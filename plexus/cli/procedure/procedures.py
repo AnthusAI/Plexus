@@ -475,16 +475,16 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
 
     You can run a procedure in two ways:
     1. By ID: plexus procedure run <procedure-id>
-    2. From YAML: plexus procedure run --yaml workflow.yaml
+    2. From YAML: plexus procedure run --yaml procedure.yaml
 
     Running from YAML is like executing a script - it creates the procedure
     (if needed) and immediately runs it.
 
     Examples:
-        # Run from YAML file (recommended for Lua DSL workflows)
-        plexus procedure run --yaml my_workflow.yaml
-        plexus procedure run --yaml my_workflow.yaml --dry-run
-        plexus procedure run -y workflow.yaml --max-iterations 50
+        # Run from YAML file (recommended for Tactus procedures)
+        plexus procedure run --yaml my_procedure.yaml
+        plexus procedure run --yaml my_procedure.yaml --dry-run
+        plexus procedure run -y procedure.yaml --max-iterations 50
 
         # Run by ID (for existing procedures)
         plexus procedure run abc123def456
@@ -496,14 +496,14 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     if not procedure_id and not yaml_file:
         console.print("[red]Error: Either provide a procedure ID or use --yaml flag[/red]")
         console.print("Examples:")
-        console.print("  plexus procedure run --yaml workflow.yaml")
+        console.print("  plexus procedure run --yaml procedure.yaml")
         console.print("  plexus procedure run <procedure-id>")
         return
 
     if procedure_id and yaml_file:
         console.print("[red]Error: Cannot specify both procedure ID and --yaml flag[/red]")
         console.print("Use one or the other:")
-        console.print("  plexus procedure run --yaml workflow.yaml")
+        console.print("  plexus procedure run --yaml procedure.yaml")
         console.print("  plexus procedure run <procedure-id>")
         return
 
@@ -534,13 +534,13 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
             return
 
-        # Check if this is a Lua DSL procedure
+        # Check if this is a Tactus procedure
         import yaml as yaml_lib
         try:
             config = yaml_lib.safe_load(yaml_config)
-            is_lua_dsl = config.get('class') == 'LuaDSL'
+            is_tactus = config.get('class') == 'Tactus'
         except:
-            is_lua_dsl = False
+            is_tactus = False
 
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(
@@ -549,7 +549,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             score_identifier=None,
             yaml_config=yaml_config,
             featured=False,
-            create_root_node=not is_lua_dsl  # Don't create root node for Lua DSL
+            create_root_node=not is_tactus  # Don't create root node for Tactus procedures
         )
 
         if not result.success:
@@ -650,6 +650,103 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                     table.add_row(f"Option: {key}", str(value))
         
         console.print(table)
+
+@procedure.command('test-specs')
+@click.argument('procedure_id', required=False)
+@click.option('--yaml', '-y', 'yaml_file', help='Procedure YAML file path')
+@click.option('--mode', type=click.Choice(['mock', 'integration']), default='mock', show_default=True, help='Specification execution mode')
+@click.option('--scenario', help='Optional scenario name filter')
+@click.option('--no-parallel', is_flag=True, help='Run scenarios sequentially')
+@click.option('--workers', type=int, help='Max worker processes when running in parallel')
+@click.option('--output', '-o', type=click.Choice(['table', 'json', 'yaml']), default='table', show_default=True, help='Output format')
+def test_specs(
+    procedure_id: Optional[str],
+    yaml_file: Optional[str],
+    mode: str,
+    scenario: Optional[str],
+    no_parallel: bool,
+    workers: Optional[int],
+    output: str
+):
+    """Run embedded Tactus Specification blocks from a procedure.
+
+    Exactly one input source is required:
+    1. Procedure record: `plexus procedure test-specs <procedure-id>`
+    2. YAML file: `plexus procedure test-specs --yaml path/to/procedure.yaml`
+    """
+    if not procedure_id and not yaml_file:
+        console.print("[red]Error: provide either a procedure ID or --yaml[/red]")
+        return
+    if procedure_id and yaml_file:
+        console.print("[red]Error: cannot specify both procedure ID and --yaml[/red]")
+        return
+    if workers is not None and workers <= 0:
+        console.print("[red]Error: --workers must be a positive integer[/red]")
+        return
+
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = ProcedureService(client)
+
+    yaml_config = None
+    if yaml_file:
+        try:
+            with open(yaml_file, 'r') as f:
+                yaml_config = f.read()
+        except Exception as e:
+            console.print(f"[red]Error reading YAML file {yaml_file}: {str(e)}[/red]")
+            return
+
+    try:
+        result = service.test_procedure_specs(
+            procedure_id=procedure_id,
+            yaml_config=yaml_config,
+            mode=mode,
+            scenario=scenario,
+            parallel=not no_parallel,
+            workers=workers
+        )
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        return
+
+    if output == 'json':
+        console.print(JSON.from_data(result))
+        return
+    if output == 'yaml':
+        console.print(yaml.dump(result, default_flow_style=False, sort_keys=False))
+        return
+
+    summary = result.get('summary', {})
+    status_label = "PASS" if result.get('success') else "FAIL"
+    status_color = "green" if result.get('success') else "red"
+    console.print(
+        f"[{status_color}]{status_label}[/{status_color}] "
+        f"{summary.get('passed_scenarios', 0)}/{summary.get('total_scenarios', 0)} scenarios passed "
+        f"(mode={result.get('mode')})"
+    )
+
+    table = Table(title="Procedure Spec Results")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Procedure ID", result.get('metadata', {}).get('procedure_id') or "N/A")
+    table.add_row("Scenario Filter", result.get('metadata', {}).get('scenario_filter') or "N/A")
+    table.add_row("Parallel", str(result.get('metadata', {}).get('parallel')))
+    table.add_row("Workers", str(result.get('metadata', {}).get('workers') or "auto"))
+    table.add_row("Passed", str(summary.get('passed_scenarios', 0)))
+    table.add_row("Failed", str(summary.get('failed_scenarios', 0)))
+    table.add_row("Duration (s)", str(summary.get('duration_seconds', 0)))
+    console.print(table)
+
+    if summary.get('failed_scenarios', 0) > 0:
+        console.print("\n[red]Failed Step Messages:[/red]")
+        for feature in result.get('features', []):
+            for scenario_result in feature.get('scenarios', []):
+                for message in scenario_result.get('failed_step_messages', []):
+                    console.print(f"- {feature.get('name')} / {scenario_result.get('name')}: {message}")
 
 @procedure.command()
 @click.option('--output', '-o', help='Output file path (default: experiment-template.yaml)')

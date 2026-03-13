@@ -95,6 +95,8 @@ class LuaDSLRuntime:
 
         # Agent primitives (one per agent)
         self.agents: Dict[str, AgentPrimitive] = {}
+        self._mcp_connection = None
+        self._mcp_client = None
 
         logger.info(f"LuaDSLRuntime initialized for procedure {procedure_id}")
 
@@ -391,6 +393,16 @@ class LuaDSLRuntime:
                 'error': f"Unexpected error: {e}"
             }
 
+        finally:
+            # Ensure MCP connection is closed
+            if self._mcp_connection is not None:
+                try:
+                    await self._mcp_connection.__aexit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Failed to close MCP connection: {e}")
+                self._mcp_connection = None
+                self._mcp_client = None
+
     async def _initialize_primitives(self):
         """Initialize all primitive objects."""
         self.state_primitive = StatePrimitive()
@@ -429,83 +441,86 @@ class LuaDSLRuntime:
         if not agents_config:
             raise LuaDSLRuntimeError("No agents defined in configuration")
 
-        # Connect to MCP server and get tools
-        async with self.mcp_server.connect({'name': f'LuaDSL Runtime for {self.procedure_id}'}) as mcp_client:
-            from plexus.cli.procedure.mcp_adapter import LangChainMCPAdapter, convert_mcp_tools_to_langchain
+        # Connect to MCP server and keep connection open for tool calls during execution
+        if self._mcp_connection is None:
+            self._mcp_connection = self.mcp_server.connect({'name': f'LuaDSL Runtime for {self.procedure_id}'})
+            self._mcp_client = await self._mcp_connection.__aenter__()
 
-            adapter = LangChainMCPAdapter(mcp_client)
-            all_mcp_tools = await adapter.load_tools()
+        from plexus.cli.procedure.mcp_adapter import LangChainMCPAdapter, convert_mcp_tools_to_langchain
 
-            logger.info(f"Loaded {len(all_mcp_tools)} MCP tools")
+        adapter = LangChainMCPAdapter(self._mcp_client)
+        all_mcp_tools = await adapter.load_tools()
 
-            # Setup each agent
-            for agent_name, agent_config in agents_config.items():
-                logger.info(f"Setting up agent: {agent_name}")
+        logger.info(f"Loaded {len(all_mcp_tools)} MCP tools")
 
-                # Get agent prompts (with template substitution)
-                system_prompt = self._process_template(agent_config['system_prompt'], context)
-                initial_message = self._process_template(agent_config['initial_message'], context)
+        # Setup each agent
+        for agent_name, agent_config in agents_config.items():
+            logger.info(f"Setting up agent: {agent_name}")
 
-                # Inject output schema into system prompt if defined
-                if self.config.get('outputs'):
-                    output_guidance = self._format_output_schema_for_prompt()
-                    system_prompt = f"{system_prompt}\n\n{output_guidance}"
-                    logger.info(f"Injected output schema guidance into agent '{agent_name}' prompt")
+            # Get agent prompts (with template substitution)
+            system_prompt = self._process_template(agent_config['system_prompt'], context)
+            initial_message = self._process_template(agent_config['initial_message'], context)
 
-                # Filter tools for this agent
-                allowed_tool_names = agent_config.get('tools', [])
-                filtered_tools = [tool for tool in all_mcp_tools if tool.name in allowed_tool_names]
+            # Inject output schema into system prompt if defined
+            if self.config.get('outputs'):
+                output_guidance = self._format_output_schema_for_prompt()
+                system_prompt = f"{system_prompt}\n\n{output_guidance}"
+                logger.info(f"Injected output schema guidance into agent '{agent_name}' prompt")
 
-                logger.info(f"Agent '{agent_name}' has {len(filtered_tools)} tools: {allowed_tool_names}")
+            # Filter tools for this agent
+            allowed_tool_names = agent_config.get('tools', [])
+            filtered_tools = [tool for tool in all_mcp_tools if tool.name in allowed_tool_names]
 
-                # Convert to LangChain format
-                langchain_tools = convert_mcp_tools_to_langchain(filtered_tools)
+            logger.info(f"Agent '{agent_name}' has {len(filtered_tools)} tools: {allowed_tool_names}")
 
-                # Add "done" tool for stopping
-                from langchain_core.tools import tool
+            # Convert to LangChain format
+            langchain_tools = convert_mcp_tools_to_langchain(filtered_tools)
 
-                @tool
-                def done(reason: str, success: bool = True) -> str:
-                    """Signal completion of the task.
+            # Add "done" tool for stopping
+            from langchain_core.tools import tool
 
-                    Args:
-                        reason: Brief explanation of completion
-                        success: True if completed successfully
+            @tool
+            def done(reason: str, success: bool = True) -> str:
+                """Signal completion of the task.
 
-                    Returns:
-                        Acknowledgment message
-                    """
-                    return f"Done: {reason} (success: {success})"
+                Args:
+                    reason: Brief explanation of completion
+                    success: True if completed successfully
 
-                langchain_tools.append(done)
+                Returns:
+                    Acknowledgment message
+                """
+                return f"Done: {reason} (success: {success})"
 
-                # Create LLM with tools
-                from langchain_openai import ChatOpenAI
+            langchain_tools.append(done)
 
-                llm = ChatOpenAI(
-                    model="gpt-4o",
-                    temperature=0.7,
-                    openai_api_key=self.openai_api_key
-                )
+            # Create LLM with tools
+            from langchain_openai import ChatOpenAI
 
-                llm_with_tools = llm.bind_tools(langchain_tools)
+            llm = ChatOpenAI(
+                model="gpt-4o",
+                temperature=0.7,
+                openai_api_key=self.openai_api_key
+            )
 
-                # Create AgentPrimitive
-                agent_primitive = AgentPrimitive(
-                    name=agent_name,
-                    system_prompt=system_prompt,
-                    initial_message=initial_message,
-                    llm=llm_with_tools,
-                    available_tools=filtered_tools + [done],  # Include MCP tools + done tool
-                    tool_primitive=self.tool_primitive,
-                    stop_primitive=self.stop_primitive,
-                    iterations_primitive=self.iterations_primitive,
-                    chat_recorder=chat_recorder
-                )
+            llm_with_tools = llm.bind_tools(langchain_tools)
 
-                self.agents[agent_name] = agent_primitive
+            # Create AgentPrimitive
+            agent_primitive = AgentPrimitive(
+                name=agent_name,
+                system_prompt=system_prompt,
+                initial_message=initial_message,
+                llm=llm_with_tools,
+                available_tools=filtered_tools + [done],  # Include MCP tools + done tool
+                tool_primitive=self.tool_primitive,
+                stop_primitive=self.stop_primitive,
+                iterations_primitive=self.iterations_primitive,
+                chat_recorder=chat_recorder
+            )
 
-                logger.info(f"Agent '{agent_name}' configured successfully")
+            self.agents[agent_name] = agent_primitive
+
+            logger.info(f"Agent '{agent_name}' configured successfully")
 
     def _inject_primitives(self):
         """Inject all primitives into Lua global scope."""

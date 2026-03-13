@@ -2,8 +2,7 @@ name: retry_demo
 version: 1.0.0
 description: Demonstration of Retry primitive for error handling with exponential backoff
 
-class: LuaDSL
-
+class: Tactus
 params:
   target_attempts:
     type: number
@@ -24,7 +23,7 @@ agents:
     initial_message: "Starting"
     tools: []
 
-workflow: |
+code: |
   Log.info("Retry primitive demonstration")
 
   local tests_count = 0

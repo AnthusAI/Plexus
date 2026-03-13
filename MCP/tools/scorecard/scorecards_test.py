@@ -156,6 +156,89 @@ class TestScorecardListTool:
         ScorecardFunctionalityTests.test_list_scorecards_error_handling(
             lambda: asyncio.get_event_loop().run_until_complete(plexus_scorecards_list())
         )
+
+    def test_scorecard_list_return_metadata(self, monkeypatch):
+        """Test scorecard listing with return_metadata=true"""
+        from tools.scorecard.scorecards import register_scorecard_tools
+
+        # Get the function
+        mock_mcp = Mock()
+        registered_tools = {}
+
+        def mock_tool_decorator():
+            def decorator(func):
+                registered_tools[func.__name__] = func
+                return func
+            return decorator
+
+        mock_mcp.tool = mock_tool_decorator
+        register_scorecard_tools(mock_mcp)
+
+        plexus_scorecards_list = registered_tools['plexus_scorecards_list']
+
+        # Prepare mock client
+        sample_items = ScorecardTestPatterns.get_sample_scorecard_list()
+        mock_client = Mock()
+        mock_client.execute.return_value = {
+            'listScorecards': {
+                'items': sample_items,
+                'nextToken': 'token-123'
+            }
+        }
+
+        monkeypatch.setenv('PLEXUS_API_URL', 'https://example.test')
+        monkeypatch.setenv('PLEXUS_API_KEY', 'test-key')
+
+        import asyncio
+        with patch('plexus.dashboard.api.client.PlexusDashboardClient', return_value=mock_client), \
+             patch('tools.scorecard.scorecards.get_default_account_id', return_value='account-123'):
+            result = asyncio.get_event_loop().run_until_complete(
+                plexus_scorecards_list(return_metadata=True)
+            )
+
+        assert isinstance(result, dict)
+        assert result.get('items') == sample_items
+        assert result.get('nextToken') == 'token-123'
+
+    def test_scorecard_list_with_next_token(self, monkeypatch):
+        """Test scorecard listing passes next_token to GraphQL query"""
+        from tools.scorecard.scorecards import register_scorecard_tools
+
+        # Get the function
+        mock_mcp = Mock()
+        registered_tools = {}
+
+        def mock_tool_decorator():
+            def decorator(func):
+                registered_tools[func.__name__] = func
+                return func
+            return decorator
+
+        mock_mcp.tool = mock_tool_decorator
+        register_scorecard_tools(mock_mcp)
+
+        plexus_scorecards_list = registered_tools['plexus_scorecards_list']
+
+        mock_client = Mock()
+        mock_client.execute.return_value = {
+            'listScorecards': {
+                'items': [],
+                'nextToken': 'token-xyz'
+            }
+        }
+
+        monkeypatch.setenv('PLEXUS_API_URL', 'https://example.test')
+        monkeypatch.setenv('PLEXUS_API_KEY', 'test-key')
+
+        import asyncio
+        with patch('plexus.dashboard.api.client.PlexusDashboardClient', return_value=mock_client), \
+             patch('tools.scorecard.scorecards.get_default_account_id', return_value='account-123'):
+            asyncio.get_event_loop().run_until_complete(
+                plexus_scorecards_list(next_token="token-abc", return_metadata=True)
+            )
+
+        called_query = mock_client.execute.call_args[0][0]
+        assert 'nextToken: "token-abc"' in called_query
     
     def test_scorecard_validation_patterns(self):
         """Test scorecard data validation patterns"""

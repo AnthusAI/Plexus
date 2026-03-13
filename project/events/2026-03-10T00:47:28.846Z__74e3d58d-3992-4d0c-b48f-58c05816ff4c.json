@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "74e3d58d-3992-4d0c-b48f-58c05816ff4c",
+  "issue_id": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "event_type": "field_updated",
+  "occurred_at": "2026-03-10T00:47:28.846Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Intent\nAdopt Tactus as the procedure runtime format and remove LuaDSL-era workflow/config coupling.\n\n## Definition of Done\n- Procedure configs support `class: Tactus` + `code:` execution path.\n- `workflow:` is not used for Tactus procedures.\n- Scorecard create procedure is implemented and runnable in Tactus format.\n- MCP support exists for guidelines validation + scorecards list pagination metadata.\n- Tests pass for changed areas and integration test is executed."
+      }
+    }
+  }
+}

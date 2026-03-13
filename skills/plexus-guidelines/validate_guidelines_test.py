@@ -55,6 +55,12 @@ Messages that are unsolicited commercial content or malicious.
 ## Definition of No
 
 Legitimate customer communications.
+
+## Conditions for No
+
+- Message is service-related
+- Contains no promotion or solicitation
+- Does not request sensitive information
 """
 
     @pytest.fixture
@@ -84,6 +90,12 @@ Messages that are unsolicited commercial content or malicious.
 
 Legitimate customer communications.
 
+## Conditions for No
+
+- Message is service-related
+- Contains no promotion or solicitation
+- Does not request sensitive information
+
 ## Examples
 
 ### Clear Yes Cases
@@ -111,6 +123,7 @@ Example ambiguous case here.
         assert 'Definition of Yes' in result.found_sections
         assert 'Conditions for Yes' in result.found_sections
         assert 'Definition of No' in result.found_sections
+        assert 'Conditions for No' in result.found_sections
     
     def test_binary_with_optional_sections_passes(self, tmp_guidelines_file, binary_with_optional_sections):
         filepath = tmp_guidelines_file(binary_with_optional_sections)
@@ -524,6 +537,10 @@ Test conditions.
 ## Definition of No
 
 Test definition.
+
+## Conditions for No
+
+Test conditions for no.
 """
         filepath = tmp_guidelines_file(content)
         result = validate_guidelines(filepath)
@@ -646,7 +663,7 @@ Content 2
         assert 'Definition of Yes' in required
         assert 'Conditions for Yes' in required
         assert 'Definition of No' in required
-        # Note: 'Conditions for No' is optional, not required
+        assert 'Conditions for No' in required
     
     def test_get_optional_sections_binary(self):
         classes_metadata = {'valid_labels': ['Yes', 'No']}
