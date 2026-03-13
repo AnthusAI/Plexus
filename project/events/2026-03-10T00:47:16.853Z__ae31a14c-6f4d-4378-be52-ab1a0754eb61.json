@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ae31a14c-6f4d-4378-be52-ab1a0754eb61",
+  "issue_id": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T00:47:16.853Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Tactus Procedure Runtime Migration"
+  }
+}

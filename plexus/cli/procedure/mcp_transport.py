@@ -273,6 +273,7 @@ class EmbeddedMCPServer:
             from tools.util.think import register_think_tool
             from tools.scorecard.scorecards import register_scorecard_tools
             from tools.score.scores import register_score_tools
+            from tools.score.guidelines import register_guidelines_tools
             from tools.item.items import register_item_tools
             from tools.feedback.feedback import register_feedback_tools
             from tools.evaluation.evaluations import register_evaluation_tools
@@ -362,7 +363,8 @@ class EmbeddedMCPServer:
             available_tools = {
                 "think": lambda: register_think_tool(tool_capture),
                 "scorecard": lambda: register_scorecard_tools(tool_capture),
-                "score": lambda: register_score_tools(tool_capture),
+                "score": lambda: (register_score_tools(tool_capture), register_guidelines_tools(tool_capture)),
+                "guidelines": lambda: register_guidelines_tools(tool_capture),
                 "item": lambda: register_item_tools(tool_capture),
                 "feedback": lambda: register_feedback_tools(tool_capture),
                 "evaluation": lambda: register_evaluation_tools(tool_capture),

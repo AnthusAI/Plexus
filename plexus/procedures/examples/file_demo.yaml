@@ -2,8 +2,7 @@ name: file_demo
 version: 1.0.0
 description: Demonstration of File primitive for file I/O operations
 
-class: LuaDSL
-
+class: Tactus
 params:
   output_dir:
     type: string
@@ -24,7 +23,7 @@ agents:
     initial_message: "Starting"
     tools: []
 
-workflow: |
+code: |
   Log.info("File I/O demonstration", {
     output_dir = params.output_dir
   })

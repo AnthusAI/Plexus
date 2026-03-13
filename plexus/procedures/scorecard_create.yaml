@@ -1,0 +1,582 @@
+name: scorecard_create
+version: 1.0.0
+class: Tactus
+description: "Create a new scorecard and classifier scores from an unstructured brief (OODA)."
+
+params:
+  brief:
+    type: string
+    required: true
+    description: "Unstructured stakeholder brief for the new scorecard and scores"
+  account_identifier:
+    type: string
+    default: "default"
+    description: "Account identifier (key/name/id)"
+  scorecard_list_limit:
+    type: number
+    default: 50
+    description: "Max number of scorecards to list per page"
+  max_guideline_iterations:
+    type: number
+    default: 6
+    description: "Max turns for guideline drafter"
+  dry_run:
+    type: boolean
+    default: false
+    description: "If true, do not create anything; return the plan"
+
+outputs:
+  success:
+    type: boolean
+    required: true
+  status:
+    type: string
+    required: true
+  message:
+    type: string
+    required: true
+  scorecard_id:
+    type: string
+    required: false
+  score_ids:
+    type: array
+    required: false
+  plan:
+    type: object
+    required: false
+
+agents:
+  observer:
+    system_prompt: |
+      You are the Observe agent. Your job is to call plexus_scorecards_list once and return.
+      - Call plexus_scorecards_list with return_metadata=true and the provided limit.
+      - Do NOT invent results.
+      - After the tool returns, stop.
+    initial_message: |
+      Call plexus_scorecards_list with return_metadata=true.
+    tools:
+      - plexus_scorecards_list
+
+  orienter:
+    system_prompt: |
+      You are the Orient agent. You receive:
+      - A brief from a stakeholder
+      - A context pack of existing scorecards
+
+      Decide if a matching scorecard already exists. If you think a match exists, set match_found=true.
+      Then propose a new scorecard definition if no match exists.
+
+      Respond ONLY with a JSON object in the done tool reason field, with this structure:
+      {
+        "match_found": false,
+        "proposed_scorecard": {
+          "name": "...",
+          "key": "...",
+          "external_id": "...",
+          "description": "..."
+        }
+      }
+
+      Use exact strings. Do not include markdown or code fences.
+    initial_message: |
+      Analyze the brief and context pack and return JSON in done().
+    tools: []
+
+  planner:
+    system_prompt: |
+      You are the Decide agent. You receive a brief and a proposed scorecard.
+      Produce a JSON plan for a NEW scorecard with classifier-only scores.
+
+      The plan MUST be JSON in the done tool reason field and follow this schema:
+      {
+        "scorecard": {
+          "name": "...",
+          "key": "...",
+          "external_id": "...",
+          "description": "..."
+        },
+        "scores": [
+          {
+            "name": "...",
+            "key": "...",
+            "external_id": "...",
+            "description": "...",
+            "labels": ["Yes", "No"],
+            "target_class": "Yes",
+            "default_class": "No",
+            "abstain_class": "NA",
+            "score_type": "SimpleLLMScore"
+          }
+        ]
+      }
+
+      Rules:
+      - CLASSIFIER-ONLY. Every score must include labels (length >= 2).
+      - If a score is NOT a classifier, exclude it.
+      - Use kebab-case keys/external_id.
+      - Use short, clear descriptions.
+      - If abstain_class is not needed, omit it.
+      - score_type is optional; if omitted, default will be SimpleLLMScore.
+
+      Respond ONLY with JSON in done(). No markdown.
+    initial_message: |
+      Produce the plan JSON and call done().
+    tools: []
+
+  guideline_drafter:
+    system_prompt: |
+      You are the Guidelines Drafter. You receive a single score spec and the Plexus guideline schema.
+
+      You MUST:
+      1) Draft guidelines in the Plexus classifier format.
+      2) Call plexus_guidelines_validate with the draft.
+      3) If validation fails, fix and re-validate.
+      4) Only call done when validation passes.
+
+      Output ONLY the final guidelines markdown in done() reason. No JSON.
+    initial_message: |
+      Draft guidelines, validate, and return final markdown in done().
+    tools:
+      - plexus_guidelines_validate
+
+  actor:
+    system_prompt: |
+      You are the Act agent. You receive an execution payload JSON.
+      You MUST run the tools in this order:
+      1) plexus_scorecard_create
+      2) For each score: plexus_score_create
+      3) For each created score: plexus_score_update with code + guidelines
+
+      When complete, call done() with JSON:
+      {"scorecard_id": "...", "score_ids": ["..."], "success": true}
+
+      If any step fails, call done() with:
+      {"success": false, "error": "..."}
+
+      Respond ONLY with JSON in done(). No markdown.
+    initial_message: |
+      Execute the provided payload exactly and call done().
+    tools:
+      - plexus_scorecard_create
+      - plexus_score_create
+      - plexus_score_update
+
+stages:
+  - observe
+  - orient
+  - decide
+  - draft_guidelines
+  - approval
+  - act
+  - complete
+
+code: |
+  local function safe_decode(value)
+    if value == nil then
+      return nil, "nil"
+    end
+    if type(value) ~= "string" then
+      -- Coerce Python objects into a Lua table via JSON round-trip
+      local ok_encode, encoded = pcall(function()
+        return Json.encode(value)
+      end)
+      if ok_encode then
+        local ok_decode, decoded = pcall(function()
+          return Json.decode(encoded)
+        end)
+        if ok_decode then
+          return decoded, nil
+        end
+      end
+      return value, nil
+    end
+    local ok, decoded = pcall(function()
+      return Json.decode(value)
+    end)
+    if ok then
+      return decoded, nil
+    end
+    return nil, decoded
+  end
+
+  local function normalize(s)
+    if s == nil then
+      return ""
+    end
+    return string.lower(tostring(s))
+  end
+
+  local function escape_yaml(value)
+    if value == nil then
+      return ""
+    end
+    local s = tostring(value)
+    s = string.gsub(s, "\n", " ")
+    s = string.gsub(s, "\r", " ")
+    s = string.gsub(s, '"', '\\"')
+    return s
+  end
+
+  local function build_score_yaml(score)
+    local lines = {}
+    local yaml_type = score.yaml_type or "binary"
+    table.insert(lines, "name: \"" .. escape_yaml(score.name) .. "\"")
+    table.insert(lines, "key: \"" .. escape_yaml(score.key) .. "\"")
+    table.insert(lines, "type: " .. yaml_type)
+    if score.external_id ~= nil and tostring(score.external_id) ~= "" then
+      table.insert(lines, "external_id: \"" .. escape_yaml(score.external_id) .. "\"")
+    end
+    if score.description ~= nil and tostring(score.description) ~= "" then
+      table.insert(lines, "description: \"" .. escape_yaml(score.description) .. "\"")
+    end
+    if score.labels ~= nil then
+      table.insert(lines, "labels:")
+      for _, label in ipairs(score.labels) do
+        table.insert(lines, "  - \"" .. escape_yaml(label) .. "\"")
+      end
+    end
+    return table.concat(lines, "\n")
+  end
+
+  local function wait_for_tool_call(agent, tool_name, max_iters, inject)
+    local start_count = Tool.get_call_count(tool_name)
+    if inject then
+      agent({message = inject})
+    else
+      agent()
+    end
+    local iter = 0
+    repeat
+      if Tool.get_call_count(tool_name) > start_count then
+        return true
+      end
+      if iter >= max_iters then
+        return false
+      end
+      agent()
+      iter = iter + 1
+    until false
+  end
+
+  local function wait_for_done(agent, max_iters, inject)
+    return wait_for_tool_call(agent, "done", max_iters, inject)
+  end
+
+  local function run(input)
+    local params = input
+    local brief = params.brief
+    local account_identifier = params.account_identifier or "default"
+    local scorecard_list_limit = tonumber(params.scorecard_list_limit) or 50
+    local max_guideline_iterations = tonumber(params.max_guideline_iterations) or 6
+    local dry_run = params.dry_run == true
+
+    Stage.set("observe")
+    Human.notify({message = "Observing existing scorecards...", level = "info"})
+
+    local observe_inject = "Call plexus_scorecards_list with return_metadata=true and limit=" .. tostring(scorecard_list_limit) .. "."
+    local observed = wait_for_tool_call(Observer, "plexus_scorecards_list", 3, observe_inject)
+    if not observed then
+      return {success = false, status = "error", message = "Observer failed to call plexus_scorecards_list"}
+    end
+
+    local list_call = Tool.last_call("plexus_scorecards_list")
+    local list_data, list_err = safe_decode(list_call.result)
+    if not list_data then
+      return {success = false, status = "error", message = "Failed to parse scorecard list: " .. tostring(list_err)}
+    end
+
+    local items = list_data.items or list_data
+    local next_token = list_data.nextToken
+
+    local summaries = {}
+    if items then
+      for i, sc in ipairs(items) do
+        summaries[#summaries + 1] = {
+          id = sc.id,
+          name = sc.name,
+          key = sc.key,
+          externalId = sc.externalId,
+          description = sc.description
+        }
+      end
+    end
+
+    local context_pack = {
+      scorecards = summaries,
+      paging = {
+        next_token = next_token,
+        instructions = "To fetch the next page, call plexus_scorecards_list with next_token=<token> and return_metadata=true."
+      },
+      details = {
+        instructions = "To fetch details about a scorecard, call plexus_scorecard_info with its id, name, key, or externalId."
+      }
+    }
+    State.set("context_pack", context_pack)
+
+    Stage.set("orient")
+    Human.notify({message = "Orienting on brief...", level = "info"})
+
+    local orient_inject = "Brief:\n" .. brief .. "\n\nContext Pack JSON:\n" .. Json.encode(context_pack)
+    local oriented = wait_for_done(Orienter, 4, orient_inject)
+    if not oriented then
+      return {success = false, status = "error", message = "Orienter did not complete"}
+    end
+
+    local orient_call = Tool.last_call("done")
+    local orient_data, orient_err = safe_decode(orient_call.args.reason or "")
+    if not orient_data then
+      return {success = false, status = "error", message = "Failed to parse orienter JSON: " .. tostring(orient_err)}
+    end
+
+    local proposed = orient_data.proposed_scorecard or {}
+    local match_found = orient_data.match_found == true
+    local matched_id = nil
+
+    for _, sc in ipairs(summaries) do
+      local proposed_external = proposed.external_id or proposed.externalId
+      if normalize(sc.name) == normalize(proposed.name) or
+         normalize(sc.key) == normalize(proposed.key) or
+         (proposed_external ~= nil and normalize(sc.externalId) == normalize(proposed_external)) then
+        match_found = true
+        matched_id = sc.id
+        break
+      end
+    end
+
+    if match_found then
+      Human.notify({message = "Scorecard already exists", level = "warning"})
+      return {
+        success = false,
+        status = "exists",
+        message = "Matching scorecard already exists",
+        scorecard_id = matched_id
+      }
+    end
+
+    Stage.set("decide")
+    Human.notify({message = "Planning scorecard content...", level = "info"})
+
+    local plan_inject = "Brief:\n" .. brief .. "\n\nProposed Scorecard JSON:\n" .. Json.encode(proposed)
+    local planned = wait_for_done(Planner, 6, plan_inject)
+    if not planned then
+      return {success = false, status = "error", message = "Planner did not complete"}
+    end
+
+    local plan_call = Tool.last_call("done")
+    local plan_data, plan_err = safe_decode(plan_call.args.reason or "")
+    if not plan_data then
+      return {success = false, status = "error", message = "Failed to parse plan JSON: " .. tostring(plan_err)}
+    end
+
+    local plan_scorecard = plan_data.scorecard or proposed
+    local normalized_scorecard = {
+      name = plan_scorecard.name,
+      key = plan_scorecard.key,
+      external_id = plan_scorecard.external_id or plan_scorecard.externalId,
+      description = plan_scorecard.description
+    }
+    local plan_scores = plan_data.scores or {}
+
+    if plan_scorecard == nil or plan_scores == nil then
+      return {success = false, status = "error", message = "Plan missing scorecard or scores"}
+    end
+    if normalized_scorecard.name == nil or normalized_scorecard.key == nil then
+      return {success = false, status = "error", message = "Scorecard missing name or key"}
+    end
+
+    -- Validate classifier-only scores
+    for _, score in ipairs(plan_scores) do
+      if score.name == nil or score.key == nil then
+        return {success = false, status = "error", message = "Score missing name or key"}
+      end
+      if score.labels == nil or #score.labels < 2 then
+        return {success = false, status = "error", message = "Non-classifier or invalid score found (missing labels)"}
+      end
+      if #score.labels == 2 then
+        score.yaml_type = "binary"
+      else
+        score.yaml_type = "categorical"
+      end
+    end
+
+    Stage.set("draft_guidelines")
+    Human.notify({message = "Drafting guidelines...", level = "info"})
+
+    for _, score in ipairs(plan_scores) do
+      Guideline_drafter.reset()
+
+      local start_done = Tool.get_call_count("done")
+      local start_validate = Tool.get_call_count("plexus_guidelines_validate")
+
+      local schema_hint = [[Use this exact Plexus classifier guidelines format:
+
+    # Guidelines for <Score Name>
+
+    ## Objective
+    <One or two sentences describing the classification goal.>
+
+    ## Classes
+    Valid labels: [<Label1>, <Label2>, <Label3>]
+    Target class: <LabelX>
+    Default class: <LabelY>
+    Abstain class: <LabelZ>  (optional)
+
+    ## Definition of <Label1>
+    <What this label means.>
+
+    ## Conditions for <Label1>
+    - <Condition 1>
+    - <Condition 2>
+
+    ## Definition of <Label2>
+    ...
+
+    ## Conditions for <Label2>
+    ...
+
+    ## Definition of <Label3>
+    ...
+
+    ## Conditions for <Label3>
+    ...
+
+    Rules:
+    - Use the labels exactly as provided in the score spec.
+    - Include Definition and Conditions for every label.
+    - Keep sections named exactly as shown (e.g., "Definition of Positive").
+    ]]
+      local draft_inject = "Score Spec JSON:\n" .. Json.encode(score) .. "\n\n" .. schema_hint
+
+      local drafted = wait_for_done(Guideline_drafter, max_guideline_iterations, draft_inject)
+      if not drafted then
+        return {success = false, status = "error", message = "Guideline drafter timed out for score: " .. tostring(score.name)}
+      end
+
+      if Tool.get_call_count("plexus_guidelines_validate") == start_validate then
+        return {success = false, status = "error", message = "Guideline drafter did not validate guidelines for score: " .. tostring(score.name)}
+      end
+
+      local done_call = Tool.last_call("done")
+      local guidelines_md = done_call.args.reason or ""
+      score.guidelines = guidelines_md
+    end
+
+    Stage.set("approval")
+
+    local summary_lines = {}
+    summary_lines[#summary_lines + 1] = "Scorecard: " .. tostring(normalized_scorecard.name)
+    summary_lines[#summary_lines + 1] = "Key: " .. tostring(normalized_scorecard.key)
+    summary_lines[#summary_lines + 1] = "Scores:"
+    for _, score in ipairs(plan_scores) do
+      summary_lines[#summary_lines + 1] = "- " .. tostring(score.name) .. " (" .. tostring(score.key) .. ") labels: " .. Json.encode(score.labels)
+    end
+
+    local approved = Human.approve({
+      message = "Approve creation of scorecard and scores?",
+      context = {
+        summary = table.concat(summary_lines, "\n"),
+        dry_run = dry_run
+      },
+      timeout = 7200,
+      default = false
+    })
+
+    if not approved then
+      return {success = false, status = "rejected", message = "Human rejected creation", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
+    if dry_run then
+      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
+    Stage.set("act")
+    Human.notify({message = "Creating scorecard and scores...", level = "info"})
+
+    -- Build execution payload
+    local exec_scores = {}
+    for _, score in ipairs(plan_scores) do
+      local yaml_code = build_score_yaml(score)
+      local score_type = score.score_type or "SimpleLLMScore"
+      if score_type ~= "SimpleLLMScore" and score_type ~= "LangGraphScore" and score_type ~= "ClassifierScore" and score_type ~= "TactusScore" and score_type ~= "STANDARD" then
+        score_type = "SimpleLLMScore"
+      end
+      exec_scores[#exec_scores + 1] = {
+        name = score.name,
+        key = score.key,
+        external_id = score.external_id or score.externalId,
+        description = score.description,
+        score_type = score_type,
+        yaml_code = yaml_code,
+        guidelines = score.guidelines
+      }
+    end
+
+    local exec_payload = {
+      account_identifier = account_identifier,
+      scorecard = normalized_scorecard,
+      scores = exec_scores
+    }
+
+    local act_inject = "Execution Payload JSON:\n" .. Json.encode(exec_payload)
+    local acted = wait_for_done(Actor, 12, act_inject)
+    if not acted then
+      return {success = false, status = "error", message = "Actor did not complete"}
+    end
+
+    local act_call = Tool.last_call("done")
+    local act_data, act_err = safe_decode(act_call.args.reason or "")
+    if not act_data then
+      return {success = false, status = "error", message = "Failed to parse actor JSON: " .. tostring(act_err)}
+    end
+
+    if act_data.success == false then
+      return {success = false, status = "error", message = act_data.error or "Actor failed"}
+    end
+
+    Stage.set("complete")
+    return {
+      success = true,
+      status = "created",
+      message = "Scorecard and scores created",
+      scorecard_id = act_data.scorecard_id,
+      score_ids = act_data.score_ids,
+      plan = {scorecard = normalized_scorecard, scores = plan_scores}
+    }
+
+
+  end
+
+  Specification([[
+  Feature: Scorecard Create Procedure
+    Scenario: Procedure initializes
+      Given the procedure has started
+
+    Scenario: Procedure initializes for dry-run path
+      Given the procedure has started
+
+    Scenario: Procedure initializes for account-scoped path
+      Given the procedure has started
+  ]])
+
+  Procedure {
+    input = {
+      brief = field.string{required = true},
+      account_identifier = field.string{default = "default"},
+      scorecard_list_limit = field.number{default = 50},
+      max_guideline_iterations = field.number{default = 6},
+      dry_run = field.boolean{default = false}
+    },
+
+    output = {
+      success = field.boolean{required = true},
+      status = field.string{required = true},
+      message = field.string{required = true},
+      scorecard_id = field.string{},
+      score_ids = field.array{},
+      plan = field.object{}
+    },
+
+    function(input)
+      return run(input)
+    end
+  }

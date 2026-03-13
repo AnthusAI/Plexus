@@ -1,0 +1,25 @@
+{
+  "id": "plx-3fdf73f5-c61e-4446-a254-602736f70326",
+  "title": "Implement scorecard_create procedure and MCP extensions in Tactus format",
+  "description": "## User Intent\nAs an AQA lab worker, create a scorecard + classifier scores from unstructured briefs via a Tactus procedure that plans, validates guidelines, gates on human approval, and then creates resources in Plexus.\n\n## Scope\n- New MCP tool: `plexus_guidelines_validate`\n- `plexus_scorecards_list` pagination metadata (`next_token`, `return_metadata`)\n- Agent state reset support (`Agent.reset`) for per-score drafting isolation\n- New `scorecard_create` procedure in Tactus format\n- Procedure/runtime wiring updates for `class: Tactus` + `code:`\n\n## Out of Scope\n- Backward compatibility migration path for `LuaDSL`\n- Non-classifier score generation in this create flow\n\n## Verification\n- Unit tests for MCP additions\n- Unit tests for list paging behavior\n- Procedure dry-run behavior check\n- Real integration creation of sample scorecard + 3 classifiers",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0aa8eda3-dbe2-431c-97ad-20747edc7105",
+      "author": "ryan",
+      "text": "## Progress Log (2026-03-10)\n\n### Decisions\n- Adopted **breaking change**: procedures now use `class: Tactus` with `code:` field.\n- Removed reliance on `workflow:` for Tactus procedures.\n- Did **not** add LuaDSL migration/deprecation guidance per request.\n\n### Implemented\n- MCP: added `plexus_guidelines_validate(guidelines_markdown)` with structured validation result fields.\n- MCP: extended `plexus_scorecards_list` with pagination inputs and metadata response mode.\n- Runtime: added agent reset behavior for isolated per-score drafting runs.\n- Procedure: added `plexus/procedures/scorecard_create.yaml` in Tactus format (`class: Tactus`, `code:`).\n- Procedure execution/validation wiring updated for Tactus class handling.\n\n### Verification\n- `pytest -q` passed: `3148 passed, 42 skipped, 19 deselected, 3 xfailed`.\n- Lint/format baseline remains red repo-wide (`ruff`, `black --check`, `flake8`) due pre-existing issues.\n- Integration run created scorecard **Test 1234** with 3 classifiers.\n  - scorecard_id: `23f0e79f-72d4-4312-903a-4a8454a5593a`\n  - score_ids: `e9ccb4a2-...`, `de6cb2bb-...`, `1c0bb800-...`\n\n### SCM\n- Branch: `feature/tactus-procedure`\n- Commit pushed: `a14786ffb229a552bb59091fd2ce259c5b7cb6dd`\n\n### Notes\n- Secret scan initially blocked push due `.tactus/config.yml`; fixed by removing it from commit history before push.\n\n### Next Step\n- Open/merge PR for `feature/tactus-procedure` and close this task when merged.",
+      "created_at": "2026-03-10T00:47:47.887048481Z"
+    }
+  ],
+  "created_at": "2026-03-10T00:47:18.411148932Z",
+  "updated_at": "2026-03-10T00:47:47.887048481Z",
+  "closed_at": null,
+  "custom": {}
+}
