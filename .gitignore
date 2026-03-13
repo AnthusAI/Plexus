@@ -39,3 +39,4 @@ check_report.py
 
 # Kanbus overlay (ephemeral local state)
 project/.overlay/
+.venv/*
