@@ -113,7 +113,8 @@ class FeedbackAnalysis(BaseReportBlock):
                 or self.params.get("param_score")
             )
             if cc_question_id_param is not None:
-                cc_question_id_param = str(cc_question_id_param).strip() or None
+                _s = str(cc_question_id_param).strip()
+                cc_question_id_param = None if not _s or _s.lower() == "none" else _s
 
             # Parse date strings
             if start_date_str:
@@ -277,7 +278,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     _raw = fi.editCommentValue or fi.finalCommentValue or ""
                     text = _raw.strip() if isinstance(_raw, str) else ""
                     if text:
-                        score_edit_comments.append((fi.id or fi.itemId or "", text, fi.itemId, fi.editedAt))
+                        score_edit_comments.append((fi.id or fi.itemId or "", text, fi.itemId, fi.editedAt, fi.id))
                 if mismatches_for_score:
                     self._log(
                         f"Memory analysis: {len(mismatches_for_score)} mismatches for '{score_info['plexus_score_name']}', "
@@ -560,6 +561,7 @@ class FeedbackAnalysis(BaseReportBlock):
             model_id = self.config.get("memory_model_id", "all-MiniLM-L6-v2")
             min_topic_size = self.config.get("memory_min_topic_size", 5)
             use_llm_labels = self.config.get("memory_llm_labels", True)
+            use_causal_inference = self.config.get("memory_causal_inference", True)
 
             cache = EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
             embed_svc = EmbeddingService(
@@ -574,6 +576,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 texts = [item[1] for item in score_data["items"]]
                 item_ids = [item[2] if len(item) > 2 else None for item in score_data["items"]]
                 edited_ats = [item[3] if len(item) > 3 else None for item in score_data["items"]]
+                feedback_item_ids = [item[4] if len(item) > 4 else None for item in score_data["items"]]
 
                 if len(texts) < 2:
                     continue
@@ -597,6 +600,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     for ex_idx, ex_text in exemplars_raw:
                         truncated = ex_text[:300] + "…" if len(ex_text) > 300 else ex_text
                         item_id = item_ids[ex_idx] if ex_idx < len(item_ids) else None
+                        feedback_item_id = feedback_item_ids[ex_idx] if ex_idx < len(feedback_item_ids) else None
                         identifiers_list = None
                         if item_id and self.api_client:
                             try:
@@ -621,6 +625,17 @@ class FeedbackAnalysis(BaseReportBlock):
                         exemplar: Dict = {"text": truncated, "item_id": item_id}
                         if identifiers_list:
                             exemplar["identifiers"] = identifiers_list
+
+                        # Gather context for causal inference (best-effort, non-blocking)
+                        if use_causal_inference and feedback_item_id and self.api_client:
+                            causal_ctx = await self._gather_causal_context(
+                                edit_comment=ex_text,
+                                feedback_item_id=feedback_item_id,
+                                item_id=item_id,
+                            )
+                            if causal_ctx:
+                                exemplar["_causal_context"] = causal_ctx
+
                         exemplars.append(exemplar)
 
                     # Compute days_inactive from most recent editedAt in this cluster
@@ -709,6 +724,47 @@ class FeedbackAnalysis(BaseReportBlock):
                     else:
                         t["label"] = result
 
+            # Phase 2: Parallel per-exemplar causal inference — intermediate results, not written to output
+            if use_causal_inference:
+                causal_tasks = []
+                causal_topic_refs = []  # which topic each task belongs to
+                for s in scores_out:
+                    for t in s["topics"]:
+                        for ex in t["exemplars"]:
+                            ctx = ex.pop("_causal_context", None)
+                            if ctx:
+                                causal_tasks.append(asyncio.to_thread(self._infer_root_cause_llm, **ctx))
+                                causal_topic_refs.append(t)
+                if causal_tasks:
+                    self._log(f"Memory analysis: inferring root causes for {len(causal_tasks)} exemplar(s) in parallel")
+                    causal_results = await asyncio.gather(*causal_tasks, return_exceptions=True)
+                    for t, result in zip(causal_topic_refs, causal_results):
+                        if not isinstance(result, Exception) and result:
+                            t.setdefault("_exemplar_causes", []).append(result)
+
+            # Phase 3: Synthesize per-topic cause from intermediate exemplar causes
+            if use_causal_inference:
+                synthesis_tasks = []
+                synthesis_topic_refs = []
+                for s in scores_out:
+                    for t in s["topics"]:
+                        causes = t.pop("_exemplar_causes", None)
+                        if causes:
+                            synthesis_tasks.append(asyncio.to_thread(
+                                self._synthesize_topic_cause_llm,
+                                t["label"], t.get("keywords", []), causes,
+                            ))
+                            synthesis_topic_refs.append(t)
+                if synthesis_tasks:
+                    self._log(f"Memory analysis: synthesizing root cause for {len(synthesis_tasks)} topic(s) in parallel")
+                    synthesis_results = await asyncio.gather(*synthesis_tasks, return_exceptions=True)
+                    synth_found = 0
+                    for t, result in zip(synthesis_topic_refs, synthesis_results):
+                        if not isinstance(result, Exception) and result:
+                            t["cause"] = result
+                            synth_found += 1
+                    self._log(f"Memory analysis: root causes synthesized for {synth_found}/{len(synthesis_tasks)} topic(s)")
+
             self._log(f"Memory analysis complete: {len(scores_out)} score(s) with topics.")
             return {"scores": scores_out} if scores_out else None
 
@@ -716,6 +772,227 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log(f"Memory analysis failed (non-fatal): {e}", level="WARNING")
             import traceback
             self._log(traceback.format_exc(), level="DEBUG")
+            return None
+
+    def _synthesize_topic_cause_llm(
+        self,
+        topic_label: str,
+        keywords: List[str],
+        exemplar_causes: List[str],
+    ) -> Optional[str]:
+        """Synthesize a single root cause statement for a topic bucket from per-exemplar causes."""
+        try:
+            import boto3
+            import json as _json
+
+            keyword_str = ", ".join(keywords[:8]) if keywords else ""
+            causes_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(exemplar_causes))
+            system_msg = (
+                "You write extremely concise root cause statements — one short sentence, under 20 words. "
+                "No preamble, no qualifications, no restating the cluster name."
+            )
+            prompt = (
+                f"Cluster: \"{topic_label}\" (keywords: {keyword_str})\n\n"
+                f"Inferred causes from examples:\n{causes_str}\n\n"
+                f"One-sentence root cause (under 20 words):"
+            )
+
+            client = boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 60,
+                "system": system_msg,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            response = client.invoke_model(
+                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            result = _json.loads(response["body"].read())
+            cause = result["content"][0]["text"].strip()
+            return cause if cause else None
+        except Exception as e:
+            self._log(f"Topic cause synthesis LLM call failed: {e}", level="WARNING")
+            return None
+
+    async def _gather_causal_context(
+        self,
+        edit_comment: str,
+        feedback_item_id: str,
+        item_id: Optional[str],
+    ) -> Optional[Dict]:
+        """Gather all available context for causal inference on a single exemplar.
+
+        Returns a kwargs dict suitable for _infer_root_cause_llm, or None if
+        there is insufficient context to be useful.  All sub-fetches are
+        best-effort; failures are silently swallowed.
+        """
+        try:
+            ctx: Dict = {"edit_comment": edit_comment}
+
+            # --- Fetch ScoreResult via feedbackItemId GSI ---
+            sr = await self._fetch_score_result_for_feedback_item(feedback_item_id)
+            if sr:
+                ctx["score_value"] = sr.get("value", "")
+                ctx["score_explanation"] = (sr.get("explanation") or "")[:1000] or None
+
+                # Inline trace (JSON stored directly on ScoreResult)
+                trace = sr.get("trace")
+                if trace:
+                    import json as _json
+                    try:
+                        trace_str = _json.dumps(trace, indent=2) if isinstance(trace, dict) else str(trace)
+                        ctx["trace_summary"] = trace_str[:1500]
+                    except Exception:
+                        pass
+
+                # S3 attachments — try to download trace.json and log.txt
+                attachments = sr.get("attachments") or []
+                for att_path in attachments:
+                    try:
+                        from plexus.utils.score_result_s3_utils import (
+                            download_score_result_trace_file,
+                            download_score_result_log_file,
+                        )
+                        if att_path.endswith("trace.json") and "trace_summary" not in ctx:
+                            content, _ = await asyncio.to_thread(download_score_result_trace_file, att_path)
+                            import json as _json
+                            ctx["trace_summary"] = _json.dumps(content, indent=2)[:1500]
+                        elif att_path.endswith("log.txt"):
+                            content, _ = await asyncio.to_thread(download_score_result_log_file, att_path)
+                            # Use the last portion — most relevant context is near the end
+                            ctx["log_excerpt"] = content[-1500:] if len(content) > 1500 else content
+                    except Exception:
+                        pass
+
+                # ScoreVersion config + guidelines
+                sv = sr.get("scoreVersion") or {}
+                if sv.get("configuration"):
+                    ctx["score_config_yaml"] = sv["configuration"][:2000]
+                if sv.get("guidelines"):
+                    ctx["score_guidelines"] = sv["guidelines"][:1500]
+
+            # --- Fetch item text ---
+            if item_id:
+                item_text = await self._fetch_item_text(item_id)
+                if item_text:
+                    ctx["item_text_excerpt"] = item_text[:1000]
+
+            # Only worth making the LLM call if we have the edit comment (always true here)
+            return ctx
+        except Exception:
+            return None
+
+    async def _fetch_score_result_for_feedback_item(self, feedback_item_id: str) -> Optional[Dict]:
+        """Fetch the ScoreResult linked to a FeedbackItem via the feedbackItemId GSI."""
+        try:
+            gql = """
+            query ListScoreResultsByFeedbackItemId($feedbackItemId: String!) {
+                listScoreResultByFeedbackItemId(feedbackItemId: $feedbackItemId) {
+                    items {
+                        id value explanation trace attachments scoreVersionId
+                        scoreVersion { configuration guidelines }
+                    }
+                }
+            }
+            """
+            result = await asyncio.to_thread(
+                self.api_client.execute, gql, {"feedbackItemId": feedback_item_id}
+            )
+            items = (result or {}).get("listScoreResultByFeedbackItemId", {}).get("items") or []
+            return items[0] if items else None
+        except Exception:
+            return None
+
+    async def _fetch_item_text(self, item_id: str) -> Optional[str]:
+        """Fetch the text content of an Item by its ID."""
+        try:
+            gql = """
+            query GetItem($id: ID!) { getItem(id: $id) { text } }
+            """
+            result = await asyncio.to_thread(
+                self.api_client.execute, gql, {"id": item_id}
+            )
+            return (result or {}).get("getItem", {}).get("text")
+        except Exception:
+            return None
+
+    def _infer_root_cause_llm(
+        self,
+        edit_comment: str,
+        score_value: str = "",
+        score_explanation: Optional[str] = None,
+        trace_summary: Optional[str] = None,
+        log_excerpt: Optional[str] = None,
+        score_config_yaml: Optional[str] = None,
+        score_guidelines: Optional[str] = None,
+        item_text_excerpt: Optional[str] = None,
+    ) -> Optional[str]:
+        """Call Bedrock to infer the root cause of a scorecard misalignment.
+
+        Uses the edit comment as the primary observation and enriches the
+        prompt with any available score result context.  Returns 1-3 sentences
+        describing the most likely root cause, or None on failure.
+        """
+        try:
+            import boto3
+            import json as _json
+
+            sections = []
+
+            if score_value:
+                line = f"Original score prediction: {score_value}"
+                if score_explanation:
+                    line += f"\nScore explanation: {score_explanation}"
+                sections.append(line)
+
+            if score_config_yaml:
+                sections.append(f"Score configuration (YAML):\n{score_config_yaml}")
+
+            if score_guidelines:
+                sections.append(f"Score guidelines:\n{score_guidelines}")
+
+            if item_text_excerpt:
+                sections.append(f"Item text (excerpt):\n{item_text_excerpt}")
+
+            if trace_summary:
+                sections.append(f"Score trace (excerpt):\n{trace_summary}")
+
+            if log_excerpt:
+                sections.append(f"Score log (excerpt):\n{log_excerpt}")
+
+            context_block = "\n\n".join(sections)
+
+            system_msg = (
+                "You identify root causes concisely. Write one short phrase or sentence — "
+                "no preamble, no mention of AI/classifiers/misalignment, just the specific reason."
+            )
+
+            user_msg = f"Edit comment: {edit_comment}\n"
+            if context_block:
+                user_msg += f"\n{context_block}\n"
+            user_msg += "\nRoot cause (one short phrase):"
+
+            client = boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 60,
+                "system": system_msg,
+                "messages": [{"role": "user", "content": user_msg}],
+            })
+            response = client.invoke_model(
+                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            result = _json.loads(response["body"].read())
+            cause = result["content"][0]["text"].strip()
+            return cause if cause else None
+        except Exception as e:
+            self._log(f"Causal inference LLM call failed: {e}", level="WARNING")
             return None
 
     async def _fetch_all_scorecards(self) -> List[Scorecard]:
