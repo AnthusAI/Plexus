@@ -1,0 +1,991 @@
+name: score_code_create
+version: 1.0.0
+class: Tactus
+description: "Create missing score code implementations for an existing scorecard from stakeholder brief + guidelines."
+
+params:
+  brief:
+    type: string
+    required: true
+    description: "Unstructured stakeholder brief describing which scorecard to update and implementation intent"
+  scorecard_list_limit:
+    type: number
+    default: 50
+    description: "Max number of scorecards to list per page"
+  validation_item_id:
+    type: string
+    required: false
+    description: "Optional item ID used for prediction validation; if omitted, uses plexus_item_last"
+  max_code_iterations:
+    type: number
+    default: 6
+    description: "Max drafting/validation attempts per score"
+  dry_run:
+    type: boolean
+    default: false
+    description: "If true, do not apply score updates; return plan only"
+
+outputs:
+  success:
+    type: boolean
+    required: true
+  status:
+    type: string
+    required: true
+  message:
+    type: string
+    required: true
+  scorecard_id:
+    type: string
+    required: false
+  score_ids:
+    type: array
+    required: false
+  version_ids:
+    type: array
+    required: false
+  plan:
+    type: object
+    required: false
+
+agents:
+  observer:
+    system_prompt: |
+      You are the Observe/Inspect agent.
+      Execute the exact MCP tool call requested in each injected instruction.
+      Do not invent data.
+      After the call, return control.
+    initial_message: |
+      Waiting for injected tool-call instruction.
+    tools:
+      - plexus_scorecards_list
+      - plexus_scorecard_info
+      - plexus_score_info
+      - plexus_item_last
+
+  orienter:
+    system_prompt: |
+      You receive:
+      - A stakeholder brief
+      - A context pack of existing scorecards
+
+      Identify which EXISTING scorecard the stakeholder is referring to.
+      Respond ONLY as JSON in done() reason with this schema:
+      {
+        "match_found": true,
+        "scorecard": {
+          "id": "...",
+          "name": "...",
+          "key": "...",
+          "externalId": "..."
+        },
+        "reason": "short reason"
+      }
+
+      Rules:
+      - This is an update flow for existing scorecards.
+      - If no confident match in provided context, return match_found=false.
+      - No markdown, no code fences.
+    initial_message: |
+      Analyze the brief + context pack and call done() with JSON.
+    tools: []
+
+  planner:
+    system_prompt: |
+      You receive:
+      - stakeholder brief
+      - selected scorecard metadata
+      - scores missing code (with current guidelines)
+
+      Return ONLY JSON in done() reason:
+      {
+        "assumptions": ["..."],
+        "updates": [
+          {
+            "score_id": "...",
+            "score_name": "...",
+            "score_key": "...",
+            "labels": ["..."],
+            "target_class": "...",
+            "default_class": "...",
+            "implementation_notes": "short notes for drafter"
+          }
+        ]
+      }
+
+      Rules:
+      - Include only scores provided in "missing_code_scores".
+      - Preserve score identity (score_id/score_key/score_name) exactly.
+      - Prefer labels/target/default parsed from guidelines when present.
+      - No markdown, no code fences.
+    initial_message: |
+      Build the update plan JSON and call done().
+    tools: []
+
+  code_drafter:
+    system_prompt: |
+      You draft score YAML implementation for one score at a time.
+      Return ONLY final YAML in done() reason.
+
+      Requirements:
+      - Produce executable Plexus YAML for a single score.
+      - Must include at minimum: name, key, class.
+      - Prefer class: LangGraphScore with a single Classifier node.
+      - Include valid_classes matching provided labels.
+      - Include clear system_message and user_message grounded in provided guidelines.
+      - Do not use markdown fences.
+    initial_message: |
+      Draft code YAML and call done().
+    tools: []
+
+  validator:
+    system_prompt: |
+      You validate drafted score YAML by executing one prediction.
+      Follow the injected instruction exactly.
+      1) Call plexus_predict exactly once with the provided arguments.
+      2) Call done() with short JSON:
+         {"called_predict": true}
+      Do not add markdown.
+    initial_message: |
+      Awaiting validation instruction.
+    tools:
+      - plexus_predict
+
+  actor:
+    system_prompt: |
+      You apply one score update at a time.
+      Follow the injected instruction exactly:
+      - Call plexus_score_update exactly once with provided fields.
+      - Then call done() with short JSON status.
+    initial_message: |
+      Awaiting update instruction.
+    tools:
+      - plexus_score_update
+
+stages:
+  - observe
+  - orient
+  - decide
+  - draft_code
+  - approval
+  - act
+  - complete
+
+code: |
+  local function safe_decode(value)
+    if value == nil then
+      return nil, "nil"
+    end
+    if type(value) ~= "string" then
+      local ok_encode, encoded = pcall(function()
+        return Json.encode(value)
+      end)
+      if ok_encode then
+        local ok_decode, decoded = pcall(function()
+          return Json.decode(encoded)
+        end)
+        if ok_decode then
+          return decoded, nil
+        end
+      end
+      return value, nil
+    end
+    local ok, decoded = pcall(function()
+      return Json.decode(value)
+    end)
+    if ok then
+      return decoded, nil
+    end
+    return nil, decoded
+  end
+
+  local function trim(value)
+    if value == nil then
+      return ""
+    end
+    local s = tostring(value)
+    s = string.gsub(s, "^%s+", "")
+    s = string.gsub(s, "%s+$", "")
+    return s
+  end
+
+  local function normalize(value)
+    return string.lower(trim(value))
+  end
+
+  local function has_text(value)
+    return trim(value) ~= ""
+  end
+
+  local function starts_with(value, prefix)
+    if value == nil then
+      return false
+    end
+    local s = tostring(value)
+    return string.sub(s, 1, string.len(prefix)) == prefix
+  end
+
+  local function table_count(arr)
+    if type(arr) ~= "table" then
+      return 0
+    end
+    local n = 0
+    for _, _ in ipairs(arr) do
+      n = n + 1
+    end
+    return n
+  end
+
+  local function sanitize_filename(value)
+    local s = trim(value)
+    if s == "" then
+      return "score"
+    end
+    s = string.gsub(s, "[^%w%-%_]+", "_")
+    return s
+  end
+
+  local function is_error_result(result)
+    if result == nil then
+      return true
+    end
+    if type(result) == "string" then
+      local r = normalize(result)
+      return starts_with(r, "error") or string.find(r, "error:") ~= nil
+    end
+    if type(result) == "table" and result.success == false then
+      return true
+    end
+    return false
+  end
+
+  local function error_message(result, fallback)
+    if type(result) == "string" then
+      return result
+    end
+    if type(result) == "table" then
+      if has_text(result.error) then
+        return result.error
+      end
+      if has_text(result.message) then
+        return result.message
+      end
+    end
+    return fallback
+  end
+
+  local function split_csv_labels(raw)
+    local labels = {}
+    if not has_text(raw) then
+      return labels
+    end
+    for token in string.gmatch(raw, "([^,]+)") do
+      labels[#labels + 1] = trim(token)
+    end
+    return labels
+  end
+
+  local function parse_guideline_metadata(guidelines)
+    local meta = {
+      labels = {},
+      target_class = nil,
+      default_class = nil,
+      abstain_class = nil
+    }
+    if not has_text(guidelines) then
+      return meta
+    end
+    local labels_raw = string.match(guidelines, "Valid labels:%s*%[([^%]]+)%]")
+    meta.labels = split_csv_labels(labels_raw)
+    meta.target_class = trim(string.match(guidelines, "Target class:%s*([^\n\r]+)"))
+    meta.default_class = trim(string.match(guidelines, "Default class:%s*([^\n\r]+)"))
+    meta.abstain_class = trim(string.match(guidelines, "Abstain class:%s*([^\n\r]+)"))
+    if meta.target_class == "" then meta.target_class = nil end
+    if meta.default_class == "" then meta.default_class = nil end
+    if meta.abstain_class == "" then meta.abstain_class = nil end
+    return meta
+  end
+
+  local function flatten_scorecard_scores(scorecard_info)
+    local scores = {}
+    if type(scorecard_info) ~= "table" then
+      return scores
+    end
+
+    local sections = scorecard_info.sections
+    if type(sections) == "table" and sections.items ~= nil then
+      sections = sections.items
+    end
+    if type(sections) ~= "table" then
+      return scores
+    end
+
+    for _, section in ipairs(sections) do
+      local section_scores = section.scores
+      if type(section_scores) == "table" and section_scores.items ~= nil then
+        section_scores = section_scores.items
+      end
+      if type(section_scores) == "table" then
+        for _, score in ipairs(section_scores) do
+          scores[#scores + 1] = {
+            id = score.id,
+            name = score.name,
+            key = score.key,
+            externalId = score.externalId,
+            description = score.description,
+            section_name = section.name,
+            type = score.type
+          }
+        end
+      end
+    end
+
+    return scores
+  end
+
+  local function wait_for_tool_call(agent, tool_name, max_iters, inject)
+    local start_count = Tool.get_call_count(tool_name)
+    if inject ~= nil then
+      agent({message = inject})
+    else
+      agent()
+    end
+    local iter = 0
+    while Tool.get_call_count(tool_name) <= start_count do
+      if iter >= max_iters then
+        return false
+      end
+      agent()
+      iter = iter + 1
+    end
+    return true
+  end
+
+  local function wait_for_done(agent, max_iters, inject)
+    return wait_for_tool_call(agent, "done", max_iters, inject)
+  end
+
+  local function prediction_is_valid(result)
+    local parsed = result
+
+    if type(parsed) == "string" then
+      local maybe, _ = safe_decode(parsed)
+      if maybe ~= nil then
+        parsed = maybe
+      else
+        return false, parsed
+      end
+    end
+
+    if type(parsed) ~= "table" then
+      return false, "Unexpected prediction result type"
+    end
+
+    if parsed.success == false then
+      return false, trim(parsed.error) ~= "" and parsed.error or "Prediction tool returned success=false"
+    end
+
+    local predictions = parsed.predictions
+    if type(predictions) ~= "table" or #predictions == 0 then
+      return false, "No predictions returned"
+    end
+
+    local first = predictions[1]
+    if type(first) ~= "table" then
+      return false, "Malformed prediction payload"
+    end
+
+    if has_text(first.error) then
+      return false, first.error
+    end
+
+    local scores = first.scores
+    if type(scores) ~= "table" or #scores == 0 then
+      return false, "Prediction returned no score outputs"
+    end
+
+    local score0 = scores[1]
+    if type(score0) ~= "table" then
+      return false, "Malformed score output in prediction"
+    end
+
+    if normalize(score0.value) == "error" then
+      local explanation = trim(score0.explanation)
+      if explanation == "" then
+        explanation = "Prediction returned ERROR value"
+      end
+      return false, explanation
+    end
+
+    return true, "Prediction executed successfully"
+  end
+
+  local function run(input)
+    local params = input
+    local brief = params.brief
+    local scorecard_list_limit = tonumber(params.scorecard_list_limit) or 50
+    local max_code_iterations = tonumber(params.max_code_iterations) or 6
+    local dry_run = params.dry_run == true
+    local validation_item_id = params.validation_item_id
+
+    Stage.set("observe")
+    Human.notify({message = "Observing scorecards and validation context...", level = "info"})
+
+    local list_inject = "Call plexus_scorecards_list with return_metadata=true and limit=" .. tostring(scorecard_list_limit) .. "."
+    local listed = wait_for_tool_call(Observer, "plexus_scorecards_list", 3, list_inject)
+    if not listed then
+      return {success = false, status = "error", message = "Observer failed to call plexus_scorecards_list"}
+    end
+
+    local list_call = Tool.last_call("plexus_scorecards_list")
+    local list_data, list_err = safe_decode(list_call.result)
+    if list_data == nil then
+      return {success = false, status = "error", message = "Failed to parse scorecard list: " .. tostring(list_err)}
+    end
+    if is_error_result(list_data) then
+      return {success = false, status = "error", message = error_message(list_data, "Failed to list scorecards")}
+    end
+
+    local items = list_data.items or list_data
+    local next_token = list_data.nextToken
+    if type(items) ~= "table" then
+      return {success = false, status = "error", message = "Unexpected scorecard list result shape"}
+    end
+
+    local summaries = {}
+    for _, sc in ipairs(items) do
+      summaries[#summaries + 1] = {
+        id = sc.id,
+        name = sc.name,
+        key = sc.key,
+        externalId = sc.externalId,
+        description = sc.description
+      }
+    end
+
+    local context_pack = {
+      scorecards = summaries,
+      paging = {
+        next_token = next_token,
+        instructions = "To fetch the next page, call plexus_scorecards_list(next_token=<token>, return_metadata=true)."
+      },
+      details = {
+        instructions = "To get full details for any scorecard, call plexus_scorecard_info(scorecard_identifier=<id|name|key|externalId>)."
+      }
+    }
+    State.set("context_pack", context_pack)
+
+    if not has_text(validation_item_id) then
+      local item_inject = "Call plexus_item_last with minimal=true and return."
+      local got_item = wait_for_tool_call(Observer, "plexus_item_last", 3, item_inject)
+      if got_item then
+        local item_call = Tool.last_call("plexus_item_last")
+        local item_data, _ = safe_decode(item_call.result)
+        if type(item_data) == "table" and has_text(item_data.id) then
+          validation_item_id = item_data.id
+        end
+      end
+    end
+
+    if not has_text(validation_item_id) then
+      return {
+        success = false,
+        status = "error",
+        message = "Could not resolve validation item ID (provide validation_item_id or ensure plexus_item_last returns an item)"
+      }
+    end
+
+    Stage.set("orient")
+    Human.notify({message = "Identifying target scorecard...", level = "info"})
+
+    local orient_inject = "Brief:\n" .. brief .. "\n\nContext Pack JSON:\n" .. Json.encode(context_pack)
+    local oriented = wait_for_done(Orienter, 5, orient_inject)
+    if not oriented then
+      return {success = false, status = "error", message = "Orienter did not complete"}
+    end
+
+    local orient_call = Tool.last_call("done")
+    local orient_data, orient_err = safe_decode(orient_call.args.reason or "")
+    if orient_data == nil then
+      return {success = false, status = "error", message = "Failed to parse orienter JSON: " .. tostring(orient_err)}
+    end
+
+    local target = orient_data.scorecard or {}
+    local match_found = orient_data.match_found == true
+    local target_scorecard = nil
+
+    for _, sc in ipairs(summaries) do
+      if (has_text(target.id) and sc.id == target.id) or
+         (has_text(target.name) and normalize(sc.name) == normalize(target.name)) or
+         (has_text(target.key) and normalize(sc.key) == normalize(target.key)) or
+         (has_text(target.externalId) and normalize(sc.externalId) == normalize(target.externalId)) then
+        target_scorecard = sc
+        break
+      end
+    end
+
+    if not match_found or target_scorecard == nil then
+      return {
+        success = false,
+        status = "not_found",
+        message = "Could not find a matching scorecard from the provided brief and current scorecard list"
+      }
+    end
+
+    Stage.set("decide")
+    Human.notify({message = "Inspecting scorecard and planning missing code updates...", level = "info"})
+
+    local scorecard_info_inject = "Call plexus_scorecard_info with scorecard_identifier=\"" .. tostring(target_scorecard.id) .. "\"."
+    local got_info = wait_for_tool_call(Observer, "plexus_scorecard_info", 4, scorecard_info_inject)
+    if not got_info then
+      return {success = false, status = "error", message = "Observer failed to call plexus_scorecard_info"}
+    end
+
+    local info_call = Tool.last_call("plexus_scorecard_info")
+    local scorecard_info_data, scorecard_info_err = safe_decode(info_call.result)
+    if scorecard_info_data == nil then
+      return {success = false, status = "error", message = "Failed to parse scorecard info: " .. tostring(scorecard_info_err)}
+    end
+    if is_error_result(scorecard_info_data) then
+      return {success = false, status = "error", message = error_message(scorecard_info_data, "Failed to fetch scorecard info")}
+    end
+
+    local flat_scores = flatten_scorecard_scores(scorecard_info_data)
+    if #flat_scores == 0 then
+      return {success = false, status = "error", message = "Selected scorecard has no scores to process"}
+    end
+
+    local missing_scores = {}
+    local missing_by_id = {}
+    local missing_by_key = {}
+    local missing_by_name = {}
+
+    for _, score in ipairs(flat_scores) do
+      local info_inject = "Call plexus_score_info with score_identifier=\"" .. tostring(score.id) ..
+        "\" and scorecard_identifier=\"" .. tostring(target_scorecard.id) .. "\"."
+      local got_score_info = wait_for_tool_call(Observer, "plexus_score_info", 4, info_inject)
+      if not got_score_info then
+        return {success = false, status = "error", message = "Failed to inspect score info for score id: " .. tostring(score.id)}
+      end
+
+      local score_info_call = Tool.last_call("plexus_score_info")
+      local score_info_data, score_info_err = safe_decode(score_info_call.result)
+      if score_info_data == nil then
+        return {success = false, status = "error", message = "Failed to parse score info for " .. tostring(score.name) .. ": " .. tostring(score_info_err)}
+      end
+      if is_error_result(score_info_data) then
+        return {success = false, status = "error", message = error_message(score_info_data, "Failed to fetch score info for " .. tostring(score.name))}
+      end
+
+      local code = score_info_data.code
+      local guidelines = score_info_data.guidelines
+
+      if not has_text(code) then
+        if not has_text(guidelines) then
+          return {
+            success = false,
+            status = "error",
+            message = "Score '" .. tostring(score.name) .. "' is missing code and guidelines; guidelines are required for this flow"
+          }
+        end
+
+        local parsed_meta = parse_guideline_metadata(guidelines)
+        local entry = {
+          score_id = score.id,
+          score_name = score.name,
+          score_key = score.key,
+          score_external_id = score.externalId,
+          score_type = score.type,
+          score_description = score.description,
+          section_name = score.section_name,
+          guidelines = guidelines,
+          labels = parsed_meta.labels,
+          target_class = parsed_meta.target_class,
+          default_class = parsed_meta.default_class,
+          abstain_class = parsed_meta.abstain_class
+        }
+        missing_scores[#missing_scores + 1] = entry
+        missing_by_id[entry.score_id] = entry
+        if has_text(entry.score_key) then
+          missing_by_key[normalize(entry.score_key)] = entry
+        end
+        if has_text(entry.score_name) then
+          missing_by_name[normalize(entry.score_name)] = entry
+        end
+      end
+    end
+
+    local score_context_pack = {
+      scorecard = {
+        id = target_scorecard.id,
+        name = target_scorecard.name,
+        key = target_scorecard.key,
+        externalId = target_scorecard.externalId
+      },
+      scores = missing_scores,
+      details = {
+        instructions = "To inspect any score, call plexus_score_info(score_identifier, scorecard_identifier)."
+      }
+    }
+    State.set("score_context_pack", score_context_pack)
+
+    if #missing_scores == 0 then
+      return {
+        success = true,
+        status = "nothing_to_do",
+        message = "No scores are missing code implementations in the selected scorecard",
+        scorecard_id = target_scorecard.id,
+        plan = {
+          scorecard = target_scorecard,
+          updates = {}
+        }
+      }
+    end
+
+    local planner_input = {
+      brief = brief,
+      scorecard = target_scorecard,
+      missing_code_scores = missing_scores
+    }
+    local planned = wait_for_done(Planner, 6, "Plan updates JSON:\n" .. Json.encode(planner_input))
+    if not planned then
+      return {success = false, status = "error", message = "Planner did not complete"}
+    end
+
+    local plan_call = Tool.last_call("done")
+    local plan_data, plan_err = safe_decode(plan_call.args.reason or "")
+    if plan_data == nil then
+      return {success = false, status = "error", message = "Failed to parse planner JSON: " .. tostring(plan_err)}
+    end
+
+    local assumptions = plan_data.assumptions or {}
+    local planned_updates_raw = plan_data.updates or {}
+    if type(planned_updates_raw) ~= "table" or #planned_updates_raw == 0 then
+      return {success = false, status = "error", message = "Planner returned no updates"}
+    end
+
+    local planned_updates = {}
+    for _, u in ipairs(planned_updates_raw) do
+      local ref_id = u.score_id or u.scoreId
+      local ref_key = u.score_key or u.key
+      local ref_name = u.score_name or u.name
+
+      local resolved = nil
+      if has_text(ref_id) and missing_by_id[ref_id] ~= nil then
+        resolved = missing_by_id[ref_id]
+      elseif has_text(ref_key) and missing_by_key[normalize(ref_key)] ~= nil then
+        resolved = missing_by_key[normalize(ref_key)]
+      elseif has_text(ref_name) and missing_by_name[normalize(ref_name)] ~= nil then
+        resolved = missing_by_name[normalize(ref_name)]
+      end
+
+      if resolved == nil then
+        return {
+          success = false,
+          status = "error",
+          message = "Planner referenced a score that is not in missing_code_scores: " .. tostring(ref_id or ref_key or ref_name)
+        }
+      end
+
+      local labels = u.labels or resolved.labels or {}
+      if type(labels) ~= "table" or #labels < 2 then
+        labels = resolved.labels or {}
+      end
+      if type(labels) ~= "table" or #labels < 2 then
+        labels = {"Yes", "No"}
+      end
+
+      local target_class = u.target_class or u.targetClass or resolved.target_class
+      local default_class = u.default_class or u.defaultClass or resolved.default_class
+      if not has_text(target_class) then
+        target_class = labels[1]
+      end
+      if not has_text(default_class) then
+        default_class = labels[2] or labels[1]
+      end
+
+      planned_updates[#planned_updates + 1] = {
+        score_id = resolved.score_id,
+        score_name = resolved.score_name,
+        score_key = resolved.score_key,
+        score_external_id = resolved.score_external_id,
+        section_name = resolved.section_name,
+        score_description = resolved.score_description,
+        guidelines = resolved.guidelines,
+        labels = labels,
+        target_class = target_class,
+        default_class = default_class,
+        implementation_notes = u.implementation_notes or u.notes or ""
+      }
+    end
+
+    Stage.set("draft_code")
+    Human.notify({message = "Drafting and validating score code implementations...", level = "info"})
+
+    for _, update in ipairs(planned_updates) do
+      local validation_feedback = nil
+      local final_code = nil
+      local last_validation_message = nil
+
+      for attempt = 1, max_code_iterations do
+        Code_drafter.reset()
+
+        local draft_payload = {
+          score = {
+            id = update.score_id,
+            name = update.score_name,
+            key = update.score_key,
+            description = update.score_description,
+            labels = update.labels,
+            target_class = update.target_class,
+            default_class = update.default_class
+          },
+          implementation_notes = update.implementation_notes,
+          guidelines = update.guidelines,
+          previous_validation_feedback = validation_feedback,
+          constraints = {
+            return_yaml_only = true,
+            include_name_key_class = true,
+            preferred_class = "LangGraphScore",
+            recommended_node = "Classifier"
+          }
+        }
+
+        local drafted = wait_for_done(
+          Code_drafter,
+          8,
+          "Draft executable score YAML for this score. Return ONLY YAML in done() reason.\n\nDraft Context JSON:\n" .. Json.encode(draft_payload)
+        )
+
+        if not drafted then
+          return {
+            success = false,
+            status = "error",
+            message = "Code drafter timed out for score: " .. tostring(update.score_name)
+          }
+        end
+
+        local draft_done = Tool.last_call("done")
+        local candidate_code = draft_done.args.reason or ""
+        if not has_text(candidate_code) then
+          validation_feedback = "No YAML content returned. Return YAML only, no markdown fences."
+          last_validation_message = validation_feedback
+        else
+          local tmp_path = "/tmp/plexus_score_code_" .. sanitize_filename(update.score_key or update.score_id) .. "_" .. tostring(attempt) .. ".yaml"
+          File.write(tmp_path, candidate_code)
+
+          Validator.reset()
+          local validate_inject = "Call plexus_predict exactly once with this JSON args object, then done():\n" ..
+            Json.encode({
+              scorecard_name = target_scorecard.name,
+              score_name = update.score_name,
+              item_id = validation_item_id,
+              include_input = false,
+              include_trace = false,
+              output_format = "json",
+              yaml = true,
+              yaml_path = tmp_path
+            })
+
+          local validated = wait_for_tool_call(Validator, "plexus_predict", 5, validate_inject)
+          if not validated then
+            validation_feedback = "Validator did not execute plexus_predict."
+            last_validation_message = validation_feedback
+          else
+            local predict_call = Tool.last_call("plexus_predict")
+            local predict_result, _ = safe_decode(predict_call.result)
+            if predict_result == nil then
+              predict_result = predict_call.result
+            end
+            local ok_prediction, prediction_message = prediction_is_valid(predict_result)
+            if ok_prediction then
+              final_code = candidate_code
+              break
+            end
+            validation_feedback = "Prediction validation failed: " .. tostring(prediction_message)
+            last_validation_message = validation_feedback
+          end
+        end
+      end
+
+      if not has_text(final_code) then
+        return {
+          success = false,
+          status = "error",
+          message = "Could not produce valid runnable code for score '" .. tostring(update.score_name) ..
+            "' within " .. tostring(max_code_iterations) .. " attempts. Last validation message: " .. tostring(last_validation_message)
+        }
+      end
+
+      update.code = final_code
+      update.validation_item_id = validation_item_id
+    end
+
+    local plan = {
+      scorecard = {
+        id = target_scorecard.id,
+        name = target_scorecard.name,
+        key = target_scorecard.key,
+        externalId = target_scorecard.externalId
+      },
+      assumptions = assumptions,
+      validation_item_id = validation_item_id,
+      updates = planned_updates
+    }
+
+    Stage.set("approval")
+    local summary_lines = {}
+    summary_lines[#summary_lines + 1] = "Scorecard: " .. tostring(target_scorecard.name) .. " (" .. tostring(target_scorecard.id) .. ")"
+    summary_lines[#summary_lines + 1] = "Validation item: " .. tostring(validation_item_id)
+    summary_lines[#summary_lines + 1] = "Planned score updates:"
+    for _, u in ipairs(planned_updates) do
+      summary_lines[#summary_lines + 1] = "- " .. tostring(u.score_name) .. " [" .. tostring(u.score_key) .. "] labels=" .. Json.encode(u.labels)
+    end
+
+    local approved = Human.approve({
+      message = "Approve applying score code updates?",
+      context = {
+        summary = table.concat(summary_lines, "\n"),
+        assumptions = assumptions,
+        dry_run = dry_run
+      },
+      timeout = 7200,
+      default = false
+    })
+
+    if not approved then
+      return {
+        success = false,
+        status = "rejected",
+        message = "Human rejected score code updates",
+        scorecard_id = target_scorecard.id,
+        plan = plan
+      }
+    end
+
+    if dry_run then
+      return {
+        success = true,
+        status = "planned",
+        message = "Dry run complete; no score updates were applied",
+        scorecard_id = target_scorecard.id,
+        score_ids = {},
+        version_ids = {},
+        plan = plan
+      }
+    end
+
+    Stage.set("act")
+    Human.notify({message = "Applying score code updates...", level = "info"})
+
+    local updated_score_ids = {}
+    local updated_version_ids = {}
+
+    for _, u in ipairs(planned_updates) do
+      Actor.reset()
+
+      local act_payload = {
+        scorecard_identifier = target_scorecard.id,
+        score_identifier = u.score_id,
+        code = u.code,
+        guidelines = u.guidelines,
+        version_note = "Generated score code via score_code_create procedure"
+      }
+
+      local acted = wait_for_tool_call(
+        Actor,
+        "plexus_score_update",
+        5,
+        "Call plexus_score_update exactly once using this JSON payload:\n" .. Json.encode(act_payload)
+      )
+      if not acted then
+        return {
+          success = false,
+          status = "error",
+          message = "Actor failed to call plexus_score_update for score: " .. tostring(u.score_name),
+          scorecard_id = target_scorecard.id,
+          plan = plan
+        }
+      end
+
+      local update_call = Tool.last_call("plexus_score_update")
+      local update_result, _ = safe_decode(update_call.result)
+      if update_result == nil then
+        update_result = update_call.result
+      end
+
+      if is_error_result(update_result) then
+        return {
+          success = false,
+          status = "error",
+          message = "Failed to update score '" .. tostring(u.score_name) .. "': " .. error_message(update_result, "unknown error"),
+          scorecard_id = target_scorecard.id,
+          plan = plan
+        }
+      end
+
+      if type(update_result) == "table" and update_result.success == false then
+        return {
+          success = false,
+          status = "error",
+          message = "Failed to update score '" .. tostring(u.score_name) .. "': " .. error_message(update_result, "unknown error"),
+          scorecard_id = target_scorecard.id,
+          plan = plan
+        }
+      end
+
+      updated_score_ids[#updated_score_ids + 1] = u.score_id
+      if type(update_result) == "table" and has_text(update_result.newVersionId) then
+        updated_version_ids[#updated_version_ids + 1] = update_result.newVersionId
+      end
+    end
+
+    Stage.set("complete")
+    return {
+      success = true,
+      status = "updated",
+      message = "Applied score code updates",
+      scorecard_id = target_scorecard.id,
+      score_ids = updated_score_ids,
+      version_ids = updated_version_ids,
+      plan = plan
+    }
+
+
+  end
+
+  Specification([[
+  Feature: Score Code Create Procedure
+    Scenario: Procedure initializes
+      Given the procedure has started
+
+    Scenario: Procedure initializes for dry-run path
+      Given the procedure has started
+
+    Scenario: Procedure initializes for validation-item path
+      Given the procedure has started
+  ]])
+
+  Procedure {
+    input = {
+      brief = field.string{required = true},
+      scorecard_list_limit = field.number{default = 50},
+      validation_item_id = field.string{},
+      max_code_iterations = field.number{default = 6},
+      dry_run = field.boolean{default = false}
+    },
+
+    output = {
+      success = field.boolean{required = true},
+      status = field.string{required = true},
+      message = field.string{required = true},
+      scorecard_id = field.string{},
+      score_ids = field.array{},
+      version_ids = field.array{},
+      plan = field.object{}
+    },
+
+    function(input)
+      return run(input)
+    end
+  }

@@ -21,10 +21,14 @@ def _load_guidelines_validator():
 
     # Resolve repo root from this file: MCP/tools/score/guidelines.py -> repo root
     repo_root = Path(__file__).resolve().parents[3]
-    validator_path = repo_root / ".claude" / "skills" / "plexus-guidelines" / "validate_guidelines.py"
-
-    if not validator_path.exists():
-        raise FileNotFoundError(f"Guidelines validator not found at {validator_path}")
+    candidate_paths = [
+        repo_root / "skills" / "plexus-guidelines" / "validate_guidelines.py",
+        repo_root / ".claude" / "skills" / "plexus-guidelines" / "validate_guidelines.py",
+    ]
+    validator_path = next((path for path in candidate_paths if path.exists()), None)
+    if validator_path is None:
+        joined = ", ".join(str(path) for path in candidate_paths)
+        raise FileNotFoundError(f"Guidelines validator not found. Checked: {joined}")
 
     spec = importlib.util.spec_from_file_location("plexus_guidelines_validator", str(validator_path))
     if spec is None or spec.loader is None:
