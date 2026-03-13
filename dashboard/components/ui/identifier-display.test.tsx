@@ -44,7 +44,7 @@ describe('IdentifierDisplay', () => {
 
       render(<IdentifierDisplay identifiers={identifiers} />);
       
-      expect(screen.getByText('VERY-LONG-IDENTIFIER-THAT...')).toBeInTheDocument();
+      expect(screen.getByText('VERY-LONG-ID...')).toBeInTheDocument();
     });
 
     it('should display clickable URL when provided', () => {
@@ -81,6 +81,17 @@ describe('IdentifierDisplay', () => {
       // Should not show other identifiers initially
       expect(screen.queryByText('Session ID:')).not.toBeInTheDocument();
       expect(screen.queryByText('Report ID:')).not.toBeInTheDocument();
+    });
+
+    it('should not wrap identifier labels with spaces', () => {
+      const identifiers: IdentifierItem[] = [
+        { name: 'Report Id', value: 'REP-123' }
+      ];
+
+      render(<IdentifierDisplay identifiers={identifiers} />);
+
+      const label = screen.getByText('Report Id:');
+      expect(label).toHaveClass('whitespace-nowrap');
     });
 
     it('should expand to show all identifiers when clicked', () => {
@@ -204,6 +215,19 @@ describe('IdentifierDisplay', () => {
       // In compact mode, only the value is shown, not the label
       expect(screen.getByText('FORM-123')).toBeInTheDocument();
       expect(screen.queryByTitle('Copy Form ID')).not.toBeInTheDocument();
+    });
+
+    it('should show only the first identifier and no expand control', () => {
+      const identifiers: IdentifierItem[] = [
+        { name: 'Form ID', value: 'FORM-123' },
+        { name: 'Session ID', value: 'SESS-999' }
+      ];
+
+      render(<IdentifierDisplay identifiers={identifiers} displayMode="compact" />);
+
+      expect(screen.getByText('FORM-123')).toBeInTheDocument();
+      expect(screen.queryByText('SESS-999')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Expand identifiers')).not.toBeInTheDocument();
     });
 
     it('should not show copy button for external ID in compact mode', () => {
