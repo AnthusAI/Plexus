@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b336e0be-e52c-4aed-8b26-3ce20798ba49",
+  "issue_id": "plx-ea2e622c-2980-45fd-b304-3c0c91fa79df",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-14T14:41:46.048Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Sources dashboard undefined list model error"
+  }
+}
