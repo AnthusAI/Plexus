@@ -261,18 +261,6 @@ def convert_mcp_tools_to_langchain(mcp_tools):
         'plexus_item_info': {
             'item_id': 'The unique ID of the item OR an external identifier value'
         },
-        'create_procedure_node': {
-            'procedure_id': 'The unique ID of the experiment',
-            'hypothesis_description': 'Clear description following format: GOAL: [target] | METHOD: [changes]',
-            'node_name': 'Descriptive name for the hypothesis node (optional)',
-            'yaml_configuration': 'Optional YAML configuration'
-        },
-        'update_node_content': {
-            'node_id': 'ID of the node to update',
-            'yaml_configuration': 'Updated YAML configuration',
-            'update_description': 'Description of what changed in this update',
-            'computed_value': 'Optional computed results'
-        },
         'think': {
             'thought': 'Your internal reasoning or analysis'
         }

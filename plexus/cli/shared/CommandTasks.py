@@ -3,6 +3,7 @@ import shlex
 import io
 import asyncio
 import json
+import re
 from contextlib import redirect_stdout, redirect_stderr
 from celery import Task
 from plexus.CustomLogging import logging
@@ -13,7 +14,8 @@ import socket
 import os
 import time
 import random
-import subprocess
+from pathlib import Path
+import traceback
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -27,6 +29,93 @@ from .command_output import CommandOutputManager, set_output_manager
 
 # Load environment variables from .env file
 load_dotenv()
+
+PROCEDURE_RUN_COMMAND_PATTERN = re.compile(r"^\s*procedure\s+run(?:\s|$)")
+
+
+def _is_procedure_run_command(command_string: str) -> bool:
+    return bool(PROCEDURE_RUN_COMMAND_PATTERN.match(command_string or ""))
+
+
+def _safe_task_metadata(raw_metadata) -> dict:
+    if isinstance(raw_metadata, dict):
+        return dict(raw_metadata)
+    if isinstance(raw_metadata, str) and raw_metadata.strip():
+        try:
+            parsed = json.loads(raw_metadata)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return {}
+
+
+def _metadata_json(metadata: dict) -> str:
+    return json.dumps(metadata or {}, default=str)
+
+
+def _read_git_sha_without_subprocess() -> Optional[str]:
+    try:
+        repo_root = Path(__file__).resolve().parents[3]
+        git_dir = repo_root / ".git"
+        head_path = git_dir / "HEAD"
+        if not head_path.exists():
+            return None
+
+        head_text = head_path.read_text(encoding="utf-8").strip()
+        if head_text.startswith("ref: "):
+            ref_path = git_dir / head_text[5:].strip()
+            if ref_path.exists():
+                return ref_path.read_text(encoding="utf-8").strip()[:12] or None
+            return None
+        return head_text[:12] or None
+    except Exception:
+        return None
+
+
+def _get_runtime_fingerprint() -> dict:
+    expected_sha = (os.getenv("PLEXUS_EXPECTED_GIT_SHA") or os.getenv("EXPECTED_GIT_SHA") or "").strip() or None
+    build_timestamp = (os.getenv("PLEXUS_BUILD_TIMESTAMP") or os.getenv("BUILD_TIMESTAMP") or "").strip() or None
+    git_sha = (os.getenv("PLEXUS_GIT_SHA") or os.getenv("GIT_SHA") or "").strip() or None
+
+    if not git_sha:
+        git_sha = _read_git_sha_without_subprocess()
+
+    try:
+        import tactus as tactus_pkg
+        tactus_version = getattr(tactus_pkg, "__version__", None) or "unknown"
+    except Exception:
+        tactus_version = "unavailable"
+
+    return {
+        "git_sha": git_sha,
+        "expected_git_sha": expected_sha,
+        "build_timestamp": build_timestamp,
+        "tactus_version": tactus_version,
+    }
+
+
+def _format_phase_error(error_message: str, phase: str, fallback_traceback: Optional[str] = None) -> tuple[str, str, dict]:
+    message = (error_message or "").strip()
+    if not message:
+        message = f"Command failed during phase: {phase}"
+    message = message.replace("\n", " ").strip()
+
+    trace_text = (fallback_traceback or "").strip()
+    if not trace_text:
+        trace_text = traceback.format_exc()
+    if not trace_text or trace_text.strip() == "NoneType: None":
+        trace_text = f"No traceback captured. Failure phase: {phase}"
+
+    details = {
+        "phase": phase,
+        "exception_type": "CommandExecutionError",
+        "traceback": trace_text,
+    }
+
+    stderr_text = trace_text
+    return message, stderr_text, details
+
 
 def upload_file_to_s3(bucket_name: str, key: str, content: str, content_type: str = 'text/plain') -> bool:
     """
@@ -70,6 +159,18 @@ def register_tasks(app):
     def execute_command(self: Task, command_string: str, target: str = "default/command", task_id: Optional[str] = None) -> dict:
         """Execute a Plexus command and return its result."""
         try:
+            execution_phase = "claim_task"
+            runtime_fingerprint = _get_runtime_fingerprint()
+
+            if runtime_fingerprint.get("expected_git_sha") and runtime_fingerprint.get("git_sha"):
+                if runtime_fingerprint["expected_git_sha"] != runtime_fingerprint["git_sha"]:
+                    logging.warning(
+                        "Worker SHA mismatch for command '%s': expected=%s actual=%s",
+                        command_string,
+                        runtime_fingerprint["expected_git_sha"],
+                        runtime_fingerprint["git_sha"],
+                    )
+
             # IMMEDIATELY claim the task if we have a task_id
             if task_id:
                 logging.info(f"Celery assigned task {task_id} to worker - attempting immediate claim")
@@ -107,11 +208,17 @@ def register_tasks(app):
                             logging.info(f"Task {task.id} has no stages yet - individual command will create appropriate stages")
                         
                         # Second update - start processing
+                        task_metadata = _safe_task_metadata(task.metadata)
+                        task_metadata["runtime_fingerprint"] = runtime_fingerprint
+                        if _is_procedure_run_command(command_string):
+                            task_metadata["procedure_runtime_fingerprint"] = runtime_fingerprint
+                        logging.info("Runtime fingerprint for task %s: %s", task_id, runtime_fingerprint)
                         task.update(
                             status='RUNNING',
                             startedAt=datetime.now(timezone.utc).isoformat(),
                             updatedAt=datetime.now(timezone.utc).isoformat(),
-                            command=command_string  # Set the command string
+                            command=command_string,  # Set the command string
+                            metadata=_metadata_json(task_metadata)
                         )
                         logging.info(f"Started processing task {task_id}")
                     except Exception as e:
@@ -121,6 +228,7 @@ def register_tasks(app):
             
             # Initialize task tracking
             task = None
+            client = None
             api_url = os.environ.get('PLEXUS_API_URL')
             api_key = os.environ.get('PLEXUS_API_KEY')
 
@@ -148,6 +256,11 @@ def register_tasks(app):
                         target=task.target,
                         command=command_string
                     )
+                    if _is_procedure_run_command(command_string):
+                        task_metadata = _safe_task_metadata(task.metadata)
+                        task_metadata["runtime_fingerprint"] = runtime_fingerprint
+                        task_metadata["procedure_runtime_fingerprint"] = runtime_fingerprint
+                        task.update(metadata=_metadata_json(task_metadata), updatedAt=datetime.now(timezone.utc).isoformat())
                 else:
                     # Create new task if no task_id provided
                     try:
@@ -178,6 +291,7 @@ def register_tasks(app):
 
             logging.info(f"Executing command: '{command_string}'")
             # Parse the command string safely
+            execution_phase = "prepare_cli"
             args = shlex.split(command_string)
             
             # Add task_id to args if we have one
@@ -303,13 +417,19 @@ def register_tasks(app):
                 # Execute the command with output capture
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
                     try:
+                        execution_phase = "execute_cli"
                         cli(standalone_mode=False)
                         status = 'success'
                     except SystemExit as e:
                         status = 'success' if e.code == 0 else 'error'
+                        if status == 'error' and not stderr_capture.getvalue():
+                            print(f"Command exited with status {e.code}", file=sys.stderr)
                     except Exception as e:
                         status = 'error'
                         logging.error(f"Command execution failed: {str(e)}", exc_info=True)
+                        if not stderr_capture.getvalue():
+                            print(f"{type(e).__name__}: {e}", file=sys.stderr)
+                            print(traceback.format_exc(), file=sys.stderr)
                 
                 # Update task status if we have a task
                 if task:
@@ -498,6 +618,7 @@ task_info:
 """
                         
                         # Store the command output and Universal Code in the task before completing
+                        execution_phase = "persist_results"
                         try:
                             update_data = {
                                 'stdout': stdout_content,
@@ -513,18 +634,51 @@ task_info:
                             task.update(**update_data)
                         except Exception as e:
                             logging.error(f"Failed to store command output in task: {str(e)}")
-                        
-                        task.complete_processing()
+
+                        if _is_procedure_run_command(command_string) and client:
+                            refreshed_task = Task.get_by_id(task.id, client)
+                            refreshed_metadata = _safe_task_metadata(refreshed_task.metadata)
+                            refreshed_procedure_status = str(refreshed_metadata.get("procedure_status") or "").upper()
+                            refreshed_task_status = str(getattr(refreshed_task, "status", "") or "").upper()
+
+                            if refreshed_procedure_status == "WAITING_FOR_HUMAN" or refreshed_task_status == "WAITING_FOR_HUMAN":
+                                logging.info(
+                                    "Procedure task %s is waiting for human; preserving active RUNNING task state",
+                                    task.id,
+                                )
+                                refreshed_task.update(
+                                    status='RUNNING',
+                                    updatedAt=datetime.now(timezone.utc).isoformat(),
+                                )
+                            elif refreshed_task_status == "FAILED":
+                                logging.info(
+                                    "Procedure task %s already marked FAILED by procedure runtime; preserving failure state",
+                                    task.id,
+                                )
+                            elif refreshed_task_status == "COMPLETED":
+                                logging.info(
+                                    "Procedure task %s already marked COMPLETED by procedure runtime; skipping duplicate completion",
+                                    task.id,
+                                )
+                            else:
+                                task.complete_processing()
+                        else:
+                            task.complete_processing()
                     else:
                         # Clear progress callback immediately to prevent further updates
                         CommandProgress.set_update_callback(None)
                         
                         # Get error message from stderr if available
-                        error_msg = stderr_capture.getvalue().strip()
+                        raw_stderr = stderr_capture.getvalue()
+                        error_msg, stderr_for_task, error_details = _format_phase_error(
+                            raw_stderr,
+                            execution_phase,
+                            fallback_traceback=raw_stderr
+                        )
                         
                         # Generate Universal Code and upload attachments for failed task
                         stdout_content = stdout_capture.getvalue()
-                        stderr_content = stderr_capture.getvalue()
+                        stderr_content = stderr_for_task
                         
                         # Generate error-focused Universal Code
                         task_type = detect_task_type_from_command(command_string)
@@ -571,6 +725,8 @@ task_info:
                             update_data = {
                                 'stdout': stdout_content,
                                 'stderr': stderr_content,
+                                'errorMessage': error_msg,
+                                'errorDetails': json.dumps(error_details),
                             }
                             
                             if error_yaml:
@@ -583,23 +739,7 @@ task_info:
                         except Exception as e:
                             logging.error(f"Failed to store command output in task: {str(e)}")
                         
-                        if error_msg:
-                            task.fail_processing(error_msg)
-                        else:
-                            # If we somehow have no error message, find the failed stage's message
-                            stages = task.get_stages()
-                            if stages:
-                                # Look for a failed stage first
-                                failed_stage = next((stage for stage in stages if stage.status == 'FAILED'), None)
-                                if failed_stage and failed_stage.statusMessage:
-                                    error_msg = failed_stage.statusMessage
-                                else:
-                                    # If no failed stage found, use current stage's message
-                                    current_stage = next((stage for stage in stages if stage.status == 'RUNNING'), None)
-                                    error_msg = (current_stage.statusMessage if current_stage else None) or "Command failed"
-                                task.fail_processing(error_msg)
-                            else:
-                                task.fail_processing("Command failed")
+                        task.fail_processing(error_msg, error_details)
                 
                 # Return a result dict with stdout and stderr
                 result = {
@@ -629,15 +769,17 @@ task_info:
                 
         except Exception as e:
             logging.error(f"Error executing command '{command_string}': {e}", exc_info=True)
+            execution_phase = locals().get("execution_phase", "claim_task")
+            formatted_msg, stderr_text, error_details = _format_phase_error(str(e), execution_phase)
             
             # Return an error result
             result = {
                 'status': 'error',
                 'command': command_string,
                 'target': target,
-                'error': str(e),
+                'error': formatted_msg,
                 'stdout': stdout_capture.getvalue() if 'stdout_capture' in locals() else '',
-                'stderr': stderr_capture.getvalue() if 'stderr_capture' in locals() else '',
+                'stderr': stderr_text,
                 'started_at': datetime.now(timezone.utc).timestamp(),
                 'completed_at': datetime.now(timezone.utc).timestamp()
             }
@@ -698,10 +840,10 @@ task_info:
                     
                     update_data = {
                         'status': 'FAILED',
-                        'errorMessage': str(e),
-                        'errorDetails': {"traceback": str(sys.exc_info())} if sys.exc_info() else None,
+                        'errorMessage': formatted_msg,
+                        'errorDetails': json.dumps(error_details),
                         'stdout': stdout_content,
-                        'stderr': stderr_content,
+                        'stderr': stderr_text or stderr_content,
                         'completedAt': datetime.now(timezone.utc).isoformat()
                     }
                     

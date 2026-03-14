@@ -55,7 +55,6 @@ prompts:
         self.mock_procedure.accountId = 'account-789'
         self.mock_procedure.scorecardId = 'scorecard-abc'
         self.mock_procedure.scoreId = 'score-def'
-        self.mock_procedure.rootNodeId = 'node-456'
         self.mock_procedure.createdAt = datetime(2024, 1, 15, 10, 30)
         self.mock_procedure.updatedAt = datetime(2024, 1, 15, 11, 0)
         
@@ -97,7 +96,7 @@ prompts:
         # Verify success
         self.assertTrue(result.success)
         self.assertEqual(result.procedure, self.mock_procedure)
-        self.assertEqual(result.root_node, self.mock_root_node)
+        self.assertIsNone(result.root_node)
         
         # Verify calls
         mock_resolve_account.assert_called_once_with(self.mock_client, 'test-account')
@@ -113,7 +112,6 @@ prompts:
             featured=True,
             scoreVersionId=None
         )
-        self.mock_procedure.create_root_node.assert_called_once_with(self.valid_yaml_config, None)
     
     @patch('plexus.cli.procedure.service.resolve_account_identifier')
     def test_create_procedure_account_not_found(self, mock_resolve_account):
@@ -195,7 +193,7 @@ prompts:
     @patch('plexus.cli.procedure.service.resolve_scorecard_identifier')
     @patch('plexus.cli.procedure.service.ProcedureTemplate')
     def test_create_procedure_uses_template_yaml(self, mock_template_class, mock_resolve_scorecard, mock_resolve_account):
-        """Test procedure creation uses template YAML when none provided and root node is requested."""
+        """Test procedure creation uses template YAML when none provided."""
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
         
@@ -207,52 +205,35 @@ prompts:
         
         mock_procedure_class = Mock()
         mock_procedure_class.create.return_value = self.mock_procedure
-        self.mock_procedure.create_root_node.return_value = self.mock_root_node
-        
         with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'), \
              patch('plexus.cli.procedure.service.Procedure', mock_procedure_class):
             
             result = self.service.create_procedure(
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
-                score_identifier='test-score',
-                create_root_node=True  # Request root node to trigger template usage
-                # No yaml_config provided
+                score_identifier='test-score'
             )
         
         self.assertTrue(result.success)
-        # Verify template YAML was used
-        self.mock_procedure.create_root_node.assert_called_once_with(TEST_PROCEDURE_YAML, None)
+        mock_procedure_class.create.assert_called_once()
+        self.assertEqual(mock_procedure_class.create.call_args.kwargs["code"], TEST_PROCEDURE_YAML)
     
     @patch('plexus.cli.procedure.service.Procedure')
     def test_get_procedure_info_success(self, mock_procedure_class):
         """Test getting procedure info successfully."""
         # Setup mocks
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
-        self.mock_procedure.get_root_node.return_value = self.mock_root_node
-        self.mock_root_node.get_latest_version.return_value = self.mock_initial_version
-        
-        # Mock node listing
-        mock_nodes = [Mock(), Mock(), Mock()]
-        for i, node in enumerate(mock_nodes):
-            node.get_versions.return_value = [Mock(), Mock()]  # 2 versions each
-        
-        with patch('plexus.cli.procedure.service.GraphNode') as mock_node_class:
-            mock_node_class.list_by_procedure.return_value = mock_nodes
-            
-            result = self.service.get_procedure_info('exp-123')
+        result = self.service.get_procedure_info('exp-123')
         
         # Verify result
         self.assertIsNotNone(result)
         self.assertEqual(result.procedure, self.mock_procedure)
-        self.assertEqual(result.root_node, self.mock_root_node)
-        # Note: latest_version no longer exists in simplified schema
-        self.assertEqual(result.node_count, 3)
-        self.assertEqual(result.version_count, 3)  # In simplified schema, version_count equals node_count
+        self.assertIsNone(result.root_node)
+        self.assertEqual(result.node_count, 0)
+        self.assertEqual(result.version_count, 0)
         
         # Verify calls
         mock_procedure_class.get_by_id.assert_called_once_with('exp-123', self.mock_client)
-        self.mock_procedure.get_root_node.assert_called_once()
     
     @patch('plexus.cli.procedure.service.Procedure')
     def test_get_procedure_info_not_found(self, mock_procedure_class):
@@ -303,19 +284,10 @@ prompts:
         self.assertEqual(result, [])
     
     @patch('plexus.cli.procedure.service.Procedure')
-    @patch('plexus.cli.procedure.service.GraphNode')
-    def test_delete_procedure_success(self, mock_node_class, mock_procedure_class):
+    def test_delete_procedure_success(self, mock_procedure_class):
         """Test successful procedure deletion."""
         # Setup mocks
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
-        
-        mock_nodes = [Mock(), Mock()]
-        mock_node_class.list_by_procedure.return_value = mock_nodes
-        
-        # Each node no longer has separate versions in simplified schema
-        for node in mock_nodes:
-            node.delete.return_value = True
-        
         self.mock_procedure.delete.return_value = True
         
         success, message = self.service.delete_procedure('exp-123')
@@ -323,11 +295,6 @@ prompts:
         # Verify success
         self.assertTrue(success)
         self.assertIn('Deleted procedure', message)
-        
-        # Verify all nodes were deleted (no separate versions in simplified schema)
-        for node in mock_nodes:
-            node.delete.assert_called_once()
-        
         self.mock_procedure.delete.assert_called_once()
     
     @patch('plexus.cli.procedure.service.Procedure')
@@ -344,9 +311,7 @@ prompts:
     def test_update_procedure_config_success(self, mock_procedure_class):
         """Test successful procedure configuration update."""
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
-        self.mock_procedure.get_root_node.return_value = self.mock_root_node
         
-        # Mock root node update (no separate versions in simplified schema)
         yaml_config = self.valid_yaml_config
         note = "Updated configuration"
         
@@ -356,13 +321,7 @@ prompts:
         self.assertTrue(success)
         self.assertIn('Updated procedure configuration', message)
         
-        # Verify root node content was updated directly
-        self.mock_root_node.update_content.assert_called_once_with(
-            code=yaml_config,
-            status='QUEUED',
-            hypothesis=note,
-            value={"note": note}
-        )
+        self.mock_procedure.update.assert_called_once_with(code=yaml_config)
     
     @patch('plexus.cli.procedure.service.Procedure')
     def test_update_procedure_config_invalid_yaml(self, mock_procedure_class):
@@ -376,14 +335,13 @@ prompts:
     
     @patch('plexus.cli.procedure.service.Procedure')
     def test_update_procedure_config_no_root_node(self, mock_procedure_class):
-        """Test updating procedure config when no root node exists."""
+        """Test updating procedure config without graph-node dependencies."""
         mock_procedure_class.get_by_id.return_value = self.mock_procedure
-        self.mock_procedure.get_root_node.return_value = None
         
         success, message = self.service.update_procedure_config('exp-123', self.valid_yaml_config)
         
-        self.assertFalse(success)
-        self.assertEqual(message, 'Procedure has no root node')
+        self.assertTrue(success)
+        self.assertIn('Updated procedure configuration', message)
     
     @patch('plexus.cli.procedure.service.Procedure')
     @patch('plexus.cli.procedure.service.ProcedureTemplate')

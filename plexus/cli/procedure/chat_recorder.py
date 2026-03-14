@@ -29,7 +29,8 @@ class ProcedureChatRecorder:
     def __init__(self, client: PlexusDashboardClient, procedure_id: str, node_id: Optional[str] = None):
         self.client = client
         self.procedure_id = procedure_id
-        self.node_id = node_id
+        # node_id is deprecated (graph-node persistence removed); retained for call-site compatibility.
+        self.node_id = None
         self.session_id = None
         self.account_id = None
         self.sequence_number = 0
@@ -55,10 +56,6 @@ class ProcedureChatRecorder:
                 'category': 'Hypothesize',
                 'status': 'ACTIVE'
             }
-            
-            # Only include nodeId if it's not None (for experiment-level conversations)
-            if self.node_id is not None:
-                session_data['nodeId'] = self.node_id
 
             # Add scorecard/score IDs if they are present
             if scorecard_id and str(scorecard_id).strip():
@@ -482,8 +479,17 @@ class ProcedureChatRecorder:
             return True
             
         try:
+            status_map = {
+                'FAILED': 'ERROR',
+                'FAILURE': 'ERROR',
+                'ERROR': 'ERROR',
+                'COMPLETED': 'COMPLETED',
+                'SUCCESS': 'COMPLETED',
+                'ACTIVE': 'ACTIVE',
+            }
+            normalized_status = status_map.get((status or '').upper(), 'ERROR')
             name_info = f" with name '{name}'" if name else ""
-            logger.info(f"Ending session {self.session_id} with status {status}{name_info}")
+            logger.info(f"Ending session {self.session_id} with status {normalized_status}{name_info}")
             
             # Update session status and optionally name
             mutation = """
@@ -499,7 +505,7 @@ class ProcedureChatRecorder:
             
             update_data = {
                 'id': self.session_id,
-                'status': status
+                'status': normalized_status
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
             

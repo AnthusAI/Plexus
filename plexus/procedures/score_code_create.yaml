@@ -1,25 +1,23 @@
-name: score_code_create
-version: 1.0.0
+name: Create Score Code
+version: 1.0.4
 class: Tactus
 description: "Create missing score code implementations for an existing scorecard from stakeholder brief + guidelines."
 
 params:
   brief:
     type: string
+    input: textarea
+    rows: 8
     required: true
     description: "Unstructured stakeholder brief describing which scorecard to update and implementation intent"
-  scorecard_list_limit:
-    type: number
-    default: 50
-    description: "Max number of scorecards to list per page"
+  account_identifier:
+    type: string
+    input: hidden
+    description: "Account identifier (key/name/id)"
   validation_item_id:
     type: string
     required: false
     description: "Optional item ID used for prediction validation; if omitted, uses plexus_item_last"
-  max_code_iterations:
-    type: number
-    default: 6
-    description: "Max drafting/validation attempts per score"
   dry_run:
     type: boolean
     default: false
@@ -199,6 +197,26 @@ code: |
     return nil, decoded
   end
 
+  local function decode_json_flexible(value)
+    local decoded, err = safe_decode(value)
+    if decoded ~= nil then
+      return decoded, nil
+    end
+
+    if type(value) ~= "string" then
+      return nil, err
+    end
+
+    local start_idx = string.find(value, "{")
+    local end_idx = string.find(value, "}[^}]*$")
+    if not start_idx or not end_idx or end_idx < start_idx then
+      return nil, err
+    end
+
+    local snippet = string.sub(value, start_idx, end_idx)
+    return safe_decode(snippet)
+  end
+
   local function trim(value)
     if value == nil then
       return ""
@@ -215,6 +233,20 @@ code: |
 
   local function has_text(value)
     return trim(value) ~= ""
+  end
+
+  local function safe_reset(agent)
+    if agent == nil then
+      return
+    end
+    local ok_method, reset_method = pcall(function()
+      return agent.reset
+    end)
+    if ok_method and type(reset_method) == "function" then
+      pcall(function()
+        reset_method(agent)
+      end)
+    end
   end
 
   local function starts_with(value, prefix)
@@ -362,7 +394,68 @@ code: |
   end
 
   local function wait_for_done(agent, max_iters, inject)
-    return wait_for_tool_call(agent, "done", max_iters, inject)
+    local start_done = Tool.get_call_count("done")
+    local response
+    if inject ~= nil then
+      response = agent({message = inject})
+    else
+      response = agent()
+    end
+
+    local iter = 0
+    while true do
+      if Tool.get_call_count("done") > start_done then
+        local done_call = Tool.last_call("done")
+        if done_call then
+          if done_call.args and done_call.args.reason ~= nil then
+            return done_call.args.reason
+          end
+          if done_call.result ~= nil then
+            return done_call.result
+          end
+        end
+        return ""
+      end
+
+      if response ~= nil then
+        local ok_output, output_value = pcall(function() return response.output end)
+        if ok_output and output_value ~= nil then
+          return output_value
+        end
+
+        local ok_reason, reason_value = pcall(function() return response.reason end)
+        if ok_reason and reason_value ~= nil then
+          return reason_value
+        end
+
+        local ok_result, result_value = pcall(function() return response.result end)
+        if ok_result and result_value ~= nil then
+          return result_value
+        end
+
+        local ok_content, content_value = pcall(function() return response.content end)
+        if ok_content and content_value ~= nil then
+          return content_value
+        end
+
+        local ok_response, response_value = pcall(function() return response.response end)
+        if ok_response and response_value ~= nil then
+          return response_value
+        end
+
+        local response_text = tostring(response)
+        if response_text ~= "" then
+          return response_text
+        end
+      end
+
+      if iter >= max_iters then
+        return nil
+      end
+
+      response = agent()
+      iter = iter + 1
+    end
   end
 
   local function prediction_is_valid(result)
@@ -423,15 +516,17 @@ code: |
   local function run(input)
     local params = input
     local brief = params.brief
-    local scorecard_list_limit = tonumber(params.scorecard_list_limit) or 50
-    local max_code_iterations = tonumber(params.max_code_iterations) or 6
+    local account_identifier = params.account_identifier or "default"
+    local scorecard_list_limit = 50
+    local max_code_iterations = 6
     local dry_run = params.dry_run == true
     local validation_item_id = params.validation_item_id
 
     Stage.set("observe")
     Human.notify({message = "Observing scorecards and validation context...", level = "info"})
 
-    local list_inject = "Call plexus_scorecards_list with return_metadata=true and limit=" .. tostring(scorecard_list_limit) .. "."
+    local list_inject = "Call plexus_scorecards_list with return_metadata=true, limit=" .. tostring(scorecard_list_limit) ..
+      ', and account_identifier="' .. tostring(account_identifier) .. '".'
     local listed = wait_for_tool_call(Observer, "plexus_scorecards_list", 3, list_inject)
     if not listed then
       return {success = false, status = "error", message = "Observer failed to call plexus_scorecards_list"}
@@ -476,7 +571,7 @@ code: |
     State.set("context_pack", context_pack)
 
     if not has_text(validation_item_id) then
-      local item_inject = "Call plexus_item_last with minimal=true and return."
+      local item_inject = "Call plexus_item_last with minimal=true and account_identifier=\"" .. tostring(account_identifier) .. "\" and return."
       local got_item = wait_for_tool_call(Observer, "plexus_item_last", 3, item_inject)
       if got_item then
         local item_call = Tool.last_call("plexus_item_last")
@@ -499,13 +594,12 @@ code: |
     Human.notify({message = "Identifying target scorecard...", level = "info"})
 
     local orient_inject = "Brief:\n" .. brief .. "\n\nContext Pack JSON:\n" .. Json.encode(context_pack)
-    local oriented = wait_for_done(Orienter, 5, orient_inject)
-    if not oriented then
+    local orient_reason = wait_for_done(Orienter, 5, orient_inject)
+    if orient_reason == nil then
       return {success = false, status = "error", message = "Orienter did not complete"}
     end
 
-    local orient_call = Tool.last_call("done")
-    local orient_data, orient_err = safe_decode(orient_call.args.reason or "")
+    local orient_data, orient_err = decode_json_flexible(orient_reason)
     if orient_data == nil then
       return {success = false, status = "error", message = "Failed to parse orienter JSON: " .. tostring(orient_err)}
     end
@@ -647,13 +741,12 @@ code: |
       scorecard = target_scorecard,
       missing_code_scores = missing_scores
     }
-    local planned = wait_for_done(Planner, 6, "Plan updates JSON:\n" .. Json.encode(planner_input))
-    if not planned then
+    local plan_reason = wait_for_done(Planner, 6, "Plan updates JSON:\n" .. Json.encode(planner_input))
+    if plan_reason == nil then
       return {success = false, status = "error", message = "Planner did not complete"}
     end
 
-    local plan_call = Tool.last_call("done")
-    local plan_data, plan_err = safe_decode(plan_call.args.reason or "")
+    local plan_data, plan_err = decode_json_flexible(plan_reason)
     if plan_data == nil then
       return {success = false, status = "error", message = "Failed to parse planner JSON: " .. tostring(plan_err)}
     end
@@ -728,7 +821,7 @@ code: |
       local last_validation_message = nil
 
       for attempt = 1, max_code_iterations do
-        Code_drafter.reset()
+        safe_reset(CodeDrafter)
 
         local draft_payload = {
           score = {
@@ -751,13 +844,13 @@ code: |
           }
         }
 
-        local drafted = wait_for_done(
-          Code_drafter,
+        local draft_reason = wait_for_done(
+          CodeDrafter,
           8,
           "Draft executable score YAML for this score. Return ONLY YAML in done() reason.\n\nDraft Context JSON:\n" .. Json.encode(draft_payload)
         )
 
-        if not drafted then
+        if draft_reason == nil then
           return {
             success = false,
             status = "error",
@@ -765,8 +858,7 @@ code: |
           }
         end
 
-        local draft_done = Tool.last_call("done")
-        local candidate_code = draft_done.args.reason or ""
+        local candidate_code = tostring(draft_reason)
         if not has_text(candidate_code) then
           validation_feedback = "No YAML content returned. Return YAML only, no markdown fences."
           last_validation_message = validation_feedback
@@ -774,7 +866,7 @@ code: |
           local tmp_path = "/tmp/plexus_score_code_" .. sanitize_filename(update.score_key or update.score_id) .. "_" .. tostring(attempt) .. ".yaml"
           File.write(tmp_path, candidate_code)
 
-          Validator.reset()
+          safe_reset(Validator)
           local validate_inject = "Call plexus_predict exactly once with this JSON args object, then done():\n" ..
             Json.encode({
               scorecard_name = target_scorecard.name,
@@ -969,9 +1061,8 @@ code: |
   Procedure {
     input = {
       brief = field.string{required = true},
-      scorecard_list_limit = field.number{default = 50},
+      account_identifier = field.string{default = "default"},
       validation_item_id = field.string{},
-      max_code_iterations = field.number{default = 6},
       dry_run = field.boolean{default = false}
     },
 

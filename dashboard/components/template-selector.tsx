@@ -10,98 +10,239 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ConfigurableParametersDialog } from '@/components/ui/ConfigurableParametersDialog'
 import { Sparkles, Beaker, FileCode2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { parseParametersFromYaml, hasParameters } from '@/lib/parameter-parser'
+import { parseParametersFromYaml } from '@/lib/parameter-parser'
 
 const client = generateClient<Schema>()
 
-// Types
-// NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
 type ProcedureTemplate = Schema['Procedure']['type']
+
+type BuiltInProcedureTemplate = {
+  slug: string
+  name: string
+  description: string
+  category: string
+  version: string
+  code: string
+}
 
 interface TemplateSelectorProps {
   accountId: string
+  accountName?: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onTemplateSelect: (template: ProcedureTemplate, parameters?: Record<string, any>) => void
 }
 
-export default function TemplateSelector({ accountId, open, onOpenChange, onTemplateSelect }: TemplateSelectorProps) {
+export default function TemplateSelector({ accountId, accountName, open, onOpenChange, onTemplateSelect }: TemplateSelectorProps) {
   const [templates, setTemplates] = useState<ProcedureTemplate[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [creatingProcedureFromTemplate, setCreatingProcedureFromTemplate] = useState<string | null>(null)
   const [showParametersDialog, setShowParametersDialog] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<ProcedureTemplate | null>(null)
 
-  // Load templates when dialog opens
   useEffect(() => {
     if (open) {
       loadTemplates()
     }
   }, [open, accountId])
 
-  const loadTemplates = async () => {
-    setIsLoading(true)
-    try {
-      const result = await client.graphql({
-        query: `
-          query ListProcedureByAccountIdAndUpdatedAt(
-            $accountId: String!
-            $sortDirection: ModelSortDirection
-            $limit: Int
+  const listAccountProcedures = async () => {
+    const result = await client.graphql({
+      query: `
+        query ListProcedureByAccountIdAndUpdatedAt(
+          $accountId: String!
+          $sortDirection: ModelSortDirection
+          $limit: Int
+        ) {
+          listProcedureByAccountIdAndUpdatedAt(
+            accountId: $accountId
+            sortDirection: $sortDirection
+            limit: $limit
           ) {
-            listProcedureByAccountIdAndUpdatedAt(
-              accountId: $accountId
-              sortDirection: $sortDirection
-              limit: $limit
-            ) {
-              items {
-                id
-                name
-                description
-                code
-                isTemplate
-                category
-                version
-                isDefault
-                accountId
-                createdAt
-                updatedAt
+            items {
+              id
+              isTemplate
+              category
+              version
+              isDefault
+              createdAt
+              updatedAt
+            }
+            nextToken
+          }
+        }
+      `,
+      variables: {
+        accountId,
+        sortDirection: 'DESC',
+        limit: 100,
+      }
+    })
+
+    return (result as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
+  }
+
+  const getProcedureTemplateDetails = async (procedureId: string) => {
+    const result = await client.graphql({
+      query: `
+        query GetProcedure($id: ID!) {
+          getProcedure(id: $id) {
+            id
+            name
+            description
+            code
+            isTemplate
+            category
+            version
+            isDefault
+            accountId
+            createdAt
+            updatedAt
+          }
+        }
+      `,
+      variables: { id: procedureId },
+    })
+
+    return (result as any).data?.getProcedure || null
+  }
+
+  const ensureBuiltInTemplates = async () => {
+    const response = await fetch('/api/procedure-templates/builtin', {
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to load built-in procedure templates')
+    }
+
+    const payload = await response.json()
+    const builtInTemplates = (payload.templates || []) as BuiltInProcedureTemplate[]
+    if (builtInTemplates.length === 0) {
+      return
+    }
+
+    const existingProcedures = await listAccountProcedures()
+    const existingTemplates = existingProcedures.filter((procedure: any) => procedure.isTemplate === true)
+
+    for (const builtInTemplate of builtInTemplates) {
+      const existingTemplate = existingTemplates.find(
+        (template: any) =>
+          template.category === builtInTemplate.category
+      )
+
+      if (existingTemplate) {
+        let existingTemplateDetails: any = null
+        try {
+          existingTemplateDetails = await getProcedureTemplateDetails(existingTemplate.id)
+        } catch (error) {
+          console.warn('Failed to load template details for built-in comparison:', existingTemplate.id, error)
+        }
+
+        const existingCode = (existingTemplateDetails?.code || '') as string
+        const needsUpdate =
+          existingTemplate.isTemplate !== true ||
+          existingTemplate.version !== builtInTemplate.version ||
+          existingTemplateDetails?.name !== builtInTemplate.name ||
+          existingTemplateDetails?.description !== builtInTemplate.description ||
+          existingCode !== builtInTemplate.code
+
+        if (needsUpdate) {
+          await client.graphql({
+            query: `
+              mutation UpdateProcedure($input: UpdateProcedureInput!) {
+                updateProcedure(input: $input) {
+                  id
+                }
               }
-              nextToken
+            `,
+            variables: {
+              input: {
+                id: existingTemplate.id,
+                name: builtInTemplate.name,
+                description: builtInTemplate.description,
+                code: builtInTemplate.code,
+                category: builtInTemplate.category,
+                version: builtInTemplate.version,
+                isTemplate: true,
+                isDefault: false,
+              },
+            },
+          })
+        }
+
+        continue
+      }
+
+      await client.graphql({
+        query: `
+          mutation CreateProcedure($input: CreateProcedureInput!) {
+            createProcedure(input: $input) {
+              id
             }
           }
         `,
         variables: {
-          accountId: accountId,
-          sortDirection: 'DESC',
-          limit: 100
-        }
+          input: {
+            accountId,
+            name: builtInTemplate.name,
+            description: builtInTemplate.description,
+            code: builtInTemplate.code,
+            category: builtInTemplate.category,
+            version: builtInTemplate.version,
+            isTemplate: true,
+            isDefault: false,
+            featured: false,
+          },
+        },
       })
+    }
+  }
 
-      const allProcedures = (result as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
-      // Filter for templates only (isTemplate=true) and map code -> template
-      const templatesData = allProcedures
-        .filter((p: any) => p.isTemplate === true)
-        .map((p: any) => ({ ...p, template: p.code }))
+  const loadTemplates = async () => {
+    setIsLoading(true)
+    try {
+      await ensureBuiltInTemplates()
+      const allProcedures = await listAccountProcedures()
+      const templateCandidates = allProcedures.filter((procedure: any) => procedure.isTemplate === true)
+      const templateDetails = await Promise.all(
+        templateCandidates.map(async (procedure: any) => {
+          try {
+            return await getProcedureTemplateDetails(procedure.id)
+          } catch (error) {
+            console.warn('Skipping template with invalid data:', procedure.id, error)
+            return null
+          }
+        })
+      )
+
+      const templatesData = templateDetails
+        .filter((procedure: any) => procedure?.isTemplate === true)
+        .map((procedure: any) => ({ ...procedure, template: procedure.code }))
+        .sort((a: any, b: any) => {
+          if (a.isDefault && !b.isDefault) return -1
+          if (!a.isDefault && b.isDefault) return 1
+          return a.name.localeCompare(b.name)
+        })
+
       setTemplates(templatesData)
     } catch (error) {
       console.error('Error loading templates:', error)
-      toast.error("Failed to load experiment templates")
+      toast.error("Failed to load runnable procedures")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleCreateProcedureFromTemplate = async (template: ProcedureTemplate) => {
-    // Check if template has parameters
-    // Note: We map code -> template when loading, but TypeScript doesn't know about it
+  const handleRunProcedureFromTemplate = async (template: ProcedureTemplate) => {
     const templateCode = (template as any).template || template.code || ''
-    if (templateCode && hasParameters(templateCode)) {
-      // Show parameters dialog
+    const parameters = parseParametersFromYaml(templateCode)
+    const visibleParameters = parameters.filter((parameter) => parameter.input !== 'hidden')
+
+    if (visibleParameters.length > 0) {
       setSelectedTemplate(template)
       setShowParametersDialog(true)
     } else {
-      // Create directly without parameters
       setCreatingProcedureFromTemplate(template.id)
       try {
         await onTemplateSelect(template)
@@ -125,16 +266,25 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
     }
   }
 
+  const selectedTemplateParameters = selectedTemplate
+    ? parseParametersFromYaml((selectedTemplate as any).template || selectedTemplate.code || '')
+    : []
+  const selectedTemplateDescription = selectedTemplateParameters.some(
+    (parameter) => parameter.name === 'account_identifier' && parameter.input === 'hidden'
+  ) && accountName
+    ? `Runs in account: ${accountName}`
+    : 'Please provide the required parameters for this procedure template'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCode2 className="h-5 w-5" />
-            Choose Experiment Template
+            Run Procedure
           </DialogTitle>
           <DialogDescription>
-            Select a template to create a new experiment with predefined configuration.
+            Select a procedure template to create and start a new run.
           </DialogDescription>
         </DialogHeader>
 
@@ -142,17 +292,17 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
           {isLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading templates...</p>
+              <p className="text-muted-foreground">Loading procedures...</p>
             </div>
           ) : templates.length === 0 ? (
             <div className="text-center py-12">
               <Beaker className="h-16 w-16 text-muted-foreground mx-auto mb-6 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No templates available</h3>
+              <h3 className="text-lg font-medium mb-2">No runnable procedures available</h3>
               <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-                Templates can be created and managed in the Templates dashboard.
+                Built-in and saved procedure templates will appear here when available.
               </p>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Go to Templates Dashboard
+                Close
               </Button>
             </div>
           ) : (
@@ -161,7 +311,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
                 <Card 
                   key={template.id} 
                   className="relative group cursor-pointer border border-border bg-card hover:shadow-md transition-all duration-200 hover:border-primary/30"
-                  onClick={() => handleCreateProcedureFromTemplate(template)}
+                  onClick={() => handleRunProcedureFromTemplate(template)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
@@ -200,7 +350,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
                       className="w-full"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleCreateProcedureFromTemplate(template)
+                        handleRunProcedureFromTemplate(template)
                       }}
                       disabled={creatingProcedureFromTemplate === template.id}
                     >
@@ -212,7 +362,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
                       ) : (
                         <>
                           <Sparkles className="w-3 h-3 mr-2" />
-                          Use Template
+                          Run Procedure
                         </>
                       )}
                     </Button>
@@ -224,19 +374,18 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
         </div>
       </DialogContent>
 
-      {/* Parameters Dialog */}
       {selectedTemplate && (
         <ConfigurableParametersDialog
           open={showParametersDialog}
-          onOpenChange={(open) => {
-            setShowParametersDialog(open)
-            if (!open) setSelectedTemplate(null)
+          onOpenChange={(isOpen) => {
+            setShowParametersDialog(isOpen)
+            if (!isOpen) setSelectedTemplate(null)
           }}
           title={`Configure ${selectedTemplate.name}`}
-          description="Please provide the required parameters for this procedure template"
-          parameters={parseParametersFromYaml((selectedTemplate as any).template || selectedTemplate.code || '')}
+          description={selectedTemplateDescription}
+          parameters={selectedTemplateParameters}
           onSubmit={handleParametersSubmit}
-          submitLabel="Create Procedure"
+          submitLabel="Create And Run"
         />
       )}
     </Dialog>

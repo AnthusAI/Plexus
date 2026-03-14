@@ -19,7 +19,7 @@ class TestCLIImportsOnly:
             assert callable(main)
         except ImportError as e:
             pytest.fail(f"Failed to import CommandLineInterface: {e}")
-    
+
     def test_command_tasks_module(self):
         """Test CommandTasks module that had broken imports"""
         try:

@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from "react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
-import { getClient } from '@/utils/data-operations'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -37,6 +36,138 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 
 const client = generateClient<Schema>()
+
+const LIST_CHAT_SESSIONS_BY_PROCEDURE_QUERY = /* GraphQL */ `
+  query ListChatSessionByProcedureIdAndCreatedAt(
+    $procedureId: String!
+    $sortDirection: ModelSortDirection
+    $limit: Int
+    $nextToken: String
+  ) {
+    listChatSessionByProcedureIdAndCreatedAt(
+      procedureId: $procedureId
+      sortDirection: $sortDirection
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        name
+        category
+        status
+        createdAt
+        updatedAt
+      }
+      nextToken
+    }
+  }
+`
+
+const LIST_CHAT_MESSAGES_BY_PROCEDURE_QUERY = /* GraphQL */ `
+  query ListChatMessageByProcedureIdAndCreatedAt(
+    $procedureId: String!
+    $sortDirection: ModelSortDirection
+    $limit: Int
+    $nextToken: String
+  ) {
+    listChatMessageByProcedureIdAndCreatedAt(
+      procedureId: $procedureId
+      sortDirection: $sortDirection
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        content
+        role
+        messageType
+        humanInteraction
+        toolName
+        toolParameters
+        toolResponse
+        createdAt
+        sequenceNumber
+        sessionId
+      }
+      nextToken
+    }
+  }
+`
+
+const ON_CREATE_CHAT_SESSION_SUBSCRIPTION = /* GraphQL */ `
+  subscription OnCreateChatSession($filter: ModelSubscriptionChatSessionFilterInput) {
+    onCreateChatSession(filter: $filter) {
+      id
+      procedureId
+      createdAt
+    }
+  }
+`
+
+const ON_CREATE_CHAT_MESSAGE_SUBSCRIPTION = /* GraphQL */ `
+  subscription OnCreateChatMessage($filter: ModelSubscriptionChatMessageFilterInput) {
+    onCreateChatMessage(filter: $filter) {
+      id
+      procedureId
+      createdAt
+    }
+  }
+`
+
+const safeParseJson = (value: unknown): any => {
+  if (value == null) return undefined
+  if (typeof value === 'object') return value
+  if (typeof value !== 'string') return undefined
+  try {
+    return JSON.parse(value)
+  } catch {
+    return undefined
+  }
+}
+
+const listSessionsByProcedure = async (procedureId: string): Promise<any[]> => {
+  let allSessions: any[] = []
+  let nextToken: string | null = null
+
+  do {
+    const response: any = await client.graphql({
+      query: LIST_CHAT_SESSIONS_BY_PROCEDURE_QUERY,
+      variables: {
+        procedureId,
+        sortDirection: 'DESC',
+        limit: 100,
+        nextToken,
+      },
+    })
+    const page = response?.data?.listChatSessionByProcedureIdAndCreatedAt
+    allSessions = [...allSessions, ...(page?.items || [])]
+    nextToken = page?.nextToken || null
+  } while (nextToken)
+
+  return allSessions
+}
+
+const listMessagesByProcedure = async (procedureId: string): Promise<any[]> => {
+  let allMessages: any[] = []
+  let nextToken: string | null = null
+
+  do {
+    const response: any = await client.graphql({
+      query: LIST_CHAT_MESSAGES_BY_PROCEDURE_QUERY,
+      variables: {
+        procedureId,
+        sortDirection: 'ASC',
+        limit: 1000,
+        nextToken,
+      },
+    })
+    const page = response?.data?.listChatMessageByProcedureIdAndCreatedAt
+    allMessages = [...allMessages, ...(page?.items || [])]
+    nextToken = page?.nextToken || null
+  } while (nextToken)
+
+  return allMessages
+}
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -322,10 +453,7 @@ function ConversationViewer({
         setIsLoading(true)
         
         // Load chat sessions for the procedure
-        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
-          procedureId: effectiveId,
-          limit: 100
-        })
+        const sessionsData = await listSessionsByProcedure(effectiveId)
 
         if (sessionsData) {
           const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
@@ -352,43 +480,14 @@ function ConversationViewer({
         }
 
         // Load ALL messages for this experiment with proper pagination
-        let allMessages: any[] = []
-        let nextToken: string | null = null
-        
-        do {
-          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
-            procedureId: effectiveId,
-            limit: 1000,
-            nextToken,
-          }, {
-            selectionSet: [
-              'id',
-              'content',
-              'role',
-              'messageType',
-              'humanInteraction',
-              'toolName',
-              'toolParameters',
-              'toolResponse',
-              'createdAt',
-              'sequenceNumber',
-              'sessionId'
-            ]
-          })
-          
-          if (response?.data) {
-            allMessages = [...allMessages, ...response.data]
-          }
-          
-          nextToken = response.nextToken || null
-        } while (nextToken)
+        const allMessages = await listMessagesByProcedure(effectiveId)
 
         if (allMessages.length > 0) {
           const formattedMessages: ChatMessage[] = allMessages.map((msg: any) => {
             
             // Parse tool call data from content if structured fields are missing
             let parsedToolName = msg.toolName
-            let parsedToolParameters = msg.toolParameters ? JSON.parse(msg.toolParameters) : undefined
+            let parsedToolParameters = safeParseJson(msg.toolParameters)
             
             if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
               // Parse tool call from content string like: "plexus_feedback_find({'scorecard_name': 'SelectQuote HCS Medium-Risk', ...})"
@@ -418,7 +517,7 @@ function ConversationViewer({
               humanInteraction: msg.humanInteraction,
               toolName: parsedToolName,
               toolParameters: parsedToolParameters,
-              toolResponse: msg.toolResponse ? JSON.parse(msg.toolResponse) : undefined,
+              toolResponse: safeParseJson(msg.toolResponse),
               createdAt: msg.createdAt,
               sequenceNumber: msg.sequenceNumber,
               sessionId: msg.sessionId
@@ -500,10 +599,7 @@ function ConversationViewer({
         console.log('Checking for new chat sessions in experiment:', effectiveId)
         
         // Query for sessions in the current procedure
-        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
-          procedureId: effectiveId,
-          limit: 100
-        })
+        const sessionsData = await listSessionsByProcedure(effectiveId)
 
         if (sessionsData) {
           const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
@@ -554,8 +650,14 @@ function ConversationViewer({
     }
 
     try {
-      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatSession.onCreate().subscribe({
+      const subscription = (client.graphql({
+        query: ON_CREATE_CHAT_SESSION_SUBSCRIPTION,
+        variables: {
+          filter: {
+            procedureId: { eq: effectiveId }
+          }
+        }
+      }) as any).subscribe({
         next: (param: any) => {
           console.log('Chat session notification received - checking for updates')
           console.log('Subscription param:', param)
@@ -586,39 +688,7 @@ function ConversationViewer({
       try {
         console.log('Checking for new messages in experiment')
         
-        // Load ALL messages for this experiment with proper pagination
-        let allMessages: any[] = []
-        let nextToken: string | null = null
-        
-        do {
-          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
-            procedureId: effectiveId,
-            limit: 1000,
-            nextToken,
-          }, {
-            selectionSet: [
-              'id',
-              'content',
-              'role',
-              'messageType',
-              'humanInteraction',
-              'toolName',
-              'toolParameters',
-              'toolResponse',
-              'createdAt',
-              'sequenceNumber',
-              'sessionId'
-            ]
-          })
-          
-          if (response?.data) {
-            allMessages = [...allMessages, ...response.data]
-          }
-          
-          nextToken = response.nextToken || null
-        } while (nextToken)
-
-        const messagesData = allMessages
+        const messagesData = await listMessagesByProcedure(effectiveId)
 
         console.log('Raw messagesData received:', messagesData?.length || 0, 'messages')
         
@@ -626,7 +696,7 @@ function ConversationViewer({
           const formattedMessages: ChatMessage[] = messagesData.map((msg: any) => {
             // Parse tool call data from content if structured fields are missing
             let parsedToolName = msg.toolName
-            let parsedToolParameters = msg.toolParameters ? JSON.parse(msg.toolParameters) : undefined
+            let parsedToolParameters = safeParseJson(msg.toolParameters)
             
             if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
               // Parse tool call from content string
@@ -655,7 +725,7 @@ function ConversationViewer({
               humanInteraction: msg.humanInteraction,
               toolName: parsedToolName,
               toolParameters: parsedToolParameters,
-              toolResponse: msg.toolResponse ? JSON.parse(msg.toolResponse) : undefined,
+              toolResponse: safeParseJson(msg.toolResponse),
               createdAt: msg.createdAt,
               sequenceNumber: msg.sequenceNumber,
               sessionId: msg.sessionId
@@ -718,8 +788,14 @@ function ConversationViewer({
     }
 
     try {
-      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatMessage.onCreate().subscribe({
+      const subscription = (client.graphql({
+        query: ON_CREATE_CHAT_MESSAGE_SUBSCRIPTION,
+        variables: {
+          filter: {
+            procedureId: { eq: effectiveId }
+          }
+        }
+      }) as any).subscribe({
         next: (param: any) => {
           console.log('Chat message notification received - checking for updates')
           console.log('Subscription param:', param)

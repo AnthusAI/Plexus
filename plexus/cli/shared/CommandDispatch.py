@@ -220,6 +220,9 @@ def worker(
     # Use queue from parameter, or from environment, or default
     if queue is None:
         queue = os.getenv("CELERY_QUEUE_NAME", "plexus-celery")  # Changed default to "plexus-celery"
+    else:
+        # Keep Celery transport/predefined queue config aligned with the explicit worker queue.
+        os.environ["CELERY_QUEUE_NAME"] = queue
     
     # Only set up target matching if patterns are provided
     if target_patterns:

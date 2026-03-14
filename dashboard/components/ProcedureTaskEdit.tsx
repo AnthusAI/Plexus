@@ -18,7 +18,6 @@ import { useYamlLinter, useLintMessageHandler } from "@/hooks/use-yaml-linter"
 import YamlLinterPanel from "@/components/ui/yaml-linter-panel"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 import ProcedureTask from "./ProcedureTask"
-import GraphNodesList from "./graph-nodes-list"
 import { useAccount } from '@/app/contexts/AccountContext'
 import ScorecardContext from '@/components/ScorecardContext'
 import { ConfigurableParametersForm } from "@/components/ui/ConfigurableParametersForm"
@@ -135,7 +134,6 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
               id
               featured
               code
-              rootNodeId
               createdAt
               updatedAt
               accountId
@@ -508,13 +506,6 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
             </AccordionItem>
           </Accordion>
 
-
-          {/* Procedure Nodes section - only show when not in edit mode and procedureId exists */}
-          {!isEditMode && procedureId && (
-            <div className="mt-6 bg-background rounded-lg p-4">
-              <GraphNodesList procedureId={procedureId} />
-            </div>
-          )}
         </div>
         
         {/* Save/Cancel Bar - appears when in edit mode */}

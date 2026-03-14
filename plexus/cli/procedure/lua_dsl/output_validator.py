@@ -49,7 +49,7 @@ class OutputValidator:
                         'required': True,
                         'description': 'The generated limerick'
                     },
-                    'node_id': {
+                    'session_id': {
                         'type': 'string',
                         'required': False
                     }

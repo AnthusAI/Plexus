@@ -38,6 +38,14 @@ Operational discipline: use the minimum commands needed. To inspect work, run `k
 
 Editing project/ directly is hacking the data and is a sin against The Way. Do not read or write anything inside project/. Do not inspect issue JSON with tools like cat or jq. All work must pass through Kanbus.
 
+## Node Runtime Discipline
+
+Node and npm commands in this repository must run on `18.19.0`.
+
+- Use `nvm use` from repo root (`.nvmrc` is pinned).
+- For deterministic execution, invoke explicit binaries from `~/.nvm/versions/node/v18.19.0/bin/`.
+- Do not use Homebrew Node (`/opt/homebrew/bin/node`) for repo validation commands.
+
 ## The Order of Being
 
 All work is structured.

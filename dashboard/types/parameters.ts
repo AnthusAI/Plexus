@@ -21,12 +21,14 @@ export interface ParameterDefinition {
   name: string
   label: string
   type: ParameterType
+  input?: 'text' | 'textarea' | 'hidden'
   required?: boolean
   default?: any
   options?: ParameterOption[]
   depends_on?: string
   description?: string
   placeholder?: string
+  rows?: number
   min?: number
   max?: number
 }
@@ -43,6 +45,4 @@ export interface ParameterValidationError {
   parameter: string
   message: string
 }
-
-
 

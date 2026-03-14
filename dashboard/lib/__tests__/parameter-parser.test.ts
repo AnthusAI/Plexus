@@ -3,7 +3,8 @@ import {
   parseParametersFromYaml, 
   hasParameters, 
   validateParameters, 
-  getDefaultValues 
+  getDefaultValues,
+  injectParameterValuesIntoYaml
 } from '../parameter-parser'
 import { ParameterDefinition } from '@/types/parameters'
 
@@ -88,6 +89,72 @@ parameters:
 `
       const result = parseParametersFromYaml(yaml)
       expect(result[1].depends_on).toBe('scorecard_id')
+    })
+
+    it('should parse Tactus params mappings', () => {
+      const yaml = `
+name: scorecard_create
+params:
+  brief:
+    type: string
+    required: true
+    description: Stakeholder brief
+  dry_run:
+    type: boolean
+    default: false
+`
+      const result = parseParametersFromYaml(yaml)
+      expect(result).toHaveLength(2)
+      expect(result[0]).toMatchObject({
+        name: 'brief',
+        label: 'Brief',
+        type: 'text',
+        required: true,
+        description: 'Stakeholder brief',
+      })
+      expect(result[1]).toMatchObject({
+        name: 'dry_run',
+        type: 'boolean',
+        default: false,
+      })
+    })
+
+    it('should preserve text input presentation metadata from Tactus params', () => {
+      const yaml = `
+name: scorecard_create
+params:
+  brief:
+    type: string
+    input: textarea
+    rows: 8
+    required: true
+`
+      const result = parseParametersFromYaml(yaml)
+
+      expect(result[0]).toMatchObject({
+        name: 'brief',
+        type: 'text',
+        input: 'textarea',
+        rows: 8,
+        required: true,
+      })
+    })
+
+    it('should preserve hidden input metadata from Tactus params', () => {
+      const yaml = `
+name: scorecard_create
+params:
+  account_identifier:
+    type: string
+    input: hidden
+`
+      const result = parseParametersFromYaml(yaml)
+
+      expect(result[0]).toMatchObject({
+        name: 'account_identifier',
+        type: 'text',
+        input: 'hidden',
+      })
     })
   })
 
@@ -217,7 +284,29 @@ parameters:
       expect(result.age).toBe(18)
     })
   })
+
+  describe('injectParameterValuesIntoYaml', () => {
+    it('should inject submitted values into Tactus params definitions', () => {
+      const yaml = `
+name: scorecard_create
+params:
+  brief:
+    type: string
+    required: true
+  dry_run:
+    type: boolean
+    default: false
+`
+
+      const result = injectParameterValuesIntoYaml(yaml, {
+        brief: 'Create a compliance scorecard',
+        dry_run: true,
+      })
+
+      expect(result).toContain('default: Create a compliance scorecard')
+      expect(result).toContain('value: Create a compliance scorecard')
+      expect(result).toContain('default: true')
+      expect(result).toContain('value: true')
+    })
+  })
 })
-
-
-

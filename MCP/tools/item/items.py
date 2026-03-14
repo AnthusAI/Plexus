@@ -18,13 +18,15 @@ def register_item_tools(mcp: FastMCP):
     
     @mcp.tool()
     async def plexus_item_last(
-        minimal: bool = False
+        minimal: bool = False,
+        account_identifier: Optional[str] = None
     ) -> Union[str, Dict[str, Any]]:
         """
-        Gets the most recent item for the default account, including score results and feedback items by default.
+        Gets the most recent item for the requested account, or the default account when omitted, including score results and feedback items by default.
         
         Parameters:
         - minimal: If True, returns minimal info without score results and feedback items (optional, default: False)
+        - account_identifier: Account identifier (ID, key, name, or external ID) to scope the lookup (optional)
         
         Returns:
         - Detailed information about the most recent item
@@ -57,9 +59,11 @@ def register_item_tools(mcp: FastMCP):
             if not client:
                 return "Error: Could not create dashboard client."
 
-            # Get the default account ID
-            account_id = resolve_account_id_for_command(client, None)
+            # Get the requested account ID, or fall back to the default account
+            account_id = resolve_account_id_for_command(client, account_identifier)
             if not account_id:
+                if account_identifier:
+                    return f"Error: Could not resolve account identifier: {account_identifier}"
                 return "Error: Could not determine default account ID. Please check that PLEXUS_ACCOUNT_KEY is set in environment."
                 
             logger.info(f"Getting latest item for account: {account_id}")

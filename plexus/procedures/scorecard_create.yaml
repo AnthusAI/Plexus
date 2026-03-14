@@ -1,25 +1,19 @@
-name: scorecard_create
-version: 1.0.0
+name: Create Scorecard
+version: 1.0.4
 class: Tactus
 description: "Create a new scorecard and classifier scores from an unstructured brief (OODA)."
 
 params:
   brief:
     type: string
+    input: textarea
+    rows: 8
     required: true
     description: "Unstructured stakeholder brief for the new scorecard and scores"
   account_identifier:
     type: string
-    default: "default"
+    input: hidden
     description: "Account identifier (key/name/id)"
-  scorecard_list_limit:
-    type: number
-    default: 50
-    description: "Max number of scorecards to list per page"
-  max_guideline_iterations:
-    type: number
-    default: 6
-    description: "Max turns for guideline drafter"
   dry_run:
     type: boolean
     default: false
@@ -199,11 +193,45 @@ code: |
     return nil, decoded
   end
 
+  local function decode_json_flexible(value)
+    local decoded, err = safe_decode(value)
+    if decoded ~= nil then
+      return decoded, nil
+    end
+
+    if type(value) ~= "string" then
+      return nil, err
+    end
+
+    local start_idx = string.find(value, "{")
+    local end_idx = string.find(value, "}[^}]*$") -- last closing brace
+    if not start_idx or not end_idx or end_idx < start_idx then
+      return nil, err
+    end
+
+    local snippet = string.sub(value, start_idx, end_idx)
+    return safe_decode(snippet)
+  end
+
   local function normalize(s)
     if s == nil then
       return ""
     end
     return string.lower(tostring(s))
+  end
+
+  local function safe_reset(agent)
+    if agent == nil then
+      return
+    end
+    local ok_method, reset_method = pcall(function()
+      return agent.reset
+    end)
+    if ok_method and type(reset_method) == "function" then
+      pcall(function()
+        reset_method(agent)
+      end)
+    end
   end
 
   local function escape_yaml(value)
@@ -259,15 +287,76 @@ code: |
   end
 
   local function wait_for_done(agent, max_iters, inject)
-    return wait_for_tool_call(agent, "done", max_iters, inject)
+    local start_done = Tool.get_call_count("done")
+    local response
+    if inject then
+      response = agent({message = inject})
+    else
+      response = agent()
+    end
+
+    local iter = 0
+    while true do
+      if Tool.get_call_count("done") > start_done then
+        local done_call = Tool.last_call("done")
+        if done_call then
+          if done_call.args and done_call.args.reason ~= nil then
+            return done_call.args.reason
+          end
+          if done_call.result ~= nil then
+            return done_call.result
+          end
+        end
+        return ""
+      end
+
+      if response ~= nil then
+        local ok_output, output_value = pcall(function() return response.output end)
+        if ok_output and output_value ~= nil then
+          return output_value
+        end
+
+        local ok_reason, reason_value = pcall(function() return response.reason end)
+        if ok_reason and reason_value ~= nil then
+          return reason_value
+        end
+
+        local ok_result, result_value = pcall(function() return response.result end)
+        if ok_result and result_value ~= nil then
+          return result_value
+        end
+
+        local ok_content, content_value = pcall(function() return response.content end)
+        if ok_content and content_value ~= nil then
+          return content_value
+        end
+
+        local ok_response, response_value = pcall(function() return response.response end)
+        if ok_response and response_value ~= nil then
+          return response_value
+        end
+
+        local response_text = tostring(response)
+        if response_text ~= "" then
+          return response_text
+        end
+      end
+
+      if iter >= max_iters then
+        return nil
+      end
+
+      response = agent()
+      iter = iter + 1
+    end
   end
 
   local function run(input)
     local params = input
     local brief = params.brief
     local account_identifier = params.account_identifier or "default"
-    local scorecard_list_limit = tonumber(params.scorecard_list_limit) or 50
-    local max_guideline_iterations = tonumber(params.max_guideline_iterations) or 6
+    local scorecard_list_limit = 50
+    local max_guideline_iterations = 6
     local dry_run = params.dry_run == true
 
     Stage.set("observe")
@@ -317,13 +406,12 @@ code: |
     Human.notify({message = "Orienting on brief...", level = "info"})
 
     local orient_inject = "Brief:\n" .. brief .. "\n\nContext Pack JSON:\n" .. Json.encode(context_pack)
-    local oriented = wait_for_done(Orienter, 4, orient_inject)
-    if not oriented then
+    local orient_reason = wait_for_done(Orienter, 4, orient_inject)
+    if orient_reason == nil then
       return {success = false, status = "error", message = "Orienter did not complete"}
     end
 
-    local orient_call = Tool.last_call("done")
-    local orient_data, orient_err = safe_decode(orient_call.args.reason or "")
+    local orient_data, orient_err = decode_json_flexible(orient_reason)
     if not orient_data then
       return {success = false, status = "error", message = "Failed to parse orienter JSON: " .. tostring(orient_err)}
     end
@@ -357,13 +445,12 @@ code: |
     Human.notify({message = "Planning scorecard content...", level = "info"})
 
     local plan_inject = "Brief:\n" .. brief .. "\n\nProposed Scorecard JSON:\n" .. Json.encode(proposed)
-    local planned = wait_for_done(Planner, 6, plan_inject)
-    if not planned then
+    local plan_reason = wait_for_done(Planner, 6, plan_inject)
+    if plan_reason == nil then
       return {success = false, status = "error", message = "Planner did not complete"}
     end
 
-    local plan_call = Tool.last_call("done")
-    local plan_data, plan_err = safe_decode(plan_call.args.reason or "")
+    local plan_data, plan_err = decode_json_flexible(plan_reason)
     if not plan_data then
       return {success = false, status = "error", message = "Failed to parse plan JSON: " .. tostring(plan_err)}
     end
@@ -403,7 +490,7 @@ code: |
     Human.notify({message = "Drafting guidelines...", level = "info"})
 
     for _, score in ipairs(plan_scores) do
-      Guideline_drafter.reset()
+      safe_reset(GuidelineDrafter)
 
       local start_done = Tool.get_call_count("done")
       local start_validate = Tool.get_call_count("plexus_guidelines_validate")
@@ -447,21 +534,29 @@ code: |
     ]]
       local draft_inject = "Score Spec JSON:\n" .. Json.encode(score) .. "\n\n" .. schema_hint
 
-      local drafted = wait_for_done(Guideline_drafter, max_guideline_iterations, draft_inject)
-      if not drafted then
+      local guideline_reason = wait_for_done(GuidelineDrafter, max_guideline_iterations, draft_inject)
+      if guideline_reason == nil then
         return {success = false, status = "error", message = "Guideline drafter timed out for score: " .. tostring(score.name)}
       end
 
+      local guidelines_md = tostring(guideline_reason)
+
       if Tool.get_call_count("plexus_guidelines_validate") == start_validate then
-        return {success = false, status = "error", message = "Guideline drafter did not validate guidelines for score: " .. tostring(score.name)}
+        Human.notify({
+          message = "Guideline drafter skipped validation tool; proceeding with returned draft for score: " .. tostring(score.name),
+          level = "warning"
+        })
       end
 
-      local done_call = Tool.last_call("done")
-      local guidelines_md = done_call.args.reason or ""
       score.guidelines = guidelines_md
     end
 
     Stage.set("approval")
+
+    if dry_run then
+      Stage.set("complete")
+      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
 
     local summary_lines = {}
     summary_lines[#summary_lines + 1] = "Scorecard: " .. tostring(normalized_scorecard.name)
@@ -483,10 +578,6 @@ code: |
 
     if not approved then
       return {success = false, status = "rejected", message = "Human rejected creation", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
-    end
-
-    if dry_run then
-      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
     end
 
     Stage.set("act")
@@ -562,8 +653,6 @@ code: |
     input = {
       brief = field.string{required = true},
       account_identifier = field.string{default = "default"},
-      scorecard_list_limit = field.number{default = 50},
-      max_guideline_iterations = field.number{default = 6},
       dry_run = field.boolean{default = false}
     },
 

@@ -16,9 +16,11 @@ class TestItemLastTool:
     
     def test_item_last_validation_patterns(self):
         """Test item last parameter validation patterns"""
-        def validate_item_last_params(minimal=False):
+        def validate_item_last_params(minimal=False, account_identifier=None):
             if not isinstance(minimal, bool):
                 return False, "minimal must be a boolean"
+            if account_identifier is not None and not isinstance(account_identifier, str):
+                return False, "account_identifier must be a string"
             return True, None
         
         # Test valid parameters
@@ -30,11 +32,19 @@ class TestItemLastTool:
         valid, error = validate_item_last_params(True)
         assert valid is True
         assert error is None
+
+        valid, error = validate_item_last_params(False, "account-123")
+        assert valid is True
+        assert error is None
         
         # Test invalid minimal parameter
         valid, error = validate_item_last_params("invalid")
         assert valid is False
         assert "minimal must be a boolean" in error
+
+        valid, error = validate_item_last_params(False, 123)
+        assert valid is False
+        assert "account_identifier must be a string" in error
     
     def test_item_last_query_patterns(self):
         """Test GraphQL query patterns for item last"""

@@ -14,13 +14,20 @@ import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
-import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
+import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
+import { injectParameterValuesIntoYaml } from "@/lib/parameter-parser"
+import { getSystemProcedureParameterValues } from "@/lib/procedure-template-parameters"
+import * as yaml from 'js-yaml'
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
 type ProcedureWithTask = Procedure & {
   task?: Task | null
+}
+
+type ProcedureStageDefinition = {
+  name: string
 }
 
 const client = generateClient<Schema>()
@@ -111,9 +118,11 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             ) {
               items {
                 id
+                isTemplate
+                parentProcedureId
+                metadata
                 featured
                 code
-                rootNodeId
                 createdAt
                 updatedAt
                 accountId
@@ -139,7 +148,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           limit: 1000
         }
       })
-      const proceduresData = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
+      const proceduresData = ((proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || [])
+        .filter((procedure: Procedure) => procedure.isTemplate !== true)
       
       // Then get tasks related to procedures (via metadata)
       const tasksResult = await client.graphql({
@@ -403,7 +413,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       const { data: newProcedure } = await (client.models.Procedure.create as any)({
         featured: procedure.featured || false,
         code: procedure.code || null, // Copy the code if it exists
-        rootNodeId: null, // Will be set after creating nodes
         scorecardId: procedure.scorecardId,
         scoreId: procedure.scoreId,
         accountId: selectedAccount.id,
@@ -445,8 +454,41 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     setShowTemplateSelector(true)
   }
 
+  const getStageDefinitionsFromYaml = (procedureCode: string): ProcedureStageDefinition[] => {
+    try {
+      const parsed = yaml.load(procedureCode) as { stages?: string[] | Array<{ name?: string }> } | undefined
+      const stages = parsed?.stages
+
+      if (!Array.isArray(stages) || stages.length === 0) {
+        return [{ name: 'start' }, { name: 'run' }, { name: 'complete' }]
+      }
+
+      return stages
+        .map((stage) => {
+          if (typeof stage === 'string') {
+            return { name: stage }
+          }
+
+          if (stage?.name) {
+            return { name: stage.name }
+          }
+
+          return null
+        })
+        .filter((stage): stage is ProcedureStageDefinition => Boolean(stage))
+    } catch (yamlError) {
+      console.warn('Could not parse procedure stages from YAML:', yamlError)
+      return [{ name: 'start' }, { name: 'run' }, { name: 'complete' }]
+    }
+  }
+
   // Helper function to create Task with stages for a procedure
-  const createTaskWithStagesForProcedure = async (procedureId: string, accountId: string) => {
+  const createTaskWithStagesForProcedure = async (
+    procedureId: string,
+    accountId: string,
+    procedureName: string,
+    stageDefinitions: ProcedureStageDefinition[]
+  ) => {
     console.log('[createTaskWithStagesForProcedure] Starting for procedure:', procedureId, 'account:', accountId)
     
     // Create Task
@@ -454,10 +496,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       accountId: accountId,
       type: 'Procedure',
       status: 'PENDING',
-      target: `procedure/${procedureId}`,
-      command: `procedure ${procedureId}`,
-      description: `Procedure workflow for ${procedureId}`,
-      dispatchStatus: 'ANNOUNCED',
+      target: `procedure/run/${procedureId}`,
+      command: `procedure run ${procedureId}`,
+      description: `Run procedure "${procedureName}"`,
+      dispatchStatus: 'PENDING',
       metadata: JSON.stringify({
         type: 'Procedure',
         procedure_id: procedureId,
@@ -487,19 +529,11 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       throw new Error('Failed to create Task')
     }
 
-    // Define stages matching the state machine
-    const stages = [
-      { name: 'Start', order: 1, statusMessage: 'Initializing procedure...' },
-      { name: 'Evaluation', order: 2, statusMessage: 'Running initial evaluation...' },
-      { name: 'Hypothesis', order: 3, statusMessage: 'Analyzing results and generating hypotheses...' },
-      { name: 'Test', order: 4, statusMessage: 'Testing hypothesis with score version...' },
-      { name: 'Insights', order: 5, statusMessage: 'Analyzing test results and generating insights...' }
-    ]
-
     // Create each stage
-    console.log('[createTaskWithStagesForProcedure] Creating', stages.length, 'stages (Start, Evaluation, Hypothesis, Test, Insights) for task:', task.id)
-    for (const stage of stages) {
-      console.log('[createTaskWithStagesForProcedure] Creating stage:', stage.name, 'order:', stage.order)
+    console.log('[createTaskWithStagesForProcedure] Creating', stageDefinitions.length, 'stages for task:', task.id)
+    for (const [index, stage] of stageDefinitions.entries()) {
+      const stageName = stage.name
+      console.log('[createTaskWithStagesForProcedure] Creating stage:', stageName, 'order:', index + 1)
       await client.graphql({
         query: `
           mutation CreateTaskStage($input: CreateTaskStageInput!) {
@@ -515,16 +549,16 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         variables: {
           input: {
             taskId: task.id,
-            name: stage.name,
-            order: stage.order,
+            name: stageName,
+            order: index + 1,
             status: 'PENDING',
-            statusMessage: stage.statusMessage
+            statusMessage: index === 0 ? `Preparing ${procedureName}...` : `Waiting for ${stageName}...`
           }
         }
       })
     }
 
-    console.log(`✓ Created Task ${task.id} with ${stages.length} stages (Start, Evaluation, Hypothesis, Test, Insights)`)
+    console.log(`✓ Created Task ${task.id} with ${stageDefinitions.length} stages`)
     return task
   }
 
@@ -542,54 +576,56 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         parameters
       })
 
-      // Process template YAML to inject parameter values
-      let processedCode = template.code || ''
-
-      if (parameters && template.code) {
-        // Parse the YAML to find the parameters section
-        const yaml = require('yaml')
-        try {
-          const parsed = yaml.parse(template.code)
-          
-          // If there's a parameters section, add values to it
-          if (parsed.parameters && Array.isArray(parsed.parameters)) {
-            parsed.parameters = parsed.parameters.map((param: any) => ({
-              ...param,
-              value: parameters[param.name] // Add the actual value
-            }))
-          }
-          
-          // Convert back to YAML
-          processedCode = yaml.stringify(parsed)
-        } catch (yamlError) {
-          console.warn('Could not parse template YAML, using original:', yamlError)
-        }
+      const mergedParameters = {
+        ...(parameters || {}),
+        ...getSystemProcedureParameterValues(template, selectedAccount.id),
       }
+
+      const processedCode = template.code
+        ? injectParameterValuesIntoYaml(template.code, mergedParameters)
+        : (template.code || '')
+      const stageDefinitions = getStageDefinitionsFromYaml(processedCode)
       
       // Create procedure with template reference and processed code
-      const createInput = {
+      const createInput: Record<string, any> = {
+        name: template.name,
         featured: false,
+        isTemplate: false,
+        parentProcedureId: template.id,
+        status: 'PENDING',
         code: processedCode,
-        rootNodeId: null, // Will be set when nodes are created
-        scorecardId: parameters?.scorecard_id || selectedScorecard || null,
-        scoreId: parameters?.score_id || selectedScore || null,
         accountId: selectedAccount.id,
+        metadata: JSON.stringify({
+          templateId: template.id,
+          templateName: template.name,
+        }),
+      }
+
+      if (template.description) {
+        createInput.description = template.description
+      }
+
+      if (mergedParameters.scorecard_id || selectedScorecard) {
+        createInput.scorecardId = mergedParameters.scorecard_id || selectedScorecard
+      }
+
+      if (mergedParameters.score_id || selectedScore) {
+        createInput.scoreId = mergedParameters.score_id || selectedScore
       }
       
       console.log('Create input:', createInput)
-      
-      // Use direct GraphQL mutation instead of client.models
       const result = await client.graphql({
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
             createProcedure(input: $input) {
               id
+              name
               featured
               code
-              rootNodeId
               scorecardId
               scoreId
               accountId
+              parentProcedureId
               createdAt
               updatedAt
             }
@@ -598,14 +634,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         variables: { input: createInput }
       })
 
-      const newProcedure = (result as any).data?.createProcedure
-      const errors = (result as any).errors
+      console.log('Create procedure result:', result)
 
-      if (errors && errors.length > 0) {
-        console.error('GraphQL errors creating procedure:', errors)
-        toast.error('Failed to create procedure: ' + errors.map((e: any) => e.message).join(', '))
-        return
-      }
+      const newProcedure = (result as any)?.data?.createProcedure
+      const errors = (result as any)?.errors
 
       if (newProcedure) {
         console.log('Procedure created successfully:', newProcedure)
@@ -614,7 +646,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         let createdTask = null
         try {
           console.log('Creating Task with stages for procedure:', newProcedure.id)
-          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id)
+          createdTask = await createTaskWithStagesForProcedure(
+            newProcedure.id,
+            selectedAccount.id,
+            template.name,
+            stageDefinitions
+          )
           console.log('✓ Task and stages created:', createdTask)
         } catch (taskError) {
           console.error('Failed to create Task for procedure:', taskError)
@@ -632,13 +669,29 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         handleSelectProcedure(newProcedure.id)
         // Close template selector
         setShowTemplateSelector(false)
-        toast.success(`Procedure created from template "${template.name}"`)
+        toast.success(`Procedure run started from "${template.name}"`)
       } else {
+        if (errors && Array.isArray(errors) && errors.length > 0) {
+          console.error('Model errors creating procedure:', errors)
+          toast.error('Failed to create procedure: ' + errors.map((e: any) => e.message).join(', '))
+          return
+        }
         console.error('No procedure data returned')
         toast.error('Failed to create procedure: No data returned')
       }
     } catch (error) {
       console.error('Error creating procedure from template:', error)
+      if ((error as any)?.errors && Array.isArray((error as any).errors)) {
+        ;(error as any).errors.forEach((err: any, index: number) => {
+          console.error(`GraphQL Error ${index + 1}:`, {
+            message: err.message,
+            errorType: err.errorType,
+            errorInfo: err.errorInfo,
+            path: err.path,
+            locations: err.locations,
+          })
+        })
+      }
       toast.error('Failed to create procedure from template')
     }
   }
@@ -681,36 +734,51 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }
 
   // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
-  const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => ({
-    id: procedure.id,
-    title: `${procedure.scorecard?.name || 'Procedure'} - ${procedure.score?.name || 'Score'}`,
-    featured: procedure.featured || false,
-    rootNodeId: procedure.rootNodeId || undefined,
-    createdAt: procedure.createdAt,
-    updatedAt: procedure.updatedAt,
-    scorecard: procedure.scorecard ? { name: procedure.scorecard.name } : null,
-    score: procedure.score ? { name: procedure.score.name } : null,
-    task: procedure.task ? {
-      id: procedure.task.id,
-      type: procedure.task.type || 'Procedure',
-      status: procedure.task.status || 'PENDING',
-      target: procedure.task.target || '',
-      command: procedure.task.command || '',
-      description: procedure.task.description || undefined,
-      dispatchStatus: procedure.task.dispatchStatus || undefined,
-      metadata: typeof procedure.task.metadata === 'string' ? procedure.task.metadata : JSON.stringify(procedure.task.metadata),
-      createdAt: procedure.task.createdAt || undefined,
-      startedAt: procedure.task.startedAt || undefined,
-      completedAt: procedure.task.completedAt || undefined,
-      estimatedCompletionAt: procedure.task.estimatedCompletionAt || undefined,
-      errorMessage: procedure.task.errorMessage || undefined,
-      errorDetails: typeof procedure.task.errorDetails === 'string' ? procedure.task.errorDetails : JSON.stringify(procedure.task.errorDetails) || undefined,
-      currentStageId: procedure.task.currentStageId || undefined,
-      stages: procedure.task.stages ? {
-        items: (procedure.task.stages as any)?.items || []
+  const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => {
+    let procedureMetadata: any = null
+    try {
+      procedureMetadata = typeof (procedure as any).metadata === 'string'
+        ? JSON.parse((procedure as any).metadata)
+        : (procedure as any).metadata
+    } catch {
+      procedureMetadata = null
+    }
+
+    const templateName = procedureMetadata?.templateName
+
+    return {
+      id: procedure.id,
+      title: `${procedure.scorecard?.name || 'Procedure'} - ${procedure.score?.name || 'Score'}`,
+      featured: procedure.featured || false,
+      createdAt: procedure.createdAt,
+      updatedAt: procedure.updatedAt,
+      description: undefined,
+      parentProcedureId: procedure.parentProcedureId || undefined,
+      parentProcedure: templateName ? { name: templateName } : null,
+      scorecard: procedure.scorecard ? { name: procedure.scorecard.name } : null,
+      score: procedure.score ? { name: procedure.score.name } : null,
+      task: procedure.task ? {
+        id: procedure.task.id,
+        type: procedure.task.type || 'Procedure',
+        status: procedure.task.status || 'PENDING',
+        target: procedure.task.target || '',
+        command: procedure.task.command || '',
+        description: procedure.task.description || undefined,
+        dispatchStatus: procedure.task.dispatchStatus || undefined,
+        metadata: typeof procedure.task.metadata === 'string' ? procedure.task.metadata : JSON.stringify(procedure.task.metadata),
+        createdAt: procedure.task.createdAt || undefined,
+        startedAt: procedure.task.startedAt || undefined,
+        completedAt: procedure.task.completedAt || undefined,
+        estimatedCompletionAt: procedure.task.estimatedCompletionAt || undefined,
+        errorMessage: procedure.task.errorMessage || undefined,
+        errorDetails: typeof procedure.task.errorDetails === 'string' ? procedure.task.errorDetails : JSON.stringify(procedure.task.errorDetails) || undefined,
+        currentStageId: procedure.task.currentStageId || undefined,
+        stages: procedure.task.stages ? {
+          items: (procedure.task.stages as any)?.items || []
+        } : undefined
       } : undefined
-    } : undefined
-  }), [])
+    }
+  }, [])
   
 
   // Loading and error states
@@ -730,7 +798,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           <div className="flex-shrink-0">
             <Button onClick={handleCreateProcedure} disabled={isLoading}>
               <Plus className="h-4 w-4 mr-2" />
-              New Procedure
+              Run Procedure
             </Button>
           </div>
         </div>
@@ -807,7 +875,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         <div className="flex-shrink-0">
           <Button onClick={handleCreateProcedure}>
             <Plus className="h-4 w-4 mr-2" />
-            Create
+            Run Procedure
           </Button>
         </div>
       </div>
@@ -976,11 +1044,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       {/* Template Selector Modal */}
       {selectedAccount && (
-        <TemplateSelector
-          accountId={selectedAccount.id}
-          open={showTemplateSelector}
-          onOpenChange={setShowTemplateSelector}
-          onTemplateSelect={handleCreateProcedureFromTemplate}
+      <TemplateSelector
+        accountId={selectedAccount.id}
+        accountName={selectedAccount.name}
+        open={showTemplateSelector}
+        onOpenChange={setShowTemplateSelector}
+        onTemplateSelect={handleCreateProcedureFromTemplate}
         />
       )}
     </div>

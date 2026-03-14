@@ -8,7 +8,6 @@ behavior across different interfaces.
 The service handles:
 - Procedure creation with proper validation
 - YAML configuration management  
-- Node and version lifecycle management
 - Error handling and logging
 - Account and resource resolution
 """
@@ -109,9 +108,9 @@ def _validate_yaml_template(template_data):
 @dataclass
 class ProcedureCreationResult:
     """Result of creating a new procedure."""
-    procedure: Procedure
-    root_node: GraphNode
-    # Note: initial_version removed - version data now stored directly on GraphNode
+    procedure: Optional[Procedure]
+    # Deprecated: Graph-node root storage was removed.
+    root_node: Optional[Any]
     success: bool
     message: str
 
@@ -119,9 +118,10 @@ class ProcedureCreationResult:
 class ProcedureInfo:
     """Comprehensive information about an procedure."""
     procedure: Procedure
-    root_node: Optional[GraphNode]
+    # Deprecated: Graph-node root storage was removed.
+    root_node: Optional[Any]
     node_count: int
-    version_count: int  # This will be removed as versions no longer exist separately
+    version_count: int
     scorecard_name: Optional[str] = None
     score_name: Optional[str] = None
     # Back-compat: some tests and callers still pass latest_version; accept and ignore if provided
@@ -165,12 +165,10 @@ class ProcedureService:
         score_identifier: Optional[str] = None,
         yaml_config: Optional[str] = None,
         featured: bool = False,
-        initial_value: Optional[Dict[str, Any]] = None,
-        create_root_node: bool = True,
         template_id: Optional[str] = None,
         score_version_id: Optional[str] = None
     ) -> ProcedureCreationResult:
-        """Create a new procedure with optional root node and initial version.
+        """Create a new procedure.
 
         Args:
             account_identifier: Account ID, key, or name
@@ -178,8 +176,6 @@ class ProcedureService:
             score_identifier: Score ID, key, or name
             yaml_config: YAML configuration (uses default if None)
             featured: Whether to mark as featured
-            initial_value: Initial computed value (defaults to {"initialized": True})
-            create_root_node: Whether to create a root node (defaults to True for backward compatibility)
             template_id: Optional template/parent procedure ID (NOTE: stored as parentProcedureId in schema)
             score_version_id: Optional score version ID
 
@@ -243,32 +239,29 @@ class ProcedureService:
             else:
                 # Get or create default template
                 template = self.get_or_create_default_template(account_id)
-            
-            # Validate YAML if provided or if creating root node
-            if yaml_config is not None or create_root_node:
-                # Use template YAML if not provided and root node is requested
-                if yaml_config is None and create_root_node:
-                    yaml_config = template.get_template_content()
-                    
-                # Validate YAML
-                if yaml_config:
-                    try:
-                        yaml_data = yaml.safe_load(yaml_config)
-                        # Enhanced validation - check for required structure
-                        if not _validate_yaml_template(yaml_data):
-                            return ProcedureCreationResult(
-                                procedure=None,
-                                root_node=None,
-                                success=False,
-                                message="YAML configuration is invalid for its procedure class. Tactus requires class/name/version/code; SOPAgent requires class/prompts."
-                            )
-                    except yaml.YAMLError as e:
+
+            # Default to template content when YAML is omitted.
+            if yaml_config is None and template:
+                yaml_config = template.get_template_content()
+
+            # Validate YAML if provided.
+            if yaml_config:
+                try:
+                    yaml_data = yaml.safe_load(yaml_config)
+                    if not _validate_yaml_template(yaml_data):
                         return ProcedureCreationResult(
                             procedure=None,
                             root_node=None,
                             success=False,
-                            message=f"Invalid YAML configuration: {str(e)}"
+                            message="YAML configuration is invalid for its procedure class. Tactus requires class/name/version/code; SOPAgent requires class/prompts."
                         )
+                except yaml.YAMLError as e:
+                    return ProcedureCreationResult(
+                        procedure=None,
+                        root_node=None,
+                        success=False,
+                        message=f"Invalid YAML configuration: {str(e)}"
+                    )
             
             # Create experiment
             procedure = Procedure.create(
@@ -292,21 +285,14 @@ class ProcedureService:
             )
             if task:
                 logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
-            
-            root_node = None
-            
-            # Optionally create root node (version data now stored directly on node)
-            if create_root_node:
-                root_node = procedure.create_root_node(yaml_config, initial_value)
-                logger.info(f"Successfully created procedure {procedure.id} with root node {root_node.id}")
-            else:
-                logger.info(f"Successfully created procedure {procedure.id} without root node")
+
+            logger.info(f"Successfully created procedure {procedure.id}")
             
             return ProcedureCreationResult(
                 procedure=procedure,
-                root_node=root_node,
+                root_node=None,
                 success=True,
-                message=f"Created procedure {procedure.id}" + (" with root node" if create_root_node else " without root node")
+                message=f"Created procedure {procedure.id}"
             )
             
         except Exception as e:
@@ -330,29 +316,7 @@ class ProcedureService:
         try:
             # Get experiment
             procedure = Procedure.get_by_id(procedure_id, self.client)
-            
-            # Get root node
-            root_node = procedure.get_root_node()
-            
-            # Note: latest_version no longer exists - version data stored directly on node
-            
-            # Count nodes and versions (handle GraphQL schema issues gracefully)
-            node_count = 0
-            version_count = 0
-            
-            try:
-                all_nodes = GraphNode.list_by_procedure(procedure_id, self.client)
-                node_count = len(all_nodes)
-                
-                # Note: Version count is now always equal to node count since versions are stored directly on nodes
-                # Each node effectively represents one "version" in the simplified schema
-                version_count = node_count
-            except Exception as e:
-                logger.warning(f"Could not count procedure nodes/versions: {e}")
-                # Set defaults for experiments without proper node structure
-                node_count = 1 if root_node else 0
-                version_count = 1 if root_node else 0
-            
+
             # Get scorecard and score names
             scorecard_name = None
             score_name = None
@@ -373,9 +337,9 @@ class ProcedureService:
             
             return ProcedureInfo(
                 procedure=procedure,
-                root_node=root_node,
-                node_count=node_count,
-                version_count=version_count,  # Will be 0 since versions no longer exist separately
+                root_node=None,
+                node_count=0,
+                version_count=0,
                 scorecard_name=scorecard_name,
                 score_name=score_name
             )
@@ -423,7 +387,7 @@ class ProcedureService:
             return []
     
     def delete_procedure(self, procedure_id: str) -> Tuple[bool, str]:
-        """Delete an procedure and all its nodes/versions.
+        """Delete a procedure.
         
         Args:
             procedure_id: ID of the procedure to delete
@@ -433,15 +397,7 @@ class ProcedureService:
         """
         try:
             procedure = Procedure.get_by_id(procedure_id, self.client)
-            
-            # Delete all nodes (versions are now stored directly on nodes in simplified schema)
-            nodes = GraphNode.list_by_procedure(procedure_id, self.client)
-            for node in nodes:
-                # Note: No separate versions to delete since version data is stored directly on GraphNode
-                # Delete the node (which contains the version data)
-                node.delete()
-            
-            # Delete the experiment
+
             success = procedure.delete()
             
             if success:
@@ -460,7 +416,7 @@ class ProcedureService:
         yaml_config: str,
         note: Optional[str] = None
     ) -> Tuple[bool, str]:
-        """Update a procedure's configuration by creating a new version.
+        """Update a procedure's YAML configuration.
         
         Args:
             procedure_id: ID of the experiment
@@ -481,21 +437,10 @@ class ProcedureService:
                 return False, f"Invalid YAML configuration: {str(e)}"
             
             procedure = Procedure.get_by_id(procedure_id, self.client)
-            root_node = procedure.get_root_node()
-            
-            if not root_node:
-                return False, "Procedure has no root node"
-            
-            # Update root node content directly (no separate versions in simplified schema)
-            root_node.update_content(
-                code=yaml_config,
-                status='QUEUED',
-                hypothesis=note if note else "Configuration updated",
-                value={"note": note} if note else {"updated": True}
-            )
-            
-            logger.info(f"Updated root node configuration for procedure {procedure_id}")
-            return True, f"Updated procedure configuration (node {root_node.id})"
+            procedure.update(code=yaml_config)
+
+            logger.info(f"Updated procedure configuration for {procedure_id}")
+            return True, f"Updated procedure configuration for {procedure_id}"
             
         except Exception as e:
             logger.error(f"Error updating procedure config: {str(e)}")
@@ -941,7 +886,6 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                 - timeout: Timeout in seconds (int)
                 - async_mode: Whether to run asynchronously (bool)
                 - dry_run: Whether to perform a dry run (bool)
-                - restart_from_root_node: Delete all non-root graph nodes before starting (bool)
                 - enable_mcp: Whether to enable MCP tools (bool, default True)
                 - mcp_tools: List of MCP tool categories to enable (list)
                 
@@ -1023,13 +967,36 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                         return {
                             'procedure_id': procedure_id,
                             'status': 'error',
-                            'error': "Unsupported procedure class: LuaDSL."
+                            'error': "Procedure class 'LuaDSL' is deprecated. Use class 'Tactus'."
                         }
 
-                except Exception as e:
-                    logger.warning(f"Error checking procedure class: {e}, falling back to SOP Agent")
+                    return {
+                        'procedure_id': procedure_id,
+                        'status': 'error',
+                        'error': (
+                            f"Procedure class '{procedure_class}' is no longer supported. "
+                            "Graph-node-based procedure execution has been removed; use class 'Tactus'."
+                        )
+                    }
 
-            # Continue with existing SOP Agent logic for non-Tactus procedures
+                except Exception as e:
+                    logger.error(f"Error checking procedure class for {procedure_id}: {e}")
+                    return {
+                        'procedure_id': procedure_id,
+                        'status': 'error',
+                        'error': f"Failed to parse procedure configuration for {procedure_id}: {e}",
+                    }
+
+            return {
+                'procedure_id': procedure_id,
+                'status': 'error',
+                'error': (
+                    "Procedure YAML is required for execution. "
+                    "Graph-node-based procedure execution has been removed; use class 'Tactus' with code."
+                ),
+            }
+
+            # Legacy SOP/graph-node logic retained below but now unreachable.
             # Handle restart from root node option
             if options.get('restart_from_root_node'):
                 from .states import STATE_START
@@ -3844,7 +3811,7 @@ Format your response as a clear, structured summary that will guide the next rou
             # Find the task with exact target match
             existing_task = None
             for task_data in existing_tasks:
-                if task_data['target'] == f"procedure/{procedure_id}":
+                if task_data['target'] in (f"procedure/run/{procedure_id}", f"procedure/{procedure_id}"):
                     existing_task = task_data
                     break
 
@@ -3874,10 +3841,10 @@ Format your response as a clear, structured summary that will guide the next rou
                 accountId=account_id,
                 type="Procedure",
                 status="PENDING",  # Initial status
-                target=f"procedure/{procedure_id}",
-                command=f"procedure {procedure_id}",
+                target=f"procedure/run/{procedure_id}",
+                command=f"procedure run {procedure_id}",
                 description=f"Procedure workflow for {procedure_id}",
-                dispatchStatus="ANNOUNCED",
+                dispatchStatus="PENDING",
                 metadata=json.dumps(metadata)
                 # createdAt and updatedAt are auto-generated by the database
             )

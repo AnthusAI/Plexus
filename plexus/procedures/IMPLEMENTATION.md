@@ -10,6 +10,8 @@
 
 This document serves as the authoritative roadmap from the [DSL_SPECIFICATION.md](DSL_SPECIFICATION.md) to the actual code implementation. Every feature specified in the DSL has a corresponding implementation pointer here, with verification status, file locations, and line number references.
 
+> Note: Graph-node primitives and graph-node persistence are deprecated/removed in current Tactus-first procedure runtime work. Historical sections below may reference legacy implementation details.
+
 **Purpose:**
 - Map each DSL feature to its implementation
 - Verify completeness of the implementation

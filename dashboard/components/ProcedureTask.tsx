@@ -25,8 +25,6 @@ import Editor from "@monaco-editor/react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
-
-import GraphNodesList from "./graph-nodes-list"
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
 import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
@@ -64,9 +62,13 @@ const getStatusDisplay = (status?: string): { text: string; variant: 'default' |
 export interface ProcedureTaskData extends BaseTaskData {
   id: string
   featured: boolean
-  rootNodeId?: string
   createdAt: string
   updatedAt: string
+  parentProcedureId?: string
+  parentProcedure?: {
+    id?: string
+    name: string
+  } | null
   scorecardId?: string
   scorecard?: {
     id?: string
@@ -143,7 +145,6 @@ export default function ProcedureTask({
   const [loadedYaml, setLoadedYaml] = useState<string>('')
   const [isLoadingYaml, setIsLoadingYaml] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
-  const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const [parameters, setParameters] = useState<ParameterDefinition[]>([])
   const [parameterValues, setParameterValues] = useState<ParameterValue>({})
 
@@ -216,7 +217,6 @@ export default function ProcedureTask({
   }
 
   const handleConversationFullscreenChange = useCallback((isFullscreen: boolean) => {
-    setIsConversationFullscreen(isFullscreen)
     if (onConversationFullscreenChange) {
       onConversationFullscreenChange(isFullscreen)
     }
@@ -335,6 +335,12 @@ export default function ProcedureTask({
                 <Timestamp time={props.task.time} variant="relative" />
               </div>
               
+              {procedure.parentProcedure?.name && (
+                <div className="text-sm text-muted-foreground truncate">
+                  Run from {procedure.parentProcedure.name}
+                </div>
+              )}
+
               {/* Only show scorecard/score if there are no parameters */}
               {parameters.length === 0 && (
                 <>
@@ -454,34 +460,13 @@ export default function ProcedureTask({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-          
-          
-          {/* Procedure Nodes section */}
-          <div className="mt-6 bg-background rounded-lg p-4">
-            <GraphNodesList
-              procedureId={procedure.id}
-              scorecardId={
-                parameterValues.scorecard_id as string ||
-                parameterValues.scorecardId as string ||
-                procedure.scorecardId ||
-                procedure.scorecard?.id
-              }
-              scoreId={
-                parameterValues.score_id as string ||
-                parameterValues.scoreId as string ||
-                procedure.scoreId ||
-                procedure.score?.id
-              }
-            />
-          </div>
-          
           {/* Procedure Conversation section */}
           <div className="mt-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
-                  Tasks ({sessionCount})
+                  Conversation ({sessionCount})
                 </h3>
                 <Button
                   variant="ghost"
