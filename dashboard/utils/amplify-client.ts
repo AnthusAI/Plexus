@@ -564,12 +564,6 @@ export const amplifyClient = {
   },
   DataSource: {
     list: async (params?: any) => {
-      const model = (getClient().models as any)?.DataSource
-      if (model?.list) {
-        const response = await model.list(params)
-        return response as AmplifyResponse<Schema['DataSource']['type'][]>
-      }
-
       const filter = params?.filter
       const nextToken = params?.nextToken
       const limit = params?.limit
@@ -647,12 +641,6 @@ export const amplifyClient = {
   },
   DataSourceVersion: {
     list: async (params?: any) => {
-      const model = (getClient().models as any)?.DataSourceVersion
-      if (model?.list) {
-        const response = await model.list(params)
-        return response as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
-      }
-
       const filter = params?.filter
       const nextToken = params?.nextToken
       const limit = params?.limit
@@ -718,12 +706,6 @@ export const amplifyClient = {
   },
   DataSet: {
     list: async (params?: any) => {
-      const model = (getClient().models as any)?.DataSet
-      if (model?.list) {
-        const response = await model.list(params)
-        return response as AmplifyResponse<Schema['DataSet']['type'][]>
-      }
-
       const filter = params?.filter
       const nextToken = params?.nextToken
       const limit = params?.limit
