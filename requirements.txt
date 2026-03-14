@@ -72,3 +72,4 @@ hdbscan>=0.8.40
 sentence-transformers>=5.0.0
 kaleido>=0.2.1
 requests>=2.31.0
+biblicus @ file:///Users/ryan/Projects/Biblicus
