@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3841caee-59e6-4101-a1ef-1257f7960b70",
+  "issue_id": "plx-ea152809-b91a-49f7-9159-e8a936f97be8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-14T06:04:18.173Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement removal of GraphNode from Procedures UI/schema/runtime, move Procedures metrics to procedures+chatSessions, and remove procedure-node MCP/tooling surfaces. Legacy graph-node Procedure records are intentionally unsupported after this change.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Deprecate graph nodes from Procedures dashboard and schema"
+  }
+}

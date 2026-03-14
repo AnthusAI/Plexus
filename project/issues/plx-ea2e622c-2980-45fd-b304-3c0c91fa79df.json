@@ -1,0 +1,49 @@
+{
+  "id": "plx-ea2e622c-2980-45fd-b304-3c0c91fa79df",
+  "title": "Fix Sources dashboard undefined list model error",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2e4292a0-261f-4b31-bdac-4b34b6ddfc0a",
+      "author": "ryan",
+      "text": "Investigating Sources dashboard runtime error: Cannot read properties of undefined (reading list). Tracing data-sources fetch path to identify undefined model client and patch to supported list API.",
+      "created_at": "2026-03-14T14:41:49.196769Z"
+    },
+    {
+      "id": "985df64d-d6ef-473a-a097-8430de3b02eb",
+      "author": "ryan",
+      "text": "Implemented fix in dashboard/utils/amplify-client.ts: DataSource.list, DataSourceVersion.list, and DataSet.list now detect missing generated model clients and transparently fall back to direct GraphQL list queries. This prevents the runtime crash where the Sources dashboard fails while trying to read list on an undefined model client. Typecheck passes after patch.",
+      "created_at": "2026-03-14T14:43:13.701778Z"
+    },
+    {
+      "id": "a4df4a0c-be13-48e4-8149-357674c5d873",
+      "author": "ryan",
+      "text": "Root-cause fix applied: regenerated Amplify outputs from hosted backend using app d1cegb1ft4iove, branch main, profile capacity_anthus, region us-west-2 via ampx generate outputs. Removed previous workaround and restored ORM-only list path for DataSource/DataSet/DataSourceVersion in dashboard/utils/amplify-client.ts. Commit: 45514c15. Next operational step: restart dashboard dev server so it reloads outputs/client runtime state.",
+      "created_at": "2026-03-14T15:08:47.800455Z"
+    },
+    {
+      "id": "9f385c79-ab8c-4b3a-817f-3b5ced9e0663",
+      "author": "ryan",
+      "text": "Continuing root-cause fix: re-generate dashboard/amplify_outputs.json against app d1cegb1ft4iove (profile capacity_anthus), verify Gen2 ORM models include DataSource, and confirm Sources dashboard works without fallback code.",
+      "created_at": "2026-03-14T15:09:35.667929Z"
+    },
+    {
+      "id": "13ede7c1-01a1-409a-bcaa-0e964e63b012",
+      "author": "ryan",
+      "text": "Root-cause path verified. Regenerated dashboard/amplify_outputs.json from hosted backend (app d1cegb1ft4iove, branch main, profile capacity_anthus, region us-west-2) using Node 18.19.0. Confirmed model introspection now includes DataSource/DataSourceVersion/DataSet. Code path in dashboard/utils/amplify-client.ts remains ORM-only (no fallback branch). If UI still shows undefined list at runtime, the active dashboard process is running stale outputs/client state and must be restarted.",
+      "created_at": "2026-03-14T15:10:29.839850Z"
+    }
+  ],
+  "created_at": "2026-03-14T14:41:46.047572Z",
+  "updated_at": "2026-03-14T15:10:29.839850Z",
+  "closed_at": null,
+  "custom": {}
+}
