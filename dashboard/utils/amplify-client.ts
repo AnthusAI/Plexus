@@ -564,8 +564,49 @@ export const amplifyClient = {
   },
   DataSource: {
     list: async (params?: any) => {
-      const response = await (getClient().models.DataSource as any).list(params)
-      return response as AmplifyResponse<Schema['DataSource']['type'][]>
+      const model = (getClient().models as any)?.DataSource
+      if (model?.list) {
+        const response = await model.list(params)
+        return response as AmplifyResponse<Schema['DataSource']['type'][]>
+      }
+
+      const filter = params?.filter
+      const nextToken = params?.nextToken
+      const limit = params?.limit
+      const response = await graphqlRequest<{
+        listDataSources: {
+          items: Schema['DataSource']['type'][]
+          nextToken: string | null
+        }
+      }>(
+        `
+          query ListDataSources($filter: ModelDataSourceFilterInput, $limit: Int, $nextToken: String) {
+            listDataSources(filter: $filter, limit: $limit, nextToken: $nextToken) {
+              items {
+                id
+                name
+                key
+                description
+                yamlConfiguration
+                attachedFiles
+                accountId
+                scorecardId
+                scoreId
+                currentVersionId
+                createdAt
+                updatedAt
+              }
+              nextToken
+            }
+          }
+        `,
+        { filter, limit, nextToken }
+      )
+
+      return {
+        data: response.data?.listDataSources?.items || [],
+        nextToken: response.data?.listDataSources?.nextToken || null
+      } as AmplifyResponse<Schema['DataSource']['type'][]>
     },
     get: async (params: any) => {
       const response = await (getClient().models.DataSource as any).get(params)
@@ -606,8 +647,45 @@ export const amplifyClient = {
   },
   DataSourceVersion: {
     list: async (params?: any) => {
-      const response = await (getClient().models.DataSourceVersion as any).list(params)
-      return response as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
+      const model = (getClient().models as any)?.DataSourceVersion
+      if (model?.list) {
+        const response = await model.list(params)
+        return response as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
+      }
+
+      const filter = params?.filter
+      const nextToken = params?.nextToken
+      const limit = params?.limit
+      const response = await graphqlRequest<{
+        listDataSourceVersions: {
+          items: Schema['DataSourceVersion']['type'][]
+          nextToken: string | null
+        }
+      }>(
+        `
+          query ListDataSourceVersions($filter: ModelDataSourceVersionFilterInput, $limit: Int, $nextToken: String) {
+            listDataSourceVersions(filter: $filter, limit: $limit, nextToken: $nextToken) {
+              items {
+                id
+                dataSourceId
+                yamlConfiguration
+                isFeatured
+                note
+                parentVersionId
+                createdAt
+                updatedAt
+              }
+              nextToken
+            }
+          }
+        `,
+        { filter, limit, nextToken }
+      )
+
+      return {
+        data: response.data?.listDataSourceVersions?.items || [],
+        nextToken: response.data?.listDataSourceVersions?.nextToken || null
+      } as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
     },
     get: async (params: any) => {
       const response = await (getClient().models.DataSourceVersion as any).get(params)
@@ -640,8 +718,49 @@ export const amplifyClient = {
   },
   DataSet: {
     list: async (params?: any) => {
-      const response = await (getClient().models.DataSet as any).list(params)
-      return response as AmplifyResponse<Schema['DataSet']['type'][]>
+      const model = (getClient().models as any)?.DataSet
+      if (model?.list) {
+        const response = await model.list(params)
+        return response as AmplifyResponse<Schema['DataSet']['type'][]>
+      }
+
+      const filter = params?.filter
+      const nextToken = params?.nextToken
+      const limit = params?.limit
+      const response = await graphqlRequest<{
+        listDataSets: {
+          items: Schema['DataSet']['type'][]
+          nextToken: string | null
+        }
+      }>(
+        `
+          query ListDataSets($filter: ModelDataSetFilterInput, $limit: Int, $nextToken: String) {
+            listDataSets(filter: $filter, limit: $limit, nextToken: $nextToken) {
+              items {
+                id
+                name
+                description
+                file
+                attachedFiles
+                accountId
+                scorecardId
+                scoreId
+                scoreVersionId
+                dataSourceVersionId
+                createdAt
+                updatedAt
+              }
+              nextToken
+            }
+          }
+        `,
+        { filter, limit, nextToken }
+      )
+
+      return {
+        data: response.data?.listDataSets?.items || [],
+        nextToken: response.data?.listDataSets?.nextToken || null
+      } as AmplifyResponse<Schema['DataSet']['type'][]>
     },
     get: async (params: any) => {
       const response = await (getClient().models.DataSet as any).get(params)
