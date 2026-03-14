@@ -50,8 +50,7 @@ import { AdHocFeedbackAnalysis } from "@/components/ui/ad-hoc-feedback-analysis"
 import { AdHocCostAnalysis } from "@/components/ui/ad-hoc-cost-analysis"
 import { motion, AnimatePresence } from 'framer-motion'
 import { FilterInput } from '@/components/FilterInput'
-
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
+import { useAccount } from "@/app/contexts/AccountContext"
 
 export default function ScorecardsComponent({
   initialSelectedScorecardId = null,
@@ -64,6 +63,7 @@ export default function ScorecardsComponent({
 } = {}) {
   // Get the Amplify client for Tasks model
   const client = getClient();
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -951,16 +951,15 @@ export default function ScorecardsComponent({
   // Initial data load - optimized for immediate display
   const fetchScorecards = async () => {
     try {
-      const accountResult = await amplifyClient.Account.list({
-        filter: { key: { eq: ACCOUNT_KEY } }
-      })
-
-      if (accountResult.data.length === 0) {
+      if (!selectedAccount?.id) {
+        if (isLoadingAccounts) {
+          return null
+        }
         setIsLoading(false)
         return
       }
 
-      const foundAccountId = accountResult.data[0].id
+      const foundAccountId = selectedAccount.id
       setAccountId(foundAccountId)
 
       // Get scorecards as quickly as possible - no additional queries
@@ -1117,8 +1116,11 @@ export default function ScorecardsComponent({
   }, [])
 
   useEffect(() => {
+    if (isLoadingAccounts) {
+      return
+    }
     fetchScorecards()
-  }, [])
+  }, [selectedAccount?.id, isLoadingAccounts])
 
   // Removed redundant useEffect for loadScorecardSections - now handled in handleSelectScorecard
 
@@ -1993,4 +1995,3 @@ export default function ScorecardsComponent({
     </div>
   )
 }
-
