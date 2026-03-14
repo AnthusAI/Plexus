@@ -7,6 +7,8 @@ Supports multiple procedure execution engines:
 """
 
 import logging
+import json
+import re
 import yaml
 from typing import Dict, Any, Optional
 
@@ -53,7 +55,7 @@ async def execute_procedure(
                 raise ValueError("Tactus procedure requires non-empty 'code' field")
             return await _execute_tactus(
                 procedure_id,
-                code,
+                procedure_code,
                 client,
                 mcp_server,
                 context,
@@ -102,7 +104,7 @@ async def execute_procedure(
 
 async def _execute_tactus(
     procedure_id: str,
-    code: str,
+    procedure_source: str,
     client,
     mcp_server,
     context: Optional[Dict[str, Any]],
@@ -113,7 +115,7 @@ async def _execute_tactus(
 
     Args:
         procedure_id: Procedure ID
-        code: Tactus procedure code
+        procedure_source: Full Tactus YAML procedure source
         client: PlexusDashboardClient
         mcp_server: MCP server
         context: Optional context
@@ -126,8 +128,276 @@ async def _execute_tactus(
 
     try:
         from tactus.core import TactusRuntime
-        from .tactus_adapters import PlexusStorageAdapter, PlexusHITLAdapter, PlexusChatAdapter
+        from .tactus_adapters import PlexusStorageAdapter, PlexusHITLAdapter, PlexusTraceSink
         from .chat_recorder import ProcedureChatRecorder
+        
+        def _extract_legacy_input_from_params(source_config: Dict[str, Any]) -> Dict[str, Any]:
+            """Resolve legacy runtime input from params.<name>.value/default declarations."""
+            params_config = source_config.get("params")
+            if not isinstance(params_config, dict):
+                return {}
+
+            resolved: Dict[str, Any] = {}
+            for name, definition in params_config.items():
+                if not isinstance(name, str) or not name:
+                    continue
+                if not isinstance(definition, dict):
+                    continue
+                if "value" in definition:
+                    resolved[name] = definition.get("value")
+                elif "default" in definition:
+                    resolved[name] = definition.get("default")
+            return resolved
+
+        def _lua_string(value: str) -> str:
+            escaped = (
+                value.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+            )
+            return f'"{escaped}"'
+
+        def _lua_literal(value: Any) -> str:
+            if value is None:
+                return "nil"
+            if isinstance(value, bool):
+                return "true" if value else "false"
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return repr(value)
+            if isinstance(value, str):
+                return _lua_string(value)
+            try:
+                payload = json.dumps(value)
+                payload = payload.replace("]]", "] ]")
+                return f"Json.decode([[{payload}]])"
+            except Exception:
+                return _lua_string(str(value))
+
+        def _lua_table_literal(values: Dict[str, Any]) -> str:
+            entries = []
+            for key, value in values.items():
+                if not isinstance(key, str) or not key:
+                    continue
+                entries.append(f"[{_lua_string(key)}] = {_lua_literal(value)}")
+            return "{ " + ", ".join(entries) + " }" if entries else "{}"
+
+        # Backward compatibility: older Plexus templates use `code:` for Lua source.
+        # Current Tactus parser expects `procedure:` as the required field.
+        try:
+            parsed_source = yaml.safe_load(procedure_source)
+            if isinstance(parsed_source, dict):
+                changed = False
+
+                if 'procedure' not in parsed_source:
+                    legacy_code = parsed_source.get('code')
+                    if isinstance(legacy_code, str) and legacy_code.strip():
+                        parsed_source = dict(parsed_source)
+                        parsed_source['procedure'] = legacy_code
+                        parsed_source.pop('code', None)
+                        changed = True
+                        logger.info("Adapted legacy Tactus config: mapped 'code' to 'procedure'")
+
+                if not parsed_source.get('default_provider'):
+                    parsed_source = dict(parsed_source)
+                    parsed_source['default_provider'] = 'openai'
+                    changed = True
+                    logger.info("Adapted Tactus config: set default_provider to 'openai'")
+
+                agents = parsed_source.get('agents')
+                if isinstance(agents, dict):
+                    normalized_agents = dict(agents)
+                    agents_changed = False
+                    for agent_name, agent_config in agents.items():
+                        if not isinstance(agent_config, dict):
+                            continue
+                        tools = agent_config.get('tools')
+                        if (
+                            isinstance(tools, list)
+                            and tools
+                            and all(isinstance(tool, str) for tool in tools)
+                            and all(tool.startswith('plexus_') for tool in tools)
+                        ):
+                            updated_agent_config = dict(agent_config)
+                            # Use direct named toolset binding for compatibility with DSPy tool conversion.
+                            # Filtered toolset wrappers currently lose visible tool definitions, resulting in
+                            # zero callable tools at runtime.
+                            updated_agent_config['tools'] = ['plexus']
+                            normalized_agents[agent_name] = updated_agent_config
+                            agents_changed = True
+                    if agents_changed:
+                        parsed_source = dict(parsed_source)
+                        parsed_source['agents'] = normalized_agents
+                        changed = True
+                        logger.info("Adapted Tactus config: normalized legacy tool lists to plexus toolset expressions")
+
+                if changed:
+                    procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+
+            # Backward compatibility shims for older Lua procedures.
+            if isinstance(parsed_source, dict):
+                lua_source = parsed_source.get('procedure')
+                if isinstance(lua_source, str):
+                    shim_parts = []
+
+                    if 'Specification(' in lua_source and 'function Specification' not in lua_source:
+                        shim_parts.append(
+                            "if Specification == nil then\n"
+                            "  function Specification(spec)\n"
+                            "    return spec\n"
+                            "  end\n"
+                            "end\n"
+                        )
+                        shim_parts.append(
+                            "if field == nil then\n"
+                            "  field = setmetatable({}, {\n"
+                            "    __index = function(_, _)\n"
+                            "      return function(value)\n"
+                            "        return value\n"
+                            "      end\n"
+                            "    end\n"
+                            "  })\n"
+                            "end\n"
+                        )
+
+                    if 'State.' in lua_source and 'State = ' not in lua_source:
+                        shim_parts.append(
+                            "if State == nil then\n"
+                            "  local __legacy_state = {}\n"
+                            "  State = {\n"
+                            "    get = function(key, default)\n"
+                            "      local value = __legacy_state[key]\n"
+                            "      if value == nil then\n"
+                            "        return default\n"
+                            "      end\n"
+                            "      return value\n"
+                            "    end,\n"
+                            "    set = function(key, value)\n"
+                            "      __legacy_state[key] = value\n"
+                            "      return value\n"
+                            "    end,\n"
+                            "    increment = function(key, amount)\n"
+                            "      local current = __legacy_state[key]\n"
+                            "      if type(current) ~= 'number' then\n"
+                            "        current = 0\n"
+                            "      end\n"
+                            "      local delta = amount or 1\n"
+                            "      __legacy_state[key] = current + delta\n"
+                            "      return __legacy_state[key]\n"
+                            "    end,\n"
+                            "    append = function(key, value)\n"
+                            "      local current = __legacy_state[key]\n"
+                            "      if type(current) ~= 'table' then\n"
+                            "        current = {}\n"
+                            "      end\n"
+                            "      table.insert(current, value)\n"
+                            "      __legacy_state[key] = current\n"
+                            "      return current\n"
+                            "    end,\n"
+                            "    all = function()\n"
+                            "      return __legacy_state\n"
+                            "    end\n"
+                            "  }\n"
+                            "end\n"
+                        )
+
+                    if 'Stage.' in lua_source and 'Stage = ' not in lua_source:
+                        shim_parts.append(
+                            "if Stage == nil then\n"
+                            "  local __stage_value = nil\n"
+                            "  Stage = {\n"
+                            "    set = function(value)\n"
+                            "      __stage_value = value\n"
+                            "      if State ~= nil and State.set ~= nil then\n"
+                            "        State.set(\"stage\", value)\n"
+                            "      end\n"
+                            "      return value\n"
+                            "    end,\n"
+                            "    get = function()\n"
+                            "      return __stage_value\n"
+                            "    end\n"
+                            "  }\n"
+                            "end\n"
+                        )
+
+                    agents = parsed_source.get('agents')
+                    if isinstance(agents, dict):
+                        alias_lines = []
+                        for agent_name in agents.keys():
+                            if not isinstance(agent_name, str) or not agent_name:
+                                continue
+                            alias = ''.join(part.capitalize() for part in agent_name.split('_'))
+                            if not alias:
+                                continue
+                            alias_lines.append(
+                                f"if {alias} == nil then "
+                                f"if {agent_name} ~= nil then {alias} = {agent_name} "
+                                f"elseif Agent ~= nil then {alias} = Agent('{agent_name}') end end"
+                            )
+                        if alias_lines:
+                            shim_parts.append('\n'.join(alias_lines) + '\n')
+
+                    if shim_parts:
+                        parsed_source = dict(parsed_source)
+                        parsed_source['procedure'] = '\n'.join(shim_parts) + '\n' + lua_source
+                        procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+                        logger.info("Adapted Tactus config: added legacy Lua compatibility shims")
+
+                if (
+                    isinstance(lua_source, str)
+                    and 'Specification(' in lua_source
+                    and 'function Specification' not in lua_source
+                ):
+                    # No-op: condition retained for compatibility with previous log messages.
+                    procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+                    logger.info("Adapted Tactus config: added legacy Specification/field compatibility shims")
+
+            # Backward compatibility: older procedures ended with:
+            #   Procedure { ..., function(input) return run(input) end }
+            # In current Tactus runtime, `Procedure(...)` is a lookup primitive, not a declarative
+            # wrapper, so executing this block raises "Named procedure '<Lua table ...>' not found".
+            # Rewrite to direct legacy execution entrypoint.
+            if isinstance(parsed_source, dict):
+                legacy_input = _extract_legacy_input_from_params(parsed_source)
+                if legacy_input:
+                    if isinstance(context, dict):
+                        context = {**legacy_input, **context}
+                    elif context is None:
+                        context = legacy_input
+
+                lua_source = parsed_source.get('procedure')
+                if (
+                    isinstance(lua_source, str)
+                    and 'Procedure {' in lua_source
+                    and 'return run(' in lua_source
+                ):
+                    block_start = lua_source.rfind('Procedure {')
+                    if block_start > -1:
+                        legacy_defaults_lua = _lua_table_literal(legacy_input)
+                        normalized_lua = (
+                            lua_source[:block_start].rstrip()
+                            + "\n\nlocal __legacy_defaults = "
+                            + legacy_defaults_lua
+                            + "\nlocal __legacy_input = {}\n"
+                            + "for k, v in pairs(__legacy_defaults) do\n"
+                            + "  __legacy_input[k] = v\n"
+                            + "end\n"
+                            + "if type(input) == 'table' then\n"
+                            + "  for k, v in pairs(input) do\n"
+                            + "    __legacy_input[k] = v\n"
+                            + "  end\n"
+                            + "end\n"
+                            + "return run(__legacy_input)\n"
+                        )
+                        parsed_source = dict(parsed_source)
+                        parsed_source['procedure'] = normalized_lua
+                        procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+                        logger.info(
+                            "Adapted Tactus config: replaced legacy Procedure block with direct run(input)"
+                        )
+        except Exception:
+            # Let runtime report parse errors with full context if adaptation fails.
+            pass
 
         # Get OpenAI API key from options or environment
         openai_api_key = options.get('openai_api_key')
@@ -142,20 +412,87 @@ async def _execute_tactus(
         storage = PlexusStorageAdapter(client, procedure_id)
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
         hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
-        chat = PlexusChatAdapter(chat_recorder)
+        trace_sink = PlexusTraceSink(chat_recorder)
 
         # Create Tactus runtime with Plexus adapters
         runtime = TactusRuntime(
             procedure_id=procedure_id,
             storage_backend=storage,
             hitl_handler=hitl,
-            chat_recorder=chat,
+            trace_sink=trace_sink,
             mcp_server=mcp_server,
             openai_api_key=openai_api_key
         )
 
-        # Execute workflow with Tactus Lua format
-        result = await runtime.execute(code, context, format="lua")
+        # Ensure DSPy agents can run in streaming mode even outside IDE event handlers.
+        # Non-streaming path in current Tactus does not fully reconcile tool-call history,
+        # which causes OpenAI tool_call_id continuity errors on subsequent turns.
+        if getattr(runtime, "log_handler", None) is None:
+            class _NoopStreamingLogHandler:
+                supports_streaming = True
+
+                def log(self, _event):
+                    return None
+
+            runtime.log_handler = _NoopStreamingLogHandler()
+
+        # Bridge legacy in-process MCP server to Tactus toolset registry.
+        # Newer Tactus versions resolve agent tools through named toolsets.
+        mcp_client_for_bridge = None
+        if mcp_server and hasattr(mcp_server, "list_tools") and hasattr(mcp_server, "call_tool"):
+            mcp_client_for_bridge = mcp_server
+        elif mcp_server and hasattr(mcp_server, "transport"):
+            try:
+                from .mcp_transport import ProcedureMCPClient
+                # Embedded transport must be initialized before any tool calls.
+                transport = mcp_server.transport
+                if hasattr(transport, "initialize") and not getattr(transport, "connected", False):
+                    await transport.initialize({"name": "Tactus Procedure Runtime", "version": "1.0.0"})
+                mcp_client_for_bridge = ProcedureMCPClient(mcp_server.transport)
+            except Exception:
+                mcp_client_for_bridge = None
+
+        if mcp_client_for_bridge:
+            try:
+                from tactus.adapters.mcp import PydanticAIMCPAdapter
+                from pydantic_ai.toolsets import FunctionToolset
+
+                mcp_adapter = PydanticAIMCPAdapter(
+                    mcp_client_for_bridge, tool_primitive=runtime.tool_primitive
+                )
+                mcp_tools = await mcp_adapter.load_tools()
+                if mcp_tools and "plexus" not in runtime.toolset_registry:
+                    runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
+                    logger.info(
+                        "Registered bridged MCP toolset 'plexus' with %d tool(s)",
+                        len(mcp_tools),
+                    )
+            except Exception as exc:
+                logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
+
+        # Compatibility patch: newer DSPy ToolCall objects are attribute-based,
+        # while current Tactus agent code indexes them like dictionaries.
+        try:
+            from dspy.adapters.types.tool import ToolCalls
+
+            dspy_tool_call_cls = getattr(ToolCalls, "ToolCall", None)
+            if dspy_tool_call_cls and not hasattr(dspy_tool_call_cls, "__getitem__"):
+                def _tool_call_getitem(self, key):
+                    if key == "name":
+                        return getattr(self, "name", None)
+                    if key == "args":
+                        return getattr(self, "args", None)
+                    if hasattr(self, key):
+                        return getattr(self, key)
+                    raise KeyError(key)
+
+                dspy_tool_call_cls.__getitem__ = _tool_call_getitem
+                logger.info("Patched DSPy ToolCalls.ToolCall for dict-style compatibility")
+        except Exception as exc:
+            logger.warning("Could not patch DSPy ToolCall compatibility: %s", exc)
+
+        # Execute the full Tactus YAML source so params/agents/stages are preserved.
+        result = await runtime.execute(procedure_source, context, format="yaml")
 
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
