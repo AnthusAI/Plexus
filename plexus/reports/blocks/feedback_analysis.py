@@ -553,9 +553,13 @@ class FeedbackAnalysis(BaseReportBlock):
         try:
             import numpy as np
             from datetime import timezone as _tz
-            from plexus.analysis.embedding_cache import EmbeddingService, EmbeddingCache
-            from plexus.analysis.topic_clusterer import TopicClusterer
-            from plexus.analysis.memory_weights import tier_from_weight
+            from biblicus.analysis.reinforcement_memory import (
+                S3EmbeddingCache,
+                sentence_transformer_embedder,
+            )
+            from biblicus.analysis.reinforcement_memory._clusterer import TopicClusterer
+            from biblicus.analysis.reinforcement_memory._weights import tier_from_weight
+            from biblicus.analysis.reinforcement_memory._lifecycle import derive_lifecycle
 
             cache_bucket = self.config.get("memory_cache_bucket", "")
             model_id = self.config.get("memory_model_id", "all-MiniLM-L6-v2")
@@ -563,11 +567,8 @@ class FeedbackAnalysis(BaseReportBlock):
             use_llm_labels = self.config.get("memory_llm_labels", True)
             use_causal_inference = self.config.get("memory_causal_inference", True)
 
-            cache = EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
-            embed_svc = EmbeddingService(
-                model_id=model_id,
-                cache=cache,
-            )
+            cache = S3EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
+            embed_fn = sentence_transformer_embedder(model_id=model_id, cache=cache)
 
             now = datetime.now(_tz.utc)
             scores_out = []
@@ -582,7 +583,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     continue
 
                 self._log(f"Memory analysis: embedding {len(texts)} edit comments for score '{score_data['score_name']}'")
-                embeddings = np.array(await asyncio.to_thread(embed_svc.batch_embed, texts))
+                embeddings = np.array(await asyncio.to_thread(embed_fn, texts))
 
                 clusterer = TopicClusterer(min_topic_size=min(min_topic_size, max(2, len(texts) // 3)))
                 topic_ids, _ = clusterer.cluster(embeddings, texts)
@@ -654,27 +655,14 @@ class FeedbackAnalysis(BaseReportBlock):
                     weight = 0.5  # Baseline for FeedbackAnalysis memories
                     tier = tier_from_weight(weight)
 
-                    # Derive lifecycle tier from member timestamps (same windowed logic as VectorTopicMemory)
-                    _SHORT_TERM = 14
-                    _MEDIUM_TERM = 30
-                    _has_short = _has_medium = _has_long = False
-                    for _ea in cluster_edited_ats:
-                        _ea_aware = _ea if _ea.tzinfo else _ea.replace(tzinfo=_tz.utc)
-                        _age = max(0, (now - _ea_aware).days)
-                        if _age <= _SHORT_TERM:
-                            _has_short = True
-                        elif _age <= _MEDIUM_TERM:
-                            _has_medium = True
-                        else:
-                            _has_long = True
-                    _is_new = _has_short and not _has_medium and not _has_long
-                    _is_trending = (_has_short or _has_medium) and not _has_long
-                    if _is_new:
-                        _lifecycle_tier = "new"
-                    elif _is_trending:
-                        _lifecycle_tier = "trending"
-                    else:
-                        _lifecycle_tier = "established"
+                    # Derive lifecycle tier using Biblicus lifecycle helper
+                    member_ts_iso = [
+                        (ea if ea.tzinfo else ea.replace(tzinfo=_tz.utc)).isoformat()
+                        for ea in cluster_edited_ats
+                    ]
+                    _lifecycle_tier, _is_new, _is_trending, _ = derive_lifecycle(
+                        member_ts_iso, now=now
+                    )
 
                     topic_entry: Dict = {
                         "topic_id": int(tid),
