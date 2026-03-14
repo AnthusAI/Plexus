@@ -20,6 +20,7 @@ def register_scorecard_tools(mcp: FastMCP):
     @mcp.tool()
     async def plexus_scorecards_list(
         identifier: Optional[str] = None, 
+        account_identifier: Optional[str] = None,
         limit: Optional[str] = None,
         next_token: Optional[str] = None,
         return_metadata: Optional[bool] = False
@@ -29,6 +30,7 @@ def register_scorecard_tools(mcp: FastMCP):
         
         Parameters:
         - identifier: Filter by scorecard name, key, ID, or external ID (optional)
+        - account_identifier: Account identifier (ID, key, name, or external ID) to scope the listing (optional)
         - limit: Maximum number of scorecards to return (optional)
         - next_token: Pagination token for fetching the next page (optional)
         - return_metadata: If true, return {items, nextToken} instead of a bare list
@@ -100,13 +102,20 @@ def register_scorecard_tools(mcp: FastMCP):
 
             filter_parts = []
             
-            # Always use default account
-            default_account_id = get_default_account_id()
-            if default_account_id:
-                filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
-                logger.info("Using default account for scorecard listing")
+            # Scope to the requested account, or fall back to the default account
+            if account_identifier:
+                account_id = resolve_account_identifier(client, account_identifier)
+                if not account_id:
+                    return f"Error: Could not resolve account identifier: {account_identifier}"
+                filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
+                logger.info(f"Using requested account for scorecard listing: {account_identifier}")
             else:
-                logger.warning("No default account ID available for filtering scorecards")
+                default_account_id = get_default_account_id()
+                if default_account_id:
+                    filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+                    logger.info("Using default account for scorecard listing")
+                else:
+                    logger.warning("No default account ID available for filtering scorecards")
             
             # Handle specific scorecard filtering if identifier is provided
             if identifier:

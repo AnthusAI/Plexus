@@ -10,6 +10,13 @@ How: See CONTRIBUTING_AGENT.md for the Kanbus workflow, hierarchy, status rules,
 Performance: Prefer kbs (Rust) when available; kanbus (Python) is equivalent but slower.
 Warning: Editing project/ directly is a sin against The Way. Do not read or write anything in project/; work only through Kanbus.
 
+## Node Runtime
+
+- Canonical Node version for this repo is `18.19.0` (see root `.nvmrc`).
+- Run `nvm use` at repo root before any Node/NPM command.
+- If you must bypass shell state, run explicit binaries from `~/.nvm/versions/node/v18.19.0/bin/`.
+- Do not rely on Homebrew Node paths for repo checks/builds.
+
 ## Overview
 
 Plexus provides comprehensive AI agent integration through the MCP (Model Context Protocol) server, enabling AI assistants like Claude and Cursor to interact natively with Plexus functionality. This integration transforms Plexus from a passive framework into an active **AI Agent Operating System** where human developers and AI agents collaborate on scoring, evaluation, and improvement workflows.
@@ -148,9 +155,14 @@ This workflow uses a chain of skills and agents:
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
 - **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
 
+## Implementation Discipline
+
+- **No fallback/compatibility branches by default**: Prefer a single canonical implementation path.
+- **No silent degradations**: If a required interface is unavailable, fail explicitly with actionable diagnostics.
+- **Add fallback logic only when explicitly requested**: Treat backward compatibility shims as opt-in, not default behavior.
+
 ## Troubleshooting
 
 - **"Tool not found"**: Restart the MCP server (in Cursor: CMD+Shift+P -> "Cursor: Restart MCP Server").
 - **"GraphQL Error"**: Check your environment variables in `.env`.
 - **"Validation Failed"**: The score config updater protects you from pushing bad YAML. Read the error message and correct the format.
-

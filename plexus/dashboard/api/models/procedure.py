@@ -4,12 +4,9 @@ Procedure Model - Python representation of the GraphQL Procedure type.
 Provides methods to manage procedures including:
 - Creating new procedures
 - Linking to scorecards and scores
-- Managing graph nodes and versions
 - YAML configuration handling
 
 Each procedure belongs to an account and is associated with a scorecard and score.
-Procedures use a tree structure of nodes, where each node has versions containing
-YAML configurations and computed values.
 """
 
 import logging
@@ -20,7 +17,6 @@ from .base import BaseModel
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
-    from .graph_node import GraphNode
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +58,8 @@ class Procedure(BaseModel):
         self.parentProcedureId = parentProcedureId or templateId
         self.templateId = parentProcedureId or templateId  # Keep both for backward compat
         self.isTemplate = isTemplate
+        # Deprecated: GraphNode linkage has been removed from schema.
+        # Keep attribute for in-process compatibility with older call sites.
         self.rootNodeId = rootNodeId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -78,12 +76,12 @@ class Procedure(BaseModel):
             code
             parentProcedureId
             isTemplate
-            rootNodeId
             createdAt
             updatedAt
             accountId
             scorecardId
             scoreId
+            scoreVersionId
         """
 
     @classmethod
@@ -99,7 +97,7 @@ class Procedure(BaseModel):
             state=data.get('state'),
             parentProcedureId=data.get('parentProcedureId'),
             isTemplate=data.get('isTemplate'),
-            rootNodeId=data.get('rootNodeId'),
+            rootNodeId=None,
             createdAt=created_at,
             updatedAt=updated_at,
             accountId=data['accountId'],
@@ -256,7 +254,15 @@ class Procedure(BaseModel):
         logger.debug(f"Found {len(items)} procedures for scorecard {scorecardId}")
         return [cls.from_dict(item, client) for item in items]
 
-    def update(self, featured: Optional[bool] = None, scorecardId: Optional[str] = None, scoreId: Optional[str] = None) -> 'Procedure':
+    def update(
+        self,
+        featured: Optional[bool] = None,
+        scorecardId: Optional[str] = None,
+        scoreId: Optional[str] = None,
+        code: Optional[str] = None,
+        state: Optional[str] = None,
+        scoreVersionId: Optional[str] = None,
+    ) -> 'Procedure':
         """Update this procedure.
         
         Args:
@@ -279,6 +285,12 @@ class Procedure(BaseModel):
             input_data['scorecardId'] = scorecardId
         if scoreId is not None:
             input_data['scoreId'] = scoreId
+        if code is not None:
+            input_data['code'] = code
+        if state is not None:
+            input_data['state'] = state
+        if scoreVersionId is not None:
+            input_data['scoreVersionId'] = scoreVersionId
             
         mutation = """
         mutation UpdateProcedure($input: UpdateProcedureInput!) {
@@ -293,10 +305,13 @@ class Procedure(BaseModel):
         
         # Update current instance
         self.featured = updated_procedure.featured
+        self.code = updated_procedure.code
+        self.state = updated_procedure.state
         self.scorecardId = updated_procedure.scorecardId
         self.scoreId = updated_procedure.scoreId
+        self.scoreVersionId = updated_procedure.scoreVersionId
         self.updatedAt = updated_procedure.updatedAt
-        
+
         return self
 
     def delete(self) -> bool:
@@ -324,98 +339,8 @@ class Procedure(BaseModel):
             return False
         return delete_result.get('id') == self.id
 
-    def get_root_node(self) -> Optional['GraphNode']:
-        """Get the root node for this procedure.
-        
-        Returns:
-            The root GraphNode or None if not set
-        """
-        if not self.rootNodeId or not self._client:
-            return None
-            
-        from .graph_node import GraphNode
-        try:
-            return GraphNode.get_by_id(self.rootNodeId, self._client)
-        except ValueError:
-            return None
-
-    def create_root_node(self, yaml_config: str, initial_metadata: Optional[Dict[str, Any]] = None) -> 'GraphNode':
-        """Create a root node for this procedure with initial metadata.
-        
-        Args:
-            yaml_config: The YAML configuration for the initial version
-            initial_metadata: Optional initial metadata (defaults to {"initialized": True})
-            
-        Returns:
-            The created GraphNode
-        """
-        if not self._client:
-            raise ValueError("Cannot create root node without client")
-            
-        from .graph_node import GraphNode
-        
-        logger.debug(f"Creating root node for procedure {self.id}")
-        
-        # Create the node
-        node = GraphNode.create(
-            client=self._client,
-            accountId=self.accountId,
-            procedureId=self.id,
-            parentNodeId=None,
-            status='ACTIVE'
-        )
-        
-        # Set initial metadata
-        if initial_metadata is None:
-            initial_metadata = {"initialized": True, "code": yaml_config}
-
-        node.update_content(
-            status='QUEUED',
-            metadata=initial_metadata
-        )
-        
-        # Update procedure to set root node
-        self.update_root_node(node.id)
-        
-        logger.debug(f"Created root node {node.id} for procedure {self.id}")
-        return node
-
-    def update_root_node(self, rootNodeId: Optional[str]) -> 'Procedure':
-        """Update the root node ID for this procedure.
-        
-        Args:
-            rootNodeId: The ID of the node to set as root
-            
-        Returns:
-            Updated Procedure instance
-        """
-        if not self._client:
-            raise ValueError("Cannot update root node without client")
-            
-        logger.debug(f"Setting root node {rootNodeId} for procedure {self.id}")
-        
-        input_data = {'id': self.id}
-        
-        # Only include rootNodeId if it's not None (avoid DynamoDB empty string error)
-        if rootNodeId is not None:
-            input_data['rootNodeId'] = rootNodeId
-            
-        mutation = """
-        mutation UpdateProcedure($input: UpdateProcedureInput!) {
-            updateProcedure(input: $input) {
-                %s
-            }
-        }
-        """ % self.fields()
-        
-        result = self._client.execute(mutation, {'input': input_data})
-        updated_procedure = self.from_dict(result['updateProcedure'], self._client)
-        
-        # Update current instance
-        self.rootNodeId = updated_procedure.rootNodeId
-        self.updatedAt = updated_procedure.updatedAt
-        
-        return self
-
+    def get_root_node(self):
+        """Graph nodes are no longer supported for procedures."""
+        return None
 
 

@@ -1006,8 +1006,6 @@ Session.append({role, content})
 Session.inject_system(text)
 Session.clear()
 Session.history()
-Session.load_from_node(node)
-Session.save_to_node(node)
 ```
 
 ### State Primitives
@@ -1043,19 +1041,10 @@ Iterations.current()
 Iterations.exceeded(n)
 ```
 
-### Graph Primitives
+### Graph Primitives (Deprecated/Removed)
 
-```lua
-GraphNode.root()
-GraphNode.current()
-GraphNode.create({...})
-GraphNode.set_current(node)
-node:children()
-node:parent()
-node:score()
-node:metadata()
-node:set_metadata(key, value)
-```
+Graph node primitives were removed as part of the Tactus procedure migration.
+Use procedure-scoped chat session/message history and external workflow systems instead.
 
 ### Utility Primitives
 

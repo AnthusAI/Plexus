@@ -103,6 +103,58 @@ prompts:
         
         assert len(params) == 0
 
+    def test_parse_tactus_params_mapping(self):
+        """Test parsing Tactus params mapping definitions."""
+        yaml_code = """
+params:
+  brief:
+    type: string
+    required: true
+    description: Stakeholder brief
+  dry_run:
+    type: boolean
+    default: false
+"""
+        params = ProcedureParameterParser.parse_parameter_definitions(yaml_code)
+
+        assert len(params) == 2
+        assert params[0].name == "brief"
+        assert params[0].label == "Brief"
+        assert params[0].required is True
+        assert params[1].name == "dry_run"
+        assert params[1].default is False
+
+    def test_parse_tactus_params_input_metadata(self):
+        """Test parsing Tactus input presentation metadata."""
+        yaml_code = """
+params:
+  brief:
+    type: string
+    input: textarea
+    rows: 8
+    required: true
+"""
+        params = ProcedureParameterParser.parse_parameter_definitions(yaml_code)
+
+        assert len(params) == 1
+        assert params[0].name == "brief"
+        assert params[0].input == "textarea"
+        assert params[0].rows == 8
+
+    def test_parse_tactus_hidden_input_metadata(self):
+        """Test parsing hidden input presentation metadata."""
+        yaml_code = """
+params:
+  account_identifier:
+    type: string
+    input: hidden
+"""
+        params = ProcedureParameterParser.parse_parameter_definitions(yaml_code)
+
+        assert len(params) == 1
+        assert params[0].name == "account_identifier"
+        assert params[0].input == "hidden"
+
 
 class TestParameterValueExtraction:
     """Tests for extracting parameter values from YAML."""
@@ -191,6 +243,23 @@ class: BeamSearch
         values = ProcedureParameterParser.extract_parameter_values(yaml_code)
         
         assert "scorecard_id" not in values
+
+    def test_extract_values_from_tactus_params_defaults_and_values(self):
+        """Test extracting stored values from Tactus params mapping."""
+        yaml_code = """
+params:
+  brief:
+    type: string
+    required: true
+    value: "Create a compliance scorecard"
+  dry_run:
+    type: boolean
+    default: false
+"""
+        values = ProcedureParameterParser.extract_parameter_values(yaml_code)
+
+        assert values["brief"] == "Create a compliance scorecard"
+        assert values["dry_run"] is False
 
 
 class TestRequiredParametersValidation:
@@ -292,6 +361,22 @@ configurable_parameters:
         
         assert is_valid is True
         assert len(missing) == 0
+
+    def test_validate_required_tactus_params(self):
+        """Test required validation for Tactus params mappings."""
+        yaml_code = """
+params:
+  brief:
+    type: string
+    required: true
+  dry_run:
+    type: boolean
+    default: false
+"""
+        is_valid, missing = ProcedureParameterParser.validate_parameter_values(yaml_code)
+
+        assert is_valid is False
+        assert "brief" in missing
 
 
 class TestComplexScenarios:

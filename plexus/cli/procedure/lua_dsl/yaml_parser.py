@@ -165,6 +165,18 @@ class ProcedureYAMLParser:
         if workflow.count('(') != workflow.count(')'):
             logger.warning("Workflow has unmatched parentheses - may have syntax errors")
 
+        deprecated_tokens = (
+            "GraphNode.",
+            "Session.load_from_node(",
+            "Session.save_to_node(",
+        )
+        for token in deprecated_tokens:
+            if token in workflow:
+                raise ProcedureConfigError(
+                    f"Deprecated graph-node API reference detected: `{token}`. "
+                    "Graph node primitives were removed; use procedure-scoped conversation history APIs."
+                )
+
     @staticmethod
     def extract_agent_names(config: Dict[str, Any]) -> List[str]:
         """Extract list of agent names from configuration."""

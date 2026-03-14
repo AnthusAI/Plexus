@@ -58,7 +58,6 @@ def register_procedure_tools(mcp):
         score_identifier: Annotated[str, Field(description="Score identifier (key, name, or ID)")]
         yaml_config: Annotated[Optional[str], Field(description="YAML configuration (uses default if not provided)")] = None
         featured: Annotated[bool, Field(description="Whether to mark as featured")] = False
-        create_root_node: Annotated[bool, Field(description="Whether to create a root node (default: True)")] = True
         template_id: Annotated[Optional[str], Field(description="Optional template ID to use for the procedure")] = None
         score_version_id: Annotated[Optional[str], Field(description="Optional score version ID to use for the procedure")] = None
     
@@ -74,7 +73,7 @@ def register_procedure_tools(mcp):
     class UpdateProcedureRequest(BaseModel):
         procedure_id: Annotated[str, Field(description="Procedure ID")]
         yaml_config: Annotated[str, Field(description="New YAML configuration")]
-        note: Annotated[Optional[str], Field(description="Optional note for this version")] = None
+        note: Annotated[Optional[str], Field(description="Optional note for this update")] = None
     
     class DeleteProcedureRequest(BaseModel):
         procedure_id: Annotated[str, Field(description="Procedure ID")]
@@ -125,7 +124,6 @@ def register_procedure_tools(mcp):
                 score_identifier=request.score_identifier,
                 yaml_config=request.yaml_config,
                 featured=request.featured,
-                create_root_node=request.create_root_node,
                 template_id=request.template_id,
                 score_version_id=request.score_version_id
             )
@@ -144,9 +142,7 @@ def register_procedure_tools(mcp):
                     "featured": result.procedure.featured,
                     "created_at": result.procedure.createdAt.isoformat(),
                     "scorecard_id": result.procedure.scorecardId,
-                    "score_id": result.procedure.scoreId,
-                    "root_node_id": result.root_node.id,
-                    "initial_version_id": result.initial_version.id
+                    "score_id": result.procedure.scoreId
                 }
             }
             
@@ -183,8 +179,7 @@ def register_procedure_tools(mcp):
                         "created_at": exp.createdAt.isoformat(),
                         "updated_at": exp.updatedAt.isoformat(),
                         "scorecard_id": exp.scorecardId,
-                        "score_id": exp.scoreId,
-                        "root_node_id": exp.rootNodeId
+                        "score_id": exp.scoreId
                     }
                     for exp in procedures
                 ]
@@ -201,8 +196,8 @@ def register_procedure_tools(mcp):
     def plexus_procedure_info(request: ProcedureInfoRequest) -> Dict[str, Any]:
         """Get detailed information about an procedure.
         
-        Returns comprehensive procedure details including node and version counts,
-        associated scorecard/score information, and optionally the YAML configuration.
+        Returns comprehensive procedure details with associated scorecard/score
+        information, and optionally the YAML configuration.
         """
         try:
             service = get_procedure_service()
@@ -223,12 +218,9 @@ def register_procedure_tools(mcp):
                     "updated_at": info.procedure.updatedAt.isoformat(),
                     "account_id": info.procedure.accountId,
                     "scorecard_id": info.procedure.scorecardId,
-                    "score_id": info.procedure.scoreId,
-                    "root_node_id": info.procedure.rootNodeId
+                    "score_id": info.procedure.scoreId
                 },
                 "summary": {
-                    "node_count": info.node_count,
-                    "version_count": info.version_count,
                     "scorecard_name": info.scorecard_name,
                     "score_name": info.score_name
                 }
@@ -252,8 +244,7 @@ def register_procedure_tools(mcp):
     def plexus_procedure_update(request: UpdateProcedureRequest) -> Dict[str, Any]:
         """Update a procedure's configuration.
         
-        Creates a new version with the provided YAML configuration.
-        The procedure will maintain its history of configurations through versions.
+        Updates the procedure YAML configuration.
         """
         try:
             service = get_procedure_service()
@@ -280,7 +271,7 @@ def register_procedure_tools(mcp):
     def plexus_procedure_delete(request: DeleteProcedureRequest) -> Dict[str, Any]:
         """Delete a procedure and all its data.
         
-        WARNING: This permanently deletes the procedure, all its nodes, and all versions.
+        WARNING: This permanently deletes the procedure.
         This action cannot be undone. Use with caution.
         """
         try:
@@ -304,7 +295,7 @@ def register_procedure_tools(mcp):
     def plexus_procedure_yaml(request: ProcedureYamlRequest) -> Dict[str, Any]:
         """Get the latest YAML configuration for an procedure.
         
-        Returns the current YAML configuration from the procedure's latest version.
+        Returns the current YAML configuration from the procedure record.
         Useful for reviewing configurations or as a starting point for updates.
         """
         try:
@@ -333,8 +324,7 @@ def register_procedure_tools(mcp):
     async def plexus_procedure_run(request: ProcedureRunRequest) -> Dict[str, Any]:
         """Run an procedure with the given ID.
         
-        Executes the procedure using its configured YAML settings. The procedure
-        will process its nodes according to the defined workflow and return results.
+        Executes the procedure using its configured YAML settings.
         
         This function provides the same functionality as the CLI 'plexus procedure run'
         command, ensuring consistent behavior between CLI and MCP interfaces.
@@ -424,7 +414,7 @@ def register_procedure_tools(mcp):
     def plexus_procedure_chat_sessions(request: ProcedureChatSessionsRequest) -> Dict[str, Any]:
         """Get chat sessions for an procedure.
         
-        Returns all chat sessions associated with the procedure's nodes, including
+        Returns chat sessions associated with the procedure, including
         session status, creation time, and message counts. Useful for understanding
         conversation activity within an procedure.
         """
@@ -442,7 +432,6 @@ def register_procedure_tools(mcp):
                         id
                         status
                         procedureId
-                        nodeId
                         createdAt
                         updatedAt
                         messages {
@@ -486,7 +475,6 @@ def register_procedure_tools(mcp):
                 processed_sessions.append({
                     "id": session["id"],
                     "status": session["status"],
-                    "node_id": session.get("nodeId"),
                     "created_at": session["createdAt"],
                     "updated_at": session.get("updatedAt"),
                     "message_count": len(messages),
@@ -530,7 +518,6 @@ def register_procedure_tools(mcp):
                         id
                         status
                         procedureId
-                        nodeId
                         createdAt
                         messages {
                             items {
@@ -578,7 +565,6 @@ def register_procedure_tools(mcp):
                             id
                             status
                             procedureId
-                            nodeId
                             createdAt
                             messages {
                                 items {
@@ -686,7 +672,6 @@ def register_procedure_tools(mcp):
                 processed_sessions.append({
                     "session_id": session["id"],
                     "status": session["status"],
-                    "node_id": session.get("nodeId"),
                     "created_at": session["createdAt"],
                     "message_count": len(processed_messages),
                     "tool_calls": len(session_tool_calls),

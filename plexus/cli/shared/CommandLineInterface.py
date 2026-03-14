@@ -7,6 +7,7 @@ import click
 import os
 import json
 import logging
+from importlib import import_module
 
 from plexus.cli.task.tasks import tasks, task
 from plexus.cli.item.items import items, item
@@ -27,8 +28,9 @@ from plexus.cli.data_lake.operations import lake_group
 from plexus.cli.feedback.commands import feedback
 from plexus.cli.scorecard.scorecards import scorecards, scorecard
 from plexus.cli.record_count.counting import count
-from plexus.cli.metrics.commands import metrics_group
 from plexus.cli.procedure.procedures import procedure
+
+logger = logging.getLogger(__name__)
 
 # Define OrderCommands class for command ordering
 class OrderCommands(click.Group):
@@ -84,9 +86,25 @@ cli.add_command(scorecards)
 cli.add_command(scorecard)
 cli.add_command(evaluations)
 cli.add_command(count)
-cli.add_command(metrics_group)
 cli.add_command(dataset)
 cli.add_command(procedure)
+
+
+def _register_optional_command(module_name: str, command_name: str) -> None:
+    """Register a CLI command group without breaking the whole CLI on optional deps."""
+    try:
+        module = import_module(module_name)
+        cli.add_command(getattr(module, command_name))
+    except Exception as exc:
+        logger.warning(
+            "Skipping optional CLI command %s from %s: %s",
+            command_name,
+            module_name,
+            exc,
+        )
+
+
+_register_optional_command("plexus.cli.metrics.commands", "metrics_group")
 
 def main():
     """

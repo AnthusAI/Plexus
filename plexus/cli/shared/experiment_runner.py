@@ -5,6 +5,8 @@ import socket
 from typing import Optional, Tuple, Dict, Any
 import logging
 import json
+import os
+from pathlib import Path
 
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
@@ -13,6 +15,73 @@ from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedur
 from plexus.dashboard.api.models.task import Task
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_task_metadata(raw_metadata: Any) -> Dict[str, Any]:
+    if isinstance(raw_metadata, dict):
+        return dict(raw_metadata)
+    if isinstance(raw_metadata, str) and raw_metadata.strip():
+        try:
+            parsed = json.loads(raw_metadata)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return {}
+
+
+def _derive_procedure_task_state(experiment_result: Dict[str, Any]) -> str:
+    status = str(experiment_result.get("status") or "").upper()
+    if status == "WAITING_FOR_HUMAN":
+        return "WAITING_FOR_HUMAN"
+    if bool(experiment_result.get("success")) or status in {"COMPLETED", "COMPLETE"}:
+        return "COMPLETED"
+    return "FAILED"
+
+
+def _metadata_json(metadata: Dict[str, Any]) -> str:
+    return json.dumps(metadata or {}, default=str)
+
+
+def _read_git_sha_without_subprocess() -> Optional[str]:
+    try:
+        repo_root = Path(__file__).resolve().parents[3]
+        git_dir = repo_root / ".git"
+        head_path = git_dir / "HEAD"
+        if not head_path.exists():
+            return None
+
+        head_text = head_path.read_text(encoding="utf-8").strip()
+        if head_text.startswith("ref: "):
+            ref_path = git_dir / head_text[5:].strip()
+            if ref_path.exists():
+                return ref_path.read_text(encoding="utf-8").strip()[:12] or None
+            return None
+        return head_text[:12] or None
+    except Exception:
+        return None
+
+
+def _runtime_fingerprint() -> Dict[str, Any]:
+    expected_sha = (os.getenv("PLEXUS_EXPECTED_GIT_SHA") or os.getenv("EXPECTED_GIT_SHA") or "").strip() or None
+    build_timestamp = (os.getenv("PLEXUS_BUILD_TIMESTAMP") or os.getenv("BUILD_TIMESTAMP") or "").strip() or None
+    git_sha = (os.getenv("PLEXUS_GIT_SHA") or os.getenv("GIT_SHA") or "").strip() or None
+
+    if not git_sha:
+        git_sha = _read_git_sha_without_subprocess()
+
+    try:
+        import tactus as tactus_pkg
+        tactus_version = getattr(tactus_pkg, "__version__", None) or "unknown"
+    except Exception:
+        tactus_version = "unavailable"
+
+    return {
+        "git_sha": git_sha,
+        "expected_git_sha": expected_sha,
+        "build_timestamp": build_timestamp,
+        "tactus_version": tactus_version,
+    }
 
 
 def _find_existing_task_for_procedure(procedure_id: str, account_id: str, client) -> Optional[str]:
@@ -116,17 +185,6 @@ def create_tracker_and_experiment_task(
     # Configure stages and create tracker (creates API Task)
     stage_configs = get_procedure_stage_configs(total_items=total_items)
     
-    # Build metadata
-    metadata = {
-        "type": "Experiment Run",
-        "procedure_id": procedure_id,
-        "task_type": "Experiment Run",
-    }
-    if scorecard_name:
-        metadata["scorecard"] = scorecard_name
-    if score_name:
-        metadata["score"] = score_name
-    
     # Find or create task for this procedure
     existing_task_id = _find_existing_task_for_procedure(procedure_id, account_id, client)
 
@@ -149,15 +207,26 @@ def create_tracker_and_experiment_task(
     # Claim task like CLI (set worker and RUNNING)
     if task:
         worker_id = f"{socket.gethostname()}-{__import__('os').getpid()}"
+        reset_metadata = _safe_task_metadata(task.metadata)
+        reset_metadata["procedure_id"] = procedure_id
+        reset_metadata["procedure_type"] = "run"
+        reset_metadata["procedure_target"] = f"procedure/run/{procedure_id}"
+        reset_metadata["runtime_fingerprint"] = _runtime_fingerprint()
         task.update(
             accountId=task.accountId,
             type=task.type,
             status='RUNNING',
-            target=task.target,
+            target=f"procedure/run/{procedure_id}",
             command=task.command,
             workerNodeId=worker_id,
             startedAt=datetime.now(timezone.utc).isoformat(),
             updatedAt=datetime.now(timezone.utc).isoformat(),
+            completedAt=None,
+            errorMessage=None,
+            errorDetails=None,
+            stdout=None,
+            stderr=None,
+            metadata=_metadata_json(reset_metadata),
         )
 
     # Try to get the existing Procedure record and associate via metadata
@@ -167,9 +236,11 @@ def create_tracker_and_experiment_task(
         if procedure_record and task:
             # Store procedure ID in task metadata for the association
             # This avoids adding new schema relationships that would increase resource count
-            task_metadata = task.metadata or {}
+            task_metadata = _safe_task_metadata(task.metadata)
             task_metadata["procedure_id"] = procedure_id
             task_metadata["procedure_type"] = "run"
+            task_metadata["procedure_target"] = f"procedure/run/{procedure_id}"
+            task_metadata["runtime_fingerprint"] = _runtime_fingerprint()
             
             # Update the task with the metadata
             task.update(
@@ -178,7 +249,7 @@ def create_tracker_and_experiment_task(
                 status=task.status,
                 target=task.target,
                 command=task.command,
-                metadata=task_metadata,
+                metadata=_metadata_json(task_metadata),
                 updatedAt=datetime.now(timezone.utc).isoformat(),
             )
             logging.info(f"Associated Task {task.id} with Procedure {procedure_id} via metadata")
@@ -256,40 +327,66 @@ async def run_experiment_with_task_tracking(
         # Run the procedure (this is the actual hypothesis generation work)
         experiment_result = await service.run_experiment(procedure_id, **experiment_options)
         
-        # Complete Hypothesis stage and advance to Evaluation
-        if tracker:
+        derived_state = _derive_procedure_task_state(experiment_result)
+
+        # Complete progress stages only when terminally completed.
+        if tracker and derived_state == 'COMPLETED':
             tracker.advance_stage()  # This completes Hypothesis and starts Evaluation
             tracker.current_stage.status_message = "Running experiment evaluation"
             tracker.update(current_items=0)
-        
-        # Since we're not actually running evaluation yet, mark it as complete and advance to Analysis
-        if tracker:
             tracker.advance_stage()  # This completes Evaluation and starts Analysis
             tracker.current_stage.status_message = "Analyzing experiment results"
             tracker.update(current_items=total_items)
-        
-        # Since we're not actually running analysis yet, complete the Analysis stage
-        if tracker:
             tracker.current_stage.complete()  # Complete the final Analysis stage
-        
-        # Complete the task
-        if tracker and tracker.task:
-            tracker.task.update(
-                accountId=tracker.task.accountId,
-                type=tracker.task.type,
-                status='COMPLETED',
-                target=tracker.task.target,
-                command=tracker.task.command,
-                completedAt=datetime.now(timezone.utc).isoformat(),
-                updatedAt=datetime.now(timezone.utc).isoformat(),
-                output=json.dumps(experiment_result, default=str),
-            )
-        
+
+        active_task = (tracker.task if tracker and tracker.task else task)
+        if active_task:
+            task_metadata = _safe_task_metadata(active_task.metadata)
+            task_metadata["procedure_status"] = derived_state
+            if experiment_result.get("pending_message_id"):
+                task_metadata["waiting_on_message_id"] = experiment_result.get("pending_message_id")
+            task_metadata["runtime_fingerprint"] = _runtime_fingerprint()
+
+            task_update_data = {
+                "accountId": active_task.accountId,
+                "type": active_task.type,
+                "target": active_task.target,
+                "command": active_task.command,
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "metadata": _metadata_json(task_metadata),
+                "output": json.dumps(experiment_result, default=str),
+            }
+
+            if derived_state == "COMPLETED":
+                task_update_data["status"] = "COMPLETED"
+                task_update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
+            elif derived_state == "WAITING_FOR_HUMAN":
+                task_update_data["status"] = "RUNNING"
+            else:
+                error_text = (
+                    experiment_result.get("error")
+                    or experiment_result.get("message")
+                    or "Procedure execution failed"
+                )
+                task_update_data["status"] = "FAILED"
+                task_update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
+                task_update_data["errorMessage"] = str(error_text)
+                task_update_data["errorDetails"] = json.dumps(experiment_result, default=str)
+
+            active_task.update(**task_update_data)
+
         # Update result with experiment outcome
         result.update(experiment_result)
-        result['status'] = 'completed'
-        result['message'] = 'Experiment completed successfully'
-        
+        if derived_state == "WAITING_FOR_HUMAN":
+            result['status'] = 'waiting_for_human'
+            result['message'] = 'Procedure is waiting for human input'
+        elif derived_state == "COMPLETED":
+            result['status'] = 'completed'
+            result['message'] = 'Experiment completed successfully'
+        else:
+            result['status'] = 'error'
+            result['message'] = f"Experiment failed: {experiment_result.get('error') or 'unknown error'}"
+
     except Exception as e:
         logging.error(f"Experiment run failed: {str(e)}", exc_info=True)
         

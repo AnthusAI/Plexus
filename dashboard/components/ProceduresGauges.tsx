@@ -4,7 +4,7 @@ import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
 import { useProceduresMetrics } from '../hooks/useUnifiedMetrics'
 
-// Configuration for procedures-specific gauges (two gauges: procedures + graph nodes)  
+// Configuration for procedures-specific gauges (two gauges: procedures + chat sessions)
 const proceduresGaugesConfig: BaseGaugesConfig = {
   // Use grid layout to match ItemsGauges pattern
   layout: 'grid',
@@ -40,12 +40,12 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       ]
     },
     {
-      key: 'graphNodes',
-      title: 'Graph Nodes / hour',
-      valueKey: 'graphNodesPerHour',
-      averageKey: 'graphNodesAveragePerHour',
-      peakKey: 'graphNodesPeakHourly',
-      totalKey: 'graphNodesTotal24h',
+      key: 'chatSessions',
+      title: 'Chat Sessions / hour',
+      valueKey: 'chatSessionsPerHour',
+      averageKey: 'chatSessionsAveragePerHour',
+      peakKey: 'chatSessionsPeakHourly',
+      totalKey: 'chatSessionsTotal24h',
       color: 'hsl(var(--chart-2))',
       unit: '',
       decimalPlaces: 0,
@@ -63,8 +63,8 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       fillOpacity: 0.8
     },
     {
-      dataKey: 'graphNodes',
-      label: 'Graph Nodes',
+      dataKey: 'chatSessions',
+      label: 'Chat Sessions',
       color: 'var(--secondary)',
       fillOpacity: 0.8
     }
@@ -74,8 +74,8 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       label: 'Procedures',
       color: 'hsl(var(--chart-1))',
     },
-    graphNodes: {
-      label: 'Graph Nodes',
+    chatSessions: {
+      label: 'Chat Sessions',
       color: 'hsl(var(--chart-2))',
     },
   }
@@ -100,15 +100,15 @@ export function ProceduresGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: ProceduresGaugesProps) {
-  // Use procedures metrics (procedures and graph nodes)
+  // Use procedures metrics (procedures and chat sessions)
   const { 
     metrics: metricsData, 
     isLoading, 
     error 
   } = useProceduresMetrics()
 
-  // Transform metrics data to BaseGaugesData format
-  // For procedures, we use both procedures data and graphNodes data
+  // Transform metrics data to BaseGaugesData format.
+  // `scoreResults*` fields are reused for the second series in unified gauges.
   const data: BaseGaugesData | null = metricsData ? {
     // Procedures data
     proceduresPerHour: metricsData.itemsPerHour || 0,
@@ -116,16 +116,16 @@ export function ProceduresGauges({
     proceduresPeakHourly: metricsData.itemsPeakHourly || 10, // Use higher baseline for procedures
     proceduresTotal24h: metricsData.itemsTotal24h || 0,
     
-    // Graph Nodes data
-    graphNodesPerHour: metricsData.scoreResultsPerHour || 0,
-    graphNodesAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
-    graphNodesPeakHourly: metricsData.scoreResultsPeakHourly || 50, // Use higher baseline for graph nodes
-    graphNodesTotal24h: metricsData.scoreResultsTotal24h || 0,
+    // Chat sessions data
+    chatSessionsPerHour: metricsData.scoreResultsPerHour || 0,
+    chatSessionsAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
+    chatSessionsPeakHourly: metricsData.scoreResultsPeakHourly || 10,
+    chatSessionsTotal24h: metricsData.scoreResultsTotal24h || 0,
     
     chartData: metricsData.chartData?.map((point: any) => ({
       time: point.time,
       procedures: point.items || 0, // Map items to procedures for chart display
-      graphNodes: point.scoreResults || 0, // Map scoreResults to graphNodes for chart display
+      chatSessions: point.scoreResults || 0,
       bucketStart: point.bucketStart,
       bucketEnd: point.bucketEnd
     })) || [],
@@ -141,7 +141,7 @@ export function ProceduresGauges({
       data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
-      title="Procedures & Graph Nodes, Last 24 Hours"
+      title="Procedures & Chat Sessions, Last 24 Hours"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
@@ -149,4 +149,3 @@ export function ProceduresGauges({
     />
   )
 }
-

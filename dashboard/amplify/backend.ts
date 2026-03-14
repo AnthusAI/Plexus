@@ -80,14 +80,6 @@ if (procedureCfnTable) {
     };
 }
 
-const graphNodeTable = backend.data.resources.tables.GraphNode;
-const graphNodeCfnTable = graphNodeTable.node.defaultChild as dynamodb.CfnTable;
-if (graphNodeCfnTable) {
-    graphNodeCfnTable.streamSpecification = {
-        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
-    };
-}
-
 const chatSessionTable = backend.data.resources.tables.ChatSession;
 const chatSessionCfnTable = chatSessionTable.node.defaultChild as dynamodb.CfnTable;
 if (chatSessionCfnTable) {

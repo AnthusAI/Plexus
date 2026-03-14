@@ -239,6 +239,45 @@ class TestScorecardListTool:
 
         called_query = mock_client.execute.call_args[0][0]
         assert 'nextToken: "token-abc"' in called_query
+
+    def test_scorecard_list_uses_explicit_account_identifier(self, monkeypatch):
+        """Test scorecard listing can scope to an explicit account identifier."""
+        from tools.scorecard.scorecards import register_scorecard_tools
+
+        mock_mcp = Mock()
+        registered_tools = {}
+
+        def mock_tool_decorator():
+            def decorator(func):
+                registered_tools[func.__name__] = func
+                return func
+            return decorator
+
+        mock_mcp.tool = mock_tool_decorator
+        register_scorecard_tools(mock_mcp)
+
+        plexus_scorecards_list = registered_tools['plexus_scorecards_list']
+
+        mock_client = Mock()
+        mock_client.execute.return_value = {
+            'listScorecards': {
+                'items': [],
+                'nextToken': None
+            }
+        }
+
+        monkeypatch.setenv('PLEXUS_API_URL', 'https://example.test')
+        monkeypatch.setenv('PLEXUS_API_KEY', 'test-key')
+
+        import asyncio
+        with patch('plexus.dashboard.api.client.PlexusDashboardClient', return_value=mock_client), \
+             patch('tools.scorecard.scorecards.resolve_account_identifier', return_value='resolved-account-123'):
+            asyncio.get_event_loop().run_until_complete(
+                plexus_scorecards_list(account_identifier='account-123', return_metadata=True)
+            )
+
+        called_query = mock_client.execute.call_args[0][0]
+        assert 'accountId: { eq: "resolved-account-123" }' in called_query
     
     def test_scorecard_validation_patterns(self):
         """Test scorecard data validation patterns"""

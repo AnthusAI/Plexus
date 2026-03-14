@@ -45,7 +45,9 @@ class PlexusHITLAdapter:
     def request_interaction(
         self,
         procedure_id: str,
-        request: HITLRequest
+        request: HITLRequest,
+        execution_context=None,
+        **kwargs
     ) -> HITLResponse:
         """
         Request human interaction using Plexus's exit-and-resume pattern.
@@ -56,6 +58,8 @@ class PlexusHITLAdapter:
         Args:
             procedure_id: Procedure ID
             request: HITLRequest with interaction details
+            execution_context: Optional runtime context (ignored, compatibility arg)
+            **kwargs: Forward-compatibility kwargs from newer Tactus runtimes
 
         Returns:
             HITLResponse (only reached if response already exists on resume)
@@ -117,7 +121,9 @@ class PlexusHITLAdapter:
                     self.chat_recorder.record_message(
                         role='ASSISTANT',
                         content=request.message,
-                        message_type='HITL_REQUEST',
+                        # ChatMessage.messageType enum only supports MESSAGE/TOOL_CALL/TOOL_RESPONSE.
+                        # HITL state is represented via humanInteraction and metadata.
+                        message_type='MESSAGE',
                         human_interaction=interaction_type,
                         metadata=metadata
                     )

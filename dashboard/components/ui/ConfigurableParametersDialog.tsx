@@ -48,11 +48,12 @@ export function ConfigurableParametersDialog({
   const [values, setValues] = useState<ParameterValue>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const visibleParameters = parameters.filter((param) => param.input !== 'hidden')
 
   // Initialize with default values when dialog opens or parameters change
   useEffect(() => {
     if (open) {
-      const defaults = getDefaultValues(parameters)
+      const defaults = getDefaultValues(parameters.filter((param) => param.input !== 'hidden'))
       setValues(defaults)
       setErrors({})
     }
@@ -71,7 +72,7 @@ export function ConfigurableParametersDialog({
     }
 
     // Clear dependent fields when a dependency changes
-    const dependentParams = parameters.filter(p => p.depends_on === name)
+    const dependentParams = visibleParameters.filter(p => p.depends_on === name)
     if (dependentParams.length > 0) {
       setValues(prev => {
         const newValues = { ...prev }
@@ -85,7 +86,7 @@ export function ConfigurableParametersDialog({
 
   const handleSubmit = async () => {
     // Validate
-    const validation = validateParameters(values, parameters)
+    const validation = validateParameters(values, visibleParameters)
     
     if (!validation.valid) {
       const errorMap: Record<string, string> = {}
@@ -161,7 +162,7 @@ export function ConfigurableParametersDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {parameters.map(renderParameter)}
+          {visibleParameters.map(renderParameter)}
         </div>
 
         {hasErrors && (
@@ -199,6 +200,3 @@ export function ConfigurableParametersDialog({
     </Dialog>
   )
 }
-
-
-
