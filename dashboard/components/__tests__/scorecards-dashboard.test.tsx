@@ -82,6 +82,13 @@ jest.mock('next/navigation', () => ({
   useParams: () => ({})
 }))
 
+jest.mock('@/app/contexts/AccountContext', () => ({
+  useAccount: () => ({
+    selectedAccount: { id: 'account-1', key: 'call-criteria' },
+    isLoadingAccounts: false
+  })
+}))
+
 // Mock framer-motion to avoid animation issues in tests
 jest.mock('framer-motion', () => ({
   motion: {
@@ -430,7 +437,7 @@ describe('ScorecardsComponent', () => {
 
   describe('Error Handling', () => {
     it('should display error message when initial data fetch fails', async () => {
-      mockAmplifyClient.amplifyClient.Account.list.mockRejectedValue(new Error('Failed to fetch accounts'))
+      mockAmplifyClient.amplifyClient.Scorecard.list.mockRejectedValue(new Error('Failed to fetch scorecards'))
       
       render(<ScorecardsComponent />)
       
