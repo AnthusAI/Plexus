@@ -461,8 +461,6 @@ code: |
       score.guidelines = guidelines_md
     end
 
-    Stage.set("approval")
-
     local summary_lines = {}
     summary_lines[#summary_lines + 1] = "Scorecard: " .. tostring(normalized_scorecard.name)
     summary_lines[#summary_lines + 1] = "Key: " .. tostring(normalized_scorecard.key)
@@ -470,6 +468,12 @@ code: |
     for _, score in ipairs(plan_scores) do
       summary_lines[#summary_lines + 1] = "- " .. tostring(score.name) .. " (" .. tostring(score.key) .. ") labels: " .. Json.encode(score.labels)
     end
+
+    if dry_run then
+      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
+    Stage.set("approval")
 
     local approved = Human.approve({
       message = "Approve creation of scorecard and scores?",
@@ -483,10 +487,6 @@ code: |
 
     if not approved then
       return {success = false, status = "rejected", message = "Human rejected creation", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
-    end
-
-    if dry_run then
-      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
     end
 
     Stage.set("act")
