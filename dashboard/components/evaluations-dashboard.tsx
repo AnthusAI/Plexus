@@ -41,6 +41,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useParams, usePathname } from 'next/navigation'
 import { Observable } from 'rxjs'
 import { getClient } from '@/utils/amplify-client'
+import { useAccount } from '@/app/contexts/AccountContext'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
 import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatch'
 import { EvaluationCard, EvaluationGrid } from '@/features/evaluations'
@@ -118,19 +119,6 @@ interface RawTask {
 interface RawTaskData {
   data?: RawTask;
 }
-
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
-
-const LIST_ACCOUNTS = `
-  query ListAccounts($filter: ModelAccountFilterInput) {
-    listAccounts(filter: $filter) {
-      items {
-        id
-        key
-      }
-    }
-  }
-`
 
 const LIST_EVALUATIONS = `
   query ListEvaluationByAccountIdAndUpdatedAt(
@@ -241,15 +229,6 @@ const LIST_EVALUATIONS = `
 interface GraphQLError {
   message: string;
   path?: string[];
-}
-
-interface ListAccountResponse {
-  listAccounts: {
-    items: Array<{
-      id: string;
-      key: string;
-    }>;
-  };
 }
 
 interface ListEvaluationResponse {
@@ -373,11 +352,12 @@ export default function EvaluationsDashboard({
   initialSelectedEvaluationId?: string | null,
   initialSelectedScoreResultId?: string | null
 } = {}) {
-  const { user } = useAuthenticator()
+  const { user, authStatus } = useAuthenticator(context => [context.user, context.authStatus])
+  const { selectedAccount, isLoadingAccounts, accounts } = useAccount()
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
-  const [accountId, setAccountId] = useState<string | null>(null)
+  const accountId = selectedAccount?.id ?? null
   const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(initialSelectedEvaluationId)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
@@ -521,30 +501,18 @@ export default function EvaluationsDashboard({
     window.history.pushState(null, '', '/lab/evaluations');
   };
 
-  // Fetch account ID
   useEffect(() => {
-    const fetchAccountId = async () => {
-      try {
-        const accountResponse = await getClient().graphql<ListAccountResponse>({
-          query: LIST_ACCOUNTS,
-          variables: {
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }
-        })
-
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const id = accountResponse.data.listAccounts.items[0].id
-          setAccountId(id)
-        } else {
-          setAccountError('No account found')
-        }
-      } catch (error) {
-        console.error('Error fetching account:', error)
-        setAccountError('Error fetching account')
-      }
+    if (authStatus !== 'authenticated') {
+      setAccountError(null)
+      return
     }
-    fetchAccountId()
-  }, [])
+    if (isLoadingAccounts) return
+    if (!selectedAccount) {
+      setAccountError(accounts.length === 0 ? 'No account found' : null)
+      return
+    }
+    setAccountError(null)
+  }, [authStatus, isLoadingAccounts, selectedAccount, accounts])
 
   // Use the new hook for evaluation data
   const { evaluations, isLoading, isLoadingMore, hasMore, error, refetch, loadMore } = useEvaluationData({ 
@@ -1095,4 +1063,3 @@ export default function EvaluationsDashboard({
     </div>
   )
 }
-
