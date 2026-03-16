@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bdeaf59b-9d20-4f87-9967-716696026fd8",
+  "issue_id": "plx-efe93285-809e-438a-b637-e1f5e146f675",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-14T15:21:18.766Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix /lab/evaluations account resolution to use AccountContext"
+  }
+}

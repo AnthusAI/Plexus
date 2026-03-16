@@ -1,0 +1,37 @@
+{
+  "id": "plx-ea152809-b91a-49f7-9159-e8a936f97be8",
+  "title": "Deprecate graph nodes from Procedures dashboard and schema",
+  "description": "Implement removal of GraphNode from Procedures UI/schema/runtime, move Procedures metrics to procedures+chatSessions, and remove procedure-node MCP/tooling surfaces. Legacy graph-node Procedure records are intentionally unsupported after this change.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1cb15732-1578-41ad-9a57-e6ef608c31b7",
+      "author": "ryan",
+      "text": "Kickoff: implementing graph-node deprecation end-to-end. Context linked from prior Procedures dashboard task plx-da791c (runs-first Tactus flow). Scope in this task: remove GraphNode UI and schema usage, switch Procedures gauges to procedures+chatSessions, remove procedure-node MCP and Lua graph-node/session-node persistence surfaces, and clean graphNodes metrics aggregation paths. Legacy graph-node Procedure records are intentionally unsupported after landing.",
+      "created_at": "2026-03-14T06:04:22.752894Z"
+    },
+    {
+      "id": "188e9789-bc67-4c90-9744-d71802d3ff4f",
+      "author": "ryan",
+      "text": "Implementation progress update (context: plx-da791c): removed procedure graph-node UI/components/queries/metrics wiring; removed GraphNode and rootNodeId/nodeId fields from Amplify schema resource; removed MCP procedure-node registration and deleted MCP/tools/procedure/procedure_nodes.py; removed Lua GraphNode primitive plus Session.load_from_node/save_to_node and added explicit YAML parser validation for deprecated graph-node tokens; converted ProcedureService create/info/update/delete to procedure-record/chat-session model (no root-node creation/deletion); updated MCP/CLI procedure outputs/docs to drop root/node/version fields. Verification: dashboard typecheck passed (Node 18.19 via nvm), targeted dashboard Jest passed, MCP procedures tests passed, procedure service/session parser tests passed, MCP server --help startup passed.",
+      "created_at": "2026-03-14T06:20:45.958484Z"
+    },
+    {
+      "id": "5ab4ef52-c095-4a44-bc43-297bb10f7509",
+      "author": "ryan",
+      "text": "Validation note: dashboard typecheck/Jest and Python targeted suites pass. Amplify GraphQL client generation could not be executed locally because ampx generate graphql-client-code requires a deployed stack/app context; the command failed with StackDoesNotExistError for sandbox stack id amplify-awsamplifygen2-ryan-sandbox-e9d5ef3fc4.",
+      "created_at": "2026-03-14T06:21:23.586676Z"
+    }
+  ],
+  "created_at": "2026-03-14T06:04:18.173325Z",
+  "updated_at": "2026-03-14T06:21:30.033601Z",
+  "closed_at": null,
+  "custom": {}
+}

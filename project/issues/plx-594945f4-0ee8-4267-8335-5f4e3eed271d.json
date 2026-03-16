@@ -1,0 +1,34 @@
+{
+  "id": "plx-594945f4-0ee8-4267-8335-5f4e3eed271d",
+  "title": "Prevent identifier labels from wrapping in IdentifierDisplay",
+  "description": "As a dashboard user, I want identifier labels with spaces to stay on one line, so that the identifier list remains tidy and readable.\n\nFeature: IdentifierDisplay label layout\n\nScenario: Identifier labels do not wrap\n  Given an identifier name contains spaces (e.g., \"Report Id\")\n  When IdentifierDisplay renders in full mode\n  Then the label text does not wrap onto multiple lines",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e5a6ca47-7983-42da-b0ec-291bdcbe9ff1",
+      "author": "ryan",
+      "text": "Starting fix. Plan: prevent label wrapping in IdentifierDisplay full mode and add a regression test.",
+      "created_at": "2026-03-13T18:05:12.473996Z"
+    },
+    {
+      "id": "fc8436db-fd48-45a2-aee7-d9c9074d97dd",
+      "author": "ryan",
+      "text": "Done. Added whitespace-nowrap to identifier labels in IdentifierDisplay and added regression test. Tests: \n> aws-amplify-gen2@0.1.0 test\n> jest identifier-display.test.tsx\n\n  console.error\n    Failed to copy to clipboard: Error: Clipboard error\n        at Object.<anonymous> (/Users/ryan/Projects/Plexus/dashboard/components/ui/identifier-display.test.tsx:161:49)\n        at Promise.then.completed (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/utils.js:298:28)\n        at new Promise (<anonymous>)\n        at callAsyncCircusFn (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/utils.js:231:10)\n        at _callCircusTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:316:40)\n        at _runTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:252:3)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:126:9)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:121:9)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:121:9)\n        at run (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:71:3)\n        at runAndTransformResultsToJestFormat (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n        at jestAdapter (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n        at runTestInternal (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-runner/build/runTest.js:367:16)\n        at runTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-runner/build/runTest.js:444:34)\n\n      45 |       toast.success(`Copied ${label || 'identifier'} to clipboard`);\n      46 |     } catch (error) {\n    > 47 |       console.error('Failed to copy to clipboard:', error);\n         |               ^\n      48 |       toast.error('Failed to copy to clipboard');\n      49 |     }\n      50 |   };\n\n      at error (components/ui/identifier-display.tsx:47:15) (pass; existing console.error from clipboard error test).",
+      "created_at": "2026-03-13T18:05:34.466937Z"
+    }
+  ],
+  "created_at": "2026-03-13T18:05:10.347585Z",
+  "updated_at": "2026-03-13T18:05:34.466937Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

@@ -21,7 +21,7 @@ async def test_actual_service_flow_tool_availability():
     2. Server registers all tools
     3. sop_agent_base.py connects to server and loads tools
     4. Tools are filtered to allowed list
-    5. Agent should have plexus_evaluation_score_result_find available
+    5. Agent should have evaluation tools available
     """
     print("\n=== Simulating actual runtime flow ===")
     
@@ -45,7 +45,7 @@ async def test_actual_service_flow_tool_availability():
         assert 'plexus_evaluation_score_result_find' in all_tool_names, \
             f"FAIL: plexus_evaluation_score_result_find not in {len(all_tool_names)} MCP tools"
         assert 'plexus_evaluation_info' in all_tool_names
-        assert 'upsert_procedure_node' in all_tool_names
+        assert 'upsert_procedure_node' not in all_tool_names
         print(f"✓ Evaluation tools present in MCP")
         
         # Step 3: Load tools through LangChain adapter (as sop_agent_base.py does)
@@ -75,8 +75,8 @@ async def test_actual_service_flow_tool_availability():
         assert 'plexus_evaluation_score_result_find' in filtered_names, \
             f"FAIL: plexus_evaluation_score_result_find was filtered out! " \
             f"Filtered tools: {filtered_names}"
-        assert 'upsert_procedure_node' in filtered_names
-        
+        assert 'upsert_procedure_node' not in filtered_names
+
         print(f"\n✅ SUCCESS: plexus_evaluation_score_result_find is available to agent")
         print(f"Final tool list: {filtered_names}")
         
@@ -123,10 +123,10 @@ async def test_langchain_tool_binding():
         langchain_tools.append(stop_procedure)
         print(f"✓ Added stop_procedure, total: {len(langchain_tools)} tools")
         
-        # Verify we have all 3 expected tools
+        # Verify we have the expected evaluation + control tools
         tool_names = [t.name for t in langchain_tools]
         assert 'plexus_evaluation_score_result_find' in tool_names
-        assert 'upsert_procedure_node' in tool_names  
+        assert 'upsert_procedure_node' not in tool_names
         assert 'stop_procedure' in tool_names
         
         print(f"✅ All 3 tools ready for LangChain: {tool_names}")
@@ -147,4 +147,3 @@ async def test_langchain_tool_binding():
 if __name__ == "__main__":
     # Run tests and show output
     pytest.main([__file__, "-v", "-s"])
-
