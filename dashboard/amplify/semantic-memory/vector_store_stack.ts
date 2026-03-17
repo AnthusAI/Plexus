@@ -1,4 +1,4 @@
-import { CfnOutput, CfnResource, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { Aws, CfnOutput, CfnResource, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
@@ -25,10 +25,11 @@ export class TopicMemoryVectorStoreStack extends Stack {
 
     const environmentName = normalizeEnvironmentName(props.environmentName);
     const isDevelopment = environmentName === 'development';
+    const stagingNameSuffix = environmentName === 'staging' ? `-${Aws.ACCOUNT_ID}` : '';
 
-    this.vectorBucketName = `plexus-vectors-${environmentName}`;
-    this.vectorIndexName = `topic-memory-idx-${environmentName}`;
-    this.embeddingsBucketName = `plexus-embeddings-${environmentName}`;
+    this.vectorBucketName = `plexus-vectors-${environmentName}${stagingNameSuffix}`;
+    this.vectorIndexName = `topic-memory-idx-${environmentName}${stagingNameSuffix}`;
+    this.embeddingsBucketName = `plexus-embeddings-${environmentName}${stagingNameSuffix}`;
 
     const vectorBucket = new CfnResource(this, 'TopicMemoryVectorBucket', {
       type: 'AWS::S3Vectors::VectorBucket',
