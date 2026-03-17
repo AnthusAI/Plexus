@@ -14,8 +14,9 @@ _VALIDATOR_MODULE = None
 def _load_guidelines_validator():
     """Dynamically load the guidelines validator from the Plexus skill."""
     global _VALIDATOR_MODULE
-    if _VALIDATOR_MODULE is not None:
-        return _VALIDATOR_MODULE
+    cached_module = _VALIDATOR_MODULE
+    if cached_module is not None:
+        return cached_module
 
     import importlib.util
 
