@@ -20,17 +20,21 @@ def register_scorecard_tools(mcp: FastMCP):
     @mcp.tool()
     async def plexus_scorecards_list(
         identifier: Optional[str] = None, 
-        limit: Optional[str] = None
-    ) -> Union[str, List[Dict]]:
+        limit: Optional[str] = None,
+        next_token: Optional[str] = None,
+        return_metadata: Optional[bool] = False
+    ) -> Union[str, List[Dict], Dict[str, Any]]:
         """
         Lists scorecards from the Plexus Dashboard.
         
         Parameters:
         - identifier: Filter by scorecard name, key, ID, or external ID (optional)
         - limit: Maximum number of scorecards to return (optional)
+        - next_token: Pagination token for fetching the next page (optional)
+        - return_metadata: If true, return {items, nextToken} instead of a bare list
         
         Returns:
-        - A list of scorecards matching the filter criteria
+        - A list of scorecards matching the filter criteria, or a metadata object when return_metadata=true
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -47,6 +51,12 @@ def register_scorecard_tools(mcp: FastMCP):
                         return f"Error: Invalid limit parameter: {limit}. Must be a positive number."
                 except (ValueError, TypeError):
                     return f"Error: Invalid limit parameter: {limit}. Must be a number."
+
+            # Normalize return_metadata (may be passed as string)
+            if isinstance(return_metadata, str):
+                return_metadata = return_metadata.strip().lower() in ["true", "1", "yes"]
+            else:
+                return_metadata = bool(return_metadata)
             
             # Try to import required modules directly
             try:
@@ -127,6 +137,8 @@ def register_scorecard_tools(mcp: FastMCP):
                             
                             scorecard_data = response.get('getScorecard')
                             if scorecard_data:
+                                if return_metadata:
+                                    return {"items": [scorecard_data], "nextToken": None}
                                 return [scorecard_data]
                             else:
                                 logger.warning(f"Resolved scorecard ID {scorecard_id} but couldn't fetch details")
@@ -148,9 +160,10 @@ def register_scorecard_tools(mcp: FastMCP):
 
             filter_str = ", ".join(filter_parts)
 
+            next_token_arg = f', nextToken: "{next_token}"' if next_token else ''
             query = f"""
-            query ListScorecards {{ listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}) {{
-                items {{ id name key description externalId createdAt updatedAt }} }} }}
+            query ListScorecards {{ listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}{next_token_arg}) {{
+                items {{ id name key description externalId createdAt updatedAt }} nextToken }} }}
             """
             logger.info(f"Executing Dashboard query (limit={fetch_limit})")
             
@@ -169,12 +182,22 @@ def register_scorecard_tools(mcp: FastMCP):
                     logger.error(f"Dashboard query returned errors: {error_details}")
                     return f"Error from Dashboard query: {error_details}"
         
-                scorecards_data = response.get('listScorecards', {}).get('items', [])
-        
+                list_scorecards = response.get('listScorecards', {}) or {}
+                scorecards_data = list_scorecards.get('items', [])
+                next_token_value = list_scorecards.get('nextToken')
+
                 if not scorecards_data:
+                    if return_metadata:
+                        return {
+                            "items": [],
+                            "nextToken": next_token_value,
+                            "message": "No scorecards found matching the criteria in the Plexus Dashboard."
+                        }
                     return "No scorecards found matching the criteria in the Plexus Dashboard."
-        
+
                 # Return raw data
+                if return_metadata:
+                    return {"items": scorecards_data, "nextToken": next_token_value}
                 return scorecards_data
             finally:
                 query_output = query_stdout.getvalue()

@@ -11,6 +11,7 @@ Available tools:
 - plexus_procedure_update: Update procedure configuration
 - plexus_procedure_delete: Delete a procedure
 - plexus_procedure_run: Run an procedure
+- plexus_procedure_test_specs: Run embedded Tactus specifications
 - plexus_procedure_yaml: Get procedure YAML configuration
 - stop_conversation: Stop the current conversation with a reason
 """
@@ -87,6 +88,14 @@ def register_procedure_tools(mcp):
         timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None
         async_mode: Annotated[bool, Field(description="Whether to run asynchronously")] = False
         dry_run: Annotated[bool, Field(description="Whether to perform a dry run")] = False
+
+    class ProcedureTestSpecsRequest(BaseModel):
+        procedure_id: Annotated[Optional[str], Field(description="Procedure ID")] = None
+        yaml_config: Annotated[Optional[str], Field(description="Inline procedure YAML text")] = None
+        mode: Annotated[str, Field(description="Execution mode: mock or integration")] = "mock"
+        scenario: Annotated[Optional[str], Field(description="Optional scenario name filter")] = None
+        parallel: Annotated[bool, Field(description="Run scenarios in parallel")] = True
+        workers: Annotated[Optional[int], Field(description="Worker count override when parallel=true")] = None
     
     class ProcedureChatSessionsRequest(BaseModel):
         procedure_id: Annotated[str, Field(description="Procedure ID")]
@@ -356,7 +365,40 @@ def register_procedure_tools(mcp):
                 "status": "error",
                 "error": f"Failed to run procedure: {str(e)}"
             }
-    
+
+    @mcp.tool()
+    def plexus_procedure_test_specs(request: ProcedureTestSpecsRequest) -> Dict[str, Any]:
+        """Run embedded Tactus Specification blocks from a procedure record or YAML text."""
+        try:
+            if bool(request.procedure_id) == bool(request.yaml_config):
+                return {
+                    "success": False,
+                    "error": "Provide exactly one of procedure_id or yaml_config."
+                }
+
+            if request.mode not in {"mock", "integration"}:
+                return {
+                    "success": False,
+                    "error": "Invalid mode. Expected one of: mock, integration."
+                }
+
+            service = get_procedure_service()
+            return service.test_procedure_specs(
+                procedure_id=request.procedure_id,
+                yaml_config=request.yaml_config,
+                mode=request.mode,
+                scenario=request.scenario,
+                parallel=request.parallel,
+                workers=request.workers,
+            )
+
+        except Exception as e:
+            logger.error(f"Error running procedure specs: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to test procedure specs: {str(e)}"
+            }
+
     @mcp.tool()
     def plexus_procedure_template() -> Dict[str, Any]:
         """Get the default procedure YAML template.

@@ -117,12 +117,19 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function fetchAccounts() {
+      // While auth is initializing, keep loading true to avoid transient
+      // "no account" states in downstream dashboards.
+      if (authStatus === 'configuring') {
+        return
+      }
+
       // Only fetch accounts if user is authenticated
       if (authStatus !== 'authenticated') {
         setIsLoadingAccounts(false)
         return
       }
 
+      setIsLoadingAccounts(true)
       try {
         const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
           client.models.Account

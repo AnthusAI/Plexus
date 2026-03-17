@@ -26,9 +26,11 @@ The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and t
 3. **Available Tools**
    
    **Scorecard Management**:
+   - `plexus_scorecards_list`: Lists scorecards from the Plexus Dashboard. Supports pagination via `next_token` and `return_metadata=true`.
    - `list_plexus_scorecards`: Lists scorecards from the Plexus Dashboard. Can filter by account, name, or key.
    - `get_plexus_scorecard_info`: Gets detailed information about a specific scorecard, including its sections and scores.
    - `get_plexus_score_details`: Gets detailed information for a specific score, including its configuration and version history.
+   - `plexus_guidelines_validate`: Validate Plexus classifier guidelines markdown and return structured results.
    - `find_plexus_score`: ✅ **TESTED** Intelligent search to find a specific score within a scorecard using flexible identifiers. Supports complex queries like "X score on Y scorecard".
    - `get_plexus_score_configuration`: ✅ **TESTED** Gets the YAML configuration for a specific score version, with syntax highlighting and formatting.
    - `update_plexus_score_configuration`: ✅ **TESTED & WORKING** Updates a score's configuration by creating a new version with the provided YAML content. **First successful mutation tool in MCP server**.
