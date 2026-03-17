@@ -26,9 +26,13 @@ def test_test_specs_cli_with_procedure_id(monkeypatch):
         },
     }
 
-    monkeypatch.setattr("plexus.cli.procedure.procedures.create_client", lambda: Mock())
+    monkeypatch.setattr("plexus.cli.procedure.procedures.create_client", Mock)
+
+    def _mock_procedure_service(_client):
+        return mock_service
+
     monkeypatch.setattr(
-        "plexus.cli.procedure.procedures.ProcedureService", lambda client: mock_service
+        "plexus.cli.procedure.procedures.ProcedureService", _mock_procedure_service
     )
 
     result = runner.invoke(procedure, ["test-specs", "proc-1", "--output", "json"])
@@ -60,9 +64,13 @@ def test_test_specs_cli_with_yaml_file(monkeypatch):
         },
     }
 
-    monkeypatch.setattr("plexus.cli.procedure.procedures.create_client", lambda: Mock())
+    monkeypatch.setattr("plexus.cli.procedure.procedures.create_client", Mock)
+
+    def _mock_procedure_service(_client):
+        return mock_service
+
     monkeypatch.setattr(
-        "plexus.cli.procedure.procedures.ProcedureService", lambda client: mock_service
+        "plexus.cli.procedure.procedures.ProcedureService", _mock_procedure_service
     )
 
     with runner.isolated_filesystem():
