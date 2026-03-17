@@ -22,9 +22,8 @@ const backend = defineBackend({
 for (const table of Object.values(backend.data.resources.tables)) {
     const cfnTable = table.node.defaultChild as dynamodb.CfnTable;
     if (cfnTable) {
-        cfnTable.pointInTimeRecoverySpecification = {
-            pointInTimeRecoveryEnabled: true
-        };
+        cfnTable.addPropertyOverride('PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled', true);
+        cfnTable.addPropertyOverride('PointInTimeRecoverySpecification.RecoveryPeriodInDays', 35);
     }
 }
 
