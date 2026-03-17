@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1a40aefc-ab11-47c1-a871-3093406e6834",
+  "issue_id": "plx-47ea2fa7-51c3-4f6c-9518-8ef4d6128ea3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-13T00:01:00.376Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Add procedure embedded spec runner (mock + integration)"
+  }
+}

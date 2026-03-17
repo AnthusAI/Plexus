@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "76f5286e-679b-428b-824e-61b3141d2bcf",
+  "issue_id": "plx-b7348ce2-d278-4c85-b42b-b6d33ec7f7e9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-10T01:01:29.173Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implements story `plx-bcf813` (Create Score code from guidelines via procedure).\n\nScope:\n- Tactus procedure YAML/code for Observe/Orient/Decide/Approval/Act flow\n- Score discovery + missing-code targeting\n- Per-score drafting/reset loop and prediction-run validation\n- Human approval gate + dry-run mode\n- Programmatic score update act phase\n- Tests for key behavior and dry-run no-write guarantees",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement create-score-code Tactus procedure"
+  }
+}

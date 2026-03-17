@@ -87,6 +87,31 @@ plexus procedure run --yaml plexus/procedures/scorecard_create.yaml
 4. Requests human approval
 5. Creates scorecard and scores if approved (unless dry_run=true)
 
+### 4. score_code_create.yaml - Fill Missing Score Implementations
+
+**Purpose**: Finds an existing scorecard from an unstructured brief, identifies scores missing code, drafts runnable score YAML for each, validates by running predictions, requests approval, and applies updates.
+
+**What it demonstrates**:
+- OODA update workflow for existing scorecards
+- Scorecard resolution from brief + list context
+- Programmatic score inspection for missing code
+- Per-score drafting loop with validation via `plexus_predict`
+- Human approval gate before `plexus_score_update`
+- Dry-run planning mode
+
+**How to run**:
+```bash
+plexus procedure run --yaml plexus/procedures/score_code_create.yaml
+```
+
+**Expected behavior**:
+1. Lists scorecards and builds context (with paging/detail instructions)
+2. Resolves target scorecard from stakeholder brief
+3. Inspects scores and selects only those missing code
+4. Drafts + validates each score implementation
+5. Requests human approval
+6. Applies `plexus_score_update` calls unless `dry_run=true`
+
 **Key pattern demonstrated**:
 ```lua
 -- Phase 1: First agent
@@ -120,6 +145,8 @@ plexus/procedures/
 ├── limerick_writer.yaml         # Basic agent loop example
 └── creative_writer.yaml         # Multi-agent collaboration example
 ```
+
+`scorecard_create.yaml` and `score_code_create.yaml` include inline Tactus `Specification([[ ... ]])` blocks in their `code:` sections.
 
 ## Documentation Guide
 

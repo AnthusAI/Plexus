@@ -1,0 +1,25 @@
+{
+  "id": "plx-f9a848e5-2384-4b51-a639-e58008d75b98",
+  "title": "Sync tactus feature branch with main for report runtime parity",
+  "description": "Ensure feature/tactus-procedure includes the latest main branch report-parameter behavior so CLI report runs match current production expectations.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3d27f6e4-ebeb-4f65-b3c4-22776a581e30",
+      "author": "ryan",
+      "text": "Completed: feature/tactus-procedure synced with main for report runtime parity; post-merge CI regressions fixed and GitHub Actions run 23016477402 is green.",
+      "created_at": "2026-03-12T18:09:50.177925208Z"
+    }
+  ],
+  "created_at": "2026-03-12T17:42:55.825186374Z",
+  "updated_at": "2026-03-12T18:09:50.213365712Z",
+  "closed_at": "2026-03-12T18:09:50.213365712Z",
+  "custom": {}
+}

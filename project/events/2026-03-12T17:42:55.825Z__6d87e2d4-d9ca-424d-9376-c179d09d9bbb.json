@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6d87e2d4-d9ca-424d-9376-c179d09d9bbb",
+  "issue_id": "plx-f9a848e5-2384-4b51-a639-e58008d75b98",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-12T17:42:55.825Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Ensure feature/tactus-procedure includes the latest main branch report-parameter behavior so CLI report runs match current production expectations.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Sync tactus feature branch with main for report runtime parity"
+  }
+}

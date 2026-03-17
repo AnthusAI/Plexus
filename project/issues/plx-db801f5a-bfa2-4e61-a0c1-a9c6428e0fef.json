@@ -1,0 +1,25 @@
+{
+  "id": "plx-db801f5a-bfa2-4e61-a0c1-a9c6428e0fef",
+  "title": "Report run handles optional score parameter safely and supports score identifier input",
+  "description": "Feature: Feedback report optional score handling\n\nScenario: Optional score omitted\nGiven a report configuration with an optional score parameter\nWhen a user runs report generation without score\nThen configuration rendering succeeds without undefined-variable errors\nAnd FeedbackAnalysis runs at scorecard scope\n\nScenario: Score identifier provided\nGiven a report configuration with score provided as an identifier\nWhen report generation runs\nThen FeedbackAnalysis accepts score input from score or score_id fields\nAnd score filtering is applied for that identifier",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f9a848e5-2384-4b51-a639-e58008d75b98",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "da8eb1fa-5860-477c-9392-f62ca16478f8",
+      "author": "ryan",
+      "text": "Completed: behavior verified by report CLI smoke checks and merged runtime behavior. Optional score omission no longer causes Jinja undefined-variable errors; score filtering accepts identifier input through score/score_id handling.",
+      "created_at": "2026-03-12T18:09:50.108225277Z"
+    }
+  ],
+  "created_at": "2026-03-12T17:42:55.866317523Z",
+  "updated_at": "2026-03-12T18:09:50.144064380Z",
+  "closed_at": "2026-03-12T18:09:50.144064380Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fc6b073b-c61a-45bc-944a-5df2a1a27750",
+  "issue_id": "plx-db801f5a-bfa2-4e61-a0c1-a9c6428e0fef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-12T17:42:55.866Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Feedback report optional score handling\n\nScenario: Optional score omitted\nGiven a report configuration with an optional score parameter\nWhen a user runs report generation without score\nThen configuration rendering succeeds without undefined-variable errors\nAnd FeedbackAnalysis runs at scorecard scope\n\nScenario: Score identifier provided\nGiven a report configuration with score provided as an identifier\nWhen report generation runs\nThen FeedbackAnalysis accepts score input from score or score_id fields\nAnd score filtering is applied for that identifier",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f9a848e5-2384-4b51-a639-e58008d75b98",
+    "priority": 1,
+    "status": "open",
+    "title": "Report run handles optional score parameter safely and supports score identifier input"
+  }
+}

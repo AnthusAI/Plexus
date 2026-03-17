@@ -1,0 +1,55 @@
+{
+  "id": "plx-47ea2fa7-51c3-4f6c-9518-8ef4d6128ea3",
+  "title": "Add procedure embedded spec runner (mock + integration)",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "54a111ec-3a2b-46c9-b973-00752857c072",
+      "author": "ryan",
+      "text": "Starting implementation for Procedure spec runner in Plexus: service-level runner, CLI command, MCP tool, and tests. Default mode will be mock; integration mode explicit.",
+      "created_at": "2026-03-13T00:01:04.538886279Z"
+    },
+    {
+      "id": "cd9ed4bb-9a8b-4e20-8da8-0d2373b14727",
+      "author": "ryan",
+      "text": "Implemented procedure embedded spec runner:\n- Added ProcedureService.test_procedure_specs to load YAML (from procedure ID or inline YAML), validate Tactus code, require embedded Specification blocks, execute via TactusTestRunner in mock/integration mode, and return structured summary plus scenario/step details.\n- Added CLI command: plexus procedure test-specs with --mode, --scenario, --no-parallel, --workers, and output formats table/json/yaml.\n- Added MCP tool: plexus_procedure_test_specs with exact-one-of input validation (procedure_id xor yaml_config).\n- Added tests for service, CLI, and MCP, including acceptance checks for plexus/procedures/scorecard_create.yaml and plexus/procedures/score_code_create.yaml in mock mode.\nValidation run:\n- pytest -q plexus/cli/procedure/test_spec_runner_service.py plexus/cli/procedure/test_procedure_test_specs_cli.py MCP/tools/procedure/procedures_test.py => 24 passed\n- black --check on modified files => pass\n- ruff check on new/updated test files => pass",
+      "created_at": "2026-03-13T00:08:25.252175426Z"
+    },
+    {
+      "id": "a2cb6c9d-3ff4-4e7f-b909-0b0afeea6d7d",
+      "author": "ryan",
+      "text": "Re-validated after cleanup:\n- pytest targeted suite: 24 passed\n- black --check on new/updated spec-runner test files: pass\n- ruff check on new/updated spec-runner test files: pass\nImplementation files currently include only focused deltas (service + CLI + MCP + tests), without broad formatter churn.",
+      "created_at": "2026-03-13T00:10:47.743102105Z"
+    },
+    {
+      "id": "c0215387-4a07-40b5-b9aa-fb2150ab3b8c",
+      "author": "ryan",
+      "text": "Opened PR to `dev` with semantic-release note: https://github.com/AnthusAI/Plexus/pull/116\nCommit: 6a489fd1\nBranch: feature/tactus-procedure\nPR title: feat(procedure): run embedded Tactus specs from procedure records",
+      "created_at": "2026-03-13T00:15:38.207874223Z"
+    },
+    {
+      "id": "fdb0bc61-8508-4ac5-a27b-aca5ca3f267a",
+      "author": "ryan",
+      "text": "Resolved PR conflicts by merging latest `origin/dev` into `feature/tactus-procedure` (merge commit `75ba190f`) and pushed branch. Re-ran targeted suite: 24 passed.",
+      "created_at": "2026-03-13T00:18:07.286791509Z"
+    },
+    {
+      "id": "51ae6d54-0f5a-4612-a975-48c786f26661",
+      "author": "ryan",
+      "text": "Addressed CI failures on PR #116:\n- Fixed guidelines validator module lookup to support `skills/plexus-guidelines/...` (with fallback to legacy `.claude/skills/...`).\n- Committed updated `plexus/procedures/scorecard_create.yaml` (removed deprecated `.turn()` calls via callable agent syntax).\n- Added missing `plexus/procedures/score_code_create.yaml` required by spec-runner acceptance tests.\n\nLocal verification for failing set:\n- `pytest -q MCP/tools/score/guidelines_test.py`\n- `pytest -q plexus/cli/procedure/test_spec_runner_service.py::test_acceptance_procedure_specs_pass_in_mock_mode[plexus/procedures/scorecard_create.yaml]`\n- `pytest -q plexus/cli/procedure/test_spec_runner_service.py::test_acceptance_procedure_specs_pass_in_mock_mode[plexus/procedures/score_code_create.yaml]`\n=> 6 passed\n\nPushed commit `89a3a4f6` to `feature/tactus-procedure`; CI re-running on PR #116.",
+      "created_at": "2026-03-13T00:55:39.096896107Z"
+    }
+  ],
+  "created_at": "2026-03-13T00:01:00.376617468Z",
+  "updated_at": "2026-03-13T00:55:39.096896107Z",
+  "closed_at": null,
+  "custom": {}
+}

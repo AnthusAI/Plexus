@@ -1,0 +1,91 @@
+{
+  "id": "plx-b7348ce2-d278-4c85-b42b-b6d33ec7f7e9",
+  "title": "Implement create-score-code Tactus procedure",
+  "description": "Implements story `plx-bcf813` (Create Score code from guidelines via procedure).\n\nScope:\n- Tactus procedure YAML/code for Observe/Orient/Decide/Approval/Act flow\n- Score discovery + missing-code targeting\n- Per-score drafting/reset loop and prediction-run validation\n- Human approval gate + dry-run mode\n- Programmatic score update act phase\n- Tests for key behavior and dry-run no-write guarantees",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2a67911f-c453-4644-a8fa-7bcf0d8fbc36",
+      "author": "ryan",
+      "text": "Implemented initial procedure for story `plx-bcf813`:\n\n- Added `plexus/procedures/score_code_create.yaml` (Tactus).\n- Flow implemented: Observe -> Orient -> Decide -> Draft Code -> Approval -> Act.\n- Observe builds scorecard context pack with paging and scorecard-detail instructions.\n- Orient resolves existing target scorecard; not-found exits with explicit error.\n- Decide inspects scorecard scores, calls `plexus_score_info`, and targets only missing-code scores.\n- Per-score drafting loop uses `code_drafter.reset()` and prediction validation via `plexus_predict` (yaml_path + validation item).\n- Human approval gate included before writes.\n- Act stage applies `plexus_score_update` for each planned score.\n- Added README section for `score_code_create.yaml`.\n\nValidation run:\n- YAML parse/load check passed for new procedure file.",
+      "created_at": "2026-03-10T01:07:58.773237941Z"
+    },
+    {
+      "id": "df418292-f260-4d9b-809d-d30ef08af1b1",
+      "author": "ryan",
+      "text": "Added tests for procedure definitions and re-ran targeted suites.\n\nNew tests:\n- `plexus/procedures/test_procedure_definitions.py`\n  - validates `scorecard_create.yaml` is valid Tactus template\n  - validates `score_code_create.yaml` is valid Tactus template\n  - checks required agents/tool wiring for `score_code_create`\n\nVerification run:\n- `pytest -q MCP/tools/score/guidelines_test.py MCP/tools/scorecard/scorecards_test.py plexus/cli/procedure/lua_dsl/tests/test_agent_primitives.py plexus/procedures/test_procedure_definitions.py`\n- Result: `40 passed`.",
+      "created_at": "2026-03-10T01:14:40.808932798Z"
+    },
+    {
+      "id": "aad534b8-24c8-4cfa-b8be-a0828e02a8b0",
+      "author": "ryan",
+      "text": "Adding executable tests for procedure routing/validation (not just YAML shape): execute_procedure Tactus routing tests + template validation tests for class/code/workflow rules.",
+      "created_at": "2026-03-10T01:16:46.202366676Z"
+    },
+    {
+      "id": "3e60d6d7-7e3a-4f6f-8ba2-6238b31c8cdf",
+      "author": "ryan",
+      "text": "Added procedure-focused test code (beyond YAML shape checks):\n\n- `plexus/cli/procedure/test_tactus_procedure_routing.py`\n  - verifies `execute_procedure` routes `scorecard_create.yaml` to Tactus and passes `code` payload\n  - verifies `execute_procedure` routes `score_code_create.yaml` to Tactus and passes `code` payload\n  - verifies Tactus wrapper without `code` fails with explicit error\n\n- `plexus/cli/procedure/test_tactus_template_validation.py`\n  - validates both procedure YAMLs pass `_validate_yaml_template`\n  - asserts Tactus+workflow is rejected\n  - asserts `class: LuaDSL` is rejected\n\nRe-ran targeted suites:\n`pytest -q plexus/cli/procedure/test_tactus_procedure_routing.py plexus/cli/procedure/test_tactus_template_validation.py plexus/procedures/test_procedure_definitions.py MCP/tools/score/guidelines_test.py MCP/tools/scorecard/scorecards_test.py plexus/cli/procedure/lua_dsl/tests/test_agent_primitives.py`\n\nResult: `47 passed`.",
+      "created_at": "2026-03-10T01:17:23.519504842Z"
+    },
+    {
+      "id": "0336f759-4fa8-48a6-ab3f-4257f1142a2e",
+      "author": "ryan",
+      "text": "Adding explicit behavior specs per Tactus BDD guidance: feature/spec files for scorecard_create and score_code_create acceptance behavior.",
+      "created_at": "2026-03-12T20:18:24.905960240Z"
+    },
+    {
+      "id": "0f885ece-3692-48fa-83fb-cea25734e270",
+      "author": "ryan",
+      "text": "Added explicit behavior specs (Gherkin) per Tactus spec guidance.\n\nNew files:\n- `plexus/procedures/specs/scorecard_create.feature`\n- `plexus/procedures/specs/score_code_create.feature`\n- `plexus/procedures/specs/README.md`\n- `plexus/procedures/specs/test_procedure_specs.py`\n\nAlso updated `plexus/procedures/README.md` to include `specs/` in structure.\n\nVerification:\n- `pytest -q plexus/procedures/specs/test_procedure_specs.py plexus/cli/procedure/test_tactus_procedure_routing.py plexus/cli/procedure/test_tactus_template_validation.py plexus/procedures/test_procedure_definitions.py`\n- Result: `12 passed`.",
+      "created_at": "2026-03-12T20:19:16.872528831Z"
+    },
+    {
+      "id": "72ccb1ac-2413-4b68-b561-dba0e5eaba3b",
+      "author": "ryan",
+      "text": "Corrected approach: removed external Python-style Gherkin spec files and embedded Tactus-native  blocks directly inside procedure  for  and , each wrapped in  with explicit input/output schemas. Re-ran targeted tests: 47 passed.",
+      "created_at": "2026-03-12T22:02:00.804653897Z"
+    },
+    {
+      "id": "39eb996d-3117-451a-88c5-58965de7f023",
+      "author": "ryan",
+      "text": "Correction applied:\n- Removed external Python-style Gherkin files for procedure specs.\n- Embedded Tactus-native Specification blocks directly inside procedure code for:\n  - plexus/procedures/scorecard_create.yaml\n  - plexus/procedures/score_code_create.yaml\n- Wrapped each procedure code body in Procedure { input, output, function } so specs are part of Tactus definitions.\n- Targeted test run passed: 47 passed.",
+      "created_at": "2026-03-12T22:02:06.109803991Z"
+    },
+    {
+      "id": "6b94fc3a-7c95-49a6-9719-dbee74f2b5f4",
+      "author": "ryan",
+      "text": "Ran embedded Tactus specifications from procedure code using Tactus test runner API (CLI is currently broken in this environment due Typer flag parsing).\n\nMethod:\n- Extracted each YAML `code:` block to temp `.tac` files\n- Parsed inline `Specification([[ ... ]])` from each\n- Executed with `tactus.testing.test_runner.TactusTestRunner(..., mocked=True)`\n\nResults:\n- `scorecard_create.yaml`: 3 scenarios, 3 passed, 0 failed\n- `score_code_create.yaml`: 3 scenarios, 3 passed, 0 failed\n\nNote:\n- Specs are now embedded in Tactus code, not external Python feature files.",
+      "created_at": "2026-03-12T22:07:05.166252514Z"
+    },
+    {
+      "id": "66bff80b-b4b4-4f07-a06e-8b903177ffde",
+      "author": "ryan",
+      "text": "Unblocked scope expanded per user: fixing ../Tactus CLI failure is now in scope. Investigating and patching Tactus, then re-running embedded-spec tests through CLI.",
+      "created_at": "2026-03-12T22:34:28.285946778Z"
+    },
+    {
+      "id": "7e86a166-96df-406f-99cc-2c6738f56c82",
+      "author": "ryan",
+      "text": "Fixed Tactus CLI breakage and ran embedded Tactus specs via CLI.\n\nRoot issue observed:\n- `tactus --version` and `tactus test ...` crashed with Click/Typer option parsing error (`Secondary flag is not valid for non-boolean flag`).\n\nFixes applied:\n1) Updated Tactus dependency constraints in `../Tactus/pyproject.toml`:\n   - `typer>=0.17,<0.18` (runtime + dev extras)\n2) Reinstalled editable Tactus package (`pip install -e .`)\n3) Updated procedure code to Tactus callable agent syntax (replaced deprecated `.turn()` with callable form) so CLI validation passes.\n\nVerification:\n- `tactus --version` now works (`0.44.1`).\n- Ran embedded spec tests from procedure code via CLI:\n  - `tactus test /tmp/scorecard_create.tac --mock` -> 3 passed\n  - `tactus test /tmp/score_code_create.tac --mock` -> 3 passed\n- Re-ran Plexus targeted tests: `47 passed`.\n\nNotes:\n- Specs are embedded in Tactus code (`Specification([[ ... ]])`) inside both procedure YAML code blocks.",
+      "created_at": "2026-03-12T22:37:06.876824660Z"
+    },
+    {
+      "id": "e0fec9cb-3011-45bc-99b8-acc8f7ceccce",
+      "author": "ryan",
+      "text": "Starting implementation of procedure spec runner (service + CLI + MCP + tests) per approved plan. Default mode: mock; integration optional.",
+      "created_at": "2026-03-12T23:59:34.027867467Z"
+    }
+  ],
+  "created_at": "2026-03-10T01:01:29.173149080Z",
+  "updated_at": "2026-03-12T23:59:34.027867467Z",
+  "closed_at": null,
+  "custom": {}
+}

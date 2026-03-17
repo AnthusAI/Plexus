@@ -3,16 +3,29 @@
   "title": "Create Score code from guidelines via procedure",
   "description": "## User Story\nAs an AQA lab worker, I want to generate missing score code implementations for an existing scorecard from its guidelines, so that I can move configured scorecards into runnable production scoring faster.\n\n## Feature\nFeature: Create Score code for existing scorecard\n\nScenario: Plan and apply missing score code updates\nGiven a scorecard exists with guidelines on all scores and at least one score missing code\nWhen I run the create-score-code procedure with stakeholder context\nThen the procedure observes available scorecards and score details via tools\nAnd orients to identify the intended scorecard\nAnd fails with an error if no matching scorecard is found\nAnd decides a per-score code implementation plan with sub-agent isolation\nAnd validates each drafted implementation by confirming predictions can run\nAnd requests human approval before changes are applied\nAnd applies score code updates programmatically when approved\n\n## Acceptance Criteria\n- Observe stage builds a context pack from scorecard/score listing tool outputs, including instructions for paging and detail retrieval.\n- Orient stage resolves the target scorecard from stakeholder brief + context pack, or exits with clear not-found error.\n- Decide stage produces a plan for updating only scores missing implementations.\n- Per-score drafting runs in isolated sub-agent context and returns implementation payload by explicit completion convention.\n- Validation loop verifies drafted code supports successful prediction execution before finalization.\n- Human approval gate is required before Act stage writes updates.\n- Act stage updates score code through MCP tools and returns update IDs/results.\n- Dry-run mode returns plan without applying updates.",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f1920a01-770d-45a0-bb29-786a112ca813",
+      "author": "ryan",
+      "text": "Starting implementation now.\n\nPlanned execution:\n1. Add Tactus procedure for create-score-code flow (Observe/Orient/Decide/Approval/Act).\n2. Add/extend MCP/tool support needed for score listing/detail + prediction-based validation loop.\n3. Add tests for planning, validation, and dry-run behavior.\n4. Run targeted tests and report integration-readiness.",
+      "created_at": "2026-03-10T01:01:23.444015214Z"
+    },
+    {
+      "id": "e904a213-8c42-4c82-b216-8e8040007387",
+      "author": "ryan",
+      "text": "Implementation task created and started: plx-b7348c",
+      "created_at": "2026-03-10T01:01:31.302442043Z"
+    }
+  ],
   "created_at": "2026-03-10T00:50:30.752388867Z",
-  "updated_at": "2026-03-10T00:50:30.752388867Z",
+  "updated_at": "2026-03-10T01:01:31.302442043Z",
   "closed_at": null,
   "custom": {}
 }

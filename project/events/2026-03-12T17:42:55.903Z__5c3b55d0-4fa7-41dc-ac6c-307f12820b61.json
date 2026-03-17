@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5c3b55d0-4fa7-41dc-ac6c-307f12820b61",
+  "issue_id": "plx-0efa7cca-5286-4785-81ed-5c25c6e38aa9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-12T17:42:55.903Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Stash local changes, merge origin/main with merge commit, reapply stash, run targeted tests and report CLI smoke checks, push branch, and verify GitHub Actions CI passes.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f9a848e5-2384-4b51-a639-e58008d75b98",
+    "priority": 1,
+    "status": "open",
+    "title": "Merge origin/main into feature/tactus-procedure and verify report behavior"
+  }
+}

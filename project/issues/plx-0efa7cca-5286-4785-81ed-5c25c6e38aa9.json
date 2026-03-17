@@ -1,0 +1,43 @@
+{
+  "id": "plx-0efa7cca-5286-4785-81ed-5c25c6e38aa9",
+  "title": "Merge origin/main into feature/tactus-procedure and verify report behavior",
+  "description": "Stash local changes, merge origin/main with merge commit, reapply stash, run targeted tests and report CLI smoke checks, push branch, and verify GitHub Actions CI passes.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f9a848e5-2384-4b51-a639-e58008d75b98",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "29df4196-8d97-41d0-b91f-0039cefb7898",
+      "author": "ryan",
+      "text": "Starting implementation: will stash local state, fetch/prune remotes, merge origin/main into feature/tactus-procedure, reapply stash, run focused report tests/smoke checks, push, and verify GitHub Actions.",
+      "created_at": "2026-03-12T17:42:55.976557672Z"
+    },
+    {
+      "id": "6f5f7fa1-a739-4c84-b976-9412268850d0",
+      "author": "ryan",
+      "text": "Merge completed with conflicts in .gitignore and project/.cache/index.json (resolved by keeping both ignore entries and taking main-side cache file). Verified merged behavior in code: service.py now defaults missing optional params to empty string before Jinja render; feedback_analysis.py accepts score_id and score from config/params. Ran targeted tests: pytest -q plexus/reports/tests/test_parameter_utils.py plexus/reports/blocks/feedback_analysis_test.py (39 passed). Ran CLI smoke checks for report config e555be4d-8013-419f-bb63-87b348712944: (1) empty score via --param-score= rendered and completed successfully (Report ID 4b17a74a-c02a-4aa1-b3ea-b5845a7a80e9), (2) explicit score via --param-score=44246 resolved and used score filter path (Report ID 2d2730e9-a0ee-43d9-80bb-3efb373198f9). Proceeding to push and CI verification.",
+      "created_at": "2026-03-12T17:46:30.011100388Z"
+    },
+    {
+      "id": "cd497419-e872-4cee-9540-f5fabec90756",
+      "author": "ryan",
+      "text": "Follow-up from CI failure: reproduced failing tests in .claude/skills/plexus-guidelines/validate_guidelines_test.py and updated binary fixtures/assertions to include required 'Conditions for No' section. Local verification: pytest -q .claude/skills/plexus-guidelines/validate_guidelines_test.py (32 passed) and combined targeted suite pytest -q plexus/reports/tests/test_parameter_utils.py plexus/reports/blocks/feedback_analysis_test.py .claude/skills/plexus-guidelines/validate_guidelines_test.py (71 passed). Next: commit, push, and wait for GitHub Actions.",
+      "created_at": "2026-03-12T17:59:08.239659561Z"
+    },
+    {
+      "id": "275ae84b-adfa-40af-8f3b-b32d457b1e73",
+      "author": "ryan",
+      "text": "Final verification complete. Commit ef4366fc aligned validator tests with required binary section 'Conditions for No'. Local tests passed (71 targeted). GitHub Actions run 23016477402 on feature/tactus-procedure completed SUCCESS at 2026-03-12T18:09:13Z (Dashboard Unit Tests, Dashboard Storybook Tests, Python 3.11, Python 3.12 all green).",
+      "created_at": "2026-03-12T18:09:46.344607766Z"
+    }
+  ],
+  "created_at": "2026-03-12T17:42:55.903484162Z",
+  "updated_at": "2026-03-12T18:09:50.074321368Z",
+  "closed_at": "2026-03-12T18:09:50.074321368Z",
+  "custom": {}
+}
