@@ -3,21 +3,15 @@
 Guidelines validation tool for Plexus MCP Server.
 """
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Any, Optional
 from fastmcp import FastMCP
 
 
-_VALIDATOR_MODULE = None
-
-
+@lru_cache(maxsize=1)
 def _load_guidelines_validator():
     """Dynamically load the guidelines validator from the Plexus skill."""
-    global _VALIDATOR_MODULE
-    cached_module = _VALIDATOR_MODULE
-    if cached_module is not None:
-        return cached_module
-
     import importlib.util
 
     # Resolve repo root from this file: MCP/tools/score/guidelines.py -> repo root
@@ -41,7 +35,6 @@ def _load_guidelines_validator():
     if not hasattr(module, "validate_guidelines"):
         raise AttributeError("validate_guidelines function not found in validator module")
 
-    _VALIDATOR_MODULE = module
     return module
 
 
