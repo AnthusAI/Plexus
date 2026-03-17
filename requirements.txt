@@ -59,7 +59,7 @@ pyairtable
 azure-identity>=1.15.0
 rich>=13.9.4
 gql[requests]>=3.0.0,<4.0.0
-openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main
+git+https://github.com/AnthusAI/openai_cost_calculator.git@main
 invoke>=2.2.0
 celery>=5.4.0
 pycurl>=7.45.4
@@ -67,5 +67,8 @@ SQLAlchemy[asyncio]==1.4.15
 fastmcp>=2.3.5
 ollama>=0.1.6
 bertopic>=0.16.2
+umap-learn>=0.5.7
+hdbscan>=0.8.40
+sentence-transformers>=5.0.0
 kaleido>=0.2.1
 requests>=2.31.0

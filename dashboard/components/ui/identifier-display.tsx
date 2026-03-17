@@ -84,7 +84,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
 
   const baseTextSize = textSize === 'xs' ? 'text-xs' : textSize === 'sm' ? 'text-sm' : 'text-base';
   const textClasses = cn(baseTextSize, 'flex-shrink-0');
-  const labelTextClasses = cn('!text-xs', 'font-medium text-muted-foreground');
+  const labelTextClasses = cn('!text-xs', 'font-medium text-muted-foreground', 'whitespace-nowrap');
 
   // Skeleton mode rendering - check this BEFORE any data checks
   if (skeletonMode) {
@@ -107,8 +107,9 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   }
 
   const renderIdentifierValue = (identifier: IdentifierItem) => {
-    const displayValue = identifier.value.length > 25 
-      ? `${identifier.value.substring(0, 25)}...` 
+    const maxIdentifierLength = 12;
+    const displayValue = identifier.value.length > maxIdentifierLength 
+      ? `${identifier.value.substring(0, maxIdentifierLength)}...` 
       : identifier.value;
 
     const valueElement = identifier.url ? (
@@ -232,29 +233,13 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     );
   }
 
-  // Compact mode - show all identifiers without copy buttons or expand/collapse
+  // Compact mode - show only the first identifier without copy buttons or expand/collapse
   return (
-    <div className={cn("grid grid-cols-[auto_auto_1fr] gap-x-1 gap-y-0 items-start text-muted-foreground", finalTextClasses)}>
-      <div className="flex items-center">
-        <IdCard className={iconClasses} />
-      </div>
-      <div className={labelTextClasses}>
-        {firstIdentifier!.name}:
-      </div>
-      <div>
+    <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
+      <IdCard className={iconClasses} />
+      <div className="flex-1 min-w-0">
         {renderIdentifierValue(firstIdentifier!)}
       </div>
-      {parsedIdentifiers.slice(1).map((identifier, index) => (
-        <React.Fragment key={`${identifier.name}-${index + 1}`}>
-          <div></div>
-          <div className={labelTextClasses}>
-            {identifier.name}:
-          </div>
-          <div>
-            {renderIdentifierValue(identifier)}
-          </div>
-        </React.Fragment>
-      ))}
     </div>
   );
 };

@@ -2,8 +2,7 @@ name: log_demo
 version: 1.0.0
 description: Demonstration of logging primitives at different levels
 
-class: LuaDSL
-
+class: Tactus
 params:
   task:
     type: string
@@ -29,7 +28,7 @@ stages:
   - processing
   - complete
 
-workflow: |
+code: |
   Log.debug("Workflow started", {
     task = params.task,
     timestamp = os.date("%Y-%m-%dT%H:%M:%SZ")

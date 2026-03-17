@@ -8,9 +8,11 @@ Tactus library with Plexus's GraphQL-based infrastructure.
 from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
 from plexus.cli.procedure.tactus_adapters.hitl import PlexusHITLAdapter
 from plexus.cli.procedure.tactus_adapters.chat import PlexusChatAdapter
+from plexus.cli.procedure.tactus_adapters.trace import PlexusTraceSink
 
 __all__ = [
     'PlexusStorageAdapter',
     'PlexusHITLAdapter',
     'PlexusChatAdapter',
+    'PlexusTraceSink',
 ]

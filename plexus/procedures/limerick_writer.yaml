@@ -1,6 +1,6 @@
 name: limerick_writer
 version: 4.0.0
-class: LuaDSL
+class: Tactus
 description: "AI poet that writes limericks - demonstrates basic agent loop with HITL messaging"
 
 params:
@@ -51,7 +51,7 @@ stages:
   - recording
   - complete
 
-workflow: |
+code: |
   -- Get the topic parameter
   local topic = "neurosymbolic AI"  -- default topic
   State.set("topic", topic)

@@ -1,0 +1,46 @@
+{
+  "id": "plx-0b90660b-0d2b-4e39-8a00-9af80c8d1912",
+  "title": "Shorten IdentifierDisplay truncation length",
+  "description": "As a dashboard user, I want long identifier values to truncate sooner so that card layouts stay compact and readable.\n\nFeature: IdentifierDisplay value truncation\n\nScenario: Long identifier values truncate at a shorter length\n  Given an identifier value exceeds the truncation threshold\n  When IdentifierDisplay renders the value\n  Then the value is truncated earlier than before with an ellipsis",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3653c1fc-cf33-4383-a7b9-6732241df5bd",
+      "author": "ryan",
+      "text": "Starting fix. Plan: reduce truncation length in IdentifierDisplay and update tests.",
+      "created_at": "2026-03-13T18:06:39.400176Z"
+    },
+    {
+      "id": "c1f020fa-e7b5-420d-924b-83d0acfcbfcd",
+      "author": "ryan",
+      "text": "Done. Reduced identifier truncation length to 18 chars and updated truncation test. Tests: \n> aws-amplify-gen2@0.1.0 test\n> jest identifier-display.test.tsx\n\n  console.error\n    Failed to copy to clipboard: Error: Clipboard error\n        at Object.<anonymous> (/Users/ryan/Projects/Plexus/dashboard/components/ui/identifier-display.test.tsx:161:49)\n        at Promise.then.completed (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/utils.js:298:28)\n        at new Promise (<anonymous>)\n        at callAsyncCircusFn (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/utils.js:231:10)\n        at _callCircusTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:316:40)\n        at _runTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:252:3)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:126:9)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:121:9)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:121:9)\n        at run (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:71:3)\n        at runAndTransformResultsToJestFormat (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n        at jestAdapter (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n        at runTestInternal (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-runner/build/runTest.js:367:16)\n        at runTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-runner/build/runTest.js:444:34)\n\n      45 |       toast.success(`Copied ${label || 'identifier'} to clipboard`);\n      46 |     } catch (error) {\n    > 47 |       console.error('Failed to copy to clipboard:', error);\n         |               ^\n      48 |       toast.error('Failed to copy to clipboard');\n      49 |     }\n      50 |   };\n\n      at error (components/ui/identifier-display.tsx:47:15) (pass; existing console.error from clipboard error test).",
+      "created_at": "2026-03-13T18:07:01.516017Z"
+    },
+    {
+      "id": "ee36255f-fdf4-4ac3-aa53-8cd9f6d25c4b",
+      "author": "ryan",
+      "text": "Adjusting truncation length to 12 as requested; will update code and tests, then re-run identifier-display tests.",
+      "created_at": "2026-03-13T18:08:01.074936Z"
+    },
+    {
+      "id": "1c2fd423-e333-4406-ad5c-5b13e24934a8",
+      "author": "ryan",
+      "text": "Updated truncation length to 12 and adjusted test expectation. Tests: \n> aws-amplify-gen2@0.1.0 test\n> jest identifier-display.test.tsx\n\n  console.error\n    Failed to copy to clipboard: Error: Clipboard error\n        at Object.<anonymous> (/Users/ryan/Projects/Plexus/dashboard/components/ui/identifier-display.test.tsx:161:49)\n        at Promise.then.completed (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/utils.js:298:28)\n        at new Promise (<anonymous>)\n        at callAsyncCircusFn (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/utils.js:231:10)\n        at _callCircusTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:316:40)\n        at _runTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:252:3)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:126:9)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:121:9)\n        at _runTestsForDescribeBlock (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:121:9)\n        at run (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/run.js:71:3)\n        at runAndTransformResultsToJestFormat (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n        at jestAdapter (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n        at runTestInternal (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-runner/build/runTest.js:367:16)\n        at runTest (/Users/ryan/Projects/Plexus/dashboard/node_modules/jest-runner/build/runTest.js:444:34)\n\n      45 |       toast.success(`Copied ${label || 'identifier'} to clipboard`);\n      46 |     } catch (error) {\n    > 47 |       console.error('Failed to copy to clipboard:', error);\n         |               ^\n      48 |       toast.error('Failed to copy to clipboard');\n      49 |     }\n      50 |   };\n\n      at error (components/ui/identifier-display.tsx:47:15) (pass; existing console.error from clipboard error test).",
+      "created_at": "2026-03-13T18:08:14.285347Z"
+    }
+  ],
+  "created_at": "2026-03-13T18:06:37.617506Z",
+  "updated_at": "2026-03-13T18:08:14.285347Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
