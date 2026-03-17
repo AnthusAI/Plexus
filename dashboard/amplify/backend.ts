@@ -18,6 +18,15 @@ const backend = defineBackend({
     taskAttachments
 });
 
+// Enable PITR on all Amplify Data DynamoDB tables (AWS default retention is 35 days).
+for (const table of Object.values(backend.data.resources.tables)) {
+    const cfnTable = table.node.defaultChild as dynamodb.CfnTable;
+    if (cfnTable) {
+        cfnTable.addPropertyOverride('PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled', true);
+        cfnTable.addPropertyOverride('PointInTimeRecoverySpecification.RecoveryPeriodInDays', 35);
+    }
+}
+
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
 
