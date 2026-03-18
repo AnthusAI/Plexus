@@ -232,7 +232,8 @@ def check_s3_bucket_access(bucket_name=None):
             logger.info(f"Successfully uploaded test file: {test_key}")
             
             # Try to download it
-            download_path = tempfile.mktemp()
+            download_fd, download_path = tempfile.mkstemp()
+            os.close(download_fd)
             s3_client.download_file(
                 Bucket=bucket_name,
                 Key=test_key,

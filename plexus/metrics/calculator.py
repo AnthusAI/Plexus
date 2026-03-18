@@ -569,6 +569,6 @@ def create_calculator_from_env(cache_bucket_minutes: int = 15) -> MetricsCalcula
         )
         
     logger.info(f"Creating MetricsCalculator with endpoint: {endpoint}")
-    logger.info(f"Using API key: ***{api_key[-4:]}")
+    logger.info("Using configured Plexus API credentials")
 
     return MetricsCalculator(endpoint, api_key, cache_bucket_minutes=cache_bucket_minutes) 
