@@ -1,0 +1,76 @@
+{
+  "id": "plx-dab4ee84-b8ce-4058-b056-91da209cc859",
+  "title": "Verify develop contains dev, clear CodeQL findings, and open develop->main PR",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "853b846c-ce2d-4d01-b24d-516a558b2ed0",
+      "author": "ryan",
+      "text": "develop now fully contains dev, CodeQL cleanup landed on develop as f99dd1d5fe4fd08277c56c62b36a4eba3e99ec8f, and develop CI run 23226460821 passed. Opened PR #126 to merge develop into main: https://github.com/AnthusAI/Plexus/pull/126",
+      "created_at": "2026-03-18T02:56:54.094350Z"
+    },
+    {
+      "id": "7c0558ba-6d61-4d10-8f6f-4aed01f4b32f",
+      "author": "ryan",
+      "text": "Investigating active PR #126 CodeQL/code-quality findings and applying targeted fixes on develop; validating locally before push.",
+      "created_at": "2026-03-18T03:06:22.427917Z"
+    },
+    {
+      "id": "b9f12175-3607-472d-8a70-9c0df1c3f4fb",
+      "author": "ryan",
+      "text": "Validated targeted fixes locally (Python compile + dashboard typecheck) and am pushing a follow-up commit to clear the remaining PR findings.",
+      "created_at": "2026-03-18T03:07:36.424290Z"
+    },
+    {
+      "id": "9400bed4-2807-4767-97dd-667d7a35ed0b",
+      "author": "ryan",
+      "text": "Found one remaining live PR code-quality comment on the latest head in explanation_analysis.py, patched it, and am pushing a small follow-up commit now.",
+      "created_at": "2026-03-18T03:13:45.994902Z"
+    },
+    {
+      "id": "fd3b121f-b8be-45e0-acdc-c7a98a12d238",
+      "author": "ryan",
+      "text": "User still sees a PR suggestion; checking PR #126 review threads directly to distinguish current-head findings from outdated unresolved comments.",
+      "created_at": "2026-03-18T03:20:06.015548Z"
+    },
+    {
+      "id": "0ce46bba-9a31-473c-9e54-01a60f242cc6",
+      "author": "ryan",
+      "text": "Resolved two stale outdated PR review threads in model_config.py that were still showing as open suggestions after the underlying CodeQL findings were fixed.",
+      "created_at": "2026-03-18T03:20:14.841333Z"
+    },
+    {
+      "id": "545e03a1-f0c3-42e7-b14c-0c4d7324fd91",
+      "author": "ryan",
+      "text": "GitHub treats the remaining visible bot items as non-conversation review comments, so they cannot be resolved normally. Minimizing the outdated bot comments instead so they no longer surface as active suggestions.",
+      "created_at": "2026-03-18T03:20:32.738824Z"
+    },
+    {
+      "id": "c8849984-7380-4d68-8a63-ac1ba870e703",
+      "author": "ryan",
+      "text": "Minimized the remaining outdated bot review comments on PR #126 so the UI reflects the actual current state: no active CodeQL/code-quality findings on the latest develop head.",
+      "created_at": "2026-03-18T03:21:03.859624Z"
+    },
+    {
+      "id": "41e903eb-e389-4dbf-9996-3d4b62e23e63",
+      "author": "ryan",
+      "text": "Superseded obsolete PR #126 with fresh PR #127 after rebuilding develop from the trusted dev baseline. Current develop head is e0482a74, open CodeQL alerts are 0, and CI runs 23227855698, 23227856866, and 23228151302 all passed on that head.",
+      "created_at": "2026-03-18T04:38:26.900607Z"
+    }
+  ],
+  "created_at": "2026-03-18T02:16:55.580063Z",
+  "updated_at": "2026-03-18T04:38:40.514274Z",
+  "closed_at": "2026-03-18T04:38:40.514274Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

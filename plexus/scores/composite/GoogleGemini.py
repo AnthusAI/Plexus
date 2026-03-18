@@ -19,6 +19,7 @@ from plexus.scores.CompositeScore import CompositeScore
 from plexus.scores.Score import Score
 from plexus.Result import Result
 from plexus.Registries import scorecard_registry
+from plexus.utils.text_template import render_text_template
 
 # logging.getLogger("openai._base_client").setLevel(logging.INFO)
 
@@ -290,8 +291,7 @@ class GoogleGeminiCompositeScore(CompositeScore):
 
         context = self.get_element_by_name(name='context')['prompt']
  
-        system_prompt_template = Environment().from_string(context)
-        context = system_prompt_template.render(transcript=transcript)
+        context = render_text_template(context, {"transcript": transcript})
 
         return {
             "role": "system",
@@ -312,8 +312,7 @@ Context:
     # Construct the message for the request
     def construct_element_prompt(self, *, prompt, transcript):
 
-        system_prompt_template = Environment().from_string(prompt)
-        prompt = system_prompt_template.render(transcript=transcript)
+        prompt = render_text_template(prompt, {"transcript": transcript})
 
         return {
             "role": "user",

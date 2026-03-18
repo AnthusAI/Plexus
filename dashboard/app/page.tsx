@@ -53,7 +53,7 @@ export default function LandingPage() {
   return (
     <Layout>
       <StandardSection
-        headline="Agent Operating System"
+        headline="AI Agent Incubator"
         headlinePosition="inline"
         variant="hero"
         useWordReveal={true}
@@ -64,10 +64,10 @@ export default function LandingPage() {
         leftContent={
           <>
             <p className="text-xl text-muted-foreground mb-8 w-full">
-              Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.
+              Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents. It's built for running agent workflows at scale, making it easy to capture feedback, measure accuracy, and automatically refine how your AI behaves.
             </p>
             <p className="text-xl text-muted-foreground mb-8 w-full">
-              Your team can use your data to set up step-by-step processes that automate information management. Without dealing with code development and deployment.
+              Instead of guessing if your prompts work, use Plexus to set up a continuous learning loop where human feedback directly improves the models and logic behind your agents.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="lg" className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90 text-lg font-semibold" asChild>
@@ -225,7 +225,7 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto text-center mb-12">
           <p className="text-2xl text-muted-foreground mb-12">
             Built by practitioners on the front lines of AI deployment. Our features 
-            evolve as rapidly as AI itself, delivering battle-tested tools that 
+            evolve as rapidly as AI itself, delivering powerful tools that 
             transform cutting-edge capabilities into real business value.
           </p>
         </div>
