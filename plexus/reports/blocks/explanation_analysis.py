@@ -495,8 +495,7 @@ class ExplanationAnalysis(FeedbackAnalysis):
                         ctx["trace_summary"] = trace_str[:1500]
                     except Exception as exc:
                         logger.warning(
-                            "Failed to process explanation-analysis attachment '%s': %s",
-                            attachment_path,
+                            "Failed to summarize explanation-analysis trace: %s",
                             exc,
                         )
 
