@@ -5,6 +5,47 @@
 import yaml from 'js-yaml'
 import { ParameterConfig, ParameterDefinition } from '@/types/parameters'
 
+type RawParameterType = 'string' | 'text' | 'number' | 'boolean' | 'select' | string
+
+function toTitleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function normalizeParameterType(type: RawParameterType): ParameterDefinition['type'] {
+  if (type === 'string') return 'text'
+  if (type === 'text') return 'text'
+  if (type === 'number') return 'number'
+  if (type === 'boolean') return 'boolean'
+  if (type === 'select') return 'select'
+  return 'text'
+}
+
+function normalizeParameterDefinition(name: string, raw: any): ParameterDefinition {
+  const type = normalizeParameterType(raw?.type || 'text')
+  const input = raw?.input === 'textarea' || raw?.input === 'hidden' || raw?.input === 'text'
+    ? raw.input
+    : undefined
+  const rows = typeof raw?.rows === 'number' ? raw.rows : undefined
+  return {
+    name,
+    label: raw?.label || toTitleCase(name),
+    type,
+    input: type === 'text' ? input : undefined,
+    rows: type === 'text' ? rows : undefined,
+    required: Boolean(raw?.required),
+    default: raw?.default,
+    options: Array.isArray(raw?.options) ? raw.options : undefined,
+    depends_on: typeof raw?.depends_on === 'string' ? raw.depends_on : undefined,
+    description: typeof raw?.description === 'string' ? raw.description : undefined,
+    placeholder: typeof raw?.placeholder === 'string' ? raw.placeholder : undefined,
+    min: typeof raw?.min === 'number' ? raw.min : undefined,
+    max: typeof raw?.max === 'number' ? raw.max : undefined,
+  }
+}
+
 /**
  * Extract parameter definitions from YAML content
  * Supports frontmatter format: parameters section before --- separator
@@ -18,15 +59,27 @@ export function parseParametersFromYaml(yamlContent: string): ParameterDefinitio
         // First part is the frontmatter
         const frontmatter = parts[0].trim()
         if (frontmatter) {
-          const config = yaml.load(frontmatter) as ParameterConfig
-          return config?.parameters || []
+          const config = yaml.load(frontmatter) as ParameterConfig & { params?: Record<string, any> }
+          if (Array.isArray(config?.parameters)) {
+            return config.parameters
+          }
+          if (config?.params && typeof config.params === 'object') {
+            return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
+          }
+          return []
         }
       }
     }
     
     // Fallback: try to parse the whole thing
-    const config = yaml.load(yamlContent) as ParameterConfig
-    return config?.parameters || []
+    const config = yaml.load(yamlContent) as ParameterConfig & { params?: Record<string, any> }
+    if (Array.isArray(config?.parameters)) {
+      return config.parameters
+    }
+    if (config?.params && typeof config.params === 'object') {
+      return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
+    }
+    return []
   } catch (error) {
     console.error('Error parsing parameters from YAML:', error)
     return []
@@ -52,6 +105,10 @@ export function validateParameters(
 
   definitions.forEach(def => {
     const value = values[def.name]
+
+    if (def.input === 'hidden') {
+      return
+    }
 
     // Check required fields
     if (def.required && (value === undefined || value === null || value === '')) {
@@ -155,6 +212,3 @@ export function getDefaultValues(definitions: ParameterDefinition[]): Record<str
 
   return defaults
 }
-
-
-

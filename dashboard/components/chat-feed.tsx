@@ -189,7 +189,7 @@ export function ChatFeedView({
 
               <div className="text-sm">
                 {/* Interactive messages (with buttons/inputs) */}
-                {message.metadata && (message.humanInteraction === 'PENDING_APPROVAL' ||
+                {onHitlSubmit && message.metadata && (message.humanInteraction === 'PENDING_APPROVAL' ||
                                       message.humanInteraction === 'PENDING_INPUT' ||
                                       message.humanInteraction === 'PENDING_REVIEW') ? (
                   <InteractiveMessage

@@ -107,6 +107,12 @@ cp plexus.yaml.example .plexus/config.yaml
 
 The dashboard is a standard Next.js application located in the `dashboard/` directory.
 
+For local procedure execution from the UI, `npm run dev` now runs:
+- Next.js dev server
+- Local procedure task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+
+Set `PLEXUS_ACCOUNT_KEY` in your environment or `.env` for local auto-dispatch.
+
 ```bash
 cd dashboard
 npm install
