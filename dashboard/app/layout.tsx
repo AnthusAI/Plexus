@@ -11,8 +11,8 @@ import { BrandedTitle } from "@/components/BrandedTitle"
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Agent Operating System",
-  description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+  title: "AI Agent Incubator",
+  description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
   viewport: {
     width: 'device-width',
     initialScale: 1,
@@ -20,8 +20,8 @@ export const metadata: Metadata = {
     userScalable: false,
   },
   openGraph: {
-    title: "Agent Operating System",
-    description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+    title: "AI Agent Incubator",
+    description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
     url: "https://plexus.anth.us",
     siteName: "Plexus",
     images: [
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Plexus - Agent Operating System"
+        alt: "Plexus - AI Agent Incubator"
       }
     ],
     locale: "en_US",
@@ -37,8 +37,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Agent Operating System",
-    description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+    title: "AI Agent Incubator",
+    description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
     creator: "@Anthus_AI",
     images: ["/og-image.png"],
   }
