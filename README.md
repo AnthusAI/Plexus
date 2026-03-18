@@ -94,7 +94,7 @@ Plexus is built on a modern, scalable stack:
 
 2. **Install Python dependencies:**
    ```bash
-   pip install -e .
+   poetry install --with dev
    ```
 
 3. **Set up configuration:**

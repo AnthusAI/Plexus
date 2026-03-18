@@ -61,16 +61,9 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip --no-cache-dir
-        pip install invoke --no-cache-dir
-        # Install build dependencies first to ensure they're available
-        pip install pybind11 cython setuptools wheel --no-cache-dir
-        pip install numpy --no-cache-dir
-
-        # Install fasttext-wheel instead of fasttext
-        # pip install fasttext-wheel==0.9.2 --no-cache-dir
-
-        # Now install package dependencies with no cache to save space
-        pip install -e . --no-cache-dir
+        pip install "poetry>=1.8,<2.0" --no-cache-dir
+        poetry config virtualenvs.create false
+        poetry install --with dev --no-interaction --no-ansi
 
         echo "Disk space after Python installation:"
         df -h
@@ -80,7 +73,7 @@ jobs:
         echo "Current directory: $(pwd)"
         echo "Python version: $(python --version)"
         echo "Conda environment: $CONDA_DEFAULT_ENV"
-        invoke ci
+        poetry run invoke ci
 
   dashboard-unit-tests:
     name: Dashboard Unit Tests
