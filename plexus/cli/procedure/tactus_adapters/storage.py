@@ -6,6 +6,7 @@ Stores checkpoints and state in the Procedure.metadata JSON field.
 """
 
 import logging
+import json
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 
@@ -57,7 +58,7 @@ class PlexusStorageAdapter:
         # Query GraphQL for procedure metadata
         query = """
         query GetProcedure($id: ID!) {
-            procedure(id: $id) {
+            getProcedure(id: $id) {
                 id
                 metadata
                 status
@@ -68,7 +69,7 @@ class PlexusStorageAdapter:
 
         try:
             response = self.client.execute(query, {'id': procedure_id})
-            procedure_data = response.get('procedure')
+            procedure_data = response.get('getProcedure')
 
             if not procedure_data:
                 logger.warning(f"Procedure {procedure_id} not found, creating new metadata")
@@ -78,6 +79,12 @@ class PlexusStorageAdapter:
 
             # Parse metadata JSON field
             raw_metadata = procedure_data.get('metadata') or {}
+            if isinstance(raw_metadata, str):
+                try:
+                    raw_metadata = json.loads(raw_metadata)
+                except Exception:
+                    logger.warning("Procedure metadata was not valid JSON; defaulting to empty object")
+                    raw_metadata = {}
 
             # Convert checkpoint data to execution_log
             execution_log = []
@@ -142,15 +149,13 @@ class PlexusStorageAdapter:
 
         # Update via GraphQL mutation
         mutation = """
-        mutation UpdateProcedureMetadata($id: ID!, $metadata: JSON!) {
+        mutation UpdateProcedureMetadata($id: ID!, $metadata: AWSJSON!) {
             updateProcedure(input: {
                 id: $id
                 metadata: $metadata
             }) {
-                procedure {
-                    id
-                    metadata
-                }
+                id
+                metadata
             }
         }
         """
@@ -158,7 +163,7 @@ class PlexusStorageAdapter:
         try:
             self.client.execute(mutation, {
                 'id': metadata.procedure_id,
-                'metadata': metadata_json
+                'metadata': json.dumps(metadata_json)
             })
 
             # Update cache
@@ -184,17 +189,15 @@ class PlexusStorageAdapter:
             waiting_on_message_id: Optional message ID if waiting for human
         """
         mutation = """
-        mutation UpdateProcedureStatus($id: ID!, $status: ProcedureStatus!, $waitingOnMessageId: ID) {
+        mutation UpdateProcedureStatus($id: ID!, $status: String!, $waitingOnMessageId: String) {
             updateProcedure(input: {
                 id: $id
                 status: $status
                 waitingOnMessageId: $waitingOnMessageId
             }) {
-                procedure {
-                    id
-                    status
-                    waitingOnMessageId
-                }
+                id
+                status
+                waitingOnMessageId
             }
         }
         """

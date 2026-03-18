@@ -89,6 +89,37 @@ parameters:
       const result = parseParametersFromYaml(yaml)
       expect(result[1].depends_on).toBe('scorecard_id')
     })
+
+    it('should parse Tactus params mapping format', () => {
+      const yaml = `
+params:
+  brief:
+    type: string
+    input: textarea
+    rows: 8
+    required: true
+    description: Unstructured stakeholder brief
+  account_identifier:
+    type: string
+    input: hidden
+  dry_run:
+    type: boolean
+    default: false
+`
+      const result = parseParametersFromYaml(yaml)
+      expect(result).toHaveLength(3)
+      expect(result[0].name).toBe('brief')
+      expect(result[0].type).toBe('text')
+      expect(result[0].input).toBe('textarea')
+      expect(result[0].rows).toBe(8)
+      expect(result[0].required).toBe(true)
+      expect(result[0].label).toBe('Brief')
+      expect(result[1].name).toBe('account_identifier')
+      expect(result[1].input).toBe('hidden')
+      expect(result[2].name).toBe('dry_run')
+      expect(result[2].type).toBe('boolean')
+      expect(result[2].default).toBe(false)
+    })
   })
 
   describe('hasParameters', () => {
@@ -181,6 +212,16 @@ parameters:
       const result = validateParameters({}, definitions)
       expect(result.valid).toBe(true)
     })
+
+    it('should ignore required hidden fields during UI validation', () => {
+      const definitions: ParameterDefinition[] = [
+        { name: 'account_identifier', label: 'Account Identifier', type: 'text', input: 'hidden', required: true },
+        { name: 'brief', label: 'Brief', type: 'text', required: true }
+      ]
+
+      const result = validateParameters({ brief: 'hello' }, definitions)
+      expect(result.valid).toBe(true)
+    })
   })
 
   describe('getDefaultValues', () => {
@@ -218,6 +259,3 @@ parameters:
     })
   })
 })
-
-
-

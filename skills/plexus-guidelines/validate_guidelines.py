@@ -115,12 +115,23 @@ def determine_classifier_type(sections: Dict[str, str]) -> Tuple[Optional[str], 
 
 def get_required_sections(classifier_type: str, classes_metadata: Dict[str, any]) -> List[str]:
     if classifier_type == 'binary':
+        # If binary labels aren't Yes/No, require per-label definitions
+        labels = classes_metadata.get('valid_labels', [])
+        if labels:
+            normalized = [label.strip().lower() for label in labels]
+            if set(normalized) != {"yes", "no"}:
+                required = ['Objective', 'Classes']
+                for label in labels:
+                    required.append(f'Definition of {label}')
+                    required.append(f'Conditions for {label}')
+                return required
         return [
             'Objective',
             'Classes',
             'Definition of Yes',
             'Conditions for Yes',
-            'Definition of No'
+            'Definition of No',
+            'Conditions for No'
         ]
 
     elif classifier_type == 'binary_with_abstentions':

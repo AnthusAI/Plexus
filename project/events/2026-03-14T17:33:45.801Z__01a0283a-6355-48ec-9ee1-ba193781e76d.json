@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "01a0283a-6355-48ec-9ee1-ba193781e76d",
+  "issue_id": "plx-efe93285-809e-438a-b637-e1f5e146f675",
+  "event_type": "comment_added",
+  "occurred_at": "2026-03-14T17:33:45.801Z",
+  "actor_id": "ryan",
+  "payload": {
+    "comment_author": "ryan",
+    "comment_id": "1b7983e1-346f-4fda-ab4a-22cc289f9fdb"
+  }
+}

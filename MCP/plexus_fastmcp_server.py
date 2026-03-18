@@ -427,6 +427,7 @@ try:
     from tools.scorecard.scorecards import register_scorecard_tools
     from tools.report.reports import register_report_tools
     from tools.score.scores import register_score_tools
+    from tools.score.guidelines import register_guidelines_tools
     from tools.item.items import register_item_tools
     from tools.task.tasks import register_task_tools
     from tools.feedback.feedback import register_feedback_tools
@@ -442,6 +443,7 @@ try:
     register_scorecard_tools(mcp)
     register_report_tools(mcp)
     register_score_tools(mcp)
+    register_guidelines_tools(mcp)
     register_item_tools(mcp)
     register_task_tools(mcp)
     register_feedback_tools(mcp)
@@ -637,6 +639,7 @@ if __name__ == "__main__":
         from tools.util.docs import register_docs_tool
         from tools.scorecard.scorecards import register_scorecard_tools
         from tools.score.scores import register_score_tools
+        from tools.score.guidelines import register_guidelines_tools
         from tools.evaluation.evaluations import register_evaluation_tools
         from tools.procedure.procedures import register_procedure_tools
         from tools.procedure.procedure_nodes import register_procedure_node_tools
@@ -658,6 +661,7 @@ if __name__ == "__main__":
 
         print("Registering score management tools...", file=sys.stderr)
         register_score_tools(mcp)
+        register_guidelines_tools(mcp)
         print("✓ Registered score management tools", file=sys.stderr)
 
         print("Registering evaluation tools...", file=sys.stderr)
