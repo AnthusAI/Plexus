@@ -12,6 +12,88 @@ from typing import List, Tuple, Dict, Any
 logger = logging.getLogger(__name__)
 
 
+def _extract_markdown_code_blocks(text: str) -> List[str]:
+    blocks: List[str] = []
+    index = 0
+
+    while True:
+        start = text.find("```", index)
+        if start == -1:
+            return blocks
+
+        language_end = text.find("\n", start + 3)
+        if language_end == -1:
+            return blocks
+
+        language = text[start + 3:language_end].strip().lower()
+        end = text.find("```", language_end + 1)
+        if end == -1:
+            return blocks
+
+        if language in {"", "json"}:
+            blocks.append(text[language_end + 1:end].strip())
+
+        index = end + 3
+
+
+def _find_function_style_calls(text: str) -> List[Tuple[str, str]]:
+    calls: List[Tuple[str, str]] = []
+    length = len(text)
+    index = 0
+
+    while index < length:
+        char = text[index]
+        if (char.isalpha() or char == "_") and (index == 0 or text[index - 1].isspace()):
+            name_start = index
+            index += 1
+            while index < length and (text[index].isalnum() or text[index] == "_"):
+                index += 1
+            tool_name = text[name_start:index]
+
+            cursor = index
+            while cursor < length and text[cursor].isspace():
+                cursor += 1
+
+            if cursor >= length or text[cursor] != "(":
+                continue
+
+            depth = 1
+            cursor += 1
+            args_start = cursor
+            in_quotes = False
+            quote_char = ""
+            escape_next = False
+
+            while cursor < length and depth > 0:
+                current = text[cursor]
+                if escape_next:
+                    escape_next = False
+                elif in_quotes:
+                    if current == "\\":
+                        escape_next = True
+                    elif current == quote_char:
+                        in_quotes = False
+                        quote_char = ""
+                else:
+                    if current in {"'", '"'}:
+                        in_quotes = True
+                        quote_char = current
+                    elif current == "(":
+                        depth += 1
+                    elif current == ")":
+                        depth -= 1
+                cursor += 1
+
+            if depth == 0:
+                calls.append((tool_name, text[args_start:cursor - 1]))
+                index = cursor
+                continue
+
+        index += 1
+
+    return calls
+
+
 def _llm_repair_malformed_json(malformed_json: str, available_tools: List[str]) -> str:
     """Use an LLM to attempt repair of malformed JSON tool calls."""
     try:
@@ -151,8 +233,7 @@ def extract_all_tool_calls(response_text: str, mcp_tools: List) -> List[Tuple[st
     
     # METHOD 1A: Extract JSON from markdown code blocks first
     # Many AI models wrap JSON in ```json ... ``` blocks
-    markdown_json_pattern = r'```(?:json)?\s*(.*?)\s*```'
-    markdown_matches = re.findall(markdown_json_pattern, response_text, re.DOTALL)
+    markdown_matches = _extract_markdown_code_blocks(response_text)
     
     # Find all complete JSON objects in the response (including from markdown blocks)
     json_blocks = find_complete_json_objects(response_text)
@@ -353,14 +434,11 @@ def extract_all_tool_calls(response_text: str, mcp_tools: List) -> List[Tuple[st
     
     # Enhanced pattern to handle multiline function calls better
     # This pattern looks for tool_name followed by opening paren, then captures everything until matching closing paren
-    enhanced_function_pattern = r'(?:^|\n|\s)(\w+)\s*\(\s*((?:[^()]*|\([^)]*\))*)\s*\)'
-    function_matches = re.finditer(enhanced_function_pattern, response_text, re.DOTALL | re.MULTILINE)
+    function_matches = _find_function_style_calls(response_text)
     
     logger.debug(f"Looking for function-style tool calls with enhanced pattern...")
     
-    for match in function_matches:
-        tool_name = match.group(1)
-        tool_args_str = match.group(2)
+    for tool_name, tool_args_str in function_matches:
         
         # Skip common English words that aren't tools
         if tool_name.upper() in ['YAML', 'JSON', 'HTML', 'XML', 'CSV', 'PDF', 'SQL']:
@@ -532,4 +610,3 @@ def call_tool(tool_name: str, tool_kwargs: Dict[str, Any], mcp_tools: List) -> s
                 return f"Error calling {tool_name}: {e}"
     
     return f"Tool {tool_name} not found"
-

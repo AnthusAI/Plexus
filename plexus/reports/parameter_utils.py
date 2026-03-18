@@ -9,8 +9,10 @@ This module provides functions for:
 
 import yaml
 from typing import Dict, Any, List, Optional
-from jinja2 import Environment, StrictUndefined, TemplateError
+from jinja2 import StrictUndefined, TemplateError
 import logging
+
+from plexus.utils.text_template import render_text_template
 
 logger = logging.getLogger(__name__)
 
@@ -171,18 +173,14 @@ def render_configuration_with_parameters(
     # Extract parameters and content
     param_defs, content = extract_parameters_from_config(configuration)
     
-    # Create Jinja2 environment
-    env = Environment(
-        undefined=StrictUndefined if strict else None,
-        trim_blocks=True,
-        lstrip_blocks=True
-    )
-    
     try:
-        # Render the template
-        template = env.from_string(content)
-        rendered = template.render(**parameters)
-        return rendered
+        return render_text_template(
+            content,
+            parameters,
+            undefined=StrictUndefined if strict else None,
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
     except TemplateError as e:
         logger.error(f"Jinja2 template rendering failed: {e}")
         raise
@@ -384,4 +382,3 @@ def enrich_parameters_with_names(
                 logger.warning(f"Error resolving score '{identifier}': {e}, using identifier as name")
     
     return enriched
-
