@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "event_id": "58236d64-c3f2-4b2a-a022-edef19d2323d",
+  "issue_id": "plx-e8fec0df-cf93-415d-af4a-cba55def1b7c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-17T17:55:39.183Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Implement backend.ts CDK overrides so every backend.data.resources.tables DynamoDB table has PITR enabled (35-day retention), then verify synth/typecheck for dashboard.",
+    "issue_type": "task",
+    "labels": [
+      "security",
+      "prowler"
+    ],
+    "parent": "plx-004bc381-017b-4834-ae74-23af8a899ea5",
+    "priority": 1,
+    "status": "open",
+    "title": "Enable PITR on all Amplify Gen2 DynamoDB tables to satisfy Prowler finding"
+  }
+}

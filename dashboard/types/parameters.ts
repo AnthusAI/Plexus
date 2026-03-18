@@ -21,6 +21,8 @@ export interface ParameterDefinition {
   name: string
   label: string
   type: ParameterType
+  input?: 'text' | 'textarea' | 'hidden'
+  rows?: number
   required?: boolean
   default?: any
   options?: ParameterOption[]
@@ -43,6 +45,5 @@ export interface ParameterValidationError {
   parameter: string
   message: string
 }
-
 
 

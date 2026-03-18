@@ -210,6 +210,17 @@ class AgentPrimitive:
         if self.chat_recorder:
             self._recording_queue.append(message_data)
 
+    def reset(self) -> None:
+        """
+        Reset the agent's conversation state.
+
+        Clears the in-memory conversation history and forces re-initialization
+        on the next turn, without altering the recording queue.
+        """
+        self._conversation = []
+        self._initialized = False
+        logger.debug(f"Agent '{self.name}' reset conversation state")
+
     async def flush_recordings(self):
         """Flush queued recordings to chat session (called by runtime after workflow)."""
         if not self.chat_recorder or not self.chat_recorder.session_id:
@@ -366,12 +377,6 @@ class AgentPrimitive:
     def get_conversation(self) -> List[Any]:
         """Get the current conversation history."""
         return self._conversation.copy()
-
-    def reset(self):
-        """Reset the agent (mainly for testing)."""
-        self._conversation.clear()
-        self._initialized = False
-        logger.debug(f"Agent '{self.name}' reset")
 
     def __repr__(self) -> str:
         return f"AgentPrimitive(name='{self.name}', turns={len(self._conversation)})"

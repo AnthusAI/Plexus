@@ -1,0 +1,31 @@
+{
+  "id": "plx-c34e9f30-d322-408d-b873-5ffe5df0bcb5",
+  "title": "Investigate missing scorecards dashboard list query",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "01af6344-53af-4d4b-b8eb-f9b6fa3f29f3",
+      "author": "ryan",
+      "text": "Repro from user: scorecards dashboard shows no scorecards and browser network tab has no GraphQL request for scorecard listing. Investigating frontend data-fetch path and query trigger conditions.",
+      "created_at": "2026-03-14T14:37:06.282859Z"
+    },
+    {
+      "id": "26bc62ea-9cd2-42a5-9cc9-57fe4398e4ee",
+      "author": "ryan",
+      "text": "Root cause identified and patched in dashboard/components/scorecards-dashboard.tsx: scorecards load used NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY at mount-only. When env key is unset/empty, account lookup returned no account and function exited before listScorecards query, so UI showed empty state and no scorecard list request. Updated flow to use AccountContext selectedAccount.id and trigger fetch when selected account finishes loading. This now issues listScorecards for active account and updates on account switch.",
+      "created_at": "2026-03-14T14:39:02.504253Z"
+    }
+  ],
+  "created_at": "2026-03-14T14:36:59.510294Z",
+  "updated_at": "2026-03-14T14:39:02.504253Z",
+  "closed_at": null,
+  "custom": {}
+}
