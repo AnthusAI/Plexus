@@ -1,11 +1,13 @@
-name: score_code_create
-version: 1.0.0
+name: Create Score Code
+version: 1.0.5
 class: Tactus
 description: "Create missing score code implementations for an existing scorecard from stakeholder brief + guidelines."
 
 params:
   brief:
     type: string
+    input: textarea
+    rows: 8
     required: true
     description: "Unstructured stakeholder brief describing which scorecard to update and implementation intent"
   scorecard_list_limit:

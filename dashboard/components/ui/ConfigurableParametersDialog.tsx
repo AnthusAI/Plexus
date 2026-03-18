@@ -151,6 +151,7 @@ export function ConfigurableParametersDialog({
   }
 
   const hasErrors = Object.keys(errors).length > 0
+  const visibleParameters = parameters.filter(param => param.input !== 'hidden')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -161,7 +162,7 @@ export function ConfigurableParametersDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {parameters.map(renderParameter)}
+          {visibleParameters.map(renderParameter)}
         </div>
 
         {hasErrors && (
@@ -199,6 +200,5 @@ export function ConfigurableParametersDialog({
     </Dialog>
   )
 }
-
 
 

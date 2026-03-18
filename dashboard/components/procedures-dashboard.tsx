@@ -454,10 +454,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       accountId: accountId,
       type: 'Procedure',
       status: 'PENDING',
-      target: `procedure/${procedureId}`,
-      command: `procedure ${procedureId}`,
+      target: `procedure/run/${procedureId}`,
+      command: `procedure run ${procedureId}`,
       description: `Procedure workflow for ${procedureId}`,
-      dispatchStatus: 'ANNOUNCED',
+      dispatchStatus: 'PENDING',
       metadata: JSON.stringify({
         type: 'Procedure',
         procedure_id: procedureId,
@@ -558,6 +558,15 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               value: parameters[param.name] // Add the actual value
             }))
           }
+
+          // Tactus params mapping format
+          if (parsed.params && typeof parsed.params === 'object') {
+            for (const [name, value] of Object.entries(parameters)) {
+              if (parsed.params[name] && typeof parsed.params[name] === 'object') {
+                parsed.params[name].value = value
+              }
+            }
+          }
           
           // Convert back to YAML
           processedCode = yaml.stringify(parsed)
@@ -566,14 +575,33 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         }
       }
       
-      // Create procedure with template reference and processed code
-      const createInput = {
+      const resolvedScorecardId = parameters?.scorecard_id || selectedScorecard || null
+      const resolvedScoreId = parameters?.score_id || selectedScore || null
+
+      // Create procedure run from template. Name is required by schema.
+      const createInput: Record<string, any> = {
+        name: template.name || 'Procedure Run',
+        description: template.description || undefined,
         featured: false,
+        isTemplate: false,
+        parentProcedureId: template.id,
         code: processedCode,
+        category: template.category || undefined,
+        version: template.version || undefined,
         rootNodeId: null, // Will be set when nodes are created
-        scorecardId: parameters?.scorecard_id || selectedScorecard || null,
-        scoreId: parameters?.score_id || selectedScore || null,
+        status: 'PENDING',
+        metadata: JSON.stringify({
+          templateId: template.id,
+          templateName: template.name || 'Procedure Template'
+        }),
         accountId: selectedAccount.id,
+      }
+
+      if (resolvedScorecardId) {
+        createInput.scorecardId = resolvedScorecardId
+      }
+      if (resolvedScoreId) {
+        createInput.scoreId = resolvedScoreId
       }
       
       console.log('Create input:', createInput)
@@ -584,8 +612,16 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           mutation CreateProcedure($input: CreateProcedureInput!) {
             createProcedure(input: $input) {
               id
+              name
+              description
               featured
+              isTemplate
+              parentProcedureId
               code
+              category
+              version
+              status
+              metadata
               rootNodeId
               scorecardId
               scoreId
@@ -951,7 +987,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               <div className="flex items-center justify-between mb-4 flex-shrink-0 px-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
-                  Procedures
+                  Conversations
                 </h3>
                 <Button
                   variant="ghost"

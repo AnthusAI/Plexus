@@ -26,7 +26,6 @@ import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 
-import GraphNodesList from "./graph-nodes-list"
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
 import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
@@ -173,6 +172,15 @@ export default function ProcedureTask({
             }
           })
           console.log('[ProcedureTask] Parameter values:', values)
+          setParameterValues(values)
+        } else if (config && config.params && typeof config.params === 'object') {
+          const values: ParameterValue = {}
+          Object.entries(config.params).forEach(([name, paramDef]: [string, any]) => {
+            if (paramDef && typeof paramDef === 'object' && paramDef.value !== undefined) {
+              values[name] = paramDef.value
+            }
+          })
+          console.log('[ProcedureTask] Parameter values from params mapping:', values)
           setParameterValues(values)
         } else {
           console.log('[ProcedureTask] No parameters array found in config')
@@ -455,33 +463,13 @@ export default function ProcedureTask({
             </AccordionItem>
           </Accordion>
           
-          
-          {/* Procedure Nodes section */}
-          <div className="mt-6 bg-background rounded-lg p-4">
-            <GraphNodesList
-              procedureId={procedure.id}
-              scorecardId={
-                parameterValues.scorecard_id as string ||
-                parameterValues.scorecardId as string ||
-                procedure.scorecardId ||
-                procedure.scorecard?.id
-              }
-              scoreId={
-                parameterValues.score_id as string ||
-                parameterValues.scoreId as string ||
-                procedure.scoreId ||
-                procedure.score?.id
-              }
-            />
-          </div>
-          
           {/* Procedure Conversation section */}
           <div className="mt-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
-                  Tasks ({sessionCount})
+                  Conversations ({sessionCount})
                 </h3>
                 <Button
                   variant="ghost"

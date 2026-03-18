@@ -432,6 +432,16 @@ class EmbeddedMCPServer:
                     return decorator
             
             tool_capture = ToolCapture(self)
+
+            @tool_capture.tool()
+            async def done(reason: str = "", success: Optional[bool] = True):
+                """Signal agent completion with an optional reason."""
+                return {
+                    "status": "completed",
+                    "success": bool(True if success is None else success),
+                    "reason": reason,
+                    "tool": "done",
+                }
             
             # Register selected tool sets
             available_tools = {
