@@ -8,9 +8,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 from plexus.utils.dict_utils import truncate_dict_strings
+from plexus.utils.text_template import render_text_template
 from rapidfuzz import process, fuzz
 from time import sleep
-from jinja2 import Template
 
 class MultiClassClassifier(BaseNode):
     """
@@ -192,8 +192,10 @@ class MultiClassClassifier(BaseNode):
                         template_state = {**state.dict(), **result}
                         
                         # Format the explanation message using Jinja2 template
-                        template = Template(self.parameters.explanation_message)
-                        formatted_explanation_message = template.render(**template_state)
+                        formatted_explanation_message = render_text_template(
+                            self.parameters.explanation_message,
+                            template_state,
+                        )
                         
                         explanation_prompt = ChatPromptTemplate.from_messages([
                             *chat_history,
