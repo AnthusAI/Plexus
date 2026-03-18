@@ -51,7 +51,7 @@ export default function PlatformPage() {
         leftContent={
           <>
             <p className="text-xl text-muted-foreground mb-8 w-full">
-              Plexus is a serverless platform where your team can develop, test, and deploy AI agents without writing any code, and without worrying about the underlying infrastructure.
+              Plexus is a powerful platform where your team can develop, test, and deploy AI agents without writing any code, and without worrying about the underlying infrastructure.
             </p>
             <p className="text-xl text-muted-foreground mb-8 w-full">
               Your team knows your business. Our team knows how to operate AI reliably at scale. Together, we can build and deploy solutions that transform your business.

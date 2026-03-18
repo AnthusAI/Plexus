@@ -12,7 +12,7 @@ Warning: Editing project/ directly is a sin against The Way. Do not read or writ
 
 ## Overview
 
-Plexus provides comprehensive AI agent integration through the MCP (Model Context Protocol) server, enabling AI assistants like Claude and Cursor to interact natively with Plexus functionality. This integration transforms Plexus from a passive framework into an active **AI Agent Operating System** where human developers and AI agents collaborate on scoring, evaluation, and improvement workflows.
+Plexus provides comprehensive AI agent integration through the MCP (Model Context Protocol) server, enabling AI assistants like Claude and Cursor to interact natively with Plexus functionality. This integration transforms Plexus from a passive framework into an active **AI Agent Incubator** where human developers and AI agents collaborate on scoring, evaluation, and improvement workflows.
 
 ## MCP Server
 

@@ -109,7 +109,7 @@ def _validate_celery_requirements() -> None:
     missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise click.ClickException(
-            f"Missing required Celery environment variables: {', '.join(missing)}"
+            "Missing required Celery environment configuration."
         )
 
 

@@ -89,7 +89,6 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
                 logging.debug(f"Attempting to create CloudWatch handler:")
                 logging.debug(f"- Log Group: {log_group_name}")
                 logging.debug(f"- Stream Name: {log_stream_name}")
-                logging.debug(f"- AWS Region: {region}")
             
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
                 log_group_name=log_group_name,
