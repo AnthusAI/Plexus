@@ -1,0 +1,18 @@
+{
+  "id": "plx-cfe5803f-82af-41b8-8c51-0e60b4de49e1",
+  "title": "Merge Biblicus reinforcement branch into develop",
+  "description": "Get CI passing on feature/biblicus-reinforcement-memory, merge it into develop, and ensure CI passes on develop afterward.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-18T02:05:28.950542Z",
+  "updated_at": "2026-03-18T02:15:50.219753Z",
+  "closed_at": "2026-03-18T02:15:50.219753Z",
+  "custom": {}
+}

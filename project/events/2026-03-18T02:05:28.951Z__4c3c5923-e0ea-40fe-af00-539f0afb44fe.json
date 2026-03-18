@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4c3c5923-e0ea-40fe-af00-539f0afb44fe",
+  "issue_id": "plx-cfe5803f-82af-41b8-8c51-0e60b4de49e1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T02:05:28.951Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Get CI passing on feature/biblicus-reinforcement-memory, merge it into develop, and ensure CI passes on develop afterward.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Merge Biblicus reinforcement branch into develop"
+  }
+}
