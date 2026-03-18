@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "40f39f53-a628-4b32-9df4-cbcd6c15f367",
+  "issue_id": "plx-7f508daa-27b9-4293-93d1-3837ad1c347e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T01:18:48.201Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update PR #124 to target develop instead of dev per Git Flow integration branch rules.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Retarget Biblicus PR to develop"
+  }
+}

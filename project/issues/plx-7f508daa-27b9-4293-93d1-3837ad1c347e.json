@@ -1,0 +1,18 @@
+{
+  "id": "plx-7f508daa-27b9-4293-93d1-3837ad1c347e",
+  "title": "Retarget Biblicus PR to develop",
+  "description": "Update PR #124 to target develop instead of dev per Git Flow integration branch rules.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-18T01:18:48.201423Z",
+  "updated_at": "2026-03-18T01:19:05.555063Z",
+  "closed_at": "2026-03-18T01:19:05.555063Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "128f24e4-ca5f-4944-bd28-c96a74045e57",
+  "issue_id": "plx-0b597b05-5449-4e74-9ef7-2485b8caa562",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T01:18:00.826Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Open and document the PR from feature/biblicus-reinforcement-memory into dev after CI is green.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Open PR for Biblicus reinforcement branch"
+  }
+}

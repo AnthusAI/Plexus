@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a9e904a5-06b4-4d2a-90e4-9aa3b46db421",
+  "issue_id": "plx-6ac59a40-0a39-46e0-988d-e68c6c8711bf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T01:52:53.376Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Commit the remaining untracked Kanbus event file after PR retarget cleanup so the branch is clean.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Commit final Kanbus event artifact"
+  }
+}
