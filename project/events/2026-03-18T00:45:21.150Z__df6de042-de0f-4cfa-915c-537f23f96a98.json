@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "df6de042-de0f-4cfa-915c-537f23f96a98",
+  "issue_id": "plx-940fd4d1-fb7a-4b42-b408-c600a87552f5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T00:45:21.150Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d51c9aff-c76c-49ef-9e9c-5cc07e5a4c53",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix CI on biblicus reinforcement branch"
+  }
+}
