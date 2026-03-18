@@ -1,0 +1,40 @@
+{
+  "id": "plx-a050e971-a567-432d-afaf-a990c6f92b18",
+  "title": "Resolve PR #121 Code Quality warning in procedure-hitl metadata guard",
+  "description": "Address GitHub Code Quality warning about metadata null comparison typing in dashboard/lib/procedure-hitl.ts on dev->main PR #121.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [
+    "code-quality",
+    "dashboard"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7d1aab13-7fa0-4294-a0f2-793409ecc813",
+      "author": "derek",
+      "text": "Started: creating a dev-based follow-up branch and applying a minimal type-safe metadata guard fix in dashboard/lib/procedure-hitl.ts for the remaining PR #121 Code Quality warning.",
+      "created_at": "2026-03-18T16:52:31.603068535Z"
+    },
+    {
+      "id": "43b4438c-f7d3-4960-9a0e-29c91d39259d",
+      "author": "derek",
+      "text": "Implemented metadata-guard fix in dashboard/lib/procedure-hitl.ts by removing redundant null comparison after initial falsy guard and keeping explicit null check only for JSON.parse output object narrowing. Validation passed: npx jest lib/__tests__/procedure-hitl.test.ts --runInBand (6 passed).",
+      "created_at": "2026-03-18T16:53:15.118800590Z"
+    },
+    {
+      "id": "08a3dd7b-06e3-44dd-9435-d428aa3dbe81",
+      "author": "derek",
+      "text": "Opened follow-up PR to dev: https://github.com/AnthusAI/Plexus/pull/128 from branch fix/pr121-hitl-metadata-guard. Includes commit d6582764 and targeted validation (6 passing tests in procedure-hitl test suite).",
+      "created_at": "2026-03-18T16:53:32.273832055Z"
+    }
+  ],
+  "created_at": "2026-03-18T16:52:19.900663362Z",
+  "updated_at": "2026-03-18T16:53:32.273832055Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -352,7 +352,7 @@ export default function EvaluationsDashboard({
   initialSelectedEvaluationId?: string | null,
   initialSelectedScoreResultId?: string | null
 } = {}) {
-  const { user, authStatus } = useAuthenticator(context => [context.user, context.authStatus])
+  const { authStatus } = useAuthenticator(context => [context.user, context.authStatus])
   const { selectedAccount, isLoadingAccounts, accounts } = useAccount()
   const router = useRouter()
   const pathname = usePathname()

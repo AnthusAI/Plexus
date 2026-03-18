@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Plexus is an AI Agent Operating System** designed for analyzing content streams, orchestrating complex workflows, and taking action at scale.
+**Plexus is an AI agent incubator and MLOps platform**, designed to help teams evaluate, deploy, and continuously improve AI agents. It acts as a testing ground where you can use human feedback to refine how your AI behaves, ensuring your agents get smarter and more reliable over time.
 
 It transforms the chaotic process of managing hundreds of AI prompts and classifiers into a structured, engineering-grade discipline. By combining a robust backend, a real-time dashboard, and deep integration with AI agents, Plexus enables teams to build, deploy, and improve AI solutions without managing low-level infrastructure.
 
@@ -106,6 +106,12 @@ cp plexus.yaml.example .plexus/config.yaml
 ### Running the Dashboard
 
 The dashboard is a standard Next.js application located in the `dashboard/` directory.
+
+For local procedure execution from the UI, `npm run dev` now runs:
+- Next.js dev server
+- Local procedure task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+
+Set `PLEXUS_ACCOUNT_KEY` in your environment or `.env` for local auto-dispatch.
 
 ```bash
 cd dashboard

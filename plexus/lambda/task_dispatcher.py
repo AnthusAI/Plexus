@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 # Read Celery configuration from environment variables
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
-CELERY_QUEUE_NAME = os.environ.get('CELERY_QUEUE_NAME', 'plexus-celery')  # Changed default to "plexus-celery"
+CELERY_QUEUE_NAME = os.environ.get('CELERY_QUEUE_NAME', 'plexus-celery-development')
 
 logging.info(f"Using queue name: {CELERY_QUEUE_NAME}" + 
             (f" (from CELERY_QUEUE_NAME environment variable)" if os.environ.get("CELERY_QUEUE_NAME") else " (default)"))
