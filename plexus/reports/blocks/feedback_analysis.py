@@ -16,6 +16,7 @@ from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
 from . import feedback_utils
+from .reinforcement_helpers import fetch_item_identifiers
 
 logger = logging.getLogger(__name__)
 
@@ -602,27 +603,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         truncated = ex_text[:300] + "…" if len(ex_text) > 300 else ex_text
                         item_id = item_ids[ex_idx] if ex_idx < len(item_ids) else None
                         feedback_item_id = feedback_item_ids[ex_idx] if ex_idx < len(feedback_item_ids) else None
-                        identifiers_list = None
-                        if item_id and self.api_client:
-                            try:
-                                gql = """
-                                query ListIdentifiersByItemId($itemId: String!) {
-                                    listIdentifierByItemIdAndPosition(itemId: $itemId) {
-                                        items { name value url position }
-                                    }
-                                }
-                                """
-                                result = await asyncio.to_thread(
-                                    self.api_client.execute, gql, {"itemId": item_id}
-                                )
-                                raw = (result or {}).get("listIdentifierByItemIdAndPosition", {}).get("items") or []
-                                if raw:
-                                    identifiers_list = [
-                                        {"name": i["name"], "value": i["value"], **({"url": i["url"]} if i.get("url") else {})}
-                                        for i in sorted(raw, key=lambda x: x.get("position") or 0)
-                                    ]
-                            except Exception:
-                                pass
+                        identifiers_list = await fetch_item_identifiers(self.api_client, item_id)
                         exemplar: Dict = {"text": truncated, "item_id": item_id}
                         if identifiers_list:
                             exemplar["identifiers"] = identifiers_list
