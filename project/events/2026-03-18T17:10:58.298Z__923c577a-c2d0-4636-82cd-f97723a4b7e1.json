@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "923c577a-c2d0-4636-82cd-f97723a4b7e1",
+  "issue_id": "plx-c82b618c-f71e-4be4-afa1-fd415c67e6bd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T17:10:58.298Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Audit branch delta between develop and main, confirm whether recent PITR/HITL/code-quality fixes are included in main, and summarize remaining merge items.",
+    "issue_type": "task",
+    "labels": [
+      "release"
+    ],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 2,
+    "status": "open",
+    "title": "Compare develop vs main after branch migration"
+  }
+}
