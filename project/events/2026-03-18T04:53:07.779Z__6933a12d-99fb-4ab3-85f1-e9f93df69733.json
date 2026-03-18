@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6933a12d-99fb-4ab3-85f1-e9f93df69733",
+  "issue_id": "plx-6bda8549-8459-46c0-9495-8a77bffa147c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T04:53:07.779Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Move the local workspace to develop and realign it to origin/develop after the Biblicus merge.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Switch local repo to updated develop branch"
+  }
+}

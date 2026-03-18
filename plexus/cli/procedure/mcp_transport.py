@@ -273,11 +273,11 @@ class EmbeddedMCPServer:
             from tools.util.think import register_think_tool
             from tools.scorecard.scorecards import register_scorecard_tools
             from tools.score.scores import register_score_tools
+            from tools.score.guidelines import register_guidelines_tools
             from tools.item.items import register_item_tools
             from tools.feedback.feedback import register_feedback_tools
             from tools.evaluation.evaluations import register_evaluation_tools
             from tools.prediction.predictions import register_prediction_tools
-            from tools.procedure.procedure_nodes import register_procedure_node_tools
             
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
@@ -290,13 +290,88 @@ class EmbeddedMCPServer:
                         # Extract tool info from the function
                         tool_name = func.__name__
                         tool_description = func.__doc__ or f"Tool: {tool_name}"
-                        
-                        # Create input schema - try to extract from function signature
+
+                        # Build JSON schema from the registered function signature.
+                        # This keeps MCP tool argument contracts available to Tactus.
+                        import inspect
+                        from typing import Any, get_args, get_origin, Literal, Union
+                        from pydantic import BaseModel
+
+                        def annotation_to_schema(annotation: Any) -> Dict[str, Any]:
+                            if annotation is inspect._empty:
+                                return {"type": "string"}
+
+                            origin = get_origin(annotation)
+                            args = get_args(annotation)
+
+                            if origin in (list, List):
+                                item_annotation = args[0] if args else Any
+                                return {"type": "array", "items": annotation_to_schema(item_annotation)}
+
+                            if origin in (dict, Dict):
+                                return {"type": "object", "additionalProperties": True}
+
+                            if origin is Literal:
+                                literal_values = [value for value in args if value is not None]
+                                schema: Dict[str, Any] = {"enum": literal_values}
+                                if literal_values:
+                                    first = literal_values[0]
+                                    if isinstance(first, bool):
+                                        schema["type"] = "boolean"
+                                    elif isinstance(first, int) and not isinstance(first, bool):
+                                        schema["type"] = "integer"
+                                    elif isinstance(first, float):
+                                        schema["type"] = "number"
+                                    else:
+                                        schema["type"] = "string"
+                                else:
+                                    schema["type"] = "string"
+                                return schema
+
+                            if origin is Union:
+                                non_none = [arg for arg in args if arg is not type(None)]
+                                if len(non_none) == 1:
+                                    return annotation_to_schema(non_none[0])
+                                return {"type": "string"}
+
+                            if isinstance(annotation, type):
+                                if issubclass(annotation, BaseModel):
+                                    return annotation.model_json_schema()
+                                if annotation is bool:
+                                    return {"type": "boolean"}
+                                if annotation is int:
+                                    return {"type": "integer"}
+                                if annotation is float:
+                                    return {"type": "number"}
+                                if annotation is str:
+                                    return {"type": "string"}
+                                if annotation is dict:
+                                    return {"type": "object", "additionalProperties": True}
+                                if annotation is list:
+                                    return {"type": "array", "items": {"type": "string"}}
+
+                            return {"type": "string"}
+
+                        signature = inspect.signature(func)
+                        properties: Dict[str, Any] = {}
+                        required: List[str] = []
+                        for param_name, parameter in signature.parameters.items():
+                            if param_name in {"self", "cls", "ctx", "context"}:
+                                continue
+                            if parameter.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                                continue
+                            if parameter.default is inspect._empty:
+                                required.append(param_name)
+                            param_schema = annotation_to_schema(parameter.annotation)
+                            properties[param_name] = param_schema
+
                         input_schema = {
                             "type": "object",
-                            "properties": {},
-                            "additionalProperties": True
+                            "properties": properties,
+                            "additionalProperties": False,
                         }
+                        if required:
+                            input_schema["required"] = required
                         
                         # Create a wrapper that handles both sync and async functions
                         async def async_handler(args):
@@ -357,17 +432,27 @@ class EmbeddedMCPServer:
                     return decorator
             
             tool_capture = ToolCapture(self)
+
+            @tool_capture.tool()
+            async def done(reason: str = "", success: Optional[bool] = True):
+                """Signal agent completion with an optional reason."""
+                return {
+                    "status": "completed",
+                    "success": bool(True if success is None else success),
+                    "reason": reason,
+                    "tool": "done",
+                }
             
             # Register selected tool sets
             available_tools = {
                 "think": lambda: register_think_tool(tool_capture),
                 "scorecard": lambda: register_scorecard_tools(tool_capture),
-                "score": lambda: register_score_tools(tool_capture),
+                "score": lambda: (register_score_tools(tool_capture), register_guidelines_tools(tool_capture)),
+                "guidelines": lambda: register_guidelines_tools(tool_capture),
                 "item": lambda: register_item_tools(tool_capture),
                 "feedback": lambda: register_feedback_tools(tool_capture),
                 "evaluation": lambda: register_evaluation_tools(tool_capture),
                 "prediction": lambda: register_prediction_tools(tool_capture),
-                "experiment_node": lambda: register_procedure_node_tools(tool_capture, self.experiment_context)
             }
             
             # If no specific tools requested, register all available tools

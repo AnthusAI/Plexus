@@ -14,7 +14,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
-from jinja2 import Template
+
+from plexus.utils.text_template import render_text_template
 
 class YesOrNoClassifier(BaseNode):
     """
@@ -112,8 +113,10 @@ class YesOrNoClassifier(BaseNode):
                     template_state = {**state.dict(), **result}
                     
                     # Format the explanation message using Jinja2 template
-                    template = Template(self.parameters.explanation_message)
-                    formatted_explanation_message = template.render(**template_state)
+                    formatted_explanation_message = render_text_template(
+                        self.parameters.explanation_message,
+                        template_state,
+                    )
                     
                     explanation_messages = ChatPromptTemplate(
                         messages=[

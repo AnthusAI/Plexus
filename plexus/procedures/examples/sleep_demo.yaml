@@ -2,8 +2,7 @@ name: sleep_demo
 version: 1.0.0
 description: Demonstration of Sleep() primitive for delays and rate limiting
 
-class: LuaDSL
-
+class: Tactus
 params:
   delay_seconds:
     type: number
@@ -29,7 +28,7 @@ stages:
   - processing
   - complete
 
-workflow: |
+code: |
   Log.info("Starting workflow with delays", {
     delay_seconds = params.delay_seconds
   })

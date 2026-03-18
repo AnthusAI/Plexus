@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "main"
+      - "develop"
       - "staging"
       - "dev"
       - "feature/**"
@@ -45,7 +46,7 @@ jobs:
         df -h
 
     - name: Set up Conda with Python ${{ matrix.python-version }}
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
       with:
         python-version: ${{ matrix.python-version }}
         miniforge-version: latest
@@ -166,7 +167,7 @@ jobs:
 
     steps:
       - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           aws-region: us-west-2

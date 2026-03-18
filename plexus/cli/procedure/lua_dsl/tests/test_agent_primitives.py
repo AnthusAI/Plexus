@@ -316,6 +316,33 @@ class TestAgentTurn:
         assert len(agent_primitive._recording_queue) == 0
 
 
+class TestAgentReset:
+    """Tests for Agent.reset() behavior."""
+
+    def test_reset_clears_conversation(self, agent_primitive, mock_llm):
+        """Reset should clear conversation and mark agent as uninitialized."""
+        mock_response = Mock()
+        mock_response.content = 'Hello'
+        mock_response.tool_calls = []
+        mock_llm.invoke.return_value = mock_response
+
+        # Initialize conversation
+        agent_primitive.turn()
+        assert agent_primitive._initialized is True
+        assert len(agent_primitive._conversation) > 0
+
+        # Reset and verify
+        agent_primitive.reset()
+        assert agent_primitive._initialized is False
+        assert agent_primitive._conversation == []
+
+    def test_reset_preserves_recording_queue(self, agent_primitive):
+        """Reset should not clear the recording queue."""
+        agent_primitive._recording_queue.append({"role": "SYSTEM", "content": "keep"})
+        agent_primitive.reset()
+        assert len(agent_primitive._recording_queue) == 1
+
+
 class TestAgentResponse:
     """Tests for AgentResponse helper class."""
 

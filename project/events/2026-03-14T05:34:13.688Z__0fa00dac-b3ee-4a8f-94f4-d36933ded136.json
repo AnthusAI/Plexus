@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "0fa00dac-b3ee-4a8f-94f4-d36933ded136",
+  "issue_id": "plx-d83f7a08-e1e8-4356-a661-7c29b6d2f272",
+  "event_type": "field_updated",
+  "occurred_at": "2026-03-14T05:34:13.688Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Intent\nRestore conversation history visibility for procedure runs in dashboard conversation viewer when generated model helpers are missing from the Amplify client.\n\n## Scope\n- Harden  query path with GraphQL fallback for chat sessions/messages by .\n- Guard subscription setup when model  helpers are unavailable.\n- Preserve existing rendering/filtering behavior.\n\n## Definition of Done\n- Opening a procedure run no longer throws on undefined  / .\n- Existing history loads via fallback and renders in UI.\n- No regression for environments where generated model helpers exist.\n- Tests added/updated for fallback behavior where practical.",
+        "to": "## Intent\nRestore conversation history visibility for procedure runs in dashboard conversation viewer when generated model helpers are missing from the Amplify client.\n\n## Scope\n- Harden `conversation-viewer.tsx` query path with GraphQL fallback for chat sessions/messages by `procedureId`.\n- Guard subscription setup when model `onCreate` helpers are unavailable.\n- Preserve existing rendering/filtering behavior.\n\n## Definition of Done\n- Opening a procedure run no longer throws on undefined `listChatSessionByProcedureIdAndCreatedAt` / `onCreate`.\n- Existing history loads via fallback and renders in UI.\n- No regression for environments where generated model helpers exist.\n- Tests added/updated for fallback behavior where practical."
+      }
+    }
+  }
+}

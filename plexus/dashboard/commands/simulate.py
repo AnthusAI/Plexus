@@ -109,7 +109,6 @@ def generate_class_distribution(num_classes: int, total_items: int, balanced: bo
         # Select a random class set
         class_set_name, class_set = random.choice(CLASS_SETS)
         labels = random.sample(class_set, num_classes)
-        logger.info(f"Using {class_set_name} for classification labels")
     
     return [
         {"label": label, "count": count}

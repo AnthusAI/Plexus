@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "56699f63-ccf5-43cb-8998-cc9ab15cb0d9",
+  "issue_id": "plx-0b90660b-0d2b-4e39-8a00-9af80c8d1912",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-13T18:06:37.619Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a dashboard user, I want long identifier values to truncate sooner so that card layouts stay compact and readable.\n\nFeature: IdentifierDisplay value truncation\n\nScenario: Long identifier values truncate at a shorter length\n  Given an identifier value exceeds the truncation threshold\n  When IdentifierDisplay renders the value\n  Then the value is truncated earlier than before with an ellipsis",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+    "priority": 2,
+    "status": "open",
+    "title": "Shorten IdentifierDisplay truncation length"
+  }
+}

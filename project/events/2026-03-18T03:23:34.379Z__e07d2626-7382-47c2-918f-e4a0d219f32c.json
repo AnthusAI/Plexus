@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e07d2626-7382-47c2-918f-e4a0d219f32c",
+  "issue_id": "plx-96a4e586-aca9-485c-ba10-b3390862aa52",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T03:23:34.379Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Rescue develop branch from trusted recent commits"
+  }
+}

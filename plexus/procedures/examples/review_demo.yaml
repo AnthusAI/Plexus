@@ -2,8 +2,7 @@ name: review_demo
 version: 1.0.0
 description: Demonstration of Human-in-the-Loop artifact review with editing
 
-class: LuaDSL
-
+class: Tactus
 params:
   artifact_name:
     type: string
@@ -40,7 +39,7 @@ stages:
   - processing
   - complete
 
-workflow: |
+code: |
   Human.notify({
     message = "📋 Artifact ready for review: " .. params.artifact_name,
     level = "info"
