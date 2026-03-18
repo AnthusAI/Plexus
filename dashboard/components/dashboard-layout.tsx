@@ -99,6 +99,7 @@ export const menuItems = [
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
+  { name: "Analysis", icon: Sparkles, path: "/lab/analysis" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
@@ -226,6 +227,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 (item.name === "Items" && pathname.startsWith(item.path)) ||
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                 (item.name === "Procedures" && pathname.startsWith(item.path)) ||
+                (item.name === "Analysis" && pathname.startsWith(item.path)) ||
                 (item.name === "Templates" && pathname.startsWith(item.path)) ||
                 (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                 (item.name === "Reports" && pathname.startsWith(item.path)) ||
@@ -312,7 +314,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 Dashboard
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <Link href="/settings">
+              <Link href="/lab/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
@@ -389,7 +391,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             <DropdownMenuContent align="end" className="w-[200px] z-[9999]">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <Link href="/settings">
+              <Link href="/lab/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
