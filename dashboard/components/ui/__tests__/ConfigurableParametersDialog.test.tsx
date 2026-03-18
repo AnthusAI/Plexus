@@ -77,6 +77,46 @@ describe('ConfigurableParametersDialog', () => {
     expect(screen.getByLabelText(/Test Field/)).toBeInTheDocument()
   })
 
+  it('should render textarea for text params with input=textarea', () => {
+    const parameters: ParameterDefinition[] = [
+      { name: 'brief', label: 'Brief', type: 'text', input: 'textarea', rows: 8, required: true }
+    ]
+
+    render(
+      <ConfigurableParametersDialog
+        open={true}
+        onOpenChange={() => {}}
+        title="Test Dialog"
+        parameters={parameters}
+        onSubmit={() => {}}
+      />
+    )
+
+    const field = screen.getByLabelText(/Brief/)
+    expect(field.tagName).toBe('TEXTAREA')
+    expect(field).toHaveAttribute('rows', '8')
+  })
+
+  it('should not render hidden parameters', () => {
+    const parameters: ParameterDefinition[] = [
+      { name: 'account_identifier', label: 'Account Identifier', type: 'text', input: 'hidden' },
+      { name: 'brief', label: 'Brief', type: 'text', required: true }
+    ]
+
+    render(
+      <ConfigurableParametersDialog
+        open={true}
+        onOpenChange={() => {}}
+        title="Test Dialog"
+        parameters={parameters}
+        onSubmit={() => {}}
+      />
+    )
+
+    expect(screen.queryByLabelText(/Account Identifier/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Brief/)).toBeInTheDocument()
+  })
+
   it('should show validation errors for required fields', async () => {
     const parameters: ParameterDefinition[] = [
       { name: 'required_field', label: 'Required Field', type: 'text', required: true }
@@ -300,4 +340,3 @@ describe('ConfigurableParametersDialog', () => {
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument()
   })
 })
-
