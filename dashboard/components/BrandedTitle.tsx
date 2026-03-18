@@ -44,7 +44,7 @@ export function BrandedTitle({ pageTitle }: BrandedTitleProps) {
         document.title = brandedTitle;
       } else if (currentTitle && !currentTitle.includes(brandName)) {
         // If the title doesn't contain the brand name, append it
-        // This handles cases like "Agent Operating System" -> "Agent Operating System - Acme"
+        // This handles cases like "AI Agent Incubator" -> "AI Agent Incubator - Acme"
         const brandedTitle = `${currentTitle} - ${brandName}`;
         if (currentTitle === brandedTitle) {
           return;
