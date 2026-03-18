@@ -1,6 +1,7 @@
 import click
 import os
 import time
+import shlex
 from dotenv import load_dotenv
 from celery import Celery
 from plexus.CustomLogging import logging
@@ -23,6 +24,10 @@ from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageCo
 from datetime import timezone
 from urllib.parse import quote
 import boto3
+import subprocess
+import socket
+from plexus.config.loader import ConfigLoader
+from plexus.dashboard.api.models.account import Account
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -38,9 +43,276 @@ class StatusColumn(ProgressColumn):
 load_dotenv()
 
 console = Console()
+DEFAULT_CELERY_QUEUE_NAME = "plexus-celery-development"
+VALID_DISPATCH_MODES = {"celery", "local"}
+DEFAULT_LOCAL_DISPATCH_TIMEOUT_SECONDS = 900
+PROCEDURE_WAITING_STATUSES = {"WAITING_FOR_HUMAN"}
+PROCEDURE_SUCCESS_STATUSES = {"COMPLETED", "COMPLETE"}
+PROCEDURE_FAILURE_STATUSES = {"FAILED", "ERROR"}
+
+
+def _resolve_dispatch_mode() -> str:
+    mode = os.getenv("PLEXUS_DISPATCH_MODE", "celery").strip().lower()
+    if mode not in VALID_DISPATCH_MODES:
+        raise click.ClickException(
+            f"Invalid PLEXUS_DISPATCH_MODE='{mode}'. Valid values: {', '.join(sorted(VALID_DISPATCH_MODES))}"
+        )
+    return mode
+
+
+def _load_queue_name_from_config() -> Optional[str]:
+    try:
+        loader = ConfigLoader()
+        loader.load_config()
+        queue_name = loader.get_config_value("celery.queue_name")
+        if queue_name:
+            return str(queue_name).strip()
+    except Exception as e:
+        logging.debug(f"Could not load queue name from Plexus config: {e}")
+    return None
+
+
+def _resolve_queue_name(explicit_queue: Optional[str] = None) -> str:
+    if explicit_queue:
+        return explicit_queue.strip()
+    env_queue = os.getenv("CELERY_QUEUE_NAME")
+    if env_queue:
+        return env_queue.strip()
+    config_queue = _load_queue_name_from_config()
+    if config_queue:
+        return config_queue
+    return DEFAULT_CELERY_QUEUE_NAME
+
+
+def _resolve_local_dispatch_timeout_seconds() -> int:
+    value = os.getenv("PLEXUS_LOCAL_TASK_TIMEOUT_SECONDS", str(DEFAULT_LOCAL_DISPATCH_TIMEOUT_SECONDS)).strip()
+    try:
+        timeout = int(value)
+    except ValueError as e:
+        raise click.ClickException(
+            f"Invalid PLEXUS_LOCAL_TASK_TIMEOUT_SECONDS='{value}'. Must be a positive integer."
+        ) from e
+    if timeout <= 0:
+        raise click.ClickException(
+            f"Invalid PLEXUS_LOCAL_TASK_TIMEOUT_SECONDS='{value}'. Must be greater than zero."
+        )
+    return timeout
+
+
+def _validate_celery_requirements() -> None:
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_REGION_NAME",
+        "CELERY_RESULT_BACKEND_TEMPLATE",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        raise click.ClickException(
+            "Missing required Celery environment configuration."
+        )
+
+
+def _list_pending_tasks_for_account(
+    client: PlexusDashboardClient,
+    account_id: str,
+    limit: int = 50
+) -> list[dict]:
+    query = """
+    query ListTaskByAccountIdAndUpdatedAt(
+      $accountId: String!
+      $updatedAt: ModelStringKeyConditionInput
+      $sortDirection: ModelSortDirection
+      $limit: Int
+      $nextToken: String
+    ) {
+      listTaskByAccountIdAndUpdatedAt(
+        accountId: $accountId
+        updatedAt: $updatedAt
+        sortDirection: $sortDirection
+        limit: $limit
+        nextToken: $nextToken
+      ) {
+        items {
+          id
+          accountId
+          type
+          status
+          target
+          command
+          dispatchStatus
+          metadata
+          createdAt
+          updatedAt
+          startedAt
+          completedAt
+          errorMessage
+          errorDetails
+          stdout
+          stderr
+          workerNodeId
+        }
+        nextToken
+      }
+    }
+    """
+    very_old_date = "2000-01-01T00:00:00.000Z"
+    response = client.execute(
+        query,
+        {
+            "accountId": account_id,
+            "updatedAt": {"ge": very_old_date},
+            "sortDirection": "DESC",
+            "limit": limit,
+        },
+    )
+    items = response.get("listTaskByAccountIdAndUpdatedAt", {}).get("items", [])
+    pending = [
+        task for task in items
+        if task.get("dispatchStatus") == "PENDING" and task.get("status") == "PENDING"
+    ]
+    # Run newest items first so fresh UI-triggered runs are not starved by stale backlog tasks.
+    pending.sort(key=lambda task: task.get("createdAt") or "", reverse=True)
+    return pending
+
+
+def _normalize_metadata(value: Optional[typing.Any]) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        if not value.strip():
+            return {}
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _claim_task_for_dispatch(task: Task, dispatcher_id: str, mode: str) -> bool:
+    if task.dispatchStatus != "PENDING":
+        return False
+
+    metadata = _normalize_metadata(task.metadata)
+    metadata["dispatch_mode"] = mode
+    metadata["dispatch_claimed_at"] = datetime.datetime.now(timezone.utc).isoformat()
+
+    task.update(
+        accountId=task.accountId,
+        type=task.type,
+        status=task.status,
+        target=task.target,
+        command=task.command,
+        dispatchStatus="DISPATCHING",
+        workerNodeId=dispatcher_id,
+        errorMessage=None,
+        errorDetails=None,
+        stdout=None,
+        stderr=None,
+        startedAt=None,
+        completedAt=None,
+        metadata=json.dumps(metadata),
+        updatedAt=datetime.datetime.now(timezone.utc).isoformat(),
+    )
+    return True
+
+
+def _resolve_dispatcher_account_id(client: PlexusDashboardClient, identifier: Optional[str]) -> str:
+    if identifier:
+        try:
+            return Account.get_by_id(identifier, client).id
+        except Exception:
+            account = Account.get_by_key(identifier, client)
+            if account:
+                return account.id
+            raise click.ClickException(
+                f"Could not resolve account identifier '{identifier}' as account ID or key"
+            )
+    try:
+        return client._resolve_account_id()
+    except Exception as e:
+        raise click.ClickException(
+            f"Could not resolve default account. Set PLEXUS_ACCOUNT_KEY or pass --account. ({e})"
+        )
+
+
+def _resolve_required_dispatch_account_id(client: PlexusDashboardClient, account: Optional[str]) -> str:
+    account_identifier = account or os.getenv("PLEXUS_ACCOUNT_KEY")
+    if not account_identifier:
+        raise click.ClickException(
+            "Local dispatcher requires account context. Set PLEXUS_ACCOUNT_KEY or pass --account."
+        )
+    return _resolve_dispatcher_account_id(client, account_identifier)
+
+
+def _extract_procedure_id_from_task(task: Task, metadata: dict) -> Optional[str]:
+    procedure_id = metadata.get("procedure_id") if isinstance(metadata, dict) else None
+    if isinstance(procedure_id, str) and procedure_id:
+        return procedure_id
+
+    target = (task.target or "").strip()
+    if target.startswith("procedure/run/"):
+        return target[len("procedure/run/") :]
+    if target.startswith("procedure/"):
+        return target[len("procedure/") :]
+
+    try:
+        args = shlex.split(task.command or "")
+    except Exception:
+        args = []
+    if len(args) >= 3 and args[0] == "procedure" and args[1] in {"run", "resume"}:
+        return args[2]
+    return None
+
+
+def _get_procedure_status_for_local_command(
+    client: PlexusDashboardClient,
+    procedure_id: Optional[str],
+) -> Optional[str]:
+    if not procedure_id:
+        return None
+    query = """
+    query GetProcedureStatus($id: ID!) {
+      getProcedure(id: $id) {
+        id
+        status
+      }
+    }
+    """
+    try:
+        response = client.execute(query, {"id": procedure_id})
+        procedure = response.get("getProcedure") or {}
+        status = procedure.get("status")
+        return str(status).upper() if status else None
+    except Exception as exc:
+        logging.warning(
+            "Could not read procedure status for local command mapping procedure_id=%s: %s",
+            procedure_id,
+            exc,
+        )
+        return None
+
+
+def _map_procedure_status_to_task_status(procedure_status: Optional[str]) -> Optional[str]:
+    if not procedure_status:
+        return None
+    status = procedure_status.upper()
+    if status in PROCEDURE_WAITING_STATUSES:
+        return "RUNNING"
+    if status in PROCEDURE_SUCCESS_STATUSES:
+        return "COMPLETED"
+    if status in PROCEDURE_FAILURE_STATUSES:
+        return "FAILED"
+    return None
 
 def create_celery_app() -> Celery:
     """Create a configured Celery application with AWS credentials."""
+    mode = _resolve_dispatch_mode()
+    if mode != "celery":
+        raise click.ClickException("Celery app requested while PLEXUS_DISPATCH_MODE is not 'celery'")
+    _validate_celery_requirements()
+
     # Get AWS credentials from standard environment variables
     raw_aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
     raw_aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -55,8 +327,8 @@ def create_celery_app() -> Celery:
     quoted_aws_access_key = safequote(raw_aws_access_key)
     quoted_aws_secret_key = safequote(raw_aws_secret_key)
 
-    # Get queue name from environment variable or use default
-    sqs_queue_name = os.getenv("CELERY_QUEUE_NAME", "plexus-celery")  # Changed default to "plexus-celery"
+    # Resolve queue name from explicit env/config/default precedence.
+    sqs_queue_name = _resolve_queue_name()
 
     # Check if queue exists and create if it doesn't
     try:
@@ -120,10 +392,8 @@ def create_celery_app() -> Celery:
     )
     
     logging.info(
-        f"Celery configured for SQS in region '{aws_region}'. "
-        f"Queue name: '{sqs_queue_name}'" + 
-        (f" (from CELERY_QUEUE_NAME environment variable)" if os.getenv("CELERY_QUEUE_NAME") else " (default)") + 
-        f". The AWS SDK (Boto3) will resolve the queue name to its full URL."
+        f"Dispatch mode: {mode}. Celery configured for SQS in region '{aws_region}'. "
+        f"Queue name: '{sqs_queue_name}'."
     )
     logging.debug(f"Celery Broker base URL (credentials part): {broker_url}")
     logging.debug(f"Celery Backend URL: {backend_url}")
@@ -200,7 +470,7 @@ def command():
 
 @command.command()
 @click.option('--concurrency', default=4, help='Number of worker processes')
-@click.option('--queue', default=None, help='Queue to process (defaults to CELERY_QUEUE_NAME if set, otherwise "celery")')
+@click.option('--queue', default=None, help='Queue to process (defaults to CELERY_QUEUE_NAME if set, otherwise "plexus-celery-development")')
 @click.option('--loglevel', default='INFO', help='Logging level')
 @click.option(
     '--target-patterns',
@@ -214,12 +484,14 @@ def worker(
 ) -> None:
     """Start a Celery worker for processing remote commands."""
     from .TaskTargeting import TaskTargetMatcher
-    
+    mode = _resolve_dispatch_mode()
+    if mode != "celery":
+        raise click.ClickException("`plexus command worker` requires PLEXUS_DISPATCH_MODE=celery")
+    _validate_celery_requirements()
+
     logging.info("Starting worker initialization...")
-    
-    # Use queue from parameter, or from environment, or default
-    if queue is None:
-        queue = os.getenv("CELERY_QUEUE_NAME", "plexus-celery")  # Changed default to "plexus-celery"
+    queue = _resolve_queue_name(queue)
+    logging.info(f"Dispatch mode: {mode} | Queue: {queue}")
     
     # Only set up target matching if patterns are provided
     if target_patterns:
@@ -265,8 +537,12 @@ def dispatch(
 ) -> None:
     """Execute a Plexus command remotely via Celery."""
     from .TaskTargeting import TaskTargetMatcher
-    
+    mode = _resolve_dispatch_mode()
+    if mode != "celery":
+        raise click.ClickException("`plexus command dispatch` requires PLEXUS_DISPATCH_MODE=celery")
+
     logging.getLogger().setLevel(loglevel)
+    logging.info(f"Dispatch mode: {mode} | Queue: {_resolve_queue_name()}")
     
     if not TaskTargetMatcher.validate_target(target):
         raise click.BadParameter(
@@ -463,6 +739,213 @@ def dispatch(
         console.print("\n--- DISPATCH ERROR ---")
         console.print(f"[red]Error dispatching task: {str(e)}")
         logging.error(f"Failed to dispatch task: {e}", exc_info=True)
+
+
+@command.command("dispatcher")
+@click.option('--account', default=None, help='Account key or ID (defaults to PLEXUS_ACCOUNT_KEY context)')
+@click.option('--interval', default=2.0, type=float, help='Polling interval seconds')
+@click.option('--limit', default=25, type=int, help='Max pending tasks to inspect each cycle')
+@click.option('--once', is_flag=True, help='Run a single poll cycle and exit')
+@click.option('--loglevel', default='INFO', help='Logging level')
+def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, loglevel: str) -> None:
+    """
+    Poll AppSync for PENDING tasks and dispatch them using explicit dispatch mode.
+
+    Modes:
+    - celery: enqueue claimed tasks to Celery
+    - local: run claimed tasks in local CLI process
+    """
+    logging.getLogger().setLevel(loglevel)
+    mode = _resolve_dispatch_mode()
+    queue_name = _resolve_queue_name()
+    local_timeout_seconds = _resolve_local_dispatch_timeout_seconds()
+    logging.info(
+        f"Starting task dispatcher daemon | mode={mode} | queue={queue_name} "
+        f"| local_timeout_seconds={local_timeout_seconds}"
+    )
+
+    if mode == "celery":
+        _validate_celery_requirements()
+        ensure_tasks_registered()
+
+    client = PlexusDashboardClient()
+    account_id = _resolve_required_dispatch_account_id(client, account)
+    dispatcher_id = f"{socket.gethostname()}-{os.getpid()}"
+    logging.info(
+        f"Dispatcher active | mode={mode} account_id={account_id} "
+        f"account_key={os.getenv('PLEXUS_ACCOUNT_KEY', '<unset>')} dispatcher_id={dispatcher_id}"
+    )
+
+    def run_cycle() -> int:
+        pending = _list_pending_tasks_for_account(client, account_id, limit=limit)
+        if not pending:
+            logging.debug("No pending tasks found")
+            return 0
+
+        processed = 0
+        for task_data in pending:
+            task_id = task_data.get("id")
+            if not task_id:
+                continue
+            try:
+                task = Task.get_by_id(task_id, client)
+                claimed = _claim_task_for_dispatch(task, dispatcher_id=dispatcher_id, mode=mode)
+                if not claimed:
+                    continue
+
+                if mode == "celery":
+                    celery_task = get_celery_app().send_task(
+                        'plexus.execute_command',
+                        args=[task.command],
+                        kwargs={'target': task.target or "default/command", 'task_id': task.id}
+                    )
+                    task.update(
+                        accountId=task.accountId,
+                        type=task.type,
+                        status=task.status,
+                        target=task.target,
+                        command=task.command,
+                        dispatchStatus="DISPATCHED",
+                        workerNodeId=dispatcher_id,
+                        updatedAt=datetime.datetime.now(timezone.utc).isoformat(),
+                    )
+                    logging.info(f"Dispatched task {task.id} to Celery task {celery_task.id}")
+                else:
+                    started_at = datetime.datetime.now(timezone.utc).isoformat()
+                    run_args = ["plexus"] + shlex.split(task.command)
+                    metadata = _normalize_metadata(task.metadata)
+                    metadata["dispatch_mode"] = "local"
+                    metadata["local_command"] = " ".join(run_args)
+                    metadata["local_timeout_seconds"] = local_timeout_seconds
+                    metadata["phase"] = "execute_cli"
+                    try:
+                        result = subprocess.run(
+                            run_args,
+                            text=True,
+                            capture_output=True,
+                            check=False,
+                            timeout=local_timeout_seconds,
+                        )
+                    except subprocess.TimeoutExpired as timeout_exc:
+                        completed_at = datetime.datetime.now(timezone.utc).isoformat()
+
+                        timeout_stdout = timeout_exc.stdout or ""
+                        timeout_stderr = timeout_exc.stderr or ""
+                        timeout_stderr = (
+                            f"{timeout_stderr}\nTimed out after {local_timeout_seconds} seconds."
+                        ).strip()
+
+                        task.update(
+                            accountId=task.accountId,
+                            type=task.type,
+                            status='FAILED',
+                            target=task.target,
+                            command=task.command,
+                            dispatchStatus='DISPATCHED',
+                            workerNodeId=dispatcher_id,
+                            startedAt=started_at,
+                            completedAt=completed_at,
+                            errorMessage=f"Local dispatch timed out after {local_timeout_seconds}s",
+                            errorDetails=json.dumps({
+                                "phase": "local_execute_timeout",
+                                "timeout_seconds": local_timeout_seconds,
+                            }),
+                            stdout=timeout_stdout[-200000:] if timeout_stdout else None,
+                            stderr=timeout_stderr[-200000:] if timeout_stderr else None,
+                            metadata=json.dumps(metadata),
+                            updatedAt=completed_at,
+                        )
+                        logging.error(
+                            f"Locally executed task {task.id} timed out after {local_timeout_seconds}s"
+                        )
+                        processed += 1
+                        continue
+                    completed_at = datetime.datetime.now(timezone.utc).isoformat()
+
+                    if result.returncode == 0:
+                        procedure_id = _extract_procedure_id_from_task(task, metadata)
+                        procedure_status = _get_procedure_status_for_local_command(client, procedure_id)
+                        mapped_task_status = _map_procedure_status_to_task_status(procedure_status) or "COMPLETED"
+                        metadata["procedure_id"] = procedure_id
+                        metadata["procedure_status_after_command"] = procedure_status
+                        metadata["phase"] = "persist_results"
+
+                        update_kwargs = {
+                            "accountId": task.accountId,
+                            "type": task.type,
+                            "status": mapped_task_status,
+                            "target": task.target,
+                            "command": task.command,
+                            "dispatchStatus": "DISPATCHED",
+                            "workerNodeId": dispatcher_id,
+                            "startedAt": started_at,
+                            "stdout": result.stdout[-200000:] if result.stdout else None,
+                            "stderr": result.stderr[-200000:] if result.stderr else None,
+                            "metadata": json.dumps(metadata),
+                            "updatedAt": completed_at,
+                            "errorMessage": None,
+                            "errorDetails": None,
+                            "completedAt": None,
+                        }
+                        if mapped_task_status in {"COMPLETED", "FAILED"}:
+                            update_kwargs["completedAt"] = completed_at
+                        if mapped_task_status == "FAILED":
+                            update_kwargs["errorMessage"] = (
+                                f"Procedure status after local command is {procedure_status}"
+                            )
+                            update_kwargs["errorDetails"] = json.dumps(
+                                {
+                                    "phase": "persist_results",
+                                    "procedure_status": procedure_status,
+                                }
+                            )
+
+                        task.update(**update_kwargs)
+                        logging.info(
+                            "Locally executed task %s exited 0 and mapped to %s (procedure_status=%s)",
+                            task.id,
+                            mapped_task_status,
+                            procedure_status,
+                        )
+                    else:
+                        metadata["phase"] = "persist_results"
+                        task.update(
+                            accountId=task.accountId,
+                            type=task.type,
+                            status='FAILED',
+                            target=task.target,
+                            command=task.command,
+                            dispatchStatus='DISPATCHED',
+                            workerNodeId=dispatcher_id,
+                            startedAt=started_at,
+                            completedAt=completed_at,
+                            errorMessage=f"Local dispatch failed (exit {result.returncode})",
+                            errorDetails=json.dumps({
+                                "exit_code": result.returncode,
+                                "phase": "execute_cli",
+                            }),
+                            stdout=result.stdout[-200000:] if result.stdout else None,
+                            stderr=result.stderr[-200000:] if result.stderr else None,
+                            metadata=json.dumps(metadata),
+                            updatedAt=completed_at,
+                        )
+                        logging.error(f"Locally executed task {task.id} failed exit={result.returncode}")
+
+                processed += 1
+            except Exception as e:
+                logging.error(f"Failed to dispatch task {task_id}: {e}", exc_info=True)
+        return processed
+
+    if once:
+        processed = run_cycle()
+        logging.info(f"Dispatcher run complete (once): processed={processed}")
+        return
+
+    while True:
+        processed = run_cycle()
+        if processed:
+            logging.info(f"Dispatcher cycle processed {processed} task(s)")
+        time.sleep(interval)
 
 @command.command()
 @click.argument('task_id')

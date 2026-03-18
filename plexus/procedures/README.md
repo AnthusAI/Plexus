@@ -64,6 +64,29 @@ plexus procedure run --yaml plexus/procedures/creative_writer.yaml
 3. User sees "Writing final piece" progress
 4. User sees "Creative writing complete!" with the final 2-3 paragraph piece
 
+### 3. scorecard_create.yaml - OODA Scorecard Creation
+
+**Purpose**: Turns an unstructured brief into a planned, validated, and human-approved scorecard + classifier scores, then creates them via MCP tools.
+
+**What it demonstrates**:
+- OODA workflow (Observe → Orient → Decide → Act)
+- Scorecard existence check before creation
+- Guidelines drafting with validation tool
+- Human approval gate
+- Tool-driven creation of scorecard + scores
+
+**How to run**:
+```bash
+plexus procedure run --yaml plexus/procedures/scorecard_create.yaml
+```
+
+**Expected behavior**:
+1. Lists existing scorecards for context
+2. Proposes a new scorecard and classifier-only scores
+3. Drafts and validates guidelines for each score
+4. Requests human approval
+5. Creates scorecard and scores if approved (unless dry_run=true)
+
 **Key pattern demonstrated**:
 ```lua
 -- Phase 1: First agent

@@ -168,6 +168,11 @@ def create_tracker_and_experiment_task(
             # Store procedure ID in task metadata for the association
             # This avoids adding new schema relationships that would increase resource count
             task_metadata = task.metadata or {}
+            if isinstance(task_metadata, str):
+                try:
+                    task_metadata = json.loads(task_metadata) if task_metadata else {}
+                except Exception:
+                    task_metadata = {}
             task_metadata["procedure_id"] = procedure_id
             task_metadata["procedure_type"] = "run"
             
@@ -178,7 +183,7 @@ def create_tracker_and_experiment_task(
                 status=task.status,
                 target=task.target,
                 command=task.command,
-                metadata=task_metadata,
+                metadata=json.dumps(task_metadata),
                 updatedAt=datetime.now(timezone.utc).isoformat(),
             )
             logging.info(f"Associated Task {task.id} with Procedure {procedure_id} via metadata")
@@ -272,23 +277,54 @@ async def run_experiment_with_task_tracking(
         if tracker:
             tracker.current_stage.complete()  # Complete the final Analysis stage
         
-        # Complete the task
+        procedure_status = str(experiment_result.get("status") or "").upper()
+        is_waiting_for_human = procedure_status == "WAITING_FOR_HUMAN"
+        is_success = bool(experiment_result.get("success"))
+
+        if is_waiting_for_human:
+            mapped_task_status = "RUNNING"
+            mapped_procedure_status = "WAITING_FOR_HUMAN"
+        elif is_success:
+            mapped_task_status = "COMPLETED"
+            mapped_procedure_status = "COMPLETED"
+        else:
+            mapped_task_status = "FAILED"
+            mapped_procedure_status = "FAILED"
+
+        # Complete or update the task
         if tracker and tracker.task:
-            tracker.task.update(
-                accountId=tracker.task.accountId,
-                type=tracker.task.type,
-                status='COMPLETED',
-                target=tracker.task.target,
-                command=tracker.task.command,
-                completedAt=datetime.now(timezone.utc).isoformat(),
-                updatedAt=datetime.now(timezone.utc).isoformat(),
-                output=json.dumps(experiment_result, default=str),
-            )
+            update_data = {
+                "accountId": tracker.task.accountId,
+                "type": tracker.task.type,
+                "status": mapped_task_status,
+                "target": tracker.task.target,
+                "command": tracker.task.command,
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "output": json.dumps(experiment_result, default=str),
+            }
+            if mapped_task_status in {"COMPLETED", "FAILED"}:
+                update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
+            tracker.task.update(**update_data)
+
+        # Keep procedure status consistent with the actual run outcome.
+        try:
+            status_mutation = """
+            mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
+                updateProcedure(input: $input) {
+                    id
+                    status
+                    updatedAt
+                }
+            }
+            """
+            client.execute(status_mutation, {"input": {"id": procedure_id, "status": mapped_procedure_status}})
+        except Exception as e:
+            logger.warning(f"Failed to update procedure status for {procedure_id}: {e}")
         
         # Update result with experiment outcome
         result.update(experiment_result)
-        result['status'] = 'completed'
-        result['message'] = 'Experiment completed successfully'
+        result['status'] = mapped_procedure_status
+        result['message'] = 'Experiment completed successfully' if mapped_procedure_status == 'COMPLETED' else result.get('message', 'Experiment execution updated')
         
     except Exception as e:
         logging.error(f"Experiment run failed: {str(e)}", exc_info=True)

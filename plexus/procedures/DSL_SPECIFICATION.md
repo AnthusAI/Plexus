@@ -91,7 +91,7 @@ stages:
   - stage_name
 
 # Orchestration logic
-workflow: |
+code: |
   -- Lua code
 ```
 
@@ -780,7 +780,7 @@ procedures:
           Research: {params.query}
         tools: [search, done]
     
-    workflow: |
+    code: |
       repeat
         Worker.turn()
       until Tool.called("done")
@@ -791,7 +791,7 @@ agents:
       - researcher
       - done
 
-workflow: |
+code: |
   Coordinator.turn()
 ```
 
@@ -1131,7 +1131,7 @@ stages:
   - publishing
   - complete
 
-workflow: |
+code: |
   Stage.set("researching")
   Human.notify({
     message = "Starting content generation",
@@ -1221,7 +1221,7 @@ stages:
   - processing
   - complete
 
-workflow: |
+code: |
   local processed = 0
   local failed = 0
   local total = #params.items
@@ -1384,7 +1384,7 @@ agents:
       - done
     max_turns: 15
 
-workflow: |
+code: |
   local attempt = 1
   
   -----------------------------------------------------------------

@@ -87,8 +87,8 @@ async def test_tool_filtering_matches_allowed_tools():
         assert 'plexus_evaluation_score_result_find' in filtered_names, \
             f"Expected plexus_evaluation_score_result_find in filtered tools, got: {filtered_names}"
         
-        # Check that other allowed tools made it through
-        assert 'upsert_procedure_node' in filtered_names
+        # Graph-node tool is deprecated and should not be available
+        assert 'upsert_procedure_node' not in filtered_names
         # Note: stop_procedure is added separately, not from MCP
         
         # Verify that disallowed tools were filtered out
@@ -144,4 +144,3 @@ async def test_end_to_end_tool_availability():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
