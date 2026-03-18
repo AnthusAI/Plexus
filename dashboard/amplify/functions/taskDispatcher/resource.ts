@@ -1,9 +1,11 @@
 import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import * as path from 'path';
 import { createRequire } from 'module';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { StartingPosition } from 'aws-cdk-lib/aws-lambda';
@@ -43,23 +45,49 @@ export class TaskDispatcherStack extends Stack {
           image: lambda.Runtime.PYTHON_3_11.bundlingImage,
           local: {
             tryBundle(outputDir: string) {
-              // Create a temporary directory for dependencies
-              execSync('mkdir -p /tmp/package');
-              
-              // Install all dependencies with their sub-dependencies
-              execSync(
-                `python3 -m pip install -r ${path.join(functionDir, 'requirements.txt')} -t /tmp/package --platform manylinux2014_x86_64 --implementation cp --python 3.11 --only-binary=:all: --upgrade`
-              );
+              const packageDir = mkdtempSync(path.join(tmpdir(), 'task-dispatcher-'));
+              mkdirSync(outputDir, { recursive: true });
 
-              // Copy dependencies to the output directory
-              execSync(`cp -r /tmp/package/* ${outputDir}`);
-              
-              // Copy function code to output directory
-              execSync(`cp -r ${functionDir}/* ${outputDir}`);
-              
-              // Clean up
-              execSync('rm -rf /tmp/package');
-              
+              try {
+                execFileSync(
+                  'python3',
+                  [
+                    '-m',
+                    'pip',
+                    'install',
+                    '-r',
+                    path.join(functionDir, 'requirements.txt'),
+                    '-t',
+                    packageDir,
+                    '--platform',
+                    'manylinux2014_x86_64',
+                    '--implementation',
+                    'cp',
+                    '--python',
+                    '3.11',
+                    '--only-binary=:all:',
+                    '--upgrade',
+                  ],
+                  { stdio: 'inherit' }
+                );
+
+                for (const entry of readdirSync(packageDir)) {
+                  cpSync(path.join(packageDir, entry), path.join(outputDir, entry), {
+                    recursive: true,
+                    force: true,
+                  });
+                }
+
+                for (const entry of readdirSync(functionDir)) {
+                  cpSync(path.join(functionDir, entry), path.join(outputDir, entry), {
+                    recursive: true,
+                    force: true,
+                  });
+                }
+              } finally {
+                rmSync(packageDir, { recursive: true, force: true });
+              }
+
               return true;
             }
           }
