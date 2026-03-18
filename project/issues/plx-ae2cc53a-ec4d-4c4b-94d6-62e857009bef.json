@@ -1,0 +1,18 @@
+{
+  "id": "plx-ae2cc53a-ec4d-4c4b-94d6-62e857009bef",
+  "title": "fetchReportBlocks sets config:{} unconditionally, diverging from transformBlocks",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-10T15:27:51.893756Z",
+  "updated_at": "2026-03-10T15:28:01.978541Z",
+  "closed_at": "2026-03-10T15:28:01.978541Z",
+  "custom": {}
+}

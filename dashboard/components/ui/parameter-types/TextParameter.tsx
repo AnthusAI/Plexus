@@ -3,6 +3,7 @@
 import React from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { ParameterDefinition } from '@/types/parameters'
 
 interface TextParameterProps {
@@ -23,18 +24,29 @@ export function TextParameter({ definition, value, onChange, disabled, error }: 
       {definition.description && (
         <p className="text-xs text-muted-foreground">{definition.description}</p>
       )}
-      <Input
-        id={definition.name}
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={definition.placeholder}
-        disabled={disabled}
-        className={error ? 'border-destructive' : ''}
-      />
+      {definition.input === 'textarea' ? (
+        <Textarea
+          id={definition.name}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={definition.placeholder}
+          disabled={disabled}
+          rows={definition.rows || 6}
+          className={error ? 'border-destructive' : ''}
+        />
+      ) : (
+        <Input
+          id={definition.name}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={definition.placeholder}
+          disabled={disabled}
+          className={error ? 'border-destructive' : ''}
+        />
+      )}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
 }
-
 
 

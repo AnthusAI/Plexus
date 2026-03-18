@@ -90,47 +90,26 @@ class LangChainMCPAdapter:
                 if not isinstance(args, dict):
                     args = {}
                 
-                # Handle the async call properly - check for existing event loop
-                try:
-                    # Try to get the current event loop
-                    current_loop = asyncio.get_running_loop()
-                    # We're in an async context, so we need to create a task
-                    # But since LangChain expects sync execution, we'll use a workaround
-                    
-                    # Run the async call in a separate thread with its own event loop
-                    def run_in_thread():
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        try:
-                            logger.debug(f"🔧 MCP ADAPTER: Calling tool '{tool_name}' with args: {args}")
-                            result = new_loop.run_until_complete(
-                                self.mcp_client.call_tool(tool_name, args)
-                            )
-                            logger.debug(f"🔧 MCP ADAPTER: Tool '{tool_name}' returned: {type(result)} - {str(result)[:200]}...")
-                            # Track tool usage for conversation flow
-                            self.tools_called.add(tool_name)
-                            return result
-                        finally:
-                            new_loop.close()
-                    
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(run_in_thread)
-                        result = future.result(timeout=30)  # 30 second timeout
-                        
-                except RuntimeError:
-                    # No event loop running, safe to create one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                # Always run async tool calls in a separate thread with its own loop.
+                # This avoids "event loop already running" errors in mixed sync/async contexts.
+                def run_in_thread():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
                     try:
                         logger.debug(f"🔧 MCP ADAPTER: Calling tool '{tool_name}' with args: {args}")
-                        result = loop.run_until_complete(
+                        result = new_loop.run_until_complete(
                             self.mcp_client.call_tool(tool_name, args)
                         )
                         logger.debug(f"🔧 MCP ADAPTER: Tool '{tool_name}' returned: {type(result)} - {str(result)[:200]}...")
                         # Track tool usage for conversation flow
                         self.tools_called.add(tool_name)
+                        return result
                     finally:
-                        loop.close()
+                        new_loop.close()
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_in_thread)
+                    result = future.result(timeout=30)  # 30 second timeout
                 
                 # TOOL RESPONSE RECORDING: Only record if SOP agent hasn't already handled it
                 # The SOP agent now records tool calls/responses properly, so this is a fallback
@@ -359,4 +338,3 @@ def convert_mcp_tools_to_langchain(mcp_tools):
         langchain_tools.append(langchain_tool)
     
     return langchain_tools
-

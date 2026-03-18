@@ -1,0 +1,25 @@
+{
+  "id": "plx-250e8ef1-ed94-404f-8843-d51c35e362ce",
+  "title": "ReportTask matches wrong block when multiple blocks share the same type",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c30c9d31-dac1-4676-ba52-92e0065b175f",
+      "author": "ryan.porter",
+      "text": "The `customCodeBlockRenderer` in `ReportTask.tsx` only matched blocks by `type` (the `class:` field in the YAML). When a report configuration contains two blocks of the same class (e.g. two `FeedbackAnalysis` blocks), `reportBlocks.find(b => b.type === blockClass)` always returns the first matching block, rendering the wrong block in the second position.\n\n**Root cause:** The code fence metadata — ````block name=\"Feedback Analysis\"``` — includes a `name` attribute that maps to `b.name` in the reportBlocks data, but this was never extracted or used for matching.\n\n**Fix:** Extract the name from the code fence meta string via `node?.data?.meta` (react-markdown v9 exposes the raw info string here), then prefer a type+name match before falling back to type-only. Fixed in `dashboard/components/ReportTask.tsx` lines 321-330.",
+      "created_at": "2026-03-10T15:05:11.885393Z"
+    }
+  ],
+  "created_at": "2026-03-10T15:04:48.310649Z",
+  "updated_at": "2026-03-10T15:15:17.914926Z",
+  "closed_at": "2026-03-10T15:15:17.914926Z",
+  "custom": {}
+}

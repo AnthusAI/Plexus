@@ -2,8 +2,7 @@ name: simple_sub_procedure
 version: 1.0.0
 description: Simple sub-procedure for testing Procedure.run() and Procedure.spawn()
 
-class: LuaDSL
-
+class: Tactus
 params:
   message:
     type: string
@@ -28,7 +27,7 @@ agents:
     initial_message: "Starting"
     tools: []
 
-workflow: |
+code: |
   -- Get input parameters
   local message = params.message or "Hello from sub-procedure"
   local delay = params.delay or 0

@@ -1,0 +1,79 @@
+{
+  "id": "plx-d83f7a08-e1e8-4356-a661-7c29b6d2f272",
+  "title": "Fix Procedure conversation history loading in dashboard",
+  "description": "## Intent\nRestore conversation history visibility for procedure runs in dashboard conversation viewer when generated model helpers are missing from the Amplify client.\n\n## Scope\n- Harden  query path with GraphQL fallback for chat sessions/messages by .\n- Guard subscription setup when model  helpers are unavailable.\n- Preserve existing rendering/filtering behavior.\n\n## Definition of Done\n- Opening a procedure run no longer throws on undefined  / .\n- Existing history loads via fallback and renders in UI.\n- No regression for environments where generated model helpers exist.\n- Tests added/updated for fallback behavior where practical.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51ac5cc0-6afd-404b-a5d5-3f1f785ce8ca",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e7cef1e0-7f70-4ec5-9ae5-40977901f311",
+      "author": "ryan",
+      "text": "Decision update: removing model-helper fallback logic in `conversation-viewer.tsx` per project direction.\n\nNew approach is single-path and explicit:\n- load chat sessions/messages via direct GraphQL index queries\n- subscribe via GraphQL `onCreateChatSession`/`onCreateChatMessage` with procedureId filter\n- no generated-model helper dependency and no compatibility branches.",
+      "created_at": "2026-03-14T05:37:21.962772Z"
+    },
+    {
+      "id": "17e9aa17-50a2-4890-954d-0b96b39aa7e7",
+      "author": "ryan",
+      "text": "Progress: removed generated-model fallback branches from conversation viewer.\n\nCurrent implementation is single-path GraphQL for list + subscriptions keyed by procedureId.",
+      "created_at": "2026-03-14T05:38:21.441702Z"
+    },
+    {
+      "id": "d9237679-207f-4618-a79e-318628371361",
+      "author": "ryan",
+      "text": "Updated repo guidance in `AGENTS.md` with explicit implementation discipline: no fallback/compatibility branches by default; prefer one canonical path and explicit diagnostics.",
+      "created_at": "2026-03-14T05:38:29.316119Z"
+    },
+    {
+      "id": "bbb136fc-d2b5-4659-ba52-4cbc8cad24e0",
+      "author": "ryan",
+      "text": "Starting implementation of deterministic Node toolchain plan:\n- pin repo/dashboard to v20.17.0\n- document `nvm use` requirement to avoid Homebrew Node drift\n- clear stale typecheck processes\n- re-run checks with explicit v20.17.0 node/npm binaries.",
+      "created_at": "2026-03-14T05:48:09.377641Z"
+    },
+    {
+      "id": "8e6d0a06-091d-48b8-8422-5312a7aac83f",
+      "author": "ryan",
+      "text": "Adjustment after deployment constraint review: aligning Node pin to the existing Amplify-linked baseline (`18.19.0`) instead of `20.17.0`. Will update pin files/docs accordingly, install/use 18.19 locally, and rerun verification.",
+      "created_at": "2026-03-14T05:49:15.566969Z"
+    },
+    {
+      "id": "17be6b95-3c78-44e2-b8fe-ecc464f43ece",
+      "author": "ryan",
+      "text": "Implemented Node toolchain alignment to deployment baseline:\n- set root `.nvmrc` to 18.19.0\n- restored `dashboard/.nvmrc` to 18.19.0\n- added explicit Node runtime guidance in AGENTS.md and CONTRIBUTING_AGENT.md (require `nvm use`, avoid Homebrew Node)\n- installed local Node v18.19.0 via nvm\n\nVerification:\n- `which node/npm` resolves to `~/.nvm/versions/node/v18.19.0/bin/*` when PATH is prefixed\n- `node -v` => v18.19.0, `npm -v` => 10.2.3\n- dashboard typecheck passes when run with explicit v18 node + npm-cli and PATH prefixed\n\nNotes:\n- targeted ESLint check for `components/ui/conversation-viewer.tsx` still fails due existing ajv/eslint toolchain issue (`Cannot set properties of undefined (setting defaultMeta)`), independent of Node pin\n- prior stale typecheck processes remain in uninterruptible kernel sleep (`UE/UEs`) and are not killable even with SIGKILL.",
+      "created_at": "2026-03-14T05:53:07.861979Z"
+    },
+    {
+      "id": "ef06a265-bdc0-48c5-8734-4b49aa0a474b",
+      "author": "ryan",
+      "text": "Starting implementation: add first-class Tactus trace emission and Plexus trace sink mapping so procedure runs persist ChatMessage records (not just ChatSession). Will wire runtime->DSPy agent->Plexus adapter, then add tests and validate with procedure dry-run path.",
+      "created_at": "2026-03-14T13:12:30.222579Z"
+    },
+    {
+      "id": "a20e4562-5229-43e0-a1a3-9b352dd0e99c",
+      "author": "ryan",
+      "text": "Continuing implementation: validating trace persistence end-to-end from Tactus runtime into Plexus chat session/message records, then fixing remaining run failures.",
+      "created_at": "2026-03-14T13:24:50.421752Z"
+    },
+    {
+      "id": "c04cab24-9b39-402e-98b8-172f0e1c951c",
+      "author": "ryan",
+      "text": "Implemented and verified Tactus trace persistence end-to-end. Added TraceEvent/TraceSink protocol in Tactus, wired runtime start/flush/end lifecycle, added PlexusTraceSink adapter to ProcedureChatRecorder, and validated records in API (sessions/messages by procedureId). Fixed duplicate trace emission bug in Tactus DSPy agent (user/assistant/tool events were being enqueued multiple times in streaming path). Verified with fresh runs: smoke run now completes and produces 1 user + 1 assistant message; Create Scorecard dry-run run_id=cac0c1c3-d112-4fbe-bc02-99505da1c750 completes and records 12 messages in chat history.\n\nRemaining runtime quality issue discovered during dry-run: MCP tool arg-shape mismatch for log_message (unexpected keyword argument message) still triggers fallback invocation path and can degrade drafted guideline content. Next fix is to normalize DSPy->MCP tool argument invocation so wrappers receive canonical args without fallback coercion.",
+      "created_at": "2026-03-14T13:32:00.172507Z"
+    },
+    {
+      "id": "2a98ce83-2171-4849-b8ca-4a869376c5fa",
+      "author": "ryan",
+      "text": "Additional fixes completed after trace wiring: fixed MCP tool schema export in EmbeddedMCPServer so ProcedureMCPClient.list_tools returns real parameter schemas (previously properties were empty, causing Tactus adapter to build empty arg models and drop tool args). Added schema extraction from function signatures in mcp_transport and added a regression test that verifies plexus_guidelines_validate exposes guidelines_markdown in its input schema.\n\nAlso removed executor-level DSPy monkey patch fallback and moved invocation-shape handling into Tactus DSPyAgentHandle._execute_tool with deterministic call attempts. Verified adapter model now includes guidelines_markdown and tool calls pass args through to MCP.",
+      "created_at": "2026-03-14T13:42:50.040403Z"
+    }
+  ],
+  "created_at": "2026-03-14T05:34:09.415994Z",
+  "updated_at": "2026-03-14T13:42:50.040403Z",
+  "closed_at": null,
+  "custom": {}
+}

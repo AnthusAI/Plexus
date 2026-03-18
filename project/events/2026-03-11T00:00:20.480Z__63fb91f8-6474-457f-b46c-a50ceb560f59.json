@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "63fb91f8-6474-457f-b46c-a50ceb560f59",
+  "issue_id": "plx-8163f159-80dd-4886-b5c5-b207002243f1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-11T00:00:20.480Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "assignee": null,
+    "description": "Exemplars in the topic memory display need clickable links to the original Items. The TopicList/TopicItem components in dashboard/components/ui/topic-list.tsx already render IdentifierDisplay when item_id or identifiers are present on an exemplar. The backend needs to include this data. In plexus/reports/blocks/feedback_analysis.py _run_memory_analysis, when selecting exemplars for each cluster, look up the corresponding item's identifiers (external_id and any structured identifiers) and include them in the exemplar object as item_id and identifiers fields so IdentifierDisplay can render links.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+    "priority": 2,
+    "status": "open",
+    "title": "Show IdentifierDisplay links next to exemplars in TopicList"
+  }
+}

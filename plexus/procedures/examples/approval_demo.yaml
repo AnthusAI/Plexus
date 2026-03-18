@@ -4,8 +4,7 @@ description: |
   Simple demonstration of Human-in-the-Loop approval with different outcomes
   based on user's decision.
 
-class: LuaDSL
-
+class: Tactus
 params:
   proposal_title:
     type: string
@@ -56,7 +55,7 @@ stages:
   - processing
   - complete
 
-workflow: |
+code: |
   -- Phase 1: Notify user about pending approval
   Human.notify({
     message = "📋 New approval request: " .. params.proposal_title,
