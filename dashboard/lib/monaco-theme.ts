@@ -120,7 +120,8 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
         
         // Keys (including quoted keys) - more comprehensive pattern
         [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
-        [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter']],
+        [/^\s*'([^'\\]|\\.)*'\s*(?=:)/, 'key'],
+        [/^\s*"([^"\\]|\\.)*"\s*(?=:)/, 'key'],
         
         // Keys after array dashes (on same line as -)
         [/([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
@@ -141,7 +142,8 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
         
         // Keys in value context (for nested structures)
         [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key', '@pop'],
-        [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter'], '@pop'],
+        [/^\s*'([^'\\]|\\.)*'\s*(?=:)/, 'key', '@pop'],
+        [/^\s*"([^"\\]|\\.)*"\s*(?=:)/, 'key', '@pop'],
         
         // Strings (single quoted)
         [/'([^'\\]|\\.)*'/, 'string', '@pop'],

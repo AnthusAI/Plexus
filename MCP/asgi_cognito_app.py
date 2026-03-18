@@ -56,7 +56,7 @@ required_vars = {
 
 missing_vars = [name for name, value in required_vars.items() if not value]
 if missing_vars:
-    print(f"ERROR: Missing required environment variables: {', '.join(missing_vars)}", file=sys.stderr)
+    print("ERROR: Missing required Cognito environment configuration.", file=sys.stderr)
     print("Required Cognito configuration:", file=sys.stderr)
     print("  COGNITO_USER_POOL_ID=us-west-2_AbCdEf123", file=sys.stderr)
     print("  COGNITO_REGION=us-west-2", file=sys.stderr) 

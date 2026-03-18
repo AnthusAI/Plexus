@@ -26,7 +26,7 @@ export function parseMessageMetadata(metadata: unknown): Record<string, unknown>
   if (!metadata) {
     return null
   }
-  if (typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)) {
+  if (typeof metadata === 'object' && !Array.isArray(metadata)) {
     return metadata as Record<string, unknown>
   }
   if (typeof metadata !== 'string' || !metadata.trim()) {
