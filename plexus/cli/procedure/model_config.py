@@ -109,21 +109,12 @@ class ModelConfig:
         """
         kwargs = self.to_langchain_kwargs()
         
-        logger.info(
-            "Creating LLM with model='%s' and model_kwargs keys=%s",
-            self.model,
-            list(kwargs.get('model_kwargs', {}).keys()),
-        )
+        logger.info("Creating LLM with model='%s'", self.model)
         
         try:
             return ChatOpenAI(**kwargs)
         except Exception as e:
             logger.error("Failed to create LLM for model '%s': %s", self.model, e)
-            if "model_kwargs" in kwargs:
-                logger.error(
-                    "Model-specific parameter keys that failed: %s",
-                    list(kwargs["model_kwargs"].keys()),
-                )
             raise
     
     @classmethod

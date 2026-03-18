@@ -56,7 +56,12 @@ class ExplanationAnalysis(FeedbackAnalysis):
             final_output_data = {"type": "ExplanationAnalysis", "status": "error", "error": str(e), "scores": []}
             return final_output_data, "\n".join(self.log_messages)
 
-    async def _generate_single_scorecard_analysis(self, scorecard_param: str) -> Dict[str, Any]:
+    async def _generate_single_scorecard_analysis(
+        self,
+        scorecard_param: str,
+        skip_indexed_items: bool = False,
+    ) -> Dict[str, Any]:
+        del skip_indexed_items
         days = int(self.config.get("days", 14))
         start_date_str = self.config.get("start_date")
         end_date_str = self.config.get("end_date")
@@ -488,8 +493,12 @@ class ExplanationAnalysis(FeedbackAnalysis):
                     try:
                         trace_str = _json.dumps(trace, indent=2) if isinstance(trace, dict) else str(trace)
                         ctx["trace_summary"] = trace_str[:1500]
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to process explanation-analysis attachment '%s': %s",
+                            attachment_path,
+                            exc,
+                        )
 
                 attachments = score_result.get("attachments") or []
                 for attachment_path in attachments:
