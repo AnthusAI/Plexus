@@ -2,8 +2,7 @@ name: escalate_demo
 version: 1.0.0
 description: Demonstration of Human.escalate() for blocking escalations
 
-class: LuaDSL
-
+class: Tactus
 params:
   max_retries:
     type: number
@@ -29,7 +28,7 @@ stages:
   - escalated
   - resolved
 
-workflow: |
+code: |
   Log.info("Starting critical operation with retry logic", {
     max_retries = params.max_retries
   })

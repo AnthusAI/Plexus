@@ -6,7 +6,9 @@
     "node": ">=18.17.0"
   },
   "scripts": {
-    "dev": "NEXT_TYPESCRIPT_CHECK=0 next dev",
+    "dev": "npx concurrently -k -n \"WEB,DISPATCH\" -c \"cyan,magenta\" \"npm run dev:web\" \"npm run dev:dispatcher\"",
+    "dev:web": "NEXT_TYPESCRIPT_CHECK=0 next dev",
+    "dev:dispatcher": "PLEXUS_DISPATCH_MODE=local plexus command dispatcher --interval 0.5 --loglevel INFO",
     "build": "next build",
     "build:fast": "NEXT_TYPESCRIPT_CHECK=0 next build --no-lint",
     "start": "next start",

@@ -8,7 +8,7 @@ This document provides a token-efficient overview of the Plexus Procedure DSL fo
 
 A configuration-based system for defining agentic workflows that combines:
 - **Declarative YAML** → Define agents, tools, parameters, outputs
-- **Embedded Lua** → Orchestrate workflow control flow
+- **Tactus code** → Orchestrate workflow control flow
 - **High-level Primitives** → `Worker.turn()`, `Human.approve()`, etc. hide LLM mechanics
 - **Human-in-the-Loop** → First-class support for approval, input, review
 - **Idempotent Execution** → Resume-friendly with checkpoint replay
@@ -18,7 +18,7 @@ A configuration-based system for defining agentic workflows that combines:
 ```yaml
 name: content_reviewer
 version: 4.0.0
-class: LuaDSL
+class: Tactus
 
 params:
   document: { type: string, required: true }
@@ -31,7 +31,7 @@ agents:
     system_prompt: "Review this document: {params.document}"
     tools: [analyze, done]
 
-workflow: |
+code: |
   -- AI reviews
   repeat
     Reviewer.turn()
@@ -52,7 +52,7 @@ workflow: |
 ```yaml
 name: procedure_name
 version: 4.0.0
-class: LuaDSL
+class: Tactus
 description: "..."
 
 params:           # Input schema (validated before execution)
@@ -70,7 +70,7 @@ stages:           # Optional stage tracking
   - stage_1
   - stage_2
 
-workflow: |       # Lua orchestration code
+code: |       # Tactus orchestration code
   -- Your code here
 ```
 
@@ -80,6 +80,7 @@ workflow: |       # Lua orchestration code
 ```lua
 Worker.turn()                    -- Execute one agent turn
 Worker.turn({inject = "..."})    -- Inject context for this turn
+Worker.reset()                   -- Clear conversation history for a fresh run
 ```
 
 ### Human Interaction (HITL)
@@ -106,6 +107,7 @@ State.all()                      -- Get all state as table
 ```lua
 Tool.called("done")              -- Check if tool was called
 Tool.last_call("done").args      -- Get tool call arguments
+Tool.get_call_count("done")      -- Get call count (useful for phase scoping)
 Iterations.current()             -- Current iteration count
 Iterations.exceeded(10)          -- Check if limit exceeded
 Stop.requested()                 -- Check if stop was requested

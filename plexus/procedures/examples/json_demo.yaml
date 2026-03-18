@@ -2,8 +2,7 @@ name: json_demo
 version: 1.0.0
 description: Demonstration of Json primitive for JSON encoding/decoding
 
-class: LuaDSL
-
+class: Tactus
 params:
   user_name:
     type: string
@@ -24,7 +23,7 @@ agents:
     initial_message: "Starting"
     tools: []
 
-workflow: |
+code: |
   Log.info("JSON encoding/decoding demonstration")
 
   local ops_count = 0

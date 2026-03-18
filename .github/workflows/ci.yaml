@@ -65,9 +65,6 @@ jobs:
         pip install pybind11 cython setuptools wheel --no-cache-dir
         pip install numpy --no-cache-dir
 
-        # Install semantic-release for version management
-        pip install python-semantic-release --no-cache-dir
-
         # Install fasttext-wheel instead of fasttext
         # pip install fasttext-wheel==0.9.2 --no-cache-dir
 
@@ -83,60 +80,6 @@ jobs:
         echo "Python version: $(python --version)"
         echo "Conda environment: $CONDA_DEFAULT_ENV"
         invoke ci
-
-    - name: Semantic Release Safety Check
-      if: matrix.python-version == '3.11' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        python - <<'PY'
-        import re
-        import subprocess
-        import sys
-
-        def read_version(*args: str) -> str:
-            proc = subprocess.run(
-                ["semantic-release", "version", *args],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            text = (proc.stdout + "\n" + proc.stderr).strip()
-            # semantic-release may emit explanatory lines; pick the last semver token
-            matches = re.findall(r"\b\d+\.\d+\.\d+\b", text)
-            if not matches:
-                print(f"Unable to parse version from output for args={args!r}\n{text}", file=sys.stderr)
-                sys.exit(1)
-            return matches[-1]
-
-        def semver_tuple(v: str) -> tuple[int, int, int]:
-            major, minor, patch = v.split(".")
-            return int(major), int(minor), int(patch)
-
-        last_released = read_version("--print-last-released")
-        next_version = read_version("--print")
-
-        if semver_tuple(next_version) < semver_tuple(last_released):
-            print(
-                "Semantic-release safety check failed: computed next version is lower than latest released tag.",
-                file=sys.stderr,
-            )
-            print(f"latest released: {last_released}", file=sys.stderr)
-            print(f"computed next:  {next_version}", file=sys.stderr)
-            print(
-                "Aborting release to protect published GitHub release history.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        print(f"Semantic-release safety check passed: latest={last_released}, next={next_version}")
-        PY
-
-    - name: Semantic Release
-      if: matrix.python-version == '3.11' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        semantic-release version
-        semantic-release publish
 
   dashboard-unit-tests:
     name: Dashboard Unit Tests

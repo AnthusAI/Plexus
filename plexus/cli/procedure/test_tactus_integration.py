@@ -267,7 +267,7 @@ async def test_tactus_error_handling(mock_plexus_client):
     invalid_code = """
 name: invalid_test
 version: 1.0.0
-class: LuaDSL
+class: Tactus
 """
 
     result = await execute_procedure(
