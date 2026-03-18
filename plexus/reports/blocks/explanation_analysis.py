@@ -514,8 +514,12 @@ class ExplanationAnalysis(FeedbackAnalysis):
                         elif attachment_path.endswith("log.txt"):
                             content, _ = await asyncio.to_thread(download_score_result_log_file, attachment_path)
                             ctx["log_excerpt"] = content[-1500:] if len(content) > 1500 else content
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to process explanation-analysis attachment '%s': %s",
+                            attachment_path,
+                            exc,
+                        )
 
                 score_version = score_result.get("scoreVersion") or {}
                 if score_version.get("configuration"):
