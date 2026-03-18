@@ -1,0 +1,91 @@
+{
+  "id": "plx-96a4e586-aca9-485c-ba10-b3390862aa52",
+  "title": "Rescue develop branch from trusted recent commits",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cf539284-5736-4c83-aee3-0bf50a8cd166",
+      "author": "ryan",
+      "text": "Audited develop against dev. Old untrusted develop-only history begins with four 2025 commits; now classifying the recent March 12-17 develop-only commits to preserve only meaningful code changes when rebuilding develop from dev.",
+      "created_at": "2026-03-18T03:23:46.802651Z"
+    },
+    {
+      "id": "71e91fba-0059-456a-9205-4bdfdaee1c22",
+      "author": "ryan",
+      "text": "Confirmed the stale 2025 develop-only commits do not overlap the current recent code paths. Proceeding with a clean rebuild of develop from dev in a temporary worktree, reapplying only current recent non-project files from develop.",
+      "created_at": "2026-03-18T03:25:04.562448Z"
+    },
+    {
+      "id": "756ca554-79d1-4391-a005-35412ea49d0a",
+      "author": "ryan",
+      "text": "Created a rebuilt develop candidate from dev plus the recent non-project file set. Preserving the old remote develop as archive/develop-pre-rescue-20260318 before force-updating develop.",
+      "created_at": "2026-03-18T03:28:20.617583Z"
+    },
+    {
+      "id": "dc2c5ac1-86f7-491e-91a8-2603295a99cd",
+      "author": "ryan",
+      "text": "Force-updated origin/develop to the rebuilt commit d931c75a after saving the old branch at archive/develop-pre-rescue-20260318. Syncing the local checkout to the rebuilt develop and verifying CI next.",
+      "created_at": "2026-03-18T03:28:37.879110Z"
+    },
+    {
+      "id": "6b791f53-5d88-4804-8503-ffc2a9760f96",
+      "author": "ryan",
+      "text": "CI on the rebuilt develop exposed a real lint issue, not a branch-history issue: explanation_analysis.py logs attachment_path inside the trace-summary exception block where that name is undefined. Fixing that in the rescue branch now.",
+      "created_at": "2026-03-18T03:34:23.022469Z"
+    },
+    {
+      "id": "62aea1ee-0465-4ed7-bde1-aabeb0a011f3",
+      "author": "ryan",
+      "text": "Fixed the explanation_analysis.py lint failure exposed by CI and pushed follow-up commit e0482a74 on top of the rebuilt develop. Watching the fresh develop CI run now.",
+      "created_at": "2026-03-18T03:34:49.030779Z"
+    },
+    {
+      "id": "609cf606-4b3e-474c-a47b-cfe20734c5cc",
+      "author": "ryan",
+      "text": "Closed obsolete PR #126 after rebuilding develop from the trusted dev baseline. A fresh develop->main PR should be opened from the rescued branch once CI is green.",
+      "created_at": "2026-03-18T03:38:50.232494Z"
+    },
+    {
+      "id": "120e34f1-c363-43b8-b9bb-38bdf6d0d5d7",
+      "author": "ryan",
+      "text": "Verifying the rebuilt develop head and current CI status before opening a fresh develop->main PR from the rescued branch.",
+      "created_at": "2026-03-18T03:47:19.428871Z"
+    },
+    {
+      "id": "728ae53c-2237-4fdc-a318-624f1bc0f575",
+      "author": "ryan",
+      "text": "Rebuilt develop is green at e0482a74 and has zero open CodeQL alerts. Opening a fresh develop->main PR from the rescued branch now.",
+      "created_at": "2026-03-18T03:47:31.476858Z"
+    },
+    {
+      "id": "19d4747f-7428-407f-ab26-ca0b0400881e",
+      "author": "ryan",
+      "text": "Verifying whether the rescued develop branch still includes the recent landing-page repositioning changes before answering.",
+      "created_at": "2026-03-18T04:33:52.579326Z"
+    },
+    {
+      "id": "4020f380-56f9-459b-84c1-6de71909085c",
+      "author": "ryan",
+      "text": "Completed branch rescue. origin/develop now points to e0482a74, the old branch was preserved at archive/develop-pre-rescue-20260318, PR #127 is open to merge the rescued develop into main, and CI runs 23227855698, 23227856866, and 23228151302 all passed on the rescued head.",
+      "created_at": "2026-03-18T04:38:26.900693Z"
+    },
+    {
+      "id": "d817c1e4-2f38-45d7-abd4-b1d5f9305410",
+      "author": "ryan",
+      "text": "User confirmed the current project/ Kanbus artifacts are intended to be versioned. Following up by adding the current project state onto develop as a separate commit.",
+      "created_at": "2026-03-18T04:45:29.210468Z"
+    }
+  ],
+  "created_at": "2026-03-18T03:23:34.379675Z",
+  "updated_at": "2026-03-18T04:45:29.210468Z",
+  "closed_at": "2026-03-18T04:38:40.498196Z",
+  "custom": {}
+}
