@@ -1,25 +1,20 @@
-name: scorecard_create
-version: 1.0.0
+name: Create Scorecard
+version: 1.0.10
 class: Tactus
 description: "Create a new scorecard and classifier scores from an unstructured brief (OODA)."
 
 params:
   brief:
     type: string
+    input: textarea
+    rows: 8
     required: true
     description: "Unstructured stakeholder brief for the new scorecard and scores"
   account_identifier:
     type: string
+    input: hidden
     default: "default"
     description: "Account identifier (key/name/id)"
-  scorecard_list_limit:
-    type: number
-    default: 50
-    description: "Max number of scorecards to list per page"
-  max_guideline_iterations:
-    type: number
-    default: 6
-    description: "Max turns for guideline drafter"
   dry_run:
     type: boolean
     default: false
@@ -80,7 +75,8 @@ agents:
       Use exact strings. Do not include markdown or code fences.
     initial_message: |
       Analyze the brief and context pack and return JSON in done().
-    tools: []
+    tools:
+      - plexus
 
   planner:
     system_prompt: |
@@ -121,7 +117,8 @@ agents:
       Respond ONLY with JSON in done(). No markdown.
     initial_message: |
       Produce the plan JSON and call done().
-    tools: []
+    tools:
+      - plexus
 
   guideline_drafter:
     system_prompt: |
@@ -343,7 +340,7 @@ code: |
       end
     end
 
-    if match_found then
+    if match_found and not dry_run then
       Human.notify({message = "Scorecard already exists", level = "warning"})
       return {
         success = false,
@@ -351,6 +348,10 @@ code: |
         message = "Matching scorecard already exists",
         scorecard_id = matched_id
       }
+    end
+
+    if match_found and dry_run then
+      Human.notify({message = "Potential matching scorecard found; continuing dry-run plan generation", level = "warning"})
     end
 
     Stage.set("decide")
@@ -403,7 +404,7 @@ code: |
     Human.notify({message = "Drafting guidelines...", level = "info"})
 
     for _, score in ipairs(plan_scores) do
-      Guideline_drafter.reset()
+      guideline_drafter.reset()
 
       local start_done = Tool.get_call_count("done")
       local start_validate = Tool.get_call_count("plexus_guidelines_validate")
@@ -447,7 +448,7 @@ code: |
     ]]
       local draft_inject = "Score Spec JSON:\n" .. Json.encode(score) .. "\n\n" .. schema_hint
 
-      local drafted = wait_for_done(Guideline_drafter, max_guideline_iterations, draft_inject)
+      local drafted = wait_for_done(guideline_drafter, max_guideline_iterations, draft_inject)
       if not drafted then
         return {success = false, status = "error", message = "Guideline drafter timed out for score: " .. tostring(score.name)}
       end
@@ -469,17 +470,20 @@ code: |
       summary_lines[#summary_lines + 1] = "- " .. tostring(score.name) .. " (" .. tostring(score.key) .. ") labels: " .. Json.encode(score.labels)
     end
 
-    if dry_run then
-      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
-    end
-
     Stage.set("approval")
 
+    local approval_message = "Approve creation of scorecard and scores?"
+    if dry_run then
+      approval_message = "Approve dry-run plan for scorecard and scores?"
+    end
+
     local approved = Human.approve({
-      message = "Approve creation of scorecard and scores?",
+      message = approval_message,
       context = {
         summary = table.concat(summary_lines, "\n"),
-        dry_run = dry_run
+        dry_run = dry_run,
+        match_found = match_found,
+        matched_scorecard_id = matched_id
       },
       timeout = 7200,
       default = false
@@ -487,6 +491,10 @@ code: |
 
     if not approved then
       return {success = false, status = "rejected", message = "Human rejected creation", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
+    if dry_run then
+      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
     end
 
     Stage.set("act")

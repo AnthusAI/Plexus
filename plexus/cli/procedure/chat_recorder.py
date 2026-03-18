@@ -35,16 +35,146 @@ class ProcedureChatRecorder:
         self.sequence_number = 0
         self._sequence_lock = None  # Will be initialized when needed
         self._state_data: Optional[Dict[str, Any]] = None  # Conversation state machine data
+
+    @staticmethod
+    def _graphql_field(result: Any, field_name: str) -> Any:
+        """Extract a field from wrapped or unwrapped GraphQL responses."""
+        if not isinstance(result, dict):
+            return None
+        data = result.get('data')
+        if isinstance(data, dict) and field_name in data:
+            return data.get(field_name)
+        return result.get(field_name)
+
+    def _get_resume_session_id(self) -> Optional[str]:
+        """Return existing session id when procedure is waiting for human input."""
+        try:
+            query = """
+            query GetProcedureWaitingMessage($id: ID!) {
+                getProcedure(id: $id) {
+                    status
+                    waitingOnMessageId
+                }
+            }
+            """
+            result = self.client.execute(query, {'id': self.procedure_id})
+            procedure = self._graphql_field(result, 'getProcedure')
+            if not isinstance(procedure, dict):
+                return None
+
+            if procedure.get('status') != 'WAITING_FOR_HUMAN':
+                return None
+
+            waiting_message_id = procedure.get('waitingOnMessageId')
+            if not waiting_message_id:
+                return None
+
+            message_query = """
+            query GetWaitingMessageSession($id: ID!) {
+                getChatMessage(id: $id) {
+                    id
+                    sessionId
+                }
+            }
+            """
+            message_result = self.client.execute(message_query, {'id': waiting_message_id})
+            message = self._graphql_field(message_result, 'getChatMessage')
+            if not isinstance(message, dict):
+                return None
+
+            session_id = message.get('sessionId')
+            return str(session_id) if session_id else None
+        except Exception as e:
+            logger.debug(f"Could not resolve resume session for procedure {self.procedure_id}: {e}")
+            return None
+
+    def _get_latest_sequence_number_for_session(self, session_id: str) -> int:
+        """Load the latest persisted message sequence for a session."""
+        try:
+            query = """
+            query GetLatestSessionMessage($sessionId: String!, $limit: Int) {
+                listChatMessageBySessionIdAndCreatedAt(
+                    sessionId: $sessionId
+                    sortDirection: DESC
+                    limit: $limit
+                ) {
+                    items {
+                        id
+                        sequenceNumber
+                        createdAt
+                    }
+                }
+            }
+            """
+            result = self.client.execute(query, {'sessionId': session_id, 'limit': 1})
+            payload = self._graphql_field(result, 'listChatMessageBySessionIdAndCreatedAt')
+            items = payload.get('items', []) if isinstance(payload, dict) else []
+            if not items:
+                return 0
+
+            latest = items[0] if isinstance(items[0], dict) else {}
+            sequence_number = latest.get('sequenceNumber')
+            try:
+                return int(sequence_number)
+            except (TypeError, ValueError):
+                return 0
+        except Exception as e:
+            logger.debug(f"Could not resolve latest sequence number for session {session_id}: {e}")
+            return 0
+
+    def _resolve_account_id_for_session(self, context: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        """Resolve account ID for chat writes without relying solely on env defaults."""
+        context = context or {}
+
+        # 1) Prefer explicit runtime context if available
+        account_id = context.get('account_id') or context.get('accountId')
+        if account_id:
+            return str(account_id)
+
+        # 2) Resolve from the procedure record itself
+        try:
+            query = """
+            query GetProcedureAccount($id: ID!) {
+                getProcedure(id: $id) {
+                    accountId
+                }
+            }
+            """
+            result = self.client.execute(query, {'id': self.procedure_id})
+            if isinstance(result, dict):
+                procedure = result.get('data', {}).get('getProcedure') if 'data' in result else result.get('getProcedure')
+                procedure_account_id = procedure.get('accountId') if isinstance(procedure, dict) else None
+                if procedure_account_id:
+                    return str(procedure_account_id)
+        except Exception as e:
+            logger.debug(f"Could not resolve accountId from procedure {self.procedure_id}: {e}")
+
+        # 3) Final fallback to existing env-based resolver
+        try:
+            return self.client._resolve_account_id()
+        except Exception:
+            return None
         
     async def start_session(self, context: Optional[Dict[str, Any]] = None) -> str:
         """Start a new chat session for the procedure run."""
         try:
-            # Create ChatSession record
-            # Resolve account ID from environment (uses PLEXUS_ACCOUNT_KEY internally)
-            account_id = self.client._resolve_account_id()
+            # Resolve account first so resumed writes stay account-scoped.
+            account_id = self._resolve_account_id_for_session(context)
             if not account_id:
                 raise ValueError("Could not resolve account ID. Is PLEXUS_ACCOUNT_KEY set?")
 
+            resume_session_id = self._get_resume_session_id()
+            if resume_session_id:
+                self.session_id = resume_session_id
+                self.account_id = account_id
+                self.sequence_number = self._get_latest_sequence_number_for_session(resume_session_id)
+                logger.info(
+                    f"Reusing active chat session: {self.session_id} for account: {account_id} "
+                    f"(last sequence: {self.sequence_number})"
+                )
+                return self.session_id
+
+            # Create ChatSession record
             # Get the actual IDs that are being passed
             scorecard_id = context.get('scorecard_id') if context else None
             score_id = context.get('score_id') if context else None
@@ -485,6 +615,16 @@ class ProcedureChatRecorder:
             name_info = f" with name '{name}'" if name else ""
             logger.info(f"Ending session {self.session_id} with status {status}{name_info}")
             
+            # Normalize to GraphQL ChatSessionStatus enum
+            status_map = {
+                'FAILED': 'ERROR',
+                'FAILURE': 'ERROR',
+                'ERROR': 'ERROR',
+                'ACTIVE': 'ACTIVE',
+                'COMPLETED': 'COMPLETED',
+            }
+            normalized_status = status_map.get(str(status or '').upper(), 'ERROR')
+
             # Update session status and optionally name
             mutation = """
             mutation UpdateChatSession($input: UpdateChatSessionInput!) {
@@ -499,7 +639,7 @@ class ProcedureChatRecorder:
             
             update_data = {
                 'id': self.session_id,
-                'status': status
+                'status': normalized_status
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
             
@@ -507,7 +647,10 @@ class ProcedureChatRecorder:
                 update_data['name'] = name
             
             result = self.client.execute(mutation, {'input': update_data})
-            if result and 'updateChatSession' in result:
+            if (
+                (result and isinstance(result, dict) and result.get('updateChatSession'))
+                or (result and isinstance(result, dict) and result.get('data', {}).get('updateChatSession'))
+            ):
                 logger.info(f"Session ended: {self.session_id}")
                 return True
             else:

@@ -216,7 +216,8 @@ class ScorecardResultsAnalysis:
 
         # Use Jinja2 to generate the HTML report
         self.env = Environment(
-            loader=FileSystemLoader(templates_dir)
+            loader=FileSystemLoader(templates_dir),
+            autoescape=select_autoescape(['html', 'xml']),
         )
         template = self.env.get_template('scorecard_report.html')
         report = template.render(

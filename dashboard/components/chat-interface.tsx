@@ -186,8 +186,6 @@ export function ChatInterface({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [submittedMessages, setSubmittedMessages] = useState<Set<string>>(new Set())
-  const [submittingMessages, setSubmittingMessages] = useState<Set<string>>(new Set())
 
   // Load messages for account
   const loadMessages = async () => {
@@ -316,110 +314,6 @@ export function ChatInterface({
     }
   }, [accountId])
 
-  // Build response content based on message type
-  const buildResponseContent = (
-    requestType: string | undefined,
-    submissionData: Record<string, any>,
-    pendingMetadata: any
-  ): Record<string, any> => {
-    const responded_at = new Date().toISOString()
-
-    switch (requestType) {
-      case 'PENDING_APPROVAL':
-        return {
-          approved: submissionData.action === 'approve' || submissionData.action === 'Approve',
-          responded_at
-        }
-
-      case 'PENDING_INPUT':
-        return {
-          input: submissionData.input || submissionData.action || '',
-          responded_at
-        }
-
-      case 'PENDING_REVIEW':
-        return {
-          decision: submissionData.action, // Button label clicked
-          feedback: submissionData.feedback || submissionData.input || '',
-          edited_artifact: submissionData.edited_artifact || null,
-          responded_at
-        }
-
-      default:
-        return { action: submissionData.action, responded_at }
-    }
-  }
-
-  // Handle HITL response submission
-  const handleHitlResponse = async (
-    pendingMessage: ChatMessage,
-    submissionData: Record<string, any>
-  ) => {
-    // Validate required fields
-    if (!pendingMessage.sessionId) {
-      throw new Error('Session ID is required for HITL response')
-    }
-
-    // Build response content based on message type
-    const responseContent = buildResponseContent(
-      pendingMessage.humanInteraction,
-      submissionData,
-      pendingMessage.metadata
-    )
-
-    // Create RESPONSE message
-    const result = await client.models.ChatMessage.create({
-      accountId: pendingMessage.accountId,
-      sessionId: pendingMessage.sessionId,
-      procedureId: pendingMessage.procedureId,
-      parentMessageId: pendingMessage.id,
-      role: 'USER',
-      humanInteraction: 'RESPONSE',
-      content: JSON.stringify(responseContent),
-      createdAt: new Date().toISOString(),
-      metadata: JSON.stringify({
-        callback_id: pendingMessage.metadata?.callback_id, // Pass through for Lambda Durable mode
-        response_type: pendingMessage.humanInteraction?.replace('PENDING_', '').toLowerCase(),
-        original_request: pendingMessage.id,
-        submitted_at: new Date().toISOString()
-      })
-    }, {
-      selectionSet: ['id', 'parentMessageId', 'role', 'humanInteraction', 'content', 'createdAt']
-    })
-
-    // Check for errors
-    if (result.errors && result.errors.length > 0) {
-      throw new Error(`Failed to create RESPONSE: ${JSON.stringify(result.errors)}`)
-    }
-
-    if (!result.data) {
-      throw new Error('Failed to create RESPONSE: no data returned')
-    }
-
-    // Real-time subscription will trigger reload
-  }
-
-  // Wrapped HITL handler with state management
-  const handleHitlSubmit = async (message: ChatMessage, data: Record<string, any>) => {
-    const messageId = message.id
-
-    // Mark as submitting
-    setSubmittingMessages(prev => new Set(prev).add(messageId))
-
-    try {
-      await handleHitlResponse(message, data)
-      setSubmittedMessages(prev => new Set(prev).add(messageId))
-    } catch (error) {
-      // TODO: Add error state and display to user
-    } finally {
-      setSubmittingMessages(prev => {
-        const next = new Set(prev)
-        next.delete(messageId)
-        return next
-      })
-    }
-  }
-
   // Handle sending a new message (placeholder - not yet implemented on backend)
   const handleSendMessage = async (message: string) => {
     // TODO: Implement message sending via GraphQL mutation
@@ -436,9 +330,6 @@ export function ChatInterface({
       onVoiceInput={onVoiceInput}
       onVoiceMode={onVoiceMode}
       placeholder={placeholder}
-      onHitlSubmit={handleHitlSubmit}
-      submittedMessages={submittedMessages}
-      submittingMessages={submittingMessages}
       showInput={showInput}
       showVoiceButtons={showVoiceButtons}
     />

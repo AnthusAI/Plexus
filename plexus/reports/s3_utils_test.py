@@ -65,7 +65,8 @@ class TestS3Utils(unittest.TestCase):
         mock_open.return_value.__enter__.return_value = mock_file
         
         # Call the function with a specified path
-        local_path = tempfile.mktemp()
+        file_descriptor, local_path = tempfile.mkstemp()
+        os.close(file_descriptor)
         content, path = download_report_block_file(
             s3_path="reportblocks/test-block-id/test.txt",
             local_path=local_path
