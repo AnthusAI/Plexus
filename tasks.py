@@ -2,13 +2,12 @@ from invoke import task, Exit
 
 @task
 def install(context):
-    context.run("python -m pip install --upgrade pip")
-    context.run("pip install -e .")
+    context.run("poetry install --with dev")
 
 @task
 def lint(context):
     """Run flake8 linting using configuration from .flake8"""
-    result = context.run("flake8 . --count --select=E9,F63,F7,F82 --statistics", warn=True)
+    result = context.run("poetry run flake8 . --count --select=E9,F63,F7,F82 --statistics", warn=True)
     if result.ok:
         print("\n✅ Linting passed - no serious errors found!")
     else:
@@ -17,13 +16,13 @@ def lint(context):
 
 @task
 def test(context):
-    context.run("pytest")
+    context.run("poetry run pytest")
 
 @task
 def docs(context):
-    context.run("sphinx-apidoc --separate -o documentation/source plexus " \
+    context.run("poetry run sphinx-apidoc --separate -o documentation/source plexus " \
                "\"**/*_test*.*\" -f -M")
-    context.run("sphinx-build documentation/source documentation")
+    context.run("poetry run sphinx-build documentation/source documentation")
 
 @task(pre=[lint, test])
 def ci(context):
