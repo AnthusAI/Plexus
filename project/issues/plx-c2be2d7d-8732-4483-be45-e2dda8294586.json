@@ -32,10 +32,40 @@
       "author": "derek",
       "text": "Implemented Poetry migration for root project scope. Changes made: switched pyproject build backend to poetry-core; replaced setuptools/project metadata with [tool.poetry] + dependency groups; added [tool.poetry.scripts]; updated tasks.py to use poetry install/run; updated README install command to poetry; updated CI and documentation workflows to install and run via Poetry; deleted .github/workflows/requirements-sync.yml; deleted root requirements.txt; generated poetry.lock. Validation: poetry check passed, poetry lock succeeded after constraining python range to >=3.11,<3.13 due numba/langchain-community solver conflict on 3.13, poetry install --with dev succeeded, poetry run pytest --version and invoke --list succeeded, and package import via poetry run python succeeded.",
       "created_at": "2026-03-18T22:31:30.228991704Z"
+    },
+    {
+      "id": "16982917-5880-48d2-bb76-68c883301534",
+      "author": "derek",
+      "text": "Reviewing EC2 deployment post-install script for Poetry migration compatibility (CodeBuild/CodeDeploy path).",
+      "created_at": "2026-03-18T22:40:00.193608577Z"
+    },
+    {
+      "id": "32f4f511-6eb8-496e-8119-33980de2697c",
+      "author": "derek",
+      "text": "Updated EC2 CodeDeploy after_install.sh to install Poetry if missing and perform lockfile-driven runtime install via: poetry config virtualenvs.create false && poetry install --only main --sync --no-interaction --no-ansi (inside conda env py311). Also added set -euo pipefail.",
+      "created_at": "2026-03-18T22:41:32.923906706Z"
+    },
+    {
+      "id": "28622687-d1b6-4b09-9092-b2e7a639fb51",
+      "author": "derek",
+      "text": "Investigating post-migration pytest failures reported by stakeholder (MCP scorecard test + clustered tactus runtime tests). Running focused failing tests with verbose output to isolate regression source.",
+      "created_at": "2026-03-18T22:42:28.794726532Z"
+    },
+    {
+      "id": "20e344bc-c74e-4b7e-84a2-ab67a1f22f14",
+      "author": "derek",
+      "text": "Stakeholder confirmed Tactus is controlled upstream; proceeding with tactus upgrade in Plexus and re-running failing tactus tests rather than adding local bandaid dependency pins.",
+      "created_at": "2026-03-18T22:43:49.221201054Z"
+    },
+    {
+      "id": "7fcb51d7-d7bd-407f-85a7-638594dd4372",
+      "author": "derek",
+      "text": "Validated against latest available tactus (0.44.1): Tactus test failures persist. Root error remains ModuleNotFoundError: griffe during tactus runtime initialization path via pydantic_ai._griffe. Environment contains dist-info for griffe==2.0.0 but no importable griffe module package (only griffecli). Conclusion: upstream dependency break (griffe 2.x packaging/module layout) still unresolved for current tactus+pydantic-ai combination.",
+      "created_at": "2026-03-18T22:44:43.511169077Z"
     }
   ],
   "created_at": "2026-03-18T22:19:32.654874209Z",
-  "updated_at": "2026-03-18T22:31:30.228991704Z",
+  "updated_at": "2026-03-18T22:44:43.511169077Z",
   "closed_at": null,
   "custom": {}
 }
