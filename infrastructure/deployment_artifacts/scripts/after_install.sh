@@ -1,8 +1,17 @@
 #!/bin/bash
+set -euo pipefail
+
 cd /home/ec2-user/projects/Plexus
 
-echo "Installing package..."
-/home/ec2-user/miniconda3/bin/conda run -n py311 pip install --upgrade-strategy only-if-needed .
+echo "Installing Poetry (if needed) and syncing runtime dependencies from poetry.lock..."
+/home/ec2-user/miniconda3/bin/conda run -n py311 bash -lc '
+if ! command -v poetry >/dev/null 2>&1; then
+    pip install "poetry>=1.8,<2.0"
+fi
+
+poetry config virtualenvs.create false
+poetry install --only main --sync --no-interaction --no-ansi
+'
 
 # Only restart services if they exist
 if sudo systemctl list-unit-files | grep -q plexus-command-worker; then
