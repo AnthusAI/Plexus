@@ -23,8 +23,24 @@ python -m poetry --version
 # Install into the conda environment (no nested virtualenv).
 # Do not use --sync here: Poetry is installed in this same env for bootstrap,
 # and --sync can remove Poetry itself mid-run.
+export PIP_DEFAULT_TIMEOUT=120
+export POETRY_REQUESTS_TIMEOUT=120
 python -m poetry config virtualenvs.create false --local || true
-python -m poetry install --only main --no-interaction --no-ansi
+python -m poetry config installer.max-workers 4 --local || true
+
+for attempt in 1 2 3; do
+    echo "Poetry install attempt ${attempt}/3..."
+    if python -m poetry install --only main --no-interaction --no-ansi; then
+        break
+    fi
+
+    if [ "$attempt" -eq 3 ]; then
+        echo "Poetry install failed after 3 attempts." >&2
+        exit 1
+    fi
+
+    sleep $((attempt * 15))
+done
 '
 
 # Only restart services if they exist
