@@ -44,7 +44,7 @@ echo "Installing Poetry and dev dependencies in $DEV_ENV"
 set -euo pipefail
 cd '$APP_DIR'
 python -m pip install --upgrade 'pip<25' 'poetry>=1.8,<2.0'
-POETRY_VIRTUALENVS_CREATE=false python -m poetry install --with dev --sync --no-interaction --no-ansi
+POETRY_VIRTUALENVS_CREATE=false python -m poetry install --with dev --no-interaction --no-ansi
 "
 
 echo
