@@ -1,16 +1,30 @@
 #!/bin/bash
 set -euo pipefail
 
-cd /home/ec2-user/projects/Plexus
+APP_DIR="/home/ec2-user/projects/Plexus"
+CONDA_BIN="/home/ec2-user/miniconda3/bin/conda"
+CONDA_ENV="py311"
+
+cd "$APP_DIR"
 
 echo "Installing Poetry (if needed) and syncing runtime dependencies from poetry.lock..."
-/home/ec2-user/miniconda3/bin/conda run -n py311 bash -lc '
-if ! command -v poetry >/dev/null 2>&1; then
-    pip install "poetry>=1.8,<2.0"
+"$CONDA_BIN" run -n "$CONDA_ENV" bash -lc '
+set -euo pipefail
+
+if [ ! -f pyproject.toml ] || [ ! -f poetry.lock ]; then
+    echo "Missing pyproject.toml and/or poetry.lock in deployment directory" >&2
+    exit 1
 fi
 
-poetry config virtualenvs.create false
-poetry install --only main --sync --no-interaction --no-ansi
+python -m pip install --upgrade "pip<25"
+python -m pip install --upgrade "poetry>=1.8,<2.0"
+python -m poetry --version
+
+# Install into the conda environment (no nested virtualenv).
+# Do not use --sync here: Poetry is installed in this same env for bootstrap,
+# and --sync can remove Poetry itself mid-run.
+python -m poetry config virtualenvs.create false --local || true
+python -m poetry install --only main --no-interaction --no-ansi
 '
 
 # Only restart services if they exist
