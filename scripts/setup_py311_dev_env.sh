@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 APP_DIR="${APP_DIR:-$REPO_DIR}"
-RUNTIME_ENV="${RUNTIME_ENV:-py311}"
 DEV_ENV="${DEV_ENV:-py311-dev}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 
 if [ -z "${CONDA_BIN:-}" ]; then
   for candidate in \
@@ -35,16 +35,16 @@ if [ ! -d "$APP_DIR" ]; then
   exit 1
 fi
 
-echo "Creating/updating developer environment: $DEV_ENV"
-"$CONDA_BIN" create -n "$DEV_ENV" --clone "$RUNTIME_ENV" -y
+echo "Recreating fresh developer environment: $DEV_ENV (python=$PYTHON_VERSION)"
+"$CONDA_BIN" env remove -n "$DEV_ENV" -y >/dev/null 2>&1 || true
+"$CONDA_BIN" create -n "$DEV_ENV" "python=$PYTHON_VERSION" -y
 
 echo "Installing Poetry and dev dependencies in $DEV_ENV"
 "$CONDA_BIN" run -n "$DEV_ENV" bash -lc "
 set -euo pipefail
 cd '$APP_DIR'
 python -m pip install --upgrade 'pip<25' 'poetry>=1.8,<2.0'
-python -m poetry config virtualenvs.create false --local || true
-python -m poetry install --with dev --no-interaction --no-ansi
+POETRY_VIRTUALENVS_CREATE=false python -m poetry install --with dev --sync --no-interaction --no-ansi
 "
 
 echo
