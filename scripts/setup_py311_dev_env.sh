@@ -1,13 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/home/ec2-user/projects/Plexus}"
-CONDA_BIN="${CONDA_BIN:-/home/ec2-user/miniconda3/bin/conda}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+APP_DIR="${APP_DIR:-$REPO_DIR}"
 RUNTIME_ENV="${RUNTIME_ENV:-py311}"
 DEV_ENV="${DEV_ENV:-py311-dev}"
 
-if [ ! -x "$CONDA_BIN" ]; then
-  echo "Conda not found at: $CONDA_BIN" >&2
+if [ -z "${CONDA_BIN:-}" ]; then
+  for candidate in \
+    "$HOME/miniconda3/bin/conda" \
+    "/home/ec2-user/miniconda3/bin/conda" \
+    "/home/derek/miniconda3/bin/conda"
+  do
+    if [ -x "$candidate" ]; then
+      CONDA_BIN="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "${CONDA_BIN:-}" ] && command -v conda >/dev/null 2>&1; then
+    CONDA_BIN="$(command -v conda)"
+  fi
+fi
+
+if [ -z "${CONDA_BIN:-}" ] || [ ! -x "$CONDA_BIN" ]; then
+  echo "Conda binary not found. Set CONDA_BIN explicitly." >&2
   exit 1
 fi
 
