@@ -11,8 +11,8 @@ DEV_ENV="${DEV_ENV:-py311-dev}"
 if [ -z "${CONDA_BIN:-}" ]; then
   for candidate in \
     "$HOME/miniconda3/bin/conda" \
-    "/home/ec2-user/miniconda3/bin/conda" \
-    "/home/derek/miniconda3/bin/conda"
+    "$HOME/anaconda3/bin/conda" \
+    "/opt/conda/bin/conda"
   do
     if [ -x "$candidate" ]; then
       CONDA_BIN="$candidate"
