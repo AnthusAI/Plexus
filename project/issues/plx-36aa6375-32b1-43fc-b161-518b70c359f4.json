@@ -1,0 +1,25 @@
+{
+  "id": "plx-36aa6375-32b1-43fc-b161-518b70c359f4",
+  "title": "Fix scorecard info tool test contract mismatch",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a67c6075-a559-4023-a15a-e6e04e809bdd",
+      "author": "derek",
+      "text": "Fixed shared scorecard info validator contract mismatch: validate_scorecard_info_result now accepts both legacy top-level id and current nested id at additionalDetails.id. Verified by running MCP/tools/scorecard/scorecards_test.py::TestScorecardInfoTool::test_scorecard_info_basic_functionality (pass).",
+      "created_at": "2026-03-20T21:02:18.688687176Z"
+    }
+  ],
+  "created_at": "2026-03-20T21:01:44.866350436Z",
+  "updated_at": "2026-03-20T21:02:18.698912524Z",
+  "closed_at": "2026-03-20T21:02:18.698912524Z",
+  "custom": {}
+}

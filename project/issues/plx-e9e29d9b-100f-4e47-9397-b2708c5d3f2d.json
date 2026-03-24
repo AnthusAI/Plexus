@@ -1,0 +1,31 @@
+{
+  "id": "plx-e9e29d9b-100f-4e47-9397-b2708c5d3f2d",
+  "title": "Fix CodeDeploy after_install failure after Poetry migration",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "286449c6-d515-4b98-afaa-2ce6a31a8ad6",
+      "author": "derek",
+      "text": "Investigating CodeDeploy after_install failure on staging after Poetry migration; auditing deployment script assumptions and patching for robust Poetry-based installs.",
+      "created_at": "2026-03-20T19:27:20.469229163Z"
+    },
+    {
+      "id": "b3f49acd-9b86-47ea-b1f6-65dcd2a53320",
+      "author": "derek",
+      "text": "Confirmed AWS CodeDeploy failure root cause via aws deploy get-deployment-instance: after_install used poetry install --sync in same conda env, which removed Poetry packages mid-run. Updated after_install.sh to bootstrap Poetry via python -m pip/python -m poetry and switched install to --only main without --sync to prevent self-removal. Pushed commit e9a1a885 on feature/poetry-conversion.",
+      "created_at": "2026-03-20T19:29:20.394830105Z"
+    }
+  ],
+  "created_at": "2026-03-20T19:27:17.704711893Z",
+  "updated_at": "2026-03-20T19:29:20.405622953Z",
+  "closed_at": "2026-03-20T19:29:20.405622953Z",
+  "custom": {}
+}
