@@ -34,7 +34,7 @@ export function parseMessageMetadata(metadata: unknown): Record<string, unknown>
   }
   try {
     const parsed = JSON.parse(metadata)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>
     }
     return null

@@ -1,0 +1,31 @@
+{
+  "id": "plx-478fd012-fbdb-40af-b7e9-98a13ba8f0b8",
+  "title": "Clean local checkout and pull current branch",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c53be943-4358-4d31-ad1d-ddd95aa1c125",
+      "author": "ryan",
+      "text": "Local checkout is on develop at d931c75a and behind origin/develop by 3 commits. Committing the current untracked project artifacts locally first, then pulling with rebase onto origin/develop.",
+      "created_at": "2026-03-18T11:54:35.922154Z"
+    },
+    {
+      "id": "5fadb7d8-e97e-478f-8297-04c6fc4b56f3",
+      "author": "ryan",
+      "text": "Pull rebase hit one add/add conflict in the already-versioned rescue-task issue file. Resolving that file in favor of the current remote develop version while keeping the genuinely new local project artifacts.",
+      "created_at": "2026-03-18T11:55:05.443636Z"
+    }
+  ],
+  "created_at": "2026-03-18T11:54:10.477663Z",
+  "updated_at": "2026-03-18T11:55:05.443636Z",
+  "closed_at": null,
+  "custom": {}
+}
