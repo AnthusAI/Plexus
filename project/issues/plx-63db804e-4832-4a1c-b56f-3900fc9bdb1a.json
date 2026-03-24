@@ -1,0 +1,31 @@
+{
+  "id": "plx-63db804e-4832-4a1c-b56f-3900fc9bdb1a",
+  "title": "Harden after_install Poetry dependency download against transient network errors",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c1df2716-24ee-49e8-b277-e8636dc048d8",
+      "author": "derek",
+      "text": "Addressing transient ChunkedEncodingError during poetry install (litellm download) by adding deterministic retries/backoff and transport timeout tuning in deployment after_install script.",
+      "created_at": "2026-03-20T20:15:24.752210972Z"
+    },
+    {
+      "id": "d20cecba-2d40-4450-8815-f90ab4147620",
+      "author": "derek",
+      "text": "Added transient-network hardening to after_install Poetry path: set pip/poetry request timeouts, reduced installer workers, and added 3-attempt retry with backoff around poetry install --only main. Commit pushed: 359c3630.",
+      "created_at": "2026-03-20T20:15:49.862183133Z"
+    }
+  ],
+  "created_at": "2026-03-20T20:15:18.296551540Z",
+  "updated_at": "2026-03-20T20:15:49.872754246Z",
+  "closed_at": "2026-03-20T20:15:49.872754246Z",
+  "custom": {}
+}
