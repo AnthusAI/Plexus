@@ -22,10 +22,22 @@
       "author": "derek.norrbom",
       "text": "Implementation completed in Plexus:\n\n- Replaced inline release workflow with call to platform-ci reusable semantic release workflow in .github/workflows/release.yml (python 3.11, semantic_release_requirement, anthusbot secrets, guarded workflow_run conditions).\n- Added .github/workflows/ruleset-sync.yml wrapper using platform-ci reusable ruleset sync workflow (check/apply modes, RULESET_ADMIN_TOKEN).\n- Added desired-state ruleset file infrastructure/github-rulesets/main-branch-protection.json with main ref targeting, pull request protection, deletion/non-fast-forward rules, and team bypass actor (id 16575896).\n\nValidation:\n- YAML parse check passed for release.yml and ruleset-sync.yml.\n- JSON validation passed for main-branch-protection.json.",
       "created_at": "2026-03-24T17:32:08.115642Z"
+    },
+    {
+      "id": "92daacf0-e72d-412b-bb08-51c494574ae1",
+      "author": "derek.norrbom",
+      "text": "Fixing ruleset drift: fetch live main-branch-protection ruleset and align desired required_status_checks contexts in infrastructure/github-rulesets/main-branch-protection.json.",
+      "created_at": "2026-03-24T17:57:11.051291Z"
+    },
+    {
+      "id": "14ecce89-01e9-4e78-8bb4-3cdcf316d9e9",
+      "author": "derek.norrbom",
+      "text": "Patched infrastructure/github-rulesets/main-branch-protection.json to include required_status_checks rule matching live ruleset contexts: Python Tests (3.11), Python Tests (3.12), Dashboard Unit Tests, Dashboard Storybook Tests.",
+      "created_at": "2026-03-24T17:57:22.630506Z"
     }
   ],
   "created_at": "2026-03-24T17:31:06.299454Z",
-  "updated_at": "2026-03-24T17:32:08.115642Z",
+  "updated_at": "2026-03-24T17:57:22.630506Z",
   "closed_at": null,
   "custom": {}
 }

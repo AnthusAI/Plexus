@@ -34,6 +34,19 @@
         ]
       }
     },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "Python Tests (3.11)" },
+          { "context": "Python Tests (3.12)" },
+          { "context": "Dashboard Unit Tests" },
+          { "context": "Dashboard Storybook Tests" }
+        ]
+      }
+    },
     { "type": "deletion" },
     { "type": "non_fast_forward" }
   ]
