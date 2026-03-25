@@ -3102,9 +3102,12 @@ def feedback(
 
         # Auto-fetch champion version if not specified — always run Mode 2 (accuracy against feedback)
         if not version:
-            score_obj_for_champion = DashboardScore.get_by_id(score_id, client=client)
-            if score_obj_for_champion and score_obj_for_champion.championVersionId:
-                version = score_obj_for_champion.championVersionId
+            _champ_result = client.execute(
+                'query GetScore($id: ID!) { getScore(id: $id) { championVersionId } }',
+                {'id': score_id}
+            )
+            version = (_champ_result.get('getScore') or {}).get('championVersionId')
+            if version:
                 console.print(f"[dim]Auto-resolved champion version: {version}[/dim]")
             else:
                 console.print("[bold red]Error: No champion version found for this score. Use --version to specify one.[/bold red]")
