@@ -394,7 +394,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     scores = []
                     for _section in sc_data.get('sections', {}).get('items', []):
                         for _score in _section.get('scores', {}).get('items', []):
-                            if not _score.get('isDisabled') and _score.get('championVersionId'):
+                            if _score.get('championVersionId'):
                                 scores.append(_score)
                     return scores
 
