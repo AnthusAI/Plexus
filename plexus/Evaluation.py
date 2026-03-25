@@ -238,13 +238,11 @@ class Evaluation:
     @staticmethod
     def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
         """
-        Convert native Gwet's AC1 [-1, 1] into legacy-compatible percentage [0, 100].
+        Return Gwet's AC1 value as-is in its native [-1, 1] range.
         """
         if alignment_value is None:
             return 0.0
-        # Clamp to valid AC1 range before mapping to avoid drift from floating point noise.
-        clamped = max(-1.0, min(1.0, float(alignment_value)))
-        return ((clamped + 1.0) / 2.0) * 100.0
+        return float(alignment_value)
 
 
     def __enter__(self):
@@ -1311,6 +1309,12 @@ class Evaluation:
                         self.processed_items_by_score[score_name] = processed_counter
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
+                        # Advance to Processing stage on first item completed
+                        if processed_counter == 1 and tracker and not getattr(self, '_processing_stage_started', False):
+                            self._processing_stage_started = True
+                            tracker.advance_stage()
+                            self.logging.info("==== STAGE: Processing ====")
+
                         # Update tracker with actual count of processed items
                         if tracker and tracker.current_stage:
                             tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
@@ -3580,10 +3584,6 @@ class AccuracyEvaluation(Evaluation):
                 selected_sample_rows = df
 
             # Update tracker status without advancing stage
-            # Advance to Processing stage before starting predictions
-            if tracker:
-                tracker.advance_stage()
-                self.logging.info("==== STAGE: Processing ====")
             if tracker and tracker.current_stage:
                 tracker.current_stage.status_message = "Generating predictions..."
             if tracker:
