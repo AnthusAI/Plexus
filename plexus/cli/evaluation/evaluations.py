@@ -3113,17 +3113,18 @@ def feedback(
             import tempfile
             import os
             
-            # Get the score object to access external_id
+            # Get the score object to access its name for FeedbackItems lookup
             score_obj = DashboardScore.get_by_id(score_id, client=client)
-            score_external_id = score_obj.externalId if score_obj and score_obj.externalId else score
-            
-            console.print(f"Using score identifier: {score_external_id}")
+            score_name_for_dataset = score_obj.name if score_obj and score_obj.name else score
+
+            console.print(f"Using score name for dataset: {score_name_for_dataset}")
 
             # Create a temporary YAML file with FeedbackItems dataset override
+            # Use score NAME (not external ID) since FeedbackItems resolves by name/key/ID
             dataset_config = {
                 "class": "FeedbackItems",
                 "scorecard": scorecard,  # Use the identifier provided by user
-                "score": score_external_id,  # Use external ID if available, otherwise the identifier
+                "score": score_name_for_dataset,  # Use score name for reliable FeedbackItems lookup
                 "days": days
             }
 
