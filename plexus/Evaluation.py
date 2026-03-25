@@ -1520,12 +1520,19 @@ class Evaluation:
         
         # Build update input with only valid fields for UpdateEvaluationInput
         # Only include the fields that are allowed by the schema
+        # For completed evaluations, totalItems = processedItems (composite scores
+        # multiply processed_items by sub-score count, so we match them at completion).
+        # During the run, use number_of_texts_to_sample as the estimate.
+        if status == "COMPLETED":
+            total_for_update = self.processed_items
+        else:
+            total_for_update = getattr(self, 'number_of_texts_to_sample', 0)
         update_input = {
             "id": self.experiment_id,
             "status": status,
             "accuracy": metrics["accuracy"] * 100,
-            "totalItems": getattr(self, 'number_of_texts_to_sample', 0),
-            "processedItems": self.processed_items  # Add processed items count for progress tracking
+            "totalItems": total_for_update,
+            "processedItems": self.processed_items
         }
         
         # Add score ID and version ID if available
