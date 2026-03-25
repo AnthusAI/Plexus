@@ -3099,7 +3099,17 @@ def feedback(
             console.print(f"[bold red]Error: Could not find score '{score}' in scorecard '{scorecard}'[/bold red]")
             return
         console.print(f"Resolved score ID: {score_id}")
-        
+
+        # Auto-fetch champion version if not specified — always run Mode 2 (accuracy against feedback)
+        if not version:
+            score_obj_for_champion = DashboardScore.get_by_id(score_id, client=client)
+            if score_obj_for_champion and score_obj_for_champion.championVersionId:
+                version = score_obj_for_champion.championVersionId
+                console.print(f"[dim]Auto-resolved champion version: {version}[/dim]")
+            else:
+                console.print("[bold red]Error: No champion version found for this score. Use --version to specify one.[/bold red]")
+                return
+
         # If version is specified, use accuracy evaluation with FeedbackItems dataset
         if version:
             console.print(f"\n[bold]Mode: Accuracy Evaluation with FeedbackItems Dataset[/bold]")
