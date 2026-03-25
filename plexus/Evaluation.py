@@ -3580,6 +3580,10 @@ class AccuracyEvaluation(Evaluation):
                 selected_sample_rows = df
 
             # Update tracker status without advancing stage
+            # Advance to Processing stage before starting predictions
+            if tracker:
+                tracker.advance_stage()
+                self.logging.info("==== STAGE: Processing ====")
             if tracker and tracker.current_stage:
                 tracker.current_stage.status_message = "Generating predictions..."
             if tracker:
