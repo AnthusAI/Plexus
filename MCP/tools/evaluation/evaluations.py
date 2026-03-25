@@ -451,10 +451,15 @@ def register_evaluation_tools(mcp: FastMCP):
                         except Exception as exc:
                             return {"score_name": sn, "status": "error", "error": str(exc)}
 
+                    # Run evaluations sequentially: CliRunner is not thread-safe (it patches
+                    # global sys.stdout/stderr), so concurrent invocations cause
+                    # "I/O operation on closed file" errors.
                     _loop = asyncio.get_event_loop()
-                    with ThreadPoolExecutor(max_workers=concurrency) as _pool:
-                        _futures = [_loop.run_in_executor(_pool, run_single, s) for s in sc_scores]
-                        bulk_results = list(await asyncio.gather(*_futures))
+                    bulk_results = []
+                    for _s in sc_scores:
+                        with ThreadPoolExecutor(max_workers=1) as _pool:
+                            _result = await _loop.run_in_executor(_pool, run_single, _s)
+                        bulk_results.append(_result)
 
                     completed_count = sum(1 for r in bulk_results if r.get('status') == 'completed')
                     failed_count = sum(1 for r in bulk_results if r.get('status') == 'error')
