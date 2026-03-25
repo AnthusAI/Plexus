@@ -303,34 +303,41 @@ def register_evaluation_tools(mcp: FastMCP):
         fresh: bool = False,
         reload: bool = False,
         allow_no_labels: bool = False,
+        concurrency: int = 5,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
-        
+
         Parameters:
         - scorecard_name: Name of the scorecard to evaluate (required)
-        - score_name: Name of specific score to evaluate (REQUIRED for feedback evaluations, optional for accuracy)
+        - score_name: Name of specific score to evaluate (optional for feedback; if omitted, runs all scores in the scorecard)
         - evaluation_type: Type of evaluation - "accuracy" (default) or "feedback"
         - n_samples: Number of samples for accuracy evaluation (default: 10)
-        - days: Number of days to look back for feedback evaluation (default: 7)
+        - days: Number of days to look back for feedback evaluation (default: 7). The feedback items
+                collected in this window become the evaluation dataset — no random sampling, all
+                feedback items in the window are used as ground truth. Use 30-60 days for more data.
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
-        - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if provided, runs accuracy eval with FeedbackItems dataset
+        - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if
+                   provided, overrides the auto-fetched champion version.
         - latest: Use latest score version for accuracy evaluation (default: False)
         - fresh: Pull fresh, non-cached data from the data lake (default: False)
         - reload: Reload existing dataset by refreshing values for current records only (default: False)
         - allow_no_labels: Allow evaluation without ground truth labels (default: False)
                           When True, creates score results and predicted class distribution
                           but skips accuracy metrics
-        
+        - concurrency: Max parallel evaluations when running bulk (all-scores) feedback mode (default: 5)
+
         Returns:
-        - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL
-        
-        NOTE: Feedback evaluations MUST specify a score_name because evaluation records
-        are associated with a single score, not an entire scorecard.
-        
-        FEEDBACK EVALUATION MODES:
-        - Without version: Analyzes feedback edits to measure agreement (fast, no predictions)
-        - With version: Runs predictions using specified version against feedback as ground truth (slower, tests version)
+        - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL.
+          For bulk feedback mode (no score_name), returns aggregate results for all scores.
+
+        FEEDBACK EVALUATION BEHAVIOR:
+        - Runs Mode 2 (accuracy evaluation using feedback items as ground truth) by default.
+        - Automatically fetches the score's current champion version ID to use as the predictor.
+        - The champion version's code is run against all feedback items in the time window,
+          and predictions are compared to human-corrected labels to compute accuracy metrics.
+        - If score_name is omitted, runs for ALL scores in the scorecard concurrently.
+        - Supply version= explicitly to override the champion version (e.g. to test a specific version).
         """
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
@@ -338,10 +345,6 @@ def register_evaluation_tools(mcp: FastMCP):
         # Validate evaluation type
         if evaluation_type not in ["accuracy", "feedback"]:
             return f"Error: evaluation_type must be 'accuracy' or 'feedback', got '{evaluation_type}'"
-        
-        # Validate that feedback evaluations have a score_name
-        if evaluation_type == "feedback" and not score_name:
-            return "Error: score_name is required for feedback evaluations. Feedback evaluations must be run on a single score."
 
         # Validate mutually exclusive version options (same as CLI)
         if version and latest:
@@ -358,23 +361,114 @@ def register_evaluation_tools(mcp: FastMCP):
             from plexus.Evaluation import Evaluation
 
             if evaluation_type == "feedback":
-                # Build CLI arguments for feedback evaluation
-                args = [
-                    '--scorecard', scorecard_name,
-                    '--days', str(days)
-                ]
+                # Helper: fetch all scores for the scorecard with their champion version IDs
+                async def _fetch_scorecard_scores() -> List[Dict[str, Any]]:
+                    from plexus.cli.shared.client_utils import create_client
+                    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+                    _client = create_client()
+                    sc_id = resolve_scorecard_identifier(_client, scorecard_name)
+                    if not sc_id:
+                        return []
+                    _query = f"""
+                    query GetScorecardForFeedback {{
+                        getScorecard(id: "{sc_id}") {{
+                            sections {{
+                                items {{
+                                    scores {{
+                                        items {{
+                                            id
+                                            name
+                                            key
+                                            externalId
+                                            championVersionId
+                                            isDisabled
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                    """
+                    _result = _client.execute(_query)
+                    sc_data = (_result.get('getScorecard') or {})
+                    scores = []
+                    for _section in sc_data.get('sections', {}).get('items', []):
+                        for _score in _section.get('scores', {}).get('items', []):
+                            if not _score.get('isDisabled') and _score.get('championVersionId'):
+                                scores.append(_score)
+                    return scores
 
                 if score_name:
-                    args.extend(['--score', score_name])
-                
-                # Add version parameter if provided (enables accuracy eval with FeedbackItems dataset)
-                if version:
-                    args.extend(['--version', version])
+                    # Single score mode: auto-fetch champion version if not provided
+                    resolved_version = version
+                    if not resolved_version:
+                        sc_scores = await _fetch_scorecard_scores()
+                        for sc_score in sc_scores:
+                            if (sc_score.get('name', '').lower() == score_name.lower() or
+                                    sc_score.get('key') == score_name or
+                                    sc_score.get('externalId') == score_name or
+                                    sc_score.get('id') == score_name):
+                                resolved_version = sc_score.get('championVersionId')
+                                break
+                        if resolved_version:
+                            logger.info(f"Auto-fetched champion version {resolved_version} for '{score_name}'")
+                        else:
+                            logger.warning(f"Could not auto-fetch champion version for '{score_name}', running feedback alignment mode")
 
-                # Run the CLI command in a thread pool to avoid event loop conflicts
-                def run_cli_command():
-                    runner = CliRunner()
-                    return runner.invoke(feedback, args, catch_exceptions=False, standalone_mode=False)
+                    args = ['--scorecard', scorecard_name, '--days', str(days), '--score', score_name]
+                    if resolved_version:
+                        args.extend(['--version', resolved_version])
+
+                    # Run the CLI command in a thread pool to avoid event loop conflicts
+                    def run_cli_command():
+                        runner = CliRunner()
+                        return runner.invoke(feedback, args, catch_exceptions=False, standalone_mode=False)
+
+                else:
+                    # Bulk mode: run feedback accuracy evaluations for all scores in the scorecard
+                    logger.info(f"Bulk feedback evaluation mode for '{scorecard_name}' (concurrency={concurrency})")
+                    sc_scores = await _fetch_scorecard_scores()
+                    if not sc_scores:
+                        return json.dumps({"error": f"No scores with champion versions found in scorecard '{scorecard_name}'"})
+
+                    logger.info(f"Running feedback evaluations for {len(sc_scores)} scores")
+
+                    def run_single(sc_score_data: Dict[str, Any]) -> Dict[str, Any]:
+                        sn = sc_score_data['name']
+                        cv = sc_score_data['championVersionId']
+                        _args = ['--scorecard', scorecard_name, '--days', str(days),
+                                 '--score', sn, '--version', cv]
+                        _runner = CliRunner()
+                        try:
+                            _r = _runner.invoke(feedback, _args, catch_exceptions=False, standalone_mode=False)
+                            if _r.exit_code != 0:
+                                return {"score_name": sn, "status": "error", "error": _r.output}
+                            _record = _r.return_value
+                            if _record and hasattr(_record, 'id'):
+                                return {"score_name": sn, "status": "completed",
+                                        "evaluation_id": _record.id, "champion_version_id": cv}
+                            return {"score_name": sn, "status": "error", "error": "No evaluation record returned"}
+                        except Exception as exc:
+                            return {"score_name": sn, "status": "error", "error": str(exc)}
+
+                    _loop = asyncio.get_event_loop()
+                    with ThreadPoolExecutor(max_workers=concurrency) as _pool:
+                        _futures = [_loop.run_in_executor(_pool, run_single, s) for s in sc_scores]
+                        bulk_results = list(await asyncio.gather(*_futures))
+
+                    completed_count = sum(1 for r in bulk_results if r.get('status') == 'completed')
+                    failed_count = sum(1 for r in bulk_results if r.get('status') == 'error')
+
+                    return json.dumps({
+                        "mode": "bulk_feedback_evaluation",
+                        "scorecard": scorecard_name,
+                        "days": days,
+                        "total_scores": len(sc_scores),
+                        "completed": completed_count,
+                        "failed": failed_count,
+                        "results": bulk_results,
+                        "dashboard_url": "https://app.plexusanalytics.com/evaluations"
+                    })
 
             else:  # accuracy evaluation
                 # Build CLI arguments for accuracy evaluation
