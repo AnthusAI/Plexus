@@ -1524,6 +1524,7 @@ class Evaluation:
             "id": self.experiment_id,
             "status": status,
             "accuracy": metrics["accuracy"] * 100,
+            "totalItems": getattr(self, 'number_of_texts_to_sample', 0),
             "processedItems": self.processed_items  # Add processed items count for progress tracking
         }
         
@@ -3343,7 +3344,7 @@ class FeedbackEvaluation(Evaluation):
 
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
         # Store evaluation_id BEFORE calling super().__init__ so parent can use it
         self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
@@ -3362,10 +3363,11 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
-        
+
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
+        self.skip_local_reports = skip_local_reports
         # evaluation_id and account_id already set above
         # Don't overwrite scorecard_id here since it's already set
         self.results_queue = asyncio.Queue()
@@ -3677,6 +3679,11 @@ class AccuracyEvaluation(Evaluation):
                         self.logging.info(f"Overall accuracy: {overall_accuracy}%")
                     else:
                         raise
+
+                # Skip local file generation when requested (e.g. feedback accuracy evaluations
+                # that already store all results in the API).
+                if self.skip_local_reports:
+                    return metrics
 
                 # Generate reports - determine the correct report folder
                 if self.subset_of_score_names and len(self.subset_of_score_names) == 1:

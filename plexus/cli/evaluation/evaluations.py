@@ -3255,6 +3255,30 @@ def feedback(
                 else:
                     console.print("[bold red]Warning: Scorecard object has no 'scores' attribute![/bold red]")
                 
+                # Create Task and TaskStages for progress tracking (if not passed in via --task-id)
+                tracker = None
+                if not task_id:
+                    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
+
+                    stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                    tracker = TaskProgressTracker(
+                        total_items=0,
+                        stage_configs=stage_configs,
+                        target=f"evaluation/feedback/{scorecard}/{score}",
+                        command=f"evaluate feedback --scorecard {scorecard} --score {score} --version {version}",
+                        description=f"Feedback accuracy evaluation for {scorecard} > {score}",
+                        dispatch_status="DISPATCHED",
+                        prevent_new_task=False,
+                        metadata={
+                            "type": "Feedback Accuracy Evaluation",
+                            "scorecard": scorecard,
+                            "task_type": "Feedback Accuracy Evaluation"
+                        },
+                        account_id=account_id,
+                        client=client
+                    )
+                    task_id = tracker.task.id
+
                 # Create evaluation record
                 started_at = datetime.now(timezone.utc)
                 evaluation_params = {
@@ -3297,11 +3321,12 @@ def feedback(
                     evaluation_id=evaluation_id,
                     account_key=account_key,
                     scorecard_id=scorecard_id,
-                    task_id=task_id
+                    task_id=task_id,
+                    skip_local_reports=True
                 )
                 
                 # Run the evaluation
-                await_result = asyncio.run(accuracy_eval.run())
+                await_result = asyncio.run(accuracy_eval.run(tracker=tracker))
                 
                 console.print("\n[bold green]✓ Feedback Evaluation (with version) Complete[/bold green]")
                 console.print(f"\n[bold]View full results:[/bold]")
