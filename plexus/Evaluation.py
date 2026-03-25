@@ -2345,8 +2345,9 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
             
-            # Extract feedback_item_id if available
-            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            # Extract feedback_item_id if available (prefer the passed-in value over metadata)
+            if feedback_item_id is None and score_result.metadata:
+                feedback_item_id = score_result.metadata.get('feedback_item_id')
             
             # Ensure we have valid metadata
             metadata_dict = {
