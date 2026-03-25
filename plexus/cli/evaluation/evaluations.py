@@ -3336,7 +3336,9 @@ def feedback(
                     account_key=account_key,
                     scorecard_id=scorecard_id,
                     task_id=task_id,
-                    skip_local_reports=True
+                    skip_local_reports=True,
+                    number_of_texts_to_sample=10000,  # Process all feedback items, not just default 100
+                    subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                 )
                 
                 # Run the evaluation
