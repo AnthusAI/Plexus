@@ -3343,7 +3343,14 @@ def feedback(
                 
                 # Run the evaluation
                 await_result = asyncio.run(accuracy_eval.run(tracker=tracker))
-                
+
+                # Complete the tracker to mark Finalizing stage as done
+                if tracker:
+                    try:
+                        tracker.complete()
+                    except Exception as _tracker_err:
+                        console.print(f"[yellow]Warning: tracker.complete() failed: {_tracker_err}[/yellow]")
+
                 console.print("\n[bold green]✓ Feedback Evaluation (with version) Complete[/bold green]")
                 console.print(f"\n[bold]View full results:[/bold]")
                 console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")
