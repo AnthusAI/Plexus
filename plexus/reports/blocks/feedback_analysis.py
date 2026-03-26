@@ -659,7 +659,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         "lifecycle_tier": _lifecycle_tier,
                         "is_new": _is_new,
                         "is_trending": _is_trending,
-                        "_llm_input": (keywords, [e["text"] for e in exemplars]) if use_llm_labels and keywords else None,
+                        "_llm_input": (keywords, [e["text"] for e in exemplars]) if use_llm_labels and (keywords or exemplars) else None,
                     }
                     if days_inactive is not None:
                         topic_entry["days_inactive"] = days_inactive
