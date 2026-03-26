@@ -71,6 +71,7 @@ dependencies = [
     "rich>=13.9.4",
     "gql[requests]>=3.0.0,<4.0.0",
     "openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main",
+    "biblicus @ git+https://github.com/AnthusAI/Biblicus.git@main",
     "invoke>=2.2.0",
     "celery>=5.4.0",
     "pycurl>=7.45.4",
