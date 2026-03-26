@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1cb4cc49-6105-4b06-a502-ab6c02e01a3b",
+  "issue_id": "plx-169b8aed-312d-498c-8a9e-474ab9826f9e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-26T21:33:32.041Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Use local Tactus path dependency in Plexus for end-to-end local validation"
+  }
+}
