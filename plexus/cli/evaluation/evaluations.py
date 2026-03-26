@@ -1866,6 +1866,25 @@ def accuracy(
             
             logging.info(f"Retrieved {len(labeled_samples_data)} samples.")
 
+            if len(labeled_samples_data) == 0:
+                logging.warning("No feedback items found in the specified time window. Marking evaluation as NO_DATA.")
+                if evaluation_record:
+                    try:
+                        evaluation_record.update(**{
+                            'status': 'COMPLETED',
+                            'totalItems': 0,
+                            'processedItems': 0,
+                            'errorMessage': 'No feedback items found in the specified time window.',
+                        })
+                    except Exception as _upd_err:
+                        logging.warning(f"Could not update evaluation record for NO_DATA: {_upd_err}")
+                if tracker:
+                    try:
+                        tracker.complete()
+                    except Exception:
+                        pass
+                return evaluation_record
+
             # Determine the subset of score names to evaluate
             subset_of_score_names = None
             if target_score_identifiers:
