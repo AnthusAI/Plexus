@@ -557,22 +557,47 @@ class FeedbackAnalysis(BaseReportBlock):
         try:
             import numpy as np
             from datetime import timezone as _tz
-            from biblicus.analysis.reinforcement_memory import (
-                S3EmbeddingCache,
-                sentence_transformer_embedder,
-            )
-            from biblicus.analysis.reinforcement_memory._clusterer import TopicClusterer
-            from biblicus.analysis.reinforcement_memory._weights import tier_from_weight
-            from biblicus.analysis.reinforcement_memory._lifecycle import derive_lifecycle
+            from plexus.analysis.embedding_cache import EmbeddingCache, EmbeddingService
+            from plexus.analysis.topic_clusterer import TopicClusterer
+            from plexus.analysis.memory_weights import tier_from_weight
 
-            cache_bucket = self.config.get("memory_cache_bucket", "")
             model_id = self.config.get("memory_model_id", "all-MiniLM-L6-v2")
             min_topic_size = self.config.get("memory_min_topic_size", 5)
             use_llm_labels = self.config.get("memory_llm_labels", True)
             use_causal_inference = self.config.get("memory_causal_inference", True)
 
-            cache = S3EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
-            embed_fn = sentence_transformer_embedder(model_id=model_id, cache=cache)
+            embed_svc = EmbeddingService(cache=EmbeddingCache(), model_id=model_id)
+
+            def _derive_lifecycle(timestamps_iso, now):
+                """Inline lifecycle deriver matching VectorTopicMemory logic."""
+                from datetime import datetime as _dt
+                SHORT_TERM = 30
+                MEDIUM_TERM = 90
+                has_short = has_medium = has_long = False
+                for ts_str in timestamps_iso:
+                    if not ts_str:
+                        continue
+                    try:
+                        ts = _dt.fromisoformat(ts_str)
+                        ts_aware = ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)
+                        age = max(0, (now - ts_aware).days)
+                        if age <= SHORT_TERM:
+                            has_short = True
+                        elif age <= MEDIUM_TERM:
+                            has_medium = True
+                        else:
+                            has_long = True
+                    except Exception:
+                        pass
+                is_new = has_short and not has_medium and not has_long
+                is_trending = (has_short or has_medium) and not has_long
+                if is_new:
+                    lc = "new"
+                elif is_trending:
+                    lc = "trending"
+                else:
+                    lc = "established"
+                return lc, is_new, is_trending, None
 
             now = datetime.now(_tz.utc)
             scores_out = []
@@ -587,7 +612,7 @@ class FeedbackAnalysis(BaseReportBlock):
                     continue
 
                 self._log(f"Memory analysis: embedding {len(texts)} edit comments for score '{score_data['score_name']}'")
-                embeddings = np.array(await asyncio.to_thread(embed_fn, texts))
+                embeddings = np.array(await asyncio.to_thread(embed_svc.batch_embed, texts))
 
                 clusterer = TopicClusterer(min_topic_size=min(min_topic_size, max(2, len(texts) // 3)))
                 topic_ids, _ = clusterer.cluster(embeddings, texts)
@@ -644,7 +669,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         (ea if ea.tzinfo else ea.replace(tzinfo=_tz.utc)).isoformat()
                         for ea in cluster_edited_ats
                     ]
-                    _lifecycle_tier, _is_new, _is_trending, _ = derive_lifecycle(
+                    _lifecycle_tier, _is_new, _is_trending, _ = _derive_lifecycle(
                         member_ts_iso, now=now
                     )
 
