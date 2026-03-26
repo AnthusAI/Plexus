@@ -451,7 +451,10 @@ class FeedbackAnalysis(BaseReportBlock):
                             try:
                                 memories_yaml = yaml.dump(memories, indent=2, allow_unicode=True, sort_keys=False)
                                 from plexus.reports.s3_utils import add_file_to_report_block
-                                all_paths = add_file_to_report_block(report_block_id, "memories.yaml", memories_yaml, content_type="text/yaml", client=self.api_client)
+                                import re as _re
+                                _sc_slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', str(cc_scorecard_id_param))[:40]
+                                _memories_filename = f"memories-{_sc_slug}.yaml"
+                                all_paths = add_file_to_report_block(report_block_id, _memories_filename, memories_yaml, content_type="text/yaml", client=self.api_client)
                                 # add_file_to_report_block returns full list; the new file is always last
                                 memories_path = all_paths[-1] if isinstance(all_paths, list) else all_paths
                                 final_output_data["memories_file"] = memories_path
