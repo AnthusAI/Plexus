@@ -45,23 +45,47 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
  * in a structured before/after format with toggleable raw JSON view.
  */
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
+  const [loadedOutput, setLoadedOutput] = React.useState<FeedbackAnalysisData | null>(null);
   const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
 
   // Parse output unconditionally so hooks always run in the same order
-  let feedbackData: FeedbackAnalysisData | null = null;
+  let parsedOutput: FeedbackAnalysisData | null = null;
   let parseError = false;
   if (props.output) {
     try {
       if (typeof props.output === 'string') {
-        feedbackData = yaml.load(props.output) as FeedbackAnalysisData;
+        parsedOutput = yaml.load(props.output) as FeedbackAnalysisData;
       } else {
-        feedbackData = props.output as FeedbackAnalysisData;
+        parsedOutput = props.output as FeedbackAnalysisData;
       }
     } catch (error) {
       console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
       parseError = true;
     }
   }
+
+  // Fetch compacted output attachment if present (large outputs are offloaded to S3)
+  const outputAttachment = (parsedOutput as any)?.output_attachment ?? null;
+  const outputCompacted = (parsedOutput as any)?.output_compacted ?? false;
+  React.useEffect(() => {
+    if (!outputCompacted || !outputAttachment || loadedOutput) return;
+    (async () => {
+      try {
+        const { downloadData } = await import('aws-amplify/storage');
+        const result = await downloadData({
+          path: outputAttachment,
+          options: { bucket: 'reportBlockDetails' as any },
+        }).result;
+        const text = await result.body.text();
+        setLoadedOutput(yaml.load(text) as FeedbackAnalysisData);
+      } catch (e) {
+        console.warn('FeedbackAnalysis: failed to load output attachment', e);
+      }
+    })();
+  }, [outputCompacted, outputAttachment, loadedOutput]);
+
+  // Use loaded attachment data if available, otherwise fall back to inline parsed output
+  const feedbackData = loadedOutput ?? parsedOutput;
 
   const memoriesFile = feedbackData?.memories_file ?? null;
   React.useEffect(() => {
@@ -92,6 +116,12 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
       </div>
     );
   }
+
+  // Show loading state while fetching compacted output
+  if (outputCompacted && !loadedOutput) {
+    return <p className="text-sm text-muted-foreground p-4">Loading report data…</p>;
+  }
+
   if (!feedbackData) {
     return <p>No feedback analysis data available after parsing.</p>;
   }
