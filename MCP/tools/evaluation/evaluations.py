@@ -361,6 +361,12 @@ def register_evaluation_tools(mcp: FastMCP):
             from plexus.Evaluation import Evaluation
 
             if evaluation_type == "feedback":
+                import subprocess
+                import shutil
+                import time as _time
+
+                plexus_bin = shutil.which("plexus") or "/home/ryan/miniconda3/envs/py311/bin/plexus"
+
                 # Helper: fetch all scores for the scorecard with their champion version IDs
                 async def _fetch_scorecard_scores() -> List[Dict[str, Any]]:
                     from plexus.cli.shared.client_utils import create_client
@@ -398,8 +404,46 @@ def register_evaluation_tools(mcp: FastMCP):
                                 scores.append(_score)
                     return scores
 
+                def _spawn_feedback(sc: str, sco: str, d: int, ver: Optional[str]) -> subprocess.Popen:
+                    """Spawn plexus evaluate feedback as a fire-and-forget background process."""
+                    cmd = [plexus_bin, "evaluate", "feedback",
+                           "--scorecard", sc, "--score", sco, "--days", str(d)]
+                    if ver:
+                        cmd += ["--version", ver]
+                    return subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,  # detach from MCP server process group
+                    )
+
+                async def _wait_for_evaluation(spawn_time: float, timeout: float = 30.0) -> Optional[str]:
+                    """Poll the API until a new evaluation appears that was created after spawn_time."""
+                    import datetime as _dt
+                    deadline = _time.monotonic() + timeout
+                    while _time.monotonic() < deadline:
+                        await asyncio.sleep(2)
+                        try:
+                            eval_info = Evaluation.get_latest_evaluation(evaluation_type="feedback")
+                            if eval_info:
+                                created_at_str = eval_info.get("created_at") or eval_info.get("createdAt") or ""
+                                if created_at_str:
+                                    try:
+                                        # Parse ISO timestamp; accept both Z and +00:00
+                                        created_ts = _dt.datetime.fromisoformat(
+                                            created_at_str.replace("Z", "+00:00")
+                                        ).timestamp()
+                                        if created_ts >= spawn_time - 5:  # 5s grace for clock skew
+                                            return eval_info.get("id")
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                    return None
+
                 if score_name:
-                    # Single score mode: auto-fetch champion version if not provided
+                    # Single score: resolve champion version, spawn background process,
+                    # then wait up to 30s for the evaluation record to appear in the DB.
                     resolved_version = version
                     if not resolved_version:
                         sc_scores = await _fetch_scorecard_scores()
@@ -413,66 +457,67 @@ def register_evaluation_tools(mcp: FastMCP):
                         if resolved_version:
                             logger.info(f"Auto-fetched champion version {resolved_version} for '{score_name}'")
                         else:
-                            logger.warning(f"Could not auto-fetch champion version for '{score_name}', running feedback alignment mode")
+                            logger.warning(f"No champion version for '{score_name}', proceeding without --version")
 
-                    args = ['--scorecard', scorecard_name, '--days', str(days), '--score', score_name]
-                    if resolved_version:
-                        args.extend(['--version', resolved_version])
+                    logger.info(f"Spawning feedback evaluation for '{score_name}' (background)")
+                    spawn_time = _time.time()
+                    _spawn_feedback(scorecard_name, score_name, days, resolved_version)
 
-                    # Run the CLI command in a thread pool to avoid event loop conflicts
-                    def run_cli_command():
-                        runner = CliRunner()
-                        return runner.invoke(feedback, args, catch_exceptions=False, standalone_mode=False)
+                    # Give the process a moment to start, then poll for the evaluation record
+                    await asyncio.sleep(3)
+                    evaluation_id = await _wait_for_evaluation(spawn_time, timeout=25)
+
+                    if evaluation_id:
+                        logger.info(f"Evaluation record created: {evaluation_id}")
+                        return json.dumps({
+                            "status": "dispatched",
+                            "evaluation_id": evaluation_id,
+                            "scorecard": scorecard_name,
+                            "score": score_name,
+                            "days": days,
+                            "champion_version_id": resolved_version,
+                            "message": "Evaluation is running in the background. Use plexus_evaluation_info to check status.",
+                            "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
+                        })
+                    else:
+                        return json.dumps({
+                            "status": "dispatched",
+                            "evaluation_id": None,
+                            "scorecard": scorecard_name,
+                            "score": score_name,
+                            "days": days,
+                            "champion_version_id": resolved_version,
+                            "message": "Evaluation dispatched but ID not yet available. Use plexus_evaluation_info(use_latest=True) in ~30s to find it.",
+                        })
 
                 else:
-                    # Bulk mode: run feedback accuracy evaluations for all scores in the scorecard
-                    logger.info(f"Bulk feedback evaluation mode for '{scorecard_name}' (concurrency={concurrency})")
+                    # Bulk mode: spawn one background process per score, return immediately.
+                    logger.info(f"Bulk feedback evaluation (background) for '{scorecard_name}'")
                     sc_scores = await _fetch_scorecard_scores()
                     if not sc_scores:
                         return json.dumps({"error": f"No scores with champion versions found in scorecard '{scorecard_name}'"})
 
-                    logger.info(f"Running feedback evaluations for {len(sc_scores)} scores")
-
-                    def run_single(sc_score_data: Dict[str, Any]) -> Dict[str, Any]:
-                        sn = sc_score_data['name']
-                        cv = sc_score_data['championVersionId']
-                        _args = ['--scorecard', scorecard_name, '--days', str(days),
-                                 '--score', sn, '--version', cv]
-                        _runner = CliRunner()
+                    dispatched = []
+                    for sc_score in sc_scores:
+                        sn = sc_score['name']
+                        cv = sc_score['championVersionId']
                         try:
-                            _r = _runner.invoke(feedback, _args, catch_exceptions=False, standalone_mode=False)
-                            if _r.exit_code != 0:
-                                return {"score_name": sn, "status": "error", "error": _r.output}
-                            _record = _r.return_value
-                            if _record and hasattr(_record, 'id'):
-                                return {"score_name": sn, "status": "completed",
-                                        "evaluation_id": _record.id, "champion_version_id": cv}
-                            return {"score_name": sn, "status": "error", "error": "No evaluation record returned"}
+                            _spawn_feedback(scorecard_name, sn, days, cv)
+                            dispatched.append({"score_name": sn, "status": "dispatched", "champion_version_id": cv})
+                            logger.info(f"Dispatched feedback evaluation for '{sn}'")
                         except Exception as exc:
-                            return {"score_name": sn, "status": "error", "error": str(exc)}
-
-                    # Run evaluations sequentially: CliRunner is not thread-safe (it patches
-                    # global sys.stdout/stderr), so concurrent invocations cause
-                    # "I/O operation on closed file" errors.
-                    _loop = asyncio.get_event_loop()
-                    bulk_results = []
-                    for _s in sc_scores:
-                        with ThreadPoolExecutor(max_workers=1) as _pool:
-                            _result = await _loop.run_in_executor(_pool, run_single, _s)
-                        bulk_results.append(_result)
-
-                    completed_count = sum(1 for r in bulk_results if r.get('status') == 'completed')
-                    failed_count = sum(1 for r in bulk_results if r.get('status') == 'error')
+                            dispatched.append({"score_name": sn, "status": "error", "error": str(exc)})
 
                     return json.dumps({
                         "mode": "bulk_feedback_evaluation",
+                        "status": "dispatched",
                         "scorecard": scorecard_name,
                         "days": days,
                         "total_scores": len(sc_scores),
-                        "completed": completed_count,
-                        "failed": failed_count,
-                        "results": bulk_results,
-                        "dashboard_url": "https://app.plexusanalytics.com/evaluations"
+                        "dispatched": len([d for d in dispatched if d["status"] == "dispatched"]),
+                        "scores": dispatched,
+                        "message": "All evaluations are running in the background. Use plexus_evaluation_info to check status of individual evaluations.",
+                        "dashboard_url": "https://lab.callcriteria.com/lab/evaluations",
                     })
 
             else:  # accuracy evaluation
