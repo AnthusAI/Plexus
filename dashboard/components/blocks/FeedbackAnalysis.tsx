@@ -44,6 +44,61 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
  * The confusion matrix uses FeedbackItemView to display filtered feedback items
  * in a structured before/after format with toggleable raw JSON view.
  */
+// Sub-component that fetches and renders per-scorecard topic memories.
+// Isolated to its own component so useState/useEffect are called unconditionally.
+const ScorecardMemories: React.FC<{
+  memoriesFile?: string;
+  inlineMemories?: FeedbackAnalysisData['memories'];
+}> = ({ memoriesFile, inlineMemories }) => {
+  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+  const [expanded, setExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!memoriesFile || loadedMemories) return;
+    (async () => {
+      try {
+        const { downloadData } = await import('aws-amplify/storage');
+        const result = await downloadData({
+          path: memoriesFile,
+          options: { bucket: 'reportBlockDetails' as any },
+        }).result;
+        const text = await result.body.text();
+        const parsed = yaml.load(text) as FeedbackAnalysisData['memories'];
+        setLoadedMemories(parsed ?? null);
+      } catch (e) {
+        console.warn('ScorecardMemories: failed to load memories_file', e);
+      }
+    })();
+  }, [memoriesFile, loadedMemories]);
+
+  const memories = loadedMemories ?? inlineMemories;
+  if (!memories || !memories.scores || memories.scores.length === 0) return null;
+
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+      >
+        <span className="font-medium text-sm">Topic Memories</span>
+        {expanded ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+      {expanded && (
+        <div className="mt-3 space-y-6 px-1">
+          {memories.scores.map((sd) => (
+            <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Sub-component for "all scorecards" mode — keeps hooks at top level
 const AllScorecardsView: React.FC<{
   data: any;
@@ -52,9 +107,6 @@ const AllScorecardsView: React.FC<{
 }> = ({ data, title, blockProps }) => {
   const scorecards = data.scorecards || [];
   const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
-  const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
-  const toggleMemory = (id: string) =>
-    setExpandedMemoryIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   return (
     <div className="space-y-8">
@@ -95,10 +147,6 @@ const AllScorecardsView: React.FC<{
                 : scorecardData.total_items > 0
                   ? (scorecardData.total_agreements / scorecardData.total_items) * 100
                   : 100.0;
-
-            const scMemories = scorecardData.memories;
-            const hasScMemories = scMemories && scMemories.scores && scMemories.scores.length > 0;
-            const scMemExpanded = expandedMemoryIds.has(scorecardId);
 
             return (
               <div key={scorecardId} style={{ marginBottom: (index < scorecards.length - 1 && !isExpanded) ? '2em' : '0' }}>
@@ -175,29 +223,10 @@ const AllScorecardsView: React.FC<{
                       position={blockProps.position}
                       config={blockProps.config}
                     />
-                    {hasScMemories && (
-                      <div className="mt-4">
-                        <button
-                          type="button"
-                          onClick={() => toggleMemory(scorecardId)}
-                          className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
-                        >
-                          <span className="font-medium text-sm">Topic Memories</span>
-                          {scMemExpanded ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </button>
-                        {scMemExpanded && (
-                          <div className="mt-3 space-y-6 px-1">
-                            {scMemories.scores.map((sd: any) => (
-                              <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <ScorecardMemories
+                      memoriesFile={scorecardData.memories_file}
+                      inlineMemories={scorecardData.memories}
+                    />
                   </div>
                 )}
               </div>
