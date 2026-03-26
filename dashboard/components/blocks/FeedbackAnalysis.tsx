@@ -44,6 +44,171 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
  * The confusion matrix uses FeedbackItemView to display filtered feedback items
  * in a structured before/after format with toggleable raw JSON view.
  */
+// Sub-component for "all scorecards" mode — keeps hooks at top level
+const AllScorecardsView: React.FC<{
+  data: any;
+  title: string;
+  blockProps: ReportBlockProps;
+}> = ({ data, title, blockProps }) => {
+  const scorecards = data.scorecards || [];
+  const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
+  const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
+  const toggleMemory = (id: string) =>
+    setExpandedMemoryIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  return (
+    <div className="space-y-8">
+      <div className="p-4 bg-muted/30 rounded-lg">
+        <h3 className="text-lg font-semibold mb-2">{title}</h3>
+        {data.block_description && (
+          <p className="text-sm text-muted-foreground mb-2">{data.block_description}</p>
+        )}
+        <div className="text-sm space-y-1">
+          <p><strong>Total scorecards analyzed:</strong> {data.total_scorecards_analyzed || scorecards.length}</p>
+          {data.total_scorecards_filtered !== undefined && data.total_scorecards_filtered > 0 && (
+            <p><strong>Scorecards filtered (no data):</strong> {data.total_scorecards_filtered}</p>
+          )}
+          {data.date_range && (
+            <p><strong>Date range:</strong> {new Date(data.date_range.start).toLocaleDateString()} - {new Date(data.date_range.end).toLocaleDateString()}</p>
+          )}
+        </div>
+      </div>
+
+      {scorecards.length === 0 ? (
+        <p className="text-muted-foreground">No scorecards found.</p>
+      ) : (
+        <div>
+          {scorecards.map((scorecardData: any, index: number) => {
+            const scorecardId = scorecardData.scorecard_id || index.toString();
+            const isExpanded = expandedScorecardId === scorecardId;
+
+            const accuracySegments: Segment[] = scorecardData.label_distribution
+              ? GaugeThresholdComputer.createSegments(
+                  GaugeThresholdComputer.computeThresholds(scorecardData.label_distribution)
+                )
+              : [{ start: 0, end: 100, color: 'var(--gauge-inviable)' }];
+
+            const accuracy = scorecardData.accuracy !== undefined
+              ? scorecardData.accuracy
+              : scorecardData.mismatch_percentage !== undefined
+                ? (100 - scorecardData.mismatch_percentage)
+                : scorecardData.total_items > 0
+                  ? (scorecardData.total_agreements / scorecardData.total_items) * 100
+                  : 100.0;
+
+            const scMemories = scorecardData.memories;
+            const hasScMemories = scMemories && scMemories.scores && scMemories.scores.length > 0;
+            const scMemExpanded = expandedMemoryIds.has(scorecardId);
+
+            return (
+              <div key={scorecardId} style={{ marginBottom: (index < scorecards.length - 1 && !isExpanded) ? '2em' : '0' }}>
+                <div className="bg-card rounded-lg">
+                  <div className="px-4 py-4">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="flex items-start gap-4 flex-1">
+                        <span className="text-sm text-muted-foreground font-mono pt-1">#{scorecardData.rank || index + 1}</span>
+                        <div className="flex-1">
+                          <div className="font-semibold mb-1">{scorecardData.scorecard_name || scorecardData.scorecard_id}</div>
+                          <div className="text-sm text-muted-foreground">
+                            Items: <span className="font-medium text-foreground">{scorecardData.total_items || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="flex flex-col items-center" style={{ width: '200px' }}>
+                          <Gauge
+                            value={scorecardData.overall_ac1 ?? 0}
+                            title="Agreement"
+                            valueUnit=""
+                            min={-1}
+                            max={1}
+                            decimalPlaces={2}
+                            segments={ac1GaugeSegments}
+                            showTicks={true}
+                          />
+                        </div>
+                        <div className="flex flex-col items-center" style={{ width: '200px' }}>
+                          <Gauge
+                            value={accuracy ?? 0}
+                            title="Accuracy"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium mb-2">Raw Agreement</h5>
+                      <RawAgreementBar
+                        agreements={scorecardData.total_agreements || 0}
+                        totalItems={scorecardData.total_items || 0}
+                      />
+                    </div>
+                    <div className="flex flex-col items-center mt-4">
+                      <div className="w-full h-px bg-border mb-1"></div>
+                      <button
+                        onClick={() => setExpandedScorecardId(isExpanded ? null : scorecardId)}
+                        className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors"
+                        aria-label={isExpanded ? "Collapse details" : "Expand details"}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className="pt-3" style={{ marginBottom: index < scorecards.length - 1 ? '4em' : '0' }}>
+                    <FeedbackAnalysisDisplay
+                      data={scorecardData}
+                      showHeader={false}
+                      showDateRange={false}
+                      showPrecisionRecall={false}
+                      hideSummary={true}
+                      attachedFiles={blockProps.attachedFiles}
+                      log={blockProps.log}
+                      rawOutput={typeof blockProps.output === 'string' ? blockProps.output : undefined}
+                      id={`${blockProps.id}-${index}`}
+                      position={blockProps.position}
+                      config={blockProps.config}
+                    />
+                    {hasScMemories && (
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => toggleMemory(scorecardId)}
+                          className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <span className="font-medium text-sm">Topic Memories</span>
+                          {scMemExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </button>
+                        {scMemExpanded && (
+                          <div className="mt-3 space-y-6 px-1">
+                            {scMemories.scores.map((sd: any) => (
+                              <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackAnalysisData | null>(null);
   const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
@@ -131,183 +296,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
 
   // Check if this is "all scorecards" mode
   if ((feedbackData as any).mode === 'all_scorecards') {
-    const allScorecardsData = feedbackData as any;
-    const scorecards = allScorecardsData.scorecards || [];
-
-    // State to track which scorecard is currently expanded
-    const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
-    // State to track which scorecard's memories section is expanded
-    const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
-    const toggleMemory = (id: string) =>
-      setExpandedMemoryIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-
-    return (
-      <div className="space-y-8">
-        {/* Summary header */}
-        <div className="p-4 bg-muted/30 rounded-lg">
-          <h3 className="text-lg font-semibold mb-2">{title}</h3>
-          {allScorecardsData.block_description && (
-            <p className="text-sm text-muted-foreground mb-2">{allScorecardsData.block_description}</p>
-          )}
-          <div className="text-sm space-y-1">
-            <p><strong>Total scorecards analyzed:</strong> {allScorecardsData.total_scorecards_analyzed || scorecards.length}</p>
-            {allScorecardsData.total_scorecards_filtered !== undefined && allScorecardsData.total_scorecards_filtered > 0 && (
-              <p><strong>Scorecards filtered (no data):</strong> {allScorecardsData.total_scorecards_filtered}</p>
-            )}
-            {allScorecardsData.date_range && (
-              <p><strong>Date range:</strong> {new Date(allScorecardsData.date_range.start).toLocaleDateString()} - {new Date(allScorecardsData.date_range.end).toLocaleDateString()}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Render each scorecard with collapsible details */}
-        {scorecards.length === 0 ? (
-          <p className="text-muted-foreground">No scorecards found.</p>
-        ) : (
-          <div>
-            {scorecards.map((scorecardData: any, index: number) => {
-              const scorecardId = scorecardData.scorecard_id || index.toString();
-              const isExpanded = expandedScorecardId === scorecardId;
-
-              // Calculate accuracy segments if label distribution is available
-              const accuracySegments: Segment[] = scorecardData.label_distribution 
-                ? GaugeThresholdComputer.createSegments(
-                    GaugeThresholdComputer.computeThresholds(scorecardData.label_distribution)
-                  )
-                : [{ start: 0, end: 100, color: 'var(--gauge-inviable)' }];
-
-              // Calculate accuracy value  
-              const accuracy = scorecardData.accuracy !== undefined 
-                ? scorecardData.accuracy 
-                : scorecardData.mismatch_percentage !== undefined
-                  ? (100 - scorecardData.mismatch_percentage)
-                  : scorecardData.total_items > 0
-                    ? (scorecardData.total_agreements / scorecardData.total_items) * 100
-                    : 100.0;
-
-              return (
-                <div key={scorecardId} style={{ marginBottom: (index < scorecards.length - 1 && !isExpanded) ? '2em' : '0' }}>
-                  {/* Scorecard card */}
-                  <div className="bg-card rounded-lg">
-                    <div className="px-4 py-4">
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        {/* Left side: Rank, name, and items count */}
-                        <div className="flex items-start gap-4 flex-1">
-                          <span className="text-sm text-muted-foreground font-mono pt-1">#{scorecardData.rank || index + 1}</span>
-                          <div className="flex-1">
-                            <div className="font-semibold mb-1">{scorecardData.scorecard_name || scorecardData.scorecard_id}</div>
-                            <div className="text-sm text-muted-foreground">
-                              Items: <span className="font-medium text-foreground">{scorecardData.total_items || 0}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Right side: Larger gauges */}
-                        <div className="flex items-center gap-6">
-                          <div className="flex flex-col items-center" style={{ width: '200px' }}>
-                            <Gauge
-                              value={scorecardData.overall_ac1 ?? 0}
-                              title="Agreement"
-                              valueUnit=""
-                              min={-1}
-                              max={1}
-                              decimalPlaces={2}
-                              segments={ac1GaugeSegments}
-                              showTicks={true}
-                            />
-                          </div>
-                          <div className="flex flex-col items-center" style={{ width: '200px' }}>
-                            <Gauge 
-                              value={accuracy ?? 0} 
-                              title="Accuracy"
-                              segments={accuracySegments}
-                              showTicks={true}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Raw Agreement Bar */}
-                      <div className="mb-4">
-                        <h5 className="text-sm font-medium mb-2">Raw Agreement</h5>
-                        <RawAgreementBar 
-                          agreements={scorecardData.total_agreements || 0}
-                          totalItems={scorecardData.total_items || 0}
-                        />
-                      </div>
-
-                      {/* Expand/Collapse button - matching individual score pattern */}
-                      <div className="flex flex-col items-center mt-4">
-                        <div className="w-full h-px bg-border mb-1"></div>
-                        <button
-                          onClick={() => setExpandedScorecardId(isExpanded ? null : scorecardId)}
-                          className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors"
-                          aria-label={isExpanded ? "Collapse details" : "Expand details"}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="h-3 w-3 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded detailed view - rendered below the card when expanded */}
-                  {isExpanded && (
-                    <div className="pt-3" style={{ marginBottom: index < scorecards.length - 1 ? '4em' : '0' }}>
-                      <FeedbackAnalysisDisplay
-                        data={scorecardData}
-                        showHeader={false}
-                        showDateRange={false}
-                        showPrecisionRecall={false}
-                        hideSummary={true}
-                        attachedFiles={props.attachedFiles}
-                        log={props.log}
-                        rawOutput={typeof props.output === 'string' ? props.output : undefined}
-                        id={`${props.id}-${index}`}
-                        position={props.position}
-                        config={props.config}
-                      />
-                      {(() => {
-                        const scMemories = (scorecardData as any).memories;
-                        const hasScMemories = scMemories && scMemories.scores && scMemories.scores.length > 0;
-                        if (!hasScMemories) return null;
-                        const scMemExpanded = expandedMemoryIds.has(scorecardId);
-                        return (
-                          <div className="mt-4">
-                            <button
-                              type="button"
-                              onClick={() => toggleMemory(scorecardId)}
-                              className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
-                            >
-                              <span className="font-medium text-sm">Topic Memories</span>
-                              {scMemExpanded ? (
-                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                              )}
-                            </button>
-                            {scMemExpanded && (
-                              <div className="mt-3 space-y-6 px-1">
-                                {scMemories.scores.map((sd: any) => (
-                                  <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
+    return <AllScorecardsView data={feedbackData as any} title={title} blockProps={props} />;
   }
 
   // Single scorecard mode — merge memory topics into each score entry
