@@ -575,8 +575,8 @@ class FeedbackAnalysis(BaseReportBlock):
             embed_fn = sentence_transformer_embedder(model_id=model_id, cache=cache)
 
             now = datetime.now(_tz.utc)
-            scores_out = []
-            for score_data in per_score_raw_texts:
+
+            async def _process_one_score(score_data: Dict) -> Optional[Dict]:
                 doc_ids = [item[0] for item in score_data["items"]]
                 texts = [item[1] for item in score_data["items"]]
                 item_ids = [item[2] if len(item) > 2 else None for item in score_data["items"]]
@@ -584,7 +584,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 feedback_item_ids = [item[4] if len(item) > 4 else None for item in score_data["items"]]
 
                 if len(texts) < 2:
-                    continue
+                    return None
 
                 self._log(f"Memory analysis: embedding {len(texts)} edit comments for score '{score_data['score_name']}'")
                 embeddings = np.array(await asyncio.to_thread(embed_fn, texts))
@@ -600,9 +600,8 @@ class FeedbackAnalysis(BaseReportBlock):
                     keywords = clusterer.get_keywords(int(tid), n=8)
                     exemplars_raw = clusterer.get_representative_exemplars(int(tid), n=3)
 
-                    # Build exemplars with item_id and identifiers fetched via GSI query
-                    exemplars = []
-                    for ex_idx, ex_text in exemplars_raw:
+                    # Build exemplars with item_id and identifiers fetched in parallel
+                    async def _build_exemplar(ex_idx, ex_text):
                         truncated = ex_text[:300] + "…" if len(ex_text) > 300 else ex_text
                         item_id = item_ids[ex_idx] if ex_idx < len(item_ids) else None
                         feedback_item_id = feedback_item_ids[ex_idx] if ex_idx < len(feedback_item_ids) else None
@@ -610,8 +609,6 @@ class FeedbackAnalysis(BaseReportBlock):
                         exemplar: Dict = {"text": truncated, "item_id": item_id}
                         if identifiers_list:
                             exemplar["identifiers"] = identifiers_list
-
-                        # Gather context for causal inference (best-effort, non-blocking)
                         if use_causal_inference and feedback_item_id and self.api_client:
                             causal_ctx = await self._gather_causal_context(
                                 edit_comment=ex_text,
@@ -620,8 +617,11 @@ class FeedbackAnalysis(BaseReportBlock):
                             )
                             if causal_ctx:
                                 exemplar["_causal_context"] = causal_ctx
+                        return exemplar
 
-                        exemplars.append(exemplar)
+                    exemplars = await asyncio.gather(*[
+                        _build_exemplar(ex_idx, ex_text) for ex_idx, ex_text in exemplars_raw
+                    ])
 
                     # Compute days_inactive from most recent editedAt in this cluster
                     member_indices = list(np.where(topic_ids == tid)[0])
@@ -639,7 +639,6 @@ class FeedbackAnalysis(BaseReportBlock):
                     weight = 0.5  # Baseline for FeedbackAnalysis memories
                     tier = tier_from_weight(weight)
 
-                    # Derive lifecycle tier using Biblicus lifecycle helper
                     member_ts_iso = [
                         (ea if ea.tzinfo else ea.replace(tzinfo=_tz.utc)).isoformat()
                         for ea in cluster_edited_ats
@@ -652,7 +651,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         "topic_id": int(tid),
                         "label": None,  # Will be filled after parallel LLM calls
                         "keywords": keywords,
-                        "exemplars": exemplars,
+                        "exemplars": list(exemplars),
                         "member_count": member_count,
                         "memory_weight": weight,
                         "memory_tier": tier,
@@ -666,11 +665,16 @@ class FeedbackAnalysis(BaseReportBlock):
                     topics.append(topic_entry)
 
                 if topics:
-                    scores_out.append({
+                    return {
                         "score_id": score_data["score_id"],
                         "score_name": score_data["score_name"],
                         "topics": topics,
-                    })
+                    }
+                return None
+
+            # Process all scores in parallel
+            score_results = await asyncio.gather(*[_process_one_score(sd) for sd in per_score_raw_texts])
+            scores_out = [r for r in score_results if r is not None]
 
             # Parallel LLM label generation for all topics across all scores
             all_topic_entries = [t for s in scores_out for t in s["topics"]]
