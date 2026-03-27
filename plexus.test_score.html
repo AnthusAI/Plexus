@@ -1,0 +1,498 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.test_score module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.training_data_lake module" href="plexus.training_data_lake.html" />
+    <link rel="prev" title="plexus.test_prediction_commands module" href="plexus.test_prediction_commands.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.CustomLogging.html">plexus.CustomLogging module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Evaluation.html">plexus.Evaluation module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.LangChainUser.html">plexus.LangChainUser module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.PromptTemplateLoader.html">plexus.PromptTemplateLoader module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Registries.html">plexus.Registries module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Scorecard.html">plexus.Scorecard module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResults.html">plexus.ScorecardResults module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResultsAnalysis.html">plexus.ScorecardResultsAnalysis module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.confidence_calibration.html">plexus.confidence_calibration module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_metrics.html">plexus.test_evaluation_metrics module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_prediction_commands.html">plexus.test_prediction_commands module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.test_score module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.ConcreteScore"><code class="docutils literal notranslate"><span class="pre">ConcreteScore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreEdgeCases"><code class="docutils literal notranslate"><span class="pre">TestScoreEdgeCases</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreFromName"><code class="docutils literal notranslate"><span class="pre">TestScoreFromName</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreInitialization"><code class="docutils literal notranslate"><span class="pre">TestScoreInitialization</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreInput"><code class="docutils literal notranslate"><span class="pre">TestScoreInput</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreParameters"><code class="docutils literal notranslate"><span class="pre">TestScoreParameters</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreResult"><code class="docutils literal notranslate"><span class="pre">TestScoreResult</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.test_score.TestScoreUtilityMethods"><code class="docutils literal notranslate"><span class="pre">TestScoreUtilityMethods</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.training_data_lake.html">plexus.training_data_lake module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.test_score module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.test_score.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.test_score">
+<span id="plexus-test-score-module"></span><h1>plexus.test_score module<a class="headerlink" href="#module-plexus.test_score" title="Link to this heading"></a></h1>
+<p>Comprehensive tests for Score.py - the foundation class of the entire scoring system.</p>
+<p>This test suite focuses on the most critical aspects of the Score base class:
+- Score.Parameters validation and data conversion
+- Score.Input standardization and edge cases
+- Score.Result creation, comparison, and helper methods
+- Score initialization and parameter validation
+- Registry integration (Score.from_name)
+- Path generation and utilities
+- Cost tracking interface</p>
+<p>The Score class is the foundation that all other scoring classes inherit from,
+making these tests critical for the reliability of the entire scoring system.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.ConcreteScore">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">ConcreteScore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.ConcreteScore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.scores.Score.html#plexus.scores.Score.Score" title="plexus.scores.Score.Score"><code class="xref py py-class docutils literal notranslate"><span class="pre">Score</span></code></a></p>
+<p>Concrete implementation of Score for testing since Score is abstract</p>
+<p>Initialize the Score instance with the given parameters.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>parameters<span class="classifier">dict</span></dt><dd><p>Arbitrary keyword arguments that are used to initialize the Parameters instance.</p>
+</dd>
+</dl>
+</section>
+<section id="raises">
+<h2>Raises<a class="headerlink" href="#raises" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>ValidationError</dt><dd><p>If the provided parameters do not pass validation.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.ConcreteScore.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.core.ScoreInput.html#plexus.core.ScoreInput.ScoreInput" title="plexus.core.ScoreInput.ScoreInput"><span class="pre">ScoreInput</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.ConcreteScore.predict" title="Link to this definition"></a></dt>
+<dd><p>Concrete implementation of the abstract predict method</p>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreEdgeCases">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreEdgeCases</span></span><a class="headerlink" href="#plexus.test_score.TestScoreEdgeCases" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test edge cases and error conditions</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreEdgeCases.test_input_with_empty_string_text">
+<span class="sig-name descname"><span class="pre">test_input_with_empty_string_text</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreEdgeCases.test_input_with_empty_string_text" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Input with empty string text</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreEdgeCases.test_result_equality_with_invalid_type">
+<span class="sig-name descname"><span class="pre">test_result_equality_with_invalid_type</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreEdgeCases.test_result_equality_with_invalid_type" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result equality with invalid comparison type</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreEdgeCases.test_result_with_decimal_confidence">
+<span class="sig-name descname"><span class="pre">test_result_with_decimal_confidence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreEdgeCases.test_result_with_decimal_confidence" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result with Decimal confidence value</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreEdgeCases.test_score_parameters_with_none_values">
+<span class="sig-name descname"><span class="pre">test_score_parameters_with_none_values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreEdgeCases.test_score_parameters_with_none_values" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Parameters with None values (should use defaults)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreEdgeCases.test_score_with_numeric_string_values">
+<span class="sig-name descname"><span class="pre">test_score_with_numeric_string_values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreEdgeCases.test_score_with_numeric_string_values" title="Link to this definition"></a></dt>
+<dd><p>Test Score handling with numeric string parameters</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreFromName">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreFromName</span></span><a class="headerlink" href="#plexus.test_score.TestScoreFromName" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test Score.from_name registry integration</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreFromName.test_score_from_name_score_not_found">
+<span class="sig-name descname"><span class="pre">test_score_from_name_score_not_found</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreFromName.test_score_from_name_score_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test Score.from_name with nonexistent score in valid scorecard</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreFromName.test_score_from_name_scorecard_not_found">
+<span class="sig-name descname"><span class="pre">test_score_from_name_scorecard_not_found</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreFromName.test_score_from_name_scorecard_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test Score.from_name with nonexistent scorecard</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreFromName.test_score_from_name_with_complex_parameters">
+<span class="sig-name descname"><span class="pre">test_score_from_name_with_complex_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreFromName.test_score_from_name_with_complex_parameters" title="Link to this definition"></a></dt>
+<dd><p>Test Score.from_name with complex score parameters</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreFromName.test_successful_score_from_name">
+<span class="sig-name descname"><span class="pre">test_successful_score_from_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreFromName.test_successful_score_from_name" title="Link to this definition"></a></dt>
+<dd><p>Test successful Score.from_name with valid scorecard and score</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInitialization">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreInitialization</span></span><a class="headerlink" href="#plexus.test_score.TestScoreInitialization" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test Score initialization and parameter validation</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInitialization.test_log_validation_errors_formatting">
+<span class="sig-name descname"><span class="pre">test_log_validation_errors_formatting</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInitialization.test_log_validation_errors_formatting" title="Link to this definition"></a></dt>
+<dd><p>Test that validation errors are properly formatted and logged</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInitialization.test_score_initialization_with_validation_error">
+<span class="sig-name descname"><span class="pre">test_score_initialization_with_validation_error</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInitialization.test_score_initialization_with_validation_error" title="Link to this definition"></a></dt>
+<dd><p>Test Score initialization with parameter validation error</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInitialization.test_score_with_complex_initialization">
+<span class="sig-name descname"><span class="pre">test_score_with_complex_initialization</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInitialization.test_score_with_complex_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test Score initialization with complex parameter configuration</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInitialization.test_successful_score_initialization">
+<span class="sig-name descname"><span class="pre">test_successful_score_initialization</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInitialization.test_successful_score_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test successful Score initialization with valid parameters</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreInput</span></span><a class="headerlink" href="#plexus.test_score.TestScoreInput" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test Score.Input standardization and validation</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput.test_basic_input_creation">
+<span class="sig-name descname"><span class="pre">test_basic_input_creation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInput.test_basic_input_creation" title="Link to this definition"></a></dt>
+<dd><p>Test basic Score.Input creation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput.test_input_with_complex_metadata">
+<span class="sig-name descname"><span class="pre">test_input_with_complex_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInput.test_input_with_complex_metadata" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Input with nested, complex metadata</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput.test_input_with_empty_metadata">
+<span class="sig-name descname"><span class="pre">test_input_with_empty_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInput.test_input_with_empty_metadata" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Input with empty metadata (default behavior)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput.test_input_with_results_for_dependencies">
+<span class="sig-name descname"><span class="pre">test_input_with_results_for_dependencies</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInput.test_input_with_results_for_dependencies" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Input with results for dependent scores</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput.test_input_with_unicode_text">
+<span class="sig-name descname"><span class="pre">test_input_with_unicode_text</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInput.test_input_with_unicode_text" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Input with Unicode and special characters</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreInput.test_input_with_very_long_text">
+<span class="sig-name descname"><span class="pre">test_input_with_very_long_text</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreInput.test_input_with_very_long_text" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Input with very long text content</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreParameters</span></span><a class="headerlink" href="#plexus.test_score.TestScoreParameters" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test Score.Parameters validation and data conversion</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_basic_parameters_creation">
+<span class="sig-name descname"><span class="pre">test_basic_parameters_creation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_basic_parameters_creation" title="Link to this definition"></a></dt>
+<dd><p>Test basic Score.Parameters creation with valid data</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_parameters_with_all_optional_fields">
+<span class="sig-name descname"><span class="pre">test_parameters_with_all_optional_fields</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_parameters_with_all_optional_fields" title="Link to this definition"></a></dt>
+<dd><p>Test parameters with all optional fields populated</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_parameters_with_data_percentage_conversion">
+<span class="sig-name descname"><span class="pre">test_parameters_with_data_percentage_conversion</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_parameters_with_data_percentage_conversion" title="Link to this definition"></a></dt>
+<dd><p>Test automatic percentage conversion in data field</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_parameters_with_dependencies">
+<span class="sig-name descname"><span class="pre">test_parameters_with_dependencies</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_parameters_with_dependencies" title="Link to this definition"></a></dt>
+<dd><p>Test parameters with dependency configuration</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_parameters_with_numeric_percentage">
+<span class="sig-name descname"><span class="pre">test_parameters_with_numeric_percentage</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_parameters_with_numeric_percentage" title="Link to this definition"></a></dt>
+<dd><p>Test percentage handling when already numeric</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_parameters_with_string_percentage_variations">
+<span class="sig-name descname"><span class="pre">test_parameters_with_string_percentage_variations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_parameters_with_string_percentage_variations" title="Link to this definition"></a></dt>
+<dd><p>Test various string percentage formats</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreParameters.test_parameters_without_percentage_gets_default">
+<span class="sig-name descname"><span class="pre">test_parameters_without_percentage_gets_default</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreParameters.test_parameters_without_percentage_gets_default" title="Link to this definition"></a></dt>
+<dd><p>Test that missing percentage gets default value of 100.0</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreResult</span></span><a class="headerlink" href="#plexus.test_score.TestScoreResult" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test Score.Result creation, comparison, and helper methods</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.sample_parameters">
+<span class="sig-name descname"><span class="pre">sample_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.sample_parameters" title="Link to this definition"></a></dt>
+<dd><p>Sample parameters for testing Results</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_basic_result_creation">
+<span class="sig-name descname"><span class="pre">test_basic_result_creation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_basic_result_creation" title="Link to this definition"></a></dt>
+<dd><p>Test basic Score.Result creation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_backwards_compatibility_properties">
+<span class="sig-name descname"><span class="pre">test_result_backwards_compatibility_properties</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_backwards_compatibility_properties" title="Link to this definition"></a></dt>
+<dd><p>Test backwards compatibility properties for explanation and confidence</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_backwards_compatibility_with_empty_metadata">
+<span class="sig-name descname"><span class="pre">test_result_backwards_compatibility_with_empty_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_backwards_compatibility_with_empty_metadata" title="Link to this definition"></a></dt>
+<dd><p>Test backwards compatibility when metadata is empty</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_equality_with_other_result">
+<span class="sig-name descname"><span class="pre">test_result_equality_with_other_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_equality_with_other_result" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result equality comparison with another Result</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_equality_with_string">
+<span class="sig-name descname"><span class="pre">test_result_equality_with_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_equality_with_string" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result equality comparison with string</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_is_no_method">
+<span class="sig-name descname"><span class="pre">test_result_is_no_method</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_is_no_method" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result.is_no() method</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_is_yes_method">
+<span class="sig-name descname"><span class="pre">test_result_is_yes_method</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_is_yes_method" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result.is_yes() method</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_with_boolean_value">
+<span class="sig-name descname"><span class="pre">test_result_with_boolean_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_with_boolean_value" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result with boolean value</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_with_error">
+<span class="sig-name descname"><span class="pre">test_result_with_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_with_error" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result with error information</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreResult.test_result_with_metadata">
+<span class="sig-name descname"><span class="pre">test_result_with_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_parameters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreResult.test_result_with_metadata" title="Link to this definition"></a></dt>
+<dd><p>Test Score.Result with metadata</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.test_score.</span></span><span class="sig-name descname"><span class="pre">TestScoreUtilityMethods</span></span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test Score utility methods like path generation and label handling</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_get_accumulated_costs_default">
+<span class="sig-name descname"><span class="pre">test_get_accumulated_costs_default</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_get_accumulated_costs_default" title="Link to this definition"></a></dt>
+<dd><p>Test default cost accumulation (should return zero cost)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_basic">
+<span class="sig-name descname"><span class="pre">test_get_label_score_name_basic</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_basic" title="Link to this definition"></a></dt>
+<dd><p>Test basic label score name determination</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_with_both_custom_and_field">
+<span class="sig-name descname"><span class="pre">test_get_label_score_name_with_both_custom_and_field</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_with_both_custom_and_field" title="Link to this definition"></a></dt>
+<dd><p>Test label score name with both custom label and field</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_with_custom_label">
+<span class="sig-name descname"><span class="pre">test_get_label_score_name_with_custom_label</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_with_custom_label" title="Link to this definition"></a></dt>
+<dd><p>Test label score name with custom label_score_name</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_with_label_field">
+<span class="sig-name descname"><span class="pre">test_get_label_score_name_with_label_field</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_get_label_score_name_with_label_field" title="Link to this definition"></a></dt>
+<dd><p>Test label score name with label_field suffix</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_model_directory_path">
+<span class="sig-name descname"><span class="pre">test_model_directory_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_model_directory_path" title="Link to this definition"></a></dt>
+<dd><p>Test model directory path generation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.test_score.TestScoreUtilityMethods.test_report_directory_path">
+<span class="sig-name descname"><span class="pre">test_report_directory_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.test_score.TestScoreUtilityMethods.test_report_directory_path" title="Link to this definition"></a></dt>
+<dd><p>Test report directory path generation</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.test_prediction_commands.html" class="btn btn-neutral float-left" title="plexus.test_prediction_commands module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.training_data_lake.html" class="btn btn-neutral float-right" title="plexus.training_data_lake module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

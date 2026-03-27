@@ -1,0 +1,339 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.lua_dsl.primitives.session module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.lua_dsl.primitives.stage module" href="plexus.cli.procedure.lua_dsl.primitives.stage.html" />
+    <link rel="prev" title="plexus.cli.procedure.lua_dsl.primitives.retry module" href="plexus.cli.procedure.lua_dsl.primitives.retry.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.html">plexus.cli.procedure.lua_dsl package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.lua_dsl.primitives.html">plexus.cli.procedure.lua_dsl.primitives package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.lua_dsl.primitives.session module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.lua_dsl.primitives.session.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.lua_dsl.primitives.session">
+<span id="plexus-cli-procedure-lua-dsl-primitives-session-module"></span><h1>plexus.cli.procedure.lua_dsl.primitives.session module<a class="headerlink" href="#module-plexus.cli.procedure.lua_dsl.primitives.session" title="Link to this heading"></a></h1>
+<p>Session Primitive - Conversation history management.</p>
+<p>Provides:
+- Session.append(role, content) - Add message to conversation
+- Session.inject_system(text) - Inject system message
+- Session.clear() - Clear conversation history
+- Session.history() - Get all messages as Lua table
+- Session.save() - Persist current session to database</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.lua_dsl.primitives.session.</span></span><span class="sig-name descname"><span class="pre">SessionPrimitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lua_sandbox</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages agent conversation history for procedures.</p>
+<p>Enables workflows to:
+- Manipulate conversation context
+- Inject system messages
+- Clear history for fresh contexts
+- Retrieve conversation for inspection</p>
+<p>Initialize Session primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for database operations
+execution_context: ExecutionContext for agent state access
+lua_sandbox: LuaSandbox for creating Lua tables (optional)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">chat_recorder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lua_sandbox</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize Session primitive.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>chat_recorder: ProcedureChatRecorder for database operations
+execution_context: ExecutionContext for agent state access
+lua_sandbox: LuaSandbox for creating Lua tables (optional)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.append">
+<span class="sig-name descname"><span class="pre">append</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">role</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.append" title="Link to this definition"></a></dt>
+<dd><p>Add message to conversation history (in-memory only until save()).</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>role: Message role (USER, ASSISTANT, SYSTEM)
+content: Message content
+metadata: Optional metadata dict</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>Session.append(“USER”, “What is the weather?”)
+Session.append(“ASSISTANT”, “I need more information about location.”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.clear" title="Link to this definition"></a></dt>
+<dd><p>Clear conversation history (in-memory only until save()).</p>
+<dl class="simple">
+<dt>Example (Lua):</dt><dd><p>Session.clear()
+Session.inject_system(“Fresh context”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.count">
+<span class="sig-name descname"><span class="pre">count</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.count" title="Link to this definition"></a></dt>
+<dd><p>Get count of messages in session.</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p>Number of messages</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local msg_count = Session.count()
+Log.info(“Messages in session”, {count = msg_count})</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.history">
+<span class="sig-name descname"><span class="pre">history</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.history" title="Link to this definition"></a></dt>
+<dd><p>Get all messages in conversation history.</p>
+<dl>
+<dt>Returns:</dt><dd><p>Lua table with messages (1-indexed for Lua)</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local messages = Session.history()
+for i, msg in ipairs(messages) do</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Log.info(“Message”, {</dt><dd><p>role = msg.role,
+content = msg.content</p>
+</dd>
+</dl>
+<p>})</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.inject_system">
+<span class="sig-name descname"><span class="pre">inject_system</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.inject_system" title="Link to this definition"></a></dt>
+<dd><p>Inject system message into conversation.</p>
+<p>This is a convenience method for Session.append(“SYSTEM”, text)</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>text: System message content</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>Session.inject_system(“Focus on security implications”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.load_from_node">
+<span class="sig-name descname"><span class="pre">load_from_node</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.load_from_node" title="Link to this definition"></a></dt>
+<dd><p>Load conversation history from a graph node’s metadata.</p>
+<dl>
+<dt>Args:</dt><dd><p>node: Node dict with ‘id’ field (and optionally ‘metadata’)</p>
+</dd>
+<dt>Returns:</dt><dd><p>Number of messages loaded</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>local checkpoint = GraphNode.root()
+if checkpoint then</p>
+<blockquote>
+<div><p>local count = Session.load_from_node(checkpoint)
+Log.info(“Resumed session”, {messages = count})</p>
+</div></blockquote>
+<p>end</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.save">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.save" title="Link to this definition"></a></dt>
+<dd><p>Persist current in-memory messages to database.</p>
+<p>This records all queued messages via the chat recorder.
+Called automatically by runtime after workflow execution.</p>
+<dl class="simple">
+<dt>Example (Lua):</dt><dd><p>– Not typically called from Lua - runtime handles this</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.save_to_node">
+<span class="sig-name descname"><span class="pre">save_to_node</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#plexus.cli.procedure.lua_dsl.primitives.session.SessionPrimitive.save_to_node" title="Link to this definition"></a></dt>
+<dd><p>Save conversation history to a graph node’s metadata.</p>
+<dl>
+<dt>Args:</dt><dd><p>node: Node dict with ‘id’ field</p>
+</dd>
+<dt>Returns:</dt><dd><p>True if saved successfully, False otherwise</p>
+</dd>
+<dt>Example (Lua):</dt><dd><p>Session.append(“ASSISTANT”, “Phase 1 complete”)</p>
+<p>local checkpoint = GraphNode.create(“checkpoint”)
+Session.save_to_node(checkpoint)
+Log.info(“Session saved”, {node = checkpoint.id})</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.lua_dsl.primitives.retry.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.lua_dsl.primitives.retry module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.lua_dsl.primitives.stage.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.lua_dsl.primitives.stage module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
