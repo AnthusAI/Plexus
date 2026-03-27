@@ -81,7 +81,7 @@ function TopicItem({ topic }: TopicItemProps) {
             {topic.memory_tier}
           </Badge>
           <span>
-            {topic.member_count} comment{topic.member_count !== 1 ? "s" : ""}
+            {topic.member_count} item{topic.member_count !== 1 ? "s" : ""}
           </span>
         </div>
       </button>
@@ -149,9 +149,10 @@ export function TopicList({ topics, label }: TopicListProps) {
   if (!topics || topics.length === 0) return null;
 
   const sorted = [...topics].sort((a, b) => {
-    const w = (t: string) => (t === "hot" ? 3 : t === "warm" ? 2 : 1);
-    const d = w(b.memory_tier) - w(a.memory_tier);
-    return d !== 0 ? d : b.member_count - a.member_count;
+    const aInactive = a.days_inactive ?? Infinity;
+    const bInactive = b.days_inactive ?? Infinity;
+    if (aInactive !== bInactive) return aInactive - bInactive;
+    return b.member_count - a.member_count;
   });
 
   return (
