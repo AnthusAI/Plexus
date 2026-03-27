@@ -1159,15 +1159,15 @@ class FeedbackAnalysis(BaseReportBlock):
                 "scorecards": []
             }, "\n".join(self.log_messages)
 
-        # Sort scorecards by AC1 (best first, None values at the end)
+        # Sort scorecards by AC1 (worst first, None values at the end)
         self._log("Sorting scorecards by overall AC1...")
 
         def sort_key(scorecard_result):
             ac1 = scorecard_result.get('overall_ac1')
-            # None values get -infinity so they sort to the end
-            return (ac1 is not None, ac1 if ac1 is not None else -float('inf'))
+            # None values get +infinity so they sort to the end (after worst real values)
+            return (ac1 is not None, ac1 if ac1 is not None else float('inf'))
 
-        scorecard_results.sort(key=sort_key, reverse=True)
+        scorecard_results.sort(key=sort_key, reverse=False)
 
         # Add rank to each scorecard
         for rank, result in enumerate(scorecard_results, 1):
