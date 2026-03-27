@@ -317,7 +317,24 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
 
   // Check if this is "all scorecards" mode
   if ((feedbackData as any).mode === 'all_scorecards') {
-    return <AllScorecardsView data={feedbackData as any} title={title} blockProps={props} />;
+    return (
+      <FeedbackAnalysisDisplay
+        data={{ scores: [] } as any}
+        title={title}
+        subtitle={(feedbackData as any).block_description}
+        showPrecisionRecall={false}
+        showHeader={false}
+        hideSummary={true}
+        attachedFiles={props.attachedFiles}
+        log={props.log}
+        rawOutput={typeof props.output === 'string' ? props.output : undefined}
+        id={props.id}
+        position={props.position}
+        config={props.config}
+      >
+        <AllScorecardsView data={feedbackData as any} title={title} blockProps={props} />
+      </FeedbackAnalysisDisplay>
+    );
   }
 
   // Single scorecard mode — merge memory topics into each score entry
