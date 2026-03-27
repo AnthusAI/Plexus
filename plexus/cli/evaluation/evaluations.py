@@ -1881,8 +1881,8 @@ def accuracy(
                 if tracker:
                     try:
                         tracker.complete()
-                    except Exception:
-                        pass
+                    except Exception as _tracker_err:
+                        logging.warning(f"Tracker failed to complete after NO_DATA evaluation: {_tracker_err}")
                 return evaluation_record
 
             # Determine the subset of score names to evaluate
