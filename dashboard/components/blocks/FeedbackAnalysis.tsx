@@ -7,7 +7,6 @@ import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import { ac1GaugeSegments } from '@/components/ui/scorecard-evaluation';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { ChevronUp, ChevronDown } from 'lucide-react';
-import { TopicList } from '@/components/ui/topic-list';
 
 // Re-export the interface for backward compatibility
 export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
@@ -44,15 +43,18 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
  * The confusion matrix uses FeedbackItemView to display filtered feedback items
  * in a structured before/after format with toggleable raw JSON view.
  */
-// Sub-component that fetches and renders per-scorecard topic memories.
-// Isolated to its own component so useState/useEffect are called unconditionally.
-const ScorecardMemories: React.FC<{
-  memoriesFile?: string;
-  inlineMemories?: FeedbackAnalysisData['memories'];
-}> = ({ memoriesFile, inlineMemories }) => {
+// Sub-component for an expanded scorecard in all-scorecards mode.
+// Fetches the scorecard's memories file and merges topics into score rows,
+// matching single-scorecard mode behaviour so memories appear inline per-score.
+const ExpandedScorecardView: React.FC<{
+  scorecardData: any;
+  blockProps: ReportBlockProps;
+  index: number;
+  totalCount: number;
+}> = ({ scorecardData, blockProps, index, totalCount }) => {
   const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
-  const [expanded, setExpanded] = React.useState(false);
 
+  const memoriesFile: string | null = scorecardData.memories_file ?? null;
   React.useEffect(() => {
     if (!memoriesFile || loadedMemories) return;
     (async () => {
@@ -66,35 +68,38 @@ const ScorecardMemories: React.FC<{
         const parsed = yaml.load(text) as FeedbackAnalysisData['memories'];
         setLoadedMemories(parsed ?? null);
       } catch (e) {
-        console.warn('ScorecardMemories: failed to load memories_file', e);
+        console.warn('ExpandedScorecardView: failed to load memories_file', e);
       }
     })();
   }, [memoriesFile, loadedMemories]);
 
-  const memories = loadedMemories ?? inlineMemories;
-  if (!memories || !memories.scores || memories.scores.length === 0) return null;
+  const memories = loadedMemories ?? scorecardData.memories ?? null;
+  const memoriesByScoreId = memories
+    ? Object.fromEntries(memories.scores.map((s: any) => [s.score_id, s.topics]))
+    : {};
+  const dataWithTopics = memories ? {
+    ...scorecardData,
+    scores: scorecardData.scores?.map((s: any) => ({
+      ...s,
+      topics: memoriesByScoreId[s.score_id] ?? s.topics,
+    })),
+  } : scorecardData;
 
   return (
-    <div className="mt-4">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
-      >
-        <span className="font-medium text-sm">Topic Memories</span>
-        {expanded ? (
-          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        )}
-      </button>
-      {expanded && (
-        <div className="mt-3 space-y-6 px-1">
-          {memories.scores.map((sd) => (
-            <TopicList key={sd.score_id} topics={sd.topics} label={sd.score_name} />
-          ))}
-        </div>
-      )}
+    <div className="pt-3" style={{ marginBottom: index < totalCount - 1 ? '4em' : '0' }}>
+      <FeedbackAnalysisDisplay
+        data={dataWithTopics}
+        showHeader={false}
+        showDateRange={false}
+        showPrecisionRecall={false}
+        hideSummary={true}
+        attachedFiles={blockProps.attachedFiles}
+        log={blockProps.log}
+        rawOutput={typeof blockProps.output === 'string' ? blockProps.output : undefined}
+        id={`${blockProps.id}-${index}`}
+        position={blockProps.position}
+        config={blockProps.config}
+      />
     </div>
   );
 };
@@ -209,25 +214,12 @@ const AllScorecardsView: React.FC<{
                   </div>
                 </div>
                 {isExpanded && (
-                  <div className="pt-3" style={{ marginBottom: index < scorecards.length - 1 ? '4em' : '0' }}>
-                    <FeedbackAnalysisDisplay
-                      data={scorecardData}
-                      showHeader={false}
-                      showDateRange={false}
-                      showPrecisionRecall={false}
-                      hideSummary={true}
-                      attachedFiles={blockProps.attachedFiles}
-                      log={blockProps.log}
-                      rawOutput={typeof blockProps.output === 'string' ? blockProps.output : undefined}
-                      id={`${blockProps.id}-${index}`}
-                      position={blockProps.position}
-                      config={blockProps.config}
-                    />
-                    <ScorecardMemories
-                      memoriesFile={scorecardData.memories_file}
-                      inlineMemories={scorecardData.memories}
-                    />
-                  </div>
+                  <ExpandedScorecardView
+                    scorecardData={scorecardData}
+                    blockProps={blockProps}
+                    index={index}
+                    totalCount={scorecards.length}
+                  />
                 )}
               </div>
             );
