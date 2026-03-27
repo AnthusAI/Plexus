@@ -435,8 +435,12 @@ def register_evaluation_tools(mcp: FastMCP):
                                         ).timestamp()
                                         if created_ts >= spawn_time - 5:  # 5s grace for clock skew
                                             return eval_info.get("id")
-                                    except Exception:
-                                        pass
+                                    except Exception as parse_err:
+                                        logger.debug(
+                                            "Failed to parse evaluation created_at timestamp %r: %s",
+                                            created_at_str,
+                                            parse_err,
+                                        )
                         except Exception:
                             pass
                     return None
