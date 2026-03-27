@@ -22,7 +22,7 @@ import time
 import subprocess
 import threading
 import argparse
-from typing import Optional, Any
+from typing import Optional
 
 # ── Server configuration (mirrors ~/.cursor/mcp.json) ──────────────────────
 PYTHON = "/home/ryan/miniconda3/envs/py311/bin/python"
