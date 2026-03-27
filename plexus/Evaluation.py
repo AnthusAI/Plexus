@@ -238,13 +238,11 @@ class Evaluation:
     @staticmethod
     def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
         """
-        Convert native Gwet's AC1 [-1, 1] into legacy-compatible percentage [0, 100].
+        Return Gwet's AC1 value as-is in its native [-1, 1] range.
         """
         if alignment_value is None:
             return 0.0
-        # Clamp to valid AC1 range before mapping to avoid drift from floating point noise.
-        clamped = max(-1.0, min(1.0, float(alignment_value)))
-        return ((clamped + 1.0) / 2.0) * 100.0
+        return float(alignment_value)
 
 
     def __enter__(self):
@@ -1311,6 +1309,12 @@ class Evaluation:
                         self.processed_items_by_score[score_name] = processed_counter
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
+                        # Advance to Processing stage on first item completed
+                        if processed_counter == 1 and tracker and not getattr(self, '_processing_stage_started', False):
+                            self._processing_stage_started = True
+                            tracker.advance_stage()
+                            self.logging.info("==== STAGE: Processing ====")
+
                         # Update tracker with actual count of processed items
                         if tracker and tracker.current_stage:
                             tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
@@ -1520,11 +1524,19 @@ class Evaluation:
         
         # Build update input with only valid fields for UpdateEvaluationInput
         # Only include the fields that are allowed by the schema
+        # For completed evaluations, totalItems = processedItems (composite scores
+        # multiply processed_items by sub-score count, so we match them at completion).
+        # During the run, use number_of_texts_to_sample as the estimate.
+        if status == "COMPLETED":
+            total_for_update = self.processed_items
+        else:
+            total_for_update = getattr(self, 'number_of_texts_to_sample', 0)
         update_input = {
             "id": self.experiment_id,
             "status": status,
             "accuracy": metrics["accuracy"] * 100,
-            "processedItems": self.processed_items  # Add processed items count for progress tracking
+            "totalItems": total_for_update,
+            "processedItems": self.processed_items
         }
         
         # Add score ID and version ID if available
@@ -2337,8 +2349,9 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
             
-            # Extract feedback_item_id if available
-            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            # Extract feedback_item_id if available (prefer the passed-in value over metadata)
+            if feedback_item_id is None and score_result.metadata:
+                feedback_item_id = score_result.metadata.get('feedback_item_id')
             
             # Ensure we have valid metadata
             metadata_dict = {
@@ -3343,7 +3356,7 @@ class FeedbackEvaluation(Evaluation):
 
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
         # Store evaluation_id BEFORE calling super().__init__ so parent can use it
         self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
@@ -3362,10 +3375,11 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
-        
+
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
+        self.skip_local_reports = skip_local_reports
         # evaluation_id and account_id already set above
         # Don't overwrite scorecard_id here since it's already set
         self.results_queue = asyncio.Queue()
@@ -3677,6 +3691,11 @@ class AccuracyEvaluation(Evaluation):
                         self.logging.info(f"Overall accuracy: {overall_accuracy}%")
                     else:
                         raise
+
+                # Skip local file generation when requested (e.g. feedback accuracy evaluations
+                # that already store all results in the API).
+                if self.skip_local_reports:
+                    return metrics
 
                 # Generate reports - determine the correct report folder
                 if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
