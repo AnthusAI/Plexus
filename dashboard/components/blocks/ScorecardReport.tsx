@@ -227,7 +227,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
         </div>
       )}
 
-      {!hasData && scoreData.scores && scoreData.scores.length === 0 && (
+      {!hasData && scoreData.scores && scoreData.scores.length === 0 && !children && (
         <div className="py-8 text-center text-muted-foreground">
           <p>No scorecard data available for analysis within the selected parameters.</p>
           <p className="text-sm mt-1">Check that scorecard items exist for the specified parameters.</p>

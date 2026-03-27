@@ -40,22 +40,68 @@ export class EvaluationService {
     }
   }
 
+  // Fetch all score results for an evaluation using paginated query
+  private async fetchAllScoreResults(evaluationId: string): Promise<any[]> {
+    let nextToken: string | null = null;
+    let all: any[] = [];
+    do {
+      const resp = await this.client.graphql({
+        query: `
+          query ($evaluationId: String!, $limit: Int, $nextToken: String) {
+            listScoreResultByEvaluationId(
+              evaluationId: $evaluationId
+              limit: $limit
+              nextToken: $nextToken
+            ) {
+              items {
+                id
+                value
+                explanation
+                confidence
+                metadata
+                trace
+                itemId
+                createdAt
+                feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
+                item { id itemIdentifiers { items { name value url position } } }
+              }
+              nextToken
+            }
+          }
+        `,
+        variables: { evaluationId, limit: 1000, nextToken }
+      }) as any;
+      const data = resp?.data?.listScoreResultByEvaluationId;
+      const items = Array.isArray(data?.items) ? data.items : [];
+      all = all.concat(items);
+      nextToken = data?.nextToken || null;
+    } while (nextToken);
+    return all;
+  }
+
   // Fetch evaluation by ID (for dashboard deep links)
   async fetchEvaluationById(id: string): Promise<Evaluation> {
     try {
       const evaluationData = await this.safeGet<Schema['Evaluation']['type']>('Evaluation', id);
-      
+
       if (!evaluationData) {
         throw new Error('Evaluation not found');
       }
-      
+
+      // Load score results via paginated query (lazy loader from .get() doesn't return data)
+      const scoreResultItems = await this.fetchAllScoreResults(id);
+      const evaluationWithResults = {
+        ...evaluationData,
+        scoreResults: { items: scoreResultItems }
+      };
+
       // Transform the data to the expected Evaluation type
-      const transformedData = transformEvaluation(evaluationData);
-      
+      const transformedData = transformEvaluation(evaluationWithResults as any);
+
       if (!transformedData) {
         throw new Error('Failed to transform evaluation data');
       }
-      
+
       return transformedData as Evaluation;
     } catch (error) {
       console.error('Error fetching evaluation by ID:', error);
