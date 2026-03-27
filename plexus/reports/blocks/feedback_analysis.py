@@ -574,6 +574,10 @@ class FeedbackAnalysis(BaseReportBlock):
             cache = S3EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
             embed_fn = sentence_transformer_embedder(model_id=model_id, cache=cache)
 
+            # Warm up the model before parallel execution to avoid meta-tensor
+            # race conditions when multiple coroutines call embed_fn concurrently
+            await asyncio.to_thread(embed_fn, ["warmup"])
+
             now = datetime.now(_tz.utc)
 
             async def _process_one_score(score_data: Dict) -> Optional[Dict]:
