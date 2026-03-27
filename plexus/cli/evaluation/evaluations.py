@@ -1866,6 +1866,25 @@ def accuracy(
             
             logging.info(f"Retrieved {len(labeled_samples_data)} samples.")
 
+            if len(labeled_samples_data) == 0:
+                logging.warning("No feedback items found in the specified time window. Marking evaluation as NO_DATA.")
+                if evaluation_record:
+                    try:
+                        evaluation_record.update(**{
+                            'status': 'COMPLETED',
+                            'totalItems': 0,
+                            'processedItems': 0,
+                            'errorMessage': 'No feedback items found in the specified time window.',
+                        })
+                    except Exception as _upd_err:
+                        logging.warning(f"Could not update evaluation record for NO_DATA: {_upd_err}")
+                if tracker:
+                    try:
+                        tracker.complete()
+                    except Exception:
+                        pass
+                return evaluation_record
+
             # Determine the subset of score names to evaluate
             subset_of_score_names = None
             if target_score_identifiers:
@@ -3099,7 +3118,20 @@ def feedback(
             console.print(f"[bold red]Error: Could not find score '{score}' in scorecard '{scorecard}'[/bold red]")
             return
         console.print(f"Resolved score ID: {score_id}")
-        
+
+        # Auto-fetch champion version if not specified — always run Mode 2 (accuracy against feedback)
+        if not version:
+            _champ_result = client.execute(
+                'query GetScore($id: ID!) { getScore(id: $id) { championVersionId } }',
+                {'id': score_id}
+            )
+            version = (_champ_result.get('getScore') or {}).get('championVersionId')
+            if version:
+                console.print(f"[dim]Auto-resolved champion version: {version}[/dim]")
+            else:
+                console.print("[bold red]Error: No champion version found for this score. Use --version to specify one.[/bold red]")
+                return
+
         # If version is specified, use accuracy evaluation with FeedbackItems dataset
         if version:
             console.print(f"\n[bold]Mode: Accuracy Evaluation with FeedbackItems Dataset[/bold]")
@@ -3113,17 +3145,18 @@ def feedback(
             import tempfile
             import os
             
-            # Get the score object to access external_id
+            # Get the score object to access its name for FeedbackItems lookup
             score_obj = DashboardScore.get_by_id(score_id, client=client)
-            score_external_id = score_obj.externalId if score_obj and score_obj.externalId else score
-            
-            console.print(f"Using score identifier: {score_external_id}")
+            score_name_for_dataset = score_obj.name if score_obj and score_obj.name else score
+
+            console.print(f"Using score name for dataset: {score_name_for_dataset}")
 
             # Create a temporary YAML file with FeedbackItems dataset override
+            # Use score NAME (not external ID) since FeedbackItems resolves by name/key/ID
             dataset_config = {
                 "class": "FeedbackItems",
                 "scorecard": scorecard,  # Use the identifier provided by user
-                "score": score_external_id,  # Use external ID if available, otherwise the identifier
+                "score": score_name_for_dataset,  # Use score name for reliable FeedbackItems lookup
                 "days": days
             }
 
@@ -3255,6 +3288,30 @@ def feedback(
                 else:
                     console.print("[bold red]Warning: Scorecard object has no 'scores' attribute![/bold red]")
                 
+                # Create Task and TaskStages for progress tracking (if not passed in via --task-id)
+                tracker = None
+                if not task_id:
+                    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
+
+                    stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                    tracker = TaskProgressTracker(
+                        total_items=0,
+                        stage_configs=stage_configs,
+                        target=f"evaluation/feedback/{scorecard}/{score}",
+                        command=f"evaluate feedback --scorecard {scorecard} --score {score} --version {version}",
+                        description=f"Feedback accuracy evaluation for {scorecard} > {score}",
+                        dispatch_status="DISPATCHED",
+                        prevent_new_task=False,
+                        metadata={
+                            "type": "Feedback Accuracy Evaluation",
+                            "scorecard": scorecard,
+                            "task_type": "Feedback Accuracy Evaluation"
+                        },
+                        account_id=account_id,
+                        client=client
+                    )
+                    task_id = tracker.task.id
+
                 # Create evaluation record
                 started_at = datetime.now(timezone.utc)
                 evaluation_params = {
@@ -3297,12 +3354,22 @@ def feedback(
                     evaluation_id=evaluation_id,
                     account_key=account_key,
                     scorecard_id=scorecard_id,
-                    task_id=task_id
+                    task_id=task_id,
+                    skip_local_reports=True,
+                    number_of_texts_to_sample=10000,  # Process all feedback items, not just default 100
+                    subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                 )
                 
                 # Run the evaluation
-                await_result = asyncio.run(accuracy_eval.run())
-                
+                await_result = asyncio.run(accuracy_eval.run(tracker=tracker))
+
+                # Complete the tracker to mark Finalizing stage as done
+                if tracker:
+                    try:
+                        tracker.complete()
+                    except Exception as _tracker_err:
+                        console.print(f"[yellow]Warning: tracker.complete() failed: {_tracker_err}[/yellow]")
+
                 console.print("\n[bold green]✓ Feedback Evaluation (with version) Complete[/bold green]")
                 console.print(f"\n[bold]View full results:[/bold]")
                 console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")

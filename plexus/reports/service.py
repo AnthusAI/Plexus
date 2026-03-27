@@ -132,11 +132,9 @@ def _persist_output_artifact_and_compact_if_needed(
         if output_path not in existing_details_files_list:
             existing_details_files_list.append(output_path)
 
-    if len(normalized_output) > MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS:
-        logger.warning(
-            f"{log_prefix} ReportBlock {report_block_id} output length {len(normalized_output)} exceeds "
-            f"inline limit {MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS}. Compacting inline payload."
-        )
+    if should_attach and output_path:
+        # Always compact inline payload when output is attached — one consistent path
+        # for the frontend regardless of output size.
         return (
             _compact_output_json_for_storage(normalized_output, output_path),
             existing_details_files_list,
