@@ -3360,7 +3360,7 @@ def feedback(
                 )
                 
                 # Run the evaluation
-                await_result = asyncio.run(accuracy_eval.run(tracker=tracker))
+                asyncio.run(accuracy_eval.run(tracker=tracker))
 
                 # Complete the tracker to mark Finalizing stage as done
                 if tracker:
