@@ -22,7 +22,6 @@ import time
 import subprocess
 import threading
 import argparse
-import textwrap
 from typing import Optional, Any
 
 # ── Server configuration (mirrors ~/.cursor/mcp.json) ──────────────────────
