@@ -2033,7 +2033,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
-                        item = Item.get_by_id(item_id, item_client) if item_client else None
+                        item = await asyncio.to_thread(Item.get_by_id, item_id, item_client) if item_client else None
                         if not item_client:
                             logging.warning(f"No dashboard client available to fetch Item {item_id}")
                         elif not item:
@@ -2049,7 +2049,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     if content_id and account_id:
                         try:
                             from plexus.dashboard.api.models.item import Item
-                            item = Item.find_by_identifier(
+                            item = await asyncio.to_thread(
+                                Item.find_by_identifier,
                                 client=item_client,
                                 account_id=account_id,
                                 identifier_key="reportId",
