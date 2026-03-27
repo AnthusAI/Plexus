@@ -96,7 +96,6 @@ def log_scorecard_configurations(scorecard_instance, context=""):
         logging.info(f"  " + "-" * 50)
     
     logging.info(f"==== END SCORECARD CONFIGURATIONS {context} ====")
-    logging.info("")
 
 def format_confusion_matrix_summary(final_metrics):
     """Format confusion matrix and detailed metrics for the evaluation summary."""
@@ -2163,8 +2162,6 @@ def accuracy(
                 skipped_results = final_metrics.get('skipped_results', 0)
                 if skipped_results > 0:
                     logging.info(f"Skipped Results:    {skipped_results} (due to unmet dependency conditions)")
-            
-            logging.info("")
             
             # Add detailed confusion matrix and metrics
             detailed_summary = format_confusion_matrix_summary(final_metrics)
