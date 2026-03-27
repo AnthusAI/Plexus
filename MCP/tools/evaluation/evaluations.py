@@ -441,8 +441,11 @@ def register_evaluation_tools(mcp: FastMCP):
                                             created_at_str,
                                             parse_err,
                                         )
-                        except Exception:
-                            pass
+                        except Exception as poll_err:
+                            logger.debug(
+                                "Error while polling for latest feedback evaluation: %s",
+                                poll_err,
+                            )
                     return None
 
                 if score_name:
