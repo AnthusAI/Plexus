@@ -3173,7 +3173,7 @@ def feedback(
                 if os.path.isdir(scorecard_yaml_path):
                     # It's a directory with individual score YAML files
                     # Look for the score's YAML file in the directory
-                    score_yaml_filename = f"{score_external_id}.yaml"
+                    score_yaml_filename = f"{score}.yaml"
                     score_yaml_path = os.path.join(scorecard_yaml_path, score_yaml_filename)
 
                     if not os.path.exists(score_yaml_path):
@@ -3247,8 +3247,7 @@ def feedback(
                     if score_config.get('name') == score or \
                        score_config.get('key') == score or \
                        score_config.get('external_id') == score or \
-                       score_config.get('id') == score_id or \
-                       score_config.get('external_id') == score_external_id:
+                       score_config.get('id') == score_id:
                         score_matches = True
                     
                     if score_matches:
