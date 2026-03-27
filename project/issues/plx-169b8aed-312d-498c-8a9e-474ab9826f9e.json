@@ -1,0 +1,37 @@
+{
+  "id": "plx-169b8aed-312d-498c-8a9e-474ab9826f9e",
+  "title": "Use local Tactus path dependency in Plexus for end-to-end local validation",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c6307742-74a7-45f8-b24f-03aba1cdf341",
+      "author": "derek.norrbom",
+      "text": "Implementing local-only dependency override in pyproject.toml by replacing pinned tactus==0.44.0 with a local file reference to /Users/derek.norrbom/Projects/Tactus for end-to-end local CC Python validation.",
+      "created_at": "2026-03-26T21:33:36.100729Z"
+    },
+    {
+      "id": "ac345572-add9-43e2-ac8b-f3932d92fd1b",
+      "author": "derek.norrbom",
+      "text": "Completed file edit in pyproject.toml: tactus dependency now points to local path URI (tactus @ file:///Users/derek.norrbom/Projects/Tactus). Ready for local install validation.",
+      "created_at": "2026-03-26T21:33:42.370706Z"
+    },
+    {
+      "id": "04c2ab14-7aad-437b-a749-c58efc9fa79b",
+      "author": "derek.norrbom",
+      "text": "Completed: updated pyproject.toml to use local Tactus dependency for local end-to-end validation ().",
+      "created_at": "2026-03-26T21:44:15.508985Z"
+    }
+  ],
+  "created_at": "2026-03-26T21:33:32.040817Z",
+  "updated_at": "2026-03-26T21:44:15.508985Z",
+  "closed_at": "2026-03-26T21:44:07.835014Z",
+  "custom": {}
+}

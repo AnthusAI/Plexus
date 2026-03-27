@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "79031a04-7bd3-431b-924f-d58284bcc9b7",
+  "issue_id": "plx-e812f92b-ba73-4840-a46b-5e88cbeeecbb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-26T19:43:26.161Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Harden Plexus dependency declarations so downstream installs (including Call-Criteria-Python) resolve deterministically in fresh Python 3.11 environments without excessive backtracking or resolution-too-deep failures.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Stabilize Plexus dependency constraints to prevent pip resolver depth failures"
+  }
+}
