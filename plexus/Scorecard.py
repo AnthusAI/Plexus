@@ -1190,45 +1190,10 @@ class Scorecard:
                 else:
                     result = score_result
 
-                # Get the score instance to access cost information
-                score_class = self.score_registry.get(score_name)
-                if score_class:
-                    score_config = self.score_registry.get_properties(score_name)
-                    try:
-                        temp_score_instance = await score_class.create(**score_config)
-                        # Get the total cost for this score and update scorecard's cost accumulators
-                        score_total_cost = temp_score_instance.get_accumulated_costs()
-                        total_tokens = score_total_cost.get(
-                            "prompt_tokens", 0
-                        ) + score_total_cost.get("completion_tokens", 0)
-                    except Exception:
-                        # If we can't create the instance, use default values
-                        score_total_cost = {}
-                        total_tokens = 0
-                else:
-                    score_total_cost = {}
-                    total_tokens = 0
-
-                self.prompt_tokens += score_total_cost.get("prompt_tokens", 0)
-                self.completion_tokens += score_total_cost.get("completion_tokens", 0)
-                self.cached_tokens += score_total_cost.get("cached_tokens", 0)
-                self.llm_calls += score_total_cost.get("llm_calls", 0)
-                self.input_cost += score_total_cost.get("input_cost", 0)
-                self.output_cost += score_total_cost.get("output_cost", 0)
-                self.total_cost += Decimal(str(score_total_cost.get("total_cost", 0)))
-                self.scorecard_total_cost += Decimal(
-                    str(score_total_cost.get("total_cost", 0))
-                )
-                self.cost_per_text += Decimal(
-                    str(score_total_cost.get("cost_per_text", 0))
-                )
-
-                # Log CloudWatch metrics for this individual score
-                score_config = (
-                    score_config
-                    if "score_config" in locals()
-                    else self.score_registry.get_properties(score_name)
-                )
+                # Cost/token metrics are already recorded in get_score_result().
+                # Avoid re-instantiating the score here because it can trigger expensive setup
+                # (e.g., LangGraph workflow compilation) for every item.
+                score_config = self.score_registry.get_properties(score_name) or {}
                 dimensions = {
                     "ScoreCardID": str(self.properties.get("id", "unknown")),
                     "ScoreCardName": str(self.properties.get("name", "unknown")),
@@ -1237,72 +1202,18 @@ class Scorecard:
                     "Modality": modality or "Development",
                     "Environment": os.getenv("environment") or "Unknown",
                 }
-
-                self.cloudwatch_logger.log_metric(
-                    "Cost", score_total_cost.get("total_cost", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "PromptTokens", score_total_cost.get("prompt_tokens", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CompletionTokens",
-                    score_total_cost.get("completion_tokens", 0),
-                    dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "TotalTokens", total_tokens, dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CachedTokens", score_total_cost.get("cached_tokens", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "ExternalAIRequests",
-                    score_total_cost.get("llm_calls", 0),
-                    dimensions,
-                )
                 self.cloudwatch_logger.log_metric("ItemTokens", item_tokens, dimensions)
 
                 scorecard_dimensions = {
                     "ScoreCardName": str(self.properties.get("name", "unknown")),
                     "Environment": os.getenv("environment") or "Unknown",
                 }
-
-                self.cloudwatch_logger.log_metric(
-                    "CostByScorecard",
-                    score_total_cost.get("total_cost", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "PromptTokensByScorecard",
-                    score_total_cost.get("prompt_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CompletionTokensByScorecard",
-                    score_total_cost.get("completion_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "TotalTokensByScorecard", total_tokens, scorecard_dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CachedTokensByScorecard",
-                    score_total_cost.get("cached_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "ExternalAIRequestsByScorecard",
-                    score_total_cost.get("llm_calls", 0),
-                    scorecard_dimensions,
-                )
                 self.cloudwatch_logger.log_metric(
                     "ItemTokensByScorecard", item_tokens, scorecard_dimensions
                 )
-                # Use aggregated scorecard costs for CostPerText instead of per-score value
-                aggregated_costs = self.get_accumulated_costs()
                 self.cloudwatch_logger.log_metric(
                     "CostPerText",
-                    aggregated_costs.get("cost_per_text", 0),
+                    self.get_accumulated_costs().get("cost_per_text", 0),
                     scorecard_dimensions,
                 )
 
