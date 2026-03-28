@@ -145,6 +145,120 @@ const parseJsonField = (value: unknown): any => {
   }
 }
 
+const parseRawChatMessage = (msg: any): ChatMessage | null => {
+  if (!msg || typeof msg !== 'object' || !msg.id) {
+    return null
+  }
+
+  // Parse tool call data from content if structured fields are missing
+  let parsedToolName = msg.toolName
+  let parsedToolParameters = parseJsonField(msg.toolParameters)
+
+  if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
+    const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
+    if (toolCallMatch) {
+      parsedToolName = toolCallMatch[1].trim()
+      try {
+        const pythonDict = toolCallMatch[2]
+        const jsonString = pythonDict
+          .replace(/'/g, '"')
+          .replace(/True/g, 'true')
+          .replace(/False/g, 'false')
+          .replace(/None/g, 'null')
+        parsedToolParameters = JSON.parse(jsonString)
+      } catch (e) {
+        console.warn('Failed to parse tool parameters:', e)
+      }
+    }
+  }
+
+  return {
+    id: msg.id,
+    content: msg.content || '',
+    role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+    messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+    humanInteraction: msg.humanInteraction,
+    toolName: parsedToolName,
+    toolParameters: parsedToolParameters,
+    toolResponse: parseJsonField(msg.toolResponse),
+    metadata: parseMessageMetadata(msg.metadata),
+    parentMessageId: msg.parentMessageId,
+    accountId: msg.accountId,
+    procedureId: msg.procedureId,
+    createdAt: msg.createdAt,
+    sequenceNumber: msg.sequenceNumber,
+    sessionId: msg.sessionId
+  }
+}
+
+const isVisibleChatMessage = (msg: ChatMessage): boolean => {
+  if (msg.humanInteraction === 'INTERNAL') {
+    return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+  }
+  return true
+}
+
+const sortChatMessages = (messages: ChatMessage[]): ChatMessage[] => {
+  return [...messages].sort((a, b) => {
+    if (a.sequenceNumber && b.sequenceNumber) {
+      return a.sequenceNumber - b.sequenceNumber
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  })
+}
+
+const normalizeAndSortVisibleMessages = (rawMessages: any[]): ChatMessage[] => {
+  const parsed = rawMessages
+    .map(parseRawChatMessage)
+    .filter((msg): msg is ChatMessage => Boolean(msg))
+    .filter(isVisibleChatMessage)
+  return sortChatMessages(parsed)
+}
+
+const getMetadataFingerprint = (metadata: unknown): string => {
+  try {
+    return JSON.stringify(metadata ?? null)
+  } catch {
+    return '__unserializable__'
+  }
+}
+
+const areMessagesEquivalent = (left: ChatMessage, right: ChatMessage): boolean => {
+  return (
+    left.id === right.id
+    && left.content === right.content
+    && left.role === right.role
+    && left.messageType === right.messageType
+    && left.humanInteraction === right.humanInteraction
+    && left.toolName === right.toolName
+    && getMetadataFingerprint(left.toolParameters) === getMetadataFingerprint(right.toolParameters)
+    && getMetadataFingerprint(left.toolResponse) === getMetadataFingerprint(right.toolResponse)
+    && getMetadataFingerprint(left.metadata) === getMetadataFingerprint(right.metadata)
+    && left.parentMessageId === right.parentMessageId
+    && left.accountId === right.accountId
+    && left.procedureId === right.procedureId
+    && left.createdAt === right.createdAt
+    && left.sequenceNumber === right.sequenceNumber
+    && left.sessionId === right.sessionId
+  )
+}
+
+const hasMessageListChanged = (prevMessages: ChatMessage[], nextMessages: ChatMessage[]): boolean => {
+  if (prevMessages.length !== nextMessages.length) {
+    return true
+  }
+
+  for (let i = 0; i < nextMessages.length; i += 1) {
+    const previous = prevMessages[i]
+    const next = nextMessages[i]
+    if (!previous || !next || previous.id !== next.id || !areMessagesEquivalent(previous, next)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 // Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
@@ -376,6 +490,36 @@ function ConversationViewer({
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
   }, [selectedSessionId])
+
+  useEffect(() => {
+    if (propMessages) {
+      return
+    }
+
+    const sessionCounts = internalMessages.reduce((acc: Record<string, number>, message) => {
+      if (message.sessionId) {
+        acc[message.sessionId] = (acc[message.sessionId] || 0) + 1
+      }
+      return acc
+    }, {})
+
+    setInternalSessions((prevSessions) => {
+      let changed = false
+      const nextSessions = prevSessions.map((session) => {
+        const nextCount = sessionCounts[session.id] || 0
+        if ((session.messageCount || 0) === nextCount) {
+          return session
+        }
+        changed = true
+        return {
+          ...session,
+          messageCount: nextCount,
+        }
+      })
+
+      return changed ? nextSessions : prevSessions
+    })
+  }, [internalMessages, propMessages])
   
   // Use either experimentId or procedureId (they're synonymous in this context)
   const effectiveId = experimentId || procedureId
@@ -753,66 +897,7 @@ function ConversationViewer({
         } while (nextToken)
 
         if (allMessages.length > 0) {
-          const formattedMessages: ChatMessage[] = allMessages.map((msg: any) => {
-            
-            // Parse tool call data from content if structured fields are missing
-            let parsedToolName = msg.toolName
-            let parsedToolParameters = parseJsonField(msg.toolParameters)
-            
-            if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
-              // Parse tool call from content string like: "plexus_feedback_find({'scorecard_name': 'SelectQuote HCS Medium-Risk', ...})"
-              const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
-              if (toolCallMatch) {
-                parsedToolName = toolCallMatch[1].trim()
-                try {
-                  // Convert Python-style dict to JSON and parse
-                  const pythonDict = toolCallMatch[2]
-                  const jsonString = pythonDict
-                    .replace(/'/g, '"')  // Convert single quotes to double quotes
-                    .replace(/True/g, 'true')  // Convert Python booleans
-                    .replace(/False/g, 'false')
-                    .replace(/None/g, 'null')
-                  parsedToolParameters = JSON.parse(jsonString)
-                } catch (e) {
-                  console.warn('Failed to parse tool parameters from content:', e)
-                }
-              }
-            }
-            
-            return {
-              id: msg.id,
-              content: msg.content || '',
-              role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-              messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
-              humanInteraction: msg.humanInteraction,
-              toolName: parsedToolName,
-              toolParameters: parsedToolParameters,
-              toolResponse: parseJsonField(msg.toolResponse),
-              metadata: parseMessageMetadata(msg.metadata),
-              parentMessageId: msg.parentMessageId,
-              accountId: msg.accountId,
-              procedureId: msg.procedureId,
-              createdAt: msg.createdAt,
-              sequenceNumber: msg.sequenceNumber,
-              sessionId: msg.sessionId
-            }
-          })
-          
-          const visibleMessages = formattedMessages.filter(msg => {
-            if (msg.humanInteraction === 'INTERNAL') {
-              return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
-            }
-            return true
-          })
-
-          // Sort all messages by sequence number and creation time
-          const sortedMessages = visibleMessages.sort((a, b) => {
-            if (a.sequenceNumber && b.sequenceNumber) {
-              return a.sequenceNumber - b.sequenceNumber
-            }
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          })
-
+          const sortedMessages = normalizeAndSortVisibleMessages(allMessages)
           setInternalMessages(sortedMessages)
           
           // Update session message counts
@@ -937,18 +1022,56 @@ function ConversationViewer({
     }
   }, [effectiveId, isExternallyControlledSession, onSessionSelect])
 
-  // Real-time subscription for new chat messages - notification-based pattern
+  const applyRealtimeMessageMutation = React.useCallback((rawMessage: any) => {
+    const parsed = parseRawChatMessage(rawMessage)
+    if (!parsed) {
+      return
+    }
+
+    if (parsed.procedureId && parsed.procedureId !== effectiveId) {
+      return
+    }
+
+    setInternalMessages((prevMessages) => {
+      const existingIndex = prevMessages.findIndex((message) => message.id === parsed.id)
+      const visible = isVisibleChatMessage(parsed)
+
+      if (!visible) {
+        if (existingIndex === -1) {
+          return prevMessages
+        }
+        return prevMessages.filter((message) => message.id !== parsed.id)
+      }
+
+      if (existingIndex === -1) {
+        return sortChatMessages([...prevMessages, parsed])
+      }
+
+      const previous = prevMessages[existingIndex]
+      if (areMessagesEquivalent(previous, parsed)) {
+        return prevMessages
+      }
+
+      const next = [...prevMessages]
+      next[existingIndex] = parsed
+      return sortChatMessages(next)
+    })
+  }, [effectiveId])
+
+  // Real-time subscription for chat messages. onCreate/onUpdate are primary; polling is fallback.
   useEffect(() => {
     if (!effectiveId) return
+
+    let isCancelled = false
 
     const checkForNewMessages = async () => {
       try {
         const client = getClient()
-        
+
         // Load ALL messages for this experiment with proper pagination
         let allMessages: any[] = []
         let nextToken: string | null = null
-        
+
         do {
           const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
             procedureId: effectiveId,
@@ -973,120 +1096,102 @@ function ConversationViewer({
               'sessionId'
             ]
           })
-          
+
           if (response?.data) {
             allMessages = [...allMessages, ...response.data]
           }
-          
+
           nextToken = response.nextToken || null
         } while (nextToken)
 
-        const messagesData = allMessages
-
-        if (messagesData) {
-          const formattedMessages: ChatMessage[] = messagesData.map((msg: any) => {
-            // Parse tool call data from content if structured fields are missing
-            let parsedToolName = msg.toolName
-            let parsedToolParameters = parseJsonField(msg.toolParameters)
-            
-            if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
-              // Parse tool call from content string
-              const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
-              if (toolCallMatch) {
-                parsedToolName = toolCallMatch[1].trim()
-                try {
-                  const pythonDict = toolCallMatch[2]
-                  const jsonString = pythonDict
-                    .replace(/'/g, '"')
-                    .replace(/True/g, 'true')
-                    .replace(/False/g, 'false')
-                    .replace(/None/g, 'null')
-                  parsedToolParameters = JSON.parse(jsonString)
-                } catch (e) {
-                  console.warn('Failed to parse tool parameters:', e)
-                }
-              }
-            }
-            
-            return {
-              id: msg.id,
-              content: msg.content || '',
-              role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-              messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
-              humanInteraction: msg.humanInteraction,
-              toolName: parsedToolName,
-              toolParameters: parsedToolParameters,
-              toolResponse: parseJsonField(msg.toolResponse),
-              metadata: parseMessageMetadata(msg.metadata),
-              parentMessageId: msg.parentMessageId,
-              accountId: msg.accountId,
-              procedureId: msg.procedureId,
-              createdAt: msg.createdAt,
-              sequenceNumber: msg.sequenceNumber,
-              sessionId: msg.sessionId
-            }
-          })
-          
-          const visibleMessages = formattedMessages.filter(msg => {
-            if (msg.humanInteraction === 'INTERNAL') {
-              return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
-            }
-            return true
-          })
-
-          // Sort messages by sequence number and creation time
-          const sortedMessages = visibleMessages.sort((a, b) => {
-            if (a.sequenceNumber && b.sequenceNumber) {
-              return a.sequenceNumber - b.sequenceNumber
-            }
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          })
-
-          // Check if we have new messages compared to current state
-          setInternalMessages(prevMessages => {
-            const currentIds = new Set(prevMessages.map(m => m.id))
-            const newMessages = sortedMessages.filter(m => !currentIds.has(m.id))
-            
-            if (newMessages.length > 0) {
-              return sortedMessages // Replace with complete sorted list
-            }
-            
-            return prevMessages // No changes
-          })
+        if (isCancelled) {
+          return
         }
+
+        const sortedMessages = normalizeAndSortVisibleMessages(allMessages)
+        setInternalMessages((prevMessages) => (
+          hasMessageListChanged(prevMessages, sortedMessages)
+            ? sortedMessages
+            : prevMessages
+        ))
       } catch (error) {
         console.error('Error checking for new messages:', error)
       }
     }
 
-    let subscription: { unsubscribe: () => void } | null = null
+    const extractSubscriptionMessage = (payload: any): any | null => {
+      const directData = payload?.data
+      if (directData && typeof directData === 'object') {
+        if ('onCreateChatMessage' in directData) {
+          return directData.onCreateChatMessage
+        }
+        if ('onUpdateChatMessage' in directData) {
+          return directData.onUpdateChatMessage
+        }
+        if ('id' in directData) {
+          return directData
+        }
+      }
+      if (payload && typeof payload === 'object' && 'id' in payload) {
+        return payload
+      }
+      return null
+    }
+
+    let createSubscription: { unsubscribe: () => void } | null = null
+    let updateSubscription: { unsubscribe: () => void } | null = null
     const pollTimer = window.setInterval(() => {
       checkForNewMessages()
-    }, 5000)
+    }, 15000)
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      subscription = getClient().models.ChatMessage.onCreate().subscribe({
-        next: () => {
-          // Don't rely on the subscription data, just use it as a notification
+      createSubscription = getClient().models.ChatMessage.onCreate().subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionMessage(payload)
+          if (incoming) {
+            applyRealtimeMessageMutation(incoming)
+            return
+          }
           checkForNewMessages()
         },
         error: (error: Error) => {
-          console.error('Chat message subscription error:', error)
+          console.error('Chat message create subscription error:', error)
         }
       })
     } catch (error) {
-      console.error('Error setting up chat message notification:', error)
+      console.error('Error setting up chat message create notification:', error)
     }
 
-    // Also check for new messages when the listener is first set up.
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      updateSubscription = getClient().models.ChatMessage.onUpdate().subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionMessage(payload)
+          if (incoming) {
+            applyRealtimeMessageMutation(incoming)
+            return
+          }
+          checkForNewMessages()
+        },
+        error: (error: Error) => {
+          console.error('Chat message update subscription error:', error)
+        }
+      })
+    } catch (error) {
+      console.error('Error setting up chat message update notification:', error)
+    }
+
+    // Initial load + reconciliation on mount.
     checkForNewMessages()
 
     return () => {
+      isCancelled = true
       window.clearInterval(pollTimer)
-      subscription?.unsubscribe()
+      createSubscription?.unsubscribe()
+      updateSubscription?.unsubscribe()
     }
-  }, [effectiveId])
+  }, [applyRealtimeMessageMutation, effectiveId])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
