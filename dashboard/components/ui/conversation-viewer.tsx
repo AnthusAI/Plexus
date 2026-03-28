@@ -106,6 +106,27 @@ export interface ConversationViewerProps {
   defaultAccountIdForNewSession?: string
 }
 
+const START_CONSOLE_RUN_MUTATION = `
+  mutation StartConsoleRun(
+    $sessionId: String!
+    $procedureId: String!
+    $triggerMessageId: String!
+    $clientInstrumentation: AWSJSON
+  ) {
+    startConsoleRun(
+      sessionId: $sessionId
+      procedureId: $procedureId
+      triggerMessageId: $triggerMessageId
+      clientInstrumentation: $clientInstrumentation
+    ) {
+      runId
+      taskId
+      accepted
+      queuedAt
+    }
+  }
+`
+
 // Helper function to format JSON with proper newlines
 const formatJsonWithNewlines = (obj: any): string => {
   // If the object has a 'result' field that's a string, try to parse it as JSON
@@ -409,6 +430,24 @@ const getMessageTypeLabel = (message: ChatMessage) => {
   return message.messageType || message.role || 'Message'
 }
 
+const shouldShowMessageTypeBadge = (message: ChatMessage): boolean => {
+  if (message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') {
+    return true
+  }
+  return [
+    'NOTIFICATION',
+    'ALERT_INFO',
+    'ALERT_WARNING',
+    'ALERT_ERROR',
+    'ALERT_CRITICAL',
+    'PENDING_APPROVAL',
+    'PENDING_INPUT',
+    'PENDING_REVIEW',
+    'PENDING_ESCALATION',
+    'RESPONSE',
+  ].includes(message.humanInteraction || '')
+}
+
 const getRowFromMessage = (message: ChatMessage): ConversationRow => {
   if (message.role === 'USER' || message.humanInteraction === 'RESPONSE') {
     return {
@@ -571,139 +610,84 @@ function ConversationViewer({
     })
   }
 
-  const triggerLocalProcedureRun = React.useCallback(async (
+  const startConsoleRun = React.useCallback(async (
+    sessionId: string,
     procedureIdToRun: string,
-    taskId: string
-  ): Promise<boolean> => {
-    try {
-      const response = await fetch('/api/console/procedure-run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          procedureId: procedureIdToRun,
-          taskId,
-        }),
-      })
-      if (!response.ok) {
-        return false
-      }
-      const payload = await response.json().catch(() => null)
-      return Boolean(payload?.accepted)
-    } catch (error) {
-      console.warn('[ConversationViewer] Local console procedure trigger failed', error)
-      return false
+    triggerMessageId: string,
+    clientInstrumentation: Record<string, unknown> = {},
+  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
+    const client = getClient() as any
+    const response = await client.graphql({
+      query: START_CONSOLE_RUN_MUTATION,
+      variables: {
+        sessionId,
+        procedureId: procedureIdToRun,
+        triggerMessageId,
+        clientInstrumentation: JSON.stringify(clientInstrumentation),
+      },
+    })
+
+    const result = response?.data?.startConsoleRun
+    if (!result?.accepted || !result?.taskId || !result?.runId || !result?.queuedAt) {
+      throw new Error('Failed to queue procedure run after chat input')
+    }
+    return {
+      taskId: result.taskId,
+      runId: result.runId,
+      queuedAt: result.queuedAt,
     }
   }, [])
 
   const enqueueProcedureRunTask = async (
-    accountId: string,
     procedureIdToRun: string,
+    sessionId: string,
     pendingMessageId: string,
     responseMessageId: string,
     requestId: string
   ) => {
-    const client = getClient()
-    const nowIso = new Date().toISOString()
-    const taskMetadata = {
-      dispatch_mode: 'local',
-      hitl_resume: {
-        pending_message_id: pendingMessageId,
-        response_message_id: responseMessageId,
-        request_id: requestId,
-        queued_at: nowIso,
+    await startConsoleRun(
+      sessionId,
+      procedureIdToRun,
+      responseMessageId,
+      {
+        hitl_resume: {
+          pending_message_id: pendingMessageId,
+          response_message_id: responseMessageId,
+          request_id: requestId,
+        },
       },
-    }
-
-    const created = await (client.models.Task.create as any)({
-      accountId,
-      type: 'Procedure Run',
-      status: 'RUNNING',
-      dispatchStatus: 'DISPATCHED',
-      target: `procedure/run/${procedureIdToRun}`,
-      command: `procedure run ${procedureIdToRun}`,
-      description: `Resume procedure ${procedureIdToRun} after HITL response`,
-      metadata: JSON.stringify(taskMetadata),
-      createdAt: nowIso,
-      startedAt: nowIso,
-      updatedAt: nowIso,
-      workerNodeId: 'dashboard-local-direct',
-    })
-    const createdTaskId = created?.data?.id
-    if (!createdTaskId) {
-      throw new Error('Failed to create local procedure run task for HITL response')
-    }
-
-    const triggered = await triggerLocalProcedureRun(procedureIdToRun, createdTaskId)
-    if (!triggered) {
-      await (client.models.Task.update as any)({
-        id: createdTaskId,
-        status: 'PENDING',
-        dispatchStatus: 'PENDING',
-        startedAt: null,
-        workerNodeId: null,
-        errorMessage: null,
-        errorDetails: null,
-        stdout: null,
-        stderr: null,
-        updatedAt: new Date().toISOString(),
-      })
-    }
+    )
   }
 
   const enqueueProcedureRunFromChat = React.useCallback(async (
-    accountId: string,
     procedureIdToRun: string,
     triggerMessageId: string,
-    sessionId: string
+    sessionId: string,
+    clientTiming: Record<string, unknown> = {},
   ) => {
-    const client = getClient()
-    const nowIso = new Date().toISOString()
-    const taskMetadata = {
-      dispatch_mode: 'local',
-      console_chat: {
-        session_id: sessionId,
-        trigger_message_id: triggerMessageId,
-        queued_at: nowIso,
-      },
+    const instrumentation: Record<string, unknown> = {
+      ...clientTiming,
+      client_dispatch_request_started_at: new Date().toISOString(),
     }
 
-    const created = await (client.models.Task.create as any)({
-      accountId,
-      type: 'Procedure Run',
-      status: 'RUNNING',
-      dispatchStatus: 'DISPATCHED',
-      target: `procedure/run/${procedureIdToRun}`,
-      command: `procedure run ${procedureIdToRun}`,
-      description: `Resume procedure ${procedureIdToRun} after chat input`,
-      metadata: JSON.stringify(taskMetadata),
-      createdAt: nowIso,
-      startedAt: nowIso,
-      updatedAt: nowIso,
-      workerNodeId: 'dashboard-local-direct',
-    })
-    const createdTaskId = created?.data?.id
-    if (!createdTaskId) {
-      throw new Error('Failed to queue procedure run after chat input')
+    try {
+      const dispatchResult = await startConsoleRun(
+        sessionId,
+        procedureIdToRun,
+        triggerMessageId,
+        instrumentation,
+      )
+      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
+      instrumentation.client_dispatch_request_accepted = true
+      instrumentation.queue_task_id = dispatchResult.taskId
+      instrumentation.queue_run_id = dispatchResult.runId
+      instrumentation.queue_accepted_at = dispatchResult.queuedAt
+    } catch (error) {
+      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
+      instrumentation.client_dispatch_request_accepted = false
+      throw error
     }
-
-    const triggered = await triggerLocalProcedureRun(procedureIdToRun, createdTaskId)
-    if (!triggered) {
-      await (client.models.Task.update as any)({
-        id: createdTaskId,
-        status: 'PENDING',
-        dispatchStatus: 'PENDING',
-        startedAt: null,
-        workerNodeId: null,
-        errorMessage: null,
-        errorDetails: null,
-        stdout: null,
-        stderr: null,
-        updatedAt: new Date().toISOString(),
-      })
-    }
-  }, [triggerLocalProcedureRun])
+  }, [startConsoleRun])
 
   const submitHitlResponse = async (
     pendingMessage: ChatMessage,
@@ -765,8 +749,8 @@ function ConversationViewer({
       }
 
       await enqueueProcedureRunTask(
-        pendingMessage.accountId,
         pendingMessage.procedureId,
+        pendingMessage.sessionId,
         pendingMessage.id,
         responseMessageId,
         control.request_id
@@ -1322,7 +1306,6 @@ function ConversationViewer({
     setIsCreatingSession(true)
     try {
       await createNewSession()
-      toast.success('New chat session created')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create session'
       toast.error(message)
@@ -1387,6 +1370,7 @@ function ConversationViewer({
         return
       }
 
+      const clientSendStartedAt = new Date().toISOString()
       const nowIso = new Date().toISOString()
       const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const optimisticMessage: ChatMessage = {
@@ -1423,6 +1407,9 @@ function ConversationViewer({
           metadata: JSON.stringify({
             source: 'console-prompt-input',
             sent_at: nowIso,
+            instrumentation: {
+              client_send_started_at: clientSendStartedAt,
+            },
           }),
           createdAt: nowIso,
         })
@@ -1441,10 +1428,14 @@ function ConversationViewer({
         )))
 
         await enqueueProcedureRunFromChat(
-          targetSessionAccountId,
           targetSessionProcedureId,
           createdMessageId,
-          targetSessionId
+          targetSessionId,
+          {
+            client_send_started_at: clientSendStartedAt,
+            client_user_message_created_at: persistedCreatedAt,
+            client_prompt_length_chars: nextValue.length,
+          },
         )
 
         setPromptValue('')
@@ -1697,7 +1688,7 @@ function ConversationViewer({
                   const isSubmitting = submittingMessageIds.has(message.id)
                   const currentInput = hitlTextByMessage[message.id] || ''
                   const messageTypeLabel = getMessageTypeLabel(message)
-                  const showMessageTypeBadge = messageTypeLabel !== 'User' && messageTypeLabel !== 'Assistant'
+                  const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
 
                   return (
                     <Message
