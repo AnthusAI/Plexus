@@ -7,6 +7,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
+import { Message, MessageContent } from "@/components/ai-elements/message"
 import {
   PromptInput,
   PromptInputBody,
@@ -26,25 +27,14 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   MessageSquare,
-  User,
-  Bot,
-  Settings,
-  Wrench,
-  Terminal,
-  Clock,
   PanelLeftOpen,
   PanelLeftClose,
   MoreHorizontal,
   Trash2,
   ChevronRight,
-  Bell,
-  Info,
-  AlertTriangle,
   AlertCircle,
-  XCircle,
   Plus
 } from "lucide-react"
-import { Timestamp } from "@/components/ui/timestamp"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -56,6 +46,7 @@ import {
   mapPendingInteractionToRequestType,
   parseMessageMetadata,
 } from "@/lib/procedure-hitl"
+import { cn } from "@/lib/utils"
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -232,52 +223,6 @@ function CollapsibleText({
       </Button>
     </div>
   )
-}
-
-// Message type icons and colors
-const getMessageIcon = (role?: string, messageType?: string, humanInteraction?: string) => {
-  // Check humanInteraction first for special message types
-  if (humanInteraction === 'NOTIFICATION') {
-    return <Bell className="h-4 w-4 text-blue-500" />
-  }
-  if (humanInteraction === 'ALERT_INFO') {
-    return <Info className="h-4 w-4 text-blue-600" />
-  }
-  if (humanInteraction === 'ALERT_WARNING') {
-    return <AlertTriangle className="h-4 w-4 text-yellow-600" />
-  }
-  if (humanInteraction === 'ALERT_ERROR') {
-    return <AlertCircle className="h-4 w-4 text-red-600" />
-  }
-  if (humanInteraction === 'ALERT_CRITICAL') {
-    return <XCircle className="h-4 w-4 text-red-700" />
-  }
-  if (humanInteraction === 'PENDING_APPROVAL' || humanInteraction === 'PENDING_INPUT' || humanInteraction === 'PENDING_REVIEW' || humanInteraction === 'PENDING_ESCALATION') {
-    return <AlertTriangle className="h-4 w-4 text-yellow-600" />
-  }
-  if (humanInteraction === 'RESPONSE') {
-    return <User className="h-4 w-4 text-green-600" />
-  }
-
-  if (messageType === 'TOOL_CALL') {
-    return <Wrench className="h-4 w-4 text-blue-500" />
-  }
-  if (messageType === 'TOOL_RESPONSE') {
-    return <Terminal className="h-4 w-4 text-green-600" />
-  }
-
-  switch (role) {
-    case 'SYSTEM':
-      return <Settings className="h-4 w-4 text-purple-600" />
-    case 'ASSISTANT':
-      return <Bot className="h-4 w-4 text-blue-600" />
-    case 'USER':
-      return <User className="h-4 w-4 text-green-600" />
-    case 'TOOL':
-      return <Terminal className="h-4 w-4 text-orange-600" />
-    default:
-      return <MessageSquare className="h-4 w-4 text-muted-foreground" />
-  }
 }
 
 const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
@@ -1569,8 +1514,6 @@ function ConversationViewer({
                     <span>
                       {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                     </span>
-                    <span>•</span>
-                    <Timestamp time={selectedSession.createdAt} variant="relative" showIcon={false} />
                   </div>
                 </div>
               </div>
@@ -1648,243 +1591,243 @@ function ConversationViewer({
                   const isSubmitted = responseExists || submittedMessageIds.has(message.id)
                   const isSubmitting = submittingMessageIds.has(message.id)
                   const currentInput = hitlTextByMessage[message.id] || ''
+                  const messageTypeLabel = getMessageTypeLabel(message)
+                  const showMessageTypeBadge = messageTypeLabel !== 'User' && messageTypeLabel !== 'Assistant'
 
                   return (
-                    <div
+                    <Message
                       key={row.id}
+                      from={row.from}
                       data-message-id={row.id}
                       data-from={row.from}
-                      className="flex items-start gap-3"
+                      className="max-w-full"
                     >
-                      <div className="mt-1 flex-shrink-0">
-                        {getMessageIcon(message.role, message.messageType, message.humanInteraction)}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-2 flex items-center gap-2">
-                          <Badge
-                            variant="secondary"
-                            className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
-                          >
-                            {getMessageTypeLabel(message)}
-                          </Badge>
-
-                          {message.toolName && (
-                            <Badge variant="outline" className="text-xs">
-                              {message.toolName}
-                            </Badge>
-                          )}
-
-                          <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <Timestamp time={message.createdAt} variant="relative" showIcon={false} />
-                          </div>
-                        </div>
-
-                        {message.messageType === 'TOOL_CALL' && message.toolParameters ? (
-                          <div>
-                            <div className="rounded-md bg-card p-3">
-                              {message.toolName && (
-                                <h4 className="mb-2 text-sm font-semibold text-foreground">{message.toolName}</h4>
-                              )}
-                              <div className="space-y-1">
-                                {Object.entries(message.toolParameters).map(([key, value]) => (
-                                  <div key={key} className="grid grid-cols-3 gap-2 text-xs">
-                                    <div className="font-medium text-muted-foreground">{key}:</div>
-                                    <div className="col-span-2 break-words font-mono text-foreground">
-                                      {typeof value === 'string' ? value : JSON.stringify(value)}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="mt-3">
-                              <Collapsible>
-                                <CollapsibleTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="flex h-auto items-center gap-1 p-0 text-xs text-muted-foreground hover:text-foreground"
-                                  >
-                                    <ChevronRight className="h-3 w-3" />
-                                    Raw
-                                  </Button>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                  <div className="mt-2 text-sm font-mono">
-                                    <CollapsibleText content={message.content} maxLines={10} />
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            </div>
-                          </div>
-                        ) : message.messageType === 'TOOL_RESPONSE' ? (
-                          null
-                        ) : (
-                          <div className="text-sm">
-                            <CollapsibleText content={message.content} maxLines={10} />
-                          </div>
-                        )}
-
-                        {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
-                          <div className="mt-3">
-                            <div className="rounded-md bg-card p-3 text-xs">
-                              <div className="font-mono">
-                                <CollapsibleText
-                                  content={formatJsonWithNewlines(message.toolResponse)}
-                                  maxLines={12}
-                                  className="whitespace-pre-wrap break-words font-mono"
-                                  enableMarkdown={false}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {messageIsPending && (
-                          <div className="mt-3 space-y-3 rounded-md border border-border p-3">
-                            {!controlEnvelope && (
-                              <div className="text-xs text-red-600">
-                                Pending request is missing canonical `metadata.control`.
-                              </div>
-                            )}
-                            {hitlSubmitErrors[message.id] && (
-                              <div className="text-xs text-red-600">
-                                {hitlSubmitErrors[message.id]}
-                              </div>
-                            )}
-
-                            {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
-                              <Textarea
-                                value={currentInput}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  setHitlTextByMessage((prev) => ({
-                                    ...prev,
-                                    [message.id]: value,
-                                  }))
-                                }}
-                                rows={requestType === 'review' ? 6 : 4}
-                                placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
-                                disabled={isSubmitting}
-                              />
-                            )}
-
-                            <div className="flex flex-wrap items-center gap-2">
-                              {isSubmitted && (
+                      <div className="flex items-start">
+                        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                          {(showMessageTypeBadge || Boolean(message.toolName)) && (
+                            <div className="mb-2 flex items-center gap-2">
+                              {showMessageTypeBadge && (
                                 <Badge
-                                  variant="outline"
-                                  className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                                  variant="secondary"
+                                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
                                 >
-                                  Response submitted
+                                  {messageTypeLabel}
                                 </Badge>
                               )}
 
-                              {!isSubmitted && requestType === 'approval' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'approve')
-                                      } catch (error) {
-                                        console.error('Failed submitting approval response', error)
-                                      }
-                                    }}
-                                  >
-                                    Approve
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'reject')
-                                      } catch (error) {
-                                        console.error('Failed submitting rejection response', error)
-                                      }
-                                    }}
-                                  >
-                                    Reject
-                                  </Button>
-                                </>
-                              )}
-
-                              {!isSubmitted && requestType === 'input' && (
-                                <Button
-                                  size="sm"
-                                  disabled={isSubmitting || !controlEnvelope}
-                                  onClick={async () => {
-                                    try {
-                                      await submitHitlResponse(message, 'submit', currentInput)
-                                    } catch (error) {
-                                      console.error('Failed submitting input response', error)
-                                    }
-                                  }}
-                                >
-                                  Submit
-                                </Button>
-                              )}
-
-                              {!isSubmitted && requestType === 'review' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'approve', currentInput)
-                                      } catch (error) {
-                                        console.error('Failed submitting review approval', error)
-                                      }
-                                    }}
-                                  >
-                                    Approve
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'request_changes', currentInput)
-                                      } catch (error) {
-                                        console.error('Failed submitting review feedback', error)
-                                      }
-                                    }}
-                                  >
-                                    Request Changes
-                                  </Button>
-                                </>
-                              )}
-
-                              {!isSubmitted && requestType === 'escalation' && (
-                                <Button
-                                  size="sm"
-                                  disabled={isSubmitting || !controlEnvelope}
-                                  onClick={async () => {
-                                    try {
-                                      await submitHitlResponse(message, 'acknowledge', currentInput)
-                                    } catch (error) {
-                                      console.error('Failed submitting escalation acknowledgment', error)
-                                    }
-                                  }}
-                                >
-                                  Acknowledge
-                                </Button>
-                              )}
-
-                              {isSubmitting && (
-                                <Badge variant="outline">Submitting...</Badge>
+                              {message.toolName && (
+                                <Badge variant="outline" className="text-xs">
+                                  {message.toolName}
+                                </Badge>
                               )}
                             </div>
-                          </div>
-                        )}
+                          )}
+
+                          {message.messageType === 'TOOL_CALL' && message.toolParameters ? (
+                            <div>
+                              <div className="rounded-md bg-card p-3">
+                                {message.toolName && (
+                                  <h4 className="mb-2 text-sm font-semibold text-foreground">{message.toolName}</h4>
+                                )}
+                                <div className="space-y-1">
+                                  {Object.entries(message.toolParameters).map(([key, value]) => (
+                                    <div key={key} className="grid grid-cols-3 gap-2 text-xs">
+                                      <div className="font-medium text-muted-foreground">{key}:</div>
+                                      <div className="col-span-2 break-words font-mono text-foreground">
+                                        {typeof value === 'string' ? value : JSON.stringify(value)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="mt-3">
+                                <Collapsible>
+                                  <CollapsibleTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="flex h-auto items-center gap-1 p-0 text-xs text-muted-foreground hover:text-foreground"
+                                    >
+                                      <ChevronRight className="h-3 w-3" />
+                                      Raw
+                                    </Button>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="mt-2 text-sm font-mono">
+                                      <CollapsibleText content={message.content} maxLines={10} />
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              </div>
+                            </div>
+                          ) : message.messageType === 'TOOL_RESPONSE' ? (
+                            null
+                          ) : (
+                            <div className="text-sm">
+                              <CollapsibleText content={message.content} maxLines={10} />
+                            </div>
+                          )}
+
+                          {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
+                            <div className="mt-3">
+                              <div className="rounded-md bg-card p-3 text-xs">
+                                <div className="font-mono">
+                                  <CollapsibleText
+                                    content={formatJsonWithNewlines(message.toolResponse)}
+                                    maxLines={12}
+                                    className="whitespace-pre-wrap break-words font-mono"
+                                    enableMarkdown={false}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {messageIsPending && (
+                            <div className="mt-3 space-y-3 rounded-md border border-border p-3">
+                              {!controlEnvelope && (
+                                <div className="text-xs text-red-600">
+                                  Pending request is missing canonical `metadata.control`.
+                                </div>
+                              )}
+                              {hitlSubmitErrors[message.id] && (
+                                <div className="text-xs text-red-600">
+                                  {hitlSubmitErrors[message.id]}
+                                </div>
+                              )}
+
+                              {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
+                                <Textarea
+                                  value={currentInput}
+                                  onChange={(event) => {
+                                    const value = event.target.value
+                                    setHitlTextByMessage((prev) => ({
+                                      ...prev,
+                                      [message.id]: value,
+                                    }))
+                                  }}
+                                  rows={requestType === 'review' ? 6 : 4}
+                                  placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
+                                  disabled={isSubmitting}
+                                />
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                {isSubmitted && (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                                  >
+                                    Response submitted
+                                  </Badge>
+                                )}
+
+                                {!isSubmitted && requestType === 'approval' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'approve')
+                                        } catch (error) {
+                                          console.error('Failed submitting approval response', error)
+                                        }
+                                      }}
+                                    >
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'reject')
+                                        } catch (error) {
+                                          console.error('Failed submitting rejection response', error)
+                                        }
+                                      }}
+                                    >
+                                      Reject
+                                    </Button>
+                                  </>
+                                )}
+
+                                {!isSubmitted && requestType === 'input' && (
+                                  <Button
+                                    size="sm"
+                                    disabled={isSubmitting || !controlEnvelope}
+                                    onClick={async () => {
+                                      try {
+                                        await submitHitlResponse(message, 'submit', currentInput)
+                                      } catch (error) {
+                                        console.error('Failed submitting input response', error)
+                                      }
+                                    }}
+                                  >
+                                    Submit
+                                  </Button>
+                                )}
+
+                                {!isSubmitted && requestType === 'review' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'approve', currentInput)
+                                        } catch (error) {
+                                          console.error('Failed submitting review approval', error)
+                                        }
+                                      }}
+                                    >
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'request_changes', currentInput)
+                                        } catch (error) {
+                                          console.error('Failed submitting review feedback', error)
+                                        }
+                                      }}
+                                    >
+                                      Request Changes
+                                    </Button>
+                                  </>
+                                )}
+
+                                {!isSubmitted && requestType === 'escalation' && (
+                                  <Button
+                                    size="sm"
+                                    disabled={isSubmitting || !controlEnvelope}
+                                    onClick={async () => {
+                                      try {
+                                        await submitHitlResponse(message, 'acknowledge', currentInput)
+                                      } catch (error) {
+                                        console.error('Failed submitting escalation acknowledgment', error)
+                                      }
+                                    }}
+                                  >
+                                    Acknowledge
+                                  </Button>
+                                )}
+
+                                {isSubmitting && (
+                                  <Badge variant="outline">Submitting...</Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </MessageContent>
                       </div>
-                    </div>
+                    </Message>
                   )
                 })
               )}
