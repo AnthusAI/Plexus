@@ -42,56 +42,97 @@ def _fetch_memories(memories_file: str) -> dict:
     return yaml.safe_load(content) or {}
 
 
-def _collect_action_items(output: dict, ac1_threshold: float, recency_days: int) -> list:
-    """Walk the report output and return filtered, annotated action items."""
+def _extract_topics_for_scores(scores: list, memories: dict, scorecard_name: str,
+                                ac1_threshold: float, recency_days: int) -> list:
+    """Extract action items from a list of scores using a memories dict."""
     items = []
-    for scorecard in output.get("scorecards", []):
-        sc_ac1 = scorecard.get("overall_ac1")
+    topics_by_score_id = {
+        s["score_id"]: s.get("topics", [])
+        for s in memories.get("scores", [])
+        if s.get("score_id")
+    }
+    for score in scores:
+        score_ac1 = score.get("ac1")
+        if score_ac1 is not None and score_ac1 >= ac1_threshold:
+            continue
+        if score.get("mismatches", 0) == 0:
+            continue
+        topics = topics_by_score_id.get(score.get("score_id"), [])
+        for topic in topics:
+            days_inactive = topic.get("days_inactive")
+            if days_inactive is None or days_inactive > recency_days:
+                continue
+            items.append({
+                "scorecard_name": scorecard_name,
+                "score_name": score.get("score_name", "Unknown"),
+                "score_ac1": score_ac1,
+                "score_mismatches": score.get("mismatches", 0),
+                "topic_label": topic.get("label") or "Unnamed topic",
+                "cause": topic.get("cause"),
+                "keywords": topic.get("keywords", []),
+                "member_count": topic.get("member_count", 0),
+                "days_inactive": days_inactive,
+                "is_new": topic.get("is_new", False),
+                "is_trending": topic.get("is_trending", False),
+                "exemplars": topic.get("exemplars", []),
+            })
+    return items
+
+
+def _collect_action_items(output: dict, ac1_threshold: float, recency_days: int,
+                          scorecard_name_hint: str = None) -> list:
+    """Walk the report output and return filtered, annotated action items.
+
+    Handles both all-scorecards mode (output has a 'scorecards' list) and
+    single-scorecard mode (output has 'scores' and 'memories_file' at root).
+    """
+    items = []
+
+    if output.get("mode") == "all_scorecards":
+        # All-scorecards mode: one memories file per scorecard
+        for scorecard in output.get("scorecards", []):
+            sc_ac1 = scorecard.get("overall_ac1")
+            if sc_ac1 is not None and sc_ac1 >= ac1_threshold:
+                continue
+
+            memories_file = scorecard.get("memories_file")
+            if not memories_file:
+                continue
+            try:
+                memories = _fetch_memories(memories_file)
+            except Exception as e:
+                logger.warning(f"Could not fetch memories for {scorecard.get('scorecard_name')}: {e}")
+                continue
+
+            items.extend(_extract_topics_for_scores(
+                scorecard.get("scores", []),
+                memories,
+                scorecard.get("scorecard_name", "Unknown"),
+                ac1_threshold,
+                recency_days,
+            ))
+    else:
+        # Single-scorecard mode: memories at root level
+        sc_ac1 = output.get("overall_ac1")
         if sc_ac1 is not None and sc_ac1 >= ac1_threshold:
-            continue  # scorecard is performing well enough
+            return []
 
-        memories_file = scorecard.get("memories_file")
-        if not memories_file:
-            continue
+        memories_file = output.get("memories_file")
+        memories = output.get("memories") or {}
+        if memories_file:
+            try:
+                memories = _fetch_memories(memories_file)
+            except Exception as e:
+                logger.warning(f"Could not fetch memories file: {e}")
 
-        try:
-            memories = _fetch_memories(memories_file)
-        except Exception as e:
-            logger.warning(f"Could not fetch memories for {scorecard.get('scorecard_name')}: {e}")
-            continue
-
-        topics_by_score_id = {
-            s["score_id"]: s.get("topics", [])
-            for s in memories.get("scores", [])
-            if s.get("score_id")
-        }
-
-        for score in scorecard.get("scores", []):
-            score_ac1 = score.get("ac1")
-            if score_ac1 is not None and score_ac1 >= ac1_threshold:
-                continue
-            if score.get("mismatches", 0) == 0:
-                continue
-
-            topics = topics_by_score_id.get(score.get("score_id"), [])
-            for topic in topics:
-                days_inactive = topic.get("days_inactive")
-                if days_inactive is None or days_inactive > recency_days:
-                    continue
-                items.append({
-                    "scorecard_name": scorecard.get("scorecard_name", "Unknown"),
-                    "score_name": score.get("score_name", "Unknown"),
-                    "score_ac1": score_ac1,
-                    "score_mismatches": score.get("mismatches", 0),
-                    "topic_label": topic.get("label") or "Unnamed topic",
-                    "cause": topic.get("cause"),
-                    "keywords": topic.get("keywords", []),
-                    "member_count": topic.get("member_count", 0),
-                    "days_inactive": days_inactive,
-                    "is_new": topic.get("is_new", False),
-                    "is_trending": topic.get("is_trending", False),
-                    "exemplars": topic.get("exemplars", []),
-                })
+        scorecard_name = output.get("scorecard_name") or scorecard_name_hint or "Unknown Scorecard"
+        items.extend(_extract_topics_for_scores(
+            output.get("scores", []),
+            memories,
+            scorecard_name,
+            ac1_threshold,
+            recency_days,
+        ))
 
     # Sort: most recent first, then highest item count
     items.sort(key=lambda x: (x["days_inactive"], -x["member_count"]))
@@ -202,11 +243,9 @@ def action_items_command(
         console.print("[red]Could not read block output.[/red]")
         raise click.Abort()
 
-    if output.get("mode") != "all_scorecards":
-        console.print("[yellow]Warning: this block does not appear to be an all-scorecards report.[/yellow]")
-
     console.print("[dim]Collecting action items…[/dim]")
-    items = _collect_action_items(output, ac1_threshold, recency_days)
+    items = _collect_action_items(output, ac1_threshold, recency_days,
+                                  scorecard_name_hint=fa_block.name)
 
     console.print(f"[dim]Found {len(items)} action item(s).[/dim]\n")
 
