@@ -2,21 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  ButtonGroup,
-  ButtonGroupText,
-} from "@/components/ui/button-group";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
-import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import {
@@ -28,10 +19,11 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Streamdown } from "streamdown";
+
+type MessageFrom = "assistant" | "user" | "system" | "tool";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
-  from: UIMessage["role"];
+  from: MessageFrom;
 };
 
 export const Message = ({ className, from, ...props }: MessageProps) => (
@@ -54,7 +46,7 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
+      "flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
       "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-muted group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
       "group-[.is-assistant]:text-foreground",
       className
@@ -97,20 +89,20 @@ export const MessageAction = ({
     </Button>
   );
 
-  if (tooltip) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
+  if (!tooltip) {
+    return button;
   }
 
-  return button;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent>
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 };
 
 interface MessageBranchContextType {
@@ -128,13 +120,11 @@ const MessageBranchContext = createContext<MessageBranchContextType | null>(
 
 const useMessageBranch = () => {
   const context = useContext(MessageBranchContext);
-
   if (!context) {
     throw new Error(
       "MessageBranch components must be used within MessageBranch"
     );
   }
-
   return context;
 };
 
@@ -162,7 +152,7 @@ export const MessageBranch = ({
 
   const goToPrevious = useCallback(() => {
     const newBranch =
-      currentBranch > 0 ? currentBranch - 1 : branches.length - 1;
+      currentBranch > 0 ? currentBranch - 1 : Math.max(0, branches.length - 1);
     handleBranchChange(newBranch);
   }, [currentBranch, branches.length, handleBranchChange]);
 
@@ -202,16 +192,15 @@ export const MessageBranchContent = ({
 }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch();
   const childrenArray = useMemo(
-    () => (Array.isArray(children) ? children : [children]),
+    () => (Array.isArray(children) ? children : [children]).filter(Boolean) as ReactElement[],
     [children]
   );
 
-  // Use useEffect to update branches when they change
   useEffect(() => {
     if (branches.length !== childrenArray.length) {
       setBranches(childrenArray);
     }
-  }, [childrenArray, branches, setBranches]);
+  }, [childrenArray, branches.length, setBranches]);
 
   return childrenArray.map((branch, index) => (
     <div
@@ -219,7 +208,7 @@ export const MessageBranchContent = ({
         "grid gap-2 overflow-hidden [&>div]:pb-0",
         index === currentBranch ? "block" : "hidden"
       )}
-      key={branch.key}
+      key={branch.key ?? index}
       {...props}
     >
       {branch}
@@ -227,26 +216,21 @@ export const MessageBranchContent = ({
   ));
 };
 
-export type MessageBranchSelectorProps = ComponentProps<typeof ButtonGroup>;
+export type MessageBranchSelectorProps = ComponentProps<"div">;
 
 export const MessageBranchSelector = ({
   className,
   ...props
 }: MessageBranchSelectorProps) => {
   const { totalBranches } = useMessageBranch();
-
-  // Don't render if there's only one branch
   if (totalBranches <= 1) {
     return null;
   }
 
   return (
-    <ButtonGroup
-      className={cn(
-        "[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md",
-        className
-      )}
-      orientation="horizontal"
+    <div
+      className={cn("flex items-center gap-1", className)}
+      role="group"
       {...props}
     />
   );
@@ -307,37 +291,28 @@ export const MessageBranchPage = ({
   const { currentBranch, totalBranches } = useMessageBranch();
 
   return (
-    <ButtonGroupText
-      className={cn(
-        "border-none bg-transparent text-muted-foreground shadow-none",
-        className
-      )}
+    <span
+      className={cn("text-muted-foreground text-xs", className)}
       {...props}
     >
       {currentBranch + 1} of {totalBranches}
-    </ButtonGroupText>
+    </span>
   );
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = HTMLAttributes<HTMLDivElement> & {
+  isAnimating?: boolean;
+};
 
-const streamdownPlugins = { cjk, code, math, mermaid };
-
-export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
-    <Streamdown
-      className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
-      plugins={streamdownPlugins}
-      {...props}
-    />
-  ),
-  (prevProps, nextProps) =>
-    prevProps.children === nextProps.children &&
-    nextProps.isAnimating === prevProps.isAnimating
-);
+export const MessageResponse = memo(({ className, ...props }: MessageResponseProps) => (
+  <div
+    className={cn(
+      "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+      className
+    )}
+    {...props}
+  />
+));
 
 MessageResponse.displayName = "MessageResponse";
 

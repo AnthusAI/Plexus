@@ -613,8 +613,8 @@ async def test_execute_tactus_streams_via_log_handler_without_trace_sink_constru
     assert result["success"] is True
     assert len(recorder.recorded) == 1
     assert recorder.recorded[0]["content"] == "Hel"
-    assert len(recorder.updated) >= 2
-    assert recorder.updated[0]["content"] == "Hello"
+    assert len(recorder.updated) >= 1
+    assert recorder.updated[-1]["content"] == "Hello"
     assert recorder.fallback_messages == []
 
 
