@@ -8,10 +8,79 @@ Supports multiple procedure execution engines:
 
 import logging
 import json
+import inspect
+import asyncio
+import queue
+import threading
 import yaml
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class _PlexusTraceLogBridge:
+    """
+    Bridges synchronous Tactus log events to async Plexus trace persistence.
+
+    - Exposes supports_streaming=True so Tactus enables agent chunk streaming.
+    - Captures CostEvent entries for execution summary accounting.
+    - Forwards all non-cost events to PlexusTraceSink on a background worker.
+    """
+
+    supports_streaming = True
+
+    def __init__(self, trace_sink: Any):
+        self.trace_sink = trace_sink
+        self.cost_events = []
+        self._events: "queue.Queue[Any]" = queue.Queue()
+        self._closed = threading.Event()
+        self._worker = threading.Thread(
+            target=self._worker_main,
+            name="plexus-trace-log-bridge",
+            daemon=True,
+        )
+        self._worker.start()
+
+    def log(self, event: Any) -> None:
+        try:
+            from tactus.protocols.models import CostEvent
+        except Exception:
+            CostEvent = None  # type: ignore
+
+        if CostEvent is not None and isinstance(event, CostEvent):
+            self.cost_events.append(event)
+            return
+
+        try:
+            self._events.put_nowait(event)
+        except Exception as exc:
+            logger.warning("Failed queueing trace event for persistence: %s", exc)
+
+    def _worker_main(self) -> None:
+        while not self._closed.is_set() or not self._events.empty():
+            try:
+                event = self._events.get(timeout=0.05)
+            except queue.Empty:
+                continue
+
+            try:
+                record_fn = getattr(self.trace_sink, "record", None)
+                if callable(record_fn):
+                    asyncio.run(record_fn(event))
+            except Exception as exc:
+                logger.warning("Failed recording streamed trace event: %s", exc)
+            finally:
+                self._events.task_done()
+
+    async def flush(self) -> None:
+        await asyncio.to_thread(self._events.join)
+        flush_fn = getattr(self.trace_sink, "flush", None)
+        if callable(flush_fn):
+            await flush_fn()
+
+    async def close(self) -> None:
+        self._closed.set()
+        await asyncio.to_thread(self._worker.join, 1.0)
 
 
 async def execute_procedure(
@@ -124,6 +193,7 @@ async def _execute_tactus(
         Execution results
     """
     logger.info(f"Executing procedure {procedure_id} with Tactus runtime")
+    log_bridge: Optional[_PlexusTraceLogBridge] = None
 
     try:
         from tactus.core import TactusRuntime
@@ -180,6 +250,19 @@ async def _execute_tactus(
                     continue
                 entries.append(f"[{_lua_string(key)}] = {_lua_literal(value)}")
             return "{ " + ", ".join(entries) + " }" if entries else "{}"
+
+        def _extract_assistant_text(payload: Any) -> Optional[str]:
+            if not isinstance(payload, dict):
+                return None
+            response_value = payload.get("response")
+            if isinstance(response_value, str) and response_value.strip():
+                return response_value.strip()
+            nested_result = payload.get("result")
+            if isinstance(nested_result, dict):
+                nested_response = nested_result.get("response")
+                if isinstance(nested_response, str) and nested_response.strip():
+                    return nested_response.strip()
+            return None
 
         # Backward compatibility: older Plexus templates use `code:` for Lua source.
         # Current Tactus parser expects `procedure:` as the required field.
@@ -412,28 +495,58 @@ async def _execute_tactus(
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
         hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
         trace_sink = PlexusTraceSink(chat_recorder)
+        log_bridge = _PlexusTraceLogBridge(trace_sink)
 
-        # Create Tactus runtime with Plexus adapters
-        runtime = TactusRuntime(
-            procedure_id=procedure_id,
-            storage_backend=storage,
-            hitl_handler=hitl,
-            trace_sink=trace_sink,
-            mcp_server=mcp_server,
-            openai_api_key=openai_api_key
-        )
+        # Create Tactus runtime with Plexus adapters.
+        # Support both newer and older runtime signatures.
+        runtime_kwargs: Dict[str, Any] = {
+            "procedure_id": procedure_id,
+            "storage_backend": storage,
+            "hitl_handler": hitl,
+            "chat_recorder": chat_recorder,
+            "trace_sink": trace_sink,
+            "log_handler": log_bridge,
+            "mcp_server": mcp_server,
+            "openai_api_key": openai_api_key,
+        }
+        supports_trace_sink = True
+        supports_chat_recorder = True
+        try:
+            runtime_sig = inspect.signature(TactusRuntime.__init__)
+            accepts_var_kwargs = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in runtime_sig.parameters.values()
+            )
+            if not accepts_var_kwargs:
+                supported_params = {
+                    name
+                    for name in runtime_sig.parameters.keys()
+                    if name != "self"
+                }
+                supports_trace_sink = "trace_sink" in supported_params
+                supports_chat_recorder = "chat_recorder" in supported_params
+                dropped = sorted(key for key in runtime_kwargs.keys() if key not in supported_params)
+                if dropped:
+                    logger.info(
+                        "TactusRuntime.__init__ does not accept %s; continuing without them",
+                        ", ".join(dropped),
+                    )
+                runtime_kwargs = {
+                    key: value
+                    for key, value in runtime_kwargs.items()
+                    if key in supported_params
+                }
+        except Exception as sig_error:
+            logger.debug(
+                "Could not inspect TactusRuntime signature (%s); using default runtime kwargs",
+                sig_error,
+            )
 
-        # Ensure DSPy agents can run in streaming mode even outside IDE event handlers.
-        # Non-streaming path in current Tactus does not fully reconcile tool-call history,
-        # which causes OpenAI tool_call_id continuity errors on subsequent turns.
+        runtime = TactusRuntime(**runtime_kwargs)
+
+        # Ensure DSPy agents can stream even when runtime constructor does not expose log_handler.
         if getattr(runtime, "log_handler", None) is None:
-            class _NoopStreamingLogHandler:
-                supports_streaming = True
-
-                def log(self, _event):
-                    return None
-
-            runtime.log_handler = _NoopStreamingLogHandler()
+            runtime.log_handler = log_bridge
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
@@ -490,13 +603,66 @@ async def _execute_tactus(
         except Exception as exc:
             logger.warning("Could not patch DSPy ToolCall compatibility: %s", exc)
 
+        # Hydrate console-trigger text into runtime context so procedures can access
+        # the exact user prompt even when runtime message history is empty.
+        runtime_context: Any = context
+        if isinstance(context, dict):
+            runtime_context = dict(context)
+        elif context is None:
+            runtime_context = {}
+
+        if isinstance(runtime_context, dict):
+            get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+            console_trigger_message = (
+                get_console_trigger_message()
+                if callable(get_console_trigger_message)
+                else None
+            )
+            if (
+                isinstance(console_trigger_message, str)
+                and console_trigger_message.strip()
+                and not runtime_context.get("console_user_message")
+            ):
+                runtime_context["console_user_message"] = console_trigger_message.strip()
+
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
-        result = await runtime.execute(procedure_source, context, format="yaml")
+        result = await runtime.execute(procedure_source, runtime_context, format="yaml")
+        if log_bridge:
+            await log_bridge.flush()
+
+        # Ensure Console receives a meaningful assistant message from procedure output.
+        # Some runtime/trace combinations emit only placeholder completion events.
+        if supports_chat_recorder and isinstance(result, dict):
+            assistant_text = _extract_assistant_text(result)
+            if assistant_text:
+                trace_messages = getattr(trace_sink, "assistant_message_texts", [])
+                has_meaningful_trace_assistant = bool(trace_messages)
+                already_recorded = any(
+                    isinstance(message, str) and message.strip() == assistant_text
+                    for message in trace_messages
+                )
+                if (not has_meaningful_trace_assistant) or (not already_recorded):
+                    await chat_recorder.record_assistant_message(assistant_text)
+
+        if log_bridge:
+            try:
+                await log_bridge.close()
+            except Exception as close_error:
+                logger.warning("Failed closing trace log bridge after success: %s", close_error)
 
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
 
     except Exception as e:
+        if log_bridge:
+            try:
+                await log_bridge.flush()
+            except Exception as flush_error:
+                logger.warning("Failed flushing trace log bridge after error: %s", flush_error)
+            try:
+                await log_bridge.close()
+            except Exception as close_error:
+                logger.warning("Failed closing trace log bridge after error: %s", close_error)
         logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
             'success': False,
