@@ -6,6 +6,7 @@ including tool calls and responses, for later analysis and display in the UI.
 """
 
 import logging
+import os
 import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -86,6 +87,170 @@ class ProcedureChatRecorder:
             return str(session_id) if session_id else None
         except Exception as e:
             logger.debug(f"Could not resolve resume session for procedure {self.procedure_id}: {e}")
+            return None
+
+    def _get_latest_console_chat_metadata(self, account_id: str) -> Optional[Dict[str, Any]]:
+        """Return the most recent console_chat metadata for this procedure, if present."""
+        try:
+            dispatch_task_id = (os.getenv('PLEXUS_DISPATCH_TASK_ID') or '').strip()
+            if dispatch_task_id:
+                query = """
+                query GetTaskForConsoleChat($id: ID!) {
+                    getTask(id: $id) {
+                        id
+                        accountId
+                        target
+                        metadata
+                    }
+                }
+                """
+                result = self.client.execute(query, {'id': dispatch_task_id})
+                task = self._graphql_field(result, 'getTask')
+                if isinstance(task, dict):
+                    task_account_id = str(task.get('accountId') or '')
+                    task_target = str(task.get('target') or '')
+                    if task_account_id == str(account_id) and task_target in {
+                        f'procedure/{self.procedure_id}',
+                        f'procedure/run/{self.procedure_id}',
+                    }:
+                        metadata = task.get('metadata')
+                        if isinstance(metadata, str):
+                            try:
+                                metadata = json.loads(metadata)
+                            except Exception:
+                                metadata = None
+                        if isinstance(metadata, dict):
+                            console_chat = metadata.get('console_chat')
+                            if isinstance(console_chat, dict):
+                                return console_chat
+
+            query = """
+            query ListTaskByAccountIdAndUpdatedAt($accountId: String!, $updatedAt: ModelStringKeyConditionInput, $limit: Int, $nextToken: String) {
+                listTaskByAccountIdAndUpdatedAt(
+                    accountId: $accountId
+                    updatedAt: $updatedAt
+                    limit: $limit
+                    nextToken: $nextToken
+                ) {
+                    items {
+                        id
+                        target
+                        status
+                        metadata
+                        updatedAt
+                    }
+                    nextToken
+                }
+            }
+            """
+
+            items: List[dict] = []
+            next_token: Optional[str] = None
+            while True:
+                result = self.client.execute(
+                    query,
+                    {
+                        'accountId': account_id,
+                        'updatedAt': {'ge': '2000-01-01T00:00:00.000Z'},
+                        'limit': 200,
+                        'nextToken': next_token,
+                    }
+                )
+                task_page = self._graphql_field(result, 'listTaskByAccountIdAndUpdatedAt')
+                if not isinstance(task_page, dict):
+                    break
+
+                page_items = task_page.get('items', [])
+                if isinstance(page_items, list):
+                    items.extend(item for item in page_items if isinstance(item, dict))
+
+                next_token = task_page.get('nextToken')
+                if not next_token:
+                    break
+
+            sorted_items = sorted(
+                items,
+                key=lambda item: str(item.get('updatedAt') or ''),
+                reverse=True,
+            )
+
+            for item in sorted_items:
+                if not isinstance(item, dict):
+                    continue
+                target = str(item.get('target') or '')
+                if target not in {f'procedure/{self.procedure_id}', f'procedure/run/{self.procedure_id}'}:
+                    continue
+
+                metadata = item.get('metadata')
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except Exception:
+                        metadata = None
+                if not isinstance(metadata, dict):
+                    return None
+
+                console_chat = metadata.get('console_chat')
+                if not isinstance(console_chat, dict):
+                    return None
+
+                return console_chat
+
+            return None
+        except Exception as e:
+            logger.debug(f"Could not resolve console session from task metadata for procedure {self.procedure_id}: {e}")
+            return None
+
+    def _get_console_session_id_from_task_metadata(self, account_id: str) -> Optional[str]:
+        """Return session id from most recent procedure task metadata when present."""
+        console_chat = self._get_latest_console_chat_metadata(account_id)
+        if not isinstance(console_chat, dict):
+            return None
+
+        session_id = console_chat.get('session_id')
+        if isinstance(session_id, str) and session_id.strip():
+            return session_id.strip()
+        return None
+
+    def get_latest_console_trigger_message(self, account_id: Optional[str] = None) -> Optional[str]:
+        """Return latest console trigger message content from task metadata, if present."""
+        try:
+            resolved_account_id = account_id or self.account_id or self._resolve_account_id_for_session({})
+            if not resolved_account_id:
+                return None
+
+            console_chat = self._get_latest_console_chat_metadata(resolved_account_id)
+            if not isinstance(console_chat, dict):
+                return None
+
+            trigger_message_id = console_chat.get('trigger_message_id')
+            if not isinstance(trigger_message_id, str) or not trigger_message_id.strip():
+                return None
+
+            query = """
+            query GetChatMessageContent($id: ID!) {
+                getChatMessage(id: $id) {
+                    id
+                    role
+                    content
+                }
+            }
+            """
+            result = self.client.execute(query, {'id': trigger_message_id.strip()})
+            message = self._graphql_field(result, 'getChatMessage')
+            if not isinstance(message, dict):
+                return None
+
+            content = message.get('content')
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+            return None
+        except Exception as e:
+            logger.debug(
+                "Could not resolve latest console trigger message for procedure %s: %s",
+                self.procedure_id,
+                e,
+            )
             return None
 
     def _get_latest_sequence_number_for_session(self, session_id: str) -> int:
@@ -174,15 +339,40 @@ class ProcedureChatRecorder:
                 )
                 return self.session_id
 
+            console_chat_metadata = self._get_latest_console_chat_metadata(account_id)
+            console_session_id = None
+            if isinstance(console_chat_metadata, dict):
+                session_id = console_chat_metadata.get('session_id')
+                if isinstance(session_id, str) and session_id.strip():
+                    console_session_id = session_id.strip()
+
+            if console_session_id:
+                self.session_id = console_session_id
+                self.account_id = account_id
+                self.sequence_number = self._get_latest_sequence_number_for_session(console_session_id)
+                logger.info(
+                    f"Reusing console chat session from task metadata: {self.session_id} for account: {account_id} "
+                    f"(last sequence: {self.sequence_number})"
+                )
+                return self.session_id
+
             # Create ChatSession record
             # Get the actual IDs that are being passed
             scorecard_id = context.get('scorecard_id') if context else None
             score_id = context.get('score_id') if context else None
             
+            session_category = 'Console' if isinstance(console_chat_metadata, dict) else 'Hypothesize'
+            if isinstance(console_chat_metadata, dict) and not console_session_id:
+                logger.info(
+                    "Console-triggered task metadata found without reusable session_id for procedure %s; "
+                    "creating new Console chat session.",
+                    self.procedure_id,
+                )
+
             session_data = {
                 'accountId': account_id,
                 'procedureId': self.procedure_id,
-                'category': 'Hypothesize',
+                'category': session_category,
                 'status': 'ACTIVE'
             }
             
@@ -363,6 +553,84 @@ class ProcedureChatRecorder:
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
+
+    async def update_message(
+        self,
+        message_id: str,
+        content: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        human_interaction: Optional[str] = None,
+    ) -> bool:
+        """Update an existing chat message."""
+        if not message_id:
+            logger.warning("Cannot update chat message without message_id")
+            return False
+
+        update_input: Dict[str, Any] = {"id": message_id}
+
+        if content is not None:
+            # Keep update payload safely below DynamoDB item limits.
+            max_content_size = 300 * 1024  # 300KB in bytes
+            normalized_content = content
+            if len(normalized_content.encode("utf-8")) > max_content_size:
+                truncated_bytes = normalized_content.encode("utf-8")[:max_content_size]
+                try:
+                    normalized_content = truncated_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    normalized_content = truncated_bytes[:-10].decode("utf-8", errors="ignore")
+                normalized_content += "\n\n... [Content truncated due to size limits]"
+                logger.warning(
+                    "Truncated update_message content for %s from %s to %s chars",
+                    message_id,
+                    len(content),
+                    len(normalized_content),
+                )
+            update_input["content"] = normalized_content
+
+        if metadata is not None:
+            update_input["metadata"] = json.dumps(metadata)
+
+        if human_interaction is not None:
+            update_input["humanInteraction"] = human_interaction
+
+        if len(update_input) == 1:
+            logger.debug("No update fields provided for message %s", message_id)
+            return True
+
+        mutation = """
+        mutation UpdateChatMessage($input: UpdateChatMessageInput!) {
+            updateChatMessage(input: $input) {
+                id
+                content
+                humanInteraction
+                metadata
+            }
+        }
+        """
+
+        try:
+            result = self.client.execute(mutation, {"input": update_input})
+            if isinstance(result, dict) and result.get("errors"):
+                logger.error("GraphQL error updating message %s: %s", message_id, result["errors"])
+                return False
+
+            updated = None
+            if isinstance(result, dict):
+                data = result.get("data")
+                if isinstance(data, dict):
+                    updated = data.get("updateChatMessage")
+                if updated is None:
+                    updated = result.get("updateChatMessage")
+
+            if isinstance(updated, dict) and updated.get("id"):
+                logger.debug("Updated chat message %s", message_id)
+                return True
+
+            logger.error("Unexpected updateChatMessage result for %s: %s", message_id, result)
+            return False
+        except Exception as e:
+            logger.error(f"Error updating chat message {message_id}: {e}", exc_info=True)
+            return False
     
     def _get_next_sequence_number(self) -> int:
         """Thread-safe sequence number generation."""
@@ -605,15 +873,39 @@ class ProcedureChatRecorder:
             logger.error(f"Error updating session name: {e}")
             return False
 
-    async def end_session(self, status: str = 'COMPLETED', name: Optional[str] = None) -> bool:
-        """End the chat session with optional name update."""
-        if not self.session_id:
+    async def end_session(self, *args, status: str = 'COMPLETED', name: Optional[str] = None) -> bool:
+        """End the chat session with optional name update.
+
+        Supports both call styles:
+        - end_session(status="COMPLETED", name="...")
+        - end_session(session_id, status="COMPLETED")
+        """
+        known_statuses = {'FAILED', 'FAILURE', 'ERROR', 'ACTIVE', 'COMPLETED'}
+        target_session_id = self.session_id
+
+        if args:
+            first_arg = args[0]
+            if isinstance(first_arg, str):
+                normalized_first = first_arg.strip().upper()
+                # Backward-compatible positional status call: end_session("COMPLETED")
+                if normalized_first in known_statuses and len(args) == 1 and status == 'COMPLETED':
+                    status = first_arg
+                else:
+                    target_session_id = first_arg
+                    if len(args) >= 2 and isinstance(args[1], str):
+                        status = args[1]
+                    if len(args) >= 3 and name is None and isinstance(args[2], str):
+                        name = args[2]
+            elif first_arg is not None:
+                target_session_id = str(first_arg)
+
+        if not target_session_id:
             logger.debug("No active session to end")
             return True
             
         try:
             name_info = f" with name '{name}'" if name else ""
-            logger.info(f"Ending session {self.session_id} with status {status}{name_info}")
+            logger.info(f"Ending session {target_session_id} with status {status}{name_info}")
             
             # Normalize to GraphQL ChatSessionStatus enum
             status_map = {
@@ -638,7 +930,7 @@ class ProcedureChatRecorder:
             """
             
             update_data = {
-                'id': self.session_id,
+                'id': target_session_id,
                 'status': normalized_status
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
@@ -651,7 +943,7 @@ class ProcedureChatRecorder:
                 (result and isinstance(result, dict) and result.get('updateChatSession'))
                 or (result and isinstance(result, dict) and result.get('data', {}).get('updateChatSession'))
             ):
-                logger.info(f"Session ended: {self.session_id}")
+                logger.info(f"Session ended: {target_session_id}")
                 return True
             else:
                 logger.error(f"Failed to end session: {result}")

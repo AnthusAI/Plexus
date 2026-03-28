@@ -80,3 +80,92 @@ async def test_trace_sink_ends_session_with_status():
     await sink.end_session(status="FAILED")
 
     recorder.end_session.assert_awaited_once_with(status="FAILED")
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_drops_placeholder_assistant_completion_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    message_id = await sink.record(
+        {
+            "event_type": "agent_complete",
+            "role": "assistant",
+            "content": "Assistant turn completed.",
+        }
+    )
+
+    assert message_id is None
+    recorder.record_message.assert_not_awaited()
+    assert sink.assistant_message_texts == []
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_stream_chunk_upserts_single_assistant_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    first_message_id = await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hel",
+            "accumulated_text": "Hel",
+        }
+    )
+    second_message_id = await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "lo",
+            "accumulated_text": "Hello",
+        }
+    )
+
+    assert first_message_id == "msg-stream-1"
+    assert second_message_id == "msg-stream-1"
+    recorder.record_message.assert_awaited_once()
+    recorder.update_message.assert_awaited_once()
+    assert sink._active_stream_message_ids["assistant"] == "msg-stream-1"
+    assert sink._active_stream_texts["assistant"] == "Hello"
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_stream_completion_finalizes_message_and_tracks_text():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hello",
+            "accumulated_text": "Hello",
+        }
+    )
+
+    completed_id = await sink.record(
+        {
+            "event_type": "agent_turn",
+            "agent_name": "assistant",
+            "stage": "completed",
+        }
+    )
+
+    assert completed_id == "msg-stream-1"
+    assert sink.assistant_message_texts == ["Hello"]
+    assert sink._active_stream_message_ids == {}
+    assert sink._active_stream_texts == {}
+    assert recorder.update_message.await_count == 1
