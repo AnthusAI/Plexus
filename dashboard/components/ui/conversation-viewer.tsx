@@ -1,6 +1,20 @@
 "use client"
 import React, { useState, useEffect } from "react"
 import { getClient } from '@/utils/data-operations'
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation"
+import { Message, MessageContent } from "@/components/ai-elements/message"
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -13,24 +27,14 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   MessageSquare,
-  User,
-  Bot,
-  Settings,
-  Wrench,
-  Terminal,
-  Clock,
   PanelLeftOpen,
   PanelLeftClose,
   MoreHorizontal,
   Trash2,
   ChevronRight,
-  Bell,
-  Info,
-  AlertTriangle,
   AlertCircle,
-  XCircle
+  Plus
 } from "lucide-react"
-import { Timestamp } from "@/components/ui/timestamp"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -42,6 +46,7 @@ import {
   mapPendingInteractionToRequestType,
   parseMessageMetadata,
 } from "@/lib/procedure-hitl"
+import { cn } from "@/lib/utils"
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -64,12 +69,20 @@ export interface ChatMessage {
 
 export interface ChatSession {
   id: string
+  accountId?: string
+  procedureId?: string
   name?: string
   category?: string
   status?: 'ACTIVE' | 'COMPLETED' | 'ERROR'
   createdAt: string
   updatedAt?: string
   messageCount?: number
+}
+
+type ConversationRow = {
+  id: string
+  from: 'assistant' | 'user'
+  message: ChatMessage
 }
 
 export interface ConversationViewerProps {
@@ -86,7 +99,33 @@ export interface ConversationViewerProps {
   experimentId?: string
   procedureId?: string
   enableHitlActions?: boolean
+  defaultSidebarCollapsed?: boolean
+  enableSidebarResize?: boolean
+  defaultSidebarWidth?: number
+  forceProcedureIdForDispatch?: string
+  defaultAccountIdForNewSession?: string
 }
+
+const START_CONSOLE_RUN_MUTATION = `
+  mutation StartConsoleRun(
+    $sessionId: String!
+    $procedureId: String!
+    $triggerMessageId: String!
+    $clientInstrumentation: AWSJSON
+  ) {
+    startConsoleRun(
+      sessionId: $sessionId
+      procedureId: $procedureId
+      triggerMessageId: $triggerMessageId
+      clientInstrumentation: $clientInstrumentation
+    ) {
+      runId
+      taskId
+      accepted
+      queuedAt
+    }
+  }
+`
 
 // Helper function to format JSON with proper newlines
 const formatJsonWithNewlines = (obj: any): string => {
@@ -125,6 +164,120 @@ const parseJsonField = (value: unknown): any => {
   } catch {
     return undefined
   }
+}
+
+const parseRawChatMessage = (msg: any): ChatMessage | null => {
+  if (!msg || typeof msg !== 'object' || !msg.id) {
+    return null
+  }
+
+  // Parse tool call data from content if structured fields are missing
+  let parsedToolName = msg.toolName
+  let parsedToolParameters = parseJsonField(msg.toolParameters)
+
+  if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
+    const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
+    if (toolCallMatch) {
+      parsedToolName = toolCallMatch[1].trim()
+      try {
+        const pythonDict = toolCallMatch[2]
+        const jsonString = pythonDict
+          .replace(/'/g, '"')
+          .replace(/True/g, 'true')
+          .replace(/False/g, 'false')
+          .replace(/None/g, 'null')
+        parsedToolParameters = JSON.parse(jsonString)
+      } catch (e) {
+        console.warn('Failed to parse tool parameters:', e)
+      }
+    }
+  }
+
+  return {
+    id: msg.id,
+    content: msg.content || '',
+    role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
+    messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
+    humanInteraction: msg.humanInteraction,
+    toolName: parsedToolName,
+    toolParameters: parsedToolParameters,
+    toolResponse: parseJsonField(msg.toolResponse),
+    metadata: parseMessageMetadata(msg.metadata),
+    parentMessageId: msg.parentMessageId,
+    accountId: msg.accountId,
+    procedureId: msg.procedureId,
+    createdAt: msg.createdAt,
+    sequenceNumber: msg.sequenceNumber,
+    sessionId: msg.sessionId
+  }
+}
+
+const isVisibleChatMessage = (msg: ChatMessage): boolean => {
+  if (msg.humanInteraction === 'INTERNAL') {
+    return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+  }
+  return true
+}
+
+const sortChatMessages = (messages: ChatMessage[]): ChatMessage[] => {
+  return [...messages].sort((a, b) => {
+    if (a.sequenceNumber && b.sequenceNumber) {
+      return a.sequenceNumber - b.sequenceNumber
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  })
+}
+
+const normalizeAndSortVisibleMessages = (rawMessages: any[]): ChatMessage[] => {
+  const parsed = rawMessages
+    .map(parseRawChatMessage)
+    .filter((msg): msg is ChatMessage => Boolean(msg))
+    .filter(isVisibleChatMessage)
+  return sortChatMessages(parsed)
+}
+
+const getMetadataFingerprint = (metadata: unknown): string => {
+  try {
+    return JSON.stringify(metadata ?? null)
+  } catch {
+    return '__unserializable__'
+  }
+}
+
+const areMessagesEquivalent = (left: ChatMessage, right: ChatMessage): boolean => {
+  return (
+    left.id === right.id
+    && left.content === right.content
+    && left.role === right.role
+    && left.messageType === right.messageType
+    && left.humanInteraction === right.humanInteraction
+    && left.toolName === right.toolName
+    && getMetadataFingerprint(left.toolParameters) === getMetadataFingerprint(right.toolParameters)
+    && getMetadataFingerprint(left.toolResponse) === getMetadataFingerprint(right.toolResponse)
+    && getMetadataFingerprint(left.metadata) === getMetadataFingerprint(right.metadata)
+    && left.parentMessageId === right.parentMessageId
+    && left.accountId === right.accountId
+    && left.procedureId === right.procedureId
+    && left.createdAt === right.createdAt
+    && left.sequenceNumber === right.sequenceNumber
+    && left.sessionId === right.sessionId
+  )
+}
+
+const hasMessageListChanged = (prevMessages: ChatMessage[], nextMessages: ChatMessage[]): boolean => {
+  if (prevMessages.length !== nextMessages.length) {
+    return true
+  }
+
+  for (let i = 0; i < nextMessages.length; i += 1) {
+    const previous = prevMessages[i]
+    const next = nextMessages[i]
+    if (!previous || !next || previous.id !== next.id || !areMessagesEquivalent(previous, next)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 // Collapsible text component with Markdown support for long messages
@@ -207,78 +360,107 @@ function CollapsibleText({
   )
 }
 
-// Message type icons and colors
-const getMessageIcon = (role?: string, messageType?: string, humanInteraction?: string) => {
-  // Check humanInteraction first for special message types
-  if (humanInteraction === 'NOTIFICATION') {
-    return <Bell className="h-4 w-4 text-blue-500" />
-  }
-  if (humanInteraction === 'ALERT_INFO') {
-    return <Info className="h-4 w-4 text-blue-600" />
-  }
-  if (humanInteraction === 'ALERT_WARNING') {
-    return <AlertTriangle className="h-4 w-4 text-yellow-600" />
-  }
-  if (humanInteraction === 'ALERT_ERROR') {
-    return <AlertCircle className="h-4 w-4 text-red-600" />
-  }
-  if (humanInteraction === 'ALERT_CRITICAL') {
-    return <XCircle className="h-4 w-4 text-red-700" />
-  }
-  if (humanInteraction === 'PENDING_APPROVAL' || humanInteraction === 'PENDING_INPUT' || humanInteraction === 'PENDING_REVIEW' || humanInteraction === 'PENDING_ESCALATION') {
-    return <AlertTriangle className="h-4 w-4 text-yellow-600" />
-  }
-  if (humanInteraction === 'RESPONSE') {
-    return <User className="h-4 w-4 text-green-600" />
-  }
+const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
+  const badgeStyles = {
+    blue: 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200',
+    yellow: 'border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-800/40 dark:text-yellow-200',
+    red: 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200',
+    redCritical: 'border-transparent bg-red-200 text-red-900 dark:bg-red-800/60 dark:text-red-100',
+    green: 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200',
+    purple: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-800/40 dark:text-purple-200',
+    orange: 'border-transparent bg-orange-100 text-orange-800 dark:bg-orange-800/40 dark:text-orange-200',
+    gray: 'border-transparent bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-200',
+  } as const
 
-  if (messageType === 'TOOL_CALL') {
-    return <Wrench className="h-4 w-4 text-blue-500" />
+  // Check humanInteraction first for special message types
+  if (humanInteraction === 'NOTIFICATION') return badgeStyles.blue
+  if (humanInteraction === 'ALERT_INFO') return badgeStyles.blue
+  if (humanInteraction === 'ALERT_WARNING') return badgeStyles.yellow
+  if (humanInteraction === 'ALERT_ERROR') return badgeStyles.red
+  if (humanInteraction === 'ALERT_CRITICAL') return badgeStyles.redCritical
+  if (humanInteraction === 'PENDING_APPROVAL' || humanInteraction === 'PENDING_INPUT' || humanInteraction === 'PENDING_REVIEW' || humanInteraction === 'PENDING_ESCALATION') {
+    return badgeStyles.yellow
   }
-  if (messageType === 'TOOL_RESPONSE') {
-    return <Terminal className="h-4 w-4 text-green-600" />
-  }
+  if (humanInteraction === 'RESPONSE') return badgeStyles.green
+
+  if (messageType === 'TOOL_CALL') return badgeStyles.blue
+  if (messageType === 'TOOL_RESPONSE') return badgeStyles.green
 
   switch (role) {
     case 'SYSTEM':
-      return <Settings className="h-4 w-4 text-purple-600" />
+      return badgeStyles.purple
     case 'ASSISTANT':
-      return <Bot className="h-4 w-4 text-blue-600" />
+      return badgeStyles.blue
     case 'USER':
-      return <User className="h-4 w-4 text-green-600" />
+      return badgeStyles.green
     case 'TOOL':
-      return <Terminal className="h-4 w-4 text-orange-600" />
+      return badgeStyles.orange
     default:
-      return <MessageSquare className="h-4 w-4 text-muted-foreground" />
+      return badgeStyles.gray
   }
 }
 
-const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
-  // Check humanInteraction first for special message types
-  if (humanInteraction === 'NOTIFICATION') return 'bg-blue-100 text-blue-800'
-  if (humanInteraction === 'ALERT_INFO') return 'bg-blue-100 text-blue-800'
-  if (humanInteraction === 'ALERT_WARNING') return 'bg-yellow-100 text-yellow-800'
-  if (humanInteraction === 'ALERT_ERROR') return 'bg-red-100 text-red-800'
-  if (humanInteraction === 'ALERT_CRITICAL') return 'bg-red-200 text-red-900'
-  if (humanInteraction === 'PENDING_APPROVAL' || humanInteraction === 'PENDING_INPUT' || humanInteraction === 'PENDING_REVIEW' || humanInteraction === 'PENDING_ESCALATION') {
-    return 'bg-yellow-100 text-yellow-800'
+const getSessionStatusColor = (status?: ChatSession['status']) => {
+  if (status === 'COMPLETED') {
+    return 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200'
   }
-  if (humanInteraction === 'RESPONSE') return 'bg-green-100 text-green-800'
+  if (status === 'ERROR') {
+    return 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200'
+  }
+  return 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200'
+}
 
-  if (messageType === 'TOOL_CALL') return 'bg-blue-100 text-blue-800'
-  if (messageType === 'TOOL_RESPONSE') return 'bg-green-100 text-green-800'
+const getMessageTypeLabel = (message: ChatMessage) => {
+  if (message.humanInteraction === 'NOTIFICATION') return 'Notification'
+  if (message.humanInteraction === 'ALERT_INFO') return 'Info'
+  if (message.humanInteraction === 'ALERT_WARNING') return 'Warning'
+  if (message.humanInteraction === 'ALERT_ERROR') return 'Error'
+  if (message.humanInteraction === 'ALERT_CRITICAL') return 'Critical'
+  if (message.humanInteraction === 'PENDING_APPROVAL') return 'Pending Approval'
+  if (message.humanInteraction === 'PENDING_INPUT') return 'Pending Input'
+  if (message.humanInteraction === 'PENDING_REVIEW') return 'Pending Review'
+  if (message.humanInteraction === 'PENDING_ESCALATION') return 'Pending Escalation'
+  if (message.humanInteraction === 'RESPONSE') return 'Response'
+  if (message.messageType === 'TOOL_CALL') return 'Tool Call'
+  if (message.messageType === 'TOOL_RESPONSE') return 'Tool Response'
+  if (message.role === 'SYSTEM') return 'System'
+  if (message.role === 'ASSISTANT') return 'Assistant'
+  if (message.role === 'USER') return 'User'
+  if (message.role === 'TOOL') return 'Tool'
+  return message.messageType || message.role || 'Message'
+}
 
-  switch (role) {
-    case 'SYSTEM':
-      return 'bg-purple-100 text-purple-800'
-    case 'ASSISTANT':
-      return 'bg-blue-100 text-blue-800'
-    case 'USER':
-      return 'bg-green-100 text-green-800'
-    case 'TOOL':
-      return 'bg-orange-100 text-orange-800'
-    default:
-      return 'bg-gray-100 text-gray-800'
+const shouldShowMessageTypeBadge = (message: ChatMessage): boolean => {
+  if (message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') {
+    return true
+  }
+  return [
+    'NOTIFICATION',
+    'ALERT_INFO',
+    'ALERT_WARNING',
+    'ALERT_ERROR',
+    'ALERT_CRITICAL',
+    'PENDING_APPROVAL',
+    'PENDING_INPUT',
+    'PENDING_REVIEW',
+    'PENDING_ESCALATION',
+    'RESPONSE',
+  ].includes(message.humanInteraction || '')
+}
+
+const getRowFromMessage = (message: ChatMessage): ConversationRow => {
+  if (message.role === 'USER' || message.humanInteraction === 'RESPONSE') {
+    return {
+      id: message.id,
+      from: 'user',
+      message,
+    }
+  }
+
+  return {
+    id: message.id,
+    from: 'assistant',
+    message,
   }
 }
 
@@ -293,8 +475,16 @@ function ConversationViewer({
   experimentId,
   procedureId,
   enableHitlActions = false,
+  defaultSidebarCollapsed = true,
+  enableSidebarResize = false,
+  defaultSidebarWidth = 320,
+  forceProcedureIdForDispatch,
+  defaultAccountIdForNewSession,
 }: ConversationViewerProps) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(defaultSidebarCollapsed)
+  const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(defaultSidebarWidth, 240), 520))
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
   
   // Internal state for data loading mode
   const [internalSessions, setInternalSessions] = useState<ChatSession[]>([])
@@ -305,40 +495,74 @@ function ConversationViewer({
   const [submittingMessageIds, setSubmittingMessageIds] = useState<Set<string>>(new Set())
   const [submittedMessageIds, setSubmittedMessageIds] = useState<Set<string>>(new Set())
   const [hitlSubmitErrors, setHitlSubmitErrors] = useState<Record<string, string>>({})
-  
-  // Ref for the messages container to handle auto-scrolling
-  const messagesContainerRef = React.useRef<HTMLDivElement>(null)
+  const [promptValue, setPromptValue] = useState("")
+  const [isPromptSubmitting, setIsPromptSubmitting] = useState(false)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
 
-  // Function to scroll to the most recent message
-  const scrollToLatestMessage = React.useCallback(() => {
-    const container = messagesContainerRef.current
-    if (!container) return
+  useEffect(() => {
+    const node = containerRef.current
+    if (!node) return
 
-    // Find the last message element
-    const messageElements = container.querySelectorAll('[data-message-id]')
-    const lastMessageElement = messageElements[messageElements.length - 1] as HTMLElement
-    
-    if (lastMessageElement) {
-      // Calculate the scroll position to show the top of the last message at the top of the container
-      const containerRect = container.getBoundingClientRect()
-      const messageRect = lastMessageElement.getBoundingClientRect()
-      const scrollTop = container.scrollTop + (messageRect.top - containerRect.top)
-      
-      // Smooth scroll to the calculated position
-      container.scrollTo({
-        top: scrollTop,
-        behavior: 'smooth'
-      })
-    }
+    const update = () => setContainerWidth(node.getBoundingClientRect().width)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(node)
+    return () => observer.disconnect()
   }, [])
+
+  const maxSidebarWidth = React.useMemo(() => {
+    if (!containerWidth) return 520
+    return Math.max(240, Math.min(520, Math.floor(containerWidth * 0.55)))
+  }, [containerWidth])
+
+  useEffect(() => {
+    setSidebarWidth((current) => Math.min(current, maxSidebarWidth))
+  }, [maxSidebarWidth])
 
   // Determine which data source to use
   const sessions = propSessions || internalSessions
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
+  const isExternallyControlledSession = Boolean(propSelectedSessionId?.trim())
+
+  useEffect(() => {
+    selectedSessionIdRef.current = selectedSessionId
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    if (propMessages) {
+      return
+    }
+
+    const sessionCounts = internalMessages.reduce((acc: Record<string, number>, message) => {
+      if (message.sessionId) {
+        acc[message.sessionId] = (acc[message.sessionId] || 0) + 1
+      }
+      return acc
+    }, {})
+
+    setInternalSessions((prevSessions) => {
+      let changed = false
+      const nextSessions = prevSessions.map((session) => {
+        const nextCount = sessionCounts[session.id] || 0
+        if ((session.messageCount || 0) === nextCount) {
+          return session
+        }
+        changed = true
+        return {
+          ...session,
+          messageCount: nextCount,
+        }
+      })
+
+      return changed ? nextSessions : prevSessions
+    })
+  }, [internalMessages, propMessages])
   
   // Use either experimentId or procedureId (they're synonymous in this context)
   const effectiveId = experimentId || procedureId
+  const dispatchProcedureId = forceProcedureIdForDispatch?.trim() || null
   
   // Notify parent of session count changes
   useEffect(() => {
@@ -348,11 +572,30 @@ function ConversationViewer({
   }, [sessions.length, onSessionCountChange])
   
   const handleSessionSelect = (sessionId: string) => {
+    setInternalSelectedSessionId(sessionId)
     if (onSessionSelect) {
       onSessionSelect(sessionId)
-    } else {
-      setInternalSelectedSessionId(sessionId)
     }
+  }
+
+  const handleSidebarResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.pageX
+    const startWidth = sidebarWidth
+
+    const handleDrag = (event: MouseEvent) => {
+      const delta = event.pageX - startX
+      const newWidth = Math.min(Math.max(startWidth + delta, 240), maxSidebarWidth)
+      setSidebarWidth(newWidth)
+    }
+
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag)
+      document.removeEventListener('mouseup', handleDragEnd)
+    }
+
+    document.addEventListener('mousemove', handleDrag)
+    document.addEventListener('mouseup', handleDragEnd)
   }
 
   const markSubmitting = (messageId: string, submitting: boolean) => {
@@ -367,79 +610,84 @@ function ConversationViewer({
     })
   }
 
-  const enqueueProcedureRunTask = async (
-    accountId: string,
+  const startConsoleRun = React.useCallback(async (
+    sessionId: string,
     procedureIdToRun: string,
+    triggerMessageId: string,
+    clientInstrumentation: Record<string, unknown> = {},
+  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
+    const client = getClient() as any
+    const response = await client.graphql({
+      query: START_CONSOLE_RUN_MUTATION,
+      variables: {
+        sessionId,
+        procedureId: procedureIdToRun,
+        triggerMessageId,
+        clientInstrumentation: JSON.stringify(clientInstrumentation),
+      },
+    })
+
+    const result = response?.data?.startConsoleRun
+    if (!result?.accepted || !result?.taskId || !result?.runId || !result?.queuedAt) {
+      throw new Error('Failed to queue procedure run after chat input')
+    }
+    return {
+      taskId: result.taskId,
+      runId: result.runId,
+      queuedAt: result.queuedAt,
+    }
+  }, [])
+
+  const enqueueProcedureRunTask = async (
+    procedureIdToRun: string,
+    sessionId: string,
     pendingMessageId: string,
     responseMessageId: string,
     requestId: string
   ) => {
-    const client = getClient()
-    const nowIso = new Date().toISOString()
-    const taskMetadata = {
-      dispatch_mode: 'local',
-      hitl_resume: {
-        pending_message_id: pendingMessageId,
-        response_message_id: responseMessageId,
-        request_id: requestId,
-        queued_at: nowIso,
+    await startConsoleRun(
+      sessionId,
+      procedureIdToRun,
+      responseMessageId,
+      {
+        hitl_resume: {
+          pending_message_id: pendingMessageId,
+          response_message_id: responseMessageId,
+          request_id: requestId,
+        },
       },
-    }
-
-    const { data: existingTasks } = await (client.models.Task.listTaskByAccountIdAndUpdatedAt as any)({
-      accountId,
-      updatedAt: { ge: '2000-01-01T00:00:00.000Z' },
-      sortDirection: 'DESC',
-      limit: 200,
-    })
-
-    const matchingTask = (existingTasks || []).find((task: any) => {
-      const target = task?.target || ''
-      return target === `procedure/${procedureIdToRun}` || target === `procedure/run/${procedureIdToRun}`
-    })
-
-    if (matchingTask) {
-      const existingMetadata = parseMessageMetadata(matchingTask.metadata) || {}
-      const existingResume = (existingMetadata.hitl_resume || {}) as Record<string, unknown>
-      if (existingResume.response_message_id === responseMessageId || existingResume.request_id === requestId) {
-        return
-      }
-
-      await (client.models.Task.update as any)({
-        id: matchingTask.id,
-        status: 'PENDING',
-        dispatchStatus: 'PENDING',
-        target: `procedure/${procedureIdToRun}`,
-        command: `procedure run ${procedureIdToRun}`,
-        startedAt: null,
-        completedAt: null,
-        workerNodeId: null,
-        errorMessage: null,
-        errorDetails: null,
-        stdout: null,
-        stderr: null,
-        metadata: JSON.stringify({
-          ...existingMetadata,
-          ...taskMetadata,
-        }),
-        updatedAt: nowIso,
-      })
-      return
-    }
-
-    await (client.models.Task.create as any)({
-      accountId,
-      type: 'Procedure Run',
-      status: 'PENDING',
-      dispatchStatus: 'PENDING',
-      target: `procedure/${procedureIdToRun}`,
-      command: `procedure run ${procedureIdToRun}`,
-      description: `Resume procedure ${procedureIdToRun} after HITL response`,
-      metadata: JSON.stringify(taskMetadata),
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    })
+    )
   }
+
+  const enqueueProcedureRunFromChat = React.useCallback(async (
+    procedureIdToRun: string,
+    triggerMessageId: string,
+    sessionId: string,
+    clientTiming: Record<string, unknown> = {},
+  ) => {
+    const instrumentation: Record<string, unknown> = {
+      ...clientTiming,
+      client_dispatch_request_started_at: new Date().toISOString(),
+    }
+
+    try {
+      const dispatchResult = await startConsoleRun(
+        sessionId,
+        procedureIdToRun,
+        triggerMessageId,
+        instrumentation,
+      )
+      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
+      instrumentation.client_dispatch_request_accepted = true
+      instrumentation.queue_task_id = dispatchResult.taskId
+      instrumentation.queue_run_id = dispatchResult.runId
+      instrumentation.queue_accepted_at = dispatchResult.queuedAt
+    } catch (error) {
+      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
+      instrumentation.client_dispatch_request_accepted = false
+      throw error
+    }
+  }, [startConsoleRun])
 
   const submitHitlResponse = async (
     pendingMessage: ChatMessage,
@@ -501,8 +749,8 @@ function ConversationViewer({
       }
 
       await enqueueProcedureRunTask(
-        pendingMessage.accountId,
         pendingMessage.procedureId,
+        pendingMessage.sessionId,
         pendingMessage.id,
         responseMessageId,
         control.request_id
@@ -573,6 +821,8 @@ function ConversationViewer({
         if (sessionsData) {
           const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
             id: session.id,
+            accountId: session.accountId,
+            procedureId: session.procedureId,
             name: session.name,
             category: session.category,
             status: session.status,
@@ -631,66 +881,7 @@ function ConversationViewer({
         } while (nextToken)
 
         if (allMessages.length > 0) {
-          const formattedMessages: ChatMessage[] = allMessages.map((msg: any) => {
-            
-            // Parse tool call data from content if structured fields are missing
-            let parsedToolName = msg.toolName
-            let parsedToolParameters = parseJsonField(msg.toolParameters)
-            
-            if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
-              // Parse tool call from content string like: "plexus_feedback_find({'scorecard_name': 'SelectQuote HCS Medium-Risk', ...})"
-              const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
-              if (toolCallMatch) {
-                parsedToolName = toolCallMatch[1].trim()
-                try {
-                  // Convert Python-style dict to JSON and parse
-                  const pythonDict = toolCallMatch[2]
-                  const jsonString = pythonDict
-                    .replace(/'/g, '"')  // Convert single quotes to double quotes
-                    .replace(/True/g, 'true')  // Convert Python booleans
-                    .replace(/False/g, 'false')
-                    .replace(/None/g, 'null')
-                  parsedToolParameters = JSON.parse(jsonString)
-                } catch (e) {
-                  console.warn('Failed to parse tool parameters from content:', e)
-                }
-              }
-            }
-            
-            return {
-              id: msg.id,
-              content: msg.content || '',
-              role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-              messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
-              humanInteraction: msg.humanInteraction,
-              toolName: parsedToolName,
-              toolParameters: parsedToolParameters,
-              toolResponse: parseJsonField(msg.toolResponse),
-              metadata: parseMessageMetadata(msg.metadata),
-              parentMessageId: msg.parentMessageId,
-              accountId: msg.accountId,
-              procedureId: msg.procedureId,
-              createdAt: msg.createdAt,
-              sequenceNumber: msg.sequenceNumber,
-              sessionId: msg.sessionId
-            }
-          })
-          
-          const visibleMessages = formattedMessages.filter(msg => {
-            if (msg.humanInteraction === 'INTERNAL') {
-              return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
-            }
-            return true
-          })
-
-          // Sort all messages by sequence number and creation time
-          const sortedMessages = visibleMessages.sort((a, b) => {
-            if (a.sequenceNumber && b.sequenceNumber) {
-              return a.sequenceNumber - b.sequenceNumber
-            }
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          })
-
+          const sortedMessages = normalizeAndSortVisibleMessages(allMessages)
           setInternalMessages(sortedMessages)
           
           // Update session message counts
@@ -732,6 +923,8 @@ function ConversationViewer({
         if (sessionsData) {
           const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
             id: session.id,
+            accountId: session.accountId,
+            procedureId: session.procedureId,
             name: session.name,
             category: session.category,
             status: session.status,
@@ -747,25 +940,45 @@ function ConversationViewer({
           
           // Check if we have new sessions compared to current state
           setInternalSessions(prevSessions => {
-            const currentIds = new Set(prevSessions.map(s => s.id))
-            const newSessions = sortedSessions.filter(s => !currentIds.has(s.id))
-            
-            if (newSessions.length > 0) {
-              // Auto-select the newest session when new sessions are created
-              if (sortedSessions.length > 0) {
-                const newestSession = sortedSessions[0]
-                // Use handleSessionSelect to properly manage both internal and external session selection
-                if (onSessionSelect) {
-                  onSessionSelect(newestSession.id)
-                } else {
-                  setInternalSelectedSessionId(newestSession.id)
-                }
+            const previousById = new Map(prevSessions.map(session => [session.id, session]))
+            const mergedSessions = sortedSessions.map((session) => {
+              const previous = previousById.get(session.id)
+              return {
+                ...session,
+                messageCount: previous?.messageCount ?? session.messageCount ?? 0,
               }
-              
-              return sortedSessions // Replace with complete sorted list
+            })
+
+            const changed =
+              mergedSessions.length !== prevSessions.length
+              || mergedSessions.some((session) => {
+                const previous = previousById.get(session.id)
+                if (!previous) {
+                  return true
+                }
+                return (
+                  previous.updatedAt !== session.updatedAt
+                  || previous.status !== session.status
+                  || previous.name !== session.name
+                  || previous.category !== session.category
+                )
+              })
+
+            if (!changed) {
+              return prevSessions
             }
-            
-            return prevSessions // No changes
+
+            const currentSelectedSessionId = selectedSessionIdRef.current
+            const selectedStillExists = currentSelectedSessionId
+              ? mergedSessions.some(session => session.id === currentSelectedSessionId)
+              : false
+
+            if (!selectedStillExists && !isExternallyControlledSession && mergedSessions.length > 0) {
+              const newestSessionId = mergedSessions[0].id
+              setInternalSelectedSessionId(newestSessionId)
+            }
+
+            return mergedSessions
           })
         }
       } catch (error) {
@@ -791,20 +1004,58 @@ function ConversationViewer({
     } catch (error) {
       console.error('Error setting up chat session notification:', error)
     }
-  }, [effectiveId, onSessionSelect])
+  }, [effectiveId, isExternallyControlledSession, onSessionSelect])
 
-  // Real-time subscription for new chat messages - notification-based pattern
+  const applyRealtimeMessageMutation = React.useCallback((rawMessage: any) => {
+    const parsed = parseRawChatMessage(rawMessage)
+    if (!parsed) {
+      return
+    }
+
+    if (parsed.procedureId && parsed.procedureId !== effectiveId) {
+      return
+    }
+
+    setInternalMessages((prevMessages) => {
+      const existingIndex = prevMessages.findIndex((message) => message.id === parsed.id)
+      const visible = isVisibleChatMessage(parsed)
+
+      if (!visible) {
+        if (existingIndex === -1) {
+          return prevMessages
+        }
+        return prevMessages.filter((message) => message.id !== parsed.id)
+      }
+
+      if (existingIndex === -1) {
+        return sortChatMessages([...prevMessages, parsed])
+      }
+
+      const previous = prevMessages[existingIndex]
+      if (areMessagesEquivalent(previous, parsed)) {
+        return prevMessages
+      }
+
+      const next = [...prevMessages]
+      next[existingIndex] = parsed
+      return sortChatMessages(next)
+    })
+  }, [effectiveId])
+
+  // Real-time subscription for chat messages. onCreate/onUpdate are primary; polling is fallback.
   useEffect(() => {
     if (!effectiveId) return
+
+    let isCancelled = false
 
     const checkForNewMessages = async () => {
       try {
         const client = getClient()
-        
+
         // Load ALL messages for this experiment with proper pagination
         let allMessages: any[] = []
         let nextToken: string | null = null
-        
+
         do {
           const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
             procedureId: effectiveId,
@@ -829,119 +1080,102 @@ function ConversationViewer({
               'sessionId'
             ]
           })
-          
+
           if (response?.data) {
             allMessages = [...allMessages, ...response.data]
           }
-          
+
           nextToken = response.nextToken || null
         } while (nextToken)
 
-        const messagesData = allMessages
-
-        if (messagesData) {
-          const formattedMessages: ChatMessage[] = messagesData.map((msg: any) => {
-            // Parse tool call data from content if structured fields are missing
-            let parsedToolName = msg.toolName
-            let parsedToolParameters = parseJsonField(msg.toolParameters)
-            
-            if (msg.messageType === 'TOOL_CALL' && !msg.toolName && msg.content) {
-              // Parse tool call from content string
-              const toolCallMatch = msg.content.match(/^([^(]+)\((.+)\)$/s)
-              if (toolCallMatch) {
-                parsedToolName = toolCallMatch[1].trim()
-                try {
-                  const pythonDict = toolCallMatch[2]
-                  const jsonString = pythonDict
-                    .replace(/'/g, '"')
-                    .replace(/True/g, 'true')
-                    .replace(/False/g, 'false')
-                    .replace(/None/g, 'null')
-                  parsedToolParameters = JSON.parse(jsonString)
-                } catch (e) {
-                  console.warn('Failed to parse tool parameters:', e)
-                }
-              }
-            }
-            
-            return {
-              id: msg.id,
-              content: msg.content || '',
-              role: msg.role as 'SYSTEM' | 'ASSISTANT' | 'USER' | 'TOOL',
-              messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE',
-              humanInteraction: msg.humanInteraction,
-              toolName: parsedToolName,
-              toolParameters: parsedToolParameters,
-              toolResponse: parseJsonField(msg.toolResponse),
-              metadata: parseMessageMetadata(msg.metadata),
-              parentMessageId: msg.parentMessageId,
-              accountId: msg.accountId,
-              procedureId: msg.procedureId,
-              createdAt: msg.createdAt,
-              sequenceNumber: msg.sequenceNumber,
-              sessionId: msg.sessionId
-            }
-          })
-          
-          const visibleMessages = formattedMessages.filter(msg => {
-            if (msg.humanInteraction === 'INTERNAL') {
-              return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
-            }
-            return true
-          })
-
-          // Sort messages by sequence number and creation time
-          const sortedMessages = visibleMessages.sort((a, b) => {
-            if (a.sequenceNumber && b.sequenceNumber) {
-              return a.sequenceNumber - b.sequenceNumber
-            }
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          })
-
-          // Check if we have new messages compared to current state
-          setInternalMessages(prevMessages => {
-            const currentIds = new Set(prevMessages.map(m => m.id))
-            const newMessages = sortedMessages.filter(m => !currentIds.has(m.id))
-            
-            if (newMessages.length > 0) {
-              // Auto-scroll to the latest message after a brief delay to ensure DOM has updated
-              setTimeout(() => {
-                scrollToLatestMessage()
-              }, 100)
-              
-              return sortedMessages // Replace with complete sorted list
-            }
-            
-            return prevMessages // No changes
-          })
+        if (isCancelled) {
+          return
         }
+
+        const sortedMessages = normalizeAndSortVisibleMessages(allMessages)
+        setInternalMessages((prevMessages) => (
+          hasMessageListChanged(prevMessages, sortedMessages)
+            ? sortedMessages
+            : prevMessages
+        ))
       } catch (error) {
         console.error('Error checking for new messages:', error)
       }
     }
 
+    const extractSubscriptionMessage = (payload: any): any | null => {
+      const directData = payload?.data
+      if (directData && typeof directData === 'object') {
+        if ('onCreateChatMessage' in directData) {
+          return directData.onCreateChatMessage
+        }
+        if ('onUpdateChatMessage' in directData) {
+          return directData.onUpdateChatMessage
+        }
+        if ('id' in directData) {
+          return directData
+        }
+      }
+      if (payload && typeof payload === 'object' && 'id' in payload) {
+        return payload
+      }
+      return null
+    }
+
+    let createSubscription: { unsubscribe: () => void } | null = null
+    let updateSubscription: { unsubscribe: () => void } | null = null
+    const pollTimer = window.setInterval(() => {
+      checkForNewMessages()
+    }, 15000)
+
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatMessage.onCreate().subscribe({
-        next: () => {
-          // Don't rely on the subscription data, just use it as a notification
+      createSubscription = getClient().models.ChatMessage.onCreate().subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionMessage(payload)
+          if (incoming) {
+            applyRealtimeMessageMutation(incoming)
+            return
+          }
           checkForNewMessages()
         },
         error: (error: Error) => {
-          console.error('Chat message subscription error:', error)
+          console.error('Chat message create subscription error:', error)
         }
       })
-
-      // Also check for new messages when the subscription is first set up
-      checkForNewMessages()
-
-      return () => {
-        subscription.unsubscribe()
-      }
     } catch (error) {
-      console.error('Error setting up chat message notification:', error)
+      console.error('Error setting up chat message create notification:', error)
     }
-  }, [effectiveId, scrollToLatestMessage])
+
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      updateSubscription = getClient().models.ChatMessage.onUpdate().subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionMessage(payload)
+          if (incoming) {
+            applyRealtimeMessageMutation(incoming)
+            return
+          }
+          checkForNewMessages()
+        },
+        error: (error: Error) => {
+          console.error('Chat message update subscription error:', error)
+        }
+      })
+    } catch (error) {
+      console.error('Error setting up chat message update notification:', error)
+    }
+
+    // Initial load + reconciliation on mount.
+    checkForNewMessages()
+
+    return () => {
+      isCancelled = true
+      window.clearInterval(pollTimer)
+      createSubscription?.unsubscribe()
+      updateSubscription?.unsubscribe()
+    }
+  }, [applyRealtimeMessageMutation, effectiveId])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -982,6 +1216,263 @@ function ConversationViewer({
   
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
+  const selectedSessionMissing = Boolean(selectedSessionId && !selectedSession)
+  const isPromptDisabled = !selectedSession
+  const conversationRows = sortedMessages.map(getRowFromMessage)
+  const pendingMessageForPrompt = React.useMemo(
+    () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
+    [sortedMessages, unresolvedPendingMessageIds]
+  )
+  const selectedSessionAccountId = selectedSession?.accountId
+    || sortedMessages.find(message => message.accountId)?.accountId
+  const selectedSessionProcedureId = dispatchProcedureId
+    || selectedSession?.procedureId
+    || sortedMessages.find(message => message.procedureId)?.procedureId
+    || effectiveId
+  const fallbackSessionAccountId = React.useMemo(
+    () => (
+      defaultAccountIdForNewSession
+      || 
+      selectedSessionAccountId
+      || sessions.find(session => session.accountId)?.accountId
+      || messages.find(message => message.accountId)?.accountId
+    ),
+    [defaultAccountIdForNewSession, messages, selectedSessionAccountId, sessions]
+  )
+  const fallbackSessionProcedureId = React.useMemo(
+    () => (
+      dispatchProcedureId
+      || selectedSessionProcedureId
+      || sessions.find(session => session.procedureId)?.procedureId
+      || messages.find(message => message.procedureId)?.procedureId
+      || effectiveId
+    ),
+    [dispatchProcedureId, effectiveId, messages, selectedSessionProcedureId, sessions]
+  )
+  const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
+
+  const createNewSession = React.useCallback(async () => {
+    if (!fallbackSessionAccountId || !fallbackSessionProcedureId) {
+      throw new Error('Missing account or procedure context to create a session')
+    }
+
+    const client = getClient()
+    const createdAt = new Date().toISOString()
+    const created = await (client.models.ChatSession.create as any)({
+      accountId: fallbackSessionAccountId,
+      procedureId: fallbackSessionProcedureId,
+      category: 'Console Chat',
+      status: 'ACTIVE',
+      createdAt,
+      updatedAt: createdAt,
+    })
+
+    const sessionId = created?.data?.id
+    if (!sessionId) {
+      throw new Error('Failed to create chat session')
+    }
+
+    const createdSession: ChatSession = {
+      id: sessionId,
+      accountId: fallbackSessionAccountId,
+      procedureId: fallbackSessionProcedureId,
+      category: created?.data?.category || 'Console Chat',
+      name: created?.data?.name,
+      status: (created?.data?.status as ChatSession['status']) || 'ACTIVE',
+      createdAt: created?.data?.createdAt || createdAt,
+      updatedAt: created?.data?.updatedAt || createdAt,
+      messageCount: 0,
+    }
+
+    setInternalSessions(prev => [createdSession, ...prev.filter(session => session.id !== sessionId)])
+    if (onSessionSelect) {
+      onSessionSelect(sessionId)
+    } else {
+      setInternalSelectedSessionId(sessionId)
+    }
+
+    return createdSession
+  }, [fallbackSessionAccountId, fallbackSessionProcedureId, onSessionSelect])
+
+  const handleCreateSession = React.useCallback(async () => {
+    if (isCreatingSession) {
+      return
+    }
+    if (!canCreateSession) {
+      toast.error('Unable to create a session until account and procedure context are available')
+      return
+    }
+
+    setIsCreatingSession(true)
+    try {
+      await createNewSession()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create session'
+      toast.error(message)
+    } finally {
+      setIsCreatingSession(false)
+    }
+  }, [canCreateSession, createNewSession, isCreatingSession])
+
+  const handlePromptSubmit = React.useCallback(
+    async ({ text }: { text?: string }) => {
+      const nextValue = (text || '').trim()
+      if (!nextValue) {
+        return
+      }
+
+      if (isPromptSubmitting || isCreatingSession) {
+        return
+      }
+
+      let targetSessionId = selectedSessionId
+      let targetSessionStatus = selectedSession?.status
+      let targetSessionAccountId = selectedSessionAccountId
+      let targetSessionProcedureId = selectedSessionProcedureId
+
+      if (!selectedSession && targetSessionId) {
+        toast.info('Select a valid chat session first')
+        return
+      }
+
+      if (!targetSessionId || targetSessionStatus === 'COMPLETED' || targetSessionStatus === 'ERROR') {
+        try {
+          const newSession = await createNewSession()
+          targetSessionId = newSession.id
+          targetSessionStatus = newSession.status
+          targetSessionAccountId = newSession.accountId
+          targetSessionProcedureId = newSession.procedureId
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to create a fresh session before send'
+          toast.error(message)
+          return
+        }
+      }
+
+      if (!targetSessionId) {
+        toast.info('Select or create a chat session first')
+        return
+      }
+
+      if (pendingMessageForPrompt) {
+        setIsPromptSubmitting(true)
+        try {
+          await submitHitlResponse(pendingMessageForPrompt, 'submit', nextValue)
+          setPromptValue('')
+        } finally {
+          setIsPromptSubmitting(false)
+        }
+        return
+      }
+
+      if (!targetSessionAccountId || !targetSessionProcedureId) {
+        toast.error('Missing required session metadata to send chat input')
+        return
+      }
+
+      const clientSendStartedAt = new Date().toISOString()
+      const nowIso = new Date().toISOString()
+      const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const optimisticMessage: ChatMessage = {
+        id: optimisticMessageId,
+        accountId: targetSessionAccountId,
+        sessionId: targetSessionId,
+        procedureId: targetSessionProcedureId,
+        role: 'USER',
+        messageType: 'MESSAGE',
+        humanInteraction: 'CHAT',
+        content: nextValue,
+        createdAt: nowIso,
+      }
+
+      setIsPromptSubmitting(true)
+      setInternalMessages(prev => [...prev, optimisticMessage])
+      setInternalSessions(prev => prev.map(session => (
+        session.id === targetSessionId
+          ? { ...session, messageCount: (session.messageCount || 0) + 1, updatedAt: nowIso }
+          : session
+      )))
+
+      let messagePersisted = false
+      try {
+        const client = getClient()
+        const created = await (client.models.ChatMessage.create as any)({
+          accountId: targetSessionAccountId,
+          sessionId: targetSessionId,
+          procedureId: targetSessionProcedureId,
+          role: 'USER',
+          messageType: 'MESSAGE',
+          humanInteraction: 'CHAT',
+          content: nextValue,
+          metadata: JSON.stringify({
+            source: 'console-prompt-input',
+            sent_at: nowIso,
+            instrumentation: {
+              client_send_started_at: clientSendStartedAt,
+            },
+          }),
+          createdAt: nowIso,
+        })
+
+        const createdMessageId = created?.data?.id
+        if (!createdMessageId) {
+          throw new Error('Failed to persist chat message')
+        }
+        messagePersisted = true
+
+        const persistedCreatedAt = created?.data?.createdAt || nowIso
+        setInternalMessages(prev => prev.map(message => (
+          message.id === optimisticMessageId
+            ? { ...optimisticMessage, id: createdMessageId, createdAt: persistedCreatedAt }
+            : message
+        )))
+
+        await enqueueProcedureRunFromChat(
+          targetSessionProcedureId,
+          createdMessageId,
+          targetSessionId,
+          {
+            client_send_started_at: clientSendStartedAt,
+            client_user_message_created_at: persistedCreatedAt,
+            client_prompt_length_chars: nextValue.length,
+          },
+        )
+
+        setPromptValue('')
+      } catch (error) {
+        if (!messagePersisted) {
+          setInternalMessages(prev => prev.filter(message => message.id !== optimisticMessageId))
+          setInternalSessions(prev => prev.map(session => (
+            session.id === targetSessionId
+              ? { ...session, messageCount: Math.max(0, (session.messageCount || 1) - 1) }
+              : session
+          )))
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Failed to send chat message'
+        if (messagePersisted) {
+          toast.error(`Message saved, but run dispatch failed: ${errorMessage}`)
+        } else {
+          toast.error(errorMessage)
+        }
+        throw error
+      } finally {
+        setIsPromptSubmitting(false)
+      }
+    },
+    [
+      selectedSessionAccountId,
+      selectedSessionId,
+      selectedSession,
+      selectedSessionProcedureId,
+      pendingMessageForPrompt,
+      isPromptSubmitting,
+      isCreatingSession,
+      createNewSession,
+      enqueueProcedureRunFromChat,
+      submitHitlResponse,
+    ]
+  )
 
   // Show loading state when loading data in effectiveId mode
   if (isLoading && effectiveId) {
@@ -993,26 +1484,43 @@ function ConversationViewer({
   }
 
   return (
-    <div className={`flex h-full bg-background ${className}`}>
+    <div ref={containerRef} className={`flex h-full bg-background min-w-0 ${className}`}>
       {/* Left Sidebar - Session List */}
-      <div className={`${isSidebarCollapsed ? 'w-12' : 'w-80'} transition-all duration-200 border-r border-border flex flex-col`}>
+      <div
+        className={`${isSidebarCollapsed ? 'w-12' : 'shrink-0'} transition-all duration-200 border-r border-border flex flex-col`}
+        style={!isSidebarCollapsed ? { width: sidebarWidth } : undefined}
+      >
         {/* Sidebar Header */}
         <div className="p-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
             <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="h-8 w-8 p-0"
-          >
-            {isSidebarCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
+          <div className="flex items-center gap-1">
+            {!isSidebarCollapsed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCreateSession}
+                className="h-8 w-8 p-0"
+                disabled={!canCreateSession || isCreatingSession}
+                title="New session"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             )}
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="h-8 w-8 p-0"
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
         
         {/* Session List */}
@@ -1038,14 +1546,8 @@ function ConversationViewer({
                   </div>
                   {session.status && (
                     <Badge 
-                      variant="outline"
-                      className={`text-xs ${
-                        session.status === 'COMPLETED' 
-                          ? 'bg-green-100 text-green-800' 
-                          : session.status === 'ERROR' 
-                          ? 'bg-red-100 text-red-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
+                      variant="secondary"
+                      className={`text-xs ${getSessionStatusColor(session.status)}`}
                     >
                       {session.status}
                     </Badge>
@@ -1075,8 +1577,17 @@ function ConversationViewer({
         )}
       </div>
 
+      {!isSidebarCollapsed && enableSidebarResize && (
+        <div
+          className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+          onMouseDown={handleSidebarResizeStart}
+        >
+          <div className="absolute inset-0 rounded-full transition-colors duration-150 group-hover:bg-accent" />
+        </div>
+      )}
+
       {/* Main Content - Messages */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col">
         {/* Session Header */}
         {selectedSession && (
           <div className="border-b border-border p-3">
@@ -1090,14 +1601,8 @@ function ConversationViewer({
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                     {selectedSession.status && (
                       <Badge 
-                        variant="outline"
-                        className={`text-xs ${
-                          selectedSession.status === 'COMPLETED' 
-                            ? 'bg-green-100 text-green-800' 
-                            : selectedSession.status === 'ERROR' 
-                            ? 'bg-red-100 text-red-800' 
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
+                        variant="secondary"
+                        className={`text-xs ${getSessionStatusColor(selectedSession.status)}`}
                       >
                         {selectedSession.status}
                       </Badge>
@@ -1105,8 +1610,6 @@ function ConversationViewer({
                     <span>
                       {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                     </span>
-                    <span>•</span>
-                    <Timestamp time={selectedSession.createdAt} variant="relative" showIcon={false} />
                   </div>
                 </div>
               </div>
@@ -1141,282 +1644,313 @@ function ConversationViewer({
         )}
         
         {/* Messages List */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3">
-          {!selectedSessionId ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <div className="text-center">
-                <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Select a chat session to view messages</p>
-              </div>
-            </div>
-          ) : sortedMessages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <div className="text-center">
-                <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No messages in this session</p>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {sortedMessages.map((message) => {
-                const controlEnvelope = getControlEnvelope(message.metadata)
-                const requestType = (
-                  controlEnvelope?.request_type
-                  || mapPendingInteractionToRequestType(message.humanInteraction)
-                ).toLowerCase()
-                const messageIsPending = enableHitlActions && isPendingHumanInteraction(message.humanInteraction)
-                const responseExists = responseParentIds.has(message.id)
-                const isSubmitted = responseExists || submittedMessageIds.has(message.id)
-                const isSubmitting = submittingMessageIds.has(message.id)
-                const currentInput = hitlTextByMessage[message.id] || ''
+        <div className="min-h-0 flex-1">
+          <Conversation className="h-full">
+            <ConversationContent className="gap-4 px-3 py-3">
+              {!selectedSessionId ? (
+                <ConversationEmptyState
+                  title="No session selected"
+                  description="Select a chat session to view messages"
+                  icon={<MessageSquare className="h-12 w-12 opacity-50" />}
+                />
+              ) : selectedSessionMissing ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3">
+                  <ConversationEmptyState
+                    title="Session not found"
+                    description="The session in this URL is unavailable for the current account. Select another session or create a new one."
+                    icon={<AlertCircle className="h-12 w-12 opacity-50" />}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleCreateSession}
+                    disabled={!canCreateSession || isCreatingSession}
+                  >
+                    Create New Session
+                  </Button>
+                </div>
+              ) : conversationRows.length === 0 ? (
+                <ConversationEmptyState
+                  title="No messages in this session"
+                  description="Run the console REPL or send a message to start this session."
+                  icon={<MessageSquare className="h-12 w-12 opacity-50" />}
+                />
+              ) : (
+                conversationRows.map((row) => {
+                  const message = row.message
+                  const controlEnvelope = getControlEnvelope(message.metadata)
+                  const requestType = (
+                    controlEnvelope?.request_type
+                    || mapPendingInteractionToRequestType(message.humanInteraction)
+                  ).toLowerCase()
+                  const messageIsPending = enableHitlActions && isPendingHumanInteraction(message.humanInteraction)
+                  const responseExists = responseParentIds.has(message.id)
+                  const isSubmitted = responseExists || submittedMessageIds.has(message.id)
+                  const isSubmitting = submittingMessageIds.has(message.id)
+                  const currentInput = hitlTextByMessage[message.id] || ''
+                  const messageTypeLabel = getMessageTypeLabel(message)
+                  const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
 
-                return (
-                  <div key={message.id} data-message-id={message.id} className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {getMessageIcon(message.role, message.messageType, message.humanInteraction)}
-                    </div>
+                  return (
+                    <Message
+                      key={row.id}
+                      from={row.from}
+                      data-message-id={row.id}
+                      data-from={row.from}
+                      className="max-w-full"
+                    >
+                      <div className="flex items-start">
+                        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                          {(showMessageTypeBadge || Boolean(message.toolName)) && (
+                            <div className="mb-2 flex items-center gap-2">
+                              {showMessageTypeBadge && (
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                                >
+                                  {messageTypeLabel}
+                                </Badge>
+                              )}
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge
-                          variant="secondary"
-                          className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
-                        >
-                          {message.humanInteraction === 'NOTIFICATION' ? 'Notification' :
-                           message.humanInteraction === 'ALERT_INFO' ? 'Info' :
-                           message.humanInteraction === 'ALERT_WARNING' ? 'Warning' :
-                           message.humanInteraction === 'ALERT_ERROR' ? 'Error' :
-                           message.humanInteraction === 'ALERT_CRITICAL' ? 'Critical' :
-                           message.humanInteraction === 'PENDING_APPROVAL' ? 'Pending Approval' :
-                           message.humanInteraction === 'PENDING_INPUT' ? 'Pending Input' :
-                           message.humanInteraction === 'PENDING_REVIEW' ? 'Pending Review' :
-                           message.humanInteraction === 'PENDING_ESCALATION' ? 'Pending Escalation' :
-                           message.humanInteraction === 'RESPONSE' ? 'Response' :
-                           message.messageType === 'TOOL_CALL' ? 'Tool Call' :
-                           message.messageType === 'TOOL_RESPONSE' ? 'Tool Response' :
-                           message.role === 'SYSTEM' ? 'System' :
-                           message.role === 'ASSISTANT' ? 'Assistant' :
-                           message.role === 'USER' ? 'User' :
-                           message.role === 'TOOL' ? 'Tool' :
-                           message.messageType || message.role || 'Message'}
-                        </Badge>
+                              {message.toolName && (
+                                <Badge variant="outline" className="text-xs">
+                                  {message.toolName}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
 
-                        {message.toolName && (
-                          <Badge variant="outline" className="text-xs">
-                            {message.toolName}
-                          </Badge>
-                        )}
+                          {message.messageType === 'TOOL_CALL' && message.toolParameters ? (
+                            <div>
+                              <div className="rounded-md bg-card p-3">
+                                {message.toolName && (
+                                  <h4 className="mb-2 text-sm font-semibold text-foreground">{message.toolName}</h4>
+                                )}
+                                <div className="space-y-1">
+                                  {Object.entries(message.toolParameters).map(([key, value]) => (
+                                    <div key={key} className="grid grid-cols-3 gap-2 text-xs">
+                                      <div className="font-medium text-muted-foreground">{key}:</div>
+                                      <div className="col-span-2 break-words font-mono text-foreground">
+                                        {typeof value === 'string' ? value : JSON.stringify(value)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
 
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
-                          <Clock className="h-3 w-3" />
-                          <Timestamp time={message.createdAt} variant="relative" showIcon={false} />
-                        </div>
+                              <div className="mt-3">
+                                <Collapsible>
+                                  <CollapsibleTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="flex h-auto items-center gap-1 p-0 text-xs text-muted-foreground hover:text-foreground"
+                                    >
+                                      <ChevronRight className="h-3 w-3" />
+                                      Raw
+                                    </Button>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="mt-2 text-sm font-mono">
+                                      <CollapsibleText content={message.content} maxLines={10} />
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              </div>
+                            </div>
+                          ) : message.messageType === 'TOOL_RESPONSE' ? (
+                            null
+                          ) : (
+                            <div className="text-sm">
+                              <CollapsibleText content={message.content} maxLines={10} />
+                            </div>
+                          )}
+
+                          {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
+                            <div className="mt-3">
+                              <div className="rounded-md bg-card p-3 text-xs">
+                                <div className="font-mono">
+                                  <CollapsibleText
+                                    content={formatJsonWithNewlines(message.toolResponse)}
+                                    maxLines={12}
+                                    className="whitespace-pre-wrap break-words font-mono"
+                                    enableMarkdown={false}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {messageIsPending && (
+                            <div className="mt-3 space-y-3 rounded-md border border-border p-3">
+                              {!controlEnvelope && (
+                                <div className="text-xs text-red-600">
+                                  Pending request is missing canonical `metadata.control`.
+                                </div>
+                              )}
+                              {hitlSubmitErrors[message.id] && (
+                                <div className="text-xs text-red-600">
+                                  {hitlSubmitErrors[message.id]}
+                                </div>
+                              )}
+
+                              {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
+                                <Textarea
+                                  value={currentInput}
+                                  onChange={(event) => {
+                                    const value = event.target.value
+                                    setHitlTextByMessage((prev) => ({
+                                      ...prev,
+                                      [message.id]: value,
+                                    }))
+                                  }}
+                                  rows={requestType === 'review' ? 6 : 4}
+                                  placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
+                                  disabled={isSubmitting}
+                                />
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                {isSubmitted && (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                                  >
+                                    Response submitted
+                                  </Badge>
+                                )}
+
+                                {!isSubmitted && requestType === 'approval' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'approve')
+                                        } catch (error) {
+                                          console.error('Failed submitting approval response', error)
+                                        }
+                                      }}
+                                    >
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'reject')
+                                        } catch (error) {
+                                          console.error('Failed submitting rejection response', error)
+                                        }
+                                      }}
+                                    >
+                                      Reject
+                                    </Button>
+                                  </>
+                                )}
+
+                                {!isSubmitted && requestType === 'input' && (
+                                  <Button
+                                    size="sm"
+                                    disabled={isSubmitting || !controlEnvelope}
+                                    onClick={async () => {
+                                      try {
+                                        await submitHitlResponse(message, 'submit', currentInput)
+                                      } catch (error) {
+                                        console.error('Failed submitting input response', error)
+                                      }
+                                    }}
+                                  >
+                                    Submit
+                                  </Button>
+                                )}
+
+                                {!isSubmitted && requestType === 'review' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'approve', currentInput)
+                                        } catch (error) {
+                                          console.error('Failed submitting review approval', error)
+                                        }
+                                      }}
+                                    >
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isSubmitting || !controlEnvelope}
+                                      onClick={async () => {
+                                        try {
+                                          await submitHitlResponse(message, 'request_changes', currentInput)
+                                        } catch (error) {
+                                          console.error('Failed submitting review feedback', error)
+                                        }
+                                      }}
+                                    >
+                                      Request Changes
+                                    </Button>
+                                  </>
+                                )}
+
+                                {!isSubmitted && requestType === 'escalation' && (
+                                  <Button
+                                    size="sm"
+                                    disabled={isSubmitting || !controlEnvelope}
+                                    onClick={async () => {
+                                      try {
+                                        await submitHitlResponse(message, 'acknowledge', currentInput)
+                                      } catch (error) {
+                                        console.error('Failed submitting escalation acknowledgment', error)
+                                      }
+                                    }}
+                                  >
+                                    Acknowledge
+                                  </Button>
+                                )}
+
+                                {isSubmitting && (
+                                  <Badge variant="outline">Submitting...</Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </MessageContent>
                       </div>
-
-                      {message.messageType === 'TOOL_CALL' && message.toolParameters ? (
-                        <div>
-                          <div className="bg-card rounded-md p-3">
-                            {message.toolName && (
-                              <h4 className="font-semibold text-sm mb-2 text-foreground">{message.toolName}</h4>
-                            )}
-                            <div className="space-y-1">
-                              {Object.entries(message.toolParameters).map(([key, value]) => (
-                                <div key={key} className="grid grid-cols-3 gap-2 text-xs">
-                                  <div className="font-medium text-muted-foreground">{key}:</div>
-                                  <div className="col-span-2 font-mono text-foreground break-words">
-                                    {typeof value === 'string' ? value : JSON.stringify(value)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="mt-3">
-                            <Collapsible>
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                                >
-                                  <ChevronRight className="h-3 w-3" />
-                                  Raw
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent>
-                                <div className="mt-2 text-sm font-mono">
-                                  <CollapsibleText content={message.content} maxLines={10} />
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          </div>
-                        </div>
-                      ) : message.messageType === 'TOOL_RESPONSE' ? (
-                        null
-                      ) : (
-                        <div className="text-sm">
-                          <CollapsibleText content={message.content} maxLines={10} />
-                        </div>
-                      )}
-
-                      {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
-                        <div className="mt-3">
-                          <div className="bg-card rounded-md p-3 text-xs">
-                            <div className="font-mono">
-                              <CollapsibleText
-                                content={formatJsonWithNewlines(message.toolResponse)}
-                                maxLines={12}
-                                className="whitespace-pre-wrap break-words font-mono"
-                                enableMarkdown={false}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {messageIsPending && (
-                        <div className="mt-3 rounded-md border border-border p-3 space-y-3">
-                          {!controlEnvelope && (
-                            <div className="text-xs text-red-600">
-                              Pending request is missing canonical `metadata.control`.
-                            </div>
-                          )}
-                          {hitlSubmitErrors[message.id] && (
-                            <div className="text-xs text-red-600">
-                              {hitlSubmitErrors[message.id]}
-                            </div>
-                          )}
-
-                          {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
-                            <Textarea
-                              value={currentInput}
-                              onChange={(event) => {
-                                const value = event.target.value
-                                setHitlTextByMessage((prev) => ({
-                                  ...prev,
-                                  [message.id]: value,
-                                }))
-                              }}
-                              rows={requestType === 'review' ? 6 : 4}
-                              placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
-                              disabled={isSubmitting}
-                            />
-                          )}
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            {isSubmitted && (
-                              <Badge variant="outline" className="text-green-700 border-green-700">
-                                Response submitted
-                              </Badge>
-                            )}
-
-                            {!isSubmitted && requestType === 'approval' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  disabled={isSubmitting || !controlEnvelope}
-                                  onClick={async () => {
-                                    try {
-                                      await submitHitlResponse(message, 'approve')
-                                    } catch (error) {
-                                      console.error('Failed submitting approval response', error)
-                                    }
-                                  }}
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={isSubmitting || !controlEnvelope}
-                                  onClick={async () => {
-                                    try {
-                                      await submitHitlResponse(message, 'reject')
-                                    } catch (error) {
-                                      console.error('Failed submitting rejection response', error)
-                                    }
-                                  }}
-                                >
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-
-                            {!isSubmitted && requestType === 'input' && (
-                              <Button
-                                size="sm"
-                                disabled={isSubmitting || !controlEnvelope}
-                                onClick={async () => {
-                                  try {
-                                    await submitHitlResponse(message, 'submit', currentInput)
-                                  } catch (error) {
-                                    console.error('Failed submitting input response', error)
-                                  }
-                                }}
-                              >
-                                Submit
-                              </Button>
-                            )}
-
-                            {!isSubmitted && requestType === 'review' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  disabled={isSubmitting || !controlEnvelope}
-                                  onClick={async () => {
-                                    try {
-                                      await submitHitlResponse(message, 'approve', currentInput)
-                                    } catch (error) {
-                                      console.error('Failed submitting review approval', error)
-                                    }
-                                  }}
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={isSubmitting || !controlEnvelope}
-                                  onClick={async () => {
-                                    try {
-                                      await submitHitlResponse(message, 'request_changes', currentInput)
-                                    } catch (error) {
-                                      console.error('Failed submitting review feedback', error)
-                                    }
-                                  }}
-                                >
-                                  Request Changes
-                                </Button>
-                              </>
-                            )}
-
-                            {!isSubmitted && requestType === 'escalation' && (
-                              <Button
-                                size="sm"
-                                disabled={isSubmitting || !controlEnvelope}
-                                onClick={async () => {
-                                  try {
-                                    await submitHitlResponse(message, 'acknowledge', currentInput)
-                                  } catch (error) {
-                                    console.error('Failed submitting escalation acknowledgment', error)
-                                  }
-                                }}
-                              >
-                                Acknowledge
-                              </Button>
-                            )}
-
-                            {isSubmitting && (
-                              <Badge variant="outline">Submitting...</Badge>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                    </Message>
+                  )
+                })
+              )}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+        </div>
+        <div className="border-t border-border bg-background px-3 py-3">
+          <PromptInput className="w-full" onSubmit={handlePromptSubmit}>
+            <PromptInputBody>
+                <PromptInputTextarea
+                  value={promptValue}
+                  onChange={(event) => setPromptValue(event.target.value)}
+                  disabled={isPromptDisabled || isPromptSubmitting}
+                  placeholder={isPromptDisabled ? "Select a session to compose a message" : "Type a message"}
+                />
+            </PromptInputBody>
+            <PromptInputFooter className="justify-end">
+              <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
+            </PromptInputFooter>
+          </PromptInput>
+          {isPromptDisabled && (
+            <p className="pt-2 text-xs text-muted-foreground">
+              {selectedSessionMissing
+                ? "Select an available session or create a new one to enable prompt input."
+                : "Select a chat session to enable prompt input."}
+            </p>
           )}
         </div>
       </div>

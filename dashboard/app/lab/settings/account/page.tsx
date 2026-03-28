@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { useAccount } from "@/app/contexts/AccountContext"
+import { menuItems } from "@/components/dashboard-layout"
 
 type Account = Schema["Account"]["type"]
 
@@ -25,19 +26,7 @@ const accountApi = {
     }
 }
 
-const MENU_ITEMS = [
-    "Items",
-    "Feedback",
-    "Reports",
-    "Evaluations",
-    "Experiments",
-    "Scorecards",
-    "Sources",
-    "Batches",
-    "Activity",
-    "Alerts",
-    "Help"
-]
+const MENU_ITEMS = menuItems.map((item) => item.name)
 
 export default function LabAccountSettings() {
     const { authStatus } = useAuthenticator((context) => [context.authStatus])
