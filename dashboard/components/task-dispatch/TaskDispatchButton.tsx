@@ -6,17 +6,25 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ChevronDown } from "lucide-react"
 import { createTask } from "@/utils/data-operations"
 import { toast } from "sonner"
-import { TaskAction, TaskDispatchConfig } from "./types"
+import { TaskAction, TaskCommandAction, TaskDispatchConfig } from "./types"
 import { useAccount } from "@/app/contexts/AccountContext"
 
 export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
-  const [selectedAction, setSelectedAction] = useState<TaskAction | null>(null)
+  const [selectedAction, setSelectedAction] = useState<TaskCommandAction | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { selectedAccount } = useAccount()
 
   const handleActionSelect = (action: TaskAction) => {
+    if (action.actionType === 'ui') {
+      Promise.resolve(action.onSelect()).catch((error) => {
+        console.error("Error running UI action:", error)
+        toast.error("Action failed")
+      })
+      setIsDropdownOpen(false)
+      return
+    }
     setSelectedAction(action)
     setIsModalOpen(true)
     setIsDropdownOpen(false)
