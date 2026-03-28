@@ -57,6 +57,9 @@ type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name
 const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
+const startConsoleRunHandler = defineFunction({
+    entry: './resolvers/startConsoleRun.ts'
+});
 
 const schema = a.schema({
     Account: a
@@ -585,6 +588,28 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    StartConsoleRunResponse: a.customType({
+        runId: a.string().required(),
+        taskId: a.string().required(),
+        accepted: a.boolean().required(),
+        queuedAt: a.datetime().required(),
+    }),
+
+    startConsoleRun: a
+        .mutation()
+        .arguments({
+            sessionId: a.string().required(),
+            procedureId: a.string().required(),
+            triggerMessageId: a.string().required(),
+            clientInstrumentation: a.json(),
+        })
+        .returns(a.ref('StartConsoleRunResponse'))
+        .authorization(allow => [
+            allow.publicApiKey(),
+            allow.authenticated(),
+        ])
+        .handler(a.handler.function(startConsoleRunHandler)),
 
     ReportConfiguration: a
         .model({
