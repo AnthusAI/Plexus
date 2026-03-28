@@ -3,10 +3,12 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { ConsoleRunWorkerStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 // Create the backend
 const backend = defineBackend({
@@ -28,6 +30,7 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
+const startConsoleRunFunction = backend.data.resources.functions.startConsoleRun;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -126,6 +129,30 @@ const taskDispatcherStack = new TaskDispatcherStack(
     }
 );
 
+const dataCfnResources = backend.data.resources.cfnResources as any;
+const resolvedDataApiUrl = process.env.PLEXUS_API_URL || dataCfnResources?.cfnGraphqlApi?.attrGraphQlUrl || '';
+const resolvedDataApiKey = process.env.PLEXUS_API_KEY || dataCfnResources?.cfnApiKey?.attrApiKey || '';
+
+const consoleRunWorkerStack = new ConsoleRunWorkerStack(
+    backend.createStack('ConsoleRunWorkerStack'),
+    'ConsoleRunWorker',
+    {
+        plexusApiUrl: resolvedDataApiUrl,
+        plexusApiKey: resolvedDataApiKey,
+    }
+);
+
+if (startConsoleRunFunction) {
+    (startConsoleRunFunction as lambda.Function).addEnvironment('CONSOLE_RUN_QUEUE_URL', consoleRunWorkerStack.queue.queueUrl);
+    startConsoleRunFunction.addToRolePolicy(
+        new PolicyStatement({
+            actions: ['appsync:*'],
+            resources: ['*']
+        })
+    );
+    consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunFunction);
+}
+
 // Add SQS permissions
 taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     new PolicyStatement({
@@ -172,4 +199,4 @@ const topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(
     }
 );
 
-export { backend, mcpStack, topicMemoryVectorStoreStack };
+export { backend, mcpStack, topicMemoryVectorStoreStack, consoleRunWorkerStack };
