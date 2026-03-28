@@ -168,9 +168,6 @@ export const handler = async (event: any) => {
   if (!isValidId(triggerMessageId)) {
     throw new Error("startConsoleRun requires a valid triggerMessageId");
   }
-  if (!queueUrl) {
-    throw new Error("CONSOLE_RUN_QUEUE_URL is not configured");
-  }
 
   const sessionResult = await executeAppSyncGraphql<{
     getChatSession: {
@@ -216,7 +213,7 @@ export const handler = async (event: any) => {
   const queuedAt = toIsoNow();
   const clientInstrumentation = normalizeInstrumentation(event.arguments.clientInstrumentation);
   const metadata = {
-    dispatch_mode: "console_async_worker",
+    dispatch_mode: queueUrl ? "console_async_worker" : "task_dispatcher",
     console_chat: {
       session_id: sessionId,
       trigger_message_id: triggerMessageId,
@@ -245,37 +242,39 @@ export const handler = async (event: any) => {
     },
   });
 
-  const sqsClient = new SQSClient({ region: resolveAwsRegion() });
-  try {
-    await sqsClient.send(
-      new SendMessageCommand({
-        QueueUrl: queueUrl,
-        MessageBody: JSON.stringify({
-          runId,
-          taskId,
-          accountId,
-          sessionId,
-          procedureId,
-          triggerMessageId,
-          queuedAt,
-          instrumentation: clientInstrumentation,
+  if (queueUrl) {
+    const sqsClient = new SQSClient({ region: resolveAwsRegion() });
+    try {
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: queueUrl,
+          MessageBody: JSON.stringify({
+            runId,
+            taskId,
+            accountId,
+            sessionId,
+            procedureId,
+            triggerMessageId,
+            queuedAt,
+            instrumentation: clientInstrumentation,
+          }),
         }),
-      }),
-    );
-  } catch (error) {
-    const failureAt = toIsoNow();
-    await executeAppSyncGraphql(UPDATE_TASK_MUTATION, {
-      input: {
-        id: taskId,
-        status: "FAILED",
-        errorMessage: "Failed to enqueue console run worker job",
-        errorDetails: JSON.stringify({
-          message: error instanceof Error ? error.message : String(error),
-        }),
-        updatedAt: failureAt,
-      },
-    });
-    throw error;
+      );
+    } catch (error) {
+      const failureAt = toIsoNow();
+      await executeAppSyncGraphql(UPDATE_TASK_MUTATION, {
+        input: {
+          id: taskId,
+          status: "FAILED",
+          errorMessage: "Failed to enqueue console run worker job",
+          errorDetails: JSON.stringify({
+            message: error instanceof Error ? error.message : String(error),
+          }),
+          updatedAt: failureAt,
+        },
+      });
+      throw error;
+    }
   }
 
   return {
