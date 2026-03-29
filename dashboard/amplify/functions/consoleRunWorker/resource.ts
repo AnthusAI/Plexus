@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, Stack, StackProps } from "aws-cdk-lib";
+import { AssetHashType, CfnOutput, Duration, Stack, StackProps } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
@@ -46,6 +46,7 @@ export class ConsoleRunWorkerStack extends Stack {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: "app.handler",
       code: lambda.Code.fromAsset(functionDir, {
+        assetHashType: AssetHashType.OUTPUT,
         bundling: {
           image: lambda.Runtime.PYTHON_3_11.bundlingImage,
           local: {
