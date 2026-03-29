@@ -4,6 +4,7 @@ Plexus Trace Sink for Tactus trace event persistence.
 
 import logging
 import inspect
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -21,11 +22,45 @@ def _event_field(event: Any, *names: str, default: Any = None) -> Any:
     return default
 
 
+def _env_float(name: str, default: float, minimum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = float(raw)
+    except Exception:
+        return default
+    if parsed < minimum:
+        return minimum
+    return parsed
+
+
+def _env_int(name: str, default: int, minimum: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+    except Exception:
+        return default
+    if parsed < minimum:
+        return minimum
+    return parsed
+
+
 class PlexusTraceSink:
     """Persist Tactus trace records into Plexus ChatSession/ChatMessage models."""
 
-    STREAM_UPDATE_MAX_INTERVAL_SECONDS = 1.2
-    STREAM_UPDATE_MIN_CHARS_DELTA = 48
+    STREAM_UPDATE_MAX_INTERVAL_SECONDS = _env_float(
+        "PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS",
+        0.35,
+        0.05,
+    )
+    STREAM_UPDATE_MIN_CHARS_DELTA = _env_int(
+        "PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA",
+        20,
+        1,
+    )
 
     def __init__(self, chat_recorder):
         self.chat_recorder = chat_recorder

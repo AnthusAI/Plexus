@@ -99,46 +99,24 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     account_id = _resolve_account_id(payload, task)
     worker_node_id = f"console-run-worker/{socket.gethostname()}"
 
-    dequeued_at = _iso_now()
+    startup_mark_at = _iso_now()
     metadata_with_dequeue = _merge_console_instrumentation(
         task,
         {
-            "worker_dequeued_at": dequeued_at,
+            "worker_dequeued_at": startup_mark_at,
             "worker_run_id": run_id or None,
             "worker_node_id": worker_node_id,
+            "worker_init_done_at": startup_mark_at,
+            "runtime_init_done_at": startup_mark_at,
         },
     )
     _task_update(
         task,
         status="RUNNING",
         dispatchStatus="DISPATCHED",
-        startedAt=dequeued_at,
+        startedAt=startup_mark_at,
         workerNodeId=worker_node_id,
         metadata=json.dumps(metadata_with_dequeue),
-    )
-
-    init_done_at = _iso_now()
-    metadata_init_done = _merge_console_instrumentation(
-        task,
-        {
-            "worker_init_done_at": init_done_at,
-        },
-    )
-    _task_update(
-        task,
-        metadata=json.dumps(metadata_init_done),
-    )
-
-    runtime_init_done_at = _iso_now()
-    metadata_runtime_init = _merge_console_instrumentation(
-        task,
-        {
-            "runtime_init_done_at": runtime_init_done_at,
-        },
-    )
-    _task_update(
-        task,
-        metadata=json.dumps(metadata_runtime_init),
     )
 
     os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id

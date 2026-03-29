@@ -9,6 +9,10 @@ import * as path from "path";
 interface ConsoleRunWorkerStackProps extends StackProps {
   plexusApiUrl?: string;
   plexusApiKey?: string;
+  reservedConcurrency?: number;
+  provisionedConcurrency?: number;
+  streamUpdateMaxIntervalSeconds?: string;
+  streamUpdateMinCharsDelta?: string;
 }
 
 export class ConsoleRunWorkerStack extends Stack {
@@ -39,15 +43,28 @@ export class ConsoleRunWorkerStack extends Stack {
       }),
       timeout: Duration.minutes(15),
       memorySize: 2048,
+      reservedConcurrentExecutions: props.reservedConcurrency,
       environment: {
         PLEXUS_API_URL: props.plexusApiUrl || process.env.PLEXUS_API_URL || "",
         PLEXUS_API_KEY: props.plexusApiKey || process.env.PLEXUS_API_KEY || "",
         PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
+        PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS: props.streamUpdateMaxIntervalSeconds || "0.35",
+        PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA: props.streamUpdateMinCharsDelta || "20",
         PYTHONUNBUFFERED: "1",
       },
     });
 
-    this.workerFunction.addEventSource(
+    let eventSourceTarget: lambda.IFunction = this.workerFunction;
+    if (props.provisionedConcurrency && props.provisionedConcurrency > 0) {
+      const liveAlias = new lambda.Alias(this, "ConsoleRunWorkerLiveAlias", {
+        aliasName: "live",
+        version: this.workerFunction.currentVersion,
+        provisionedConcurrentExecutions: props.provisionedConcurrency,
+      });
+      eventSourceTarget = liveAlias;
+    }
+
+    eventSourceTarget.addEventSource(
       new SqsEventSource(this.queue, {
         batchSize: 1,
         reportBatchItemFailures: true,
