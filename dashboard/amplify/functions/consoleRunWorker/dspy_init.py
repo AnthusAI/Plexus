@@ -36,6 +36,7 @@ _LAZY_IMPORTS = {
     "syncify": ("dspy.utils.syncify", "syncify"),
     "load": ("dspy.utils.saving", "load"),
     "track_usage": ("dspy.utils.usage_tracker", "track_usage"),
+    "Evaluate": ("dspy.evaluate.evaluate", "Evaluate"),
 }
 
 
@@ -76,4 +77,5 @@ __all__ = [  # noqa: F822
     "syncify",
     "load",
     "track_usage",
+    "Evaluate",
 ]
