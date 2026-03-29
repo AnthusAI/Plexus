@@ -43,6 +43,14 @@ litellm.cache = None
 def _get_dspy_cache():
     disk_cache_dir = os.environ.get("DSPY_CACHEDIR") or os.path.join(Path.home(), ".dspy_cache")
     disk_cache_limit = int(os.environ.get("DSPY_CACHE_LIMIT", 3e10))
+    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return Cache(
+            enable_disk_cache=False,
+            enable_memory_cache=True,
+            disk_cache_dir=disk_cache_dir,
+            disk_size_limit_bytes=disk_cache_limit,
+            memory_max_entries=1000000,
+        )
     try:
         return Cache(
             enable_disk_cache=True,
