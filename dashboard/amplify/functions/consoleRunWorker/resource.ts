@@ -54,27 +54,34 @@ export class ConsoleRunWorkerStack extends Stack {
               mkdirSync(outputDir, { recursive: true });
 
               try {
-                execFileSync(
-                  "python3",
-                  [
-                    "-m",
-                    "pip",
-                    "install",
-                    "-r",
-                    path.join(functionDir, "requirements.txt"),
-                    "-t",
-                    packageDir,
-                    "--platform",
-                    "manylinux2014_x86_64",
-                    "--implementation",
-                    "cp",
-                    "--python",
-                    "3.11",
-                    "--only-binary=:all:",
-                    "--upgrade",
-                  ],
-                  { stdio: "inherit" },
-                );
+                const installRequirements = (requirementsFile: string, extraArgs: string[] = []) => {
+                  execFileSync(
+                    "python3",
+                    [
+                      "-m",
+                      "pip",
+                      "install",
+                      "-r",
+                      path.join(functionDir, requirementsFile),
+                      "-t",
+                      packageDir,
+                      "--platform",
+                      "manylinux2014_x86_64",
+                      "--implementation",
+                      "cp",
+                      "--python-version",
+                      "3.11",
+                      "--only-binary=:all:",
+                      "--upgrade",
+                      ...extraArgs,
+                    ],
+                    { stdio: "inherit" },
+                  );
+                };
+
+                installRequirements("requirements-base.txt");
+                installRequirements("requirements-nodeps.txt", ["--no-deps"]);
+                installRequirements("requirements-runtime.txt");
 
                 for (const entry of readdirSync(packageDir)) {
                   cpSync(path.join(packageDir, entry), path.join(outputDir, entry), {
