@@ -247,7 +247,7 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     endpoint = _resolve_graphql_endpoint(payload)
     region = _resolve_region(payload)
     task = _load_task(endpoint, region, task_id)
-    _resolve_account_id(payload, task)
+    account_id = _resolve_account_id(payload, task)
     worker_node_id = f"console-run-worker/{socket.gethostname()}"
 
     startup_mark_at = _iso_now()

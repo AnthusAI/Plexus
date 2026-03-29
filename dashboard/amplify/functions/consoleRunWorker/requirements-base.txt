@@ -1,0 +1,7 @@
+boto3>=1.34.0
+requests>=2.31.0
+gql[requests]==3.5.3
+python-dotenv>=1.0.1
+PyYAML>=6.0.1
+ruamel.yaml<0.19
+rich>=13.7.1
