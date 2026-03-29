@@ -12,6 +12,7 @@ import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 // Create the backend
 const backend = defineBackend({
@@ -35,6 +36,7 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
 const startConsoleRunLambda = backend.startConsoleRunFunction.resources.lambda;
+const startConsoleRunMutableLambda = startConsoleRunLambda as lambda.Function;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -228,15 +230,15 @@ const consoleRunWorkerStack = new ConsoleRunWorkerStack(
 );
 
 if (startConsoleRunLambda) {
-    startConsoleRunLambda.addEnvironment(
+    startConsoleRunMutableLambda.addEnvironment(
         'CONSOLE_RUN_QUEUE_URL',
         consoleRunWorkerStack.queue.queueUrl
     );
-    startConsoleRunLambda.addEnvironment(
+    startConsoleRunMutableLambda.addEnvironment(
         'PLEXUS_API_URL',
         resolvedDataApiUrl
     );
-    startConsoleRunLambda.addToRolePolicy(
+    startConsoleRunMutableLambda.addToRolePolicy(
         new PolicyStatement({
             actions: ['appsync:*'],
             resources: ['*']
