@@ -237,33 +237,17 @@ def _build_celery_app() -> tuple[Celery, str]:
     else:
         broker_url = f"sqs://{safequote(access_key)}:{safequote(secret_key)}@/{queue_name}"
 
-    backend_template = (os.environ.get("CELERY_RESULT_BACKEND_TEMPLATE") or "").strip()
-    if _is_placeholder(backend_template):
-        backend_url = "rpc://"
-    elif ("{aws_access_key}" in backend_template and "{aws_secret_key}" in backend_template) and (
-        _is_placeholder(access_key) or _is_placeholder(secret_key)
-    ):
-        backend_url = "rpc://"
-    elif "{aws_access_key}" in backend_template or "{aws_secret_key}" in backend_template:
-        backend_url = backend_template.format(
-            aws_access_key=safequote(access_key),
-            aws_secret_key=safequote(secret_key),
-            aws_region_name=aws_region,
-        )
-    elif "{aws_region_name}" in backend_template:
-        backend_url = backend_template.format(aws_region_name=aws_region)
-    else:
-        backend_url = backend_template or "rpc://"
-
     app = Celery(
         "plexus",
         broker=broker_url,
-        backend=backend_url,
         broker_transport_options={"region": aws_region, "is_secure": True},
     )
     app.conf.update(
         broker_connection_retry_on_startup=True,
         task_default_queue=queue_name,
+        task_create_missing_queues=False,
+        task_ignore_result=True,
+        result_backend=None,
     )
     return app, queue_name
 
@@ -311,6 +295,7 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             "plexus.execute_command",
             args=[command],
             kwargs={"target": target, "task_id": task_id},
+            ignore_result=True,
         )
         dispatched_at = _iso_now()
         metadata_dispatched = _merge_console_instrumentation(
