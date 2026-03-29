@@ -111,7 +111,7 @@ export class ConsoleRunWorkerStack extends Stack {
         PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA: props.streamUpdateMinCharsDelta || "20",
         CELERY_QUEUE_NAME: process.env.CELERY_QUEUE_NAME || "plexus-celery-development",
         CELERY_AWS_REGION_NAME:
-          process.env.CELERY_AWS_REGION_NAME || process.env.AWS_REGION || "us-west-2",
+          process.env.CELERY_AWS_REGION_NAME || "us-east-1",
         CELERY_AWS_ACCESS_KEY_ID: process.env.CELERY_AWS_ACCESS_KEY_ID || "",
         CELERY_AWS_SECRET_ACCESS_KEY: process.env.CELERY_AWS_SECRET_ACCESS_KEY || "",
         CELERY_RESULT_BACKEND_TEMPLATE: process.env.CELERY_RESULT_BACKEND_TEMPLATE || "rpc://",

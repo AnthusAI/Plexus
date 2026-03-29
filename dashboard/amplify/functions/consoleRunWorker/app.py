@@ -224,9 +224,7 @@ def _build_celery_app() -> tuple[Celery, str]:
     queue_name = (os.environ.get("CELERY_QUEUE_NAME") or "plexus-celery-development").strip()
     aws_region = (
         os.environ.get("CELERY_AWS_REGION_NAME")
-        or os.environ.get("AWS_REGION")
-        or os.environ.get("AWS_DEFAULT_REGION")
-        or "us-west-2"
+        or "us-east-1"
     ).strip()
 
     access_key = (os.environ.get("CELERY_AWS_ACCESS_KEY_ID") or "").strip()
