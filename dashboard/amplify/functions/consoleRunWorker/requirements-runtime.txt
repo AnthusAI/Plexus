@@ -11,6 +11,7 @@ importlib-metadata
 jinja2
 jsonschema
 orjson
+json-repair
 regex
 tqdm
 diskcache

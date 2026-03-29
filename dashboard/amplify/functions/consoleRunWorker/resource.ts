@@ -83,6 +83,49 @@ export class ConsoleRunWorkerStack extends Stack {
                 installRequirements("requirements-nodeps.txt", ["--no-deps"]);
                 installRequirements("requirements-runtime.txt");
 
+                cpSync(
+                  path.join(functionDir, "tactus_context_models.py"),
+                  path.join(packageDir, "tactus", "core", "context_models.py"),
+                  { force: true },
+                );
+                cpSync(
+                  path.join(functionDir, "dspy_init.py"),
+                  path.join(packageDir, "dspy", "__init__.py"),
+                  { force: true },
+                );
+                cpSync(
+                  path.join(functionDir, "dspy_utils_init.py"),
+                  path.join(packageDir, "dspy", "utils", "__init__.py"),
+                  { force: true },
+                );
+                cpSync(
+                  path.join(functionDir, "dspy_clients_init.py"),
+                  path.join(packageDir, "dspy", "clients", "__init__.py"),
+                  { force: true },
+                );
+                cpSync(
+                  path.join(functionDir, "dspy_predict_init.py"),
+                  path.join(packageDir, "dspy", "predict", "__init__.py"),
+                  { force: true },
+                );
+                cpSync(
+                  path.join(functionDir, "dspy_primitives_init.py"),
+                  path.join(packageDir, "dspy", "primitives", "__init__.py"),
+                  { force: true },
+                );
+
+                // Strip optional tokenization providers we do not use for OpenAI-backed console chat.
+                for (const entry of readdirSync(packageDir)) {
+                  if (
+                    entry === "huggingface_hub" ||
+                    entry.startsWith("huggingface_hub-") ||
+                    entry === "hf_xet" ||
+                    entry.startsWith("hf_xet-")
+                  ) {
+                    rmSync(path.join(packageDir, entry), { recursive: true, force: true });
+                  }
+                }
+
                 for (const entry of readdirSync(packageDir)) {
                   cpSync(path.join(packageDir, entry), path.join(outputDir, entry), {
                     recursive: true,
