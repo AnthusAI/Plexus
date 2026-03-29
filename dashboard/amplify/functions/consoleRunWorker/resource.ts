@@ -5,6 +5,9 @@ import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import * as path from "path";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { execFileSync } from "child_process";
 
 interface ConsoleRunWorkerStackProps extends StackProps {
   plexusApiUrl?: string;
@@ -18,7 +21,7 @@ interface ConsoleRunWorkerStackProps extends StackProps {
 export class ConsoleRunWorkerStack extends Stack {
   public readonly queue: sqs.Queue;
   public readonly deadLetterQueue: sqs.Queue;
-  public readonly workerFunction: lambda.DockerImageFunction;
+  public readonly workerFunction: lambda.Function;
 
   constructor(scope: Construct, id: string, props: ConsoleRunWorkerStackProps = {}) {
     super(scope, id, props);
@@ -36,10 +39,66 @@ export class ConsoleRunWorkerStack extends Stack {
       },
     });
 
+    const functionDir = path.join(process.cwd(), "amplify/functions/consoleRunWorker");
     const repoRoot = path.resolve(process.cwd(), "..");
-    this.workerFunction = new lambda.DockerImageFunction(this, "ConsoleRunWorkerFunction", {
-      code: lambda.DockerImageCode.fromImageAsset(repoRoot, {
-        file: "dashboard/amplify/functions/consoleRunWorker/Dockerfile",
+
+    this.workerFunction = new lambda.Function(this, "ConsoleRunWorkerFunction", {
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: "app.handler",
+      code: lambda.Code.fromAsset(functionDir, {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_11.bundlingImage,
+          local: {
+            tryBundle(outputDir: string) {
+              const packageDir = mkdtempSync(path.join(tmpdir(), "console-worker-"));
+              mkdirSync(outputDir, { recursive: true });
+
+              try {
+                execFileSync(
+                  "python3",
+                  [
+                    "-m",
+                    "pip",
+                    "install",
+                    "-r",
+                    path.join(functionDir, "requirements.txt"),
+                    "-t",
+                    packageDir,
+                    "--platform",
+                    "manylinux2014_x86_64",
+                    "--implementation",
+                    "cp",
+                    "--python",
+                    "3.11",
+                    "--only-binary=:all:",
+                    "--upgrade",
+                  ],
+                  { stdio: "inherit" },
+                );
+
+                for (const entry of readdirSync(packageDir)) {
+                  cpSync(path.join(packageDir, entry), path.join(outputDir, entry), {
+                    recursive: true,
+                    force: true,
+                  });
+                }
+
+                cpSync(path.join(functionDir, "app.py"), path.join(outputDir, "app.py"), {
+                  force: true,
+                });
+
+                cpSync(path.join(repoRoot, "plexus"), path.join(outputDir, "plexus"), {
+                  recursive: true,
+                  force: true,
+                });
+              } finally {
+                rmSync(packageDir, { recursive: true, force: true });
+              }
+
+              return true;
+            },
+          },
+        },
       }),
       timeout: Duration.minutes(15),
       memorySize: 2048,
@@ -50,6 +109,13 @@ export class ConsoleRunWorkerStack extends Stack {
         PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
         PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS: props.streamUpdateMaxIntervalSeconds || "0.35",
         PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA: props.streamUpdateMinCharsDelta || "20",
+        CELERY_QUEUE_NAME: process.env.CELERY_QUEUE_NAME || "plexus-celery-development",
+        CELERY_AWS_REGION_NAME:
+          process.env.CELERY_AWS_REGION_NAME || process.env.AWS_REGION || "us-west-2",
+        CELERY_AWS_ACCESS_KEY_ID: process.env.CELERY_AWS_ACCESS_KEY_ID || "",
+        CELERY_AWS_SECRET_ACCESS_KEY: process.env.CELERY_AWS_SECRET_ACCESS_KEY || "",
+        CELERY_RESULT_BACKEND_TEMPLATE: process.env.CELERY_RESULT_BACKEND_TEMPLATE || "rpc://",
+        PYTHONPATH: "/var/task",
         PYTHONUNBUFFERED: "1",
       },
     });
@@ -78,6 +144,13 @@ export class ConsoleRunWorkerStack extends Stack {
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ["appsync:GraphQL"],
+        resources: ["*"],
+      }),
+    );
+    this.workerFunction.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["sqs:GetQueueUrl", "sqs:GetQueueAttributes", "sqs:SendMessage"],
         resources: ["*"],
       }),
     );

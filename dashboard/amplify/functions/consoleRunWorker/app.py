@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -7,7 +6,8 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+from celery import Celery
+from kombu.utils.url import safequote
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
 
@@ -87,6 +87,60 @@ def _resolve_account_id(payload: Dict[str, Any], task: Task) -> str:
     raise RuntimeError("Missing accountId for console run payload")
 
 
+def _is_placeholder(value: Optional[str]) -> bool:
+    raw = (value or "").strip()
+    return (not raw) or raw.upper().startswith("WILL_BE_SET_AFTER_DEPLOYMENT")
+
+
+def _build_celery_app() -> tuple[Celery, str]:
+    queue_name = (os.environ.get("CELERY_QUEUE_NAME") or "plexus-celery-development").strip()
+    aws_region = (
+        os.environ.get("CELERY_AWS_REGION_NAME")
+        or os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or "us-west-2"
+    ).strip()
+
+    access_key = (os.environ.get("CELERY_AWS_ACCESS_KEY_ID") or "").strip()
+    secret_key = (os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY") or "").strip()
+
+    if _is_placeholder(access_key) or _is_placeholder(secret_key):
+        # Prefer IAM role credentials in Amplify/Lambda.
+        broker_url = f"sqs:///{queue_name}"
+    else:
+        broker_url = f"sqs://{safequote(access_key)}:{safequote(secret_key)}@/{queue_name}"
+
+    backend_template = (os.environ.get("CELERY_RESULT_BACKEND_TEMPLATE") or "").strip()
+    if _is_placeholder(backend_template):
+        backend_url = "rpc://"
+    elif ("{aws_access_key}" in backend_template and "{aws_secret_key}" in backend_template) and (
+        _is_placeholder(access_key) or _is_placeholder(secret_key)
+    ):
+        backend_url = "rpc://"
+    elif "{aws_access_key}" in backend_template or "{aws_secret_key}" in backend_template:
+        backend_url = backend_template.format(
+            aws_access_key=safequote(access_key),
+            aws_secret_key=safequote(secret_key),
+            aws_region_name=aws_region,
+        )
+    elif "{aws_region_name}" in backend_template:
+        backend_url = backend_template.format(aws_region_name=aws_region)
+    else:
+        backend_url = backend_template or "rpc://"
+
+    app = Celery(
+        "plexus",
+        broker=broker_url,
+        backend=backend_url,
+        broker_transport_options={"region": aws_region, "is_secure": True},
+    )
+    app.conf.update(
+        broker_connection_retry_on_startup=True,
+        task_default_queue=queue_name,
+    )
+    return app, queue_name
+
+
 def _run_console_job(payload: Dict[str, Any]) -> None:
     task_id = str(payload.get("taskId") or "").strip()
     procedure_id = str(payload.get("procedureId") or "").strip()
@@ -119,27 +173,30 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
         metadata=json.dumps(metadata_with_dequeue),
     )
 
-    os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
     try:
-        result = asyncio.run(
-            run_experiment_with_task_tracking(
-                procedure_id=procedure_id,
-                client=client,
-                account_id=account_id,
-            )
+        celery_app, queue_name = _build_celery_app()
+        command = f"procedure run {procedure_id}"
+        target = f"procedure/run/{procedure_id}"
+        celery_result = celery_app.send_task(
+            "plexus.execute_command",
+            args=[command],
+            kwargs={"target": target, "task_id": task_id},
         )
-        completed_at = _iso_now()
-        metadata_completed = _merge_console_instrumentation(
+        dispatched_at = _iso_now()
+        metadata_dispatched = _merge_console_instrumentation(
             task,
             {
-                "worker_run_completed_at": completed_at,
-                "worker_result_status": result.get("status"),
+                "worker_dispatched_to_celery_at": dispatched_at,
+                "worker_celery_task_id": getattr(celery_result, "id", None),
+                "worker_celery_queue_name": queue_name,
             },
         )
         _task_update(
             task,
-            metadata=json.dumps(metadata_completed),
-            updatedAt=completed_at,
+            status="RUNNING",
+            dispatchStatus="DISPATCHED",
+            metadata=json.dumps(metadata_dispatched),
+            updatedAt=dispatched_at,
         )
     except Exception as exc:
         failed_at = _iso_now()
@@ -165,9 +222,6 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             updatedAt=failed_at,
         )
         raise
-    finally:
-        if os.environ.get("PLEXUS_DISPATCH_TASK_ID") == task_id:
-            os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
 
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
