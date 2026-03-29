@@ -11,6 +11,7 @@ import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } fr
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
+import { TopicList } from '@/components/ui/topic-list'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -128,6 +129,7 @@ export interface EvaluationTaskData extends BaseTaskData {
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
   task?: TaskData | null
   universalCode?: string | null
+  parameters?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
@@ -711,8 +713,19 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
+  const rootCauseTopics = useMemo(() => {
+    try {
+      const params = typeof data.parameters === 'string'
+        ? JSON.parse(data.parameters)
+        : data.parameters
+      return params?.root_cause?.topics ?? null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+
   return (
-    <div 
+    <div
       ref={containerRef}
       className="w-full p-3 min-w-[300px] h-full overflow-y-auto"
     >
@@ -855,6 +868,13 @@ const DetailContent = React.memo(({
                       data={transformedConfusionMatrixData} // Pass the transformed data object
                       onSelectionChange={setSelectedPredictedActual} // Reverted to original handler
                     />
+                  </div>
+                )}
+
+                {/* Root Cause Analysis */}
+                {rootCauseTopics && rootCauseTopics.length > 0 && (
+                  <div className="mt-4">
+                    <TopicList topics={rootCauseTopics} label="Root cause analysis" />
                   </div>
                 )}
               </div>

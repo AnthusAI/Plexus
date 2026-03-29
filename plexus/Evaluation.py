@@ -3022,6 +3022,8 @@ class FeedbackEvaluation(Evaluation):
                 "disagreements": overall_analysis.get("disagreements"),
             }
             
+            import json
+
             # Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data
             self.logger.info(f"Creating ScoreResult records for {len(feedback_items)} feedback items")
             await self._create_score_results_from_feedback(
@@ -3031,19 +3033,36 @@ class FeedbackEvaluation(Evaluation):
                 score_id=self.score_id,
                 account_id=self.account_id
             )
-            
+
+            # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
+            root_cause_topics = await self._run_root_cause_analysis(feedback_items)
+
+            # Merge root-cause topics into existing parameters (preserving mode/score/days metadata)
+            existing_params = evaluation_record.parameters
+            if isinstance(existing_params, str):
+                try:
+                    existing_params = json.loads(existing_params)
+                except Exception:
+                    existing_params = {}
+            parameters_dict = dict(existing_params) if existing_params else {}
+            if root_cause_topics:
+                parameters_dict["root_cause"] = {"topics": root_cause_topics}
+
             # Update evaluation record with results
             # Ensure accuracy is never None (GraphQL schema requires Float!)
-            evaluation_record.update(
+            update_kwargs = dict(
                 status="COMPLETED",
                 accuracy=accuracy if accuracy is not None else 0.0,
-                metrics=__import__('json').dumps(metrics_for_api),  # Store as array for frontend
-                confusionMatrix=__import__('json').dumps(overall_analysis.get("confusion_matrix")),
+                metrics=json.dumps(metrics_for_api),  # Store as array for frontend
+                confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
                 totalItems=overall_analysis.get("total_items"),
                 processedItems=overall_analysis.get("total_items"),
-                datasetClassDistribution=__import__('json').dumps(overall_analysis.get("class_distribution")),
-                predictedClassDistribution=__import__('json').dumps(overall_analysis.get("predicted_class_distribution")),
+                datasetClassDistribution=json.dumps(overall_analysis.get("class_distribution")),
+                predictedClassDistribution=json.dumps(overall_analysis.get("predicted_class_distribution")),
             )
+            if parameters_dict:
+                update_kwargs["parameters"] = json.dumps(parameters_dict)
+            evaluation_record.update(**update_kwargs)
             
             # Format log message with safe handling of None values
             ac1_str = f"{ac1:.3f}" if ac1 is not None else "N/A"
@@ -3124,6 +3143,7 @@ class FeedbackEvaluation(Evaluation):
                     cacheKey
                     initialAnswerValue
                     finalAnswerValue
+                    editCommentValue
                     isAgreement
                     editedAt
                     createdAt
@@ -3351,9 +3371,121 @@ class FeedbackEvaluation(Evaluation):
                     failed_count += 1
         
         self.logger.info(f"Created {created_count} ScoreResult records, {failed_count} failed")
-        
+
         if failed_count > 0:
             self.logger.warning(f"{failed_count} ScoreResult records failed to create")
+
+    async def _run_root_cause_analysis(self, feedback_items) -> list:
+        """Run topic clustering + LLM root-cause analysis on feedback edit comments.
+
+        Uses biblicus ReinforcementMemory directly for topic clustering, LLM labels,
+        per-exemplar causal inference, and topic-level cause synthesis.
+
+        Returns a list of topic dicts matching the TopicList dashboard component interface,
+        or an empty list if there is not enough data or analysis fails (non-fatal).
+        """
+        try:
+            import asyncio
+            import tempfile
+            from datetime import datetime, timezone as _tz
+            from biblicus.analysis.reinforcement_memory import (
+                ReinforcementMemory, LocalVectorStore,
+                sentence_transformer_embedder,
+                bedrock_labeler, bedrock_causal, bedrock_synthesizer,
+                TimestampedText,
+            )
+
+            items_with_comments = [fi for fi in feedback_items if fi.editCommentValue]
+            if len(items_with_comments) < 5:
+                self.logger.info(
+                    f"Root-cause analysis skipped: only {len(items_with_comments)} items "
+                    f"have edit comments (need ≥5)"
+                )
+                return []
+
+            now = datetime.now(_tz.utc)
+            texts = []
+            for fi in items_with_comments:
+                ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
+                ts_str = (
+                    (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
+                    if ts else now.isoformat()
+                )
+                metadata = {}
+                if fi.initialAnswerValue:
+                    metadata["initial_answer_value"] = fi.initialAnswerValue
+                if fi.finalAnswerValue:
+                    metadata["final_answer_value"] = fi.finalAnswerValue
+                if fi.itemId:
+                    metadata["item_id"] = fi.itemId
+                texts.append(TimestampedText(
+                    id=fi.id,
+                    group_id=self.score_id,
+                    timestamp=ts_str,
+                    text=fi.editCommentValue,
+                    metadata=metadata,
+                ))
+
+            embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
+            # Warm up the model before analysis to avoid meta-tensor race conditions
+            await asyncio.to_thread(embed_fn, ["warmup"])
+
+            self.logger.info(
+                f"Running root-cause analysis on {len(items_with_comments)} "
+                f"feedback items with edit comments"
+            )
+
+            def _run_analysis():
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    rm = ReinforcementMemory(
+                        data_dir=tmpdir,
+                        vector_store=LocalVectorStore(store_dir=tmpdir),
+                        embed=embed_fn,
+                        label=bedrock_labeler(),
+                        infer_cause=bedrock_causal(),
+                        synthesize_cause=bedrock_synthesizer(),
+                        min_topic_size=3,
+                    )
+                    rm.ingest(texts)
+                    return rm.analyze(self.score_id, min_topic_size=3)
+
+            result = await asyncio.to_thread(_run_analysis)
+            self.logger.info(f"Root-cause analysis produced {len(result.topics)} topic(s)")
+
+            # Convert TopicResult dataclasses → dicts matching the Topic interface
+            # in dashboard/components/ui/topic-list.tsx
+            topics = []
+            for tr in result.topics:
+                exemplars = [
+                    {
+                        "text": ex.text,
+                        "item_id": ex.metadata.get("item_id"),
+                        "initial_answer_value": ex.metadata.get("initial_answer_value"),
+                        "final_answer_value": ex.metadata.get("final_answer_value"),
+                    }
+                    for ex in (tr.exemplars or [])
+                ]
+                topics.append({
+                    "topic_id": tr.topic_id,
+                    "label": tr.label,
+                    "keywords": tr.keywords,
+                    "exemplars": exemplars,
+                    "member_count": tr.member_count,
+                    "memory_weight": tr.memory_weight,
+                    "memory_tier": tr.memory_tier,
+                    "lifecycle_tier": tr.lifecycle_tier,
+                    "is_new": tr.is_new,
+                    "is_trending": tr.is_trending,
+                    "days_inactive": tr.days_inactive,
+                    "cause": tr.root_cause,  # TopicResult.root_cause → Topic.cause
+                })
+            return topics
+
+        except Exception as e:
+            self.logger.warning(f"Root-cause analysis failed (non-fatal): {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            return []
 
 
 class AccuracyEvaluation(Evaluation):
