@@ -318,6 +318,24 @@ class PlexusTraceSink:
         if normalized:
             self.assistant_message_texts.append(normalized)
 
+        stream_timings = self._build_stream_timing_metadata(agent_name)
+        logger.info(
+            "Console stream timing summary: agent=%s chunks=%s persisted_updates=%s "
+            "inter_chunk_avg_ms=%s persisted_inter_update_avg_ms=%s "
+            "first_chunk_received_at=%s first_chunk_persisted_at=%s backend_exec_started_at=%s "
+            "runtime_execute_started_at=%s dispatch_queued_at=%s",
+            agent_name,
+            stream_timings.get("chunk_count"),
+            stream_timings.get("persisted_update_count"),
+            stream_timings.get("inter_chunk_average_ms"),
+            stream_timings.get("persisted_inter_update_average_ms"),
+            stream_timings.get("first_chunk_received_at"),
+            stream_timings.get("first_chunk_persisted_at"),
+            stream_timings.get("backend_execution_started_at"),
+            stream_timings.get("backend_runtime_execute_started_at"),
+            stream_timings.get("dispatch_queued_at"),
+        )
+
         self._active_stream_chunk_counts.pop(agent_name, None)
         self._active_stream_first_chunk_received_at.pop(agent_name, None)
         self._active_stream_first_chunk_persisted_at.pop(agent_name, None)
