@@ -111,7 +111,7 @@ def __getattr__(name: str):
     return value
 
 
-__all__ = [
+__all__ = [  # noqa: F822
     "BaseLM",
     "LM",
     "Provider",

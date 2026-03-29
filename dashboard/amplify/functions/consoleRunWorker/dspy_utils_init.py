@@ -33,7 +33,7 @@ def __getattr__(name: str):
     raise AttributeError(f"module 'dspy.utils' has no attribute {name!r}")
 
 
-__all__ = [
+__all__ = [  # noqa: F822
     "download",
     "exceptions",
     "magicattr",
