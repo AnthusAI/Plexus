@@ -31,6 +31,11 @@ _LAZY_IMPORTS = {
     "OutputField": ("dspy.signatures.field", "OutputField"),
     "Tool": ("dspy.adapters.types.tool", "Tool"),
     "ToolCalls": ("dspy.adapters.types.tool", "ToolCalls"),
+    "streamify": ("dspy.streaming.streamify", "streamify"),
+    "asyncify": ("dspy.utils.asyncify", "asyncify"),
+    "syncify": ("dspy.utils.syncify", "syncify"),
+    "load": ("dspy.utils.saving", "load"),
+    "track_usage": ("dspy.utils.usage_tracker", "track_usage"),
 }
 
 
@@ -66,4 +71,9 @@ __all__ = [  # noqa: F822
     "OutputField",
     "Tool",
     "ToolCalls",
+    "streamify",
+    "asyncify",
+    "syncify",
+    "load",
+    "track_usage",
 ]
