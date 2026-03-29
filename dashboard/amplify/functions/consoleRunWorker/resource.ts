@@ -150,7 +150,7 @@ export class ConsoleRunWorkerStack extends Stack {
     this.workerFunction.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
-        actions: ["sqs:GetQueueUrl", "sqs:GetQueueAttributes", "sqs:SendMessage"],
+        actions: ["sqs:ListQueues", "sqs:GetQueueUrl", "sqs:GetQueueAttributes", "sqs:SendMessage"],
         resources: ["*"],
       }),
     );
