@@ -5,3 +5,4 @@ python-dotenv>=1.0.1
 PyYAML>=6.0.1
 ruamel.yaml<0.19
 rich>=13.7.1
+watchtower>=3.3.1
