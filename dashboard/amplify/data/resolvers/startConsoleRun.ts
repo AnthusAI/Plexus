@@ -1,9 +1,5 @@
 import { randomUUID } from "crypto";
-import { Sha256 } from "@aws-crypto/sha256-js";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import { defaultProvider } from "@aws-sdk/credential-provider-node";
-import { HttpRequest } from "@aws-sdk/protocol-http";
-import { SignatureV4 } from "@aws-sdk/signature-v4";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUILTIN_PROCEDURE_RE = /^builtin:[a-z0-9][a-z0-9/_-]*$/i;
@@ -58,17 +54,6 @@ function normalizeEndpoint(rawValue: string): string {
 }
 
 function resolveGraphqlEndpoint(event?: any): string {
-  const configuredEndpoint = normalizeEndpoint(
-    (
-      process.env.PLEXUS_API_URL ||
-      process.env.API_GRAPHQLAPIENDPOINTOUTPUT ||
-      ""
-    ).trim(),
-  );
-  if (configuredEndpoint) {
-    return configuredEndpoint;
-  }
-
   const headers = event?.request?.headers || {};
   const requestHost =
     headers.host ||
@@ -76,7 +61,11 @@ function resolveGraphqlEndpoint(event?: any): string {
     headers["x-forwarded-host"] ||
     headers["X-Forwarded-Host"] ||
     "";
-  return normalizeEndpoint(String(requestHost));
+  const resolved = normalizeEndpoint(String(requestHost));
+  if (!resolved) {
+    throw new Error("Unable to resolve GraphQL endpoint from request host");
+  }
+  return resolved;
 }
 
 function resolveAwsRegion(): string {
@@ -129,40 +118,39 @@ type GraphqlEnvelope<TData> = {
   errors?: Array<{ message?: string }>;
 };
 
+function resolveCallerAuthHeaders(event?: any): Record<string, string> {
+  const headers = event?.request?.headers || {};
+  const authorization = headers.authorization || headers.Authorization;
+  const apiKey = headers["x-api-key"] || headers["X-Api-Key"];
+
+  const resolved: Record<string, string> = {};
+  if (typeof authorization === "string" && authorization.trim()) {
+    resolved.authorization = authorization.trim();
+  }
+  if (typeof apiKey === "string" && apiKey.trim()) {
+    resolved["x-api-key"] = apiKey.trim();
+  }
+  if (!resolved.authorization && !resolved["x-api-key"]) {
+    throw new Error("Unable to resolve caller auth headers for startConsoleRun resolver");
+  }
+  return resolved;
+}
+
 async function executeAppSyncGraphql<TData>(
   query: string,
   variables: Record<string, unknown>,
   endpoint: string,
+  callerAuthHeaders: Record<string, string>,
 ): Promise<TData> {
-  if (!endpoint) {
-    throw new Error("PLEXUS_API_URL is not configured for startConsoleRun resolver");
-  }
-  const region = resolveAwsRegion();
   const endpointUrl = new URL(endpoint);
-  const signer = new SignatureV4({
-    credentials: defaultProvider(),
-    region,
-    service: "appsync",
-    sha256: Sha256,
-  });
-
-  const request = new HttpRequest({
+  const response = await fetch(endpoint, {
     method: "POST",
-    protocol: endpointUrl.protocol,
-    hostname: endpointUrl.host,
-    path: endpointUrl.pathname,
     headers: {
       "content-type": "application/json",
       host: endpointUrl.host,
+      ...callerAuthHeaders,
     },
     body: JSON.stringify({ query, variables }),
-  });
-
-  const signed = await signer.sign(request);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: signed.headers as Record<string, string>,
-    body: typeof signed.body === "string" ? signed.body : JSON.stringify(signed.body),
   });
 
   const payload = (await response.json()) as GraphqlEnvelope<TData>;
@@ -184,6 +172,7 @@ export const handler = async (event: any) => {
   const triggerMessageId = event.arguments.triggerMessageId?.trim();
   const queueUrl = (process.env.CONSOLE_RUN_QUEUE_URL || "").trim();
   const graphqlEndpoint = resolveGraphqlEndpoint(event);
+  const callerAuthHeaders = resolveCallerAuthHeaders(event);
 
   if (!isValidId(sessionId)) {
     throw new Error("startConsoleRun requires a valid sessionId");
@@ -202,7 +191,7 @@ export const handler = async (event: any) => {
       procedureId?: string | null;
       status?: string | null;
     } | null;
-  }>(GET_CHAT_SESSION_QUERY, { id: sessionId }, graphqlEndpoint);
+  }>(GET_CHAT_SESSION_QUERY, { id: sessionId }, graphqlEndpoint, callerAuthHeaders);
 
   const session = sessionResult.getChatSession;
   if (!session) {
@@ -224,7 +213,7 @@ export const handler = async (event: any) => {
         id: string;
         accountId?: string | null;
       } | null;
-    }>(GET_PROCEDURE_QUERY, { id: procedureId }, graphqlEndpoint);
+    }>(GET_PROCEDURE_QUERY, { id: procedureId }, graphqlEndpoint, callerAuthHeaders);
     const procedure = procedureResult.getProcedure;
     if (!procedure) {
       throw new Error(`Procedure ${procedureId} was not found`);
@@ -266,7 +255,7 @@ export const handler = async (event: any) => {
       createdAt: queuedAt,
       updatedAt: queuedAt,
     },
-  }, graphqlEndpoint);
+  }, graphqlEndpoint, callerAuthHeaders);
 
   if (queueUrl) {
     const sqsClient = new SQSClient({ region: resolveAwsRegion() });
@@ -298,7 +287,7 @@ export const handler = async (event: any) => {
           }),
           updatedAt: failureAt,
         },
-      }, graphqlEndpoint);
+      }, graphqlEndpoint, callerAuthHeaders);
       throw error;
     }
   }

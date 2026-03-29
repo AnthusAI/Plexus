@@ -147,10 +147,11 @@ This workflow uses a chain of skills and agents:
 - **Trust the Tools**: Use MCP tools for reading/writing data, not file edits (unless instructed).
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
 - **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
+- **Single Path, No Fallbacks**: Do not add fallback branches or alternate execution paths "just in case". Implement one canonical path with explicit preconditions.
+- **Fail Fast on Misconfiguration**: If required configuration or permissions are missing, surface a clear error and fix the root cause rather than adding runtime fallback logic.
 
 ## Troubleshooting
 
 - **"Tool not found"**: Restart the MCP server (in Cursor: CMD+Shift+P -> "Cursor: Restart MCP Server").
 - **"GraphQL Error"**: Check your environment variables in `.env`.
 - **"Validation Failed"**: The score config updater protects you from pushing bad YAML. Read the error message and correct the format.
-
