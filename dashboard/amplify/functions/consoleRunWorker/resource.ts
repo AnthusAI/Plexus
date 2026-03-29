@@ -109,12 +109,9 @@ export class ConsoleRunWorkerStack extends Stack {
         PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
         PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS: props.streamUpdateMaxIntervalSeconds || "0.35",
         PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA: props.streamUpdateMinCharsDelta || "20",
-        CELERY_QUEUE_NAME: process.env.CELERY_QUEUE_NAME || "plexus-celery-development",
-        CELERY_AWS_REGION_NAME:
-          process.env.CELERY_AWS_REGION_NAME || "us-east-1",
-        CELERY_AWS_ACCESS_KEY_ID: process.env.CELERY_AWS_ACCESS_KEY_ID || "",
-        CELERY_AWS_SECRET_ACCESS_KEY: process.env.CELERY_AWS_SECRET_ACCESS_KEY || "",
-        CELERY_RESULT_BACKEND_TEMPLATE: process.env.CELERY_RESULT_BACKEND_TEMPLATE || "rpc://",
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
+        OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || "",
+        OPENAI_API_BASE: process.env.OPENAI_API_BASE || "",
         PYTHONPATH: "/var/task",
         PYTHONUNBUFFERED: "1",
       },
@@ -147,14 +144,6 @@ export class ConsoleRunWorkerStack extends Stack {
         resources: ["*"],
       }),
     );
-    this.workerFunction.addToRolePolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ["sqs:ListQueues", "sqs:GetQueueUrl", "sqs:GetQueueAttributes", "sqs:SendMessage"],
-        resources: ["*"],
-      }),
-    );
-
     new CfnOutput(this, "ConsoleRunWorkerQueueUrl", {
       value: this.queue.queueUrl,
     });

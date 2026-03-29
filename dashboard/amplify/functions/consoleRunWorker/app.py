@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -11,8 +12,6 @@ import boto3
 import requests
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
-from celery import Celery
-from kombu.utils.url import safequote
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -169,6 +168,7 @@ def _task_update(
     worker_node_id: Optional[str] = None,
     error_message: Optional[str] = None,
     error_details: Optional[str] = None,
+    output: Optional[str] = None,
 ) -> None:
     input_payload: Dict[str, Any] = {
         "id": task["id"],
@@ -192,6 +192,8 @@ def _task_update(
         input_payload["errorMessage"] = error_message
     if error_details is not None:
         input_payload["errorDetails"] = error_details
+    if output is not None:
+        input_payload["output"] = output
     if metadata is not None:
         input_payload["metadata"] = metadata if isinstance(metadata, str) else json.dumps(metadata)
 
@@ -215,39 +217,24 @@ def _resolve_account_id(payload: Dict[str, Any], task: Dict[str, Any]) -> str:
     raise RuntimeError("Missing accountId for console run payload")
 
 
-def _is_placeholder(value: Optional[str]) -> bool:
-    raw = (value or "").strip()
-    return (not raw) or raw.upper().startswith("WILL_BE_SET_AFTER_DEPLOYMENT")
+class _SignedDashboardClient:
+    """Minimal Dashboard client surface backed by SigV4 AppSync requests."""
 
+    def __init__(self, *, endpoint: str, region: str, account_id: str):
+        self.api_url = endpoint
+        self.region = region
+        self.account_id = account_id
 
-def _build_celery_app() -> tuple[Celery, str]:
-    queue_name = (os.environ.get("CELERY_QUEUE_NAME") or "plexus-celery-development").strip()
-    aws_region = (
-        os.environ.get("CELERY_AWS_REGION_NAME")
-        or "us-east-1"
-    ).strip()
+    def _resolve_account_id(self) -> str:
+        return self.account_id
 
-    access_key = (os.environ.get("CELERY_AWS_ACCESS_KEY_ID") or "").strip()
-    secret_key = (os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY") or "").strip()
-
-    if _is_placeholder(access_key) or _is_placeholder(secret_key):
-        broker_url = f"sqs:///{queue_name}"
-    else:
-        broker_url = f"sqs://{safequote(access_key)}:{safequote(secret_key)}@/{queue_name}"
-
-    app = Celery(
-        "plexus",
-        broker=broker_url,
-        broker_transport_options={"region": aws_region, "is_secure": True},
-    )
-    app.conf.update(
-        broker_connection_retry_on_startup=True,
-        task_default_queue=queue_name,
-        task_create_missing_queues=False,
-        task_ignore_result=True,
-        result_backend=None,
-    )
-    return app, queue_name
+    def execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return _signed_graphql_request(
+            endpoint=self.api_url,
+            region=self.region,
+            query=query,
+            variables=variables or {},
+        )
 
 
 def _run_console_job(payload: Dict[str, Any]) -> None:
@@ -285,23 +272,17 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
         metadata=metadata_with_dequeue,
     )
 
+    previous_dispatch_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
+    os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
+
     try:
-        celery_app, queue_name = _build_celery_app()
-        command = f"procedure run {procedure_id}"
-        target = f"procedure/run/{procedure_id}"
-        celery_result = celery_app.send_task(
-            "plexus.execute_command",
-            args=[command],
-            kwargs={"target": target, "task_id": task_id},
-            ignore_result=True,
-        )
-        dispatched_at = _iso_now()
-        metadata_dispatched = _merge_console_instrumentation(
+        from plexus.cli.procedure.service import ProcedureService
+
+        execution_started_at = _iso_now()
+        metadata_started = _merge_console_instrumentation(
             task,
             {
-                "worker_dispatched_to_celery_at": dispatched_at,
-                "worker_celery_task_id": getattr(celery_result, "id", None),
-                "worker_celery_queue_name": queue_name,
+                "backend_execution_started_at": execution_started_at,
             },
         )
         _task_update(
@@ -310,8 +291,51 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             task=task,
             status="RUNNING",
             dispatch_status="DISPATCHED",
-            metadata=metadata_dispatched,
-            updated_at=dispatched_at,
+            metadata=metadata_started,
+            updated_at=execution_started_at,
+        )
+
+        service = ProcedureService(
+            _SignedDashboardClient(endpoint=endpoint, region=region, account_id=account_id)
+        )
+        result = asyncio.run(
+            service.run_experiment(
+                procedure_id,
+                account_id=account_id,
+                task_id=task_id,
+            )
+        )
+        completed_at = _iso_now()
+        result_status = str((result or {}).get("status") or "").upper()
+        result_success = bool((result or {}).get("success"))
+
+        if result_status == "WAITING_FOR_HUMAN":
+            task_status = "RUNNING"
+            completed_marker = None
+        elif result_success:
+            task_status = "COMPLETED"
+            completed_marker = completed_at
+        else:
+            task_status = "FAILED"
+            completed_marker = completed_at
+
+        metadata_finished = _merge_console_instrumentation(
+            task,
+            {
+                "worker_run_completed_at": completed_at,
+            },
+        )
+        _task_update(
+            endpoint=endpoint,
+            region=region,
+            task=task,
+            status=task_status,
+            dispatch_status="DISPATCHED",
+            completed_at=completed_marker,
+            metadata=metadata_finished,
+            error_message=(result or {}).get("error") if task_status == "FAILED" else None,
+            output=json.dumps(result, default=str),
+            updated_at=completed_at,
         )
     except Exception as exc:
         failed_at = _iso_now()
@@ -339,6 +363,11 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             updated_at=failed_at,
         )
         raise
+    finally:
+        if previous_dispatch_task_id is None:
+            os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
+        else:
+            os.environ["PLEXUS_DISPATCH_TASK_ID"] = previous_dispatch_task_id
 
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
