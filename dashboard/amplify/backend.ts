@@ -201,7 +201,7 @@ const configuredReservedConcurrency = parseNonNegativeInt(
     process.env.CONSOLE_RUN_WORKER_RESERVED_CONCURRENCY,
     defaultReservedConcurrency
 );
-const defaultProvisionedConcurrency = environmentName === 'staging' ? 2 : 0;
+const defaultProvisionedConcurrency = 0;
 const configuredProvisionedConcurrency = parseNonNegativeInt(
     process.env.CONSOLE_RUN_WORKER_PROVISIONED_CONCURRENCY,
     defaultProvisionedConcurrency
