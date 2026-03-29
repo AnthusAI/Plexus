@@ -265,6 +265,8 @@ export const handler = async (event: any) => {
           procedureId,
           triggerMessageId,
           queuedAt,
+          graphqlEndpoint,
+          awsRegion: resolveAwsRegion(),
           instrumentation: clientInstrumentation,
         }),
       }),

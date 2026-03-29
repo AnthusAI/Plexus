@@ -5,14 +5,44 @@ import socket
 import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
+import boto3
+import requests
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 from celery import Celery
 from kombu.utils.url import safequote
-from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.models.task import Task
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+GET_TASK_QUERY = """
+query GetTaskForConsoleWorker($id: ID!) {
+  getTask(id: $id) {
+    id
+    accountId
+    type
+    status
+    target
+    command
+    metadata
+    dispatchStatus
+  }
+}
+"""
+
+UPDATE_TASK_MUTATION = """
+mutation UpdateTaskForConsoleWorker($input: UpdateTaskInput!) {
+  updateTask(input: $input) {
+    id
+    status
+    dispatchStatus
+    updatedAt
+  }
+}
+"""
 
 
 def _iso_now() -> str:
@@ -35,8 +65,8 @@ def _parse_metadata(raw: Any) -> Dict[str, Any]:
     return {}
 
 
-def _merge_console_instrumentation(task: Task, markers: Dict[str, Any]) -> Dict[str, Any]:
-    metadata = _parse_metadata(task.metadata)
+def _merge_console_instrumentation(task: Dict[str, Any], markers: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = _parse_metadata(task.get("metadata"))
     console_chat = metadata.get("console_chat")
     if not isinstance(console_chat, dict):
         console_chat = {}
@@ -51,39 +81,137 @@ def _merge_console_instrumentation(task: Task, markers: Dict[str, Any]) -> Dict[
     return metadata
 
 
-def _task_update(task: Task, **updates: Any) -> None:
-    payload = {
-        "accountId": task.accountId,
-        "type": task.type,
-        "status": updates.pop("status", task.status),
-        "target": task.target,
-        "command": task.command,
-        "updatedAt": updates.pop("updatedAt", _iso_now()),
-    }
-    payload.update(updates)
-    task.update(**payload)
-
-    if "status" in payload:
-        task.status = payload["status"]
-    if "metadata" in payload:
-        task.metadata = payload["metadata"]
-    if "dispatchStatus" in payload:
-        task.dispatchStatus = payload["dispatchStatus"]
+def _resolve_graphql_endpoint(payload: Dict[str, Any]) -> str:
+    endpoint = str(payload.get("graphqlEndpoint") or "").strip()
+    if endpoint:
+        return endpoint
+    endpoint = str(os.environ.get("PLEXUS_API_URL") or "").strip()
+    if endpoint:
+        return endpoint
+    raise RuntimeError("Missing GraphQL endpoint for console worker")
 
 
-def _load_task(client: PlexusDashboardClient, task_id: str) -> Task:
-    task = Task.get_by_id(task_id, client)
-    if not task:
+def _resolve_region(payload: Dict[str, Any]) -> str:
+    return (
+        str(payload.get("awsRegion") or "").strip()
+        or os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or "us-west-2"
+    )
+
+
+def _signed_graphql_request(
+    *,
+    endpoint: str,
+    region: str,
+    query: str,
+    variables: Dict[str, Any],
+) -> Dict[str, Any]:
+    body = json.dumps({"query": query, "variables": variables})
+    parsed = urlparse(endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError(f"Invalid GraphQL endpoint: {endpoint}")
+
+    request = AWSRequest(
+        method="POST",
+        url=endpoint,
+        data=body,
+        headers={"content-type": "application/json"},
+    )
+    credentials = boto3.Session().get_credentials()
+    if credentials is None:
+        raise RuntimeError("Unable to resolve AWS credentials for signed GraphQL request")
+    SigV4Auth(credentials, "appsync", region).add_auth(request)
+    prepared = request.prepare()
+
+    response = requests.post(
+        endpoint,
+        headers=dict(prepared.headers.items()),
+        data=body,
+        timeout=30,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"GraphQL HTTP {response.status_code}: {response.text}")
+    payload = response.json()
+    errors = payload.get("errors")
+    if errors:
+        raise RuntimeError(f"GraphQL errors: {errors}")
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"GraphQL response missing data: {payload}")
+    return data
+
+
+def _load_task(endpoint: str, region: str, task_id: str) -> Dict[str, Any]:
+    data = _signed_graphql_request(
+        endpoint=endpoint,
+        region=region,
+        query=GET_TASK_QUERY,
+        variables={"id": task_id},
+    )
+    task = data.get("getTask")
+    if not isinstance(task, dict):
         raise RuntimeError(f"Task {task_id} was not found")
     return task
 
 
-def _resolve_account_id(payload: Dict[str, Any], task: Task) -> str:
+def _task_update(
+    *,
+    endpoint: str,
+    region: str,
+    task: Dict[str, Any],
+    status: Optional[str] = None,
+    dispatch_status: Optional[str] = None,
+    updated_at: Optional[str] = None,
+    metadata: Optional[Dict[str, Any] | str] = None,
+    started_at: Optional[str] = None,
+    completed_at: Optional[str] = None,
+    worker_node_id: Optional[str] = None,
+    error_message: Optional[str] = None,
+    error_details: Optional[str] = None,
+) -> None:
+    input_payload: Dict[str, Any] = {
+        "id": task["id"],
+        "updatedAt": updated_at or _iso_now(),
+    }
+    for key in ("accountId", "type", "target", "command"):
+        value = task.get(key)
+        if value:
+            input_payload[key] = value
+    if status is not None:
+        input_payload["status"] = status
+    if dispatch_status is not None:
+        input_payload["dispatchStatus"] = dispatch_status
+    if started_at is not None:
+        input_payload["startedAt"] = started_at
+    if completed_at is not None:
+        input_payload["completedAt"] = completed_at
+    if worker_node_id is not None:
+        input_payload["workerNodeId"] = worker_node_id
+    if error_message is not None:
+        input_payload["errorMessage"] = error_message
+    if error_details is not None:
+        input_payload["errorDetails"] = error_details
+    if metadata is not None:
+        input_payload["metadata"] = metadata if isinstance(metadata, str) else json.dumps(metadata)
+
+    _signed_graphql_request(
+        endpoint=endpoint,
+        region=region,
+        query=UPDATE_TASK_MUTATION,
+        variables={"input": input_payload},
+    )
+
+    task.update(input_payload)
+
+
+def _resolve_account_id(payload: Dict[str, Any], task: Dict[str, Any]) -> str:
     account_id = str(payload.get("accountId") or "").strip()
     if account_id:
         return account_id
-    if task.accountId:
-        return str(task.accountId).strip()
+    task_account_id = str(task.get("accountId") or "").strip()
+    if task_account_id:
+        return task_account_id
     raise RuntimeError("Missing accountId for console run payload")
 
 
@@ -105,7 +233,6 @@ def _build_celery_app() -> tuple[Celery, str]:
     secret_key = (os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY") or "").strip()
 
     if _is_placeholder(access_key) or _is_placeholder(secret_key):
-        # Prefer IAM role credentials in Amplify/Lambda.
         broker_url = f"sqs:///{queue_name}"
     else:
         broker_url = f"sqs://{safequote(access_key)}:{safequote(secret_key)}@/{queue_name}"
@@ -148,9 +275,10 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     if not task_id or not procedure_id:
         raise RuntimeError("SQS payload must include taskId and procedureId")
 
-    client = PlexusDashboardClient()
-    task = _load_task(client, task_id)
-    account_id = _resolve_account_id(payload, task)
+    endpoint = _resolve_graphql_endpoint(payload)
+    region = _resolve_region(payload)
+    task = _load_task(endpoint, region, task_id)
+    _resolve_account_id(payload, task)
     worker_node_id = f"console-run-worker/{socket.gethostname()}"
 
     startup_mark_at = _iso_now()
@@ -165,12 +293,14 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
         },
     )
     _task_update(
-        task,
+        endpoint=endpoint,
+        region=region,
+        task=task,
         status="RUNNING",
-        dispatchStatus="DISPATCHED",
-        startedAt=startup_mark_at,
-        workerNodeId=worker_node_id,
-        metadata=json.dumps(metadata_with_dequeue),
+        dispatch_status="DISPATCHED",
+        started_at=startup_mark_at,
+        worker_node_id=worker_node_id,
+        metadata=metadata_with_dequeue,
     )
 
     try:
@@ -192,11 +322,13 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             },
         )
         _task_update(
-            task,
+            endpoint=endpoint,
+            region=region,
+            task=task,
             status="RUNNING",
-            dispatchStatus="DISPATCHED",
-            metadata=json.dumps(metadata_dispatched),
-            updatedAt=dispatched_at,
+            dispatch_status="DISPATCHED",
+            metadata=metadata_dispatched,
+            updated_at=dispatched_at,
         )
     except Exception as exc:
         failed_at = _iso_now()
@@ -207,19 +339,21 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             },
         )
         _task_update(
-            task,
+            endpoint=endpoint,
+            region=region,
+            task=task,
             status="FAILED",
-            dispatchStatus="DISPATCHED",
-            completedAt=failed_at,
-            metadata=json.dumps(metadata_failed),
-            errorMessage=str(exc),
-            errorDetails=json.dumps(
+            dispatch_status="DISPATCHED",
+            completed_at=failed_at,
+            metadata=metadata_failed,
+            error_message=str(exc),
+            error_details=json.dumps(
                 {
                     "message": str(exc),
                     "traceback": traceback.format_exc(),
                 }
             ),
-            updatedAt=failed_at,
+            updated_at=failed_at,
         )
         raise
 
