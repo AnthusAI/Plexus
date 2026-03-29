@@ -45,16 +45,16 @@ end
 
 local history_context = ""
 local history_start = 1
-if #history > 8 then
-  history_start = #history - 7
+if #history > 4 then
+  history_start = #history - 3
 end
 for i = history_start, #history do
   local msg = history[i]
   local role = string.upper(tostring((msg and msg.role) or "UNKNOWN"))
   local content = (msg and msg.content) or ""
   if type(content) == "string" and content ~= "" then
-    if #content > 800 then
-      content = string.sub(content, 1, 800) .. "..."
+    if #content > 400 then
+      content = string.sub(content, 1, 400) .. "..."
     end
     history_context = history_context .. role .. ": " .. content .. "\n"
   end

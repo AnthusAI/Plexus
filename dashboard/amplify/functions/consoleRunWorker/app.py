@@ -276,6 +276,11 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
 
     try:
+        if not str(os.environ.get("OPENAI_API_KEY") or "").strip():
+            raise RuntimeError(
+                "OPENAI_API_KEY is not configured for console worker runtime"
+            )
+
         from plexus.cli.procedure.service import ProcedureService
 
         execution_started_at = _iso_now()

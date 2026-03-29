@@ -51,6 +51,9 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
         },
         "agents": {
             "assistant": {
+                "model": "openai/gpt-4o-mini",
+                "temperature": 0.2,
+                "max_tokens": 600,
                 "system_prompt": (
                     "You are the Plexus Console assistant.\n\n"
                     "You are a practical, accurate engineering copilot.\n"
