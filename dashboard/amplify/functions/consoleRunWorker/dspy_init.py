@@ -41,24 +41,56 @@ _LAZY_IMPORTS = {
     "OutputField": ("dspy.signatures.field", "OutputField"),
     "Tool": ("dspy.adapters.types.tool", "Tool"),
     "ToolCalls": ("dspy.adapters.types.tool", "ToolCalls"),
+    "Image": ("dspy.adapters.types", "Image"),
     "streamify": ("dspy.streaming.streamify", "streamify"),
     "asyncify": ("dspy.utils.asyncify", "asyncify"),
     "syncify": ("dspy.utils.syncify", "syncify"),
     "load": ("dspy.utils.saving", "load"),
     "track_usage": ("dspy.utils.usage_tracker", "track_usage"),
     "Evaluate": ("dspy.evaluate.evaluate", "Evaluate"),
+    "configure_dspy_loggers": ("dspy.utils.logging_utils", "configure_dspy_loggers"),
+    "disable_logging": ("dspy.utils.logging_utils", "disable_logging"),
+    "enable_logging": ("dspy.utils.logging_utils", "enable_logging"),
+    "DSPY_CACHE": ("dspy.clients", "DSPY_CACHE"),
+    "ColBERTv2": ("dspy.dsp.colbertv2", "ColBERTv2"),
+    "__name__": ("dspy.__metadata__", "__name__"),
+    "__version__": ("dspy.__metadata__", "__version__"),
+    "__description__": ("dspy.__metadata__", "__description__"),
+    "__url__": ("dspy.__metadata__", "__url__"),
+    "__author__": ("dspy.__metadata__", "__author__"),
+    "__author_email__": ("dspy.__metadata__", "__author_email__"),
 }
+
+_FALLBACK_MODULES = (
+    "dspy.adapters",
+    "dspy.clients",
+    "dspy.predict",
+    "dspy.primitives",
+    "dspy.signatures",
+    "dspy.utils",
+)
 
 
 def __getattr__(name: str):
     target = _LAZY_IMPORTS.get(name)
-    if target is None:
-        raise AttributeError(f"module 'dspy' has no attribute {name!r}")
-    module_name, attr_name = target
-    module = import_module(module_name)
-    value = getattr(module, attr_name)
-    globals()[name] = value
-    return value
+    if target is not None:
+        module_name, attr_name = target
+        module = import_module(module_name)
+        value = getattr(module, attr_name)
+        globals()[name] = value
+        return value
+
+    for module_name in _FALLBACK_MODULES:
+        try:
+            module = import_module(module_name)
+        except Exception:
+            continue
+        if hasattr(module, name):
+            value = getattr(module, name)
+            globals()[name] = value
+            return value
+
+    raise AttributeError(f"module 'dspy' has no attribute {name!r}")
 
 
 __all__ = [  # noqa: F822
@@ -92,10 +124,16 @@ __all__ = [  # noqa: F822
     "OutputField",
     "Tool",
     "ToolCalls",
+    "Image",
     "streamify",
     "asyncify",
     "syncify",
     "load",
     "track_usage",
     "Evaluate",
+    "configure_dspy_loggers",
+    "disable_logging",
+    "enable_logging",
+    "DSPY_CACHE",
+    "ColBERTv2",
 ]

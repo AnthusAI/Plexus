@@ -9,6 +9,7 @@ Provides a sandboxed Lua runtime with:
 """
 
 import logging
+import traceback
 from typing import Dict, Any, Optional
 
 try:
@@ -187,7 +188,25 @@ class LuaSandbox:
 
         except Exception as e:
             # Other Python exceptions
-            logger.error(f"Sandbox execution error: {e}")
+            logger.error("Sandbox execution error: %s", e, exc_info=True)
+            if hasattr(e, "exceptions"):
+                subexceptions = tuple(getattr(e, "exceptions", ()))
+                for idx, subexc in enumerate(subexceptions):
+                    logger.error(
+                        "Sandbox sub-exception %d/%d: %s",
+                        idx + 1,
+                        len(subexceptions),
+                        repr(subexc),
+                    )
+                    logger.error(
+                        "".join(
+                            traceback.format_exception(
+                                type(subexc),
+                                subexc,
+                                subexc.__traceback__,
+                            )
+                        )
+                    )
             raise LuaSandboxError(f"Sandbox error: {e}")
 
     def eval(self, lua_expression: str) -> Any:
