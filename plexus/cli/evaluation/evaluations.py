@@ -3378,6 +3378,53 @@ def feedback(
 
                     async def _run_rca():
                         from datetime import timedelta
+
+                        # Build a map of feedback_item_id → {value, human_label} for
+                        # score results where the evaluation prediction was WRONG.
+                        # Only those items should drive root-cause analysis; items that
+                        # the model now gets right should not be included even if they
+                        # had edit comments (those comments describe the old error, not
+                        # a current one).
+                        score_result_map = {}
+                        next_tok = None
+                        while True:
+                            sr_resp = client.execute(
+                                """query ListSR($evalId: String!, $limit: Int, $nextToken: String) {
+                                    listScoreResultByEvaluationId(
+                                        evaluationId: $evalId, limit: $limit, nextToken: $nextToken
+                                    ) { items { value itemId metadata } nextToken }
+                                }""",
+                                {"evalId": evaluation_id, "limit": 200, "nextToken": next_tok},
+                            )
+                            sr_data = sr_resp.get("listScoreResultByEvaluationId", {})
+                            for sr in sr_data.get("items", []):
+                                try:
+                                    meta = json.loads(sr["metadata"]) if isinstance(sr["metadata"], str) else (sr["metadata"] or {})
+                                    fb_id = meta.get("feedback_item_id")
+                                    # Correctness lives one level deeper: results.{score_name}.metadata.correct
+                                    results = meta.get("results", {})
+                                    correct = all(
+                                        v.get("metadata", {}).get("correct", True)
+                                        for v in results.values()
+                                    )
+                                    if not correct and fb_id:
+                                        human_label = next(
+                                            (v["metadata"].get("human_label") for v in results.values() if "metadata" in v),
+                                            None,
+                                        )
+                                        score_result_map[fb_id] = {
+                                            "value": sr.get("value"),
+                                            "human_label": human_label,
+                                        }
+                                except Exception:
+                                    pass
+                            next_tok = sr_data.get("nextToken")
+                            if not next_tok:
+                                break
+
+                        console.print(f"[dim]Found {len(score_result_map)} incorrectly predicted item(s) to analyse[/dim]")
+
+                        # Fetch all feedback items in the date window
                         start_date = datetime.now(timezone.utc) - timedelta(days=days)
                         end_date = datetime.now(timezone.utc)
                         feedback_items = await fe._fetch_feedback_items(
@@ -3386,7 +3433,9 @@ def feedback(
                             start_date=start_date,
                             end_date=end_date,
                         )
-                        return await fe._run_root_cause_analysis(feedback_items)
+
+                        # Pass only the incorrect items + the score-result context map
+                        return await fe._run_root_cause_analysis(feedback_items, score_result_map)
 
                     root_cause_topics = asyncio.run(_run_rca())
 
