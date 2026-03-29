@@ -46,12 +46,37 @@ const UPDATE_TASK_MUTATION = `
   }
 `;
 
-function resolveGraphqlEndpoint(): string {
-  return (
-    process.env.PLEXUS_API_URL ||
-    process.env.API_GRAPHQLAPIENDPOINTOUTPUT ||
-    ""
-  ).trim();
+function normalizeEndpoint(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return `https://${trimmed}/graphql`;
+}
+
+function resolveGraphqlEndpoint(event?: any): string {
+  const configuredEndpoint = normalizeEndpoint(
+    (
+      process.env.PLEXUS_API_URL ||
+      process.env.API_GRAPHQLAPIENDPOINTOUTPUT ||
+      ""
+    ).trim(),
+  );
+  if (configuredEndpoint) {
+    return configuredEndpoint;
+  }
+
+  const headers = event?.request?.headers || {};
+  const requestHost =
+    headers.host ||
+    headers.Host ||
+    headers["x-forwarded-host"] ||
+    headers["X-Forwarded-Host"] ||
+    "";
+  return normalizeEndpoint(String(requestHost));
 }
 
 function resolveAwsRegion(): string {
@@ -107,8 +132,8 @@ type GraphqlEnvelope<TData> = {
 async function executeAppSyncGraphql<TData>(
   query: string,
   variables: Record<string, unknown>,
+  endpoint: string,
 ): Promise<TData> {
-  const endpoint = resolveGraphqlEndpoint();
   if (!endpoint) {
     throw new Error("PLEXUS_API_URL is not configured for startConsoleRun resolver");
   }
@@ -158,6 +183,7 @@ export const handler = async (event: any) => {
   const procedureId = event.arguments.procedureId?.trim();
   const triggerMessageId = event.arguments.triggerMessageId?.trim();
   const queueUrl = (process.env.CONSOLE_RUN_QUEUE_URL || "").trim();
+  const graphqlEndpoint = resolveGraphqlEndpoint(event);
 
   if (!isValidId(sessionId)) {
     throw new Error("startConsoleRun requires a valid sessionId");
@@ -176,7 +202,7 @@ export const handler = async (event: any) => {
       procedureId?: string | null;
       status?: string | null;
     } | null;
-  }>(GET_CHAT_SESSION_QUERY, { id: sessionId });
+  }>(GET_CHAT_SESSION_QUERY, { id: sessionId }, graphqlEndpoint);
 
   const session = sessionResult.getChatSession;
   if (!session) {
@@ -198,7 +224,7 @@ export const handler = async (event: any) => {
         id: string;
         accountId?: string | null;
       } | null;
-    }>(GET_PROCEDURE_QUERY, { id: procedureId });
+    }>(GET_PROCEDURE_QUERY, { id: procedureId }, graphqlEndpoint);
     const procedure = procedureResult.getProcedure;
     if (!procedure) {
       throw new Error(`Procedure ${procedureId} was not found`);
@@ -240,7 +266,7 @@ export const handler = async (event: any) => {
       createdAt: queuedAt,
       updatedAt: queuedAt,
     },
-  });
+  }, graphqlEndpoint);
 
   if (queueUrl) {
     const sqsClient = new SQSClient({ region: resolveAwsRegion() });
@@ -272,7 +298,7 @@ export const handler = async (event: any) => {
           }),
           updatedAt: failureAt,
         },
-      });
+      }, graphqlEndpoint);
       throw error;
     }
   }
