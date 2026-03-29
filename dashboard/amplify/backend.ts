@@ -193,11 +193,8 @@ function parseNonNegativeInt(rawValue: string | undefined, fallback: number): nu
     return rounded < 0 ? fallback : rounded;
 }
 
-const dataCfnResources = backend.data.resources.cfnResources as any;
-const resolvedDataApiUrl =
-    process.env.PLEXUS_API_URL || dataCfnResources?.cfnGraphqlApi?.attrGraphQlUrl || '';
-const resolvedDataApiKey =
-    process.env.PLEXUS_API_KEY || dataCfnResources?.cfnApiKey?.attrApiKey || '';
+const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
+const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
 
 const defaultReservedConcurrency = environmentName === 'staging' ? 8 : 2;
 const configuredReservedConcurrency = parseNonNegativeInt(
@@ -233,10 +230,6 @@ if (startConsoleRunLambda) {
     startConsoleRunMutableLambda.addEnvironment(
         'CONSOLE_RUN_QUEUE_URL',
         consoleRunWorkerStack.queue.queueUrl
-    );
-    startConsoleRunMutableLambda.addEnvironment(
-        'PLEXUS_API_URL',
-        resolvedDataApiUrl
     );
     startConsoleRunMutableLambda.addToRolePolicy(
         new PolicyStatement({

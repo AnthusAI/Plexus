@@ -46,12 +46,15 @@ const UPDATE_TASK_MUTATION = `
   }
 `;
 
-function resolveGraphqlEndpoint(): string {
-  return (
-    process.env.PLEXUS_API_URL ||
-    process.env.API_GRAPHQLAPIENDPOINTOUTPUT ||
-    ""
-  ).trim();
+function resolveGraphqlEndpoint(event: any): string {
+  const hostHeader =
+    event?.request?.headers?.host ||
+    event?.request?.headers?.Host ||
+    "";
+  if (typeof hostHeader === "string" && hostHeader.trim()) {
+    return `https://${hostHeader.trim()}/graphql`;
+  }
+  return (process.env.PLEXUS_API_URL || process.env.API_GRAPHQLAPIENDPOINTOUTPUT || "").trim();
 }
 
 function resolveAwsRegion(): string {
@@ -105,10 +108,10 @@ type GraphqlEnvelope<TData> = {
 };
 
 async function executeAppSyncGraphql<TData>(
+  endpoint: string,
   query: string,
   variables: Record<string, unknown>,
 ): Promise<TData> {
-  const endpoint = resolveGraphqlEndpoint();
   if (!endpoint) {
     throw new Error("PLEXUS_API_URL is not configured for startConsoleRun resolver");
   }
@@ -171,6 +174,10 @@ export const handler = async (event: any) => {
   if (!queueUrl) {
     throw new Error("CONSOLE_RUN_QUEUE_URL is not configured");
   }
+  const graphqlEndpoint = resolveGraphqlEndpoint(event);
+  if (!graphqlEndpoint) {
+    throw new Error("Unable to resolve GraphQL endpoint for startConsoleRun");
+  }
 
   const sessionResult = await executeAppSyncGraphql<{
     getChatSession: {
@@ -179,7 +186,7 @@ export const handler = async (event: any) => {
       procedureId?: string | null;
       status?: string | null;
     } | null;
-  }>(GET_CHAT_SESSION_QUERY, { id: sessionId });
+  }>(graphqlEndpoint, GET_CHAT_SESSION_QUERY, { id: sessionId });
 
   const session = sessionResult.getChatSession;
   if (!session) {
@@ -201,7 +208,7 @@ export const handler = async (event: any) => {
         id: string;
         accountId?: string | null;
       } | null;
-    }>(GET_PROCEDURE_QUERY, { id: procedureId });
+    }>(graphqlEndpoint, GET_PROCEDURE_QUERY, { id: procedureId });
     const procedure = procedureResult.getProcedure;
     if (!procedure) {
       throw new Error(`Procedure ${procedureId} was not found`);
@@ -229,7 +236,7 @@ export const handler = async (event: any) => {
     },
   };
 
-  await executeAppSyncGraphql(CREATE_TASK_MUTATION, {
+  await executeAppSyncGraphql(graphqlEndpoint, CREATE_TASK_MUTATION, {
     input: {
       id: taskId,
       accountId,
@@ -264,7 +271,7 @@ export const handler = async (event: any) => {
     );
   } catch (error) {
     const failureAt = toIsoNow();
-    await executeAppSyncGraphql(UPDATE_TASK_MUTATION, {
+    await executeAppSyncGraphql(graphqlEndpoint, UPDATE_TASK_MUTATION, {
       input: {
         id: taskId,
         status: "FAILED",
