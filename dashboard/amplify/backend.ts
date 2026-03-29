@@ -3,6 +3,7 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { ConsoleRunWorkerStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
 import { Duration } from 'aws-cdk-lib';
@@ -131,15 +132,6 @@ const taskDispatcherStack = new TaskDispatcherStack(
     }
 );
 
-if (startConsoleRunFunction) {
-    startConsoleRunFunction.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['appsync:*'],
-            resources: ['*']
-        })
-    );
-}
-
 // Add SQS permissions
 taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     new PolicyStatement({
@@ -188,6 +180,65 @@ function normalizeForResourceName(value: string): string {
 }
 
 const environmentName = normalizeForResourceName(resolveEnvironmentName());
+
+function parseNonNegativeInt(rawValue: string | undefined, fallback: number): number {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+    const rounded = Math.floor(parsed);
+    return rounded < 0 ? fallback : rounded;
+}
+
+const dataCfnResources = backend.data.resources.cfnResources as any;
+const resolvedDataApiUrl =
+    process.env.PLEXUS_API_URL || dataCfnResources?.cfnGraphqlApi?.attrGraphQlUrl || '';
+const resolvedDataApiKey =
+    process.env.PLEXUS_API_KEY || dataCfnResources?.cfnApiKey?.attrApiKey || '';
+
+const defaultReservedConcurrency = environmentName === 'staging' ? 8 : 2;
+const configuredReservedConcurrency = parseNonNegativeInt(
+    process.env.CONSOLE_RUN_WORKER_RESERVED_CONCURRENCY,
+    defaultReservedConcurrency
+);
+const defaultProvisionedConcurrency = environmentName === 'staging' ? 2 : 0;
+const configuredProvisionedConcurrency = parseNonNegativeInt(
+    process.env.CONSOLE_RUN_WORKER_PROVISIONED_CONCURRENCY,
+    defaultProvisionedConcurrency
+);
+const boundedProvisionedConcurrency =
+    configuredReservedConcurrency > 0
+        ? Math.min(configuredProvisionedConcurrency, configuredReservedConcurrency)
+        : configuredProvisionedConcurrency;
+
+const consoleRunWorkerStack = new ConsoleRunWorkerStack(
+    backend.createStack('ConsoleRunWorkerStack'),
+    'ConsoleRunWorker',
+    {
+        plexusApiUrl: resolvedDataApiUrl,
+        plexusApiKey: resolvedDataApiKey,
+        reservedConcurrency: configuredReservedConcurrency,
+        provisionedConcurrency: boundedProvisionedConcurrency,
+        streamUpdateMaxIntervalSeconds:
+            process.env.PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS || '0.35',
+        streamUpdateMinCharsDelta:
+            process.env.PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA || '20',
+    }
+);
+
+if (startConsoleRunFunction) {
+    (startConsoleRunFunction as lambda.Function).addEnvironment(
+        'CONSOLE_RUN_QUEUE_URL',
+        consoleRunWorkerStack.queue.queueUrl
+    );
+    startConsoleRunFunction.addToRolePolicy(
+        new PolicyStatement({
+            actions: ['appsync:*'],
+            resources: ['*']
+        })
+    );
+    consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunFunction);
+}
 
 // Create a backup plan and assign all Amplify Data DynamoDB tables.
 const dynamoDbBackupStack = backend.createStack('DynamoDbBackupStack');
