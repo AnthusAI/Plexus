@@ -30,6 +30,7 @@
     "ci:watch": "npx concurrently -k -n \"TYPE,TEST\" -c \"cyan,green\" \"tsc --noEmit --watch --pretty\" \"jest --watchAll --coverage\""
   },
   "dependencies": {
+    "anthus-footer": "git+https://github.com/AnthusAI/anthus-footer.git#feature/shared-anthus-footer",
     "@aws-amplify/api": "^6.3.0",
     "@aws-amplify/api-graphql": "^4.7.4",
     "@aws-amplify/ui-react": "^6.1.13",
