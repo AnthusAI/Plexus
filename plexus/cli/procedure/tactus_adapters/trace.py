@@ -53,12 +53,12 @@ class PlexusTraceSink:
 
     STREAM_UPDATE_MAX_INTERVAL_SECONDS = _env_float(
         "PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS",
-        0.08,
+        0.12,
         0.05,
     )
     STREAM_UPDATE_MIN_CHARS_DELTA = _env_int(
         "PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA",
-        2,
+        4,
         1,
     )
 
