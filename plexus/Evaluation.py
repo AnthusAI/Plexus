@@ -3375,11 +3375,19 @@ class FeedbackEvaluation(Evaluation):
         if failed_count > 0:
             self.logger.warning(f"{failed_count} ScoreResult records failed to create")
 
-    async def _run_root_cause_analysis(self, feedback_items) -> list:
+    async def _run_root_cause_analysis(self, feedback_items, score_result_map: dict = None) -> list:
         """Run topic clustering + LLM root-cause analysis on feedback edit comments.
 
         Uses biblicus ReinforcementMemory directly for topic clustering, LLM labels,
         per-exemplar causal inference, and topic-level cause synthesis.
+
+        Args:
+            feedback_items: List of FeedbackItem objects to analyze.
+            score_result_map: Optional dict mapping feedback_item_id → {'value': predicted,
+                'human_label': correct} for the current evaluation run. When provided, all
+                items in the map are included (not just those with edit comments), and the
+                text passed to clustering includes prediction-context so the LLM understands
+                what went wrong even when the reviewer comment describes the original error.
 
         Returns a list of topic dicts matching the TopicList dashboard component interface,
         or an empty list if there is not enough data or analysis fails (non-fatal).
@@ -3395,34 +3403,77 @@ class FeedbackEvaluation(Evaluation):
                 TimestampedText,
             )
 
-            items_with_comments = [fi for fi in feedback_items if fi.editCommentValue]
-            if len(items_with_comments) < 5:
+            # When score_result_map is provided, include all items in the map (the caller
+            # has already filtered to incorrect predictions).  Without it, fall back to the
+            # legacy behaviour of using items that have an edit comment.
+            if score_result_map is not None:
+                candidate_items = [fi for fi in feedback_items if fi.id in score_result_map]
+            else:
+                candidate_items = [fi for fi in feedback_items if fi.editCommentValue]
+
+            if len(candidate_items) < 5:
                 self.logger.info(
-                    f"Root-cause analysis skipped: only {len(items_with_comments)} items "
-                    f"have edit comments (need ≥5)"
+                    f"Root-cause analysis skipped: only {len(candidate_items)} incorrect "
+                    f"items available (need ≥5)"
                 )
                 return []
 
             now = datetime.now(_tz.utc)
             texts = []
-            for fi in items_with_comments:
+            for fi in candidate_items:
                 ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
                 ts_str = (
                     (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
                     if ts else now.isoformat()
                 )
                 metadata = {}
-                if fi.initialAnswerValue:
-                    metadata["initial_answer_value"] = fi.initialAnswerValue
-                if fi.finalAnswerValue:
-                    metadata["final_answer_value"] = fi.finalAnswerValue
                 if fi.itemId:
                     metadata["item_id"] = fi.itemId
+
+                # Build the text that will be clustered and analysed.
+                if score_result_map is not None:
+                    sr = score_result_map.get(fi.id, {})
+                    new_pred = (sr.get('value') or '').lower()
+                    correct_label = (sr.get('human_label') or fi.finalAnswerValue or '').lower()
+                    original_pred = (fi.initialAnswerValue or '').lower()
+
+                    lines = [
+                        f"The score predicted '{new_pred}' but the correct answer is '{correct_label}'."
+                    ]
+                    if fi.editCommentValue:
+                        # If the original production prediction was the same wrong direction,
+                        # the reviewer comment directly explains this type of error.
+                        # If the original was correct (reviewer was commenting on something else),
+                        # flag that so the LLM doesn't misread the comment.
+                        if original_pred == new_pred or not original_pred:
+                            lines.append(f"Reviewer note: {fi.editCommentValue}")
+                        else:
+                            lines.append(
+                                f"Note: the original production prediction was '{original_pred}' "
+                                f"(different from the current wrong prediction)."
+                            )
+                            lines.append(
+                                f"Reviewer comment (about the original prediction, not the current one): "
+                                f"{fi.editCommentValue}"
+                            )
+                    # Exemplar metadata: use evaluation prediction values so the
+                    # dashboard shows "Predicted: X → Correct: Y" (not the original
+                    # production prediction which may differ from the current error).
+                    metadata["initial_answer_value"] = new_pred
+                    metadata["final_answer_value"] = correct_label
+                    text = "\n".join(lines)
+                else:
+                    if fi.initialAnswerValue:
+                        metadata["initial_answer_value"] = fi.initialAnswerValue
+                    if fi.finalAnswerValue:
+                        metadata["final_answer_value"] = fi.finalAnswerValue
+                    text = fi.editCommentValue
+
                 texts.append(TimestampedText(
                     id=fi.id,
                     group_id=self.score_id,
                     timestamp=ts_str,
-                    text=fi.editCommentValue,
+                    text=text,
                     metadata=metadata,
                 ))
 
@@ -3431,8 +3482,8 @@ class FeedbackEvaluation(Evaluation):
             await asyncio.to_thread(embed_fn, ["warmup"])
 
             self.logger.info(
-                f"Running root-cause analysis on {len(items_with_comments)} "
-                f"feedback items with edit comments"
+                f"Running root-cause analysis on {len(candidate_items)} "
+                f"incorrectly-predicted feedback items"
             )
 
             def _run_analysis():
