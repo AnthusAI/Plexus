@@ -4,6 +4,7 @@ import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ConsoleRunWorkerStack } from './functions/consoleRunWorker/resource.js';
+import { startConsoleRunFunction } from './functions/startConsoleRun/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
 import { Duration } from 'aws-cdk-lib';
@@ -11,12 +12,12 @@ import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 // Create the backend
 const backend = defineBackend({
     auth,
     data,
+    startConsoleRunFunction,
     reportBlockDetails,
     dataSources,
     scoreResultAttachments,
@@ -33,7 +34,7 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
-const startConsoleRunFunction = backend.data.resources.functions.startConsoleRun;
+const startConsoleRunLambda = backend.startConsoleRunFunction.resources.lambda;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -226,18 +227,22 @@ const consoleRunWorkerStack = new ConsoleRunWorkerStack(
     }
 );
 
-if (startConsoleRunFunction) {
-    (startConsoleRunFunction as lambda.Function).addEnvironment(
+if (startConsoleRunLambda) {
+    startConsoleRunLambda.addEnvironment(
         'CONSOLE_RUN_QUEUE_URL',
         consoleRunWorkerStack.queue.queueUrl
     );
-    startConsoleRunFunction.addToRolePolicy(
+    startConsoleRunLambda.addEnvironment(
+        'PLEXUS_API_URL',
+        resolvedDataApiUrl
+    );
+    startConsoleRunLambda.addToRolePolicy(
         new PolicyStatement({
             actions: ['appsync:*'],
             resources: ['*']
         })
     );
-    consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunFunction);
+    consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunLambda);
 }
 
 // Create a backup plan and assign all Amplify Data DynamoDB tables.

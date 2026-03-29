@@ -6,6 +6,7 @@ import * as path from 'path';
 import { DockerImage, Duration } from 'aws-cdk-lib';
 import { execSync } from 'child_process';
 import { Stack } from 'aws-cdk-lib';
+import { startConsoleRunFunction } from '../functions/startConsoleRun/resource.js';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -56,9 +57,6 @@ type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
-});
-const startConsoleRunHandler = defineFunction({
-    entry: './resolvers/startConsoleRun.ts'
 });
 
 const schema = a.schema({
@@ -609,7 +607,7 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated(),
         ])
-        .handler(a.handler.function(startConsoleRunHandler)),
+        .handler(a.handler.function(startConsoleRunFunction)),
 
     ReportConfiguration: a
         .model({
