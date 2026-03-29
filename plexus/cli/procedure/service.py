@@ -1022,10 +1022,17 @@ You can query the current guidelines using the `plexus_score_info` tool with the
 
                         from .procedure_executor import execute_procedure
                         from .mcp_transport import create_procedure_mcp_server
+                        from .builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
 
-                        mcp_server = await create_procedure_mcp_server(
-                            experiment_context=context
-                        )
+                        if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
+                            mcp_server = None
+                            logger.info(
+                                "Skipping MCP server initialization for builtin console chat procedure"
+                            )
+                        else:
+                            mcp_server = await create_procedure_mcp_server(
+                                experiment_context=context
+                            )
 
                         result = await execute_procedure(
                             procedure_id=procedure_id,
