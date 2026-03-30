@@ -23,6 +23,9 @@ import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkBreaks from "remark-breaks"
 
 export interface EvaluationMetric {
   name: string
@@ -654,15 +657,25 @@ const DetailContent = React.memo(({
   const showScoreResultInNarrowView = !isWideEnoughForTwo && showResultDetail
   
   // Only show main panel if we're not in narrow view with a selected result
-  const showMainPanel = isWideEnoughForThree || 
+  const showMainPanel = isWideEnoughForThree ||
                         (isWideEnoughForTwo && (!showResultDetail || !showResultsList)) || 
                         (!isWideEnoughForTwo && !showResultDetail); // Only show main panel in narrow view if no result selected
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
+    setSelectedRcaContext(null)
     onSelectScoreResult?.(result.id)
   }
 
+  const handleRcaExemplarSelect = (itemId: string, rcaData: { detailed_cause?: string; suggested_fix?: string }) => {
+    const scoreResult = (data.scoreResults ?? []).find((r: any) => r.itemId === itemId)
+    if (scoreResult) {
+      onSelectScoreResult?.((scoreResult as any).id)
+      setSelectedRcaContext(rcaData)
+    }
+  }
+
   const handleScoreResultClose = () => {
+    setSelectedRcaContext(null)
     onSelectScoreResult?.(null)
   }
 
@@ -725,6 +738,35 @@ const DetailContent = React.memo(({
   }, [data.parameters])
 
   const [showRootCauseCode, setShowRootCauseCode] = useState(false)
+  const [selectedRcaContext, setSelectedRcaContext] = useState<{
+    detailed_cause?: string;
+    suggested_fix?: string;
+  } | null>(null)
+
+  const rcaContextSection = selectedRcaContext && (selectedRcaContext.detailed_cause || selectedRcaContext.suggested_fix) ? (
+    <div className="border-t p-3 space-y-3 text-sm overflow-y-auto shrink-0 max-h-64">
+      {selectedRcaContext.detailed_cause && (
+        <div>
+          <div className="font-medium text-muted-foreground mb-1">Root cause analysis</div>
+          <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={{ p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p> }}
+            >{selectedRcaContext.detailed_cause}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+      {selectedRcaContext.suggested_fix && (
+        <div>
+          <div className="font-medium text-muted-foreground mb-1">Suggested fix</div>
+          <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={{ p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p> }}
+            >{selectedRcaContext.suggested_fix}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null
 
   return (
     <div
@@ -765,6 +807,7 @@ const DetailContent = React.memo(({
                 onClose={handleScoreResultClose}
               />
             </div>
+            {rcaContextSection}
           </div>
         )}
 
@@ -893,7 +936,7 @@ const DetailContent = React.memo(({
                         {JSON.stringify(rootCauseTopics, null, 2)}
                       </pre>
                     ) : (
-                      <TopicList topics={rootCauseTopics} />
+                      <TopicList topics={rootCauseTopics} onSelectExemplar={handleRcaExemplarSelect} />
                     )}
                   </div>
                 )}
@@ -944,6 +987,7 @@ const DetailContent = React.memo(({
                 onClose={handleScoreResultClose}
               />
             </div>
+            {rcaContextSection}
           </div>
         )}
       </div>
