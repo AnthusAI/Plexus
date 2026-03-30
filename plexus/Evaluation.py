@@ -3501,26 +3501,162 @@ class FeedbackEvaluation(Evaluation):
             result = await asyncio.to_thread(_run_analysis)
             self.logger.info(f"Root-cause analysis produced {len(result.topics)} topic(s)")
 
+            # --- Issue 24d: fetch transcripts + run deep per-exemplar analysis ---
+            # Build a map of item_id → transcript for all above-fold exemplars across topics.
+            dashboard_client = getattr(self, 'dashboard_client', None)
+            transcript_cache: dict = {}
+            if dashboard_client:
+                from plexus.dashboard.api.models.item import Item as DashboardItem
+                above_fold_item_ids = set()
+                for tr in result.topics:
+                    for idx, ex in enumerate(tr.exemplars or []):
+                        if idx < max_summarization_exemplars and ex.metadata.get("item_id"):
+                            above_fold_item_ids.add(ex.metadata["item_id"])
+
+                async def _fetch_transcript(item_id: str) -> tuple:
+                    try:
+                        item = await asyncio.to_thread(
+                            DashboardItem.get_by_id, item_id, dashboard_client
+                        )
+                        return item_id, (item.text if item else None)
+                    except Exception as exc:
+                        self.logger.debug("Transcript fetch failed for %s: %s", item_id, exc)
+                        return item_id, None
+
+                fetch_tasks = [_fetch_transcript(iid) for iid in above_fold_item_ids]
+                fetched = await asyncio.gather(*fetch_tasks)
+                transcript_cache = {iid: txt for iid, txt in fetched if txt}
+                self.logger.info(
+                    f"Fetched transcripts for {len(transcript_cache)}/{len(above_fold_item_ids)} "
+                    f"above-fold items"
+                )
+
+            def _detailed_analysis(transcript: str, predicted: str, correct: str,
+                                   explanation: str, topic_label: str) -> str:
+                """Run a deep Bedrock call with the full transcript."""
+                import json as _json
+                import boto3 as _boto3
+                system = (
+                    "You are an expert quality analyst reviewing AI scoring errors on customer calls. "
+                    "Write a single concise paragraph (2-4 sentences) explaining specifically why "
+                    "the AI prediction was wrong for this call. Focus on what was said or not said "
+                    "in the transcript that makes the correct answer clear."
+                )
+                prompt = (
+                    f"Topic cluster: {topic_label}\n"
+                    f"AI predicted: {predicted}\n"
+                    f"Correct answer: {correct}\n"
+                    f"AI reasoning: {(explanation or '')[:400]}\n\n"
+                    f"Call transcript:\n{transcript[:6000]}\n\n"
+                    "Why was the AI prediction wrong? (2-4 sentences)"
+                )
+                try:
+                    client = _boto3.client("bedrock-runtime", region_name="us-east-1")
+                    body = _json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": 200,
+                        "system": system,
+                        "messages": [{"role": "user", "content": prompt}],
+                    })
+                    resp = client.invoke_model(
+                        modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                        body=body,
+                        contentType="application/json",
+                        accept="application/json",
+                    )
+                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+                except Exception as exc:
+                    self.logger.debug("Detailed analysis call failed: %s", exc)
+                    return ""
+
+            # --- Issue iuh: richer per-topic synthesis over all exemplar context ---
+            def _rich_synthesis(topic_label: str, keywords: list, exemplar_dicts: list) -> str:
+                """Synthesize root cause using deep analyses + all exemplar metadata."""
+                import json as _json
+                import boto3 as _boto3
+                system = (
+                    "You write concise root cause statements — one sentence under 25 words. "
+                    "No preamble, no qualifications, no restating the cluster name."
+                )
+                deep_parts = []
+                for ex in exemplar_dicts:
+                    if ex.get("detailed_cause"):
+                        deep_parts.append(f"- {ex['detailed_cause']}")
+                meta_parts = []
+                for ex in exemplar_dicts:
+                    pred = ex.get("initial_answer_value", "")
+                    correct = ex.get("final_answer_value", "")
+                    text = ex.get("text", "")[:150]
+                    if pred or correct:
+                        meta_parts.append(f"  Predicted {pred!r} → correct {correct!r}: {text}")
+                prompt = (
+                    f'Cluster: "{topic_label}" (keywords: {", ".join(keywords[:8])})\n\n'
+                )
+                if deep_parts:
+                    prompt += "Deep analysis of top examples:\n" + "\n".join(deep_parts) + "\n\n"
+                if meta_parts:
+                    prompt += f"All {len(exemplar_dicts)} examples (prediction → correct: excerpt):\n"
+                    prompt += "\n".join(meta_parts) + "\n\n"
+                prompt += "One-sentence root cause (under 25 words):"
+                try:
+                    client = _boto3.client("bedrock-runtime", region_name="us-east-1")
+                    body = _json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": 80,
+                        "system": system,
+                        "messages": [{"role": "user", "content": prompt}],
+                    })
+                    resp = client.invoke_model(
+                        modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                        body=body,
+                        contentType="application/json",
+                        accept="application/json",
+                    )
+                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+                except Exception as exc:
+                    self.logger.debug("Rich synthesis call failed: %s", exc)
+                    return ""
+
             # Convert TopicResult dataclasses → dicts matching the Topic interface
             # in dashboard/components/ui/topic-list.tsx
             topics = []
             for tr in result.topics:
-                exemplars = [
-                    {
+                exemplar_dicts = []
+                for idx, ex in enumerate(tr.exemplars or []):
+                    above_fold = idx < max_summarization_exemplars
+                    item_id = ex.metadata.get("item_id")
+                    transcript = transcript_cache.get(item_id) if item_id else None
+
+                    detailed_cause = ""
+                    if above_fold and transcript:
+                        predicted = ex.metadata.get("initial_answer_value", "")
+                        correct = ex.metadata.get("final_answer_value", "")
+                        explanation = ex.metadata.get("score_explanation", "")
+                        detailed_cause = await asyncio.to_thread(
+                            _detailed_analysis, transcript, predicted, correct,
+                            explanation, tr.label
+                        )
+
+                    exemplar_dicts.append({
                         "text": ex.text,
-                        "item_id": ex.metadata.get("item_id"),
+                        "item_id": item_id,
                         "initial_answer_value": ex.metadata.get("initial_answer_value"),
                         "final_answer_value": ex.metadata.get("final_answer_value"),
                         "timestamp": ex.timestamp,
-                        "above_fold": idx < max_summarization_exemplars,
-                    }
-                    for idx, ex in enumerate(tr.exemplars or [])
-                ]
+                        "above_fold": above_fold,
+                        **({"detailed_cause": detailed_cause} if detailed_cause else {}),
+                    })
+
+                # Rich synthesis over all exemplar context (Issue iuh)
+                rich_cause = await asyncio.to_thread(
+                    _rich_synthesis, tr.label, tr.keywords or [], exemplar_dicts
+                )
+
                 topics.append({
                     "topic_id": tr.topic_id,
                     "label": tr.label,
                     "keywords": tr.keywords,
-                    "exemplars": exemplars,
+                    "exemplars": exemplar_dicts,
                     "member_count": tr.member_count,
                     "memory_weight": tr.memory_weight,
                     "memory_tier": tr.memory_tier,
@@ -3528,7 +3664,7 @@ class FeedbackEvaluation(Evaluation):
                     "is_new": tr.is_new,
                     "is_trending": tr.is_trending,
                     "days_inactive": tr.days_inactive,
-                    "cause": tr.root_cause,  # TopicResult.root_cause → Topic.cause
+                    "cause": rich_cause or tr.root_cause,
                 })
             return topics
 
