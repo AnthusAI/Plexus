@@ -3359,6 +3359,15 @@ def feedback(
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
 
+                # Advance to Analyzing stage for root-cause analysis
+                if tracker:
+                    try:
+                        tracker.advance_stage()
+                        if tracker.current_stage:
+                            tracker.current_stage.status_message = "Running root-cause analysis..."
+                    except Exception:
+                        pass
+
                 # Run root-cause analysis on feedback edit comments (non-fatal)
                 console.print("\n[bold]Running root-cause analysis on feedback edit comments...[/bold]")
                 try:
@@ -3491,6 +3500,7 @@ def feedback(
                             feedback_items, score_result_map, original_explanations,
                             max_report_exemplars=20,
                             max_summarization_exemplars=6,
+                            tracker=tracker,
                         )
 
                     root_cause_topics = asyncio.run(_run_rca())
@@ -3512,10 +3522,10 @@ def feedback(
                     console.print(f"[yellow]Warning: root-cause analysis failed (non-fatal): {_rca_err}[/yellow]")
                     logging.debug("Root-cause analysis traceback:", exc_info=True)
 
-                # Complete the tracker to mark Finalizing stage as done
+                # Complete the tracker with a clear completion message
                 if tracker:
                     try:
-                        tracker.complete()
+                        tracker.complete_with_message("Evaluation complete.")
                     except Exception as _tracker_err:
                         console.print(f"[yellow]Warning: tracker.complete() failed: {_tracker_err}[/yellow]")
 
