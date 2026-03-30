@@ -3541,48 +3541,67 @@ class FeedbackEvaluation(Evaluation):
 
             def _detailed_analysis(transcript: str, predicted: str, correct: str,
                                    explanation: str, topic_label: str,
-                                   score_guidelines: str = "", score_yaml_code: str = "") -> str:
-                """Run a deep Bedrock call with the full transcript."""
+                                   score_guidelines: str = "", score_yaml_code: str = "") -> tuple:
+                """Run a two-turn Bedrock Haiku conversation per exemplar.
+
+                Returns (detailed_cause, suggested_fix):
+                  - detailed_cause: why the AI prediction was wrong (2-4 sentences)
+                  - suggested_fix: one concrete score code change to prevent this error
+                """
                 import json as _json
                 import boto3 as _boto3
                 system = (
-                    "You are an expert quality analyst reviewing AI scoring errors on customer calls. "
-                    "Write a single concise paragraph (2-4 sentences) explaining specifically why "
-                    "the AI prediction was wrong for this call. Focus on what was said or not said "
-                    "in the transcript that makes the correct answer clear."
+                    "You are an expert quality analyst reviewing AI scoring errors on customer calls."
                 )
-                prompt = (
+                turn1_prompt = (
                     f"Topic cluster: {topic_label}\n"
                     f"AI predicted: {predicted}\n"
                     f"Correct answer: {correct}\n"
                     f"AI reasoning: {(explanation or '')[:400]}\n\n"
                 )
                 if score_guidelines:
-                    prompt += f"Score guidelines:\n{score_guidelines[:2000]}\n\n"
+                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:2000]}\n\n"
                 if score_yaml_code:
-                    prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
-                prompt += (
+                    turn1_prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
+                turn1_prompt += (
                     f"Call transcript:\n{transcript[:6000]}\n\n"
-                    "Why was the AI prediction wrong? (2-4 sentences)"
+                    "Write a single concise paragraph (2-4 sentences) explaining specifically why "
+                    "the AI prediction was wrong. Focus on what was said or not said in the "
+                    "transcript that makes the correct answer clear."
                 )
                 try:
                     client = _boto3.client("bedrock-runtime", region_name="us-east-1")
-                    body = _json.dumps({
-                        "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": 200,
-                        "system": system,
-                        "messages": [{"role": "user", "content": prompt}],
-                    })
-                    resp = client.invoke_model(
-                        modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                        body=body,
-                        contentType="application/json",
-                        accept="application/json",
-                    )
-                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+                    def _haiku_call(messages: list, max_tokens: int) -> str:
+                        body = _json.dumps({
+                            "anthropic_version": "bedrock-2023-05-31",
+                            "max_tokens": max_tokens,
+                            "system": system,
+                            "messages": messages,
+                        })
+                        resp = client.invoke_model(
+                            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                            body=body,
+                            contentType="application/json",
+                            accept="application/json",
+                        )
+                        return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+                    messages = [{"role": "user", "content": turn1_prompt}]
+                    detailed_cause = _haiku_call(messages, max_tokens=200)
+
+                    messages.append({"role": "assistant", "content": detailed_cause})
+                    messages.append({"role": "user", "content": (
+                        "Based on this specific error and the score configuration above, "
+                        "suggest one concrete change to the score code that would prevent "
+                        "this specific misclassification. Be specific and brief (1-2 sentences)."
+                    )})
+                    suggested_fix = _haiku_call(messages, max_tokens=150)
+
+                    return detailed_cause, suggested_fix
                 except Exception as exc:
                     self.logger.debug("Detailed analysis call failed: %s", exc)
-                    return ""
+                    return "", ""
 
             # --- Fetch score context for synthesis (once for all topics) ---
             score_guidelines = ""
@@ -3642,7 +3661,9 @@ class FeedbackEvaluation(Evaluation):
                 deep_parts = []
                 for ex in exemplar_dicts:
                     if ex.get("detailed_cause"):
-                        deep_parts.append(f"- {ex['detailed_cause']}")
+                        deep_parts.append(f"- Analysis: {ex['detailed_cause']}")
+                    if ex.get("suggested_fix"):
+                        deep_parts.append(f"  Suggested fix: {ex['suggested_fix']}")
                 meta_parts = []
                 for ex in exemplar_dicts:
                     pred = ex.get("initial_answer_value", "")
@@ -3719,7 +3740,7 @@ class FeedbackEvaluation(Evaluation):
                         predicted = ex.metadata.get("initial_answer_value", "")
                         correct = ex.metadata.get("final_answer_value", "")
                         explanation = ex.metadata.get("score_explanation", "")
-                        detailed_cause = await asyncio.to_thread(
+                        detailed_cause, suggested_fix = await asyncio.to_thread(
                             _detailed_analysis, transcript, predicted, correct,
                             explanation, tr.label, score_guidelines, score_yaml_code
                         )
@@ -3732,6 +3753,7 @@ class FeedbackEvaluation(Evaluation):
                         "timestamp": ex.timestamp,
                         "above_fold": above_fold,
                         **({"detailed_cause": detailed_cause} if detailed_cause else {}),
+                        **({"suggested_fix": suggested_fix} if suggested_fix else {}),
                     })
 
                 # Multi-turn synthesis: detailed explanation + improvement suggestion

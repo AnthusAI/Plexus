@@ -5,6 +5,9 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IdentifierDisplay } from "@/components/ui/identifier-display";
 import { LabelBadgeComparison } from "@/components/LabelBadgeComparison";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 
 export interface TopicExemplar {
   text: string;
@@ -16,6 +19,7 @@ export interface TopicExemplar {
   above_fold?: boolean;
   timestamp?: string | null;
   detailed_cause?: string | null;
+  suggested_fix?: string | null;
 }
 
 export interface Topic {
@@ -122,13 +126,29 @@ function TopicItem({ topic }: TopicItemProps) {
           {topic.detailed_explanation && (
             <div>
               <div className="font-medium text-muted-foreground mb-1">Analysis</div>
-              <div className="text-foreground whitespace-pre-line">{topic.detailed_explanation}</div>
+              <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                  p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                  ul: ({children}) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                  ol: ({children}) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                  li: ({children}) => <li className="mb-1">{children}</li>,
+                  strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                }}>{topic.detailed_explanation}</ReactMarkdown>
+              </div>
             </div>
           )}
           {topic.improvement_suggestion && (
             <div>
               <div className="font-medium text-muted-foreground mb-1">Suggested Improvement</div>
-              <div className="text-foreground whitespace-pre-line">{topic.improvement_suggestion}</div>
+              <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                  p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                  ul: ({children}) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                  ol: ({children}) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                  li: ({children}) => <li className="mb-1">{children}</li>,
+                  strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                }}>{topic.improvement_suggestion}</ReactMarkdown>
+              </div>
             </div>
           )}
           {!topic.detailed_explanation && topic.cause && (
@@ -174,7 +194,16 @@ function TopicItem({ topic }: TopicItemProps) {
                         />
                       )}
                       {ex.detailed_cause && (
-                        <span className="text-xs text-foreground/80 italic">Analysis: {ex.detailed_cause}</span>
+                        <div className="text-xs text-foreground/80">
+                          <span className="font-medium not-italic">Analysis: </span>
+                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ p: ({children}) => <span>{children}</span> }}>{ex.detailed_cause}</ReactMarkdown>
+                        </div>
+                      )}
+                      {ex.suggested_fix && (
+                        <div className="text-xs text-foreground/80">
+                          <span className="font-medium not-italic">Suggested fix: </span>
+                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ p: ({children}) => <span>{children}</span> }}>{ex.suggested_fix}</ReactMarkdown>
+                        </div>
                       )}
                       {ex.score_explanation && (
                         <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
