@@ -23,9 +23,7 @@ import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import remarkBreaks from "remark-breaks"
+
 
 export interface EvaluationMetric {
   name: string
@@ -662,20 +660,19 @@ const DetailContent = React.memo(({
                         (!isWideEnoughForTwo && !showResultDetail); // Only show main panel in narrow view if no result selected
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
-    setSelectedRcaContext(null)
     onSelectScoreResult?.(result.id)
   }
 
-  const handleRcaExemplarSelect = (itemId: string, rcaData: { detailed_cause?: string; suggested_fix?: string }) => {
-    const scoreResult = (data.scoreResults ?? []).find((r: any) => r.itemId === itemId)
-    if (scoreResult) {
-      onSelectScoreResult?.((scoreResult as any).id)
-      setSelectedRcaContext(rcaData)
-    }
+  const handleTopicFilter = (
+    itemIds: string[] | null,
+    rcaData: Record<string, { detailed_cause?: string; suggested_fix?: string }>
+  ) => {
+    setSelectedTopicItemIds(itemIds)
+    setRcaDataByItemId(rcaData ?? {})
+    if (itemIds) setSelectedPredictedActual({ predicted: null, actual: null })
   }
 
   const handleScoreResultClose = () => {
-    setSelectedRcaContext(null)
     onSelectScoreResult?.(null)
   }
 
@@ -738,35 +735,14 @@ const DetailContent = React.memo(({
   }, [data.parameters])
 
   const [showRootCauseCode, setShowRootCauseCode] = useState(false)
-  const [selectedRcaContext, setSelectedRcaContext] = useState<{
-    detailed_cause?: string;
-    suggested_fix?: string;
-  } | null>(null)
+  const [selectedTopicItemIds, setSelectedTopicItemIds] = useState<string[] | null>(null)
+  const [rcaDataByItemId, setRcaDataByItemId] = useState<
+    Record<string, { detailed_cause?: string; suggested_fix?: string }>
+  >({})
 
-  const rcaContextSection = selectedRcaContext && (selectedRcaContext.detailed_cause || selectedRcaContext.suggested_fix) ? (
-    <div className="border-t p-3 space-y-3 text-sm overflow-y-auto shrink-0 max-h-64">
-      {selectedRcaContext.detailed_cause && (
-        <div>
-          <div className="font-medium text-muted-foreground mb-1">Root cause analysis</div>
-          <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
-              components={{ p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p> }}
-            >{selectedRcaContext.detailed_cause}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-      {selectedRcaContext.suggested_fix && (
-        <div>
-          <div className="font-medium text-muted-foreground mb-1">Suggested fix</div>
-          <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}
-              components={{ p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p> }}
-            >{selectedRcaContext.suggested_fix}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-    </div>
-  ) : null
+  const selectedItemRcaContext = selectedScoreResult?.itemId
+    ? rcaDataByItemId[selectedScoreResult.itemId]
+    : undefined
 
   return (
     <div
@@ -785,29 +761,28 @@ const DetailContent = React.memo(({
         {/* When in narrow view and a score result is selected, ONLY show the score result detail */}
         {showScoreResultInNarrowView && selectedScoreResult && (
           <div className="w-full h-full flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-hidden">
-              <ScoreResultComponent
-                result={{
-                  id: selectedScoreResult.id,
-                  value: String(selectedScoreResult.value),
-                  confidence: selectedScoreResult.confidence,
-                  explanation: selectedScoreResult.explanation,
-                  metadata: selectedScoreResult.metadata || {
-                    human_label: null,
-                    correct: false,
-                    human_explanation: null,
-                    text: null
-                  },
-                  trace: selectedScoreResult.trace,
-                  itemId: selectedScoreResult.itemId,
-                  itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
-                  feedbackItem: (selectedScoreResult as any).feedbackItem || null
-                }}
-                variant="detail"
-                onClose={handleScoreResultClose}
-              />
-            </div>
-            {rcaContextSection}
+            <ScoreResultComponent
+              result={{
+                id: selectedScoreResult.id,
+                value: String(selectedScoreResult.value),
+                confidence: selectedScoreResult.confidence,
+                explanation: selectedScoreResult.explanation,
+                metadata: selectedScoreResult.metadata || {
+                  human_label: null,
+                  correct: false,
+                  human_explanation: null,
+                  text: null
+                },
+                trace: selectedScoreResult.trace,
+                itemId: selectedScoreResult.itemId,
+                itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
+                feedbackItem: (selectedScoreResult as any).feedbackItem || null
+              }}
+              variant="detail"
+              onClose={handleScoreResultClose}
+              rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
+              rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+            />
           </div>
         )}
 
@@ -936,7 +911,7 @@ const DetailContent = React.memo(({
                         {JSON.stringify(rootCauseTopics, null, 2)}
                       </pre>
                     ) : (
-                      <TopicList topics={rootCauseTopics} onSelectExemplar={handleRcaExemplarSelect} />
+                      <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
                     )}
                   </div>
                 )}
@@ -949,11 +924,12 @@ const DetailContent = React.memo(({
         {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
           <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
             <div className="h-full overflow-y-auto">
-              <EvaluationTaskScoreResults 
-                results={parsedScoreResults} 
+              <EvaluationTaskScoreResults
+                results={parsedScoreResults}
                 accuracy={data.accuracy ?? 0}
                 selectedPredictedValue={selectedPredictedActual.predicted}
                 selectedActualValue={selectedPredictedActual.actual}
+                selectedItemIds={selectedTopicItemIds}
                 onResultSelect={handleScoreResultSelect}
                 selectedScoreResult={selectedScoreResult}
                 isLoading={isResultsLoading}
@@ -965,29 +941,28 @@ const DetailContent = React.memo(({
         {/* Only show the score result detail in column layout if not already showing it in narrow view */}
         {showResultDetail && !showScoreResultInNarrowView && selectedScoreResult && (
           <div className={`w-full ${showAsColumns ? 'h-full' : 'h-full'} flex flex-col overflow-hidden`}>
-            <div className="flex-1 overflow-hidden">
-              <ScoreResultComponent
-                result={{
-                  id: selectedScoreResult.id,
-                  value: String(selectedScoreResult.value),
-                  confidence: selectedScoreResult.confidence,
-                  explanation: selectedScoreResult.explanation,
-                  metadata: selectedScoreResult.metadata || {
-                    human_label: null,
-                    correct: false,
-                    human_explanation: null,
-                    text: null
-                  },
-                  trace: selectedScoreResult.trace,
-                  itemId: selectedScoreResult.itemId,
-                  itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
-                  feedbackItem: (selectedScoreResult as any).feedbackItem || null
-                }}
-                variant="detail"
-                onClose={handleScoreResultClose}
-              />
-            </div>
-            {rcaContextSection}
+            <ScoreResultComponent
+              result={{
+                id: selectedScoreResult.id,
+                value: String(selectedScoreResult.value),
+                confidence: selectedScoreResult.confidence,
+                explanation: selectedScoreResult.explanation,
+                metadata: selectedScoreResult.metadata || {
+                  human_label: null,
+                  correct: false,
+                  human_explanation: null,
+                  text: null
+                },
+                trace: selectedScoreResult.trace,
+                itemId: selectedScoreResult.itemId,
+                itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
+                feedbackItem: (selectedScoreResult as any).feedbackItem || null
+              }}
+              variant="detail"
+              onClose={handleScoreResultClose}
+              rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
+              rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+            />
           </div>
         )}
       </div>
