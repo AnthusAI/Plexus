@@ -2061,7 +2061,7 @@ def accuracy(
                 raise
                 
 
-            # Finalizing stage advancement now handled in AccuracyEvaluation.run()
+            # Analyzing stage advancement now handled in AccuracyEvaluation.run()
             
             # Final update to the evaluation record
             if evaluation_record:
@@ -2170,11 +2170,11 @@ def accuracy(
             
             logging.info('='*60)
             
-            # Complete the Finalizing stage
+            # Complete the Analyzing stage
             if tracker:
                 tracker.current_stage.complete()
                 tracker._update_api_task_progress(force_critical=True)
-                logging.info("Finalizing stage completed")
+                logging.info("Analyzing stage completed")
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
@@ -3359,10 +3359,10 @@ def feedback(
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
 
-                # Advance to Analyzing stage for root-cause analysis
+                # Update Analyzing stage status for root-cause analysis
+                # (AccuracyEvaluation.run() already advanced to Analyzing stage)
                 if tracker:
                     try:
-                        tracker.advance_stage()
                         if tracker.current_stage:
                             tracker.current_stage.status_message = "Running root-cause analysis..."
                     except Exception:
