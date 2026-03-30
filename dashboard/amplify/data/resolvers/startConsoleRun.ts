@@ -393,7 +393,19 @@ async function findExistingConsoleRun(
   let scanned = 0;
 
   while (scanned < 300) {
-    const result = await executeAppSyncGraphql<{
+    const result: {
+      listTaskByAccountIdAndUpdatedAt: {
+        items?: Array<{
+          id?: string | null;
+          status?: string | null;
+          target?: string | null;
+          metadata?: unknown;
+          createdAt?: string | null;
+          updatedAt?: string | null;
+        } | null> | null;
+        nextToken?: string | null;
+      } | null;
+    } = await executeAppSyncGraphql<{
       listTaskByAccountIdAndUpdatedAt: {
         items?: Array<{
           id?: string | null;
@@ -412,7 +424,17 @@ async function findExistingConsoleRun(
       nextToken,
     });
 
-    const page = result.listTaskByAccountIdAndUpdatedAt;
+    const page: {
+      items?: Array<{
+        id?: string | null;
+        status?: string | null;
+        target?: string | null;
+        metadata?: unknown;
+        createdAt?: string | null;
+        updatedAt?: string | null;
+      } | null> | null;
+      nextToken?: string | null;
+    } | null = result.listTaskByAccountIdAndUpdatedAt;
     const items = Array.isArray(page?.items) ? page?.items : [];
     scanned += items.length;
 
@@ -577,7 +599,17 @@ export const handler = async (event: any) => {
   }> = [];
   let nextMessageToken: string | null | undefined = undefined;
   do {
-    const historyResult = await executeAppSyncGraphql<{
+    const historyResult: {
+      listChatMessageBySessionIdAndCreatedAt: {
+        items?: Array<{
+          role?: string | null;
+          messageType?: string | null;
+          content?: string | null;
+          metadata?: unknown;
+        } | null> | null;
+        nextToken?: string | null;
+      } | null;
+    } = await executeAppSyncGraphql<{
       listChatMessageBySessionIdAndCreatedAt: {
         items?: Array<{
           role?: string | null;
@@ -592,7 +624,15 @@ export const handler = async (event: any) => {
       limit: 200,
       nextToken: nextMessageToken,
     });
-    const page = historyResult.listChatMessageBySessionIdAndCreatedAt;
+    const page: {
+      items?: Array<{
+        role?: string | null;
+        messageType?: string | null;
+        content?: string | null;
+        metadata?: unknown;
+      } | null> | null;
+      nextToken?: string | null;
+    } | null = historyResult.listChatMessageBySessionIdAndCreatedAt;
     const pageItems = Array.isArray(page?.items) ? page?.items : [];
     for (const item of pageItems) {
       if (item && typeof item === "object") {
