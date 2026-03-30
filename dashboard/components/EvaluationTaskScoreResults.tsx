@@ -133,7 +133,7 @@ export function EvaluationTaskScoreResults({
     });
 
     return filtered;
-  }, [results, filters]);
+  }, [results, filters, selectedItemIds]);
 
   const filteredAccuracy = useMemo(() => {
     if (filteredResults.length === 0) return null
