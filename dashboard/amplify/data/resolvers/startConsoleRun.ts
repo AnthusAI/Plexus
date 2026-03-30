@@ -364,38 +364,15 @@ function mergeHistorySnapshots(
   serverHistory: ConsoleHistoryEntry[],
   clientHistory: ConsoleHistoryEntry[],
 ): ConsoleHistoryEntry[] {
-  if (!serverHistory.length) {
-    return clientHistory.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
-  }
-  if (!clientHistory.length) {
+  if (serverHistory.length > 0) {
+    // Server history is authoritative. Client snapshots can become stale under
+    // retries or delayed UI reconciliation and should not override persisted turns.
     return serverHistory.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
   }
 
-  // Stitch snapshots by overlapping suffix/prefix so we do not duplicate
-  // prior turns when both server/client snapshots include the same history.
-  let overlap = 0;
-  const maxOverlap = Math.min(serverHistory.length, clientHistory.length);
-  for (let candidate = maxOverlap; candidate > 0; candidate -= 1) {
-    let matches = true;
-    for (let i = 0; i < candidate; i += 1) {
-      const serverEntry = serverHistory[serverHistory.length - candidate + i];
-      const clientEntry = clientHistory[i];
-      if (!sameHistoryEntry(serverEntry, clientEntry)) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) {
-      overlap = candidate;
-      break;
-    }
-  }
-
-  const merged = dedupeAdjacentHistory([
-    ...serverHistory,
-    ...clientHistory.slice(overlap),
-  ]);
-  return merged.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
+  // Fallback for cold-start consistency windows where the session has not yet
+  // materialized in the read query path.
+  return clientHistory.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
 }
 
 function appendLatestUserIfMissing(
