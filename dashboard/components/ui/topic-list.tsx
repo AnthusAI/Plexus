@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { IdentifierDisplay } from "@/components/ui/identifier-display";
+import { LabelBadgeComparison } from "@/components/LabelBadgeComparison";
 
 export interface TopicExemplar {
   text: string;
@@ -165,11 +166,12 @@ function TopicItem({ topic }: TopicItemProps) {
                         )}
                       </div>
                       {(ex.initial_answer_value || ex.final_answer_value) && (
-                        <span className="text-xs">
-                          Original: <strong>{ex.initial_answer_value ?? "—"}</strong>
-                          {" → "}
-                          Corrected: <strong>{ex.final_answer_value ?? "—"}</strong>
-                        </span>
+                        <LabelBadgeComparison
+                          predictedLabel={ex.initial_answer_value ?? "—"}
+                          actualLabel={ex.final_answer_value ?? "—"}
+                          isCorrect={ex.initial_answer_value === ex.final_answer_value}
+                          showStatus={false}
+                        />
                       )}
                       {ex.detailed_cause && (
                         <span className="text-xs text-foreground/80 italic">Analysis: {ex.detailed_cause}</span>
@@ -211,11 +213,12 @@ function TopicItem({ topic }: TopicItemProps) {
                       )}
                     </div>
                     {(ex.initial_answer_value || ex.final_answer_value) && (
-                      <span className="text-xs">
-                        Original: <strong>{ex.initial_answer_value ?? "—"}</strong>
-                        {" → "}
-                        Corrected: <strong>{ex.final_answer_value ?? "—"}</strong>
-                      </span>
+                      <LabelBadgeComparison
+                        predictedLabel={ex.initial_answer_value ?? "—"}
+                        actualLabel={ex.final_answer_value ?? "—"}
+                        isCorrect={ex.initial_answer_value === ex.final_answer_value}
+                        showStatus={false}
+                      />
                     )}
                     {ex.score_explanation && (
                       <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
