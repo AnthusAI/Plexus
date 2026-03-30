@@ -3375,7 +3375,7 @@ class FeedbackEvaluation(Evaluation):
         if failed_count > 0:
             self.logger.warning(f"{failed_count} ScoreResult records failed to create")
 
-    async def _run_root_cause_analysis(self, feedback_items, score_result_map: dict = None) -> list:
+    async def _run_root_cause_analysis(self, feedback_items, score_result_map: dict = None, original_explanations: dict = None, max_report_exemplars: int = 20, max_summarization_exemplars: int = 6) -> list:
         """Run topic clustering + LLM root-cause analysis on feedback edit comments.
 
         Uses biblicus ReinforcementMemory directly for topic clustering, LLM labels,
@@ -3431,37 +3431,34 @@ class FeedbackEvaluation(Evaluation):
                     metadata["item_id"] = fi.itemId
 
                 # Build the text that will be clustered and analysed.
+                # Goal: text explaining WHY the ground-truth label is correct —
+                # not what our model said (which describes the wrong reasoning).
+                #
+                # Source depends on whether the reviewer agreed or disagreed:
+                #   Agreed   → original production explanation describes the correct answer
+                #   Disagreed → edit comment explains why the reviewer changed the label
                 if score_result_map is not None:
                     sr = score_result_map.get(fi.id, {})
-                    new_pred = (sr.get('value') or '').lower()
-                    correct_label = (sr.get('human_label') or fi.finalAnswerValue or '').lower()
-                    original_pred = (fi.initialAnswerValue or '').lower()
+                    new_pred = (sr.get('value') or '')
+                    correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
+                    our_explanation = sr.get('explanation', '')
+                    orig_explanation = (original_explanations or {}).get(fi.id, '')
+                    reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
 
-                    lines = [
-                        f"The score predicted '{new_pred}' but the correct answer is '{correct_label}'."
-                    ]
-                    if fi.editCommentValue:
-                        # If the original production prediction was the same wrong direction,
-                        # the reviewer comment directly explains this type of error.
-                        # If the original was correct (reviewer was commenting on something else),
-                        # flag that so the LLM doesn't misread the comment.
-                        if original_pred == new_pred or not original_pred:
-                            lines.append(f"Reviewer note: {fi.editCommentValue}")
-                        else:
-                            lines.append(
-                                f"Note: the original production prediction was '{original_pred}' "
-                                f"(different from the current wrong prediction)."
-                            )
-                            lines.append(
-                                f"Reviewer comment (about the original prediction, not the current one): "
-                                f"{fi.editCommentValue}"
-                            )
-                    # Exemplar metadata: use evaluation prediction values so the
-                    # dashboard shows "Predicted: X → Correct: Y" (not the original
-                    # production prediction which may differ from the current error).
+                    if reviewer_agreed:
+                        # Original was correct; original explanation says why
+                        text = orig_explanation or fi.editCommentValue or our_explanation
+                    else:
+                        # Reviewer corrected original; edit comment explains the correction
+                        text = fi.editCommentValue or orig_explanation or our_explanation
+
+                    if not text:
+                        text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+
                     metadata["initial_answer_value"] = new_pred
                     metadata["final_answer_value"] = correct_label
-                    text = "\n".join(lines)
+                    if our_explanation:
+                        metadata["score_explanation"] = our_explanation
                 else:
                     if fi.initialAnswerValue:
                         metadata["initial_answer_value"] = fi.initialAnswerValue
@@ -3496,6 +3493,7 @@ class FeedbackEvaluation(Evaluation):
                         infer_cause=bedrock_causal(),
                         synthesize_cause=bedrock_synthesizer(),
                         min_topic_size=3,
+                        max_exemplars=max_report_exemplars,
                     )
                     rm.ingest(texts)
                     return rm.analyze(self.score_id, min_topic_size=3)
@@ -3513,8 +3511,10 @@ class FeedbackEvaluation(Evaluation):
                         "item_id": ex.metadata.get("item_id"),
                         "initial_answer_value": ex.metadata.get("initial_answer_value"),
                         "final_answer_value": ex.metadata.get("final_answer_value"),
+                        "timestamp": ex.timestamp,
+                        "above_fold": idx < max_summarization_exemplars,
                     }
-                    for ex in (tr.exemplars or [])
+                    for idx, ex in enumerate(tr.exemplars or [])
                 ]
                 topics.append({
                     "topic_id": tr.topic_id,
