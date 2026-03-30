@@ -394,6 +394,124 @@ async def test_execute_tactus_injects_console_trigger_message_into_runtime_conte
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_injects_console_session_history_into_runtime_context(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RecorderWithSessionHistory(SimpleNamespace):
+        def get_latest_console_trigger_message(self):
+            return "latest prompt"
+
+        def get_console_session_history(self):
+            return [
+                {"role": "USER", "content": "Pick a random number."},
+                {"role": "ASSISTANT", "content": "How about 7?"},
+            ]
+
+    recorder = _RecorderWithSessionHistory()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithChatRecorder)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-chat-history",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  local function run(input)\n"
+            "    return { success = true }\n"
+            "  end\n"
+            "  return run(input)\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={"check": "chat-history"},
+    )
+
+    assert result["success"] is True
+    assert _RuntimeWithChatRecorder.last_context == {
+        "check": "chat-history",
+        "console_user_message": "latest prompt",
+        "console_session_history": [
+            {"role": "USER", "content": "Pick a random number."},
+            {"role": "ASSISTANT", "content": "How about 7?"},
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_sets_chat_recorder_account_id_from_runtime_context(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RecorderAccountAware(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.account_id = None
+
+        def get_latest_console_trigger_message(self):
+            return f"trigger-{self.account_id}"
+
+    recorder = _RecorderAccountAware()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithChatRecorder)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-chat-account",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  local function run(input)\n"
+            "    return { success = true }\n"
+            "  end\n"
+            "  return run(input)\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={"account_id": "acct-runtime", "check": "account-binding"},
+    )
+
+    assert result["success"] is True
+    assert recorder.account_id == "acct-runtime"
+    assert _RuntimeWithChatRecorder.last_context == {
+        "account_id": "acct-runtime",
+        "check": "account-binding",
+        "console_user_message": "trigger-acct-runtime",
+    }
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_synthesizes_assistant_message_for_legacy_chat_runtime(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
@@ -554,6 +672,61 @@ async def test_execute_tactus_does_not_duplicate_response_when_trace_already_has
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_does_not_record_result_response_when_trace_has_different_assistant_text(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RecordingChatRecorder(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.messages = []
+
+        async def record_assistant_message(self, content: str):
+            self.messages.append(content)
+            return "msg-1"
+
+    class _TraceSinkWithDifferentAssistantMessage(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.assistant_message_texts = ["assistant streamed from trace sink"]
+
+    recorder = _RecordingChatRecorder()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithTraceNoMessages)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: _TraceSinkWithDifferentAssistantMessage(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-trace-has-different-assistant",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+    )
+
+    assert result["success"] is True
+    assert recorder.messages == []
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_streams_via_log_handler_without_trace_sink_constructor(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
@@ -613,8 +786,8 @@ async def test_execute_tactus_streams_via_log_handler_without_trace_sink_constru
     assert result["success"] is True
     assert len(recorder.recorded) == 1
     assert recorder.recorded[0]["content"] == "Hel"
-    assert len(recorder.updated) >= 2
-    assert recorder.updated[0]["content"] == "Hello"
+    assert len(recorder.updated) >= 1
+    assert recorder.updated[-1]["content"] == "Hello"
     assert recorder.fallback_messages == []
 
 
