@@ -3375,7 +3375,7 @@ class FeedbackEvaluation(Evaluation):
         if failed_count > 0:
             self.logger.warning(f"{failed_count} ScoreResult records failed to create")
 
-    async def _run_root_cause_analysis(self, feedback_items, score_result_map: dict = None, original_explanations: dict = None, max_report_exemplars: int = 20, max_summarization_exemplars: int = 6) -> list:
+    async def _run_root_cause_analysis(self, feedback_items, score_result_map: dict = None, original_explanations: dict = None, max_report_exemplars: int = 20, max_summarization_exemplars: int = 6, tracker=None) -> list:
         """Run topic clustering + LLM root-cause analysis on feedback edit comments.
 
         Uses biblicus ReinforcementMemory directly for topic clustering, LLM labels,
@@ -3402,6 +3402,11 @@ class FeedbackEvaluation(Evaluation):
                 bedrock_labeler, bedrock_causal, bedrock_synthesizer,
                 TimestampedText,
             )
+
+            def _update_status(msg: str):
+                """Update tracker status message if tracker is available."""
+                if tracker and hasattr(tracker, 'current_stage') and tracker.current_stage:
+                    tracker.current_stage.status_message = msg
 
             # When score_result_map is provided, include all items in the map (the caller
             # has already filtered to incorrect predictions).  Without it, fall back to the
@@ -3478,6 +3483,7 @@ class FeedbackEvaluation(Evaluation):
             # Warm up the model before analysis to avoid meta-tensor race conditions
             await asyncio.to_thread(embed_fn, ["warmup"])
 
+            _update_status(f"Clustering {len(candidate_items)} items into topics...")
             self.logger.info(
                 f"Running root-cause analysis on {len(candidate_items)} "
                 f"incorrectly-predicted feedback items"
@@ -3500,6 +3506,7 @@ class FeedbackEvaluation(Evaluation):
 
             result = await asyncio.to_thread(_run_analysis)
             self.logger.info(f"Root-cause analysis produced {len(result.topics)} topic(s)")
+            _update_status(f"Found {len(result.topics)} topic(s), fetching transcripts...")
 
             # --- Issue 24d: fetch transcripts + run deep per-exemplar analysis ---
             # Build a map of item_id → transcript for all above-fold exemplars across topics.
@@ -3530,6 +3537,7 @@ class FeedbackEvaluation(Evaluation):
                     f"Fetched transcripts for {len(transcript_cache)}/{len(above_fold_item_ids)} "
                     f"above-fold items"
                 )
+                _update_status(f"Analyzing {len(transcript_cache)} transcripts...")
 
             def _detailed_analysis(transcript: str, predicted: str, correct: str,
                                    explanation: str, topic_label: str) -> str:
@@ -3691,7 +3699,9 @@ class FeedbackEvaluation(Evaluation):
             # Convert TopicResult dataclasses → dicts matching the Topic interface
             # in dashboard/components/ui/topic-list.tsx
             topics = []
-            for tr in result.topics:
+            num_topics = len(result.topics)
+            for topic_idx, tr in enumerate(result.topics):
+                _update_status(f"Analyzing topic {topic_idx + 1}/{num_topics}...")
                 exemplar_dicts = []
                 for idx, ex in enumerate(tr.exemplars or []):
                     above_fold = idx < max_summarization_exemplars
@@ -3719,6 +3729,7 @@ class FeedbackEvaluation(Evaluation):
                     })
 
                 # Multi-turn synthesis: detailed explanation + improvement suggestion
+                _update_status(f"Synthesizing topic {topic_idx + 1}/{num_topics}...")
                 detailed_explanation, improvement_suggestion = await asyncio.to_thread(
                     _multi_turn_synthesis, exemplar_dicts, score_guidelines, score_yaml_code
                 )
@@ -3741,6 +3752,7 @@ class FeedbackEvaluation(Evaluation):
                 })
 
             # Post-loop: generate distinct topic titles informed by the detailed explanations
+            _update_status("Generating topic titles...")
             existing_titles = []
             for topic in topics:
                 if topic.get("detailed_explanation"):
