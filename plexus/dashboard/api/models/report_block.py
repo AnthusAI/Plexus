@@ -188,8 +188,23 @@ class ReportBlock(BaseModel):
             logger.exception(f"Error creating ReportBlock for report {reportId}: {e}")
             raise
 
-    # get_by_id is inherited from BaseModel
-    # TODO: Implement list methods using GSI (byReportAndName, byReportAndPosition) if needed
+    @classmethod
+    def get_by_id(cls, block_id: str, client: '_BaseAPIClient') -> Optional['ReportBlock']:
+        """Fetch a single ReportBlock by its ID."""
+        query = """
+        query GetReportBlock($id: ID!) {
+            getReportBlock(id: $id) {
+                id reportId name position type output attachedFiles log
+            }
+        }
+        """
+        try:
+            result = client.execute(query, {"id": block_id})
+            data = result.get("getReportBlock") if result else None
+            return cls.from_dict(data, client) if data else None
+        except Exception as e:
+            logger.exception(f"Error fetching ReportBlock {block_id}: {e}")
+            return None
 
     @classmethod
     def list_by_report_id(
