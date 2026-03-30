@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { IdentifierDisplay } from "@/components/ui/identifier-display";
 import { LabelBadgeComparison } from "@/components/LabelBadgeComparison";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -46,6 +45,7 @@ export interface Topic {
 
 interface TopicItemProps {
   topic: Topic;
+  onSelectExemplar?: (itemId: string, rcaData: { detailed_cause?: string; suggested_fix?: string }) => void;
 }
 
 function formatTimestamp(ts: string): string {
@@ -60,7 +60,7 @@ function formatTimestamp(ts: string): string {
   return `${Math.floor(diffDays / 365)}y ago`;
 }
 
-function TopicItem({ topic }: TopicItemProps) {
+function TopicItem({ topic, onSelectExemplar }: TopicItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [showBelowFold, setShowBelowFold] = useState(false);
   const hasDetails =
@@ -175,48 +175,36 @@ function TopicItem({ topic }: TopicItemProps) {
                       </li>
                     );
                   }
+                  const isClickable = !!(ex.item_id && onSelectExemplar);
                   return (
-                    <li key={i} className="text-muted-foreground flex flex-col gap-0.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="italic">&quot;{ex.text}&quot;</span>
-                        {ex.timestamp && (
-                          <span className="text-xs text-muted-foreground/60 shrink-0 mt-0.5">
-                            {formatTimestamp(ex.timestamp)}
-                          </span>
+                    <li key={i} className="text-muted-foreground">
+                      <button
+                        type="button"
+                        onClick={() => isClickable && onSelectExemplar!(ex.item_id!, {
+                          detailed_cause: ex.detailed_cause ?? undefined,
+                          suggested_fix: ex.suggested_fix ?? undefined,
+                        })}
+                        className={`w-full text-left flex flex-col gap-0.5 rounded px-1 -mx-1 py-0.5 ${isClickable ? "hover:bg-muted/30 cursor-pointer" : "cursor-default"}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          {(ex.initial_answer_value || ex.final_answer_value) && (
+                            <LabelBadgeComparison
+                              predictedLabel={ex.initial_answer_value ?? "—"}
+                              actualLabel={ex.final_answer_value ?? "—"}
+                              isCorrect={ex.initial_answer_value === ex.final_answer_value}
+                              showStatus={false}
+                            />
+                          )}
+                          {ex.timestamp && (
+                            <span className="text-xs text-muted-foreground/60 shrink-0">
+                              {formatTimestamp(ex.timestamp)}
+                            </span>
+                          )}
+                        </div>
+                        {ex.score_explanation && (
+                          <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
                         )}
-                      </div>
-                      {(ex.initial_answer_value || ex.final_answer_value) && (
-                        <LabelBadgeComparison
-                          predictedLabel={ex.initial_answer_value ?? "—"}
-                          actualLabel={ex.final_answer_value ?? "—"}
-                          isCorrect={ex.initial_answer_value === ex.final_answer_value}
-                          showStatus={false}
-                        />
-                      )}
-                      {ex.detailed_cause && (
-                        <div className="text-xs text-foreground/80">
-                          <span className="font-medium not-italic">Analysis: </span>
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ p: ({children}) => <span>{children}</span> }}>{ex.detailed_cause}</ReactMarkdown>
-                        </div>
-                      )}
-                      {ex.suggested_fix && (
-                        <div className="text-xs text-foreground/80">
-                          <span className="font-medium not-italic">Suggested fix: </span>
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ p: ({children}) => <span>{children}</span> }}>{ex.suggested_fix}</ReactMarkdown>
-                        </div>
-                      )}
-                      {ex.score_explanation && (
-                        <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
-                      )}
-                      {(ex.item_id || ex.identifiers?.length) && (
-                        <div className="shrink-0">
-                          <IdentifierDisplay
-                            externalId={ex.item_id ?? undefined}
-                            identifiers={ex.identifiers ?? undefined}
-                            displayMode="full"
-                          />
-                        </div>
-                      )}
+                      </button>
                     </li>
                   );
                 })}
@@ -231,38 +219,40 @@ function TopicItem({ topic }: TopicItemProps) {
                     </button>
                   </li>
                 )}
-                {showBelowFold && belowFoldExemplars.map((ex, i) => (
-                  <li key={`below-${i}`} className="text-muted-foreground flex flex-col gap-0.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="italic">&quot;{ex.text}&quot;</span>
-                      {ex.timestamp && (
-                        <span className="text-xs text-muted-foreground/60 shrink-0 mt-0.5">
-                          {formatTimestamp(ex.timestamp)}
-                        </span>
-                      )}
-                    </div>
-                    {(ex.initial_answer_value || ex.final_answer_value) && (
-                      <LabelBadgeComparison
-                        predictedLabel={ex.initial_answer_value ?? "—"}
-                        actualLabel={ex.final_answer_value ?? "—"}
-                        isCorrect={ex.initial_answer_value === ex.final_answer_value}
-                        showStatus={false}
-                      />
-                    )}
-                    {ex.score_explanation && (
-                      <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
-                    )}
-                    {(ex.item_id || ex.identifiers?.length) && (
-                      <div className="shrink-0">
-                        <IdentifierDisplay
-                          externalId={ex.item_id ?? undefined}
-                          identifiers={ex.identifiers ?? undefined}
-                          displayMode="full"
-                        />
-                      </div>
-                    )}
-                  </li>
-                ))}
+                {showBelowFold && belowFoldExemplars.map((ex, i) => {
+                  const isClickable = !!(ex.item_id && onSelectExemplar);
+                  return (
+                    <li key={`below-${i}`} className="text-muted-foreground">
+                      <button
+                        type="button"
+                        onClick={() => isClickable && onSelectExemplar!(ex.item_id!, {
+                          detailed_cause: ex.detailed_cause ?? undefined,
+                          suggested_fix: ex.suggested_fix ?? undefined,
+                        })}
+                        className={`w-full text-left flex flex-col gap-0.5 rounded px-1 -mx-1 py-0.5 ${isClickable ? "hover:bg-muted/30 cursor-pointer" : "cursor-default"}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          {(ex.initial_answer_value || ex.final_answer_value) && (
+                            <LabelBadgeComparison
+                              predictedLabel={ex.initial_answer_value ?? "—"}
+                              actualLabel={ex.final_answer_value ?? "—"}
+                              isCorrect={ex.initial_answer_value === ex.final_answer_value}
+                              showStatus={false}
+                            />
+                          )}
+                          {ex.timestamp && (
+                            <span className="text-xs text-muted-foreground/60 shrink-0">
+                              {formatTimestamp(ex.timestamp)}
+                            </span>
+                          )}
+                        </div>
+                        {ex.score_explanation && (
+                          <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -275,14 +265,15 @@ function TopicItem({ topic }: TopicItemProps) {
 export interface TopicListProps {
   topics: Topic[];
   label?: string;
+  onSelectExemplar?: (itemId: string, rcaData: { detailed_cause?: string; suggested_fix?: string }) => void;
 }
 
 /**
  * Renders a labeled list of topics with keywords, memory tiers, and expandable exemplars.
- * Exemplars support enriched objects with item_id and identifiers (rendered via IdentifierDisplay)
- * as well as plain strings for backward compatibility.
+ * When onSelectExemplar is provided, exemplars with item_id become clickable and trigger
+ * the detail pane in the parent EvaluationTask.
  */
-export function TopicList({ topics, label }: TopicListProps) {
+export function TopicList({ topics, label, onSelectExemplar }: TopicListProps) {
   if (!topics || topics.length === 0) return null;
 
   const sorted = [...topics].sort((a, b) => {
@@ -299,7 +290,7 @@ export function TopicList({ topics, label }: TopicListProps) {
       )}
       <ul className="space-y-2">
         {sorted.map((t) => (
-          <TopicItem key={t.topic_id ?? t.cluster_id ?? t.label} topic={t} />
+          <TopicItem key={t.topic_id ?? t.cluster_id ?? t.label} topic={t} onSelectExemplar={onSelectExemplar} />
         ))}
       </ul>
     </div>
