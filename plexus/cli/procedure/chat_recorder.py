@@ -544,8 +544,8 @@ class ProcedureChatRecorder:
                 normalized = normalized[-limit:]
 
             if snapshot_history:
-                # Start from client snapshot when present, then choose the richer
-                # continuity source between snapshot and DB history.
+                # Start from client snapshot when present; attempt aligned merge,
+                # then prefer persisted DB history when both are available.
                 effective_snapshot = list(snapshot_history)
                 if isinstance(latest_trigger_message, str) and latest_trigger_message.strip():
                     latest_trigger_message = latest_trigger_message.strip()
@@ -578,11 +578,28 @@ class ProcedureChatRecorder:
                     normalized,
                     latest_trigger_message if isinstance(latest_trigger_message, str) else None,
                 )
-                use_snapshot = True
-                if snapshot_has_trigger != db_has_trigger:
-                    use_snapshot = snapshot_has_trigger
-                else:
-                    use_snapshot = self._history_quality(effective_snapshot) >= self._history_quality(normalized)
+
+                snapshot_assistant_count = sum(
+                    1 for item in effective_snapshot
+                    if isinstance(item, dict) and item.get("role") == "ASSISTANT"
+                )
+                db_assistant_count = sum(
+                    1 for item in normalized
+                    if isinstance(item, dict) and item.get("role") == "ASSISTANT"
+                )
+
+                # Prefer persisted history, but allow snapshot backfill when DB
+                # is clearly stale (missing assistant context or trigger tail).
+                use_snapshot = False
+                if not normalized:
+                    use_snapshot = True
+                elif snapshot_has_trigger and not db_has_trigger:
+                    use_snapshot = True
+                elif (
+                    snapshot_assistant_count > db_assistant_count
+                    and len(effective_snapshot) > len(normalized)
+                ):
+                    use_snapshot = True
 
                 logger.info(
                     "Resolved console history for session %s (snapshot=%s, db=%s, source=%s)",
