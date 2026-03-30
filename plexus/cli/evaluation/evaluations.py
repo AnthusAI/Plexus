@@ -3503,9 +3503,9 @@ def feedback(
                             tracker=tracker,
                         )
 
-                    root_cause_topics = asyncio.run(_run_rca())
+                    root_cause_result = asyncio.run(_run_rca())
 
-                    if root_cause_topics:
+                    if root_cause_result and root_cause_result.get("topics"):
                         eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
                         existing = {}
                         if eval_rec.parameters:
@@ -3513,9 +3513,10 @@ def feedback(
                                 existing = json.loads(eval_rec.parameters) if isinstance(eval_rec.parameters, str) else (eval_rec.parameters or {})
                             except Exception:
                                 existing = {}
-                        existing["root_cause"] = {"topics": root_cause_topics}
+                        existing["root_cause"] = root_cause_result
                         eval_rec.update(parameters=json.dumps(existing))
-                        console.print(f"[green]Root-cause analysis: {len(root_cause_topics)} topic(s) identified[/green]")
+                        num_topics = len(root_cause_result["topics"])
+                        console.print(f"[green]Root-cause analysis: {num_topics} topic(s) identified[/green]")
                     else:
                         console.print("[dim]Root-cause analysis: insufficient data or no topics found[/dim]")
                 except Exception as _rca_err:
