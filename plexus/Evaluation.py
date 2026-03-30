@@ -4019,10 +4019,10 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
-            # Advance to Finalizing stage after all processing is complete
+            # Advance to Analyzing stage after all processing is complete
             if tracker:
                 tracker.advance_stage()
-                self.logging.info("==== STAGE: Finalizing ====")
+                self.logging.info("==== STAGE: Analyzing ====")
 
             # Calculate metrics from results
             
