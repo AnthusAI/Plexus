@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
 
@@ -190,16 +191,34 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     if not isinstance(instrumentation, dict):
         instrumentation = {}
 
+    os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
+
     run_options: Dict[str, Any] = {}
     trigger_message_content = console_chat.get("trigger_message_content")
     if isinstance(trigger_message_content, str) and trigger_message_content.strip():
         run_options["console_user_message"] = trigger_message_content.strip()
 
     client_history_snapshot = instrumentation.get("client_history_snapshot")
-    if isinstance(client_history_snapshot, list):
+    if isinstance(client_history_snapshot, list) and len(client_history_snapshot) > 0:
         run_options["console_session_history"] = client_history_snapshot
 
-    os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
+    # Fallback hydration for legacy/partial dispatch payloads.
+    # This keeps follow-up continuity even when client instrumentation is sparse.
+    if not run_options.get("console_user_message") or not run_options.get("console_session_history"):
+        try:
+            recorder = ProcedureChatRecorder(client, procedure_id)
+            recorder.account_id = account_id
+            if not run_options.get("console_user_message"):
+                latest_trigger = recorder.get_latest_console_trigger_message(account_id)
+                if isinstance(latest_trigger, str) and latest_trigger.strip():
+                    run_options["console_user_message"] = latest_trigger.strip()
+            if not run_options.get("console_session_history"):
+                history = recorder.get_console_session_history(account_id)
+                if isinstance(history, list) and history:
+                    run_options["console_session_history"] = history
+        except Exception as hydrate_error:
+            logger.warning("Console worker history hydration fallback failed: %s", hydrate_error)
+
     try:
         result = asyncio.run(
             run_experiment_with_task_tracking(
