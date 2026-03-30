@@ -3540,7 +3540,8 @@ class FeedbackEvaluation(Evaluation):
                 _update_status(f"Analyzing {len(transcript_cache)} transcripts...")
 
             def _detailed_analysis(transcript: str, predicted: str, correct: str,
-                                   explanation: str, topic_label: str) -> str:
+                                   explanation: str, topic_label: str,
+                                   score_guidelines: str = "", score_yaml_code: str = "") -> str:
                 """Run a deep Bedrock call with the full transcript."""
                 import json as _json
                 import boto3 as _boto3
@@ -3555,6 +3556,12 @@ class FeedbackEvaluation(Evaluation):
                     f"AI predicted: {predicted}\n"
                     f"Correct answer: {correct}\n"
                     f"AI reasoning: {(explanation or '')[:400]}\n\n"
+                )
+                if score_guidelines:
+                    prompt += f"Score guidelines:\n{score_guidelines[:2000]}\n\n"
+                if score_yaml_code:
+                    prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
+                prompt += (
                     f"Call transcript:\n{transcript[:6000]}\n\n"
                     "Why was the AI prediction wrong? (2-4 sentences)"
                 )
@@ -3645,12 +3652,14 @@ class FeedbackEvaluation(Evaluation):
                         meta_parts.append(f"- Predicted '{pred}' → correct '{correct}': {text}")
 
                 turn1_prompt = "I have a cluster of AI scoring errors from a quality evaluation.\n\n"
+                if score_guidelines:
+                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:3000]}\n\n"
+                if score_yaml_code:
+                    turn1_prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:6000]}\n```\n\n"
                 if deep_parts:
                     turn1_prompt += "Detailed analysis of individual errors:\n" + "\n".join(deep_parts) + "\n\n"
                 if meta_parts:
                     turn1_prompt += f"All {len(exemplar_dicts)} items in this cluster:\n" + "\n".join(meta_parts) + "\n\n"
-                if score_guidelines:
-                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:3000]}\n\n"
                 turn1_prompt += (
                     "Explain in 2-3 paragraphs what patterns of errors exist in this cluster. "
                     "Be specific about the directionality of errors (what was predicted vs what "
@@ -3663,32 +3672,29 @@ class FeedbackEvaluation(Evaluation):
 
                 # Turn 2: improvement suggestion (same conversation)
                 improvement_suggestion = ""
-                if detailed_explanation and score_yaml_code:
+                if detailed_explanation:
                     messages.append({"role": "assistant", "content": detailed_explanation})
                     turn2_prompt = (
-                        "Now suggest how the score classifier could be improved to avoid these "
-                        "errors in the future. Here is the current score configuration code:\n\n"
-                        f"```yaml\n{score_yaml_code[:8000]}\n```\n"
-                    )
-                    if score_guidelines:
-                        turn2_prompt += f"\nScore guidelines:\n{score_guidelines[:3000]}\n"
-                    turn2_prompt += (
-                        "\nBased on the error patterns above and the current score code, write "
-                        "1-2 paragraphs suggesting specific improvements to the score configuration "
-                        "that would reduce these misclassifications."
+                        "Based on the error patterns above, suggest specific improvements to the "
+                        "score configuration that would reduce these misclassifications. Write "
+                        "1-2 paragraphs with concrete, actionable changes."
                     )
                     messages.append({"role": "user", "content": turn2_prompt})
                     improvement_suggestion = _bedrock_converse(system, messages, max_tokens=600)
 
                 return detailed_explanation, improvement_suggestion
 
-            def _generate_title(detailed_explanation: str, existing_titles: list) -> str:
+            def _generate_title(detailed_explanation: str, existing_titles: list,
+                                score_guidelines: str = "") -> str:
                 """Generate a concise, distinct topic title based on the detailed explanation."""
                 system = (
                     "You generate concise topic titles — 3 to 8 words, title case. "
                     "No preamble, no punctuation, no quotes. Just the title."
                 )
-                prompt = f"Error pattern summary:\n{detailed_explanation[:1500]}\n\n"
+                prompt = ""
+                if score_guidelines:
+                    prompt += f"Score guidelines (for context):\n{score_guidelines[:1000]}\n\n"
+                prompt += f"Error pattern summary:\n{detailed_explanation[:1500]}\n\n"
                 if existing_titles:
                     prompt += "Existing titles (do NOT reuse or closely repeat these):\n"
                     prompt += "\n".join(f"- {t}" for t in existing_titles) + "\n\n"
@@ -3715,7 +3721,7 @@ class FeedbackEvaluation(Evaluation):
                         explanation = ex.metadata.get("score_explanation", "")
                         detailed_cause = await asyncio.to_thread(
                             _detailed_analysis, transcript, predicted, correct,
-                            explanation, tr.label
+                            explanation, tr.label, score_guidelines, score_yaml_code
                         )
 
                     exemplar_dicts.append({
@@ -3757,7 +3763,8 @@ class FeedbackEvaluation(Evaluation):
             for topic in topics:
                 if topic.get("detailed_explanation"):
                     new_title = await asyncio.to_thread(
-                        _generate_title, topic["detailed_explanation"], existing_titles
+                        _generate_title, topic["detailed_explanation"], existing_titles,
+                        score_guidelines
                     )
                     if new_title:
                         topic["label"] = new_title
