@@ -3392,7 +3392,7 @@ def feedback(
                                 """query ListSR($evalId: String!, $limit: Int, $nextToken: String) {
                                     listScoreResultByEvaluationId(
                                         evaluationId: $evalId, limit: $limit, nextToken: $nextToken
-                                    ) { items { value itemId metadata } nextToken }
+                                    ) { items { value itemId metadata explanation } nextToken }
                                 }""",
                                 {"evalId": evaluation_id, "limit": 200, "nextToken": next_tok},
                             )
@@ -3415,6 +3415,7 @@ def feedback(
                                         score_result_map[fb_id] = {
                                             "value": sr.get("value"),
                                             "human_label": human_label,
+                                            "explanation": sr.get("explanation"),
                                         }
                                 except Exception:
                                     pass
@@ -3434,8 +3435,63 @@ def feedback(
                             end_date=end_date,
                         )
 
-                        # Pass only the incorrect items + the score-result context map
-                        return await fe._run_root_cause_analysis(feedback_items, score_result_map)
+                        # Fetch original production score result explanations for incorrect items.
+                        # These tell us WHY the ground-truth label is what it is — essential
+                        # for cases where the reviewer agreed with the original (edit comment
+                        # may simply say "Agree.").
+                        original_explanations = {}
+                        for fi in feedback_items:
+                            if fi.id not in score_result_map:
+                                continue
+                            if not fi.itemId:
+                                continue
+                            try:
+                                # Use the GSI (listScoreResults scan doesn't work without
+                                # account-scoped auth; the GSI query does).
+                                # type='prediction' targets original production runs.
+                                orig_resp = client.execute(
+                                    """query GetOrigSR(
+                                        $itemId: String!,
+                                        $typeScoreId: ModelScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAtCompositeKeyConditionInput
+                                    ) {
+                                        listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
+                                            itemId: $itemId,
+                                            typeScoreIdUpdatedAt: $typeScoreId,
+                                            sortDirection: DESC,
+                                            limit: 1
+                                        ) { items { evaluationId explanation } }
+                                    }""",
+                                    {
+                                        "itemId": fi.itemId,
+                                        "typeScoreId": {
+                                            "beginsWith": {
+                                                "type": "prediction",
+                                                "scoreId": fi.scoreId,
+                                            }
+                                        },
+                                    },
+                                )
+                                items_orig = orig_resp.get(
+                                    "listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt", {}
+                                ).get("items", [])
+                                for item in items_orig:
+                                    if item.get("explanation"):
+                                        original_explanations[fi.id] = item["explanation"]
+                                        break
+                            except Exception:
+                                pass
+
+                        console.print(
+                            f"[dim]Fetched original explanations for "
+                            f"{len(original_explanations)} item(s)[/dim]"
+                        )
+
+                        # Pass only the incorrect items + both context maps
+                        return await fe._run_root_cause_analysis(
+                            feedback_items, score_result_map, original_explanations,
+                            max_report_exemplars=20,
+                            max_summarization_exemplars=6,
+                        )
 
                     root_cause_topics = asyncio.run(_run_rca())
 

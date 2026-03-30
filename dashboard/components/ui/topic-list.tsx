@@ -9,6 +9,11 @@ export interface TopicExemplar {
   text: string;
   item_id?: string | null;
   identifiers?: Array<{ name: string; value: string; url?: string }> | null;
+  initial_answer_value?: string | null;
+  final_answer_value?: string | null;
+  score_explanation?: string | null;
+  above_fold?: boolean;
+  timestamp?: string | null;
 }
 
 export interface Topic {
@@ -35,13 +40,34 @@ interface TopicItemProps {
   topic: Topic;
 }
 
+function formatTimestamp(ts: string): string {
+  const date = new Date(ts);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 30) return `${diffDays}d ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+  return `${Math.floor(diffDays / 365)}y ago`;
+}
+
 function TopicItem({ topic }: TopicItemProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showBelowFold, setShowBelowFold] = useState(false);
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
     topic.days_inactive !== undefined ||
     !!topic.cause;
+
+  const allExemplars = (topic.exemplars ?? []).filter((ex): ex is TopicExemplar => typeof ex !== "string" || ex !== "");
+  const aboveFoldExemplars = allExemplars.filter((ex) =>
+    typeof ex === "string" ? true : (ex.above_fold !== false)
+  );
+  const belowFoldExemplars = allExemplars.filter((ex) =>
+    typeof ex !== "string" && ex.above_fold === false
+  );
 
   return (
     <li className="pb-3">
@@ -99,11 +125,11 @@ function TopicItem({ topic }: TopicItemProps) {
               <span className="text-foreground">{topic.keywords.join(", ")}</span>
             </div>
           )}
-          {topic.exemplars && topic.exemplars.length > 0 && (
+          {allExemplars.length > 0 && (
             <div>
               <div className="font-medium text-muted-foreground mb-1">Exemplars</div>
               <ul className="space-y-2 list-disc list-inside">
-                {topic.exemplars.map((ex, i) => {
+                {aboveFoldExemplars.map((ex, i) => {
                   if (typeof ex === "string") {
                     return (
                       <li key={i} className="text-muted-foreground italic">
@@ -112,8 +138,25 @@ function TopicItem({ topic }: TopicItemProps) {
                     );
                   }
                   return (
-                    <li key={i} className="text-muted-foreground flex items-start justify-between gap-2">
-                      <span className="italic">&quot;{ex.text}&quot;</span>
+                    <li key={i} className="text-muted-foreground flex flex-col gap-0.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="italic">&quot;{ex.text}&quot;</span>
+                        {ex.timestamp && (
+                          <span className="text-xs text-muted-foreground/60 shrink-0 mt-0.5">
+                            {formatTimestamp(ex.timestamp)}
+                          </span>
+                        )}
+                      </div>
+                      {(ex.initial_answer_value || ex.final_answer_value) && (
+                        <span className="text-xs">
+                          Original: <strong>{ex.initial_answer_value ?? "—"}</strong>
+                          {" → "}
+                          Corrected: <strong>{ex.final_answer_value ?? "—"}</strong>
+                        </span>
+                      )}
+                      {ex.score_explanation && (
+                        <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
+                      )}
                       {(ex.item_id || ex.identifiers?.length) && (
                         <div className="shrink-0">
                           <IdentifierDisplay
@@ -126,6 +169,48 @@ function TopicItem({ topic }: TopicItemProps) {
                     </li>
                   );
                 })}
+                {belowFoldExemplars.length > 0 && !showBelowFold && (
+                  <li className="list-none">
+                    <button
+                      type="button"
+                      onClick={() => setShowBelowFold(true)}
+                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    >
+                      Show {belowFoldExemplars.length} more example{belowFoldExemplars.length !== 1 ? "s" : ""}
+                    </button>
+                  </li>
+                )}
+                {showBelowFold && belowFoldExemplars.map((ex, i) => (
+                  <li key={`below-${i}`} className="text-muted-foreground flex flex-col gap-0.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="italic">&quot;{ex.text}&quot;</span>
+                      {ex.timestamp && (
+                        <span className="text-xs text-muted-foreground/60 shrink-0 mt-0.5">
+                          {formatTimestamp(ex.timestamp)}
+                        </span>
+                      )}
+                    </div>
+                    {(ex.initial_answer_value || ex.final_answer_value) && (
+                      <span className="text-xs">
+                        Original: <strong>{ex.initial_answer_value ?? "—"}</strong>
+                        {" → "}
+                        Corrected: <strong>{ex.final_answer_value ?? "—"}</strong>
+                      </span>
+                    )}
+                    {ex.score_explanation && (
+                      <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
+                    )}
+                    {(ex.item_id || ex.identifiers?.length) && (
+                      <div className="shrink-0">
+                        <IdentifierDisplay
+                          externalId={ex.item_id ?? undefined}
+                          identifiers={ex.identifiers ?? undefined}
+                          displayMode="full"
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
           )}
