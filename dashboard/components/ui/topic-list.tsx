@@ -27,6 +27,8 @@ export interface Topic {
   memory_tier: string;
   lifecycle_tier?: string;
   cause?: string;
+  detailed_explanation?: string;
+  improvement_suggestion?: string;
   is_new?: boolean;
   is_trending?: boolean;
   has_short_term_memory?: boolean;
@@ -60,7 +62,9 @@ function TopicItem({ topic }: TopicItemProps) {
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
     topic.days_inactive !== undefined ||
-    !!topic.cause;
+    !!topic.cause ||
+    !!topic.detailed_explanation ||
+    !!topic.improvement_suggestion;
 
   const allExemplars = (topic.exemplars ?? []).filter((ex): ex is TopicExemplar => typeof ex !== "string" || ex !== "");
   const aboveFoldExemplars = allExemplars.filter((ex) =>
@@ -114,7 +118,19 @@ function TopicItem({ topic }: TopicItemProps) {
       </button>
       {expanded && hasDetails && (
         <div className="pl-6 pr-2 space-y-3 text-sm">
-          {topic.cause && (
+          {topic.detailed_explanation && (
+            <div>
+              <div className="font-medium text-muted-foreground mb-1">Analysis</div>
+              <div className="text-foreground whitespace-pre-line">{topic.detailed_explanation}</div>
+            </div>
+          )}
+          {topic.improvement_suggestion && (
+            <div>
+              <div className="font-medium text-muted-foreground mb-1">Suggested Improvement</div>
+              <div className="text-foreground whitespace-pre-line">{topic.improvement_suggestion}</div>
+            </div>
+          )}
+          {!topic.detailed_explanation && topic.cause && (
             <div>
               <span className="font-medium text-muted-foreground">Root cause: </span>
               <span className="text-foreground">{topic.cause}</span>
