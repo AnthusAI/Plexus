@@ -3569,15 +3569,61 @@ class FeedbackEvaluation(Evaluation):
                     self.logger.debug("Detailed analysis call failed: %s", exc)
                     return ""
 
-            # --- Issue iuh: richer per-topic synthesis over all exemplar context ---
-            def _rich_synthesis(topic_label: str, keywords: list, exemplar_dicts: list) -> str:
-                """Synthesize root cause using deep analyses + all exemplar metadata."""
+            # --- Fetch score context for synthesis (once for all topics) ---
+            score_guidelines = ""
+            score_yaml_code = ""
+            if dashboard_client and getattr(self, 'score_id', None):
+                try:
+                    _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
+                    _sr = dashboard_client.execute(_sq, {'id': self.score_id})
+                    _champ_id = (_sr.get('getScore') or {}).get('championVersionId')
+                    if _champ_id:
+                        _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
+                        _vr = dashboard_client.execute(_vq, {'id': _champ_id})
+                        _vd = _vr.get('getScoreVersion') or {}
+                        score_guidelines = _vd.get('guidelines') or ''
+                        score_yaml_code = _vd.get('configuration') or ''
+                        self.logger.info(
+                            f"Fetched score context: guidelines={len(score_guidelines)} chars, "
+                            f"code={len(score_yaml_code)} chars"
+                        )
+                except Exception as exc:
+                    self.logger.debug("Failed to fetch score context: %s", exc)
+
+            _SONNET_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+
+            def _bedrock_converse(system: str, messages: list, max_tokens: int = 1000) -> str:
+                """Run a Bedrock Claude conversation and return the assistant response."""
                 import json as _json
                 import boto3 as _boto3
+                try:
+                    brt = _boto3.client("bedrock-runtime", region_name="us-east-1")
+                    body = _json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": max_tokens,
+                        "system": system,
+                        "messages": messages,
+                    })
+                    resp = brt.invoke_model(
+                        modelId=_SONNET_MODEL,
+                        body=body,
+                        contentType="application/json",
+                        accept="application/json",
+                    )
+                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+                except Exception as exc:
+                    self.logger.debug("Bedrock converse call failed: %s", exc)
+                    return ""
+
+            def _multi_turn_synthesis(exemplar_dicts: list, score_guidelines: str,
+                                      score_yaml_code: str) -> tuple:
+                """Run multi-turn conversation to produce detailed explanation + improvement suggestion."""
                 system = (
-                    "You write concise root cause statements — one sentence under 25 words. "
-                    "No preamble, no qualifications, no restating the cluster name."
+                    "You are an expert QA analyst reviewing patterns in AI scoring errors "
+                    "on customer service calls. Be specific and concrete."
                 )
+
+                # Build context for turn 1
                 deep_parts = []
                 for ex in exemplar_dicts:
                     if ex.get("detailed_cause"):
@@ -3586,36 +3632,61 @@ class FeedbackEvaluation(Evaluation):
                 for ex in exemplar_dicts:
                     pred = ex.get("initial_answer_value", "")
                     correct = ex.get("final_answer_value", "")
-                    text = ex.get("text", "")[:150]
+                    text = ex.get("text", "")[:200]
                     if pred or correct:
-                        meta_parts.append(f"  Predicted {pred!r} → correct {correct!r}: {text}")
-                prompt = (
-                    f'Cluster: "{topic_label}" (keywords: {", ".join(keywords[:8])})\n\n'
-                )
+                        meta_parts.append(f"- Predicted '{pred}' → correct '{correct}': {text}")
+
+                turn1_prompt = "I have a cluster of AI scoring errors from a quality evaluation.\n\n"
                 if deep_parts:
-                    prompt += "Deep analysis of top examples:\n" + "\n".join(deep_parts) + "\n\n"
+                    turn1_prompt += "Detailed analysis of individual errors:\n" + "\n".join(deep_parts) + "\n\n"
                 if meta_parts:
-                    prompt += f"All {len(exemplar_dicts)} examples (prediction → correct: excerpt):\n"
-                    prompt += "\n".join(meta_parts) + "\n\n"
-                prompt += "One-sentence root cause (under 25 words):"
-                try:
-                    client = _boto3.client("bedrock-runtime", region_name="us-east-1")
-                    body = _json.dumps({
-                        "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": 80,
-                        "system": system,
-                        "messages": [{"role": "user", "content": prompt}],
-                    })
-                    resp = client.invoke_model(
-                        modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                        body=body,
-                        contentType="application/json",
-                        accept="application/json",
+                    turn1_prompt += f"All {len(exemplar_dicts)} items in this cluster:\n" + "\n".join(meta_parts) + "\n\n"
+                if score_guidelines:
+                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:3000]}\n\n"
+                turn1_prompt += (
+                    "Explain in 2-3 paragraphs what patterns of errors exist in this cluster. "
+                    "Be specific about the directionality of errors (what was predicted vs what "
+                    "the correct answer should be), what the calls actually contained, and why "
+                    "the AI classifier got these wrong."
+                )
+
+                messages = [{"role": "user", "content": turn1_prompt}]
+                detailed_explanation = _bedrock_converse(system, messages, max_tokens=800)
+
+                # Turn 2: improvement suggestion (same conversation)
+                improvement_suggestion = ""
+                if detailed_explanation and score_yaml_code:
+                    messages.append({"role": "assistant", "content": detailed_explanation})
+                    turn2_prompt = (
+                        "Now suggest how the score classifier could be improved to avoid these "
+                        "errors in the future. Here is the current score configuration code:\n\n"
+                        f"```yaml\n{score_yaml_code[:8000]}\n```\n"
                     )
-                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
-                except Exception as exc:
-                    self.logger.debug("Rich synthesis call failed: %s", exc)
-                    return ""
+                    if score_guidelines:
+                        turn2_prompt += f"\nScore guidelines:\n{score_guidelines[:3000]}\n"
+                    turn2_prompt += (
+                        "\nBased on the error patterns above and the current score code, write "
+                        "1-2 paragraphs suggesting specific improvements to the score configuration "
+                        "that would reduce these misclassifications."
+                    )
+                    messages.append({"role": "user", "content": turn2_prompt})
+                    improvement_suggestion = _bedrock_converse(system, messages, max_tokens=600)
+
+                return detailed_explanation, improvement_suggestion
+
+            def _generate_title(detailed_explanation: str, existing_titles: list) -> str:
+                """Generate a concise, distinct topic title based on the detailed explanation."""
+                system = (
+                    "You generate concise topic titles — 3 to 8 words, title case. "
+                    "No preamble, no punctuation, no quotes. Just the title."
+                )
+                prompt = f"Error pattern summary:\n{detailed_explanation[:1500]}\n\n"
+                if existing_titles:
+                    prompt += "Existing titles (do NOT reuse or closely repeat these):\n"
+                    prompt += "\n".join(f"- {t}" for t in existing_titles) + "\n\n"
+                prompt += "Generate a concise, descriptive 3-8 word title for this error category:"
+                messages = [{"role": "user", "content": prompt}]
+                return _bedrock_converse(system, messages, max_tokens=30)
 
             # Convert TopicResult dataclasses → dicts matching the Topic interface
             # in dashboard/components/ui/topic-list.tsx
@@ -3647,9 +3718,9 @@ class FeedbackEvaluation(Evaluation):
                         **({"detailed_cause": detailed_cause} if detailed_cause else {}),
                     })
 
-                # Rich synthesis over all exemplar context (Issue iuh)
-                rich_cause = await asyncio.to_thread(
-                    _rich_synthesis, tr.label, tr.keywords or [], exemplar_dicts
+                # Multi-turn synthesis: detailed explanation + improvement suggestion
+                detailed_explanation, improvement_suggestion = await asyncio.to_thread(
+                    _multi_turn_synthesis, exemplar_dicts, score_guidelines, score_yaml_code
                 )
 
                 topics.append({
@@ -3664,8 +3735,26 @@ class FeedbackEvaluation(Evaluation):
                     "is_new": tr.is_new,
                     "is_trending": tr.is_trending,
                     "days_inactive": tr.days_inactive,
-                    "cause": rich_cause or tr.root_cause,
+                    "cause": tr.root_cause,
+                    "detailed_explanation": detailed_explanation,
+                    "improvement_suggestion": improvement_suggestion,
                 })
+
+            # Post-loop: generate distinct topic titles informed by the detailed explanations
+            existing_titles = []
+            for topic in topics:
+                if topic.get("detailed_explanation"):
+                    new_title = await asyncio.to_thread(
+                        _generate_title, topic["detailed_explanation"], existing_titles
+                    )
+                    if new_title:
+                        topic["label"] = new_title
+                        existing_titles.append(new_title)
+                    else:
+                        existing_titles.append(topic["label"])
+                else:
+                    existing_titles.append(topic["label"])
+
             return topics
 
         except Exception as e:
