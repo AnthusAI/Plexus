@@ -612,6 +612,13 @@ async def _execute_tactus(
             runtime_context = {}
 
         if isinstance(runtime_context, dict):
+            runtime_account_id = runtime_context.get("account_id") or runtime_context.get("accountId")
+            if runtime_account_id:
+                try:
+                    chat_recorder.account_id = str(runtime_account_id)
+                except Exception:
+                    pass
+
             get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
             console_trigger_message = (
                 get_console_trigger_message()
@@ -625,6 +632,23 @@ async def _execute_tactus(
             ):
                 runtime_context["console_user_message"] = console_trigger_message.strip()
 
+            get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+            console_session_history = (
+                get_console_session_history()
+                if callable(get_console_session_history)
+                else None
+            )
+            if (
+                isinstance(console_session_history, list)
+                and console_session_history
+                and not runtime_context.get("console_session_history")
+            ):
+                runtime_context["console_session_history"] = console_session_history
+
+        mark_runtime_execute_started = getattr(trace_sink, "mark_runtime_execute_started", None)
+        if callable(mark_runtime_execute_started):
+            mark_runtime_execute_started()
+
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
         result = await runtime.execute(procedure_source, runtime_context, format="yaml")
         if log_bridge:
@@ -636,12 +660,11 @@ async def _execute_tactus(
             assistant_text = _extract_assistant_text(result)
             if assistant_text:
                 trace_messages = getattr(trace_sink, "assistant_message_texts", [])
-                has_meaningful_trace_assistant = bool(trace_messages)
-                already_recorded = any(
-                    isinstance(message, str) and message.strip() == assistant_text
+                has_meaningful_trace_assistant = any(
+                    isinstance(message, str) and message.strip()
                     for message in trace_messages
                 )
-                if (not has_meaningful_trace_assistant) or (not already_recorded):
+                if not has_meaningful_trace_assistant:
                     await chat_recorder.record_assistant_message(assistant_text)
 
         if log_bridge:

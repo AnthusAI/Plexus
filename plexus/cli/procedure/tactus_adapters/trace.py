@@ -47,11 +47,15 @@ class PlexusTraceSink:
         self._active_stream_persist_gap_sum_ms: Dict[str, float] = {}
         self._active_stream_persist_gap_max_ms: Dict[str, float] = {}
         self._active_stream_last_persisted_at_iso: Dict[str, str] = {}
+        self._recent_finalized_streams: Dict[str, tuple[str, float]] = {}
         self._console_dispatch_metadata: Optional[Dict[str, Any]] = None
         self._backend_execution_started_at: str = datetime.now(timezone.utc).isoformat()
         self._backend_runtime_execute_started_at: Optional[str] = None
+        self._session_context: Optional[Dict[str, Any]] = None
 
     async def start_session(self, context: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        if isinstance(context, dict):
+            self._session_context = dict(context)
         self.session_id = await self.chat_recorder.start_session(context)
         return self.session_id
 
@@ -161,7 +165,7 @@ class PlexusTraceSink:
             self.session_id = recorder_session_id
             return True
 
-        self.session_id = await self.chat_recorder.start_session()
+        self.session_id = await self.chat_recorder.start_session(self._session_context)
         return bool(self.session_id)
 
     async def _record_stream_chunk(self, event: Any) -> Optional[str]:
@@ -282,6 +286,7 @@ class PlexusTraceSink:
         normalized = final_text.strip()
         if normalized:
             self.assistant_message_texts.append(normalized)
+            self._recent_finalized_streams[agent_name] = (normalized, time.monotonic())
 
         self._active_stream_chunk_counts.pop(agent_name, None)
         self._active_stream_first_chunk_received_at.pop(agent_name, None)
@@ -357,6 +362,13 @@ class PlexusTraceSink:
             return None
 
         if role == "ASSISTANT" and message_type == "MESSAGE":
+            agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+            recent_stream = self._recent_finalized_streams.get(agent_name)
+            if recent_stream:
+                streamed_text, finalized_at = recent_stream
+                if time.monotonic() - finalized_at <= 15 and normalized_content == streamed_text:
+                    logger.debug("Dropping duplicate post-stream assistant message for agent %s", agent_name)
+                    return None
             if normalized_content:
                 self.assistant_message_texts.append(normalized_content)
 

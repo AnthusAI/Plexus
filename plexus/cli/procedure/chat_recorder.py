@@ -8,6 +8,7 @@ including tool calls and responses, for later analysis and display in the UI.
 import logging
 import os
 import json
+import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -107,9 +108,8 @@ class ProcedureChatRecorder:
                 result = self.client.execute(query, {'id': dispatch_task_id})
                 task = self._graphql_field(result, 'getTask')
                 if isinstance(task, dict):
-                    task_account_id = str(task.get('accountId') or '')
                     task_target = str(task.get('target') or '')
-                    if task_account_id == str(account_id) and task_target in {
+                    if task_target in {
                         f'procedure/{self.procedure_id}',
                         f'procedure/run/{self.procedure_id}',
                     }:
@@ -122,6 +122,15 @@ class ProcedureChatRecorder:
                         if isinstance(metadata, dict):
                             console_chat = metadata.get('console_chat')
                             if isinstance(console_chat, dict):
+                                task_account_id = str(task.get('accountId') or '')
+                                if task_account_id and str(account_id) and task_account_id != str(account_id):
+                                    logger.info(
+                                        "Using dispatch task console_chat metadata despite account mismatch "
+                                        "(task=%s context=%s) for procedure %s",
+                                        task_account_id,
+                                        account_id,
+                                        self.procedure_id,
+                                    )
                                 return console_chat
 
             query = """
@@ -212,6 +221,134 @@ class ProcedureChatRecorder:
             return session_id.strip()
         return None
 
+    @staticmethod
+    def _normalize_console_history_snapshot(
+        raw_snapshot: Any,
+        *,
+        limit: int = 40,
+        max_content_chars: int = 800,
+    ) -> List[Dict[str, str]]:
+        """Normalize client-provided history snapshots into USER/ASSISTANT message turns."""
+        if not isinstance(raw_snapshot, list):
+            return []
+
+        normalized: List[Dict[str, str]] = []
+        for entry in raw_snapshot:
+            if not isinstance(entry, dict):
+                continue
+
+            role = str(entry.get("role") or "").upper()
+            if role not in {"USER", "ASSISTANT"}:
+                continue
+
+            content = entry.get("content")
+            if not isinstance(content, str):
+                continue
+            content = content.strip()
+            if not content:
+                continue
+
+            if role == "ASSISTANT" and content == "Assistant turn completed.":
+                continue
+
+            if max_content_chars > 0 and len(content) > max_content_chars:
+                content = content[:max_content_chars] + "..."
+
+            normalized.append({"role": role, "content": content})
+
+        if limit > 0 and len(normalized) > limit:
+            return normalized[-limit:]
+        return normalized
+
+    @staticmethod
+    def _history_has_trailing_user_prompt(
+        history: List[Dict[str, str]],
+        latest_trigger_message: Optional[str],
+    ) -> bool:
+        if not latest_trigger_message:
+            return True
+        if not history:
+            return False
+        last = history[-1]
+        return (
+            isinstance(last, dict)
+            and last.get("role") == "USER"
+            and str(last.get("content") or "").strip() == latest_trigger_message
+        )
+
+    @staticmethod
+    def _history_quality(history: List[Dict[str, str]]) -> tuple[int, int]:
+        assistant_count = 0
+        numeric_token_count = 0
+        total_chars = 0
+
+        for item in history:
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role")
+            content = str(item.get("content") or "")
+            if role == "ASSISTANT":
+                assistant_count += 1
+            numeric_token_count += len(re.findall(r"[-+]?\d+\.?\d*", content))
+            total_chars += len(content)
+
+        return assistant_count, numeric_token_count, total_chars, len(history)
+
+    @staticmethod
+    def _merge_aligned_histories(
+        snapshot_history: List[Dict[str, str]],
+        db_history: List[Dict[str, str]],
+    ) -> Optional[List[Dict[str, str]]]:
+        if len(snapshot_history) != len(db_history):
+            return None
+        if not snapshot_history:
+            return []
+
+        merged: List[Dict[str, str]] = []
+        for snapshot_entry, db_entry in zip(snapshot_history, db_history):
+            if not isinstance(snapshot_entry, dict) or not isinstance(db_entry, dict):
+                return None
+            snapshot_role = str(snapshot_entry.get("role") or "").upper()
+            db_role = str(db_entry.get("role") or "").upper()
+            if snapshot_role != db_role:
+                return None
+
+            snapshot_content = str(snapshot_entry.get("content") or "").strip()
+            db_content = str(db_entry.get("content") or "").strip()
+
+            chosen_content = snapshot_content
+            if db_content and (
+                len(db_content) > len(snapshot_content)
+                or snapshot_content.startswith(db_content)
+                or db_content.startswith(snapshot_content)
+            ):
+                chosen_content = db_content
+            elif not snapshot_content:
+                chosen_content = db_content
+
+            merged.append({
+                "role": snapshot_role,
+                "content": chosen_content,
+            })
+
+        return merged
+
+    def get_latest_console_chat_metadata(self, account_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Public accessor for the latest console_chat task metadata."""
+        try:
+            resolved_account_id = account_id or self.account_id or self._resolve_account_id_for_session({})
+            if not resolved_account_id:
+                return None
+            metadata = self._get_latest_console_chat_metadata(str(resolved_account_id))
+            return metadata if isinstance(metadata, dict) else None
+        except Exception as e:
+            logger.debug(
+                "Could not fetch latest console chat metadata for procedure %s: %s",
+                self.procedure_id,
+                e,
+            )
+            return None
+
     def get_latest_console_trigger_message(self, account_id: Optional[str] = None) -> Optional[str]:
         """Return latest console trigger message content from task metadata, if present."""
         try:
@@ -222,6 +359,17 @@ class ProcedureChatRecorder:
             console_chat = self._get_latest_console_chat_metadata(resolved_account_id)
             if not isinstance(console_chat, dict):
                 return None
+
+            direct_message_text = console_chat.get('trigger_message_content')
+            if isinstance(direct_message_text, str) and direct_message_text.strip():
+                return direct_message_text.strip()
+
+            instrumentation = console_chat.get('instrumentation')
+            if isinstance(instrumentation, dict):
+                for key in ('client_user_message_text', 'trigger_message_content', 'message_text'):
+                    candidate = instrumentation.get(key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
 
             trigger_message_id = console_chat.get('trigger_message_id')
             if not isinstance(trigger_message_id, str) or not trigger_message_id.strip():
@@ -253,11 +401,211 @@ class ProcedureChatRecorder:
             )
             return None
 
+    def _list_session_messages(
+        self,
+        session_id: str,
+        *,
+        page_limit: int = 200,
+        max_messages: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """Fetch chat messages for a session in ascending created order."""
+        if not session_id:
+            return []
+
+        query = """
+        query ListChatMessagesBySession($sessionId: String!, $limit: Int, $nextToken: String) {
+            listChatMessageBySessionIdAndCreatedAt(
+                sessionId: $sessionId
+                sortDirection: ASC
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    role
+                    content
+                    messageType
+                    humanInteraction
+                    sequenceNumber
+                    createdAt
+                }
+                nextToken
+            }
+        }
+        """
+
+        items: List[Dict[str, Any]] = []
+        next_token: Optional[str] = None
+        while True:
+            result = self.client.execute(
+                query,
+                {
+                    'sessionId': session_id,
+                    'limit': page_limit,
+                    'nextToken': next_token,
+                },
+            )
+            payload = self._graphql_field(result, 'listChatMessageBySessionIdAndCreatedAt')
+            if not isinstance(payload, dict):
+                break
+
+            page_items = payload.get('items', [])
+            if isinstance(page_items, list):
+                for item in page_items:
+                    if isinstance(item, dict):
+                        items.append(item)
+                        if len(items) >= max_messages:
+                            return items
+
+            next_token = payload.get('nextToken')
+            if not next_token:
+                break
+
+        return items
+
+    def get_console_session_history(
+        self,
+        account_id: Optional[str] = None,
+        limit: int = 40,
+    ) -> List[Dict[str, str]]:
+        """
+        Return normalized USER/ASSISTANT chat history for the active console session.
+
+        This is used to seed runtime context across detached procedure runs so
+        follow-up turns preserve conversational references.
+        """
+        try:
+            resolved_account_id = account_id or self.account_id or self._resolve_account_id_for_session({})
+            if not resolved_account_id:
+                return []
+
+            session_id: Optional[str] = None
+            snapshot_history: List[Dict[str, str]] = []
+            console_chat = self._get_latest_console_chat_metadata(str(resolved_account_id))
+            if isinstance(console_chat, dict):
+                raw_session_id = console_chat.get('session_id')
+                if isinstance(raw_session_id, str) and raw_session_id.strip():
+                    session_id = raw_session_id.strip()
+                instrumentation = console_chat.get("instrumentation")
+                if isinstance(instrumentation, dict):
+                    snapshot_history = self._normalize_console_history_snapshot(
+                        instrumentation.get("client_history_snapshot"),
+                        limit=limit,
+                    )
+
+            if not session_id and isinstance(self.session_id, str) and self.session_id.strip():
+                session_id = self.session_id.strip()
+
+            if not session_id:
+                return snapshot_history
+
+            raw_messages = self._list_session_messages(session_id)
+            normalized: List[Dict[str, str]] = []
+            for message in raw_messages:
+                role = str(message.get('role') or '').upper()
+                if role not in {'USER', 'ASSISTANT'}:
+                    continue
+
+                message_type = str(message.get('messageType') or 'MESSAGE').upper()
+                if message_type != 'MESSAGE':
+                    continue
+
+                content = message.get('content')
+                if not isinstance(content, str):
+                    continue
+                content = content.strip()
+                if not content:
+                    continue
+
+                # Avoid polluting context with synthetic fallback-only assistant text.
+                if role == 'ASSISTANT' and content == 'Assistant turn completed.':
+                    continue
+
+                normalized.append({'role': role, 'content': content})
+
+            latest_trigger_message = self.get_latest_console_trigger_message(str(resolved_account_id))
+            if isinstance(latest_trigger_message, str) and latest_trigger_message.strip():
+                latest_trigger_message = latest_trigger_message.strip()
+                last_user_content: Optional[str] = None
+                for entry in reversed(normalized):
+                    if entry.get('role') == 'USER':
+                        last_user_content = entry.get('content')
+                        break
+                if last_user_content != latest_trigger_message:
+                    normalized.append({'role': 'USER', 'content': latest_trigger_message})
+
+            if limit > 0 and len(normalized) > limit:
+                normalized = normalized[-limit:]
+
+            if snapshot_history:
+                # Start from client snapshot when present, then choose the richer
+                # continuity source between snapshot and DB history.
+                effective_snapshot = list(snapshot_history)
+                if isinstance(latest_trigger_message, str) and latest_trigger_message.strip():
+                    latest_trigger_message = latest_trigger_message.strip()
+                    last_snapshot_user: Optional[str] = None
+                    for entry in reversed(effective_snapshot):
+                        if entry.get('role') == 'USER':
+                            last_snapshot_user = entry.get('content')
+                            break
+                    if last_snapshot_user != latest_trigger_message:
+                        effective_snapshot.append({'role': 'USER', 'content': latest_trigger_message})
+
+                if limit > 0 and len(effective_snapshot) > limit:
+                    effective_snapshot = effective_snapshot[-limit:]
+
+                merged_history = self._merge_aligned_histories(effective_snapshot, normalized)
+                if merged_history is not None:
+                    logger.info(
+                        "Resolved console history for session %s (snapshot=%s, db=%s, source=merged)",
+                        session_id,
+                        len(effective_snapshot),
+                        len(normalized),
+                    )
+                    return merged_history
+
+                snapshot_has_trigger = self._history_has_trailing_user_prompt(
+                    effective_snapshot,
+                    latest_trigger_message if isinstance(latest_trigger_message, str) else None,
+                )
+                db_has_trigger = self._history_has_trailing_user_prompt(
+                    normalized,
+                    latest_trigger_message if isinstance(latest_trigger_message, str) else None,
+                )
+                use_snapshot = True
+                if snapshot_has_trigger != db_has_trigger:
+                    use_snapshot = snapshot_has_trigger
+                else:
+                    use_snapshot = self._history_quality(effective_snapshot) >= self._history_quality(normalized)
+
+                logger.info(
+                    "Resolved console history for session %s (snapshot=%s, db=%s, source=%s)",
+                    session_id,
+                    len(effective_snapshot),
+                    len(normalized),
+                    "snapshot" if use_snapshot else "db",
+                )
+                return effective_snapshot if use_snapshot else normalized
+
+            return normalized
+        except Exception as e:
+            logger.debug(
+                "Could not resolve console session history for procedure %s: %s",
+                self.procedure_id,
+                e,
+            )
+            return []
+
     def _get_latest_sequence_number_for_session(self, session_id: str) -> int:
-        """Load the latest persisted message sequence for a session."""
+        """Load the latest persisted message sequence for a session.
+
+        USER messages created by the frontend often do not carry a sequence number.
+        Query a small descending window and pick the first numeric sequence so
+        assistant/tool writes continue incrementing instead of restarting at 1.
+        """
         try:
             query = """
-            query GetLatestSessionMessage($sessionId: String!, $limit: Int) {
+            query GetLatestSessionMessages($sessionId: String!, $limit: Int) {
                 listChatMessageBySessionIdAndCreatedAt(
                     sessionId: $sessionId
                     sortDirection: DESC
@@ -271,18 +619,21 @@ class ProcedureChatRecorder:
                 }
             }
             """
-            result = self.client.execute(query, {'sessionId': session_id, 'limit': 1})
+            result = self.client.execute(query, {'sessionId': session_id, 'limit': 50})
             payload = self._graphql_field(result, 'listChatMessageBySessionIdAndCreatedAt')
             items = payload.get('items', []) if isinstance(payload, dict) else []
             if not items:
                 return 0
 
-            latest = items[0] if isinstance(items[0], dict) else {}
-            sequence_number = latest.get('sequenceNumber')
-            try:
-                return int(sequence_number)
-            except (TypeError, ValueError):
-                return 0
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                sequence_number = item.get('sequenceNumber')
+                try:
+                    return int(sequence_number)
+                except (TypeError, ValueError):
+                    continue
+            return 0
         except Exception as e:
             logger.debug(f"Could not resolve latest sequence number for session {session_id}: {e}")
             return 0

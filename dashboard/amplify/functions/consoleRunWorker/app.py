@@ -14,9 +14,38 @@ from plexus.dashboard.api.models.task import Task
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+TERMINAL_TASK_STATUSES = {"COMPLETED", "WAITING_FOR_HUMAN", "FAILED", "CANCELED"}
+RUNNING_REENTRY_GRACE_SECONDS = int(os.getenv("CONSOLE_WORKER_RUNNING_REENTRY_GRACE_SECONDS", "900"))
+
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso_timestamp(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _running_task_is_recent(task: Task) -> bool:
+    started_at_raw = getattr(task, "startedAt", None)
+    started_at = _parse_iso_timestamp(started_at_raw)
+    if not started_at:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
+    return age_seconds >= 0 and age_seconds < RUNNING_REENTRY_GRACE_SECONDS
 
 
 def _parse_metadata(raw: Any) -> Dict[str, Any]:
@@ -96,6 +125,16 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
 
     client = PlexusDashboardClient()
     task = _load_task(client, task_id)
+    current_status = str(getattr(task, "status", "") or "").upper()
+
+    if current_status in TERMINAL_TASK_STATUSES:
+        logger.info("Skipping task %s because it is already terminal (%s)", task_id, current_status)
+        return
+
+    if current_status == "RUNNING" and _running_task_is_recent(task):
+        logger.info("Skipping task %s duplicate delivery while task is already RUNNING", task_id)
+        return
+
     account_id = _resolve_account_id(payload, task)
     worker_node_id = f"console-run-worker/{socket.gethostname()}"
 
@@ -141,6 +180,25 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
         metadata=json.dumps(metadata_runtime_init),
     )
 
+    # Build explicit console context from task metadata so detached runs do not
+    # depend solely on post-hoc history lookups.
+    task_metadata = _parse_metadata(task.metadata)
+    console_chat = task_metadata.get("console_chat")
+    if not isinstance(console_chat, dict):
+        console_chat = {}
+    instrumentation = console_chat.get("instrumentation")
+    if not isinstance(instrumentation, dict):
+        instrumentation = {}
+
+    run_options: Dict[str, Any] = {}
+    trigger_message_content = console_chat.get("trigger_message_content")
+    if isinstance(trigger_message_content, str) and trigger_message_content.strip():
+        run_options["console_user_message"] = trigger_message_content.strip()
+
+    client_history_snapshot = instrumentation.get("client_history_snapshot")
+    if isinstance(client_history_snapshot, list):
+        run_options["console_session_history"] = client_history_snapshot
+
     os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
     try:
         result = asyncio.run(
@@ -148,6 +206,7 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
                 procedure_id=procedure_id,
                 client=client,
                 account_id=account_id,
+                **run_options,
             )
         )
         completed_at = _iso_now()

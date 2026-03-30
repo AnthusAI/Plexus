@@ -46,6 +46,46 @@ const UPDATE_TASK_MUTATION = `
   }
 `;
 
+const GET_TASK_QUERY = `
+  query GetConsoleRunTaskById($id: ID!) {
+    getTask(id: $id) {
+      id
+      status
+      metadata
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const LIST_RECENT_TASKS_QUERY = `
+  query ListTaskByAccountIdAndUpdatedAtForConsoleRunDedup(
+    $accountId: String!
+    $updatedAt: ModelStringKeyConditionInput
+    $limit: Int
+    $nextToken: String
+  ) {
+    listTaskByAccountIdAndUpdatedAt(
+      accountId: $accountId
+      updatedAt: $updatedAt
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        status
+        target
+        metadata
+        createdAt
+        updatedAt
+      }
+      nextToken
+    }
+  }
+`;
+
+const DEDUP_STATUSES = new Set(["PENDING", "RUNNING", "COMPLETED", "WAITING_FOR_HUMAN"]);
+
 function resolveGraphqlEndpoint(): string {
   return (
     process.env.PLEXUS_API_URL ||
@@ -78,6 +118,10 @@ function toIsoNow(): string {
   return new Date().toISOString();
 }
 
+function buildCanonicalTaskId(triggerMessageId: string): string {
+  return `console-run-${triggerMessageId}`;
+}
+
 function normalizeInstrumentation(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     const raw = value.trim();
@@ -97,6 +141,44 @@ function normalizeInstrumentation(value: unknown): Record<string, unknown> {
     return {};
   }
   return value as Record<string, unknown>;
+}
+
+function extractTriggerMessageContent(instrumentation: Record<string, unknown>): string | null {
+  const candidates = [
+    instrumentation.client_user_message_text,
+    instrumentation.trigger_message_content,
+    instrumentation.message_text,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const normalized = candidate.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return null;
+}
+
+function parseTaskMetadata(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        return {};
+      }
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+  return raw as Record<string, unknown>;
 }
 
 type GraphqlEnvelope<TData> = {
@@ -151,6 +233,91 @@ async function executeAppSyncGraphql<TData>(
     throw new Error("AppSync request returned no data");
   }
   return payload.data;
+}
+
+async function findExistingConsoleRun(
+  accountId: string,
+  procedureId: string,
+  sessionId: string,
+  triggerMessageId: string,
+): Promise<{ runId: string; taskId: string; queuedAt: string } | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  let nextToken: string | null | undefined = undefined;
+  let scanned = 0;
+
+  while (scanned < 300) {
+    const result = await executeAppSyncGraphql<{
+      listTaskByAccountIdAndUpdatedAt: {
+        items?: Array<{
+          id?: string | null;
+          status?: string | null;
+          target?: string | null;
+          metadata?: unknown;
+          createdAt?: string | null;
+          updatedAt?: string | null;
+        } | null> | null;
+        nextToken?: string | null;
+      } | null;
+    }>(LIST_RECENT_TASKS_QUERY, {
+      accountId,
+      updatedAt: { ge: cutoff },
+      limit: 100,
+      nextToken,
+    });
+
+    const page = result.listTaskByAccountIdAndUpdatedAt;
+    const items = Array.isArray(page?.items) ? page?.items : [];
+    scanned += items.length;
+
+    for (const rawTask of items) {
+      if (!rawTask?.id) {
+        continue;
+      }
+      if ((rawTask.target || "").trim() !== `procedure/run/${procedureId}`) {
+        continue;
+      }
+
+      const taskStatus = (rawTask.status || "").toUpperCase();
+      if (!DEDUP_STATUSES.has(taskStatus)) {
+        continue;
+      }
+
+      const metadata = parseTaskMetadata(rawTask.metadata);
+      if ((metadata.dispatch_mode || "") !== "console_async_worker") {
+        continue;
+      }
+      const consoleChat = metadata.console_chat;
+      if (!consoleChat || typeof consoleChat !== "object" || Array.isArray(consoleChat)) {
+        continue;
+      }
+
+      const consoleSessionId = String((consoleChat as Record<string, unknown>).session_id || "").trim();
+      const consoleTriggerMessageId = String((consoleChat as Record<string, unknown>).trigger_message_id || "").trim();
+      if (consoleSessionId !== sessionId || consoleTriggerMessageId !== triggerMessageId) {
+        continue;
+      }
+
+      const runId = String((consoleChat as Record<string, unknown>).run_id || "").trim() || rawTask.id;
+      const queuedAt =
+        String((consoleChat as Record<string, unknown>).queued_at || "").trim()
+        || String(rawTask.createdAt || "").trim()
+        || String(rawTask.updatedAt || "").trim()
+        || toIsoNow();
+
+      return {
+        runId,
+        taskId: rawTask.id,
+        queuedAt,
+      };
+    }
+
+    nextToken = page?.nextToken;
+    if (!nextToken) {
+      break;
+    }
+  }
+
+  return null;
 }
 
 export const handler = async (event: any) => {
@@ -211,15 +378,28 @@ export const handler = async (event: any) => {
     }
   }
 
+  const existingRun = await findExistingConsoleRun(accountId, procedureId, sessionId, triggerMessageId);
+  if (existingRun) {
+    return {
+      runId: existingRun.runId,
+      taskId: existingRun.taskId,
+      accepted: true,
+      queuedAt: existingRun.queuedAt,
+    };
+  }
+
   const runId = randomUUID();
-  const taskId = randomUUID();
+  const canonicalTaskId = buildCanonicalTaskId(triggerMessageId);
+  let taskId = canonicalTaskId;
   const queuedAt = toIsoNow();
   const clientInstrumentation = normalizeInstrumentation(event.arguments.clientInstrumentation);
+  const triggerMessageContent = extractTriggerMessageContent(clientInstrumentation);
   const metadata = {
     dispatch_mode: "console_async_worker",
     console_chat: {
       session_id: sessionId,
       trigger_message_id: triggerMessageId,
+      trigger_message_content: triggerMessageContent,
       queued_at: queuedAt,
       run_id: runId,
       instrumentation: {
@@ -229,21 +409,90 @@ export const handler = async (event: any) => {
     },
   };
 
-  await executeAppSyncGraphql(CREATE_TASK_MUTATION, {
-    input: {
-      id: taskId,
-      accountId,
-      type: "Procedure Run",
-      status: "PENDING",
-      dispatchStatus: "PENDING",
-      target: `procedure/run/${procedureId}`,
-      command: `procedure run ${procedureId}`,
-      description: `Console async run ${runId}`,
-      metadata: JSON.stringify(metadata),
-      createdAt: queuedAt,
-      updatedAt: queuedAt,
-    },
-  });
+  const canonicalTaskResult = await executeAppSyncGraphql<{
+    getTask: {
+      id?: string | null;
+      status?: string | null;
+      metadata?: unknown;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    } | null;
+  }>(GET_TASK_QUERY, { id: canonicalTaskId });
+
+  const canonicalTask = canonicalTaskResult.getTask;
+  if (canonicalTask?.id) {
+    const canonicalMetadata = parseTaskMetadata(canonicalTask.metadata);
+    const canonicalDispatchMode = String(canonicalMetadata.dispatch_mode || "");
+    const canonicalConsoleChat = canonicalMetadata.console_chat;
+    const canonicalSessionId = String(
+      canonicalConsoleChat && typeof canonicalConsoleChat === "object" && !Array.isArray(canonicalConsoleChat)
+        ? (canonicalConsoleChat as Record<string, unknown>).session_id || ""
+        : "",
+    ).trim();
+    const canonicalTriggerMessageId = String(
+      canonicalConsoleChat && typeof canonicalConsoleChat === "object" && !Array.isArray(canonicalConsoleChat)
+        ? (canonicalConsoleChat as Record<string, unknown>).trigger_message_id || ""
+        : "",
+    ).trim();
+    const canonicalRunId = String(
+      canonicalConsoleChat && typeof canonicalConsoleChat === "object" && !Array.isArray(canonicalConsoleChat)
+        ? (canonicalConsoleChat as Record<string, unknown>).run_id || ""
+        : "",
+    ).trim();
+    const canonicalQueuedAt = String(
+      canonicalConsoleChat && typeof canonicalConsoleChat === "object" && !Array.isArray(canonicalConsoleChat)
+        ? (canonicalConsoleChat as Record<string, unknown>).queued_at || ""
+        : "",
+    ).trim();
+    const canonicalStatus = String(canonicalTask.status || "").toUpperCase();
+
+    const sameDispatchFingerprint =
+      canonicalDispatchMode === "console_async_worker"
+      && canonicalSessionId === sessionId
+      && canonicalTriggerMessageId === triggerMessageId;
+
+    if (sameDispatchFingerprint && DEDUP_STATUSES.has(canonicalStatus)) {
+      return {
+        runId: canonicalRunId || canonicalTask.id,
+        taskId: canonicalTask.id,
+        accepted: true,
+        queuedAt: canonicalQueuedAt || String(canonicalTask.createdAt || canonicalTask.updatedAt || queuedAt),
+      };
+    }
+
+    taskId = randomUUID();
+  }
+
+  try {
+    await executeAppSyncGraphql(CREATE_TASK_MUTATION, {
+      input: {
+        id: taskId,
+        accountId,
+        type: "Procedure Run",
+        status: "PENDING",
+        // Console runs are already dispatched by SQS enqueue in this resolver.
+        // Mark as DISPATCHED so generic task dispatchers do not execute them again.
+        dispatchStatus: "DISPATCHED",
+        target: `procedure/run/${procedureId}`,
+        command: `procedure run ${procedureId}`,
+        description: `Console async run ${runId}`,
+        metadata: JSON.stringify(metadata),
+        createdAt: queuedAt,
+        updatedAt: queuedAt,
+      },
+    });
+  } catch (error) {
+    const existingAfterCreateFailure = await findExistingConsoleRun(accountId, procedureId, sessionId, triggerMessageId);
+    if (existingAfterCreateFailure) {
+      return {
+        runId: existingAfterCreateFailure.runId,
+        taskId: existingAfterCreateFailure.taskId,
+        accepted: true,
+        queuedAt: existingAfterCreateFailure.queuedAt,
+      };
+    }
+    throw error;
+  }
 
   const sqsClient = new SQSClient({ region: resolveAwsRegion() });
   try {
