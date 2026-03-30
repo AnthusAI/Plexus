@@ -46,11 +46,11 @@ type RcaDataByItemId = Record<string, { detailed_cause?: string; suggested_fix?:
 
 interface TopicItemProps {
   topic: Topic;
-  onTopicFilter?: (itemIds: string[] | null, rcaDataByItemId: RcaDataByItemId) => void;
+  isExpanded: boolean;
+  onToggle: (topic: Topic) => void;
 }
 
-function TopicItem({ topic, onTopicFilter }: TopicItemProps) {
-  const [expanded, setExpanded] = useState(false);
+function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
@@ -63,38 +63,12 @@ function TopicItem({ topic, onTopicFilter }: TopicItemProps) {
     <li className="pb-3">
       <button
         type="button"
-        onClick={() => {
-          if (!hasDetails) return;
-          const next = !expanded;
-          setExpanded(next);
-          if (onTopicFilter) {
-            if (next) {
-              const exemplars = (topic.exemplars ?? []).filter(
-                (ex): ex is TopicExemplar => typeof ex !== "string"
-              );
-              const itemIds = exemplars
-                .map((ex) => ex.item_id)
-                .filter((id): id is string => !!id);
-              const rcaDataByItemId: RcaDataByItemId = {};
-              exemplars.forEach((ex) => {
-                if (ex.item_id) {
-                  rcaDataByItemId[ex.item_id] = {
-                    detailed_cause: ex.detailed_cause ?? undefined,
-                    suggested_fix: ex.suggested_fix ?? undefined,
-                  };
-                }
-              });
-              onTopicFilter(itemIds, rcaDataByItemId);
-            } else {
-              onTopicFilter(null, {});
-            }
-          }
-        }}
+        onClick={() => { if (hasDetails) onToggle(topic); }}
         className="w-full flex items-center justify-between py-2 text-left hover:bg-muted/30 rounded px-2 -mx-2"
       >
         <div className="flex items-center gap-2 min-w-0">
           {hasDetails ? (
-            expanded ? (
+            isExpanded ? (
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             ) : (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -127,7 +101,7 @@ function TopicItem({ topic, onTopicFilter }: TopicItemProps) {
           </span>
         </div>
       </button>
-      {expanded && hasDetails && (
+      {isExpanded && hasDetails && (
         <div className="pl-6 pr-2 space-y-3 text-sm">
           {topic.detailed_explanation && (
             <div>
@@ -187,6 +161,8 @@ export interface TopicListProps {
  * so the parent can filter the score results list to show only that topic's items.
  */
 export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
+  const [expandedKey, setExpandedKey] = useState<string | number | null>(null);
+
   if (!topics || topics.length === 0) return null;
 
   const sorted = [...topics].sort((a, b) => {
@@ -196,15 +172,53 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
     return b.member_count - a.member_count;
   });
 
+  const handleToggle = (topic: Topic) => {
+    const key = topic.topic_id ?? topic.cluster_id ?? topic.label;
+    const isCurrentlyExpanded = expandedKey === key;
+    const next = isCurrentlyExpanded ? null : key;
+    setExpandedKey(next);
+
+    if (onTopicFilter) {
+      if (next !== null) {
+        const exemplars = (topic.exemplars ?? []).filter(
+          (ex): ex is TopicExemplar => typeof ex !== "string"
+        );
+        const itemIds = exemplars
+          .map((ex) => ex.item_id)
+          .filter((id): id is string => !!id);
+        const rcaDataByItemId: RcaDataByItemId = {};
+        exemplars.forEach((ex) => {
+          if (ex.item_id) {
+            rcaDataByItemId[ex.item_id] = {
+              detailed_cause: ex.detailed_cause ?? undefined,
+              suggested_fix: ex.suggested_fix ?? undefined,
+            };
+          }
+        });
+        onTopicFilter(itemIds, rcaDataByItemId);
+      } else {
+        onTopicFilter(null, {});
+      }
+    }
+  };
+
   return (
     <div>
       {label && (
         <h4 className="font-medium text-sm text-muted-foreground mb-2">{label}</h4>
       )}
       <ul className="space-y-2">
-        {sorted.map((t) => (
-          <TopicItem key={t.topic_id ?? t.cluster_id ?? t.label} topic={t} onTopicFilter={onTopicFilter} />
-        ))}
+        {sorted.map((t) => {
+          const key = t.topic_id ?? t.cluster_id ?? t.label;
+          return (
+            <TopicItem
+              key={key}
+              topic={t}
+              isExpanded={expandedKey === key}
+              onToggle={handleToggle}
+            />
+          );
+        })}
       </ul>
     </div>
   );
