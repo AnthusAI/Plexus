@@ -51,6 +51,7 @@ langgraph = "0.6.7"
 "langchain-google-vertexai" = "2.1.2"
 "langchain-anthropic" = "0.3.22"
 "langgraph-checkpoint-postgres" = "2.0.9"
+psycopg = { version = ">=3.2.0,<4.0.0", extras = ["binary"] }
 lupa = "2.6"
 tactus = "^0.45.2"
 openpyxl = "3.1.5"
