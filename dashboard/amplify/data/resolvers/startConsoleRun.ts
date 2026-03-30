@@ -124,11 +124,72 @@ const LIST_RECENT_TASKS_QUERY = `
 `;
 
 const DEDUP_STATUSES = new Set(["PENDING", "RUNNING", "COMPLETED", "WAITING_FOR_HUMAN"]);
+let runtimeGraphqlEndpoint = "";
+
+function readHeaderValue(headers: Record<string, unknown>, name: string): string {
+  const candidate = headers[name] ?? headers[name.toLowerCase()] ?? headers[name.toUpperCase()];
+  if (Array.isArray(candidate)) {
+    for (const item of candidate) {
+      if (typeof item === "string" && item.trim()) {
+        return item.trim();
+      }
+    }
+    return "";
+  }
+  if (typeof candidate === "string") {
+    return candidate.trim();
+  }
+  return "";
+}
+
+function endpointFromHostHeaderValue(rawHost: string): string {
+  const trimmed = rawHost.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed.endsWith("/graphql")
+      ? trimmed
+      : `${trimmed.replace(/\/+$/, "")}/graphql`;
+  }
+  const normalizedHost = trimmed.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!normalizedHost) {
+    return "";
+  }
+  return normalizedHost.endsWith("/graphql")
+    ? `https://${normalizedHost}`
+    : `https://${normalizedHost}/graphql`;
+}
+
+function setRuntimeGraphqlEndpoint(event: any): void {
+  if (runtimeGraphqlEndpoint) {
+    return;
+  }
+  const request = event?.request;
+  if (!request || typeof request !== "object") {
+    return;
+  }
+  const headers = (request as Record<string, unknown>).headers;
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+    return;
+  }
+  const headerMap = headers as Record<string, unknown>;
+  const hostCandidate = (
+    readHeaderValue(headerMap, "x-forwarded-host")
+    || readHeaderValue(headerMap, "host")
+    || readHeaderValue(headerMap, ":authority")
+  );
+  const endpoint = endpointFromHostHeaderValue(hostCandidate);
+  if (endpoint) {
+    runtimeGraphqlEndpoint = endpoint;
+  }
+}
 
 function resolveGraphqlEndpoint(): string {
   return (
     process.env.PLEXUS_API_URL ||
     process.env.API_GRAPHQLAPIENDPOINTOUTPUT ||
+    runtimeGraphqlEndpoint ||
     ""
   ).trim();
 }
@@ -339,7 +400,7 @@ async function executeAppSyncGraphql<TData>(
 ): Promise<TData> {
   const endpoint = resolveGraphqlEndpoint();
   if (!endpoint) {
-    throw new Error("PLEXUS_API_URL is not configured for startConsoleRun resolver");
+    throw new Error("Unable to resolve caller auth headers for startConsoleRun resolver");
   }
   const region = resolveAwsRegion();
   const endpointUrl = new URL(endpoint);
@@ -490,6 +551,7 @@ async function findExistingConsoleRun(
 }
 
 export const handler = async (event: any) => {
+  setRuntimeGraphqlEndpoint(event);
   const sessionId = event.arguments.sessionId?.trim();
   const procedureId = event.arguments.procedureId?.trim();
   const triggerMessageId = event.arguments.triggerMessageId?.trim();
