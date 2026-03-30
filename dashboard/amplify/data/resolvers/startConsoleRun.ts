@@ -185,6 +185,18 @@ function setRuntimeGraphqlEndpoint(event: any): void {
   }
 }
 
+function resolveRequestApiKey(event: any): string {
+  const request = event?.request;
+  if (!request || typeof request !== "object") {
+    return "";
+  }
+  const headers = (request as Record<string, unknown>).headers;
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+    return "";
+  }
+  return readHeaderValue(headers as Record<string, unknown>, "x-api-key");
+}
+
 function resolveGraphqlEndpoint(): string {
   return (
     process.env.PLEXUS_API_URL ||
@@ -307,6 +319,10 @@ function normalizeHistoryEntries(value: unknown): ConsoleHistoryEntry[] {
     if (roleRaw !== "USER" && roleRaw !== "ASSISTANT") {
       continue;
     }
+    const messageTypeRaw = String(record.messageType || "").trim().toUpperCase();
+    if (messageTypeRaw && messageTypeRaw !== "MESSAGE") {
+      continue;
+    }
     const contentRaw = String(record.content || "").trim();
     if (!contentRaw) {
       continue;
@@ -328,22 +344,58 @@ function normalizeHistoryEntries(value: unknown): ConsoleHistoryEntry[] {
   return normalized;
 }
 
+function sameHistoryEntry(left: ConsoleHistoryEntry, right: ConsoleHistoryEntry): boolean {
+  return left.role === right.role && left.content === right.content;
+}
+
+function dedupeAdjacentHistory(entries: ConsoleHistoryEntry[]): ConsoleHistoryEntry[] {
+  const deduped: ConsoleHistoryEntry[] = [];
+  for (const entry of entries) {
+    const last = deduped[deduped.length - 1];
+    if (last && sameHistoryEntry(last, entry)) {
+      continue;
+    }
+    deduped.push(entry);
+  }
+  return deduped;
+}
+
 function mergeHistorySnapshots(
   serverHistory: ConsoleHistoryEntry[],
   clientHistory: ConsoleHistoryEntry[],
 ): ConsoleHistoryEntry[] {
-  const merged: ConsoleHistoryEntry[] = [...serverHistory];
-  for (const entry of clientHistory) {
-    const last = merged[merged.length - 1];
-    if (last && last.role === entry.role && last.content === entry.content) {
-      continue;
+  if (!serverHistory.length) {
+    return clientHistory.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
+  }
+  if (!clientHistory.length) {
+    return serverHistory.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
+  }
+
+  // Stitch snapshots by overlapping suffix/prefix so we do not duplicate
+  // prior turns when both server/client snapshots include the same history.
+  let overlap = 0;
+  const maxOverlap = Math.min(serverHistory.length, clientHistory.length);
+  for (let candidate = maxOverlap; candidate > 0; candidate -= 1) {
+    let matches = true;
+    for (let i = 0; i < candidate; i += 1) {
+      const serverEntry = serverHistory[serverHistory.length - candidate + i];
+      const clientEntry = clientHistory[i];
+      if (!sameHistoryEntry(serverEntry, clientEntry)) {
+        matches = false;
+        break;
+      }
     }
-    merged.push(entry);
+    if (matches) {
+      overlap = candidate;
+      break;
+    }
   }
-  if (merged.length > CLIENT_HISTORY_SNAPSHOT_LIMIT) {
-    return merged.slice(merged.length - CLIENT_HISTORY_SNAPSHOT_LIMIT);
-  }
-  return merged;
+
+  const merged = dedupeAdjacentHistory([
+    ...serverHistory,
+    ...clientHistory.slice(overlap),
+  ]);
+  return merged.slice(-CLIENT_HISTORY_SNAPSHOT_LIMIT);
 }
 
 function appendLatestUserIfMissing(
@@ -556,6 +608,12 @@ export const handler = async (event: any) => {
   const procedureId = event.arguments.procedureId?.trim();
   const triggerMessageId = event.arguments.triggerMessageId?.trim();
   const queueUrl = (process.env.CONSOLE_RUN_QUEUE_URL || "").trim();
+  const apiUrlForWorker = resolveGraphqlEndpoint();
+  const apiKeyForWorker = (
+    resolveRequestApiKey(event)
+    || process.env.PLEXUS_API_KEY
+    || ""
+  ).trim();
 
   if (!isValidId(sessionId)) {
     throw new Error("startConsoleRun requires a valid sessionId");
@@ -568,6 +626,9 @@ export const handler = async (event: any) => {
   }
   if (!queueUrl) {
     throw new Error("CONSOLE_RUN_QUEUE_URL is not configured");
+  }
+  if (!apiUrlForWorker || !apiKeyForWorker) {
+    throw new Error("Unable to resolve API URL and API key for console worker dispatch");
   }
 
   const sessionResult = await executeAppSyncGraphql<{
@@ -647,11 +708,15 @@ export const handler = async (event: any) => {
     );
   }
 
-  const triggerMessageContent = (
-    extractTriggerMessageContent(clientInstrumentation)
-    || String(triggerMessage.content || "").trim()
-    || null
-  );
+  // The trigger message record is authoritative for dispatch input.
+  // Client instrumentation can be stale under retries/races; use it only as fallback.
+  const triggerMessageContent = (() => {
+    const canonicalTriggerContent = String(triggerMessage.content || "").trim();
+    if (canonicalTriggerContent) {
+      return canonicalTriggerContent;
+    }
+    return extractTriggerMessageContent(clientInstrumentation) || null;
+  })();
 
   const serverHistoryMessages: Array<{
     role?: string | null;
@@ -839,6 +904,8 @@ export const handler = async (event: any) => {
           procedureId,
           triggerMessageId,
           queuedAt,
+          apiUrl: apiUrlForWorker,
+          apiKey: apiKeyForWorker,
           instrumentation: clientInstrumentation,
         }),
       }),
