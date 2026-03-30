@@ -510,6 +510,12 @@ class ProcedureChatRecorder:
                 if message_type != 'MESSAGE':
                     continue
 
+                human_interaction = str(message.get('humanInteraction') or '').upper()
+                # Internal assistant logs (e.g. setup/placeholder trace chatter)
+                # should not be fed back into user-facing console continuity.
+                if role == 'ASSISTANT' and human_interaction == 'INTERNAL':
+                    continue
+
                 content = message.get('content')
                 if not isinstance(content, str):
                     continue
