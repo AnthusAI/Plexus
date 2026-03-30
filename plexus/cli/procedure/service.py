@@ -555,6 +555,10 @@ class ProcedureService:
             logger.error(f"Error getting procedure YAML: {str(e)}")
             return None
 
+    def get_experiment_yaml(self, procedure_id: str) -> Optional[str]:
+        """Backward-compatible alias for callers still using older naming."""
+        return self.get_procedure_yaml(procedure_id)
+
     def test_procedure_specs(
         self,
         procedure_id: Optional[str] = None,
@@ -972,7 +976,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                 'status': 'error',
                 'error': error_msg
             }
-        
+
         try:
             built_in_procedure = is_builtin_procedure_id(procedure_id)
             procedure_info = None
@@ -989,6 +993,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                         'status': 'error',
                         'error': error_msg
                     }
+
                 logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
 
             # Check if this is a Tactus procedure and route accordingly
@@ -1009,30 +1014,36 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                             except Exception:
                                 account_id = None
 
+                        scorecard_id = procedure_info.procedure.scorecardId if procedure_info else None
+                        score_id = procedure_info.procedure.scoreId if procedure_info else None
+
                         # Build context with procedure info
                         context = {
                             'procedure_id': procedure_id,
                             'scorecard_name': procedure_info.scorecard_name if procedure_info else None,
                             'score_name': procedure_info.score_name if procedure_info else None,
-                            'scorecard_id': procedure_info.procedure.scorecardId if procedure_info else None,
-                            'score_id': procedure_info.procedure.scoreId if procedure_info else None,
+                            'scorecard_id': scorecard_id,
+                            'score_id': score_id,
                         }
                         if account_id:
                             context['account_id'] = account_id
 
+                        # Console chat runs can provide explicit trigger text/history
+                        # captured at dispatch time; pass these through directly so
+                        # detached worker execution preserves continuity.
+                        console_user_message = options.get('console_user_message')
+                        if isinstance(console_user_message, str) and console_user_message.strip():
+                            context['console_user_message'] = console_user_message.strip()
+                        console_session_history = options.get('console_session_history')
+                        if isinstance(console_session_history, list) and console_session_history:
+                            context['console_session_history'] = console_session_history
+
                         from .procedure_executor import execute_procedure
                         from .mcp_transport import create_procedure_mcp_server
-                        from .builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
 
-                        if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
-                            mcp_server = None
-                            logger.info(
-                                "Skipping MCP server initialization for builtin console chat procedure"
-                            )
-                        else:
-                            mcp_server = await create_procedure_mcp_server(
-                                experiment_context=context
-                            )
+                        mcp_server = await create_procedure_mcp_server(
+                            experiment_context=context
+                        )
 
                         result = await execute_procedure(
                             procedure_id=procedure_id,

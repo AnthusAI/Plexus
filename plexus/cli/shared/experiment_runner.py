@@ -314,7 +314,7 @@ async def run_experiment_with_task_tracking(
         # Import and run the actual procedure using ProcedureService
         from plexus.cli.procedure.service import ProcedureService
         service = ProcedureService(client)
-        
+
         # Run the procedure (this is the actual hypothesis generation work)
         run_options = dict(experiment_options)
         run_options.setdefault("account_id", account_id)
