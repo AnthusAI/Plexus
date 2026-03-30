@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { LabelBadgeComparison } from "@/components/LabelBadgeComparison";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -43,26 +42,15 @@ export interface Topic {
   days_inactive?: number;
 }
 
+type RcaDataByItemId = Record<string, { detailed_cause?: string; suggested_fix?: string }>
+
 interface TopicItemProps {
   topic: Topic;
-  onSelectExemplar?: (itemId: string, rcaData: { detailed_cause?: string; suggested_fix?: string }) => void;
+  onTopicFilter?: (itemIds: string[] | null, rcaDataByItemId: RcaDataByItemId) => void;
 }
 
-function formatTimestamp(ts: string): string {
-  const date = new Date(ts);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 30) return `${diffDays}d ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return `${Math.floor(diffDays / 365)}y ago`;
-}
-
-function TopicItem({ topic, onSelectExemplar }: TopicItemProps) {
+function TopicItem({ topic, onTopicFilter }: TopicItemProps) {
   const [expanded, setExpanded] = useState(false);
-  const [showBelowFold, setShowBelowFold] = useState(false);
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
@@ -71,19 +59,37 @@ function TopicItem({ topic, onSelectExemplar }: TopicItemProps) {
     !!topic.detailed_explanation ||
     !!topic.improvement_suggestion;
 
-  const allExemplars = (topic.exemplars ?? []).filter((ex): ex is TopicExemplar => typeof ex !== "string" || ex !== "");
-  const aboveFoldExemplars = allExemplars.filter((ex) =>
-    typeof ex === "string" ? true : (ex.above_fold !== false)
-  );
-  const belowFoldExemplars = allExemplars.filter((ex) =>
-    typeof ex !== "string" && ex.above_fold === false
-  );
-
   return (
     <li className="pb-3">
       <button
         type="button"
-        onClick={() => hasDetails && setExpanded((e) => !e)}
+        onClick={() => {
+          if (!hasDetails) return;
+          const next = !expanded;
+          setExpanded(next);
+          if (onTopicFilter) {
+            if (next) {
+              const exemplars = (topic.exemplars ?? []).filter(
+                (ex): ex is TopicExemplar => typeof ex !== "string"
+              );
+              const itemIds = exemplars
+                .map((ex) => ex.item_id)
+                .filter((id): id is string => !!id);
+              const rcaDataByItemId: RcaDataByItemId = {};
+              exemplars.forEach((ex) => {
+                if (ex.item_id) {
+                  rcaDataByItemId[ex.item_id] = {
+                    detailed_cause: ex.detailed_cause ?? undefined,
+                    suggested_fix: ex.suggested_fix ?? undefined,
+                  };
+                }
+              });
+              onTopicFilter(itemIds, rcaDataByItemId);
+            } else {
+              onTopicFilter(null, {});
+            }
+          }
+        }}
         className="w-full flex items-center justify-between py-2 text-left hover:bg-muted/30 rounded px-2 -mx-2"
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -163,99 +169,6 @@ function TopicItem({ topic, onSelectExemplar }: TopicItemProps) {
               <span className="text-foreground">{topic.keywords.join(", ")}</span>
             </div>
           )}
-          {allExemplars.length > 0 && (
-            <div>
-              <div className="font-medium text-muted-foreground mb-1">Exemplars</div>
-              <ul className="space-y-2 list-disc list-inside">
-                {aboveFoldExemplars.map((ex, i) => {
-                  if (typeof ex === "string") {
-                    return (
-                      <li key={i} className="text-muted-foreground italic">
-                        &quot;{ex}&quot;
-                      </li>
-                    );
-                  }
-                  const isClickable = !!(ex.item_id && onSelectExemplar);
-                  return (
-                    <li key={i} className="text-muted-foreground">
-                      <button
-                        type="button"
-                        onClick={() => isClickable && onSelectExemplar!(ex.item_id!, {
-                          detailed_cause: ex.detailed_cause ?? undefined,
-                          suggested_fix: ex.suggested_fix ?? undefined,
-                        })}
-                        className={`w-full text-left flex flex-col gap-0.5 rounded px-1 -mx-1 py-0.5 ${isClickable ? "hover:bg-muted/30 cursor-pointer" : "cursor-default"}`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          {(ex.initial_answer_value || ex.final_answer_value) && (
-                            <LabelBadgeComparison
-                              predictedLabel={ex.initial_answer_value ?? "—"}
-                              actualLabel={ex.final_answer_value ?? "—"}
-                              isCorrect={ex.initial_answer_value === ex.final_answer_value}
-                              showStatus={false}
-                            />
-                          )}
-                          {ex.timestamp && (
-                            <span className="text-xs text-muted-foreground/60 shrink-0">
-                              {formatTimestamp(ex.timestamp)}
-                            </span>
-                          )}
-                        </div>
-                        {ex.score_explanation && (
-                          <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-                {belowFoldExemplars.length > 0 && !showBelowFold && (
-                  <li className="list-none">
-                    <button
-                      type="button"
-                      onClick={() => setShowBelowFold(true)}
-                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-                    >
-                      Show {belowFoldExemplars.length} more example{belowFoldExemplars.length !== 1 ? "s" : ""}
-                    </button>
-                  </li>
-                )}
-                {showBelowFold && belowFoldExemplars.map((ex, i) => {
-                  const isClickable = !!(ex.item_id && onSelectExemplar);
-                  return (
-                    <li key={`below-${i}`} className="text-muted-foreground">
-                      <button
-                        type="button"
-                        onClick={() => isClickable && onSelectExemplar!(ex.item_id!, {
-                          detailed_cause: ex.detailed_cause ?? undefined,
-                          suggested_fix: ex.suggested_fix ?? undefined,
-                        })}
-                        className={`w-full text-left flex flex-col gap-0.5 rounded px-1 -mx-1 py-0.5 ${isClickable ? "hover:bg-muted/30 cursor-pointer" : "cursor-default"}`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          {(ex.initial_answer_value || ex.final_answer_value) && (
-                            <LabelBadgeComparison
-                              predictedLabel={ex.initial_answer_value ?? "—"}
-                              actualLabel={ex.final_answer_value ?? "—"}
-                              isCorrect={ex.initial_answer_value === ex.final_answer_value}
-                              showStatus={false}
-                            />
-                          )}
-                          {ex.timestamp && (
-                            <span className="text-xs text-muted-foreground/60 shrink-0">
-                              {formatTimestamp(ex.timestamp)}
-                            </span>
-                          )}
-                        </div>
-                        {ex.score_explanation && (
-                          <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
         </div>
       )}
     </li>
@@ -265,15 +178,15 @@ function TopicItem({ topic, onSelectExemplar }: TopicItemProps) {
 export interface TopicListProps {
   topics: Topic[];
   label?: string;
-  onSelectExemplar?: (itemId: string, rcaData: { detailed_cause?: string; suggested_fix?: string }) => void;
+  onTopicFilter?: (itemIds: string[] | null, rcaDataByItemId: RcaDataByItemId) => void;
 }
 
 /**
- * Renders a labeled list of topics with keywords, memory tiers, and expandable exemplars.
- * When onSelectExemplar is provided, exemplars with item_id become clickable and trigger
- * the detail pane in the parent EvaluationTask.
+ * Renders a labeled list of topics with keywords, memory tiers, and expandable analysis.
+ * When a topic is expanded, onTopicFilter is called with the topic's exemplar item IDs
+ * so the parent can filter the score results list to show only that topic's items.
  */
-export function TopicList({ topics, label, onSelectExemplar }: TopicListProps) {
+export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
   if (!topics || topics.length === 0) return null;
 
   const sorted = [...topics].sort((a, b) => {
@@ -290,7 +203,7 @@ export function TopicList({ topics, label, onSelectExemplar }: TopicListProps) {
       )}
       <ul className="space-y-2">
         {sorted.map((t) => (
-          <TopicItem key={t.topic_id ?? t.cluster_id ?? t.label} topic={t} onSelectExemplar={onSelectExemplar} />
+          <TopicItem key={t.topic_id ?? t.cluster_id ?? t.label} topic={t} onTopicFilter={onTopicFilter} />
         ))}
       </ul>
     </div>

@@ -23,17 +23,19 @@ export interface EvaluationTaskScoreResultsProps {
   accuracy: number | null
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
+  selectedItemIds?: string[] | null
   onResultSelect?: (result: any) => void
   selectedScoreResult?: any | null
   navigationControls?: React.ReactNode
   isLoading?: boolean
 }
 
-export function EvaluationTaskScoreResults({ 
-  results, 
+export function EvaluationTaskScoreResults({
+  results,
   accuracy,
   selectedPredictedValue,
   selectedActualValue,
+  selectedItemIds,
   onResultSelect,
   selectedScoreResult,
   navigationControls,
@@ -114,7 +116,12 @@ export function EvaluationTaskScoreResults({
       if (filters.actualValue && result.metadata.human_label?.toLowerCase() !== filters.actualValue) {
         return false
       }
-      
+
+      if (selectedItemIds && selectedItemIds.length > 0 &&
+          !selectedItemIds.includes(result.itemId ?? '')) {
+        return false
+      }
+
       return true
     });
 
