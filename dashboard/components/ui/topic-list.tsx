@@ -14,6 +14,7 @@ export interface TopicExemplar {
   score_explanation?: string | null;
   above_fold?: boolean;
   timestamp?: string | null;
+  detailed_cause?: string | null;
 }
 
 export interface Topic {
@@ -153,6 +154,9 @@ function TopicItem({ topic }: TopicItemProps) {
                           {" → "}
                           Corrected: <strong>{ex.final_answer_value ?? "—"}</strong>
                         </span>
+                      )}
+                      {ex.detailed_cause && (
+                        <span className="text-xs text-foreground/80 italic">Analysis: {ex.detailed_cause}</span>
                       )}
                       {ex.score_explanation && (
                         <span className="text-xs italic">AI reasoning: {ex.score_explanation}</span>
