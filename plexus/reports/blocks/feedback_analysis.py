@@ -535,13 +535,26 @@ class FeedbackAnalysis(BaseReportBlock):
             provider = self.config.get("memory_llm_provider", "bedrock")
             model = self.config.get("memory_llm_model", "anthropic.claude-3-haiku-20240307-v1:0")
 
-            tac_path = os.path.join(
-                os.path.dirname(__file__), "..", "procedures", "single_turn_inference.tac"
-            )
+            # Reasoning models (gpt-5 / o3 series) use the Responses API and
+            # do not support the Chat Completions tool format, so we use a
+            # separate .tac file that captures output directly without tools.
+            _model_lower = model.lower()
+            is_reasoning = any(s in _model_lower for s in ("gpt-5", "o3", "o4"))
+
+            if is_reasoning:
+                tac_name = "single_turn_inference_reasoning.tac"
+            else:
+                tac_name = "single_turn_inference.tac"
+
+            tac_path = os.path.join(os.path.dirname(__file__), "..", "procedures", tac_name)
             with open(tac_path) as f:
                 tac_template = f.read()
 
-            tac_source = tac_template.replace("{{PROVIDER}}", provider).replace("{{MODEL}}", model)
+            tac_source = (
+                tac_template
+                .replace("{{PROVIDER}}", provider)
+                .replace("{{MODEL}}", model)
+            )
 
             storage = MemoryStorage()
             runtime = TactusRuntime(
@@ -561,7 +574,8 @@ class FeedbackAnalysis(BaseReportBlock):
                 raw_text = procedure_output.get("text", "")
             else:
                 raw_text = str(procedure_output) if procedure_output else ""
-            # done.last_result() returns {status, reason, tool} dict; extract reason
+            # Chat models: done.last_result() returns {status, reason, tool} dict
+            # Reasoning models: result.output is a plain string
             if isinstance(raw_text, dict):
                 text = raw_text.get("reason", "") or ""
             else:

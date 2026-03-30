@@ -235,7 +235,7 @@ class ReportBlockExtractor(mistune.BaseRenderer):
             attrs_str = lang_info[len("block"):].strip()
             attrs = {}
             # Regex: find key= followed by either "quoted value" or unquoted_value
-            pattern = re.compile(r'(\\w+)\\s*=\\s*(?:"([^"]*)"|(\\S+))')
+            pattern = re.compile(r'(\w+)\s*=\s*(?:"([^"]*)"|(\S+))')
             for match in pattern.finditer(attrs_str):
                 key = match.group(1)
                 # Value can be in group 2 (quoted) or group 3 (unquoted)

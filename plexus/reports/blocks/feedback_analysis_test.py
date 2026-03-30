@@ -259,4 +259,113 @@ class TestFeedbackAnalysis:
         assert "item_count" in results
         assert "mismatches" in results
         assert results["mismatches"] == 4
-        assert results["item_count"] == 15 
+        assert results["item_count"] == 15
+
+
+class TestEnrichedExemplars:
+    """Tests that mismatch tuples carry initialAnswerValue / finalAnswerValue
+    through to the memories structure."""
+
+    def _make_fi(self, score_id, initial, final, edit_comment,
+                 item_id="item-1", fi_id="fi-1"):
+        fi = MagicMock(spec=FeedbackItem)
+        fi.id = fi_id
+        fi.itemId = item_id
+        fi.scoreId = score_id
+        fi.accountId = "acct-1"
+        fi.scorecardId = "sc-1"
+        fi.initialAnswerValue = initial
+        fi.finalAnswerValue = final
+        fi.editCommentValue = edit_comment
+        fi.finalCommentValue = None
+        fi.editedAt = None
+        fi.updatedAt = None
+        fi.createdAt = None
+        return fi
+
+    def test_mismatch_tuple_includes_answer_values(self):
+        """The tuple appended to score_edit_comments must include positions [5] and [6]."""
+        from datetime import datetime, timezone, timedelta
+
+        fi = self._make_fi(
+            score_id="score-1",
+            initial="Yes",
+            final="No",
+            edit_comment="agent missed this",
+        )
+        fi.editedAt = datetime.now(timezone.utc) - timedelta(days=5)
+
+        # Re-run the same construction logic used in feedback_analysis.py
+        score_edit_comments = []
+        for mfi in [fi]:
+            _raw = mfi.editCommentValue or mfi.finalCommentValue or ""
+            text = _raw.strip() if isinstance(_raw, str) else ""
+            if text:
+                score_edit_comments.append((
+                    mfi.id or mfi.itemId or "",
+                    text,
+                    mfi.itemId,
+                    mfi.editedAt,
+                    mfi.id,
+                    mfi.initialAnswerValue,
+                    mfi.finalAnswerValue,
+                ))
+
+        assert len(score_edit_comments) == 1
+        tup = score_edit_comments[0]
+        assert tup[1] == "agent missed this"
+        assert tup[5] == "Yes"   # initialAnswerValue
+        assert tup[6] == "No"    # finalAnswerValue
+
+    @pytest.mark.asyncio
+    async def test_exemplar_stores_answer_values(self):
+        """_run_memory_analysis must store initial/final answer values on exemplar dicts."""
+        import numpy as np
+
+        config = {
+            "scorecard": "sc-1",
+            "days": 30,
+            "memory_llm_labels": False,
+            "memory_causal_inference": False,
+        }
+        block = FeedbackAnalysis(config, {}, MagicMock())
+        block.report_block_id = None
+
+        score_data = {
+            "score_id": "score-1",
+            "score_name": "Test Score",
+            "items": [
+                ("fi-0", "agent did not do X",     "item-0", None, "fi-0", "Yes", "No"),
+                ("fi-1", "agent forgot to verify", "item-1", None, "fi-1", "Yes", "No"),
+                ("fi-2", "missing confirmation",   "item-2", None, "fi-2", "No",  "Yes"),
+            ],
+        }
+
+        mock_embedder = MagicMock(return_value=np.random.rand(3, 8))
+        mock_clusterer = MagicMock()
+        mock_clusterer.cluster.return_value = (np.array([0, 0, 0]), None)
+        mock_clusterer.get_keywords.return_value = ["verify", "agent"]
+        mock_clusterer.get_representative_exemplars.return_value = [
+            (0, "agent did not do X"),
+            (1, "agent forgot to verify"),
+        ]
+
+        async def fake_identifiers(client, item_id):
+            return [{"url": f"https://example.com/r/{item_id}"}]
+
+        with patch("biblicus.analysis.reinforcement_memory.sentence_transformer_embedder",
+                   return_value=mock_embedder), \
+             patch("biblicus.analysis.reinforcement_memory._clusterer.TopicClusterer",
+                   return_value=mock_clusterer), \
+             patch("plexus.reports.blocks.feedback_analysis.fetch_item_identifiers",
+                   side_effect=fake_identifiers):
+            result = await block._run_memory_analysis([score_data])
+
+        assert result is not None
+        exemplars = result["scores"][0]["topics"][0]["exemplars"]
+        assert len(exemplars) >= 1
+        for ex in exemplars:
+            assert "initial_answer_value" in ex, f"Missing initial_answer_value: {ex}"
+            assert "final_answer_value" in ex, f"Missing final_answer_value: {ex}"
+            assert ex["initial_answer_value"] in ("Yes", "No")
+            assert ex["final_answer_value"] in ("Yes", "No")
