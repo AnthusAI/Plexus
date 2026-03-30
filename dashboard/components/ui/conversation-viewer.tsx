@@ -2374,11 +2374,11 @@ function ConversationViewer({
           </Conversation>
         </div>
         <div className="border-t border-border bg-background px-3 py-3">
-          <PromptInput className="w-full" onSubmit={handlePromptSubmit}>
+          <PromptInput className="w-full" onPromptSubmit={handlePromptSubmit}>
             <PromptInputBody>
                 <PromptInputTextarea
                   value={promptValue}
-                  onChange={(event) => setPromptValue(event.target.value)}
+                  onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setPromptValue(event.target.value)}
                   disabled={isPromptDisabled || isPromptSubmitting}
                   placeholder={isPromptDisabled ? "Select a session to compose a message" : "Type a message"}
                 />
