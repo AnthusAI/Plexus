@@ -23,7 +23,9 @@ import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
-
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkBreaks from "remark-breaks"
 
 export interface EvaluationMetric {
   name: string
@@ -723,16 +725,18 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
-  const rootCauseTopics = useMemo(() => {
+  const rootCauseData = useMemo(() => {
     try {
       const params = typeof data.parameters === 'string'
         ? JSON.parse(data.parameters)
         : data.parameters
-      return params?.root_cause?.topics ?? null
+      return params?.root_cause ?? null
     } catch {
       return null
     }
   }, [data.parameters])
+
+  const rootCauseTopics = rootCauseData?.topics ?? null
 
   const [showRootCauseCode, setShowRootCauseCode] = useState(false)
   const [selectedTopicItemIds, setSelectedTopicItemIds] = useState<string[] | null>(null)
@@ -908,10 +912,38 @@ const DetailContent = React.memo(({
                     </div>
                     {showRootCauseCode ? (
                       <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
-                        {JSON.stringify(rootCauseTopics, null, 2)}
+                        {JSON.stringify(rootCauseData, null, 2)}
                       </pre>
                     ) : (
-                      <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                      <>
+                        {rootCauseData?.overall_explanation && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause</div>
+                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                                p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                              }}>
+                                {rootCauseData.overall_explanation}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                        {rootCauseData?.overall_improvement_suggestion && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall improvement</div>
+                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                                p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                              }}>
+                                {rootCauseData.overall_improvement_suggestion}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                        <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                      </>
                     )}
                   </div>
                 )}
