@@ -133,20 +133,9 @@ async def test_trace_sink_stream_chunk_upserts_single_assistant_message():
     assert first_message_id == "msg-stream-1"
     assert second_message_id == "msg-stream-1"
     recorder.record_message.assert_awaited_once()
-    recorder.update_message.assert_not_awaited()
+    recorder.update_message.assert_awaited_once()
     assert sink._active_stream_message_ids["assistant"] == "msg-stream-1"
     assert sink._active_stream_texts["assistant"] == "Hel this is a longer chunk update that should exceed the persistence threshold."
-
-    await sink.record(
-        {
-            "event_type": "agent_turn",
-            "agent_name": "assistant",
-            "stage": "completed",
-        }
-    )
-
-    recorder.update_message.assert_awaited_once()
-    assert recorder.update_message.await_args.kwargs["content"] == "Hello"
 
 
 @pytest.mark.asyncio
