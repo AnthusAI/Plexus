@@ -25,7 +25,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -41,7 +41,13 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                 "type": "string",
                 "required": False,
                 "default": "",
-            }
+            },
+            "console_session_history": {
+                "type": "array",
+                "required": False,
+                "default": [],
+                "description": "Recent USER/ASSISTANT turns for continuity in detached runs.",
+            },
         },
         "outputs": {
             "success": {"type": "boolean", "required": True},
@@ -51,9 +57,6 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
         },
         "agents": {
             "assistant": {
-                "model": "openai/gpt-4o-mini",
-                "temperature": 0.2,
-                "max_tokens": 600,
                 "system_prompt": (
                     "You are the Plexus Console assistant.\n\n"
                     "You are a practical, accurate engineering copilot.\n"
@@ -62,7 +65,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "If user intent is unclear, ask one clarifying question.\n"
                     "Avoid filler and avoid inventing data.\n"
                 ),
-                "initial_message": "Ready for the next user message.",
+                "initial_message": "Ready.",
                 "tools": [],
             }
         },

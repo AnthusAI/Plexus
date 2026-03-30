@@ -8,6 +8,15 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
+import { Shimmer } from "@/components/ai-elements/shimmer"
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+  type ToolState,
+} from "@/components/ai-elements/tool"
 import {
   PromptInput,
   PromptInputBody,
@@ -24,14 +33,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
   MoreHorizontal,
   Trash2,
-  ChevronRight,
   AlertCircle,
   Plus
 } from "lucide-react"
@@ -73,7 +80,6 @@ export interface ChatSession {
   procedureId?: string
   name?: string
   category?: string
-  status?: 'ACTIVE' | 'COMPLETED' | 'ERROR'
   createdAt: string
   updatedAt?: string
   messageCount?: number
@@ -83,6 +89,21 @@ type ConversationRow = {
   id: string
   from: 'assistant' | 'user'
   message: ChatMessage
+}
+
+type PendingAssistantState = {
+  requestedAt: string
+  baselineAssistantCreatedAt?: string | null
+  triggerMessageId?: string
+}
+
+type ConsoleToolViewModel = {
+  type: string
+  toolName: string
+  state: ToolState
+  input?: unknown
+  output?: unknown
+  errorText?: string | null
 }
 
 export interface ConversationViewerProps {
@@ -127,6 +148,8 @@ const START_CONSOLE_RUN_MUTATION = `
   }
 `
 
+const API_KEY_AUTH_OPTIONS = { authMode: 'apiKey' as const }
+
 // Helper function to format JSON with proper newlines
 const formatJsonWithNewlines = (obj: any): string => {
   // If the object has a 'result' field that's a string, try to parse it as JSON
@@ -164,6 +187,39 @@ const parseJsonField = (value: unknown): any => {
   } catch {
     return undefined
   }
+}
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  if (error && typeof error === "object") {
+    const maybeMessage = (error as { message?: unknown }).message
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+      return maybeMessage
+    }
+    const maybeErrors = (error as { errors?: unknown }).errors
+    if (Array.isArray(maybeErrors)) {
+      const first = maybeErrors.find(
+        (entry) => entry && typeof entry === "object" && typeof (entry as { message?: unknown }).message === "string",
+      ) as { message?: string } | undefined
+      if (first?.message?.trim()) {
+        return first.message
+      }
+    }
+  }
+  return fallback
+}
+
+const getUserFacingDispatchErrorMessage = (rawMessage: string): string => {
+  const normalized = rawMessage.toLowerCase()
+  if (
+    normalized.includes("fieldundefined")
+    || (normalized.includes("startconsolerun") && normalized.includes("undefined"))
+  ) {
+    return "Run dispatch is not available in this environment."
+  }
+  return "Run dispatch failed. Check browser console for details."
 }
 
 const parseRawChatMessage = (msg: any): ChatMessage | null => {
@@ -214,18 +270,59 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
 
 const isVisibleChatMessage = (msg: ChatMessage): boolean => {
   if (msg.humanInteraction === 'INTERNAL') {
-    return msg.messageType !== 'TOOL_CALL' && msg.messageType !== 'TOOL_RESPONSE'
+    return msg.messageType === 'TOOL_CALL' || msg.messageType === 'TOOL_RESPONSE'
   }
   return true
 }
 
-const sortChatMessages = (messages: ChatMessage[]): ChatMessage[] => {
-  return [...messages].sort((a, b) => {
-    if (a.sequenceNumber && b.sequenceNumber) {
-      return a.sequenceNumber - b.sequenceNumber
+const isUserFacingMessage = (message: ChatMessage): boolean => {
+  if (message.role === 'USER' || message.humanInteraction === 'RESPONSE') {
+    return true
+  }
+  if (message.role === 'ASSISTANT') {
+    return true
+  }
+  return false
+}
+
+const compareChatMessages = (a: ChatMessage, b: ChatMessage): number => {
+  const sameSession = Boolean(a.sessionId && b.sessionId && a.sessionId === b.sessionId)
+  const aSequence = typeof a.sequenceNumber === 'number' ? a.sequenceNumber : null
+  const bSequence = typeof b.sequenceNumber === 'number' ? b.sequenceNumber : null
+
+  if (sameSession && aSequence !== null && bSequence !== null && aSequence !== bSequence) {
+    return aSequence - bSequence
+  }
+
+  const aCreatedMs = toEpochMs(a.createdAt) ?? 0
+  const bCreatedMs = toEpochMs(b.createdAt) ?? 0
+  if (aCreatedMs !== bCreatedMs) {
+    return aCreatedMs - bCreatedMs
+  }
+
+  if (sameSession) {
+    const aUserFacing = isUserFacingMessage(a)
+    const bUserFacing = isUserFacingMessage(b)
+    if (aUserFacing !== bUserFacing) {
+      return aUserFacing ? -1 : 1
     }
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  })
+
+    const aIsUserTurn = a.role === 'USER' || a.humanInteraction === 'RESPONSE'
+    const bIsUserTurn = b.role === 'USER' || b.humanInteraction === 'RESPONSE'
+    if (aIsUserTurn !== bIsUserTurn) {
+      return aIsUserTurn ? -1 : 1
+    }
+
+    if (aSequence !== null && bSequence !== null && aSequence !== bSequence) {
+      return aSequence - bSequence
+    }
+  }
+
+  return a.id.localeCompare(b.id)
+}
+
+const sortChatMessages = (messages: ChatMessage[]): ChatMessage[] => {
+  return [...messages].sort(compareChatMessages)
 }
 
 const normalizeAndSortVisibleMessages = (rawMessages: any[]): ChatMessage[] => {
@@ -233,7 +330,14 @@ const normalizeAndSortVisibleMessages = (rawMessages: any[]): ChatMessage[] => {
     .map(parseRawChatMessage)
     .filter((msg): msg is ChatMessage => Boolean(msg))
     .filter(isVisibleChatMessage)
-  return sortChatMessages(parsed)
+  const dedupedById = new Map<string, ChatMessage>()
+  for (const message of parsed) {
+    const existing = dedupedById.get(message.id)
+    if (!existing || compareChatMessages(existing, message) <= 0) {
+      dedupedById.set(message.id, message)
+    }
+  }
+  return sortChatMessages([...dedupedById.values()])
 }
 
 const getMetadataFingerprint = (metadata: unknown): string => {
@@ -278,6 +382,187 @@ const hasMessageListChanged = (prevMessages: ChatMessage[], nextMessages: ChatMe
   }
 
   return false
+}
+
+const toEpochMs = (value?: string | null): number | null => {
+  if (!value || typeof value !== 'string') {
+    return null
+  }
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const isAssistantChatMessage = (message: ChatMessage): boolean => (
+  message.role === 'ASSISTANT'
+  && message.messageType === 'MESSAGE'
+  && (
+    !message.humanInteraction
+    || message.humanInteraction === 'CHAT_ASSISTANT'
+    || message.humanInteraction === 'CHAT'
+  )
+)
+
+const CLIENT_HISTORY_SNAPSHOT_LIMIT = 24
+const CLIENT_HISTORY_SNAPSHOT_MAX_CHARS = 600
+
+const isSnapshotReadyAssistantMessage = (message: ChatMessage): boolean => {
+  if (message.role !== 'ASSISTANT') {
+    return true
+  }
+  if ((message.content || '').trim() === 'Assistant turn completed.') {
+    return false
+  }
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return true
+  }
+  const streaming = (metadata as Record<string, unknown>).streaming
+  if (!streaming || typeof streaming !== 'object' || Array.isArray(streaming)) {
+    return true
+  }
+  const state = (streaming as Record<string, unknown>).state
+  if (typeof state === 'string' && state.toLowerCase() === 'streaming') {
+    return false
+  }
+  return true
+}
+
+const buildClientHistorySnapshot = (
+  allMessages: ChatMessage[],
+  sessionId: string,
+  pendingUserMessage?: string,
+): Array<{ role: 'USER' | 'ASSISTANT'; content: string }> => {
+  if (!sessionId) {
+    return []
+  }
+
+  const sessionMessages = sortChatMessages(
+    allMessages.filter((message) => (
+      message.sessionId === sessionId
+      && (message.role === 'USER' || message.role === 'ASSISTANT')
+      && (message.messageType || 'MESSAGE') === 'MESSAGE'
+      && typeof message.content === 'string'
+      && message.content.trim().length > 0
+      && isSnapshotReadyAssistantMessage(message)
+    )),
+  )
+
+  const snapshot: Array<{ role: 'USER' | 'ASSISTANT'; content: string }> = sessionMessages
+    .map((message) => {
+      const trimmed = message.content.trim()
+      const content = trimmed.length > CLIENT_HISTORY_SNAPSHOT_MAX_CHARS
+        ? `${trimmed.slice(0, CLIENT_HISTORY_SNAPSHOT_MAX_CHARS)}...`
+        : trimmed
+      return {
+        role: message.role as 'USER' | 'ASSISTANT',
+        content,
+      }
+    })
+    .filter((entry) => Boolean(entry.content))
+
+  const trimmedPending = (pendingUserMessage || '').trim()
+  if (trimmedPending) {
+    const lastEntry = snapshot[snapshot.length - 1]
+    if (!lastEntry || lastEntry.role !== 'USER' || lastEntry.content !== trimmedPending) {
+      snapshot.push({
+        role: 'USER',
+        content: trimmedPending.length > CLIENT_HISTORY_SNAPSHOT_MAX_CHARS
+          ? `${trimmedPending.slice(0, CLIENT_HISTORY_SNAPSHOT_MAX_CHARS)}...`
+          : trimmedPending,
+      })
+    }
+  }
+
+  if (snapshot.length > CLIENT_HISTORY_SNAPSHOT_LIMIT) {
+    return snapshot.slice(snapshot.length - CLIENT_HISTORY_SNAPSHOT_LIMIT)
+  }
+  return snapshot
+}
+
+const getLatestAssistantCreatedAtForSession = (messages: ChatMessage[], sessionId: string): string | null => {
+  let latest: string | null = null
+  let latestMs: number | null = null
+
+  for (const message of messages) {
+    if (message.sessionId !== sessionId || !isAssistantChatMessage(message)) {
+      continue
+    }
+    const candidateMs = toEpochMs(message.createdAt)
+    if (candidateMs === null) {
+      continue
+    }
+    if (latestMs === null || candidateMs > latestMs) {
+      latestMs = candidateMs
+      latest = message.createdAt
+    }
+  }
+
+  return latest
+}
+
+const toToolType = (toolName?: string): string => {
+  if (!toolName) {
+    return 'tool-unknown'
+  }
+  return `tool-${toolName.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+}
+
+const extractToolErrorText = (message: ChatMessage): string | null => {
+  const candidates: unknown[] = [
+    message.toolResponse,
+    message.metadata,
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      continue
+    }
+    const record = candidate as Record<string, unknown>
+    if (typeof record.errorText === 'string' && record.errorText.trim()) {
+      return record.errorText
+    }
+    if (typeof record.error === 'string' && record.error.trim()) {
+      return record.error
+    }
+    if (record.success === false && typeof message.content === 'string' && message.content.trim()) {
+      return message.content
+    }
+  }
+
+  return null
+}
+
+const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel | null => {
+  if (message.messageType !== 'TOOL_CALL' && message.messageType !== 'TOOL_RESPONSE') {
+    return null
+  }
+
+  const toolName = message.toolName || 'tool'
+  const type = toToolType(toolName)
+
+  if (message.messageType === 'TOOL_CALL') {
+    return {
+      type,
+      toolName,
+      state: message.toolParameters ? 'input-available' : 'input-streaming',
+      input: message.toolParameters || {},
+      output: undefined,
+      errorText: null,
+    }
+  }
+
+  const errorText = extractToolErrorText(message)
+  const output = message.toolResponse
+    ?? (message.content ? message.content : undefined)
+
+  return {
+    type,
+    toolName,
+    state: errorText ? 'output-error' : 'output-available',
+    input: undefined,
+    output,
+    errorText,
+  }
 }
 
 // Collapsible text component with Markdown support for long messages
@@ -400,16 +685,6 @@ const getMessageTypeColor = (role?: string, messageType?: string, humanInteracti
   }
 }
 
-const getSessionStatusColor = (status?: ChatSession['status']) => {
-  if (status === 'COMPLETED') {
-    return 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200'
-  }
-  if (status === 'ERROR') {
-    return 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200'
-  }
-  return 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200'
-}
-
 const getMessageTypeLabel = (message: ChatMessage) => {
   if (message.humanInteraction === 'NOTIFICATION') return 'Notification'
   if (message.humanInteraction === 'ALERT_INFO') return 'Info'
@@ -431,9 +706,6 @@ const getMessageTypeLabel = (message: ChatMessage) => {
 }
 
 const shouldShowMessageTypeBadge = (message: ChatMessage): boolean => {
-  if (message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') {
-    return true
-  }
   return [
     'NOTIFICATION',
     'ALERT_INFO',
@@ -498,7 +770,9 @@ function ConversationViewer({
   const [promptValue, setPromptValue] = useState("")
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
+  const promptSubmitLockRef = React.useRef(false)
 
   useEffect(() => {
     const node = containerRef.current
@@ -570,6 +844,75 @@ function ConversationViewer({
       onSessionCountChange(sessions.length)
     }
   }, [sessions.length, onSessionCountChange])
+
+  const markPendingAssistant = React.useCallback((
+    sessionId: string,
+    requestedAt: string,
+    triggerMessageId?: string,
+  ) => {
+    const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
+    setPendingAssistantBySession((prev) => ({
+      ...prev,
+      [sessionId]: {
+        requestedAt,
+        baselineAssistantCreatedAt,
+        triggerMessageId,
+      },
+    }))
+  }, [messages])
+
+  const clearPendingAssistant = React.useCallback((sessionId: string) => {
+    setPendingAssistantBySession((prev) => {
+      if (!prev[sessionId]) {
+        return prev
+      }
+      const next = { ...prev }
+      delete next[sessionId]
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const pendingEntries = Object.entries(pendingAssistantBySession)
+    if (!pendingEntries.length) {
+      return
+    }
+
+    const sessionsToClear: string[] = []
+    for (const [sessionId, pendingState] of pendingEntries) {
+      const baselineMs = toEpochMs(pendingState.baselineAssistantCreatedAt ?? null) ?? -Infinity
+      const requestedMs = toEpochMs(pendingState.requestedAt) ?? -Infinity
+      const threshold = Math.max(baselineMs, requestedMs)
+
+      const hasNewAssistantMessage = messages.some((message) => {
+        if (message.sessionId !== sessionId || !isAssistantChatMessage(message)) {
+          return false
+        }
+        const messageMs = toEpochMs(message.createdAt)
+        return messageMs !== null && messageMs > threshold
+      })
+
+      if (hasNewAssistantMessage) {
+        sessionsToClear.push(sessionId)
+      }
+    }
+
+    if (!sessionsToClear.length) {
+      return
+    }
+
+    setPendingAssistantBySession((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const sessionId of sessionsToClear) {
+        if (next[sessionId]) {
+          delete next[sessionId]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [messages, pendingAssistantBySession])
   
   const handleSessionSelect = (sessionId: string) => {
     setInternalSelectedSessionId(sessionId)
@@ -625,6 +968,7 @@ function ConversationViewer({
         triggerMessageId,
         clientInstrumentation: JSON.stringify(clientInstrumentation),
       },
+      authMode: 'apiKey',
     })
 
     const result = response?.data?.startConsoleRun
@@ -742,7 +1086,7 @@ function ConversationViewer({
         content: JSON.stringify({ value: responseValue }),
         metadata: JSON.stringify(responseMetadata),
         createdAt: respondedAt,
-      })
+      }, API_KEY_AUTH_OPTIONS)
       const responseMessageId = created?.data?.id
       if (!responseMessageId) {
         throw new Error('Failed to persist RESPONSE message')
@@ -755,6 +1099,7 @@ function ConversationViewer({
         responseMessageId,
         control.request_id
       )
+      markPendingAssistant(pendingMessage.sessionId, respondedAt, responseMessageId)
 
       toast.success('Response submitted. Procedure resume queued.')
 
@@ -791,6 +1136,9 @@ function ConversationViewer({
         return next
       })
     } catch (error) {
+      if (pendingMessage.sessionId) {
+        clearPendingAssistant(pendingMessage.sessionId)
+      }
       const message = error instanceof Error ? error.message : 'Failed to submit response'
       toast.error(message)
       setHitlSubmitErrors(prev => ({
@@ -815,17 +1163,39 @@ function ConversationViewer({
         // Load chat sessions for the procedure
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
-          limit: 100
-        })
+          limit: 100,
+          authMode: 'apiKey',
+        }, API_KEY_AUTH_OPTIONS)
 
-        if (sessionsData) {
-          const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
+        const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
+        const selectedId = selectedSessionIdRef.current?.trim()
+        let mergedSessions = fetchedSessions
+
+        // GSI reads can lag behind writes. If the URL points at a freshly created session
+        // that's not in the index list yet, fetch by id and inject it.
+        if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
+          try {
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, API_KEY_AUTH_OPTIONS)
+            const selectedSession = selectedSessionResponse?.data
+            if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
+              mergedSessions = [selectedSession, ...fetchedSessions]
+            }
+          } catch (error) {
+            console.warn('Unable to fetch selected session by id during initial load:', error)
+          }
+        }
+
+        if (mergedSessions.length > 0) {
+          const dedupedSessions = mergedSessions.filter((session: any, index: number, array: any[]) => (
+            session?.id && array.findIndex((candidate) => candidate?.id === session.id) === index
+          ))
+
+          const formattedSessions: ChatSession[] = dedupedSessions.map((session: any) => ({
             id: session.id,
             accountId: session.accountId,
             procedureId: session.procedureId,
             name: session.name,
             category: session.category,
-            status: session.status,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messageCount: 0 // Will be updated when we load messages
@@ -838,10 +1208,12 @@ function ConversationViewer({
           
           setInternalSessions(sortedSessions)
           
-          if (sortedSessions.length > 0) {
+          if (!isExternallyControlledSession && sortedSessions.length > 0) {
             // Select the most recent session (first in sorted array)
             setInternalSelectedSessionId(sortedSessions[0].id)
           }
+        } else {
+          setInternalSessions([])
         }
 
         // Load ALL messages for this experiment with proper pagination
@@ -853,7 +1225,9 @@ function ConversationViewer({
             procedureId: effectiveId,
             limit: 1000,
             nextToken,
+            authMode: 'apiKey',
           }, {
+            authMode: 'apiKey',
             selectionSet: [
               'id',
               'content',
@@ -904,7 +1278,7 @@ function ConversationViewer({
     }
 
     loadConversationData()
-  }, [effectiveId])
+  }, [effectiveId, isExternallyControlledSession])
 
   // Real-time subscription for new chat sessions - notification-based pattern
   useEffect(() => {
@@ -917,17 +1291,37 @@ function ConversationViewer({
         // Query for sessions in the current procedure
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
-          limit: 100
-        })
+          limit: 100,
+          authMode: 'apiKey',
+        }, API_KEY_AUTH_OPTIONS)
 
-        if (sessionsData) {
-          const formattedSessions: ChatSession[] = sessionsData.map((session: any) => ({
+        const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
+        const selectedId = selectedSessionIdRef.current?.trim()
+        let mergedSessions = fetchedSessions
+
+        if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
+          try {
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, API_KEY_AUTH_OPTIONS)
+            const selectedSession = selectedSessionResponse?.data
+            if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
+              mergedSessions = [selectedSession, ...fetchedSessions]
+            }
+          } catch (error) {
+            console.warn('Unable to fetch selected session by id during session refresh:', error)
+          }
+        }
+
+        if (mergedSessions.length > 0) {
+          const dedupedSessions = mergedSessions.filter((session: any, index: number, array: any[]) => (
+            session?.id && array.findIndex((candidate) => candidate?.id === session.id) === index
+          ))
+
+          const formattedSessions: ChatSession[] = dedupedSessions.map((session: any) => ({
             id: session.id,
             accountId: session.accountId,
             procedureId: session.procedureId,
             name: session.name,
             category: session.category,
-            status: session.status,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messageCount: 0 // Will be updated when we load messages
@@ -958,7 +1352,6 @@ function ConversationViewer({
                 }
                 return (
                   previous.updatedAt !== session.updatedAt
-                  || previous.status !== session.status
                   || previous.name !== session.name
                   || previous.category !== session.category
                 )
@@ -980,15 +1373,20 @@ function ConversationViewer({
 
             return mergedSessions
           })
+        } else {
+          setInternalSessions([])
         }
       } catch (error) {
         console.error('Error checking for new chat sessions:', error)
       }
     }
 
+    const pollTimer = window.setInterval(checkForNewSessions, 15000)
+    checkForNewSessions()
+
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatSession.onCreate().subscribe({
+      const subscription = getClient().models.ChatSession.onCreate(API_KEY_AUTH_OPTIONS as any).subscribe({
         next: () => {
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
@@ -999,10 +1397,14 @@ function ConversationViewer({
       })
 
       return () => {
+        window.clearInterval(pollTimer)
         subscription.unsubscribe()
       }
     } catch (error) {
       console.error('Error setting up chat session notification:', error)
+    }
+    return () => {
+      window.clearInterval(pollTimer)
     }
   }, [effectiveId, isExternallyControlledSession, onSessionSelect])
 
@@ -1014,6 +1416,18 @@ function ConversationViewer({
 
     if (parsed.procedureId && parsed.procedureId !== effectiveId) {
       return
+    }
+
+    const parsedSessionId = parsed.sessionId
+    if (parsedSessionId && isAssistantChatMessage(parsed)) {
+      setPendingAssistantBySession((prev) => {
+        if (!prev[parsedSessionId]) {
+          return prev
+        }
+        const next = { ...prev }
+        delete next[parsedSessionId]
+        return next
+      })
     }
 
     setInternalMessages((prevMessages) => {
@@ -1061,7 +1475,9 @@ function ConversationViewer({
             procedureId: effectiveId,
             limit: 1000,
             nextToken,
+            authMode: 'apiKey',
           }, {
+            authMode: 'apiKey',
             selectionSet: [
               'id',
               'content',
@@ -1130,7 +1546,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      createSubscription = getClient().models.ChatMessage.onCreate().subscribe({
+      createSubscription = getClient().models.ChatMessage.onCreate(API_KEY_AUTH_OPTIONS as any).subscribe({
         next: (payload: any) => {
           const incoming = extractSubscriptionMessage(payload)
           if (incoming) {
@@ -1149,7 +1565,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      updateSubscription = getClient().models.ChatMessage.onUpdate().subscribe({
+      updateSubscription = getClient().models.ChatMessage.onUpdate(API_KEY_AUTH_OPTIONS as any).subscribe({
         next: (payload: any) => {
           const incoming = extractSubscriptionMessage(payload)
           if (incoming) {
@@ -1187,7 +1603,7 @@ function ConversationViewer({
   // Filter messages for selected session
   const filteredMessages = selectedSessionId
     ? messages.filter(msg => (msg as any).sessionId === selectedSessionId)
-    : messages
+    : []
 
   const responseParentIds = new Set(
     filteredMessages
@@ -1207,16 +1623,33 @@ function ConversationViewer({
     if (aPending !== bPending) {
       return aPending ? 1 : -1
     }
-    if (a.sequenceNumber && b.sequenceNumber) {
-      return a.sequenceNumber - b.sequenceNumber
-    }
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    return compareChatMessages(a, b)
   })
 
   
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
   const selectedSessionMissing = Boolean(selectedSessionId && !selectedSession)
+  const pendingAssistantState = selectedSessionId ? pendingAssistantBySession[selectedSessionId] : undefined
+  const showThinkingPlaceholder = React.useMemo(() => {
+    if (!selectedSession || !pendingAssistantState) {
+      return false
+    }
+
+    const baselineMs = toEpochMs(pendingAssistantState.baselineAssistantCreatedAt ?? null) ?? -Infinity
+    const requestedMs = toEpochMs(pendingAssistantState.requestedAt) ?? -Infinity
+    const threshold = Math.max(baselineMs, requestedMs)
+
+    const hasAssistantSincePending = sortedMessages.some((message) => {
+      if (message.sessionId !== selectedSession.id || !isAssistantChatMessage(message)) {
+        return false
+      }
+      const messageMs = toEpochMs(message.createdAt)
+      return messageMs !== null && messageMs > threshold
+    })
+
+    return !hasAssistantSincePending
+  }, [pendingAssistantState, selectedSession, sortedMessages])
   const isPromptDisabled = !selectedSession
   const conversationRows = sortedMessages.map(getRowFromMessage)
   const pendingMessageForPrompt = React.useMemo(
@@ -1262,10 +1695,9 @@ function ConversationViewer({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
       category: 'Console Chat',
-      status: 'ACTIVE',
       createdAt,
       updatedAt: createdAt,
-    })
+    }, API_KEY_AUTH_OPTIONS)
 
     const sessionId = created?.data?.id
     if (!sessionId) {
@@ -1278,7 +1710,6 @@ function ConversationViewer({
       procedureId: fallbackSessionProcedureId,
       category: created?.data?.category || 'Console Chat',
       name: created?.data?.name,
-      status: (created?.data?.status as ChatSession['status']) || 'ACTIVE',
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
       messageCount: 0,
@@ -1308,6 +1739,12 @@ function ConversationViewer({
       await createNewSession()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create session'
+      console.error('[ConsoleChat] session create failed', {
+        error,
+        accountId: fallbackSessionAccountId,
+        procedureId: fallbackSessionProcedureId,
+        selectedSessionId,
+      })
       toast.error(message)
     } finally {
       setIsCreatingSession(false)
@@ -1321,82 +1758,60 @@ function ConversationViewer({
         return
       }
 
-      if (isPromptSubmitting || isCreatingSession) {
+      if (promptSubmitLockRef.current || isPromptSubmitting || isCreatingSession) {
         return
       }
 
-      let targetSessionId = selectedSessionId
-      let targetSessionStatus = selectedSession?.status
-      let targetSessionAccountId = selectedSessionAccountId
-      let targetSessionProcedureId = selectedSessionProcedureId
+      promptSubmitLockRef.current = true
+      try {
+        let targetSessionId = selectedSessionId
+        let targetSessionAccountId = selectedSessionAccountId
+        let targetSessionProcedureId = selectedSessionProcedureId
 
-      if (!selectedSession && targetSessionId) {
-        toast.info('Select a valid chat session first')
-        return
-      }
-
-      if (!targetSessionId || targetSessionStatus === 'COMPLETED' || targetSessionStatus === 'ERROR') {
-        try {
-          const newSession = await createNewSession()
-          targetSessionId = newSession.id
-          targetSessionStatus = newSession.status
-          targetSessionAccountId = newSession.accountId
-          targetSessionProcedureId = newSession.procedureId
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to create a fresh session before send'
-          toast.error(message)
+        if (!selectedSession && targetSessionId) {
+          toast.info('Select a valid chat session first')
           return
         }
-      }
 
-      if (!targetSessionId) {
-        toast.info('Select or create a chat session first')
-        return
-      }
-
-      if (pendingMessageForPrompt) {
-        setIsPromptSubmitting(true)
-        try {
-          await submitHitlResponse(pendingMessageForPrompt, 'submit', nextValue)
-          setPromptValue('')
-        } finally {
-          setIsPromptSubmitting(false)
+        if (!targetSessionId) {
+          try {
+            const newSession = await createNewSession()
+            targetSessionId = newSession.id
+            targetSessionAccountId = newSession.accountId
+            targetSessionProcedureId = newSession.procedureId
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to create a fresh session before send'
+            toast.error(message)
+            return
+          }
         }
-        return
-      }
 
-      if (!targetSessionAccountId || !targetSessionProcedureId) {
-        toast.error('Missing required session metadata to send chat input')
-        return
-      }
+        if (!targetSessionId) {
+          toast.info('Select or create a chat session first')
+          return
+        }
 
-      const clientSendStartedAt = new Date().toISOString()
-      const nowIso = new Date().toISOString()
-      const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const optimisticMessage: ChatMessage = {
-        id: optimisticMessageId,
-        accountId: targetSessionAccountId,
-        sessionId: targetSessionId,
-        procedureId: targetSessionProcedureId,
-        role: 'USER',
-        messageType: 'MESSAGE',
-        humanInteraction: 'CHAT',
-        content: nextValue,
-        createdAt: nowIso,
-      }
+        if (pendingMessageForPrompt) {
+          setIsPromptSubmitting(true)
+          try {
+            await submitHitlResponse(pendingMessageForPrompt, 'submit', nextValue)
+            setPromptValue('')
+          } finally {
+            setIsPromptSubmitting(false)
+          }
+          return
+        }
 
-      setIsPromptSubmitting(true)
-      setInternalMessages(prev => [...prev, optimisticMessage])
-      setInternalSessions(prev => prev.map(session => (
-        session.id === targetSessionId
-          ? { ...session, messageCount: (session.messageCount || 0) + 1, updatedAt: nowIso }
-          : session
-      )))
+        if (!targetSessionAccountId || !targetSessionProcedureId) {
+          toast.error('Missing required session metadata to send chat input')
+          return
+        }
 
-      let messagePersisted = false
-      try {
-        const client = getClient()
-        const created = await (client.models.ChatMessage.create as any)({
+        const clientSendStartedAt = new Date().toISOString()
+        const nowIso = new Date().toISOString()
+        const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const optimisticMessage: ChatMessage = {
+          id: optimisticMessageId,
           accountId: targetSessionAccountId,
           sessionId: targetSessionId,
           procedureId: targetSessionProcedureId,
@@ -1404,60 +1819,104 @@ function ConversationViewer({
           messageType: 'MESSAGE',
           humanInteraction: 'CHAT',
           content: nextValue,
-          metadata: JSON.stringify({
-            source: 'console-prompt-input',
-            sent_at: nowIso,
-            instrumentation: {
-              client_send_started_at: clientSendStartedAt,
-            },
-          }),
           createdAt: nowIso,
-        })
-
-        const createdMessageId = created?.data?.id
-        if (!createdMessageId) {
-          throw new Error('Failed to persist chat message')
         }
-        messagePersisted = true
 
-        const persistedCreatedAt = created?.data?.createdAt || nowIso
-        setInternalMessages(prev => prev.map(message => (
-          message.id === optimisticMessageId
-            ? { ...optimisticMessage, id: createdMessageId, createdAt: persistedCreatedAt }
-            : message
+        setIsPromptSubmitting(true)
+        setInternalMessages(prev => [...prev, optimisticMessage])
+        setInternalSessions(prev => prev.map(session => (
+          session.id === targetSessionId
+            ? { ...session, messageCount: (session.messageCount || 0) + 1, updatedAt: nowIso }
+            : session
         )))
 
-        await enqueueProcedureRunFromChat(
-          targetSessionProcedureId,
-          createdMessageId,
-          targetSessionId,
-          {
-            client_send_started_at: clientSendStartedAt,
-            client_user_message_created_at: persistedCreatedAt,
-            client_prompt_length_chars: nextValue.length,
-          },
-        )
+        let messagePersisted = false
+        try {
+          const client = getClient()
+          const created = await (client.models.ChatMessage.create as any)({
+            accountId: targetSessionAccountId,
+            sessionId: targetSessionId,
+            procedureId: targetSessionProcedureId,
+            role: 'USER',
+            messageType: 'MESSAGE',
+            humanInteraction: 'CHAT',
+            content: nextValue,
+            metadata: JSON.stringify({
+              source: 'console-prompt-input',
+              sent_at: nowIso,
+              instrumentation: {
+                client_send_started_at: clientSendStartedAt,
+              },
+            }),
+          }, API_KEY_AUTH_OPTIONS)
 
-        setPromptValue('')
-      } catch (error) {
-        if (!messagePersisted) {
-          setInternalMessages(prev => prev.filter(message => message.id !== optimisticMessageId))
-          setInternalSessions(prev => prev.map(session => (
-            session.id === targetSessionId
-              ? { ...session, messageCount: Math.max(0, (session.messageCount || 1) - 1) }
-              : session
+          const createdMessageId = created?.data?.id
+          if (!createdMessageId) {
+            throw new Error('Failed to persist chat message')
+          }
+          messagePersisted = true
+
+          const persistedCreatedAt = created?.data?.createdAt || nowIso
+          setInternalMessages(prev => prev.map(message => (
+            message.id === optimisticMessageId
+              ? { ...optimisticMessage, id: createdMessageId, createdAt: persistedCreatedAt }
+              : message
           )))
-        }
 
-        const errorMessage = error instanceof Error ? error.message : 'Failed to send chat message'
-        if (messagePersisted) {
-          toast.error(`Message saved, but run dispatch failed: ${errorMessage}`)
-        } else {
-          toast.error(errorMessage)
+          const dispatchMessageText = nextValue.length > 4000
+            ? `${nextValue.slice(0, 4000)}…`
+            : nextValue
+          const clientHistorySnapshot = buildClientHistorySnapshot(
+            messages,
+            targetSessionId,
+            nextValue,
+          )
+
+          await enqueueProcedureRunFromChat(
+            targetSessionProcedureId,
+            createdMessageId,
+            targetSessionId,
+            {
+              client_send_started_at: clientSendStartedAt,
+              client_user_message_created_at: persistedCreatedAt,
+              client_prompt_length_chars: nextValue.length,
+              client_user_message_text: dispatchMessageText,
+              client_history_snapshot: clientHistorySnapshot,
+            },
+          )
+          markPendingAssistant(targetSessionId, persistedCreatedAt, createdMessageId)
+
+          setPromptValue('')
+        } catch (error) {
+          clearPendingAssistant(targetSessionId)
+          if (!messagePersisted) {
+            setInternalMessages(prev => prev.filter(message => message.id !== optimisticMessageId))
+            setInternalSessions(prev => prev.map(session => (
+              session.id === targetSessionId
+                ? { ...session, messageCount: Math.max(0, (session.messageCount || 1) - 1) }
+                : session
+            )))
+          }
+
+          const errorMessage = getErrorMessage(error, 'Failed to send chat message')
+          console.error('[ConsoleChat] send/dispatch failure', {
+            messagePersisted,
+            sessionId: targetSessionId,
+            procedureId: targetSessionProcedureId,
+            errorMessage,
+            error,
+          })
+          if (messagePersisted) {
+            toast.error(`Message saved, but ${getUserFacingDispatchErrorMessage(errorMessage)}`)
+          } else {
+            toast.error(errorMessage)
+          }
+          throw error
+        } finally {
+          setIsPromptSubmitting(false)
         }
-        throw error
       } finally {
-        setIsPromptSubmitting(false)
+        promptSubmitLockRef.current = false
       }
     },
     [
@@ -1468,8 +1927,11 @@ function ConversationViewer({
       pendingMessageForPrompt,
       isPromptSubmitting,
       isCreatingSession,
+      messages,
       createNewSession,
       enqueueProcedureRunFromChat,
+      clearPendingAssistant,
+      markPendingAssistant,
       submitHitlResponse,
     ]
   )
@@ -1540,18 +2002,10 @@ function ConversationViewer({
                     <div className="text-xs font-medium truncate">
                       {session.name || session.category || `Session ${session.id.slice(0, 8)}`}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
                     </div>
                   </div>
-                  {session.status && (
-                    <Badge 
-                      variant="secondary"
-                      className={`text-xs ${getSessionStatusColor(session.status)}`}
-                    >
-                      {session.status}
-                    </Badge>
-                  )}
                 </div>
               </Button>
             ))}
@@ -1599,14 +2053,6 @@ function ConversationViewer({
                     {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
                   </h3>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                    {selectedSession.status && (
-                      <Badge 
-                        variant="secondary"
-                        className={`text-xs ${getSessionStatusColor(selectedSession.status)}`}
-                      >
-                        {selectedSession.status}
-                      </Badge>
-                    )}
                     <span>
                       {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                     </span>
@@ -1677,6 +2123,7 @@ function ConversationViewer({
               ) : (
                 conversationRows.map((row) => {
                   const message = row.message
+                  const toolViewModel = mapMessageToToolViewModel(message)
                   const controlEnvelope = getControlEnvelope(message.metadata)
                   const requestType = (
                     controlEnvelope?.request_type
@@ -1689,6 +2136,8 @@ function ConversationViewer({
                   const currentInput = hitlTextByMessage[message.id] || ''
                   const messageTypeLabel = getMessageTypeLabel(message)
                   const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
+                  const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
+                  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge
 
                   return (
                     <Message
@@ -1700,7 +2149,7 @@ function ConversationViewer({
                     >
                       <div className="flex items-start">
                         <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                          {(showMessageTypeBadge || Boolean(message.toolName)) && (
+                          {showMetadataBadges && (
                             <div className="mb-2 flex items-center gap-2">
                               {showMessageTypeBadge && (
                                 <Badge
@@ -1711,7 +2160,7 @@ function ConversationViewer({
                                 </Badge>
                               )}
 
-                              {message.toolName && (
+                              {showToolNameBadge && (
                                 <Badge variant="outline" className="text-xs">
                                   {message.toolName}
                                 </Badge>
@@ -1719,64 +2168,42 @@ function ConversationViewer({
                             </div>
                           )}
 
-                          {message.messageType === 'TOOL_CALL' && message.toolParameters ? (
-                            <div>
-                              <div className="rounded-md bg-card p-3">
-                                {message.toolName && (
-                                  <h4 className="mb-2 text-sm font-semibold text-foreground">{message.toolName}</h4>
+                          {toolViewModel ? (
+                            <Tool
+                              defaultOpen={
+                                toolViewModel.state === 'output-available'
+                                || toolViewModel.state === 'output-error'
+                                || toolViewModel.state === 'output-denied'
+                              }
+                            >
+                              <ToolHeader
+                                toolType={toolViewModel.type}
+                                state={toolViewModel.state}
+                                toolName={toolViewModel.toolName}
+                              />
+                              <ToolContent>
+                                {message.messageType === 'TOOL_CALL' && (
+                                  <ToolInput input={toolViewModel.input} />
                                 )}
-                                <div className="space-y-1">
-                                  {Object.entries(message.toolParameters).map(([key, value]) => (
-                                    <div key={key} className="grid grid-cols-3 gap-2 text-xs">
-                                      <div className="font-medium text-muted-foreground">{key}:</div>
-                                      <div className="col-span-2 break-words font-mono text-foreground">
-                                        {typeof value === 'string' ? value : JSON.stringify(value)}
+                                {message.messageType === 'TOOL_RESPONSE' && (
+                                  <ToolOutput
+                                    errorText={toolViewModel.errorText}
+                                    output={
+                                      <div className="font-mono whitespace-pre-wrap break-words">
+                                        {toolViewModel.output === undefined || toolViewModel.output === null
+                                          ? 'No output'
+                                          : typeof toolViewModel.output === 'string'
+                                            ? toolViewModel.output
+                                            : formatJsonWithNewlines(toolViewModel.output)}
                                       </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="mt-3">
-                                <Collapsible>
-                                  <CollapsibleTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="flex h-auto items-center gap-1 p-0 text-xs text-muted-foreground hover:text-foreground"
-                                    >
-                                      <ChevronRight className="h-3 w-3" />
-                                      Raw
-                                    </Button>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent>
-                                    <div className="mt-2 text-sm font-mono">
-                                      <CollapsibleText content={message.content} maxLines={10} />
-                                    </div>
-                                  </CollapsibleContent>
-                                </Collapsible>
-                              </div>
-                            </div>
-                          ) : message.messageType === 'TOOL_RESPONSE' ? (
-                            null
+                                    }
+                                  />
+                                )}
+                              </ToolContent>
+                            </Tool>
                           ) : (
                             <div className="text-sm">
                               <CollapsibleText content={message.content} maxLines={10} />
-                            </div>
-                          )}
-
-                          {message.messageType === 'TOOL_RESPONSE' && message.toolResponse && (
-                            <div className="mt-3">
-                              <div className="rounded-md bg-card p-3 text-xs">
-                                <div className="font-mono">
-                                  <CollapsibleText
-                                    content={formatJsonWithNewlines(message.toolResponse)}
-                                    maxLines={12}
-                                    className="whitespace-pre-wrap break-words font-mono"
-                                    enableMarkdown={false}
-                                  />
-                                </div>
-                              </div>
                             </div>
                           )}
 
@@ -1926,6 +2353,21 @@ function ConversationViewer({
                     </Message>
                   )
                 })
+              )}
+              {showThinkingPlaceholder && (
+                <Message
+                  key={`thinking-${selectedSessionId}`}
+                  from="assistant"
+                  data-message-id={`thinking-${selectedSessionId}`}
+                  data-from="assistant"
+                  className="max-w-full"
+                >
+                  <div className="flex items-start">
+                    <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                      <Shimmer className="text-sm">Thinking</Shimmer>
+                    </MessageContent>
+                  </div>
+                </Message>
               )}
             </ConversationContent>
             <ConversationScrollButton />
