@@ -47,17 +47,21 @@ export interface ScoreResultComponentProps {
   onSelect?: () => void
   onClose?: () => void
   navigationControls?: React.ReactNode
+  rcaDetailedCause?: string
+  rcaSuggestedFix?: string
 }
 
 
 
-export function ScoreResultComponent({ 
+export function ScoreResultComponent({
   result,
   variant = 'list',
   isFocused = false,
   onSelect,
   onClose,
-  navigationControls
+  navigationControls,
+  rcaDetailedCause,
+  rcaSuggestedFix,
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -252,6 +256,56 @@ export function ScoreResultComponent({
                   >
                     {result.metadata.human_explanation}
                   </ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {rcaDetailedCause && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Root cause analysis</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      }}
+                    >
+                      {rcaDetailedCause}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {rcaSuggestedFix && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Suggested fix</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      }}
+                    >
+                      {rcaSuggestedFix}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}
