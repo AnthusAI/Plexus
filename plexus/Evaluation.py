@@ -3035,7 +3035,7 @@ class FeedbackEvaluation(Evaluation):
             )
 
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
-            root_cause_topics = await self._run_root_cause_analysis(feedback_items)
+            root_cause_result = await self._run_root_cause_analysis(feedback_items)
 
             # Merge root-cause topics into existing parameters (preserving mode/score/days metadata)
             existing_params = evaluation_record.parameters
@@ -3045,8 +3045,8 @@ class FeedbackEvaluation(Evaluation):
                 except Exception:
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
-            if root_cause_topics:
-                parameters_dict["root_cause"] = {"topics": root_cause_topics}
+            if root_cause_result and root_cause_result.get("topics"):
+                parameters_dict["root_cause"] = root_cause_result
 
             # Update evaluation record with results
             # Ensure accuracy is never None (GraphQL schema requires Float!)
@@ -3723,6 +3723,62 @@ class FeedbackEvaluation(Evaluation):
                 messages = [{"role": "user", "content": prompt}]
                 return _bedrock_converse(system, messages, max_tokens=30)
 
+            def _top_level_synthesis(topics: list, score_guidelines: str = "",
+                                     score_yaml_code: str = "") -> tuple:
+                """Synthesize all per-topic analyses into an overall root cause summary and improvement suggestion."""
+                topic_parts = []
+                for t in topics:
+                    header_parts = [f"**{t.get('label', 'Unknown')}** ({t.get('member_count', 0)} item(s)"]
+                    if t.get('days_inactive') is not None:
+                        header_parts.append(f", {t['days_inactive']}d inactive")
+                    if t.get('is_new'):
+                        header_parts.append(", new")
+                    if t.get('is_trending'):
+                        header_parts.append(", trending")
+                    header_parts.append(f", {t.get('memory_tier', 'unknown')} memory)")
+                    header = "".join(header_parts)
+                    explanation = t.get("detailed_explanation", "").strip()
+                    suggestion = t.get("improvement_suggestion", "").strip()
+                    topic_parts.append(
+                        f"{header}\nAnalysis: {explanation}\nSuggested fix: {suggestion}"
+                    )
+                topics_text = "\n\n".join(topic_parts)
+
+                system = (
+                    "You are an expert QA analyst reviewing patterns in AI scoring errors "
+                    "on customer service calls. Be specific and concrete."
+                )
+                prompt1 = ""
+                if score_guidelines:
+                    prompt1 += f"Score guidelines:\n{score_guidelines[:2000]}\n\n"
+                if score_yaml_code:
+                    prompt1 += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
+                prompt1 += (
+                    f"Below are root-cause analysis results for {len(topics)} identified "
+                    f"error pattern(s), each with item counts and temporal context:\n\n"
+                    f"{topics_text}\n\n"
+                    "Write a 2-3 sentence executive summary of the overall root causes of "
+                    "misclassification across all topics. Prioritize by frequency and recency. "
+                    "Be specific and concrete."
+                )
+                messages = [{"role": "user", "content": prompt1}]
+                overall_explanation = _bedrock_converse(system, messages, max_tokens=300)
+
+                if not overall_explanation:
+                    return "", ""
+
+                messages.append({"role": "assistant", "content": overall_explanation})
+                messages.append({"role": "user", "content": (
+                    "Based on all the above error patterns and their individual improvement "
+                    "suggestions, write a 2-3 sentence overall recommendation for the most "
+                    "impactful changes to the score configuration. Prioritize by frequency "
+                    "and recency. Reference specific aspects of the score code or guidelines "
+                    "where relevant."
+                )})
+                overall_suggestion = _bedrock_converse(system, messages, max_tokens=300)
+
+                return overall_explanation, overall_suggestion
+
             # Convert TopicResult dataclasses → dicts matching the Topic interface
             # in dashboard/components/ui/topic-list.tsx
             topics = []
@@ -3736,6 +3792,7 @@ class FeedbackEvaluation(Evaluation):
                     transcript = transcript_cache.get(item_id) if item_id else None
 
                     detailed_cause = ""
+                    suggested_fix = ""
                     if above_fold and transcript:
                         predicted = ex.metadata.get("initial_answer_value", "")
                         correct = ex.metadata.get("final_answer_value", "")
@@ -3796,13 +3853,25 @@ class FeedbackEvaluation(Evaluation):
                 else:
                     existing_titles.append(topic["label"])
 
-            return topics
+            overall_explanation = ""
+            overall_improvement_suggestion = ""
+            if len(topics) > 1:
+                _update_status("Synthesizing overall root cause summary...")
+                overall_explanation, overall_improvement_suggestion = await asyncio.to_thread(
+                    _top_level_synthesis, topics, score_guidelines, score_yaml_code
+                )
+
+            return {
+                "topics": topics,
+                "overall_explanation": overall_explanation,
+                "overall_improvement_suggestion": overall_improvement_suggestion,
+            }
 
         except Exception as e:
             self.logger.warning(f"Root-cause analysis failed (non-fatal): {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
-            return []
+            return {}
 
 
 class AccuracyEvaluation(Evaluation):
