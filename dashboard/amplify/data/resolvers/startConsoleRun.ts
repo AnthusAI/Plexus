@@ -29,6 +29,45 @@ const GET_PROCEDURE_QUERY = `
   }
 `;
 
+const GET_CHAT_MESSAGE_QUERY = `
+  query GetChatMessageForConsoleStart($id: ID!) {
+    getChatMessage(id: $id) {
+      id
+      sessionId
+      role
+      messageType
+      content
+      metadata
+      createdAt
+    }
+  }
+`;
+
+const LIST_SESSION_MESSAGES_QUERY = `
+  query ListSessionMessagesForConsoleStart(
+    $sessionId: String!
+    $limit: Int
+    $nextToken: String
+  ) {
+    listChatMessageBySessionIdAndCreatedAt(
+      sessionId: $sessionId
+      sortDirection: ASC
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        role
+        messageType
+        content
+        metadata
+        createdAt
+      }
+      nextToken
+    }
+  }
+`;
+
 const CREATE_TASK_MUTATION = `
   mutation CreateTaskForConsoleRun($input: CreateTaskInput!) {
     createTask(input: $input) {
@@ -158,6 +197,114 @@ function extractTriggerMessageContent(instrumentation: Record<string, unknown>):
     }
   }
   return null;
+}
+
+type ConsoleHistoryEntry = {
+  role: "USER" | "ASSISTANT";
+  content: string;
+};
+
+const CLIENT_HISTORY_SNAPSHOT_LIMIT = 24;
+const CLIENT_HISTORY_MAX_CONTENT_CHARS = 600;
+
+function parseMetadataObject(value: unknown): Record<string, unknown> {
+  if (!value) {
+    return {};
+  }
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+    return {};
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function normalizeHistoryEntries(value: unknown): ConsoleHistoryEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const normalized: ConsoleHistoryEntry[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const roleRaw = String(record.role || "").trim().toUpperCase();
+    if (roleRaw !== "USER" && roleRaw !== "ASSISTANT") {
+      continue;
+    }
+    const contentRaw = String(record.content || "").trim();
+    if (!contentRaw) {
+      continue;
+    }
+    if (roleRaw === "ASSISTANT" && contentRaw === "Assistant turn completed.") {
+      continue;
+    }
+    const content = contentRaw.length > CLIENT_HISTORY_MAX_CONTENT_CHARS
+      ? `${contentRaw.slice(0, CLIENT_HISTORY_MAX_CONTENT_CHARS)}...`
+      : contentRaw;
+    normalized.push({
+      role: roleRaw as "USER" | "ASSISTANT",
+      content,
+    });
+  }
+  if (normalized.length > CLIENT_HISTORY_SNAPSHOT_LIMIT) {
+    return normalized.slice(normalized.length - CLIENT_HISTORY_SNAPSHOT_LIMIT);
+  }
+  return normalized;
+}
+
+function mergeHistorySnapshots(
+  serverHistory: ConsoleHistoryEntry[],
+  clientHistory: ConsoleHistoryEntry[],
+): ConsoleHistoryEntry[] {
+  const merged: ConsoleHistoryEntry[] = [...serverHistory];
+  for (const entry of clientHistory) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === entry.role && last.content === entry.content) {
+      continue;
+    }
+    merged.push(entry);
+  }
+  if (merged.length > CLIENT_HISTORY_SNAPSHOT_LIMIT) {
+    return merged.slice(merged.length - CLIENT_HISTORY_SNAPSHOT_LIMIT);
+  }
+  return merged;
+}
+
+function appendLatestUserIfMissing(
+  history: ConsoleHistoryEntry[],
+  latestUserMessage: string | null,
+): ConsoleHistoryEntry[] {
+  const latest = typeof latestUserMessage === "string" ? latestUserMessage.trim() : "";
+  if (!latest) {
+    return history;
+  }
+  const trimmed = latest.length > CLIENT_HISTORY_MAX_CONTENT_CHARS
+    ? `${latest.slice(0, CLIENT_HISTORY_MAX_CONTENT_CHARS)}...`
+    : latest;
+  const copy = [...history];
+  const last = copy[copy.length - 1];
+  if (!last || last.role !== "USER" || last.content !== trimmed) {
+    copy.push({ role: "USER", content: trimmed });
+  }
+  if (copy.length > CLIENT_HISTORY_SNAPSHOT_LIMIT) {
+    return copy.slice(copy.length - CLIENT_HISTORY_SNAPSHOT_LIMIT);
+  }
+  return copy;
 }
 
 function parseTaskMetadata(raw: unknown): Record<string, unknown> {
@@ -393,7 +540,89 @@ export const handler = async (event: any) => {
   let taskId = canonicalTaskId;
   const queuedAt = toIsoNow();
   const clientInstrumentation = normalizeInstrumentation(event.arguments.clientInstrumentation);
-  const triggerMessageContent = extractTriggerMessageContent(clientInstrumentation);
+  const providedClientHistory = normalizeHistoryEntries(clientInstrumentation.client_history_snapshot);
+
+  const triggerMessageResult = await executeAppSyncGraphql<{
+    getChatMessage: {
+      id: string;
+      sessionId?: string | null;
+      role?: string | null;
+      messageType?: string | null;
+      content?: string | null;
+      metadata?: unknown;
+      createdAt?: string | null;
+    } | null;
+  }>(GET_CHAT_MESSAGE_QUERY, { id: triggerMessageId });
+  const triggerMessage = triggerMessageResult.getChatMessage;
+  if (!triggerMessage) {
+    throw new Error(`Trigger message ${triggerMessageId} was not found`);
+  }
+  if ((triggerMessage.sessionId || "").trim() !== sessionId) {
+    throw new Error(
+      `Trigger message ${triggerMessageId} does not belong to session ${sessionId}`,
+    );
+  }
+
+  const triggerMessageContent = (
+    extractTriggerMessageContent(clientInstrumentation)
+    || String(triggerMessage.content || "").trim()
+    || null
+  );
+
+  const serverHistoryMessages: Array<{
+    role?: string | null;
+    messageType?: string | null;
+    content?: string | null;
+    metadata?: unknown;
+  }> = [];
+  let nextMessageToken: string | null | undefined = undefined;
+  do {
+    const historyResult = await executeAppSyncGraphql<{
+      listChatMessageBySessionIdAndCreatedAt: {
+        items?: Array<{
+          role?: string | null;
+          messageType?: string | null;
+          content?: string | null;
+          metadata?: unknown;
+        } | null> | null;
+        nextToken?: string | null;
+      } | null;
+    }>(LIST_SESSION_MESSAGES_QUERY, {
+      sessionId,
+      limit: 200,
+      nextToken: nextMessageToken,
+    });
+    const page = historyResult.listChatMessageBySessionIdAndCreatedAt;
+    const pageItems = Array.isArray(page?.items) ? page?.items : [];
+    for (const item of pageItems) {
+      if (item && typeof item === "object") {
+        serverHistoryMessages.push(item);
+      }
+    }
+    nextMessageToken = page?.nextToken;
+  } while (nextMessageToken && serverHistoryMessages.length < 800);
+
+  const serverHistory = normalizeHistoryEntries(
+    serverHistoryMessages.map((item) => {
+      const metadata = parseMetadataObject(item.metadata);
+      const streaming = parseMetadataObject(metadata.streaming);
+      const streamingState = String(streaming.state || "").trim().toLowerCase();
+      if (
+        String(item.role || "").toUpperCase() === "ASSISTANT"
+        && streamingState === "streaming"
+      ) {
+        return null;
+      }
+      return {
+        role: item.role,
+        messageType: item.messageType,
+        content: item.content,
+      };
+    }).filter(Boolean),
+  );
+
+  let mergedHistory = mergeHistorySnapshots(serverHistory, providedClientHistory);
+  mergedHistory = appendLatestUserIfMissing(mergedHistory, triggerMessageContent);
   const metadata = {
     dispatch_mode: "console_async_worker",
     console_chat: {
@@ -404,6 +633,7 @@ export const handler = async (event: any) => {
       run_id: runId,
       instrumentation: {
         ...clientInstrumentation,
+        client_history_snapshot: mergedHistory,
         queue_enqueued_at: queuedAt,
       },
     },
