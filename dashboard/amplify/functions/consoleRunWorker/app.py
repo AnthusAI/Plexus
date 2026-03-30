@@ -7,7 +7,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+from plexus.cli.procedure.service import ProcedureService
 from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.task import Task
@@ -121,10 +121,22 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     task_id = str(payload.get("taskId") or "").strip()
     procedure_id = str(payload.get("procedureId") or "").strip()
     run_id = str(payload.get("runId") or "").strip()
+    payload_api_url = str(payload.get("apiUrl") or "").strip()
+    payload_api_key = str(payload.get("apiKey") or "").strip()
     if not task_id or not procedure_id:
         raise RuntimeError("SQS payload must include taskId and procedureId")
 
-    client = PlexusDashboardClient()
+    resolved_api_url = payload_api_url or str(os.getenv("PLEXUS_API_URL") or "").strip()
+    resolved_api_key = payload_api_key or str(os.getenv("PLEXUS_API_KEY") or "").strip()
+    if not resolved_api_url or not resolved_api_key:
+        raise RuntimeError("Missing required API URL or API key")
+
+    previous_api_url = os.getenv("PLEXUS_API_URL")
+    previous_api_key = os.getenv("PLEXUS_API_KEY")
+    os.environ["PLEXUS_API_URL"] = resolved_api_url
+    os.environ["PLEXUS_API_KEY"] = resolved_api_key
+
+    client = PlexusDashboardClient(api_url=resolved_api_url, api_key=resolved_api_key)
     task = _load_task(client, task_id)
     current_status = str(getattr(task, "status", "") or "").upper()
 
@@ -220,26 +232,42 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
             logger.warning("Console worker history hydration fallback failed: %s", hydrate_error)
 
     try:
+        service = ProcedureService(client)
         result = asyncio.run(
-            run_experiment_with_task_tracking(
-                procedure_id=procedure_id,
-                client=client,
+            service.run_experiment(
+                procedure_id,
                 account_id=account_id,
                 **run_options,
             )
         )
+        procedure_status = str(result.get("status") or "").upper()
+        if procedure_status == "WAITING_FOR_HUMAN":
+            mapped_status = "WAITING_FOR_HUMAN"
+        elif bool(result.get("success")):
+            mapped_status = "COMPLETED"
+        else:
+            mapped_status = "FAILED"
+
         completed_at = _iso_now()
         metadata_completed = _merge_console_instrumentation(
             task,
             {
                 "worker_run_completed_at": completed_at,
-                "worker_result_status": result.get("status"),
+                "worker_result_status": procedure_status or None,
             },
         )
+        task_update_payload: Dict[str, Any] = {
+            "status": mapped_status,
+            "dispatchStatus": "DISPATCHED",
+            "metadata": json.dumps(metadata_completed),
+            "output": json.dumps(result, default=str),
+            "updatedAt": completed_at,
+        }
+        if mapped_status in TERMINAL_TASK_STATUSES:
+            task_update_payload["completedAt"] = completed_at
         _task_update(
             task,
-            metadata=json.dumps(metadata_completed),
-            updatedAt=completed_at,
+            **task_update_payload,
         )
     except Exception as exc:
         failed_at = _iso_now()
@@ -268,6 +296,14 @@ def _run_console_job(payload: Dict[str, Any]) -> None:
     finally:
         if os.environ.get("PLEXUS_DISPATCH_TASK_ID") == task_id:
             os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
+        if previous_api_url is None:
+            os.environ.pop("PLEXUS_API_URL", None)
+        else:
+            os.environ["PLEXUS_API_URL"] = previous_api_url
+        if previous_api_key is None:
+            os.environ.pop("PLEXUS_API_KEY", None)
+        else:
+            os.environ["PLEXUS_API_KEY"] = previous_api_key
 
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
