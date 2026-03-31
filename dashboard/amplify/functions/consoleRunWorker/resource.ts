@@ -1,10 +1,10 @@
 import { CfnOutput, Duration, Stack, StackProps } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import * as path from "path";
+import { existsSync } from "fs";
 
 interface ConsoleRunWorkerStackProps extends StackProps {
   plexusApiUrl?: string;
@@ -32,7 +32,16 @@ export class ConsoleRunWorkerStack extends Stack {
       },
     });
 
-    const repoRoot = path.resolve(process.cwd(), "..");
+    const cwd = process.cwd();
+    const repoRootCandidates = [
+      cwd,
+      path.resolve(cwd, ".."),
+      path.resolve(cwd, "../.."),
+      path.resolve(cwd, "../../.."),
+    ];
+    const repoRoot = repoRootCandidates.find((candidate) => (
+      existsSync(path.join(candidate, "dashboard", "amplify", "functions", "consoleRunWorker", "Dockerfile"))
+    )) || path.resolve(cwd, "..");
     this.workerFunction = new lambda.DockerImageFunction(this, "ConsoleRunWorkerFunction", {
       code: lambda.DockerImageCode.fromImageAsset(repoRoot, {
         file: "dashboard/amplify/functions/consoleRunWorker/Dockerfile",
@@ -47,12 +56,13 @@ export class ConsoleRunWorkerStack extends Stack {
       },
     });
 
-    this.workerFunction.addEventSource(
-      new SqsEventSource(this.queue, {
-        batchSize: 1,
-        reportBatchItemFailures: true,
-      }),
-    );
+    const workerVersion = this.workerFunction.currentVersion;
+    new lambda.EventSourceMapping(this, "ConsoleRunWorkerQueueEventSource", {
+      target: workerVersion,
+      eventSourceArn: this.queue.queueArn,
+      batchSize: 1,
+      reportBatchItemFailures: true,
+    });
 
     this.queue.grantConsumeMessages(this.workerFunction);
     this.deadLetterQueue.grantSendMessages(this.workerFunction);
