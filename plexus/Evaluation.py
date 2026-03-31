@@ -3740,12 +3740,12 @@ class FeedbackEvaluation(Evaluation):
 
             # Convert TopicResult dataclasses → dicts matching the Topic interface
             # in dashboard/components/ui/topic-list.tsx
-            topics = []
+            # Topics and their exemplars are processed in parallel for speed.
             num_topics = len(result.topics)
-            for topic_idx, tr in enumerate(result.topics):
-                _update_status(f"Analyzing topic {topic_idx + 1}/{num_topics}...")
-                exemplar_dicts = []
-                for idx, ex in enumerate(tr.exemplars or []):
+
+            async def _process_topic(topic_idx: int, tr) -> dict:
+                """Process a single topic: analyze all exemplars in parallel, then synthesize."""
+                async def _analyze_exemplar(idx: int, ex) -> dict:
                     above_fold = idx < max_summarization_exemplars
                     item_id = ex.metadata.get("item_id")
                     transcript = transcript_cache.get(item_id) if item_id else None
@@ -3762,7 +3762,7 @@ class FeedbackEvaluation(Evaluation):
                         )
 
                     score_explanation = ex.metadata.get("score_explanation", "")
-                    exemplar_dicts.append({
+                    return {
                         "text": ex.text,
                         "item_id": item_id,
                         "initial_answer_value": ex.metadata.get("initial_answer_value"),
@@ -3772,15 +3772,19 @@ class FeedbackEvaluation(Evaluation):
                         **({"score_explanation": score_explanation} if score_explanation else {}),
                         **({"detailed_cause": detailed_cause} if detailed_cause else {}),
                         **({"suggested_fix": suggested_fix} if suggested_fix else {}),
-                    })
+                    }
+
+                # Analyze all exemplars in this topic in parallel
+                exemplar_dicts = list(await asyncio.gather(
+                    *[_analyze_exemplar(idx, ex) for idx, ex in enumerate(tr.exemplars or [])]
+                ))
 
                 # Multi-turn synthesis: detailed explanation + improvement suggestion
-                _update_status(f"Synthesizing topic {topic_idx + 1}/{num_topics}...")
                 detailed_explanation, improvement_suggestion = await asyncio.to_thread(
                     _multi_turn_synthesis, exemplar_dicts, score_guidelines, score_yaml_code
                 )
 
-                topics.append({
+                return {
                     "topic_id": tr.topic_id,
                     "label": tr.label,
                     "keywords": tr.keywords,
@@ -3795,9 +3799,15 @@ class FeedbackEvaluation(Evaluation):
                     "cause": tr.root_cause,
                     "detailed_explanation": detailed_explanation,
                     "improvement_suggestion": improvement_suggestion,
-                })
+                }
 
-            # Post-loop: generate distinct topic titles informed by the detailed explanations
+            _update_status(f"Analyzing {num_topics} topic(s) in parallel...")
+            topics = list(await asyncio.gather(
+                *[_process_topic(i, tr) for i, tr in enumerate(result.topics)]
+            ))
+
+            # Post-loop: generate distinct topic titles informed by the detailed explanations.
+            # Must remain sequential to avoid duplicate titles (each call knows prior titles).
             _update_status("Generating topic titles...")
             existing_titles = []
             for topic in topics:
