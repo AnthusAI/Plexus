@@ -118,6 +118,13 @@ def register_evaluation_tools(mcp: FastMCP):
                     "updated_at": evaluation_info['updated_at'],
                 }
 
+                # Include root cause analysis if available in parameters
+                params = evaluation_info.get('parameters')
+                if params and isinstance(params, dict):
+                    root_cause = params.get('root_cause')
+                    if root_cause:
+                        payload['root_cause'] = root_cause
+
                 # Optionally include quadrant examples inline for consistency with feedback tools
                 if include_examples:
                     from plexus.dashboard.api.client import PlexusDashboardClient
@@ -861,3 +868,209 @@ def register_evaluation_tools(mcp: FastMCP):
             logger.error(f"Error in plexus_evaluation_score_result_find: {e}", exc_info=True)
             import json
             return json.dumps({"error": f"Failed to find evaluation results: {str(e)}"})
+
+    @mcp.tool()
+    async def plexus_score_result_investigate(
+        score_result_id: str,
+        topic_context: str = ""
+    ) -> str:
+        """
+        Investigate a single score result by running LLM inference to determine why the
+        prediction was wrong and suggest a concrete fix.
+
+        This tool fetches the score result, its feedback item (with reviewer edit comment),
+        the item transcript, and the score's YAML configuration, then uses an LLM to analyze
+        the misclassification and suggest a specific code change.
+
+        Use this after plexus_evaluation_score_result_find to dig deeper into specific
+        misclassifications, especially items not covered by the default top-6 RCA exemplars.
+
+        Parameters:
+        - score_result_id: The ID of the score result to investigate
+        - topic_context: Optional topic/cluster label for additional context (e.g., "Copay Guarantee false alarms")
+        """
+        import json as _json
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+
+            # 1. Fetch the score result
+            sr_query = """
+            query GetScoreResult($id: ID!) {
+                getScoreResult(id: $id) {
+                    id
+                    value
+                    explanation
+                    itemId
+                    feedbackItemId
+                    scoreId
+                    metadata
+                }
+            }
+            """
+            sr_resp = client.execute(sr_query, {"id": score_result_id})
+            sr = sr_resp.get('getScoreResult')
+            if not sr:
+                return _json.dumps({"error": f"Score result '{score_result_id}' not found"})
+
+            predicted_value = sr.get('value', '')
+            score_explanation = sr.get('explanation', '')
+            item_id = sr.get('itemId')
+            feedback_item_id = sr.get('feedbackItemId')
+            score_id = sr.get('scoreId')
+
+            # Parse metadata for human_label if available
+            human_label = None
+            md = sr.get('metadata')
+            if md:
+                try:
+                    if isinstance(md, str):
+                        md = _json.loads(md)
+                    if isinstance(md, dict):
+                        res_md = md.get('results') or {}
+                        if isinstance(res_md, dict) and res_md:
+                            key0 = next(iter(res_md))
+                            inner = res_md.get(key0) or {}
+                            inner_md = inner.get('metadata') or {}
+                            human_label = (inner_md.get('human_label') or '').strip()
+                except Exception:
+                    pass
+
+            # 2. Fetch the feedback item (edit comment + original/corrected values)
+            feedback_comment = ""
+            feedback_initial = ""
+            feedback_final = ""
+            if feedback_item_id:
+                try:
+                    fi_query = """
+                    query GetFeedbackItem($id: ID!) {
+                        getFeedbackItem(id: $id) {
+                            id
+                            initialAnswerValue
+                            finalAnswerValue
+                            editCommentValue
+                            isAgreement
+                        }
+                    }
+                    """
+                    fi_resp = client.execute(fi_query, {"id": feedback_item_id})
+                    fi = fi_resp.get('getFeedbackItem') or {}
+                    feedback_comment = fi.get('editCommentValue') or ''
+                    feedback_initial = fi.get('initialAnswerValue') or ''
+                    feedback_final = fi.get('finalAnswerValue') or ''
+                    if not human_label:
+                        human_label = feedback_final
+                except Exception as e:
+                    logger.warning(f"Could not fetch feedback item {feedback_item_id}: {e}")
+
+            # 3. Fetch the item transcript
+            transcript = ""
+            item_identifiers = []
+            if item_id:
+                try:
+                    item_query = """
+                    query GetItem($id: ID!) {
+                        getItem(id: $id) {
+                            id
+                            text
+                            identifiers
+                        }
+                    }
+                    """
+                    item_resp = client.execute(item_query, {"id": item_id})
+                    item_data = item_resp.get('getItem') or {}
+                    transcript = item_data.get('text') or ''
+                    identifiers_raw = item_data.get('identifiers')
+                    if identifiers_raw:
+                        if isinstance(identifiers_raw, str):
+                            identifiers_raw = _json.loads(identifiers_raw)
+                        item_identifiers = identifiers_raw or []
+                except Exception as e:
+                    logger.warning(f"Could not fetch item {item_id}: {e}")
+
+            # 4. Fetch score configuration (YAML + guidelines)
+            score_yaml_code = ""
+            score_guidelines = ""
+            if score_id:
+                try:
+                    score_query = f"""
+                    {{
+                        getScore(id: "{score_id}") {{
+                            championVersionId
+                        }}
+                    }}
+                    """
+                    score_resp = client.execute(score_query)
+                    score_data = score_resp.get('getScore') or {}
+                    champion_id = score_data.get('championVersionId')
+                    if champion_id:
+                        version_query = f"""
+                        {{
+                            getScoreVersion(id: "{champion_id}") {{
+                                configuration
+                                guidelines
+                            }}
+                        }}
+                        """
+                        ver_resp = client.execute(version_query)
+                        ver_data = ver_resp.get('getScoreVersion') or {}
+                        score_yaml_code = ver_data.get('configuration') or ''
+                        score_guidelines = ver_data.get('guidelines') or ''
+                except Exception as e:
+                    logger.warning(f"Could not fetch score config for {score_id}: {e}")
+
+            correct_label = human_label or feedback_final or ''
+
+            # 5. Build context summary for the response (always returned)
+            result = {
+                "score_result_id": score_result_id,
+                "item_id": item_id,
+                "identifiers": item_identifiers,
+                "predicted_value": predicted_value,
+                "actual_value": correct_label,
+                "score_explanation": score_explanation,
+                "feedback_comment": feedback_comment,
+                "feedback_initial_value": feedback_initial,
+                "feedback_final_value": feedback_final,
+            }
+
+            # 6. Run LLM inference if we have a transcript
+            if not transcript:
+                result["detailed_cause"] = "(no transcript available for LLM analysis)"
+                result["suggested_fix"] = ""
+                return _json.dumps(result, indent=2, default=str)
+
+            try:
+                from plexus.rca_analysis import analyze_score_result, build_feedback_context
+
+                feedback_ctx = build_feedback_context(
+                    feedback_comment=feedback_comment,
+                    feedback_initial=feedback_initial,
+                    feedback_final=feedback_final,
+                    predicted_value=predicted_value,
+                )
+                detailed_cause, suggested_fix = analyze_score_result(
+                    transcript=transcript,
+                    predicted=predicted_value,
+                    correct=correct_label,
+                    explanation=score_explanation,
+                    topic_label=topic_context or "Score result investigation",
+                    score_guidelines=score_guidelines,
+                    score_yaml_code=score_yaml_code,
+                    feedback_context=feedback_ctx,
+                )
+
+                result["detailed_cause"] = detailed_cause or "(analysis returned empty)"
+                result["suggested_fix"] = suggested_fix
+
+            except Exception as e:
+                logger.warning(f"LLM inference failed for score result {score_result_id}: {e}")
+                result["detailed_cause"] = f"(LLM inference failed: {str(e)})"
+                result["suggested_fix"] = ""
+
+            return _json.dumps(result, indent=2, default=str)
+
+        except Exception as e:
+            logger.error(f"Error in plexus_score_result_investigate: {e}", exc_info=True)
+            return _json.dumps({"error": f"Failed to investigate score result: {str(e)}"})
