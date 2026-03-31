@@ -35,6 +35,7 @@ class FeedbackItem(BaseModel):
     editedAt: Optional[datetime] = None  # Add the missing editedAt field
     editorName: Optional[str] = None
     isAgreement: Optional[bool] = None
+    isInvalid: Optional[bool] = None
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
 
@@ -51,7 +52,7 @@ class FeedbackItem(BaseModel):
     GRAPHQL_BASE_FIELDS = [
         'id', 'accountId', 'scorecardId', 'cacheKey', 'scoreId', 'itemId',
         'initialAnswerValue', 'finalAnswerValue', 'initialCommentValue',
-        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName', 'isAgreement', 'createdAt', 'updatedAt'
+        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName', 'isAgreement', 'isInvalid', 'createdAt', 'updatedAt'
     ]
     GRAPHQL_RELATIONSHIP_FIELDS = {
         # Relationship fields can be added here if needed
@@ -93,6 +94,7 @@ class FeedbackItem(BaseModel):
             editedAt=data.get('editedAt'),
             editorName=data.get('editorName'),
             isAgreement=data.get('isAgreement'),
+            isInvalid=data.get('isInvalid'),
             createdAt=data.get('createdAt'),
             updatedAt=data.get('updatedAt')
         )
