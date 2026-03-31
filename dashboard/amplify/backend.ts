@@ -180,9 +180,8 @@ const environmentName = normalizeForResourceName(resolveEnvironmentName());
 
 // Create a backup plan and assign all Amplify Data DynamoDB tables.
 const dynamoDbBackupStack = backend.createStack('DynamoDbBackupStack');
-const backupVault = new backup.BackupVault(dynamoDbBackupStack, 'DynamoDbBackupVault', {
-    backupVaultName: `plexus-dynamodb-${environmentName}-vault`
-});
+const backupVaultName = `plexus-dynamodb-${environmentName}-vault`;
+const backupVault = backup.BackupVault.fromBackupVaultName(dynamoDbBackupStack, 'DynamoDbBackupVault', backupVaultName);
 const backupPlan = new backup.BackupPlan(dynamoDbBackupStack, 'DynamoDbBackupPlan', {
     backupPlanName: `plexus-dynamodb-${environmentName}-plan`,
     backupVault
