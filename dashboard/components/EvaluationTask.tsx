@@ -528,8 +528,17 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
   // Parse feedbackItem data
+  const originalScoreResult = result.feedbackItem?.scoreResults?.items?.find(
+    (sr: any) => sr.type === 'prediction'
+  ) || null;
   const feedbackItem = result.feedbackItem ? {
-    editCommentValue: result.feedbackItem.editCommentValue || null
+    editCommentValue: result.feedbackItem.editCommentValue || null,
+    initialAnswerValue: result.feedbackItem.initialAnswerValue || originalScoreResult?.value || null,
+    initialCommentValue: result.feedbackItem.initialCommentValue || originalScoreResult?.explanation || null,
+    finalAnswerValue: result.feedbackItem.finalAnswerValue || null,
+    editorName: result.feedbackItem.editorName || null,
+    editedAt: result.feedbackItem.editedAt || null,
+    createdAt: result.feedbackItem.createdAt || null,
   } : null;
 
 
@@ -1060,6 +1069,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     createdAt: string;
     isChampion: boolean;
   } | null>(null);
+  const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
   
@@ -1107,6 +1117,61 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
+
+  // Fetch baseline metrics when a baseline evaluation ID is stored in parameters
+  const baselineEvaluationId = useMemo(() => {
+    try {
+      const params = typeof data.parameters === 'string'
+        ? JSON.parse(data.parameters)
+        : data.parameters
+      return params?.baseline ?? null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+
+  useEffect(() => {
+    if (!baselineEvaluationId || variant !== 'detail') {
+      setBaselineMetrics(null);
+      return;
+    }
+
+    const fetchBaselineMetrics = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetBaselineEvaluation($id: ID!) {
+              getEvaluation(id: $id) {
+                id
+                metrics
+              }
+            }
+          `,
+          variables: { id: baselineEvaluationId }
+        });
+
+        const baselineEval = (result as any).data?.getEvaluation;
+        if (baselineEval?.metrics) {
+          try {
+            const parsed = typeof baselineEval.metrics === 'string'
+              ? JSON.parse(baselineEval.metrics)
+              : baselineEval.metrics;
+            setBaselineMetrics(Array.isArray(parsed) ? parsed : null);
+          } catch {
+            setBaselineMetrics(null);
+          }
+        } else {
+          setBaselineMetrics(null);
+        }
+      } catch (error) {
+        console.error('Error fetching baseline evaluation metrics:', error);
+        setBaselineMetrics(null);
+      }
+    };
+
+    fetchBaselineMetrics();
+  }, [baselineEvaluationId, variant]);
 
   // Function to generate universal YAML code for evaluation
   const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
@@ -1203,13 +1268,17 @@ evaluation:
     }
   }, [data, generateUniversalCode]);
 
-  const metrics = useMemo(() =>
-    variant === 'detail' ?
-      (data.metrics ?? []).map(metric => {
+  const metrics = useMemo(() => {
+    if (variant === 'detail') {
+      return (data.metrics ?? []).map(metric => {
+        const baselineMetric = baselineMetrics?.find(bm => bm.name === metric.name)
+        const beforeValue = baselineMetric !== undefined ? baselineMetric.value : undefined
+
         // Special handling for Alignment (Gwet's AC1)
         if (metric.name === 'Alignment') {
           return {
             value: metric.value,
+            beforeValue,
             label: metric.name,
             information: getMetricInformation(metric.name),
             min: -1,           // AC1 ranges from -1 to 1
@@ -1230,6 +1299,7 @@ evaluation:
         // Default handling for other metrics
         return {
           value: metric.value,
+          beforeValue,
           label: metric.name,
           information: getMetricInformation(metric.name),
           max: metric.maximum ?? 100,        // Fixed: was 'maximum', should be 'max'
@@ -1237,15 +1307,16 @@ evaluation:
           priority: metric.priority
         }
       })
-      : [
-        {
-          value: data.accuracy ?? undefined,
-          label: 'Accuracy',
-          backgroundColor: 'var(--gauge-background)',
-          priority: true
-        }
-      ]
-  , [variant, data.metrics, data.accuracy])
+    }
+    return [
+      {
+        value: data.accuracy ?? undefined,
+        label: 'Accuracy',
+        backgroundColor: 'var(--gauge-background)',
+        priority: true
+      }
+    ]
+  }, [variant, data.metrics, data.accuracy, baselineMetrics])
 
   const headerContent = useMemo(() => (
     variant === 'detail' ? (
