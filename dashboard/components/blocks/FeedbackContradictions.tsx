@@ -27,6 +27,8 @@ interface Exemplar {
 
 interface Topic {
   label: string;
+  summary?: string;
+  guideline_quote?: string;
   count: number;
   exemplars: Exemplar[];
 }
@@ -146,6 +148,19 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
 
       {open && (
         <div className="divide-y">
+          {(topic.summary || topic.guideline_quote) && (
+            <div className="py-3 space-y-1.5">
+              {topic.summary && (
+                <p className="text-sm text-muted-foreground">{topic.summary}</p>
+              )}
+              {topic.guideline_quote && (
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Guideline: </span>
+                  &ldquo;{topic.guideline_quote}&rdquo;
+                </p>
+              )}
+            </div>
+          )}
           {topic.exemplars.map((ex) => (
             <ExemplarRow key={ex.feedback_item_id} exemplar={ex} />
           ))}
