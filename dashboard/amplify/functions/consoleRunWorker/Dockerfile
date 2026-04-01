@@ -9,9 +9,13 @@ WORKDIR /var/task
 # Copy repository so the worker can import Plexus source directly.
 COPY . /workspace
 
+# Required for git-based dependencies (for example openai-cost-calculator).
+RUN yum install -y git && yum clean all && rm -rf /var/cache/yum
+
 # Install Plexus and dependencies required for procedure execution.
 RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e /workspace
+    python -m pip install --no-cache-dir -e /workspace && \
+    python -m pip install --no-cache-dir "python-statemachine>=2.5.0"
 
 COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
 

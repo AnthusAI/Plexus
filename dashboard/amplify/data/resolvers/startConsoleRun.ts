@@ -1,9 +1,5 @@
 import { randomUUID } from "crypto";
-import { Sha256 } from "@aws-crypto/sha256-js";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import { defaultProvider } from "@aws-sdk/credential-provider-node";
-import { HttpRequest } from "@aws-sdk/protocol-http";
-import { SignatureV4 } from "@aws-sdk/signature-v4";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUILTIN_PROCEDURE_RE = /^builtin:[a-z0-9][a-z0-9/_-]*$/i;
@@ -183,18 +179,6 @@ function setRuntimeGraphqlEndpoint(event: any): void {
   if (endpoint) {
     runtimeGraphqlEndpoint = endpoint;
   }
-}
-
-function resolveRequestApiKey(event: any): string {
-  const request = event?.request;
-  if (!request || typeof request !== "object") {
-    return "";
-  }
-  const headers = (request as Record<string, unknown>).headers;
-  if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
-    return "";
-  }
-  return readHeaderValue(headers as Record<string, unknown>, "x-api-key");
 }
 
 function resolveGraphqlEndpoint(): string {
@@ -428,35 +412,18 @@ async function executeAppSyncGraphql<TData>(
   variables: Record<string, unknown>,
 ): Promise<TData> {
   const endpoint = resolveGraphqlEndpoint();
-  if (!endpoint) {
-    throw new Error("Unable to resolve caller auth headers for startConsoleRun resolver");
+  const apiKey = (process.env.PLEXUS_API_KEY || "").trim();
+  if (!endpoint || !apiKey) {
+    throw new Error("Unable to resolve API URL and API key for startConsoleRun resolver");
   }
-  const region = resolveAwsRegion();
-  const endpointUrl = new URL(endpoint);
-  const signer = new SignatureV4({
-    credentials: defaultProvider(),
-    region,
-    service: "appsync",
-    sha256: Sha256,
-  });
 
-  const request = new HttpRequest({
-    method: "POST",
-    protocol: endpointUrl.protocol,
-    hostname: endpointUrl.host,
-    path: endpointUrl.pathname,
-    headers: {
-      "content-type": "application/json",
-      host: endpointUrl.host,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  const signed = await signer.sign(request);
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: signed.headers as Record<string, string>,
-    body: typeof signed.body === "string" ? signed.body : JSON.stringify(signed.body),
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify({ query, variables }),
   });
 
   const payload = (await response.json()) as GraphqlEnvelope<TData>;
@@ -586,11 +553,7 @@ export const handler = async (event: any) => {
   const triggerMessageId = event.arguments.triggerMessageId?.trim();
   const queueUrl = (process.env.CONSOLE_RUN_QUEUE_URL || "").trim();
   const apiUrlForWorker = resolveGraphqlEndpoint();
-  const apiKeyForWorker = (
-    resolveRequestApiKey(event)
-    || process.env.PLEXUS_API_KEY
-    || ""
-  ).trim();
+  const apiKeyForWorker = (process.env.PLEXUS_API_KEY || "").trim();
 
   if (!isValidId(sessionId)) {
     throw new Error("startConsoleRun requires a valid sessionId");
