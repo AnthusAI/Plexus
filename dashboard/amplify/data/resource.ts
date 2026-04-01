@@ -679,6 +679,7 @@ const schema = a.schema({
             editedAt: a.datetime(),
             editorName: a.string(),
             isAgreement: a.boolean(),
+            isInvalid: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             scoreResults: a.hasMany('ScoreResult', 'feedbackItemId'),
