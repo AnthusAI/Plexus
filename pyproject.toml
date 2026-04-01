@@ -1,100 +1,95 @@
 [build-system]
-requires = ["setuptools>=64.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "plexus"
-dynamic = ["version"]
+version = "1.23.0"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [
-    { name = "Anthus AI Solutions" }
-]
-dependencies = [
-    "dateparser>=1.1.0",
-    "pytest==8.2.2",
-    "flake8==7.1.1",
-    "pytest-cov==5.0.0",
-    "pyfakefs>=5.0.0",
-    "python-dotenv>=1.1.0",
-    "pytest-watch==4.2.0",
-    "pytest-asyncio==0.23.5",
-    "nest_asyncio",
-    "python-statemachine>=2.5.0",
-    "pandas==2.1.4",
-    "openai>=1.35.10",
-    "tenacity==8.2.3",
-    "nltk==3.9.1",
-    "pybind11",
-    "tiktoken==0.7.0",
-    "transformers",
-    "seaborn",
-    "pydot==2.0.0",
-    "pydotplus==2.0.2",
-    "graphviz==0.20.3",
-    "boto3",
-    "graphviz",
-    "ruamel.yaml>=0.18.10",
-    "mistune==3.0.2",
-    "pyyaml",
-    "sphinx",
-    "sphinx-rtd-theme",
-    "scikit-learn==1.5.1",
-    "tables",
-    "xgboost==2.0.3",
-    "imbalanced-learn==0.12.3",
-    "imblearn==0.0",
-    "shap==0.45.1",
-    "numba==0.59.1",
-    "contractions==0.1.73",
-    "langchain==0.3.27",
-    "langchain-core==0.3.78",
-    "langchain-community==0.3.31",
-    "langgraph==0.6.7",
-    "langchain-aws==0.2.35",
-    "langchain-openai==0.3.35",
-    "langchain-ollama==0.3.10",
-    "langchain-google-vertexai==2.1.2",
-    "langchain-anthropic==0.3.22",
-    "langgraph-checkpoint-postgres==2.0.9",
-    "lupa==2.6",
-    "tactus==0.44.0",
-    "openpyxl==3.1.5",
-    "rapidfuzz==3.9.4",
-    "datasets",
-    "gensim",
-    "watchtower",
-    "pyairtable",
-    "azure-identity>=1.15.0",
-    "rich>=13.9.4",
-    "gql[requests]>=3.0.0,<4.0.0",
-    "openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main",
-    "invoke>=2.2.0",
-    "celery>=5.4.0",
-    "pycurl>=7.45.4",
-    "SQLAlchemy[asyncio]==1.4.15",
-    "fastmcp>=2.3.5",
-    "ollama>=0.1.6",
-    "bertopic>=0.16.2",
-    "umap-learn>=0.5.7",
-    "hdbscan>=0.8.40",
-    "sentence-transformers>=5.0.0",
-    "kaleido>=0.2.1",
-    "requests>=2.31.0"
-]
+license = "MIT"
+authors = ["Anthus AI Solutions"]
+packages = [{ include = "plexus" }]
+include = ["plexus/templates/*", "plexus/__main__.py", "plexus/py.typed", "plexus/scores/*.py"]
 
-[project.scripts]
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+dateparser = ">=1.1.0"
+python-dotenv = ">=1.1.0"
+nest_asyncio = "*"
+python-statemachine = ">=2.5.0"
+pandas = "2.1.4"
+openai = ">=1.35.10"
+tenacity = "8.2.3"
+nltk = "3.9.1"
+pybind11 = "*"
+tiktoken = "0.7.0"
+transformers = "*"
+seaborn = "*"
+pydot = "2.0.0"
+pydotplus = "2.0.2"
+graphviz = "0.20.3"
+boto3 = "*"
+"ruamel.yaml" = ">=0.18.10"
+mistune = "3.0.2"
+pyyaml = "*"
+scikit-learn = "1.5.1"
+tables = "*"
+xgboost = "2.0.3"
+imbalanced-learn = "0.12.3"
+imblearn = "0.0"
+shap = "0.45.1"
+numba = "0.59.1"
+contractions = "0.1.73"
+langchain = "0.3.27"
+"langchain-core" = "0.3.78"
+"langchain-community" = "0.3.31"
+langgraph = "0.6.7"
+"langchain-aws" = "0.2.35"
+"langchain-openai" = "0.3.35"
+"langchain-ollama" = "0.3.10"
+"langchain-google-vertexai" = "2.1.2"
+"langchain-anthropic" = "0.3.22"
+"langgraph-checkpoint-postgres" = "2.0.9"
+psycopg = { version = ">=3.2.0,<4.0.0", extras = ["binary"] }
+lupa = "2.6"
+tactus = "^0.45.2"
+openpyxl = "3.1.5"
+rapidfuzz = "3.9.4"
+datasets = "*"
+gensim = "*"
+watchtower = "*"
+pyairtable = "*"
+azure-identity = ">=1.15.0"
+rich = ">=13.9.4"
+gql = { version = ">=3.0.0,<4.0.0", extras = ["requests"] }
+openai-cost-calculator = { git = "https://github.com/AnthusAI/openai_cost_calculator.git", branch = "main" }
+celery = ">=5.4.0"
+pycurl = ">=7.45.4"
+sqlalchemy = { version = "1.4.15", extras = ["asyncio"] }
+fastmcp = ">=2.3.5"
+ollama = ">=0.1.6"
+bertopic = ">=0.16.2"
+umap-learn = ">=0.5.7"
+hdbscan = ">=0.8.40"
+sentence-transformers = ">=5.0.0"
+kaleido = ">=0.2.1"
+requests = ">=2.31.0"
+
+[tool.poetry.group.dev.dependencies]
+invoke = ">=2.2.0"
+pytest = "8.2.2"
+flake8 = "7.1.1"
+pytest-cov = "5.0.0"
+pyfakefs = ">=5.0.0"
+pytest-watch = "4.2.0"
+pytest-asyncio = "0.23.5"
+sphinx = "*"
+sphinx-rtd-theme = "*"
+
+[tool.poetry.scripts]
 plexus = "plexus.cli.shared.CommandLineInterface:main"
 plexus-dashboard = "plexus.dashboard.cli:cli"
-
-[tool.setuptools]
-packages = { find = { include = ["plexus*"] } }
-package-data = { plexus = ["templates/*", "__main__.py", "py.typed", "scores/*.py"] }
-
-[tool.setuptools.dynamic]
-version = {attr = "plexus._version.__version__"}
 
 [tool.pytest.ini_options]
 filterwarnings = [

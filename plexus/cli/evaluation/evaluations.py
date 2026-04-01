@@ -96,7 +96,6 @@ def log_scorecard_configurations(scorecard_instance, context=""):
         logging.info(f"  " + "-" * 50)
     
     logging.info(f"==== END SCORECARD CONFIGURATIONS {context} ====")
-    logging.info("")
 
 def format_confusion_matrix_summary(final_metrics):
     """Format confusion matrix and detailed metrics for the evaluation summary."""
@@ -1866,6 +1865,25 @@ def accuracy(
             
             logging.info(f"Retrieved {len(labeled_samples_data)} samples.")
 
+            if len(labeled_samples_data) == 0:
+                logging.warning("No feedback items found in the specified time window. Marking evaluation as NO_DATA.")
+                if evaluation_record:
+                    try:
+                        evaluation_record.update(**{
+                            'status': 'COMPLETED',
+                            'totalItems': 0,
+                            'processedItems': 0,
+                            'errorMessage': 'No feedback items found in the specified time window.',
+                        })
+                    except Exception as _upd_err:
+                        logging.warning(f"Could not update evaluation record for NO_DATA: {_upd_err}")
+                if tracker:
+                    try:
+                        tracker.complete()
+                    except Exception as _tracker_err:
+                        logging.warning(f"Tracker failed to complete after NO_DATA evaluation: {_tracker_err}")
+                return evaluation_record
+
             # Determine the subset of score names to evaluate
             subset_of_score_names = None
             if target_score_identifiers:
@@ -2144,8 +2162,6 @@ def accuracy(
                 skipped_results = final_metrics.get('skipped_results', 0)
                 if skipped_results > 0:
                     logging.info(f"Skipped Results:    {skipped_results} (due to unmet dependency conditions)")
-            
-            logging.info("")
             
             # Add detailed confusion matrix and metrics
             detailed_summary = format_confusion_matrix_summary(final_metrics)
@@ -3099,7 +3115,20 @@ def feedback(
             console.print(f"[bold red]Error: Could not find score '{score}' in scorecard '{scorecard}'[/bold red]")
             return
         console.print(f"Resolved score ID: {score_id}")
-        
+
+        # Auto-fetch champion version if not specified — always run Mode 2 (accuracy against feedback)
+        if not version:
+            _champ_result = client.execute(
+                'query GetScore($id: ID!) { getScore(id: $id) { championVersionId } }',
+                {'id': score_id}
+            )
+            version = (_champ_result.get('getScore') or {}).get('championVersionId')
+            if version:
+                console.print(f"[dim]Auto-resolved champion version: {version}[/dim]")
+            else:
+                console.print("[bold red]Error: No champion version found for this score. Use --version to specify one.[/bold red]")
+                return
+
         # If version is specified, use accuracy evaluation with FeedbackItems dataset
         if version:
             console.print(f"\n[bold]Mode: Accuracy Evaluation with FeedbackItems Dataset[/bold]")
@@ -3113,17 +3142,18 @@ def feedback(
             import tempfile
             import os
             
-            # Get the score object to access external_id
+            # Get the score object to access its name for FeedbackItems lookup
             score_obj = DashboardScore.get_by_id(score_id, client=client)
-            score_external_id = score_obj.externalId if score_obj and score_obj.externalId else score
-            
-            console.print(f"Using score identifier: {score_external_id}")
+            score_name_for_dataset = score_obj.name if score_obj and score_obj.name else score
+
+            console.print(f"Using score name for dataset: {score_name_for_dataset}")
 
             # Create a temporary YAML file with FeedbackItems dataset override
+            # Use score NAME (not external ID) since FeedbackItems resolves by name/key/ID
             dataset_config = {
                 "class": "FeedbackItems",
                 "scorecard": scorecard,  # Use the identifier provided by user
-                "score": score_external_id,  # Use external ID if available, otherwise the identifier
+                "score": score_name_for_dataset,  # Use score name for reliable FeedbackItems lookup
                 "days": days
             }
 
@@ -3140,7 +3170,7 @@ def feedback(
                 if os.path.isdir(scorecard_yaml_path):
                     # It's a directory with individual score YAML files
                     # Look for the score's YAML file in the directory
-                    score_yaml_filename = f"{score_external_id}.yaml"
+                    score_yaml_filename = f"{score}.yaml"
                     score_yaml_path = os.path.join(scorecard_yaml_path, score_yaml_filename)
 
                     if not os.path.exists(score_yaml_path):
@@ -3214,8 +3244,7 @@ def feedback(
                     if score_config.get('name') == score or \
                        score_config.get('key') == score or \
                        score_config.get('external_id') == score or \
-                       score_config.get('id') == score_id or \
-                       score_config.get('external_id') == score_external_id:
+                       score_config.get('id') == score_id:
                         score_matches = True
                     
                     if score_matches:
@@ -3255,6 +3284,30 @@ def feedback(
                 else:
                     console.print("[bold red]Warning: Scorecard object has no 'scores' attribute![/bold red]")
                 
+                # Create Task and TaskStages for progress tracking (if not passed in via --task-id)
+                tracker = None
+                if not task_id:
+                    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
+
+                    stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                    tracker = TaskProgressTracker(
+                        total_items=0,
+                        stage_configs=stage_configs,
+                        target=f"evaluation/feedback/{scorecard}/{score}",
+                        command=f"evaluate feedback --scorecard {scorecard} --score {score} --version {version}",
+                        description=f"Feedback accuracy evaluation for {scorecard} > {score}",
+                        dispatch_status="DISPATCHED",
+                        prevent_new_task=False,
+                        metadata={
+                            "type": "Feedback Accuracy Evaluation",
+                            "scorecard": scorecard,
+                            "task_type": "Feedback Accuracy Evaluation"
+                        },
+                        account_id=account_id,
+                        client=client
+                    )
+                    task_id = tracker.task.id
+
                 # Create evaluation record
                 started_at = datetime.now(timezone.utc)
                 evaluation_params = {
@@ -3297,12 +3350,199 @@ def feedback(
                     evaluation_id=evaluation_id,
                     account_key=account_key,
                     scorecard_id=scorecard_id,
-                    task_id=task_id
+                    task_id=task_id,
+                    skip_local_reports=True,
+                    number_of_texts_to_sample=10000,  # Process all feedback items, not just default 100
+                    subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                 )
                 
                 # Run the evaluation
-                await_result = asyncio.run(accuracy_eval.run())
-                
+                asyncio.run(accuracy_eval.run(tracker=tracker))
+
+                # Advance to Analyzing stage for root-cause analysis
+                if tracker:
+                    try:
+                        tracker.advance_stage()
+                        if tracker.current_stage:
+                            tracker.current_stage.status_message = "Running root-cause analysis..."
+                    except Exception as exc:
+                        logging.debug(
+                            "Non-fatal tracker stage advance failure during feedback evaluation: %s",
+                            exc,
+                            exc_info=True,
+                        )
+
+                # Run root-cause analysis on feedback edit comments (non-fatal)
+                console.print("\n[bold]Running root-cause analysis on feedback edit comments...[/bold]")
+                try:
+                    from plexus.Evaluation import FeedbackEvaluation
+
+                    fe = FeedbackEvaluation(
+                        scorecard_name=scorecard,
+                        scorecard=None,
+                        account_key=account_key,
+                        days=days,
+                        scorecard_id=scorecard_id,
+                        score_id=score_id,
+                        evaluation_id=evaluation_id,
+                        account_id=account_id,
+                        api_client=client,
+                    )
+
+                    async def _run_rca():
+                        from datetime import timedelta
+
+                        # Build a map of feedback_item_id → {value, human_label} for
+                        # score results where the evaluation prediction was WRONG.
+                        # Only those items should drive root-cause analysis; items that
+                        # the model now gets right should not be included even if they
+                        # had edit comments (those comments describe the old error, not
+                        # a current one).
+                        score_result_map = {}
+                        next_tok = None
+                        while True:
+                            sr_resp = client.execute(
+                                """query ListSR($evalId: String!, $limit: Int, $nextToken: String) {
+                                    listScoreResultByEvaluationId(
+                                        evaluationId: $evalId, limit: $limit, nextToken: $nextToken
+                                    ) { items { value itemId metadata explanation } nextToken }
+                                }""",
+                                {"evalId": evaluation_id, "limit": 200, "nextToken": next_tok},
+                            )
+                            sr_data = sr_resp.get("listScoreResultByEvaluationId", {})
+                            for sr in sr_data.get("items", []):
+                                try:
+                                    meta = json.loads(sr["metadata"]) if isinstance(sr["metadata"], str) else (sr["metadata"] or {})
+                                    fb_id = meta.get("feedback_item_id")
+                                    # Correctness lives one level deeper: results.{score_name}.metadata.correct
+                                    results = meta.get("results", {})
+                                    correct = all(
+                                        v.get("metadata", {}).get("correct", True)
+                                        for v in results.values()
+                                    )
+                                    if not correct and fb_id:
+                                        human_label = next(
+                                            (v["metadata"].get("human_label") for v in results.values() if "metadata" in v),
+                                            None,
+                                        )
+                                        score_result_map[fb_id] = {
+                                            "value": sr.get("value"),
+                                            "human_label": human_label,
+                                            "explanation": sr.get("explanation"),
+                                        }
+                                except Exception as exc:
+                                    logging.debug(
+                                        "Skipping malformed score result record during RCA map build: %s",
+                                        exc,
+                                        exc_info=True,
+                                    )
+                            next_tok = sr_data.get("nextToken")
+                            if not next_tok:
+                                break
+
+                        console.print(f"[dim]Found {len(score_result_map)} incorrectly predicted item(s) to analyse[/dim]")
+
+                        # Fetch all feedback items in the date window
+                        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+                        end_date = datetime.now(timezone.utc)
+                        feedback_items = await fe._fetch_feedback_items(
+                            scorecard_id=scorecard_id,
+                            score_id=score_id,
+                            start_date=start_date,
+                            end_date=end_date,
+                        )
+
+                        # Fetch original production score result explanations for incorrect items.
+                        # These tell us WHY the ground-truth label is what it is — essential
+                        # for cases where the reviewer agreed with the original (edit comment
+                        # may simply say "Agree.").
+                        original_explanations = {}
+                        for fi in feedback_items:
+                            if fi.id not in score_result_map:
+                                continue
+                            if not fi.itemId:
+                                continue
+                            try:
+                                # Use the GSI (listScoreResults scan doesn't work without
+                                # account-scoped auth; the GSI query does).
+                                # type='prediction' targets original production runs.
+                                orig_resp = client.execute(
+                                    """query GetOrigSR(
+                                        $itemId: String!,
+                                        $typeScoreId: ModelScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAtCompositeKeyConditionInput
+                                    ) {
+                                        listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
+                                            itemId: $itemId,
+                                            typeScoreIdUpdatedAt: $typeScoreId,
+                                            sortDirection: DESC,
+                                            limit: 1
+                                        ) { items { evaluationId explanation } }
+                                    }""",
+                                    {
+                                        "itemId": fi.itemId,
+                                        "typeScoreId": {
+                                            "beginsWith": {
+                                                "type": "prediction",
+                                                "scoreId": fi.scoreId,
+                                            }
+                                        },
+                                    },
+                                )
+                                items_orig = orig_resp.get(
+                                    "listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt", {}
+                                ).get("items", [])
+                                for item in items_orig:
+                                    if item.get("explanation"):
+                                        original_explanations[fi.id] = item["explanation"]
+                                        break
+                            except Exception as exc:
+                                logging.debug(
+                                    "Best-effort original explanation lookup failed for feedback item %s (itemId=%s): %s",
+                                    getattr(fi, "id", None),
+                                    getattr(fi, "itemId", None),
+                                    exc,
+                                    exc_info=True,
+                                )
+
+                        console.print(
+                            f"[dim]Fetched original explanations for "
+                            f"{len(original_explanations)} item(s)[/dim]"
+                        )
+
+                        # Pass only the incorrect items + both context maps
+                        return await fe._run_root_cause_analysis(
+                            feedback_items, score_result_map, original_explanations,
+                            max_report_exemplars=20,
+                            max_summarization_exemplars=6,
+                            tracker=tracker,
+                        )
+
+                    root_cause_topics = asyncio.run(_run_rca())
+
+                    if root_cause_topics:
+                        eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+                        existing = {}
+                        if eval_rec.parameters:
+                            try:
+                                existing = json.loads(eval_rec.parameters) if isinstance(eval_rec.parameters, str) else (eval_rec.parameters or {})
+                            except Exception:
+                                existing = {}
+                        existing["root_cause"] = {"topics": root_cause_topics}
+                        eval_rec.update(parameters=json.dumps(existing))
+                        console.print(f"[green]Root-cause analysis: {len(root_cause_topics)} topic(s) identified[/green]")
+                    else:
+                        console.print("[dim]Root-cause analysis: insufficient data or no topics found[/dim]")
+                except Exception as _rca_err:
+                    console.print(f"[yellow]Warning: root-cause analysis failed (non-fatal): {_rca_err}[/yellow]")
+                    logging.debug("Root-cause analysis traceback:", exc_info=True)
+
+                # Complete the tracker with a clear completion message
+                if tracker:
+                    try:
+                        tracker.complete_with_message("Evaluation complete.")
+                    except Exception as _tracker_err:
+                        console.print(f"[yellow]Warning: tracker.complete() failed: {_tracker_err}[/yellow]")
+
                 console.print("\n[bold green]✓ Feedback Evaluation (with version) Complete[/bold green]")
                 console.print(f"\n[bold]View full results:[/bold]")
                 console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")
