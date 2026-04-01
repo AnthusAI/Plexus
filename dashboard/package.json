@@ -190,8 +190,13 @@
     "wait-on": "^8.0.1"
   },
   "overrides": {
+    "diff": "5.2.2",
+    "dompurify": "3.3.2",
     "immutable": "4.3.8",
+    "mdast-util-to-hast": "13.2.1",
+    "mermaid": "11.14.0",
     "minimatch": "3.1.4",
+    "nanoid": "$nanoid",
     "picomatch": "2.3.2",
     "postcss": "8.4.31",
     "serve": "14.2.6",
