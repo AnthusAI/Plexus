@@ -1,14 +1,27 @@
 import React from 'react';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '@/amplify/data/resource';
-import { ReportBlockProps } from './ReportBlock';
+import ReportBlock, { ReportBlockProps } from './ReportBlock';
 import { ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison';
 import { IdentifierDisplay } from '@/components/ui/identifier-display';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 // ---- Types ----------------------------------------------------------------
+
+interface Vote {
+  model: 'sonnet' | 'gpt';
+  result: boolean | null;  // null = call failed
+  // Full vote details stored in newer reports
+  reason?: string;
+  category?: string;
+  guideline_quote?: string;
+  thinking?: string;
+}
 
 interface Exemplar {
   feedback_item_id: string;
@@ -24,6 +37,8 @@ interface Exemplar {
   reason: string;
   guideline_quote?: string;
   is_invalid: boolean;
+  confidence?: 'high' | 'medium' | 'low';
+  voting?: Vote[] | null;
 }
 
 interface Topic {
@@ -57,6 +72,59 @@ function formatTimeAgo(isoString: string | null | undefined): string {
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
 }
+
+// ---- Voting badges ---------------------------------------------------------
+
+function computeConfidence(votes: Vote[]): 'high' | 'medium' | 'low' {
+  if (votes.length === 0) return 'low';
+  const yes = votes.filter(v => v.result === true).length;
+  const no = votes.filter(v => v.result === false).length;
+  const majority = Math.max(yes, no);
+  const ratio = majority / votes.length;
+  if (ratio === 1) return 'high';
+  if (ratio >= 0.8) return 'medium';
+  return 'low';
+}
+
+const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'low' }> = ({ votes, confidence }) => {
+  const confidenceClass =
+    confidence === 'high'
+      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      : confidence === 'medium'
+        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {votes.map((v, i) => {
+        const showSep = i === 3;
+        const circleClass = v.result === null
+          ? 'bg-muted text-muted-foreground'
+          : v.result
+            ? 'bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100'
+            : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100';
+        const label = v.model === 'sonnet' ? 'S' : 'G';
+        const title = `${v.model === 'sonnet' ? 'Sonnet' : 'GPT-5.4'}: ${v.result === null ? 'failed' : v.result ? 'yes' : 'no'}`;
+        return (
+          <React.Fragment key={i}>
+            {showSep && <span className="text-muted-foreground/40 text-xs mx-0.5">|</span>}
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${circleClass}`}
+              title={title}
+            >
+              {label}
+            </span>
+          </React.Fragment>
+        );
+      })}
+      <span className={`ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded ${confidenceClass}`}>
+        Confidence: {confidence}
+      </span>
+    </div>
+  );
+};
+
+// ---- Exemplar row ----------------------------------------------------------
 
 const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
   const [invalidated, setInvalidated] = React.useState(exemplar.is_invalid);
@@ -114,20 +182,24 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
         </div>
       </div>
 
-      {/* Score reasoning */}
+      {/* Original explanation */}
       {exemplar.score_result_explanation && (
-        <p className="text-sm text-muted-foreground italic">
-          <span className="font-medium text-foreground not-italic">Score reasoning: </span>
-          {exemplar.score_result_explanation}
-        </p>
+        <div className="border-l-2 border-muted-foreground/30 pl-3">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Original explanation</p>
+          <div className="text-sm text-muted-foreground prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+              {exemplar.score_result_explanation}
+            </ReactMarkdown>
+          </div>
+        </div>
       )}
 
       {/* Reviewer comment */}
       {exemplar.edit_comment && (
-        <p className="text-sm text-muted-foreground italic">
-          <span className="font-medium text-foreground not-italic">Reviewer comment: </span>
-          &ldquo;{exemplar.edit_comment}&rdquo;
-        </p>
+        <div className="border-l-2 border-muted-foreground/30 pl-3">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Reviewer comment</p>
+          <p className="text-sm text-muted-foreground">{exemplar.edit_comment}</p>
+        </div>
       )}
 
       {/* Contradiction analysis */}
@@ -141,10 +213,18 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
         </p>
       )}
 
-      <IdentifierDisplay
-        identifiers={exemplar.item_identifiers ?? undefined}
-        externalId={exemplar.item_external_id ?? undefined}
-      />
+      <div className="flex items-center justify-between gap-2">
+        <IdentifierDisplay
+          identifiers={exemplar.item_identifiers ?? undefined}
+          externalId={exemplar.item_external_id ?? undefined}
+        />
+        {exemplar.voting && exemplar.voting.length > 0 && (
+          <VotingBadges
+            votes={exemplar.voting}
+            confidence={exemplar.confidence ?? computeConfidence(exemplar.voting)}
+          />
+        )}
+      </div>
     </div>
   );
 };
@@ -234,54 +314,58 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   }, [outputCompacted, outputAttachment, loadedOutput]);
 
   if (outputCompacted && !loadedOutput) {
-    return <p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p>;
+    return <ReportBlock {...props}><p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p></ReportBlock>;
   }
 
   const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
   if (!output) {
-    return <p className="text-muted-foreground text-sm">No contradiction analysis data available.</p>;
+    return <ReportBlock {...props}><p className="text-muted-foreground text-sm">No contradiction analysis data available.</p></ReportBlock>;
   }
 
   if (output.error) {
     return (
-      <div className="text-destructive text-sm">
-        <p>Error generating FeedbackContradictions block:</p>
-        <pre className="mt-1 text-xs whitespace-pre-wrap">{output.error}</pre>
-      </div>
+      <ReportBlock {...props}>
+        <div className="text-destructive text-sm">
+          <p>Error generating FeedbackContradictions block:</p>
+          <pre className="mt-1 text-xs whitespace-pre-wrap">{output.error}</pre>
+        </div>
+      </ReportBlock>
     );
   }
 
   const { score_name, total_items_analyzed, contradictions_found, topics = [] } = output;
 
   return (
-    <div className="space-y-1">
-      {/* Summary header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap pb-2">
-        <div>
-          <h3 className="text-base font-semibold">{score_name}</h3>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {contradictions_found} contradiction{contradictions_found !== 1 ? 's' : ''} found
-            {' '}across {total_items_analyzed} feedback item{total_items_analyzed !== 1 ? 's' : ''}
-          </p>
+    <ReportBlock {...props}>
+      <div className="space-y-1">
+        {/* Summary header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap pb-2">
+          <div>
+            <h3 className="text-base font-semibold">{score_name}</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {contradictions_found} contradiction{contradictions_found !== 1 ? 's' : ''} found
+              {' '}across {total_items_analyzed} feedback item{total_items_analyzed !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <Badge variant={contradictions_found > 0 ? 'destructive' : 'secondary'} className="shrink-0">
+            {contradictions_found > 0
+              ? `${Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100)}% contradiction rate`
+              : 'No contradictions'}
+          </Badge>
         </div>
-        <Badge variant={contradictions_found > 0 ? 'destructive' : 'secondary'} className="shrink-0">
-          {contradictions_found > 0
-            ? `${Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100)}% contradiction rate`
-            : 'No contradictions'}
-        </Badge>
+
+        {topics.length === 0 && contradictions_found === 0 && (
+          <p className="text-sm text-muted-foreground">
+            All feedback items appear consistent with the score guidelines.
+          </p>
+        )}
+
+        {topics.map((topic) => (
+          <TopicSection key={topic.label} topic={topic} />
+        ))}
       </div>
-
-      {topics.length === 0 && contradictions_found === 0 && (
-        <p className="text-sm text-muted-foreground">
-          All feedback items appear consistent with the score guidelines.
-        </p>
-      )}
-
-      {topics.map((topic) => (
-        <TopicSection key={topic.label} topic={topic} />
-      ))}
-    </div>
+    </ReportBlock>
   );
 };
 
