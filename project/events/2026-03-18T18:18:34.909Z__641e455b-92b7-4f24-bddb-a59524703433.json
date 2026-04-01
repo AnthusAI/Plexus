@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "event_id": "641e455b-92b7-4f24-bddb-a59524703433",
+  "issue_id": "plx-e4aa4d6f-4439-4717-95f5-64d18b49bd77",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T18:18:34.909Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Create and implement remediation branch/work for Prowler finding requiring DynamoDB tables to be governed by an AWS Backup plan in Amplify Gen2.",
+    "issue_type": "task",
+    "labels": [
+      "security",
+      "prowler",
+      "backup"
+    ],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement AWS Backup plan coverage for Amplify Gen2 DynamoDB tables"
+  }
+}

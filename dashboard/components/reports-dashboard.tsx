@@ -253,8 +253,8 @@ const GET_REPORT_WITH_BLOCKS = `
 
 // GraphQL subscription queries for real-time updates
 const SUBSCRIBE_ON_CREATE_REPORT = `
-  subscription OnCreateReport($accountId: String!) {
-    onCreateReport(filter: { accountId: { eq: $accountId } }) {
+  subscription OnCreateReport {
+    onCreateReport {
       id
       name
       createdAt
@@ -305,8 +305,8 @@ const SUBSCRIBE_ON_CREATE_REPORT = `
 `;
 
 const SUBSCRIBE_ON_UPDATE_REPORT = `
-  subscription OnUpdateReport($accountId: String!) {
-    onUpdateReport(filter: { accountId: { eq: $accountId } }) {
+  subscription OnUpdateReport {
+    onUpdateReport {
       id
       name
       createdAt
@@ -517,7 +517,6 @@ export default function ReportsDashboard({
     name?: string;
     position: number;
   }> | null>(null);
-  const [subscriptions, setSubscriptions] = useState<{ unsubscribe: () => void }[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [reportsFilter, setReportsFilter] = useState('');
@@ -632,7 +631,8 @@ export default function ReportsDashboard({
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [dataHasLoadedOnce]); // Dependency array includes dataHasLoadedOnce
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // dataHasLoadedOnce is only used as a one-way gate; no stale-closure risk
 
   // Add the effect for initial fetch when accountId is available
   useEffect(() => {
@@ -668,12 +668,12 @@ export default function ReportsDashboard({
     // Subscribe to new report creations
     try {
       const createReportSubscription = (getClient().graphql({
-        query: SUBSCRIBE_ON_CREATE_REPORT,
-        variables: { accountId }
+        query: SUBSCRIBE_ON_CREATE_REPORT
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onCreateReport: any } }) => {
           if (data?.onCreateReport) {
             const newReport = data.onCreateReport;
+            if (newReport.accountId !== accountId) return;
             
             // DIRECT APPROACH: Create a report display object manually to ensure name is preserved
             const manualTransformedReport: ReportDisplayData = {
@@ -714,12 +714,12 @@ export default function ReportsDashboard({
     // Subscribe to report updates
     try {
       const updateReportSubscription = (getClient().graphql({
-        query: SUBSCRIBE_ON_UPDATE_REPORT,
-        variables: { accountId }
+        query: SUBSCRIBE_ON_UPDATE_REPORT
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onUpdateReport: any } }) => {
           if (data?.onUpdateReport) {
             const updatedReport = data.onUpdateReport;
+            if (updatedReport.accountId !== accountId) return;
             // Cast to any to avoid type issues with transformReportData
             const transformedReport = transformReportData(updatedReport as any);
             if (transformedReport) {
@@ -744,9 +744,6 @@ export default function ReportsDashboard({
     } catch (error) {
       console.error('Failed to set up update report subscription:', error);
     }
-
-    // Save subscriptions for cleanup
-    setSubscriptions(prevSubscriptions => [...prevSubscriptions, ...subscriptionHandlers]);
 
     // Cleanup on unmount or accountId change
     return () => {
@@ -873,9 +870,6 @@ export default function ReportsDashboard({
       console.error('Failed to set up update report block subscription:', error);
     }
 
-    // Save subscriptions for cleanup
-    setSubscriptions(prevSubscriptions => [...prevSubscriptions, ...blockSubscriptionHandlers]);
-
     // Cleanup on unmount or selectedReportId change
     return () => {
       blockSubscriptionHandlers.forEach(subscription => {
@@ -888,18 +882,6 @@ export default function ReportsDashboard({
     };
   }, [selectedReportId]);
 
-  // Cleanup all subscriptions on component unmount
-  useEffect(() => {
-    return () => {
-      subscriptions.forEach(subscription => {
-        try {
-          subscription.unsubscribe();
-        } catch (err) {
-          console.error('Error unsubscribing on unmount:', err);
-        }
-      });
-    };
-  }, [subscriptions]);
 
   // Infinite scroll effect using Intersection Observer
   useEffect(() => {

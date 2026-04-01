@@ -1,0 +1,247 @@
+{
+  "id": "plx-d30c27ce-1eaa-4fbd-99df-8dcbcfea3235",
+  "title": "Design transcription-quality attribution workflow for feedback misclassifications",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fd598208-5a6d-4888-9ffd-1da7d6ccd2a9",
+      "author": "derek",
+      "text": "Initial feasibility scan in progress.",
+      "created_at": "2026-03-19T21:13:10.683548127Z"
+    },
+    {
+      "id": "98f3314d-86f7-4442-a426-951eb4876d89",
+      "author": "derek",
+      "text": "Feasibility findings: existing FeedbackAnalysis already computes mismatches and writes per-cell indexed JSON with feedback/item IDs and item identifiers. MCP feedback_find already returns item_text + item_identifiers and supports initial/final value filtering, so a transcription-attribution workflow is possible without schema changes. Next: recommend report-vs-procedure architecture and output contract for reportId/formId lists.",
+      "created_at": "2026-03-19T21:13:36.519353607Z"
+    },
+    {
+      "id": "15b3bb81-8db8-4dc4-b5a6-c602a547d159",
+      "author": "derek",
+      "text": "Implementation started: creating initial procedure YAML to identify likely transcription-caused mismatches and output form/report IDs with confidence reasons.",
+      "created_at": "2026-03-19T21:14:34.563915737Z"
+    },
+    {
+      "id": "c4c83a83-8ec3-43d4-b31b-90ca9c394e0d",
+      "author": "derek",
+      "text": "User clarified QA comments are not useful for attribution; implementation will rely on transcript text heuristics (entity presence/absence) on mismatch items.",
+      "created_at": "2026-03-19T21:15:55.450737616Z"
+    },
+    {
+      "id": "2cdc3129-53c5-47fa-a21b-dedfa765541f",
+      "author": "derek",
+      "text": "Implemented initial procedure: plexus/procedures/transcription_mismatch_attribution.yaml. It pages plexus_feedback_find, evaluates transcript-only missing-entity/missing-intro heuristics, and outputs form/report/session IDs with confidence + reasons.",
+      "created_at": "2026-03-19T21:18:15.688923502Z"
+    },
+    {
+      "id": "9b3a143e-4225-4262-8c90-2e72d300bfc8",
+      "author": "derek",
+      "text": "New requirement: expected names vary per call. Updating procedure to extract expected names from item metadata and apply fuzzy transcript matching; company fixed to Renewal by Andersen for this scorecard.",
+      "created_at": "2026-03-19T21:20:20.444659555Z"
+    },
+    {
+      "id": "961b41bc-dada-437f-8ac4-4d5733f33070",
+      "author": "derek",
+      "text": "Refinement requested: remove broad metadata heuristics. Use explicit item metadata key agent_name (e.g., Manuel Valverde), derive first/last from that, and fuzzy-match transcript text. Company remains Renewal by Andersen.",
+      "created_at": "2026-03-19T21:22:04.216564025Z"
+    },
+    {
+      "id": "463170ec-450b-46d4-93d4-c1f46bdede9e",
+      "author": "derek",
+      "text": "Implemented requested simplification in transcription_mismatch_attribution procedure: expected names now come from item_metadata.agent_name (or agentName) per call, split to first/last, and matched with fuzzy token similarity. Set expected_company default to 'Renewal by Andersen'. Added tunable name_similarity_threshold (default 0.8).",
+      "created_at": "2026-03-19T21:22:53.841871879Z"
+    },
+    {
+      "id": "89f94ca9-bd8a-461f-80be-784a7a52e8ae",
+      "author": "derek",
+      "text": "Starting pilot run requested by user: transcription_mismatch_attribution for scorecard 731 and score 47088 with small max_items cap.",
+      "created_at": "2026-03-19T21:24:09.087028859Z"
+    },
+    {
+      "id": "abe99d8b-71c0-4bd5-8e3b-bdb6d629e332",
+      "author": "derek",
+      "text": "Attempted to run procedure via CLI but blocked by runtime error: TactusRuntime.__init__ unexpected keyword argument trace_sink. Proceeding with one-off script execution of equivalent logic for user-requested pilot run (scorecard 731, score 47088).",
+      "created_at": "2026-03-19T21:25:40.207087776Z"
+    },
+    {
+      "id": "f70ddb81-703d-47fb-a305-5ac24c4d51c2",
+      "author": "derek",
+      "text": "Pilot execution (workaround script) for scorecard 731 / score 47088 over last 30 days: resolved scorecard_id=2d3970b9-47a3-423b-9ad1-4e103d9136c8, score_id=ae02921d-3cf3-49e7-a099-bc79b6478023. Retrieved 79 FN items (No->Yes), flagged 78 as likely transcription-related using agent_name + company heuristics. Observed item identifiers mostly lacked formId/reportId/sessionId (null in sample output).",
+      "created_at": "2026-03-19T21:27:10.842803395Z"
+    },
+    {
+      "id": "1e7e268e-8082-49c6-92ad-8b2b5889eb43",
+      "author": "derek",
+      "text": "Investigating procedure runner failure: TactusRuntime.__init__ unexpected keyword argument trace_sink. Plan is to patch executor for runtime signature compatibility and re-validate with dry run.",
+      "created_at": "2026-03-19T21:27:31.890200598Z"
+    },
+    {
+      "id": "7b89bee4-67a9-414f-bb05-7725f7de044b",
+      "author": "derek",
+      "text": "Patched procedure executor for Tactus compatibility: runtime kwargs are now signature-filtered (trace_sink only when supported) and agent tools normalization now handles mixed lists containing plexus_* plus done/think.",
+      "created_at": "2026-03-19T21:29:29.532364018Z"
+    },
+    {
+      "id": "b160a7d0-7216-48b5-9c32-6d9fd3491c03",
+      "author": "derek",
+      "text": "Validated runner now advances past trace_sink and toolset resolution. Found additional runtime/API drift in procedure script: DSPyAgentHandle lacks reset(). Updated transcription_mismatch_attribution procedure to guard reset call (only call if method exists).",
+      "created_at": "2026-03-19T21:30:56.060007073Z"
+    },
+    {
+      "id": "c9b43e53-2ef6-4b85-92d1-fe9fefaeeb25",
+      "author": "derek",
+      "text": "Additional compatibility fixes: default ProcedureMetadata.status when API returns null; made ProcedureChatRecorder.end_session accept both legacy (status-first) and new Tactus (session_id-first) call styles.",
+      "created_at": "2026-03-19T21:31:36.793771807Z"
+    },
+    {
+      "id": "0a00c4b6-a4ea-4ff2-b6c5-f0c429701ae7",
+      "author": "derek",
+      "text": "Running full procedure execution test with temporary YAML param values for scorecard 731 / score 47088 and small max_items cap.",
+      "created_at": "2026-03-19T21:32:43.666251398Z"
+    },
+    {
+      "id": "0f90d06d-48ad-4694-9b9c-aa6ca48d763b",
+      "author": "derek",
+      "text": "Re-test after compatibility patches: runner now initializes and executes Tactus workflow. New blocker surfaced in MCP bridge: tool wrapper rejects keyword args ( call fails with unexpected keyword argument 'days'). Also CLI  output currently crashes on non-serializable  in result payload.",
+      "created_at": "2026-03-19T21:36:09.903165170Z"
+    },
+    {
+      "id": "39b06460-b176-4d69-872b-cce64e4fbf6f",
+      "author": "derek",
+      "text": "Re-test after compatibility patches: runner now initializes and executes Tactus workflow. New blocker surfaced in MCP bridge: tool wrapper rejects keyword args on plexus_feedback_find (unexpected keyword argument days). Also CLI JSON output crashes on non-serializable LuaTable values in result payload.",
+      "created_at": "2026-03-19T21:36:15.694737476Z"
+    },
+    {
+      "id": "a73ad556-bbe9-4f57-bf8b-36465165f2a7",
+      "author": "derek",
+      "text": "User requested full proper fix (no hacks). Implementing upstream compatibility in Tactus MCP adapter + Plexus procedure output serialization, then validating with real run for scorecard 731 / score 47088.",
+      "created_at": "2026-03-19T21:37:26.027045093Z"
+    },
+    {
+      "id": "ba93894f-03fd-4715-b7b0-57afd8212513",
+      "author": "derek",
+      "text": "Starting no-hacks fix pass: patching Tactus MCP adapter kwargs/signature compatibility and Plexus procedure JSON serialization for LuaTable outputs, then validating with scorecard 731 / score 47088 run.",
+      "created_at": "2026-03-19T21:38:42.577583276Z"
+    },
+    {
+      "id": "94560341-ff82-41a7-a22e-6b49a8f9163d",
+      "author": "derek",
+      "text": "Implemented no-hacks compatibility fixes across Plexus+Tactus and validated with live run. Tactus MCP adapter now accepts kwargs/legacy args, coerces scalar->string for string-typed MCP schemas, and unwraps MCP content payloads into plain text for Lua JSON decoding. Plexus procedure CLI JSON output now recursively normalizes non-serializable Lua-like/model objects. Validation: Tactus adapter tests 24 passed; Plexus procedure compat/tests 10 passed + JSON-safe tests. Live run with patched runtime (PYTHONPATH=/home/derek/projects/Tactus) and YAML defaults scorecard=731 score=47088 completed successfully: procedure_id=0ece1e3b-edae-4ce9-bc53-cd007a327a8e task_id=9ba2ffc3-f3be-4a36-9fa0-39a998487e2e, scanned=79 mismatches=79 likely_transcription_issue_count=78 rate=0.98734.",
+      "created_at": "2026-03-19T21:46:04.408347210Z"
+    },
+    {
+      "id": "889b8a95-5c5e-47f4-9d1f-be9b71eb9b4a",
+      "author": "derek",
+      "text": "User-reported false missing last-name on hyphenated surname (Nunez-Tovar) where transcript contains Nunez. Patching transcription attribution procedure name-matching to handle hyphenated last-name components robustly and validating against sample.",
+      "created_at": "2026-03-19T22:04:41.354835635Z"
+    },
+    {
+      "id": "480e3bdb-5ffc-412e-bcab-44cb48cf840b",
+      "author": "derek",
+      "text": "Patched transcription_mismatch_attribution name matching for compound/hyphenated names: full token match is attempted first, then component token fallback. Last-name check now allows partial component match (e.g., Nunez-Tovar matches transcript token Nunez). Validation run confirms item external_id 305359138 now only flags missing_expected_first_name (missing_expected_last_name removed).",
+      "created_at": "2026-03-19T22:06:49.014277390Z"
+    },
+    {
+      "id": "9a2a2962-a016-46e6-b7bb-64520e453e1a",
+      "author": "derek",
+      "text": "Adding per-agent attribution breakdown to transcription_mismatch_attribution output: mismatch_count, likely_transcription_issue_count, and rate per agent to identify concentrated transcription quality issues.",
+      "created_at": "2026-03-19T22:10:34.155466575Z"
+    },
+    {
+      "id": "58d41ba2-1272-4b0c-ab7a-c3ab705d449a",
+      "author": "derek",
+      "text": "Implemented per-agent attribution outputs in transcription_mismatch_attribution: agent_breakdown_by_agent and sorted agent_breakdown with mismatch_count, likely_transcription_issue_count, likely_transcription_issue_rate, confidence_counts, likely_points_total. Verified via run output (/tmp/transcription_run_output_agent_breakdown.log). Example concentrations: Damaria Shezbie 13/13, Anais Nunez-Tovar 13/13, Colleen Colvin 11/12, Apr Seaberry Hickman 7/7, Mia Carriuolo 6/6.",
+      "created_at": "2026-03-19T22:12:26.475634514Z"
+    },
+    {
+      "id": "cf8a6f94-f23d-44e9-8eac-f179d46e38ce",
+      "author": "derek",
+      "text": "Adding stable form-id extraction to transcription attribution output so each mismatch has lookup-friendly form_id. Priority: item_identifiers.formId -> metadata form fields/content_id -> external_id fallback, with form_id_source for traceability.",
+      "created_at": "2026-03-19T22:14:29.450590831Z"
+    },
+    {
+      "id": "d8fbb146-f525-4fd7-a303-a0d2c9da1479",
+      "author": "derek",
+      "text": "Corrected ID semantics per user feedback: procedure no longer labels report/content IDs as form_id. form_id is now emitted only when true form identifiers exist in item_identifiers/item metadata form keys. Added lookup_id/lookup_id_source as explicit fallback for manual lookup. Validation run shows lookup_id populated (mostly item_metadata.content_id) and form_id absent for this dataset, confirming form IDs are not present in current source records.",
+      "created_at": "2026-03-19T22:21:30.862009158Z"
+    },
+    {
+      "id": "75e3ef69-e6c7-4ba1-8acc-aab2ee3d5f2c",
+      "author": "derek",
+      "text": "Investigating why procedure output has null identifier fields despite dashboard item detail showing Form Id/Report Id. Next steps: trace feedback_find query path and item identifier hydration, then patch backend to expose true identifiers (especially form_id) in procedure inputs.",
+      "created_at": "2026-03-19T22:24:01.463921362Z"
+    },
+    {
+      "id": "9a6cda14-77de-4c7f-adcf-ba21b7583632",
+      "author": "derek",
+      "text": "Fixed null identifier output in feedback_find/procedure path. Root cause: feedback service/model path only relied on legacy item.identifiers and did not preserve modern item.itemIdentifiers relationship used by dashboard item detail views. Changes: (1) FeedbackItem.from_dict now normalizes item.itemIdentifiers.items -> item.identifiers when legacy identifiers are absent. (2) FeedbackService GSI + fallback queries now request item.itemIdentifiers fields. (3) FeedbackService identifier normalization/extraction now handles list/dict/string payloads consistently and recognizes form/form id/formId/form_id names. Validation: pytest tests/test_feedback_service.py (24 passed); live procedure run output now includes item_identifiers and form_id values (e.g., form_id 66919927 for item ...--305359138).",
+      "created_at": "2026-03-19T22:28:55.240427111Z"
+    },
+    {
+      "id": "4f055e73-34ec-462f-ac02-fada81688722",
+      "author": "derek",
+      "text": "User requested larger run. Updating /tmp run YAML to target up to 1000 feedback samples and executing procedure with PYTHONPATH pointed at Tactus.",
+      "created_at": "2026-03-19T22:31:27.910229668Z"
+    },
+    {
+      "id": "eaa008bf-5b68-4f50-b28c-313c56176b4e",
+      "author": "derek",
+      "text": "Replacing ad-hoc /tmp run YAML with committed reusable run config: plexus/procedures/runs/transcription_mismatch_attribution_731_47088_1000.yaml (params include scorecard 731, score 47088, days 365, max_items 1000).",
+      "created_at": "2026-03-19T22:33:04.888872443Z"
+    },
+    {
+      "id": "daa5e108-a6ef-4122-be18-afa1ab887c86",
+      "author": "derek",
+      "text": "User requested permanent procedure YAML in root procedures directory. Moved run-ready file to plexus/procedures/transcription_mismatch_attribution_731_47088_1000.yaml and removed intermediate runs/ wrapper file.",
+      "created_at": "2026-03-19T22:35:20.356796561Z"
+    },
+    {
+      "id": "7b9c69fb-b645-4e06-b65b-3f16190a1fe7",
+      "author": "derek",
+      "text": "Correction: policy blocked file move/delete operations. I copied the run-ready file to plexus/procedures/transcription_mismatch_attribution_731_47088_1000.yaml in the root procedures directory. Intermediate files remain under plexus/procedures/runs for now.",
+      "created_at": "2026-03-19T22:35:41.050803784Z"
+    },
+    {
+      "id": "24bcbfa1-9b2e-4a3f-a359-56959da37727",
+      "author": "derek",
+      "text": "User reported regression: 1000-sample run fails with TaskGroup sub-exception. Investigating exact stack/error in /tmp/transcription_run_output_1000.log and applying a real fix.",
+      "created_at": "2026-03-19T22:40:21.823752892Z"
+    },
+    {
+      "id": "97d61d80-9326-4d39-a4b5-687b152eb2db",
+      "author": "derek",
+      "text": "Resolved 1000-run failure. Root cause: Tactus DSPyAgentHandle lacked legacy-compatible reset(), so pagination loop in procedure could not clear fetcher conversation between pages; second agent turn accumulated prior large tool-response history and failed with transient TaskGroup errors. Fixes in Tactus: (1) add DSPyAgentHandle.reset() alias to clear_history(), (2) add transient retry classification + retries for MCP tool execution callback in tactus/adapters/mcp_manager.py. Validation: Tactus tests pass (adapters/test_mcp_manager.py:14 passed; dspy/test_agent_execution targeted reset tests passed). Re-ran procedure YAML plexus/procedures/transcription_mismatch_attribution_731_47088_1000.yaml successfully; output status=completed, total_feedback_items_scanned=184, total_mismatches_scanned=184, likely_transcription_issue_count=181.",
+      "created_at": "2026-03-19T22:47:32.682304053Z"
+    },
+    {
+      "id": "0d1eac24-0a13-4deb-9267-74b95dad0095",
+      "author": "derek",
+      "text": "User requested new-procedure path use new agent API instead of legacy-only reset. Updating transcription_mismatch_attribution to prefer clear_history() and keep reset() only as fallback for older runtimes.",
+      "created_at": "2026-03-19T22:49:52.138264022Z"
+    },
+    {
+      "id": "fa336d1e-c278-4dc0-96fb-3845005f11f2",
+      "author": "derek",
+      "text": "User reports continued TaskGroup failures; investigating latest failing run c39cca82 session / procedure 9870106d and implementing deterministic reliability fix.",
+      "created_at": "2026-03-19T22:55:35.338175272Z"
+    },
+    {
+      "id": "dbdef247-09da-4dfd-a441-7b501c25829d",
+      "author": "derek",
+      "text": "Identified direct regression cause: Lua type-check around Fetcher.clear_history/reset treated Python-bound methods as non-function, so history reset was skipped between pages. Fixed in both procedure YAMLs by direct pcall(Fetcher.clear_history()) with reset() fallback. Validation run now stable: completed with two page fetches (two plexus_feedback_find tool executions), total_feedback_items_scanned=184, total_mismatches_scanned=184, likely_transcription_issue_count=182.",
+      "created_at": "2026-03-19T22:57:44.807365258Z"
+    }
+  ],
+  "created_at": "2026-03-19T21:12:09.654639948Z",
+  "updated_at": "2026-03-19T22:57:44.807365258Z",
+  "closed_at": null,
+  "custom": {}
+}

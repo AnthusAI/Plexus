@@ -53,7 +53,7 @@ export interface FeedbackAnalysisDisplayProps {
  * The confusion matrix uses interactive cells to allow drilling down into
  * specific feedback items in a structured before/after format.
  */
-export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps> = ({
+export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { children?: React.ReactNode }> = ({
   data,
   title,
   subtitle,
@@ -72,7 +72,8 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps> = (
   config = { class: 'FeedbackAnalysis' },
   // On-demand analysis props
   scorecardId,
-  scoreId
+  scoreId,
+  children,
 }) => {
   // Helper function to filter out unwanted default subtitle text
   const filterSubtitle = (text: string | undefined): string | undefined => {
@@ -135,7 +136,7 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps> = (
 
   return (
     <div className={className}>
-      <ScorecardReport 
+      <ScorecardReport
         {...reportBlockProps}
         showDateRange={showDateRange}
         showPrecisionRecall={showPrecisionRecall}
@@ -145,7 +146,9 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps> = (
         scorecardId={scorecardId}
         accountId={selectedAccount?.id}
         // No drill-down content at scorecard level - individual scores handle their own
-      />
+      >
+        {children}
+      </ScorecardReport>
     </div>
   );
 };

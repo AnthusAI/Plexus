@@ -404,8 +404,8 @@ def create_celery_app() -> Celery:
         f"Dispatch mode: {mode}. Celery configured for SQS in region '{aws_region}'. "
         f"Queue name: '{sqs_queue_name}'."
     )
-    logging.debug(f"Celery Broker base URL (credentials part): {broker_url}")
-    logging.debug(f"Celery Backend URL: {backend_url}")
+    logging.debug(f"Celery Broker base URL: sqs://***:***@/{sqs_queue_name}")
+    logging.debug(f"Celery Backend URL: (redacted — contains credentials)")
     
     app.conf.update(
         broker_connection_retry_on_startup=True,

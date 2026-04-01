@@ -1,0 +1,49 @@
+name: Ruleset Sync
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - develop
+      - main
+    paths:
+      - "infrastructure/github-rulesets/**"
+      - ".github/workflows/ruleset-sync.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infrastructure/github-rulesets/**"
+      - ".github/workflows/ruleset-sync.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - apply
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'check') }}
+    uses: AnthusAI/platform-ci/.github/workflows/ruleset-sync-reusable.yml@main
+    with:
+      mode: check
+      ruleset_glob: infrastructure/github-rulesets/*.json
+    secrets:
+      ruleset_admin_token: ${{ secrets.RULESET_ADMIN_TOKEN }}
+
+  apply:
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'apply') }}
+    uses: AnthusAI/platform-ci/.github/workflows/ruleset-sync-reusable.yml@main
+    with:
+      mode: apply
+      ruleset_glob: infrastructure/github-rulesets/*.json
+    secrets:
+      ruleset_admin_token: ${{ secrets.RULESET_ADMIN_TOKEN }}

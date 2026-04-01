@@ -279,7 +279,15 @@ class FeedbackAnalysis(BaseReportBlock):
                     _raw = fi.editCommentValue or fi.finalCommentValue or ""
                     text = _raw.strip() if isinstance(_raw, str) else ""
                     if text:
-                        score_edit_comments.append((fi.id or fi.itemId or "", text, fi.itemId, fi.editedAt, fi.id))
+                        score_edit_comments.append((
+                            fi.id or fi.itemId or "",  # [0] doc_id
+                            text,                      # [1] edit comment text
+                            fi.itemId,                 # [2] item_id
+                            fi.editedAt,               # [3] edited_at
+                            fi.id,                     # [4] feedback_item_id
+                            fi.initialAnswerValue,     # [5] original AI answer
+                            fi.finalAnswerValue,       # [6] human-corrected answer
+                        ))
                 if mismatches_for_score:
                     self._log(
                         f"Memory analysis: {len(mismatches_for_score)} mismatches for '{score_info['plexus_score_name']}', "
@@ -451,7 +459,10 @@ class FeedbackAnalysis(BaseReportBlock):
                             try:
                                 memories_yaml = yaml.dump(memories, indent=2, allow_unicode=True, sort_keys=False)
                                 from plexus.reports.s3_utils import add_file_to_report_block
-                                all_paths = add_file_to_report_block(report_block_id, "memories.yaml", memories_yaml, content_type="text/yaml", client=self.api_client)
+                                import re as _re
+                                _sc_slug = _re.sub(r'[^a-zA-Z0-9_-]', '_', str(cc_scorecard_id_param))[:40]
+                                _memories_filename = f"memories-{_sc_slug}.yaml"
+                                all_paths = add_file_to_report_block(report_block_id, _memories_filename, memories_yaml, content_type="text/yaml", client=self.api_client)
                                 # add_file_to_report_block returns full list; the new file is always last
                                 memories_path = all_paths[-1] if isinstance(all_paths, list) else all_paths
                                 final_output_data["memories_file"] = memories_path
@@ -514,40 +525,65 @@ class FeedbackAnalysis(BaseReportBlock):
         return final_output_data, detailed_log
 
 
-    def _generate_topic_label_llm(self, keywords: List[str], exemplars: List[str]) -> Optional[str]:
-        """Call Bedrock to generate a human-readable topic label from keywords and exemplar texts."""
+    async def _run_tac_inference(self, user_message: str, system_prompt: str = "") -> Optional[str]:
+        """Run a single-turn LLM inference via Tactus procedure."""
         try:
-            import boto3
-            import json as _json
+            import os
+            from tactus.core.runtime import TactusRuntime
+            from tactus.adapters.memory import MemoryStorage
 
-            keyword_str = ", ".join(keywords[:8]) if keywords else ""
-            exemplar_str = "\n".join(f'- "{e[:200]}"' for e in exemplars[:3] if e)
-            prompt = (
-                "You are labeling a topic cluster from customer feedback comments. "
-                "Given the following keywords and example comments, write a concise 2–5 word topic label "
-                "that describes what these feedback comments are about. "
-                "Return ONLY the label text, no quotes, no punctuation at the end.\n\n"
-                f"Keywords: {keyword_str}\n\nExample comments:\n{exemplar_str}\n\nTopic label:"
+            provider = self.config.get("memory_llm_provider", "bedrock")
+            model = self.config.get("memory_llm_model", "anthropic.claude-3-haiku-20240307-v1:0")
+
+            tac_path = os.path.join(
+                os.path.dirname(__file__), "..", "procedures", "single_turn_inference.tac"
+            )
+            with open(tac_path) as f:
+                tac_template = f.read()
+
+            tac_source = tac_template.replace("{{PROVIDER}}", provider).replace("{{MODEL}}", model)
+
+            storage = MemoryStorage()
+            runtime = TactusRuntime(
+                procedure_id="memory_analysis_inference",
+                storage_backend=storage,
+                openai_api_key=os.environ.get("OPENAI_API_KEY"),
             )
 
-            client = boto3.client("bedrock-runtime", region_name="us-east-1")
-            body = _json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 32,
-                "messages": [{"role": "user", "content": prompt}],
-            })
-            response = client.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                body=body,
-                contentType="application/json",
-                accept="application/json",
+            result = await runtime.execute(
+                tac_source,
+                context={"user_message": user_message, "system_prompt": system_prompt},
+                format="lua",
             )
-            result = _json.loads(response["body"].read())
-            label = result["content"][0]["text"].strip().strip('"').strip("'")
-            return label if label else None
+
+            procedure_output = result.get("result", result)
+            if isinstance(procedure_output, dict):
+                raw_text = procedure_output.get("text", "")
+            else:
+                raw_text = str(procedure_output) if procedure_output else ""
+            # done.last_result() returns {status, reason, tool} dict; extract reason
+            if isinstance(raw_text, dict):
+                text = raw_text.get("reason", "") or ""
+            else:
+                text = str(raw_text or "")
+            return text.strip() if text else None
         except Exception as e:
-            self._log(f"LLM topic label generation failed: {e}", level="WARNING")
+            self._log(f"Tactus inference failed: {e}", level="WARNING")
             return None
+
+    async def _generate_topic_label_llm(self, keywords: List[str], exemplars: List[str]) -> Optional[str]:
+        """Generate a human-readable topic label from keywords and exemplar texts via Tactus."""
+        keyword_str = ", ".join(keywords[:8]) if keywords else ""
+        exemplar_str = "\n".join(f'- "{e[:200]}"' for e in exemplars[:3] if e)
+        prompt = (
+            "You are labeling a topic cluster from customer feedback comments. "
+            "Given the following keywords and example comments, write a concise 2–5 word topic label "
+            "that describes what these feedback comments are about. "
+            "Return ONLY the label text, no quotes, no punctuation at the end.\n\n"
+            f"Keywords: {keyword_str}\n\nExample comments:\n{exemplar_str}\n\nTopic label:"
+        )
+        label = await self._run_tac_inference(prompt)
+        return label.strip('"').strip("'") if label else None
 
     async def _run_memory_analysis(self, per_score_raw_texts: List[Dict]) -> Optional[Dict]:
         """Run topic clustering on edit comments and return memories structure."""
@@ -567,21 +603,28 @@ class FeedbackAnalysis(BaseReportBlock):
             min_topic_size = self.config.get("memory_min_topic_size", 5)
             use_llm_labels = self.config.get("memory_llm_labels", True)
             use_causal_inference = self.config.get("memory_causal_inference", True)
+            exemplars_per_topic = int(self.config.get("memory_exemplars_per_topic", 6))
 
             cache = S3EmbeddingCache(bucket_name=cache_bucket) if cache_bucket else None
             embed_fn = sentence_transformer_embedder(model_id=model_id, cache=cache)
 
+            # Warm up the model before parallel execution to avoid meta-tensor
+            # race conditions when multiple coroutines call embed_fn concurrently
+            await asyncio.to_thread(embed_fn, ["warmup"])
+
             now = datetime.now(_tz.utc)
-            scores_out = []
-            for score_data in per_score_raw_texts:
+
+            async def _process_one_score(score_data: Dict) -> Optional[Dict]:
                 doc_ids = [item[0] for item in score_data["items"]]
                 texts = [item[1] for item in score_data["items"]]
                 item_ids = [item[2] if len(item) > 2 else None for item in score_data["items"]]
                 edited_ats = [item[3] if len(item) > 3 else None for item in score_data["items"]]
                 feedback_item_ids = [item[4] if len(item) > 4 else None for item in score_data["items"]]
+                initial_answers = [item[5] if len(item) > 5 else None for item in score_data["items"]]
+                final_answers = [item[6] if len(item) > 6 else None for item in score_data["items"]]
 
                 if len(texts) < 2:
-                    continue
+                    return None
 
                 self._log(f"Memory analysis: embedding {len(texts)} edit comments for score '{score_data['score_name']}'")
                 embeddings = np.array(await asyncio.to_thread(embed_fn, texts))
@@ -595,20 +638,21 @@ class FeedbackAnalysis(BaseReportBlock):
                         continue
                     member_count = int(np.sum(topic_ids == tid))
                     keywords = clusterer.get_keywords(int(tid), n=8)
-                    exemplars_raw = clusterer.get_representative_exemplars(int(tid), n=3)
+                    exemplars_raw = clusterer.get_representative_exemplars(int(tid), n=exemplars_per_topic)
 
-                    # Build exemplars with item_id and identifiers fetched via GSI query
-                    exemplars = []
-                    for ex_idx, ex_text in exemplars_raw:
+                    # Build exemplars with item_id and identifiers fetched in parallel
+                    async def _build_exemplar(ex_idx, ex_text):
                         truncated = ex_text[:300] + "…" if len(ex_text) > 300 else ex_text
                         item_id = item_ids[ex_idx] if ex_idx < len(item_ids) else None
                         feedback_item_id = feedback_item_ids[ex_idx] if ex_idx < len(feedback_item_ids) else None
                         identifiers_list = await fetch_item_identifiers(self.api_client, item_id)
                         exemplar: Dict = {"text": truncated, "item_id": item_id}
+                        if ex_idx < len(initial_answers) and initial_answers[ex_idx] is not None:
+                            exemplar["initial_answer_value"] = initial_answers[ex_idx]
+                        if ex_idx < len(final_answers) and final_answers[ex_idx] is not None:
+                            exemplar["final_answer_value"] = final_answers[ex_idx]
                         if identifiers_list:
                             exemplar["identifiers"] = identifiers_list
-
-                        # Gather context for causal inference (best-effort, non-blocking)
                         if use_causal_inference and feedback_item_id and self.api_client:
                             causal_ctx = await self._gather_causal_context(
                                 edit_comment=ex_text,
@@ -617,8 +661,11 @@ class FeedbackAnalysis(BaseReportBlock):
                             )
                             if causal_ctx:
                                 exemplar["_causal_context"] = causal_ctx
+                        return exemplar
 
-                        exemplars.append(exemplar)
+                    exemplars = await asyncio.gather(*[
+                        _build_exemplar(ex_idx, ex_text) for ex_idx, ex_text in exemplars_raw
+                    ])
 
                     # Compute days_inactive from most recent editedAt in this cluster
                     member_indices = list(np.where(topic_ids == tid)[0])
@@ -636,7 +683,6 @@ class FeedbackAnalysis(BaseReportBlock):
                     weight = 0.5  # Baseline for FeedbackAnalysis memories
                     tier = tier_from_weight(weight)
 
-                    # Derive lifecycle tier using Biblicus lifecycle helper
                     member_ts_iso = [
                         (ea if ea.tzinfo else ea.replace(tzinfo=_tz.utc)).isoformat()
                         for ea in cluster_edited_ats
@@ -649,25 +695,30 @@ class FeedbackAnalysis(BaseReportBlock):
                         "topic_id": int(tid),
                         "label": None,  # Will be filled after parallel LLM calls
                         "keywords": keywords,
-                        "exemplars": exemplars,
+                        "exemplars": list(exemplars),
                         "member_count": member_count,
                         "memory_weight": weight,
                         "memory_tier": tier,
                         "lifecycle_tier": _lifecycle_tier,
                         "is_new": _is_new,
                         "is_trending": _is_trending,
-                        "_llm_input": (keywords, [e["text"] for e in exemplars]) if use_llm_labels and keywords else None,
+                        "_llm_input": (keywords, [e["text"] for e in exemplars]) if use_llm_labels and (keywords or exemplars) else None,
                     }
                     if days_inactive is not None:
                         topic_entry["days_inactive"] = days_inactive
                     topics.append(topic_entry)
 
                 if topics:
-                    scores_out.append({
+                    return {
                         "score_id": score_data["score_id"],
                         "score_name": score_data["score_name"],
                         "topics": topics,
-                    })
+                    }
+                return None
+
+            # Process all scores in parallel
+            score_results = await asyncio.gather(*[_process_one_score(sd) for sd in per_score_raw_texts])
+            scores_out = [r for r in score_results if r is not None]
 
             # Parallel LLM label generation for all topics across all scores
             all_topic_entries = [t for s in scores_out for t in s["topics"]]
@@ -676,7 +727,7 @@ class FeedbackAnalysis(BaseReportBlock):
             for i, t in enumerate(all_topic_entries):
                 llm_input = t.pop("_llm_input", None)
                 if llm_input:
-                    llm_tasks.append(asyncio.to_thread(self._generate_topic_label_llm, llm_input[0], llm_input[1]))
+                    llm_tasks.append(self._generate_topic_label_llm(llm_input[0], llm_input[1]))
                     llm_indices.append(i)
                 else:
                     kw = t.get("keywords", [])
@@ -701,8 +752,9 @@ class FeedbackAnalysis(BaseReportBlock):
                     for t in s["topics"]:
                         for ex in t["exemplars"]:
                             ctx = ex.pop("_causal_context", None)
+                            ex["score_explanation"] = ctx.get("score_explanation") if ctx else None
                             if ctx:
-                                causal_tasks.append(asyncio.to_thread(self._infer_root_cause_llm, **ctx))
+                                causal_tasks.append(self._infer_root_cause_llm(**ctx))
                                 causal_topic_refs.append(t)
                 if causal_tasks:
                     self._log(f"Memory analysis: inferring root causes for {len(causal_tasks)} exemplar(s) in parallel")
@@ -719,10 +771,9 @@ class FeedbackAnalysis(BaseReportBlock):
                     for t in s["topics"]:
                         causes = t.pop("_exemplar_causes", None)
                         if causes:
-                            synthesis_tasks.append(asyncio.to_thread(
-                                self._synthesize_topic_cause_llm,
-                                t["label"], t.get("keywords", []), causes,
-                            ))
+                            synthesis_tasks.append(
+                                self._synthesize_topic_cause_llm(t["label"], t.get("keywords", []), causes)
+                            )
                             synthesis_topic_refs.append(t)
                 if synthesis_tasks:
                     self._log(f"Memory analysis: synthesizing root cause for {len(synthesis_tasks)} topic(s) in parallel")
@@ -743,48 +794,25 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log(traceback.format_exc(), level="DEBUG")
             return None
 
-    def _synthesize_topic_cause_llm(
+    async def _synthesize_topic_cause_llm(
         self,
         topic_label: str,
         keywords: List[str],
         exemplar_causes: List[str],
     ) -> Optional[str]:
         """Synthesize a single root cause statement for a topic bucket from per-exemplar causes."""
-        try:
-            import boto3
-            import json as _json
-
-            keyword_str = ", ".join(keywords[:8]) if keywords else ""
-            causes_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(exemplar_causes))
-            system_msg = (
-                "You write extremely concise root cause statements — one short sentence, under 20 words. "
-                "No preamble, no qualifications, no restating the cluster name."
-            )
-            prompt = (
-                f"Cluster: \"{topic_label}\" (keywords: {keyword_str})\n\n"
-                f"Inferred causes from examples:\n{causes_str}\n\n"
-                f"One-sentence root cause (under 20 words):"
-            )
-
-            client = boto3.client("bedrock-runtime", region_name="us-east-1")
-            body = _json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 60,
-                "system": system_msg,
-                "messages": [{"role": "user", "content": prompt}],
-            })
-            response = client.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                body=body,
-                contentType="application/json",
-                accept="application/json",
-            )
-            result = _json.loads(response["body"].read())
-            cause = result["content"][0]["text"].strip()
-            return cause if cause else None
-        except Exception as e:
-            self._log(f"Topic cause synthesis LLM call failed: {e}", level="WARNING")
-            return None
+        keyword_str = ", ".join(keywords[:8]) if keywords else ""
+        causes_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(exemplar_causes))
+        system_msg = (
+            "You write extremely concise root cause statements — one short sentence, under 20 words. "
+            "No preamble, no qualifications, no restating the cluster name."
+        )
+        prompt = (
+            f"Cluster: \"{topic_label}\" (keywords: {keyword_str})\n\n"
+            f"Inferred causes from examples:\n{causes_str}\n\n"
+            "One-sentence root cause (under 20 words):"
+        )
+        return await self._run_tac_inference(prompt, system_prompt=system_msg)
 
     async def _gather_causal_context(
         self,
@@ -888,7 +916,7 @@ class FeedbackAnalysis(BaseReportBlock):
         except Exception:
             return None
 
-    def _infer_root_cause_llm(
+    async def _infer_root_cause_llm(
         self,
         edit_comment: str,
         score_value: str = "",
@@ -899,70 +927,48 @@ class FeedbackAnalysis(BaseReportBlock):
         score_guidelines: Optional[str] = None,
         item_text_excerpt: Optional[str] = None,
     ) -> Optional[str]:
-        """Call Bedrock to infer the root cause of a scorecard misalignment.
+        """Infer the root cause of a scorecard misalignment via Tactus.
 
         Uses the edit comment as the primary observation and enriches the
         prompt with any available score result context.  Returns 1-3 sentences
         describing the most likely root cause, or None on failure.
         """
-        try:
-            import boto3
-            import json as _json
+        sections = []
 
-            sections = []
+        if score_value:
+            line = f"Original score prediction: {score_value}"
+            if score_explanation:
+                line += f"\nScore explanation: {score_explanation}"
+            sections.append(line)
 
-            if score_value:
-                line = f"Original score prediction: {score_value}"
-                if score_explanation:
-                    line += f"\nScore explanation: {score_explanation}"
-                sections.append(line)
+        if score_config_yaml:
+            sections.append(f"Score configuration (YAML):\n{score_config_yaml}")
 
-            if score_config_yaml:
-                sections.append(f"Score configuration (YAML):\n{score_config_yaml}")
+        if score_guidelines:
+            sections.append(f"Score guidelines:\n{score_guidelines}")
 
-            if score_guidelines:
-                sections.append(f"Score guidelines:\n{score_guidelines}")
+        if item_text_excerpt:
+            sections.append(f"Item text (excerpt):\n{item_text_excerpt}")
 
-            if item_text_excerpt:
-                sections.append(f"Item text (excerpt):\n{item_text_excerpt}")
+        if trace_summary:
+            sections.append(f"Score trace (excerpt):\n{trace_summary}")
 
-            if trace_summary:
-                sections.append(f"Score trace (excerpt):\n{trace_summary}")
+        if log_excerpt:
+            sections.append(f"Score log (excerpt):\n{log_excerpt}")
 
-            if log_excerpt:
-                sections.append(f"Score log (excerpt):\n{log_excerpt}")
+        context_block = "\n\n".join(sections)
 
-            context_block = "\n\n".join(sections)
+        system_msg = (
+            "You identify root causes concisely. Write one short phrase or sentence — "
+            "no preamble, no mention of AI/classifiers/misalignment, just the specific reason."
+        )
 
-            system_msg = (
-                "You identify root causes concisely. Write one short phrase or sentence — "
-                "no preamble, no mention of AI/classifiers/misalignment, just the specific reason."
-            )
+        user_msg = f"Edit comment: {edit_comment}\n"
+        if context_block:
+            user_msg += f"\n{context_block}\n"
+        user_msg += "\nRoot cause (one short phrase):"
 
-            user_msg = f"Edit comment: {edit_comment}\n"
-            if context_block:
-                user_msg += f"\n{context_block}\n"
-            user_msg += "\nRoot cause (one short phrase):"
-
-            client = boto3.client("bedrock-runtime", region_name="us-east-1")
-            body = _json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 60,
-                "system": system_msg,
-                "messages": [{"role": "user", "content": user_msg}],
-            })
-            response = client.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                body=body,
-                contentType="application/json",
-                accept="application/json",
-            )
-            result = _json.loads(response["body"].read())
-            cause = result["content"][0]["text"].strip()
-            return cause if cause else None
-        except Exception as e:
-            self._log(f"Causal inference LLM call failed: {e}", level="WARNING")
-            return None
+        return await self._run_tac_inference(user_msg, system_prompt=system_msg)
 
     async def _fetch_all_scorecards(self) -> List[Scorecard]:
         """
@@ -1148,15 +1154,15 @@ class FeedbackAnalysis(BaseReportBlock):
                 "scorecards": []
             }, "\n".join(self.log_messages)
 
-        # Sort scorecards by AC1 (best first, None values at the end)
+        # Sort scorecards by AC1 (worst first, None values at the end)
         self._log("Sorting scorecards by overall AC1...")
 
         def sort_key(scorecard_result):
             ac1 = scorecard_result.get('overall_ac1')
-            # None values get -infinity so they sort to the end
-            return (ac1 is not None, ac1 if ac1 is not None else -float('inf'))
+            # None values get +infinity so they sort to the end (after worst real values)
+            return (ac1 is not None, ac1 if ac1 is not None else float('inf'))
 
-        scorecard_results.sort(key=sort_key, reverse=True)
+        scorecard_results.sort(key=sort_key, reverse=False)
 
         # Add rank to each scorecard
         for rank, result in enumerate(scorecard_results, 1):

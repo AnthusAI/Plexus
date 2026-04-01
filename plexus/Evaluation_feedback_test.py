@@ -209,7 +209,7 @@ class TestFeedbackEvaluation:
         metrics_payload = json.loads(final_call.kwargs["metrics"])
         alignment_metric = next((m for m in metrics_payload if m["name"] == "Alignment"), None)
         assert alignment_metric is not None
-        assert alignment_metric["value"] == 0.0
+        assert alignment_metric["value"] == -1.0
     
     @pytest.mark.asyncio
     async def test_run_evaluation_without_score_id(self, mock_api_client):

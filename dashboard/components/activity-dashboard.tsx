@@ -102,6 +102,7 @@ const LIST_TASKS = `
           errorDetails
           confusionMatrix
           scoreGoal
+          parameters
           datasetClassDistribution
           isDatasetClassDistributionBalanced
           predictedClassDistribution
@@ -286,6 +287,7 @@ function transformTaskToActivity(task: ProcessedTask) {
         isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
         predictedClassDistribution: parsedPredictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+        parameters: (evaluation.parameters as string | null) ?? null,
         scoreResults: evaluation.scoreResults?.map((result: {
           id: string;
           value: string | number;
