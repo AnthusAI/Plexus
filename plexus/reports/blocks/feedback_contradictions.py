@@ -416,16 +416,23 @@ class FeedbackContradictions(BaseReportBlock):
 
         # --- Pass 1: cluster by semantic similarity (no guidelines — keeps prompt focused) ---
         cluster_prompt = (
-            f"Below are {len(contradictions)} short descriptions of reviewer corrections that contradict score guidelines.\n\n"
+            f"Below are {len(contradictions)} descriptions of individual reviewer corrections.\n\n"
             f"{reasons_text}\n\n"
-            f"YOUR TASK: Assign every item to one of EXACTLY {num_topics} topic clusters (no more, no fewer).\n"
-            f"You MUST use exactly {num_topics} distinct cluster labels across all items. "
-            "Aggressively merge similar items: items that describe the same type of violation belong in the same cluster. "
-            "For example, all variations of 'guaranteeing copays will stay the same' are ONE cluster. "
-            "Use a short, generic topic label (3-6 words) that covers the whole cluster.\n\n"
-            "Reply ONLY with a JSON object mapping item number (as a string) to topic label. "
-            f"The JSON must have exactly {len(contradictions)} keys (one per item) and use exactly {num_topics} distinct values.\n"
-            "Example: {{\"1\": \"Copay guarantee language\", \"2\": \"Copay guarantee language\", \"3\": \"Qualifying insurance not mentioned\"}}"
+            f"Group these into at most {num_topics} semantically distinct topic clusters.\n"
+            "Merge items that describe the same specific agent behavior into one cluster. "
+            "But keep genuinely different behaviors in separate clusters — for example:\n"
+            "  - high-pressure enrollment tactics\n"
+            "  - copay amount guarantees\n"
+            "  - claiming medications are free\n"
+            "  - acceptable language incorrectly flagged as a violation\n"
+            "  - reviewer score inconsistency\n"
+            "  - delivery timeline claims\n"
+            "...should each be their OWN cluster, not merged together.\n"
+            "Single-item clusters are fine if the behavior is genuinely distinct.\n\n"
+            "Assign each item a short topic label (3-7 words) that precisely names the agent behavior. "
+            "Reply ONLY with a JSON object mapping item number (as string) to topic label. "
+            f"The JSON must have exactly {len(contradictions)} keys (one per item).\n"
+            "Example: {{\"1\": \"Free medication claims\", \"2\": \"Free medication claims\", \"3\": \"High-pressure enrollment tactics\"}}"
         )
 
         try:
