@@ -94,7 +94,6 @@ def _compact_output_json_for_storage(
     """
     compact_payload: Dict[str, Any] = {
         "status": "ok",
-        "summary": "Large output moved to attached file due storage limits.",
         "output_compacted": True,
         "preview": _safe_output_preview(output_payload),
     }
@@ -236,6 +235,7 @@ class ReportBlockExtractor(mistune.BaseRenderer):
             attrs = {}
             # Regex: find key= followed by either "quoted value" or unquoted_value
             pattern = re.compile(r'(\w+)\s*=\s*(?:"([^"]*)"|(\S+))')
+            pattern = re.compile(r'(\w+)\s*=\s*(?:"([^"]*)"|(\S+))')  # group 2=quoted, group 3=unquoted
             for match in pattern.finditer(attrs_str):
                 key = match.group(1)
                 # Value can be in group 2 (quoted) or group 3 (unquoted)

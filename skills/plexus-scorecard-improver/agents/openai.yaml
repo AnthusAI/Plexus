@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plexus Scorecard Improver"
+  short_description: "Improve Plexus scores with evidence-driven iteration"
+  default_prompt: "Improve this Plexus score using recent evaluation and feedback results, then summarize the changes and measured impact."
