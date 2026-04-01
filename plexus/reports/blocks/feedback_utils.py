@@ -250,12 +250,21 @@ async def fetch_feedback_items_for_score(
                     editedAt
                     editorName
                     isAgreement
+                    isInvalid
                     createdAt
                     updatedAt
                     item {
                         id
                         identifiers
                         externalId
+                        itemIdentifiers {
+                            items {
+                                name
+                                value
+                                url
+                                position
+                            }
+                        }
                     }
                 }
                 nextToken

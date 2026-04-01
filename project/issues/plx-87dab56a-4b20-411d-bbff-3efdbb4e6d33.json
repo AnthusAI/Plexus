@@ -1,0 +1,25 @@
+{
+  "id": "plx-87dab56a-4b20-411d-bbff-3efdbb4e6d33",
+  "title": "Switch dev env bootstrap to fresh conda env (no runtime cloning)",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fbac74ea-1f34-4df4-abee-d95657290b26",
+      "author": "derek",
+      "text": "Updated setup_py311_dev_env.sh to never clone runtime envs. Script now removes/recreates py311-dev from python=3.11 and installs project dev deps with Poetry in that fresh env. Commit pushed: 38b9ef59.",
+      "created_at": "2026-03-20T20:46:05.075377658Z"
+    }
+  ],
+  "created_at": "2026-03-20T20:45:40.514875674Z",
+  "updated_at": "2026-03-20T20:46:05.085335984Z",
+  "closed_at": "2026-03-20T20:46:05.085335984Z",
+  "custom": {}
+}

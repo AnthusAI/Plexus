@@ -6,9 +6,12 @@ import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ConsoleRunWorkerStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
+import { Duration } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as events from 'aws-cdk-lib/aws-events';
 
 // Create the backend
 const backend = defineBackend({
@@ -212,11 +215,46 @@ function resolveEnvironmentName(): string {
     return branch;
 }
 
+function normalizeForResourceName(value: string): string {
+    const normalized = (value || 'development')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    return normalized || 'development';
+}
+
+const environmentName = normalizeForResourceName(resolveEnvironmentName());
+
+// Create a backup plan and assign all Amplify Data DynamoDB tables.
+const dynamoDbBackupStack = backend.createStack('DynamoDbBackupStack');
+const backupVault = new backup.BackupVault(dynamoDbBackupStack, 'DynamoDbBackupVault', {
+    backupVaultName: `plexus-dynamodb-${environmentName}-vault`
+});
+const backupPlan = new backup.BackupPlan(dynamoDbBackupStack, 'DynamoDbBackupPlan', {
+    backupPlanName: `plexus-dynamodb-${environmentName}-plan`,
+    backupVault
+});
+backupPlan.addRule(new backup.BackupPlanRule({
+    ruleName: 'Daily35DayRetention',
+    scheduleExpression: events.Schedule.cron({
+        minute: '0',
+        hour: '5'
+    }),
+    deleteAfter: Duration.days(35)
+}));
+const dynamoDbBackupResources = Object.values(backend.data.resources.tables).map((table) => {
+    return backup.BackupResource.fromDynamoDbTable(table);
+});
+backupPlan.addSelection('AmplifyDataTablesSelection', {
+    resources: dynamoDbBackupResources
+});
+
 const topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(
     backend.createStack('TopicMemoryVectorStoreStack'),
     'TopicMemoryVectorStore',
     {
-        environmentName: resolveEnvironmentName()
+        environmentName
     }
 );
 

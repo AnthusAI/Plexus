@@ -1,0 +1,31 @@
+{
+  "id": "plx-c0024b2d-4445-4470-a3f7-9d12b56ec1e1",
+  "title": "Fix py311-dev setup script to support both derek and ec2-user conda paths",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7ddea0f6-c465-4d1e-af67-b73ffb5de221",
+      "author": "derek",
+      "text": "Updating setup_py311_dev_env.sh to remove hardcoded home paths and auto-detect conda/app directory for either derek or ec2-user staging shells.",
+      "created_at": "2026-03-20T20:43:13.893723242Z"
+    },
+    {
+      "id": "edfc95de-7950-4427-9144-826b263492be",
+      "author": "derek",
+      "text": "Updated scripts/setup_py311_dev_env.sh to eliminate hardcoded user paths. Script now auto-detects conda from /home/derek, ec2-user, derek, or PATH, and defaults APP_DIR to repo root from script location. Committed/pushed: e9e665bb.",
+      "created_at": "2026-03-20T20:43:37.334190258Z"
+    }
+  ],
+  "created_at": "2026-03-20T20:43:10.601427048Z",
+  "updated_at": "2026-03-20T20:43:37.344505368Z",
+  "closed_at": "2026-03-20T20:43:37.344505368Z",
+  "custom": {}
+}

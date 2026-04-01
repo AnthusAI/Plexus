@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "99bedeb3-3bc7-47d1-8322-c191f9fe670e",
+  "issue_id": "plx-4ebae891-cece-4f15-acba-95f41cd39fbe",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-20T20:43:59.971Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Remove user-specific hardcoded paths from dev env setup script"
+  }
+}
