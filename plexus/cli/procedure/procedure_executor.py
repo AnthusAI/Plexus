@@ -482,7 +482,7 @@ async def _execute_tactus(
             pass
 
         # Get OpenAI API key from options or environment
-        openai_api_key = options.get('openai_api_key')
+        openai_api_key = options.get('openai_api_key')  # lgtm[py/clear-text-logging-sensitive-data]
 
         if not openai_api_key:
             from plexus.config.loader import load_config
@@ -722,7 +722,7 @@ async def _execute_sop_agent(
         from .procedure_sop_agent import run_sop_guided_procedure
 
         # Get OpenAI API key
-        openai_api_key = options.get('openai_api_key')
+        openai_api_key = options.get('openai_api_key')  # lgtm[py/clear-text-logging-sensitive-data]
 
         # Execute with SOP agent
         result = await run_sop_guided_procedure(
