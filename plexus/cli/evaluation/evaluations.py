@@ -3365,8 +3365,12 @@ def feedback(
                         tracker.advance_stage()
                         if tracker.current_stage:
                             tracker.current_stage.status_message = "Running root-cause analysis..."
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logging.debug(
+                            "Non-fatal tracker stage advance failure during feedback evaluation: %s",
+                            exc,
+                            exc_info=True,
+                        )
 
                 # Run root-cause analysis on feedback edit comments (non-fatal)
                 console.print("\n[bold]Running root-cause analysis on feedback edit comments...[/bold]")
@@ -3426,8 +3430,12 @@ def feedback(
                                             "human_label": human_label,
                                             "explanation": sr.get("explanation"),
                                         }
-                                except Exception:
-                                    pass
+                                except Exception as exc:
+                                    logging.debug(
+                                        "Skipping malformed score result record during RCA map build: %s",
+                                        exc,
+                                        exc_info=True,
+                                    )
                             next_tok = sr_data.get("nextToken")
                             if not next_tok:
                                 break
@@ -3487,8 +3495,14 @@ def feedback(
                                     if item.get("explanation"):
                                         original_explanations[fi.id] = item["explanation"]
                                         break
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logging.debug(
+                                    "Best-effort original explanation lookup failed for feedback item %s (itemId=%s): %s",
+                                    getattr(fi, "id", None),
+                                    getattr(fi, "itemId", None),
+                                    exc,
+                                    exc_info=True,
+                                )
 
                         console.print(
                             f"[dim]Fetched original explanations for "
