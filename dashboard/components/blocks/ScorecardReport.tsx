@@ -117,10 +117,10 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
               .sort((a, b) => {
                 // Sort by accuracy if available, otherwise sorting can be customized
                 // Now access accuracy via a.scoreData.accuracy
-                if (a.scoreData.accuracy === undefined && b.scoreData.accuracy !== undefined) return 1;
-                if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy === undefined) return -1;
-                if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy !== undefined) {
-                  return b.scoreData.accuracy - a.scoreData.accuracy;
+                if (a.scoreData.accuracy == null && b.scoreData.accuracy != null) return 1;
+                if (a.scoreData.accuracy != null && b.scoreData.accuracy == null) return -1;
+                if (a.scoreData.accuracy != null && b.scoreData.accuracy != null) {
+                  return a.scoreData.accuracy - b.scoreData.accuracy;
                 }
                 return 0;
               })

@@ -4,6 +4,8 @@ from botocore.exceptions import ClientError
 import os
 
 class CloudWatchLogger:
+    _shared_clients = {}
+
     def __init__(self, namespace="Plexus"):
         self.namespace = namespace
         self.cloudwatch_client = None
@@ -19,6 +21,21 @@ class CloudWatchLogger:
         is_lambda = os.getenv('AWS_EXECUTION_ENV') or os.getenv('AWS_LAMBDA_FUNCTION_NAME')
 
         try:
+            aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+            aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+            cache_key = (
+                bool(is_lambda),
+                aws_region,
+                aws_access_key or "",
+                aws_secret_key or "",
+                id(boto3.client),
+            )
+            cached_client = self._shared_clients.get(cache_key)
+            if cached_client is not None:
+                self.cloudwatch_client = cached_client
+                logging.debug(f"Reusing cached CloudWatch client in region {aws_region}")
+                return
+
             # In Lambda, always use IAM role (never explicit credentials)
             # In EC2, use explicit credentials if provided, otherwise use instance profile
             if is_lambda:
@@ -26,9 +43,6 @@ class CloudWatchLogger:
                 self.cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
             else:
                 # Check if explicit credentials are provided (EC2 workers)
-                aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
-                aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-
                 if aws_access_key and aws_secret_key:
                     logging.info("Using explicit AWS credentials from environment")
                     self.cloudwatch_client = boto3.client('cloudwatch',
@@ -39,6 +53,7 @@ class CloudWatchLogger:
                     logging.info("Using default AWS credentials (IAM role/instance profile)")
                     self.cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
 
+            self._shared_clients[cache_key] = self.cloudwatch_client
             logging.info(f"Successfully initialized CloudWatch client in region {aws_region}")
         except Exception as e:
             logging.error(f"Failed to initialize CloudWatch client: {str(e)}")
@@ -77,4 +92,3 @@ class CloudWatchLogger:
                 logging.error(f"Error response: {e.response}")
         except Exception as e:
             logging.error(f"Unexpected error logging metric to CloudWatch: {str(e)}")
-

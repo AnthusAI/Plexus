@@ -1,0 +1,49 @@
+{
+  "id": "plx-107e2fe4-b58b-47e2-9584-ef614eee2843",
+  "title": "Investigate segfault in LangGraphScore pytest run on py311-dev",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bbed7b2c-b3fe-43c1-ab51-eacd5df4a41e",
+      "author": "derek",
+      "text": "Started investigation. Reproducing segfault from full suite at plexus/scores/LangGraphScore_test.py and checking for env/dependency drift vs CI.",
+      "created_at": "2026-03-20T21:37:16.198576305Z"
+    },
+    {
+      "id": "66f913b2-c253-41b2-80fe-31ba9294cabe",
+      "author": "derek",
+      "text": "Reproduced segfault in  at psycopg connect path. Root cause:  sets , and  calls , forcing PostgreSQL checkpointer initialization in unit tests. Verified no-code workaround: disable dotenv auto-load for tests and preload  minus that key. Full suite result with workaround:  (no segfault).",
+      "created_at": "2026-03-20T21:42:42.622057204Z"
+    },
+    {
+      "id": "b643d74b-1aab-4899-864a-39d019ce1ed9",
+      "author": "derek",
+      "text": "Reproduced segfault in LangGraphScore_test.py at psycopg connect path.\n\nRoot cause:\n- .env sets PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI\n- LangGraphScore.async_setup() calls load_dotenv('.env', override=True)\n- Unit tests then force PostgreSQL checkpointer initialization and hit native psycopg segfault path\n\nVerified no-code workaround:\n- Disable dotenv auto-load during pytest\n- Preload .env minus PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI\n\nFull-suite result with workaround:\n- 3198 passed, 44 skipped, 19 deselected, 3 xfailed\n- No segfault\n",
+      "created_at": "2026-03-20T21:42:46.685689241Z"
+    },
+    {
+      "id": "3f45e2b5-daa1-45b2-b6d9-4f2f296b606a",
+      "author": "derek.norrbom",
+      "text": "Tracing confirms segfault path goes through langgraph-checkpoint-postgres -> psycopg. Implementing fix by making psycopg implementation explicit in Plexus dependency contract (psycopg with binary extra), then regenerating lock and pushing on feature/poetry-conversion.",
+      "created_at": "2026-03-30T21:21:55.325769Z"
+    },
+    {
+      "id": "6fd06f96-dfb0-4f39-ae2c-c8de1fbb642d",
+      "author": "derek.norrbom",
+      "text": "Applied and pushed Plexus dependency fix on feature/poetry-conversion: commit a1d91d2f. Added explicit psycopg dependency with binary extra in pyproject.toml and regenerated poetry.lock (psycopg-binary now resolved). This moves implementation control to Plexus instead of CC.",
+      "created_at": "2026-03-30T21:22:32.628962Z"
+    }
+  ],
+  "created_at": "2026-03-20T21:37:16.041952799Z",
+  "updated_at": "2026-03-30T21:22:32.628962Z",
+  "closed_at": null,
+  "custom": {}
+}

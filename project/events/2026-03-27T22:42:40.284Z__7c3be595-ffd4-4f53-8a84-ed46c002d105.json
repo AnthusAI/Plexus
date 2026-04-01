@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7c3be595-ffd4-4f53-8a84-ed46c002d105",
+  "issue_id": "plx-0f31acb4-34ea-4ab3-b64c-eb372d2b4b64",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-27T22:42:40.284Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "## Goal\nRun a second performance pass on CLI accuracy evaluations after initial async item-lookup fix.\n\n## Scope\n- Identify next dominant bottleneck in per-item scoring path\n- Implement safe optimization to improve throughput\n- Validate with targeted local checks and summarize expected impact\n\n## Definition of Done\n- One concrete bottleneck fixed\n- Code compiles/tests for touched area pass\n- Results recorded in Kanbus comments",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Second-pass optimization for CLI accuracy evaluation throughput"
+  }
+}
