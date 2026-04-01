@@ -6,12 +6,15 @@ import { ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison';
+import { IdentifierDisplay } from '@/components/ui/identifier-display';
 
 // ---- Types ----------------------------------------------------------------
 
 interface Exemplar {
   feedback_item_id: string;
   item_id?: string | null;
+  item_identifiers?: string | null;
+  item_external_id?: string | null;
   initial_value: string;
   final_value: string;
   edit_comment: string;
@@ -106,7 +109,10 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
         </p>
       )}
 
-      <p className="text-xs text-muted-foreground font-mono">{exemplar.feedback_item_id}</p>
+      <IdentifierDisplay
+        identifiers={exemplar.item_identifiers ?? undefined}
+        externalId={exemplar.item_external_id ?? undefined}
+      />
     </div>
   );
 };
