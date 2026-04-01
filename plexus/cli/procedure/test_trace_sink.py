@@ -80,3 +80,176 @@ async def test_trace_sink_ends_session_with_status():
     await sink.end_session(status="FAILED")
 
     recorder.end_session.assert_awaited_once_with(status="FAILED")
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_drops_placeholder_assistant_completion_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    message_id = await sink.record(
+        {
+            "event_type": "agent_complete",
+            "role": "assistant",
+            "content": "Assistant turn completed.",
+        }
+    )
+
+    assert message_id is None
+    recorder.record_message.assert_not_awaited()
+    assert sink.assistant_message_texts == []
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_stream_chunk_upserts_single_assistant_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    first_message_id = await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hel",
+            "accumulated_text": "Hel",
+        }
+    )
+    second_message_id = await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": " this is a longer chunk update that should exceed the persistence threshold.",
+            "accumulated_text": "Hel this is a longer chunk update that should exceed the persistence threshold.",
+        }
+    )
+
+    assert first_message_id == "msg-stream-1"
+    assert second_message_id == "msg-stream-1"
+    recorder.record_message.assert_awaited_once()
+    recorder.update_message.assert_awaited_once()
+    assert sink._active_stream_message_ids["assistant"] == "msg-stream-1"
+    assert sink._active_stream_texts["assistant"] == "Hel this is a longer chunk update that should exceed the persistence threshold."
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_stream_completion_finalizes_message_and_tracks_text():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hello",
+            "accumulated_text": "Hello",
+        }
+    )
+
+    completed_id = await sink.record(
+        {
+            "event_type": "agent_turn",
+            "agent_name": "assistant",
+            "stage": "completed",
+        }
+    )
+
+    assert completed_id == "msg-stream-1"
+    assert sink.assistant_message_texts == ["Hello"]
+    assert sink._active_stream_message_ids == {}
+    assert sink._active_stream_texts == {}
+    assert recorder.update_message.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_drops_duplicate_post_stream_assistant_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hello",
+            "accumulated_text": "Hello",
+        }
+    )
+    await sink.record(
+        {
+            "event_type": "agent_turn",
+            "agent_name": "assistant",
+            "stage": "completed",
+        }
+    )
+
+    message_id = await sink.record(
+        {
+            "event_type": "agent_message",
+            "agent_name": "assistant",
+            "role": "assistant",
+            "content": "Hello",
+        }
+    )
+
+    assert message_id is None
+    recorder.record_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_stream_metadata_contains_latency_markers():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+    recorder.get_latest_console_chat_metadata = lambda: {
+        "queued_at": "2026-03-28T01:00:00+00:00",
+        "instrumentation": {
+            "client_send_started_at": "2026-03-28T00:59:58+00:00",
+        },
+    }
+
+    sink = PlexusTraceSink(recorder)
+    sink.mark_runtime_execute_started("2026-03-28T01:00:01+00:00")
+    await sink.start_session()
+
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hello there.",
+            "accumulated_text": "Hello there.",
+            "timestamp": "2026-03-28T01:00:02+00:00",
+        }
+    )
+    await sink.record(
+        {
+            "event_type": "agent_turn",
+            "agent_name": "assistant",
+            "stage": "completed",
+            "timestamp": "2026-03-28T01:00:03+00:00",
+        }
+    )
+
+    final_update_call = recorder.update_message.await_args_list[-1]
+    metadata = final_update_call.kwargs.get("metadata", {})
+    streaming = metadata.get("streaming", {}) if isinstance(metadata, dict) else {}
+    timings = streaming.get("timings", {}) if isinstance(streaming, dict) else {}
+
+    assert timings.get("dispatch_queued_at") == "2026-03-28T01:00:00+00:00"
+    assert timings.get("backend_runtime_execute_started_at") == "2026-03-28T01:00:01+00:00"
+    assert timings.get("first_chunk_received_at") == "2026-03-28T01:00:02+00:00"
+    assert timings.get("chunk_count") == 1
