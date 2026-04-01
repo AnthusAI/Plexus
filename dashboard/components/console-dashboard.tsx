@@ -340,7 +340,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
   }, [artifact.kind, selectedScore, selectedScorecard])
 
   return (
-    <div className="flex h-full flex-col px-3 pt-0">
+    <div className="@container flex h-full flex-col overflow-hidden p-3">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-3 flex-shrink-0">
         <div className="min-w-0 flex-1">
           <ScorecardContext
