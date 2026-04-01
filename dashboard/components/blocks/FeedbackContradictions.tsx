@@ -149,11 +149,6 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
           {topic.exemplars.map((ex) => (
             <ExemplarRow key={ex.feedback_item_id} exemplar={ex} />
           ))}
-          {topic.count > topic.exemplars.length && (
-            <p className="text-xs text-muted-foreground text-center py-2">
-              Showing {topic.exemplars.length} of {topic.count} contradictions in this cluster.
-            </p>
-          )}
         </div>
       )}
     </div>
