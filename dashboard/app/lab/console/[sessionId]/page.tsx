@@ -1,11 +1,12 @@
 import ConsoleDashboard from '@/components/console-dashboard'
 
 interface ConsoleSessionPageProps {
-  params: {
+  params: Promise<{
     sessionId: string
-  }
+  }>
 }
 
-export default function LabConsoleSessionPage({ params }: ConsoleSessionPageProps) {
-  return <ConsoleDashboard routeSessionId={params.sessionId} />
+export default async function LabConsoleSessionPage({ params }: ConsoleSessionPageProps) {
+  const { sessionId } = await params
+  return <ConsoleDashboard routeSessionId={sessionId} />
 }

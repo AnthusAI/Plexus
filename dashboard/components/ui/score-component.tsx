@@ -1037,7 +1037,7 @@ const DetailContent = React.memo(({
 
             {/* Tabbed Content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-border">
                   <TabsList className="h-auto p-0 bg-transparent justify-start">
                     <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
@@ -1199,7 +1199,7 @@ const DetailContent = React.memo(({
         <div className="flex flex-col h-full w-full">
           {/* Fullscreen Tabs */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <Tabs value={fullscreenActiveTab} onValueChange={(value) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between border-b border-border">
                 <TabsList className="h-auto p-0 bg-transparent justify-start">
                   <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>

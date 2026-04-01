@@ -252,7 +252,7 @@ def show(procedure_id: str, output: str, include_yaml: bool):
     # Get YAML if requested
     yaml_config = None
     if include_yaml:
-        yaml_config = service.get_experiment_yaml(procedure_id)
+        yaml_config = service.get_procedure_yaml(procedure_id)
     
     if output == 'json':
         data = {
@@ -444,7 +444,7 @@ def pull(procedure_id: str, output: Optional[str]):
     
     service = ProcedureService(client)
     
-    yaml_config = service.get_experiment_yaml(procedure_id)
+    yaml_config = service.get_procedure_yaml(procedure_id)
     if not yaml_config:
         console.print(f"[red]Error: Could not get YAML configuration for procedure {procedure_id}[/red]")
         return

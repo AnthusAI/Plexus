@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import { Activity, PanelRightClose, PanelRightOpen, Play, KanbanSquare, FileBarChart } from "lucide-react"
 import { toast } from "sonner"
 
@@ -14,7 +13,17 @@ import { useConsoleArtifact } from "@/components/console/use-console-artifact"
 import ScorecardContext from "@/components/ScorecardContext"
 import { activityConfig, TaskDispatchButton, type TaskDispatchConfig, type TaskUiAction } from "@/components/task-dispatch"
 import { Button } from "@/components/ui/button"
-import { createTask } from "@/utils/data-operations"
+import { createTask, getClient } from "@/utils/data-operations"
+
+const LIST_ACCOUNT_BY_KEY_QUERY = `
+  query ListConsoleAccountByKey($key: String!, $limit: Int) {
+    listAccountByKey(key: $key, limit: $limit) {
+      items {
+        id
+      }
+    }
+  }
+`
 
 function ArtifactPlaceholder({
   icon,
@@ -43,7 +52,6 @@ interface ConsoleDashboardProps {
 }
 
 export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardProps) {
-  const router = useRouter()
   const { selectedAccount } = useAccount()
   const [selectedScorecard, setSelectedScorecard] = React.useState<string | null>(null)
   const [selectedScore, setSelectedScore] = React.useState<string | null>(null)
@@ -51,19 +59,100 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
   const workspaceRef = React.useRef<HTMLDivElement | null>(null)
   const artifactPaneRef = React.useRef<HTMLElement | null>(null)
   const [workspaceWidth, setWorkspaceWidth] = React.useState(0)
+  const [fallbackAccountId, setFallbackAccountId] = React.useState<string | null>(null)
   const selectedProcedureId = CONSOLE_BUILTIN_PROCEDURE_ID
+  const selectedAccountId = selectedAccount?.id?.trim() || null
+  const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY?.trim() || ""
+  const effectiveAccountId = selectedAccountId || fallbackAccountId
   const normalizedRouteSessionId = routeSessionId?.trim() || undefined
+  const [selectedSessionId, setSelectedSessionId] = React.useState<string | undefined>(normalizedRouteSessionId)
+
+  React.useEffect(() => {
+    setSelectedSessionId(normalizedRouteSessionId)
+  }, [normalizedRouteSessionId])
+
+  const getSessionIdFromPathname = React.useCallback((pathname: string): string | undefined => {
+    if (!pathname.startsWith('/lab/console')) {
+      return undefined
+    }
+    const suffix = pathname.slice('/lab/console'.length)
+    if (!suffix || suffix === '/') {
+      return undefined
+    }
+    const encoded = suffix.startsWith('/') ? suffix.slice(1) : suffix
+    if (!encoded) {
+      return undefined
+    }
+    try {
+      return decodeURIComponent(encoded)
+    } catch {
+      return encoded
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setSelectedSessionId(getSessionIdFromPathname(window.location.pathname))
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [getSessionIdFromPathname])
+
+  React.useEffect(() => {
+    if (selectedAccountId) {
+      setFallbackAccountId(null)
+      return
+    }
+    if (!defaultAccountKey) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadFallbackAccountId = async () => {
+      try {
+        const client = getClient() as any
+        const response = await client.graphql({
+          query: LIST_ACCOUNT_BY_KEY_QUERY,
+          variables: { key: defaultAccountKey, limit: 1 },
+          authMode: 'apiKey',
+        })
+        const id = response?.data?.listAccountByKey?.items?.[0]?.id
+        if (!cancelled && typeof id === 'string' && id.trim()) {
+          setFallbackAccountId(id.trim())
+        }
+      } catch (error) {
+        console.error('[ConsoleDashboard] failed to resolve fallback account id', {
+          defaultAccountKey,
+          error,
+        })
+      }
+    }
+
+    void loadFallbackAccountId()
+
+    return () => {
+      cancelled = true
+    }
+  }, [defaultAccountKey, selectedAccountId])
 
   const handleSelectSession = React.useCallback((sessionId: string) => {
     const normalizedSessionId = sessionId.trim()
     if (!normalizedSessionId) {
       return
     }
-    if (normalizedRouteSessionId === normalizedSessionId) {
+    if (selectedSessionId === normalizedSessionId) {
       return
     }
-    router.push(`/lab/console/${encodeURIComponent(normalizedSessionId)}`)
-  }, [normalizedRouteSessionId, router])
+    setSelectedSessionId(normalizedSessionId)
+    const nextPath = `/lab/console/${encodeURIComponent(normalizedSessionId)}`
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState(window.history.state, '', nextPath)
+    }
+  }, [selectedSessionId])
 
   const handleShowActivity = React.useCallback(() => {
     openArtifact('activity', { title: "Activity" })
@@ -76,7 +165,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
   }, [openArtifact])
 
   const handleRunConsoleRepl = React.useCallback(async () => {
-    if (!selectedAccount?.id) {
+    if (!effectiveAccountId) {
       toast.error("Console account context is unavailable")
       return
     }
@@ -86,7 +175,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
         type: "Procedure Run",
         target: `procedure/run/${selectedProcedureId}`,
         command: `procedure run ${selectedProcedureId}`,
-        accountId: selectedAccount.id,
+        accountId: effectiveAccountId,
         dispatchStatus: "PENDING",
         status: "PENDING",
       })
@@ -99,7 +188,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
       console.error("Error queueing console REPL run:", error)
       toast.error("Error queueing console REPL run")
     }
-  }, [selectedAccount?.id, selectedProcedureId])
+  }, [effectiveAccountId, selectedProcedureId])
 
   const actionsConfig = React.useMemo<TaskDispatchConfig>(() => {
     const showActivityAction: TaskUiAction = {
@@ -268,20 +357,12 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
 
       <div ref={workspaceRef} className="flex w-full max-w-full min-h-0 flex-1 overflow-hidden rounded-md bg-background">
         <div className="w-0 min-w-0 flex-1 overflow-hidden">
-          {!selectedAccount?.id ? (
-            <ArtifactPlaceholder
-              icon={<PanelRightOpen className="h-4 w-4" />}
-              title="Console unavailable"
-              description="Select an account to use Console chat."
-            />
-          ) : (
-            <ConsoleChatElementsAdapter
-              procedureId={selectedProcedureId}
-              accountId={selectedAccount.id}
-              selectedSessionId={normalizedRouteSessionId}
-              onSessionSelect={handleSelectSession}
-            />
-          )}
+          <ConsoleChatElementsAdapter
+            procedureId={selectedProcedureId}
+            accountId={effectiveAccountId ?? undefined}
+            selectedSessionId={selectedSessionId}
+            onSessionSelect={handleSelectSession}
+          />
         </div>
 
         {artifact.isOpen && artifact.kind !== 'none' && (

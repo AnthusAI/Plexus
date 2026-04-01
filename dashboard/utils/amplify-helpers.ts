@@ -1,7 +1,15 @@
 import type { Schema } from "@/amplify/data/resource"
 import type { AmplifyListResult, AmplifyGetResult } from "@/types/shared"
-import { tap } from "node:test/reporters"
-import { Observable } from "rxjs"
+
+const DEFAULT_LIST_AUTH_MODE: 'apiKey' | undefined = process.env.NEXT_PUBLIC_PLEXUS_API_KEY
+  ? 'apiKey'
+  : undefined
+
+const withDefaultListAuth = <T extends Record<string, any>>(options: T): T | (T & { authMode: 'apiKey' }) => (
+  DEFAULT_LIST_AUTH_MODE
+    ? { ...options, authMode: DEFAULT_LIST_AUTH_MODE }
+    : options
+)
 
 interface ScoringJobsSubscriptionData {
   items: Schema['ScoringJob']['type'][]
@@ -149,7 +157,7 @@ export async function listFromModel<T extends { id: string }>(
         console.error('GraphQL query failed:', gsiError);
         
         // Fall back to filtered list with sorting
-        response = await model.list({
+        response = await model.list(withDefaultListAuth({
           filter: { accountId: { eq: accountId } },
           limit: 100,
           nextToken,
@@ -157,7 +165,7 @@ export async function listFromModel<T extends { id: string }>(
             field: 'updatedAt',
             direction: 'DESC'
           }
-        });
+        }));
       }
     } else {
       const options: any = {}
@@ -165,7 +173,7 @@ export async function listFromModel<T extends { id: string }>(
       if (nextToken) options.nextToken = nextToken
       if (limit) options.limit = limit
       
-      response = await model.list(options)
+      response = await model.list(withDefaultListAuth(options))
     }
 
     // Sort the results in memory if we have them

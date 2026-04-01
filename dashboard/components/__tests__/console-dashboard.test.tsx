@@ -4,15 +4,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import ConsoleDashboard from "../console-dashboard"
 import { CONSOLE_BUILTIN_PROCEDURE_ID } from "@/components/console/constants"
 
-const mockPush = jest.fn()
+const mockPushState = jest.fn()
 const mockUseAccount = jest.fn(() => ({
   selectedAccount: { id: "acct-1", name: "Test Account" },
-}))
-
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
 }))
 
 jest.mock("@/app/contexts/AccountContext", () => ({
@@ -33,13 +27,13 @@ jest.mock("@/components/console/console-chat-elements-adapter", () => ({
     onSessionSelect,
   }: {
     procedureId: string
-    accountId: string
+    accountId?: string
     selectedSessionId?: string
     onSessionSelect?: (sessionId: string) => void
   }) => (
     <div>
       <div data-testid="console-chat-adapter">
-        {procedureId}:{accountId}:{selectedSessionId || "none"}
+        {procedureId}:{accountId || "none"}:{selectedSessionId || "none"}
       </div>
       <button onClick={() => onSessionSelect?.("session-picked")}>Select Session</button>
     </div>
@@ -81,10 +75,15 @@ jest.mock("@/components/task-dispatch", () => ({
 
 describe("ConsoleDashboard", () => {
   beforeEach(() => {
-    mockPush.mockReset()
+    mockPushState.mockReset()
+    jest.spyOn(window.history, "pushState").mockImplementation(mockPushState)
     mockUseAccount.mockReturnValue({
       selectedAccount: { id: "acct-1", name: "Test Account" },
     })
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
   })
 
   it("renders top controls and chat workspace with artifact pane collapsed by default", async () => {
@@ -109,7 +108,13 @@ describe("ConsoleDashboard", () => {
     })
 
     fireEvent.click(screen.getByText("Select Session"))
-    expect(mockPush).toHaveBeenCalledWith("/lab/console/session-picked")
+    expect(mockPushState).toHaveBeenCalled()
+    expect(mockPushState).toHaveBeenLastCalledWith(window.history.state, "", "/lab/console/session-picked")
+    await waitFor(() => {
+      expect(screen.getByTestId("console-chat-adapter")).toHaveTextContent(
+        `${CONSOLE_BUILTIN_PROCEDURE_ID}:acct-1:session-picked`
+      )
+    })
   })
 
   it("opens the activity artifact pane from the Show Activity action", async () => {
@@ -124,7 +129,7 @@ describe("ConsoleDashboard", () => {
     expect(screen.getByTestId("activity-dashboard")).toHaveTextContent("embedded-no-header")
   })
 
-  it("shows unavailable state when account context is missing", async () => {
+  it("still renders console chat when account context is missing", async () => {
     mockUseAccount.mockReturnValue({
       selectedAccount: null,
     })
@@ -132,9 +137,10 @@ describe("ConsoleDashboard", () => {
     render(<ConsoleDashboard />)
 
     await waitFor(() => {
-      expect(screen.getByText("Console unavailable")).toBeInTheDocument()
+      expect(screen.getByTestId("console-chat-adapter")).toBeInTheDocument()
     })
-    expect(screen.getByText(/select an account/i)).toBeInTheDocument()
-    expect(screen.queryByTestId("console-chat-adapter")).not.toBeInTheDocument()
+    expect(screen.getByTestId("console-chat-adapter")).toHaveTextContent(
+      `${CONSOLE_BUILTIN_PROCEDURE_ID}:none:none`
+    )
   })
 })

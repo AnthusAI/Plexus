@@ -95,6 +95,7 @@ type PendingAssistantState = {
   requestedAt: string
   baselineAssistantCreatedAt?: string | null
   triggerMessageId?: string
+  taskId?: string
 }
 
 type ConsoleToolViewModel = {
@@ -144,6 +145,18 @@ const START_CONSOLE_RUN_MUTATION = `
       taskId
       accepted
       queuedAt
+    }
+  }
+`
+
+const GET_TASK_STATUS_QUERY = `
+  query GetTaskStatus($id: ID!) {
+    getTask(id: $id) {
+      id
+      status
+      dispatchStatus
+      errorMessage
+      updatedAt
     }
   }
 `
@@ -220,6 +233,56 @@ const getUserFacingDispatchErrorMessage = (rawMessage: string): string => {
     return "Run dispatch is not available in this environment."
   }
   return "Run dispatch failed. Check browser console for details."
+}
+
+const isUnauthorizedError = (error: unknown): boolean => {
+  if (!error) {
+    return false
+  }
+
+  const messages: string[] = []
+  const statusCandidates: Array<number | undefined> = []
+
+  if (error instanceof Error) {
+    messages.push(error.message)
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const record = error as Record<string, unknown>
+    if (typeof record.message === "string") {
+      messages.push(record.message)
+    }
+    if (typeof record.statusCode === "number") {
+      statusCandidates.push(record.statusCode)
+    }
+    if (typeof record.status === "number") {
+      statusCandidates.push(record.status)
+    }
+
+    if (Array.isArray(record.errors)) {
+      for (const entry of record.errors) {
+        if (entry && typeof entry === "object") {
+          const entryMessage = (entry as Record<string, unknown>).message
+          if (typeof entryMessage === "string") {
+            messages.push(entryMessage)
+          }
+        }
+      }
+    }
+  }
+
+  if (statusCandidates.includes(401)) {
+    return true
+  }
+
+  const normalized = messages.join(" ").toLowerCase()
+  return (
+    normalized.includes("unauthorized")
+    || normalized.includes("not authorized")
+    || normalized.includes("unauthenticated")
+    || normalized.includes("forbidden")
+    || normalized.includes("401")
+  )
 }
 
 const parseRawChatMessage = (msg: any): ChatMessage | null => {
@@ -763,6 +826,7 @@ function ConversationViewer({
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
   const [internalSelectedSessionId, setInternalSelectedSessionId] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
+  const [isAuthUnavailable, setIsAuthUnavailable] = useState(false)
   const [hitlTextByMessage, setHitlTextByMessage] = useState<Record<string, string>>({})
   const [submittingMessageIds, setSubmittingMessageIds] = useState<Set<string>>(new Set())
   const [submittedMessageIds, setSubmittedMessageIds] = useState<Set<string>>(new Set())
@@ -773,6 +837,21 @@ function ConversationViewer({
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const promptSubmitLockRef = React.useRef(false)
+  const reportedTerminalTaskIdsRef = React.useRef<Set<string>>(new Set())
+  const authFailureReportedRef = React.useRef(false)
+
+  const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
+    if (!isUnauthorizedError(error)) {
+      return false
+    }
+    setIsAuthUnavailable(true)
+    setIsLoading(false)
+    if (!authFailureReportedRef.current) {
+      authFailureReportedRef.current = true
+      console.warn('[ConsoleChat] GraphQL auth unavailable; suspending live refresh', { source, error })
+    }
+    return true
+  }, [])
 
   useEffect(() => {
     const node = containerRef.current
@@ -849,6 +928,7 @@ function ConversationViewer({
     sessionId: string,
     requestedAt: string,
     triggerMessageId?: string,
+    taskId?: string,
   ) => {
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
@@ -857,6 +937,7 @@ function ConversationViewer({
         requestedAt,
         baselineAssistantCreatedAt,
         triggerMessageId,
+        taskId,
       },
     }))
   }, [messages])
@@ -873,6 +954,10 @@ function ConversationViewer({
   }, [])
 
   useEffect(() => {
+    if (isAuthUnavailable) {
+      return
+    }
+
     const pendingEntries = Object.entries(pendingAssistantBySession)
     if (!pendingEntries.length) {
       return
@@ -913,6 +998,74 @@ function ConversationViewer({
       return changed ? next : prev
     })
   }, [messages, pendingAssistantBySession])
+
+  useEffect(() => {
+    const pendingEntries = Object.entries(pendingAssistantBySession)
+    if (!pendingEntries.length) {
+      return
+    }
+
+    let cancelled = false
+
+    const pollPendingTaskStatuses = async () => {
+      const client = getClient() as any
+      for (const [sessionId, pendingState] of pendingEntries) {
+        const explicitTaskId = (pendingState.taskId || '').trim()
+        const fallbackTaskId = (pendingState.triggerMessageId || '').trim()
+          ? `console-run-${(pendingState.triggerMessageId || '').trim()}`
+          : ''
+        const taskId = explicitTaskId || fallbackTaskId
+        if (!taskId) {
+          continue
+        }
+
+        try {
+          const response = await client.graphql({
+            query: GET_TASK_STATUS_QUERY,
+            variables: { id: taskId },
+            authMode: 'apiKey',
+          })
+          if (cancelled) {
+            return
+          }
+
+          const task = response?.data?.getTask
+          const taskStatus = String(task?.status || '').toUpperCase()
+          if (!taskStatus || taskStatus === 'PENDING' || taskStatus === 'RUNNING') {
+            continue
+          }
+
+          clearPendingAssistant(sessionId)
+
+          if ((taskStatus === 'FAILED' || taskStatus === 'CANCELED') && !reportedTerminalTaskIdsRef.current.has(taskId)) {
+            reportedTerminalTaskIdsRef.current.add(taskId)
+            const errorText = typeof task?.errorMessage === 'string' && task.errorMessage.trim()
+              ? task.errorMessage.trim()
+              : `Assistant run ${taskStatus.toLowerCase()}.`
+            toast.error(errorText)
+            console.error('[ConsoleChat] assistant run terminal state', {
+              sessionId,
+              taskId,
+              status: taskStatus,
+              errorMessage: task?.errorMessage,
+            })
+          }
+        } catch (error) {
+          if (markAuthUnavailable(error, 'pending_task_poll')) {
+            return
+          }
+          console.error('[ConsoleChat] pending task poll failed', { sessionId, taskId, error })
+        }
+      }
+    }
+
+    const timer = window.setInterval(pollPendingTaskStatuses, 4000)
+    pollPendingTaskStatuses()
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [pendingAssistantBySession, clearPendingAssistant, isAuthUnavailable, markAuthUnavailable])
   
   const handleSessionSelect = (sessionId: string) => {
     setInternalSelectedSessionId(sessionId)
@@ -988,8 +1141,8 @@ function ConversationViewer({
     pendingMessageId: string,
     responseMessageId: string,
     requestId: string
-  ) => {
-    await startConsoleRun(
+  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
+    return startConsoleRun(
       sessionId,
       procedureIdToRun,
       responseMessageId,
@@ -1008,7 +1161,7 @@ function ConversationViewer({
     triggerMessageId: string,
     sessionId: string,
     clientTiming: Record<string, unknown> = {},
-  ) => {
+  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
     const instrumentation: Record<string, unknown> = {
       ...clientTiming,
       client_dispatch_request_started_at: new Date().toISOString(),
@@ -1026,6 +1179,7 @@ function ConversationViewer({
       instrumentation.queue_task_id = dispatchResult.taskId
       instrumentation.queue_run_id = dispatchResult.runId
       instrumentation.queue_accepted_at = dispatchResult.queuedAt
+      return dispatchResult
     } catch (error) {
       instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
       instrumentation.client_dispatch_request_accepted = false
@@ -1092,14 +1246,19 @@ function ConversationViewer({
         throw new Error('Failed to persist RESPONSE message')
       }
 
-      await enqueueProcedureRunTask(
+      const dispatchResult = await enqueueProcedureRunTask(
         pendingMessage.procedureId,
         pendingMessage.sessionId,
         pendingMessage.id,
         responseMessageId,
         control.request_id
       )
-      markPendingAssistant(pendingMessage.sessionId, respondedAt, responseMessageId)
+      markPendingAssistant(
+        pendingMessage.sessionId,
+        respondedAt,
+        responseMessageId,
+        dispatchResult.taskId,
+      )
 
       toast.success('Response submitted. Procedure resume queued.')
 
@@ -1153,7 +1312,7 @@ function ConversationViewer({
 
   // Data loading effect for effectiveId mode
   useEffect(() => {
-    if (!effectiveId) return
+    if (!effectiveId || isAuthUnavailable) return
 
     const loadConversationData = async () => {
       try {
@@ -1271,6 +1430,9 @@ function ConversationViewer({
         }
         
       } catch (error) {
+        if (markAuthUnavailable(error, 'conversation_initial_load')) {
+          return
+        }
         console.error('Error loading conversation data:', error)
       } finally {
         setIsLoading(false)
@@ -1278,11 +1440,11 @@ function ConversationViewer({
     }
 
     loadConversationData()
-  }, [effectiveId, isExternallyControlledSession])
+  }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable])
 
   // Real-time subscription for new chat sessions - notification-based pattern
   useEffect(() => {
-    if (!effectiveId) return
+    if (!effectiveId || isAuthUnavailable) return
 
     const checkForNewSessions = async () => {
       try {
@@ -1377,6 +1539,9 @@ function ConversationViewer({
           setInternalSessions([])
         }
       } catch (error) {
+        if (markAuthUnavailable(error, 'session_refresh_poll')) {
+          return
+        }
         console.error('Error checking for new chat sessions:', error)
       }
     }
@@ -1392,6 +1557,9 @@ function ConversationViewer({
           checkForNewSessions()
         },
         error: (error: Error) => {
+          if (markAuthUnavailable(error, 'session_on_create_subscription')) {
+            return
+          }
           console.error('Chat session subscription error:', error)
         }
       })
@@ -1401,12 +1569,17 @@ function ConversationViewer({
         subscription.unsubscribe()
       }
     } catch (error) {
+      if (markAuthUnavailable(error, 'session_subscription_setup')) {
+        return () => {
+          window.clearInterval(pollTimer)
+        }
+      }
       console.error('Error setting up chat session notification:', error)
     }
     return () => {
       window.clearInterval(pollTimer)
     }
-  }, [effectiveId, isExternallyControlledSession, onSessionSelect])
+  }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable, onSessionSelect])
 
   const applyRealtimeMessageMutation = React.useCallback((rawMessage: any) => {
     const parsed = parseRawChatMessage(rawMessage)
@@ -1458,7 +1631,7 @@ function ConversationViewer({
 
   // Real-time subscription for chat messages. onCreate/onUpdate are primary; polling is fallback.
   useEffect(() => {
-    if (!effectiveId) return
+    if (!effectiveId || isAuthUnavailable) return
 
     let isCancelled = false
 
@@ -1515,6 +1688,9 @@ function ConversationViewer({
             : prevMessages
         ))
       } catch (error) {
+        if (markAuthUnavailable(error, 'message_refresh_poll')) {
+          return
+        }
         console.error('Error checking for new messages:', error)
       }
     }
@@ -1556,11 +1732,16 @@ function ConversationViewer({
           checkForNewMessages()
         },
         error: (error: Error) => {
+          if (markAuthUnavailable(error, 'message_on_create_subscription')) {
+            return
+          }
           console.error('Chat message create subscription error:', error)
         }
       })
     } catch (error) {
-      console.error('Error setting up chat message create notification:', error)
+      if (!markAuthUnavailable(error, 'message_create_subscription_setup')) {
+        console.error('Error setting up chat message create notification:', error)
+      }
     }
 
     try {
@@ -1575,11 +1756,16 @@ function ConversationViewer({
           checkForNewMessages()
         },
         error: (error: Error) => {
+          if (markAuthUnavailable(error, 'message_on_update_subscription')) {
+            return
+          }
           console.error('Chat message update subscription error:', error)
         }
       })
     } catch (error) {
-      console.error('Error setting up chat message update notification:', error)
+      if (!markAuthUnavailable(error, 'message_update_subscription_setup')) {
+        console.error('Error setting up chat message update notification:', error)
+      }
     }
 
     // Initial load + reconciliation on mount.
@@ -1591,7 +1777,7 @@ function ConversationViewer({
       createSubscription?.unsubscribe()
       updateSubscription?.unsubscribe()
     }
-  }, [applyRealtimeMessageMutation, effectiveId])
+  }, [applyRealtimeMessageMutation, effectiveId, isAuthUnavailable, markAuthUnavailable])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -1650,7 +1836,7 @@ function ConversationViewer({
 
     return !hasAssistantSincePending
   }, [pendingAssistantState, selectedSession, sortedMessages])
-  const isPromptDisabled = !selectedSession
+  const isPromptDisabled = !selectedSession || isAuthUnavailable
   const conversationRows = sortedMessages.map(getRowFromMessage)
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
@@ -1726,6 +1912,9 @@ function ConversationViewer({
   }, [fallbackSessionAccountId, fallbackSessionProcedureId, onSessionSelect])
 
   const handleCreateSession = React.useCallback(async () => {
+    if (isAuthUnavailable) {
+      return
+    }
     if (isCreatingSession) {
       return
     }
@@ -1749,7 +1938,7 @@ function ConversationViewer({
     } finally {
       setIsCreatingSession(false)
     }
-  }, [canCreateSession, createNewSession, isCreatingSession])
+  }, [canCreateSession, createNewSession, isAuthUnavailable, isCreatingSession])
 
   const handlePromptSubmit = React.useCallback(
     async ({ text }: { text?: string }) => {
@@ -1872,7 +2061,7 @@ function ConversationViewer({
             nextValue,
           )
 
-          await enqueueProcedureRunFromChat(
+          const dispatchResult = await enqueueProcedureRunFromChat(
             targetSessionProcedureId,
             createdMessageId,
             targetSessionId,
@@ -1884,11 +2073,17 @@ function ConversationViewer({
               client_history_snapshot: clientHistorySnapshot,
             },
           )
-          markPendingAssistant(targetSessionId, persistedCreatedAt, createdMessageId)
+          markPendingAssistant(
+            targetSessionId,
+            persistedCreatedAt,
+            createdMessageId,
+            dispatchResult.taskId,
+          )
 
           setPromptValue('')
         } catch (error) {
           clearPendingAssistant(targetSessionId)
+          const isAuthFailure = markAuthUnavailable(error, 'prompt_submit_dispatch')
           if (!messagePersisted) {
             setInternalMessages(prev => prev.filter(message => message.id !== optimisticMessageId))
             setInternalSessions(prev => prev.map(session => (
@@ -1906,9 +2101,9 @@ function ConversationViewer({
             errorMessage,
             error,
           })
-          if (messagePersisted) {
+          if (!isAuthFailure && messagePersisted) {
             toast.error(`Message saved, but ${getUserFacingDispatchErrorMessage(errorMessage)}`)
-          } else {
+          } else if (!isAuthFailure) {
             toast.error(errorMessage)
           }
           throw error
@@ -1931,6 +2126,7 @@ function ConversationViewer({
       createNewSession,
       enqueueProcedureRunFromChat,
       clearPendingAssistant,
+      markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
     ]
@@ -1964,7 +2160,7 @@ function ConversationViewer({
                 size="sm"
                 onClick={handleCreateSession}
                 className="h-8 w-8 p-0"
-                disabled={!canCreateSession || isCreatingSession}
+                disabled={isAuthUnavailable || !canCreateSession || isCreatingSession}
                 title="New session"
               >
                 <Plus className="h-4 w-4" />
@@ -2093,7 +2289,13 @@ function ConversationViewer({
         <div className="min-h-0 flex-1">
           <Conversation className="h-full">
             <ConversationContent className="gap-4 px-3 py-3">
-              {!selectedSessionId ? (
+              {isAuthUnavailable ? (
+                <ConversationEmptyState
+                  title="Console unavailable"
+                  description="GraphQL access is unauthorized in this environment. Check API URL/key and restart dev."
+                  icon={<AlertCircle className="h-12 w-12 opacity-50" />}
+                />
+              ) : !selectedSessionId ? (
                 <ConversationEmptyState
                   title="No session selected"
                   description="Select a chat session to view messages"
@@ -2109,7 +2311,7 @@ function ConversationViewer({
                   <Button
                     size="sm"
                     onClick={handleCreateSession}
-                    disabled={!canCreateSession || isCreatingSession}
+                    disabled={isAuthUnavailable || !canCreateSession || isCreatingSession}
                   >
                     Create New Session
                   </Button>
@@ -2374,13 +2576,22 @@ function ConversationViewer({
           </Conversation>
         </div>
         <div className="border-t border-border bg-background px-3 py-3">
-          <PromptInput className="w-full" onPromptSubmit={handlePromptSubmit}>
+          <PromptInput
+            className="w-full"
+            onSubmit={({ text }) => handlePromptSubmit({ text })}
+          >
             <PromptInputBody>
                 <PromptInputTextarea
                   value={promptValue}
                   onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setPromptValue(event.target.value)}
                   disabled={isPromptDisabled || isPromptSubmitting}
-                  placeholder={isPromptDisabled ? "Select a session to compose a message" : "Type a message"}
+                  placeholder={
+                    isAuthUnavailable
+                      ? "Console unavailable"
+                      : isPromptDisabled
+                        ? "Select a session to compose a message"
+                        : "Type a message"
+                  }
                 />
             </PromptInputBody>
             <PromptInputFooter className="justify-end">
@@ -2389,7 +2600,9 @@ function ConversationViewer({
           </PromptInput>
           {isPromptDisabled && (
             <p className="pt-2 text-xs text-muted-foreground">
-              {selectedSessionMissing
+              {isAuthUnavailable
+                ? "Console is unavailable due to GraphQL authorization failure."
+                : selectedSessionMissing
                 ? "Select an available session or create a new one to enable prompt input."
                 : "Select a chat session to enable prompt input."}
             </p>

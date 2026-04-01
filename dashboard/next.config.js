@@ -1,11 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    serverExternalPackages: ['@aws-crypto'],
+    typedRoutes: false,
     experimental: {
-        serverComponentsExternalPackages: ['@aws-crypto'],
         // Use faster transpilation with SWC
         swcTraceProfiling: false,
-        // Optimize for faster builds
-        typedRoutes: false,
         forceSwcTransforms: true,
     },
     eslint: {
@@ -21,8 +20,6 @@ const nextConfig = {
     },
     // Only include type checking on your own code files
     transpilePackages: [],
-    // Use SWC minifier for faster builds
-    swcMinify: true,
     // Optimize for faster builds
     compiler: {
         // Remove console logs in production
@@ -47,8 +44,7 @@ const nextConfig = {
                             if (use.loader && use.loader.includes('postcss-loader')) {
                                 use.options.postcssOptions = {
                                     plugins: [
-                                        'tailwindcss',
-                                        'autoprefixer',
+                                        '@tailwindcss/postcss',
                                     ],
                                 };
                             }
@@ -60,11 +56,4 @@ const nextConfig = {
         return config;
     },
 }
-
-// Only use hydration overlay in development
-if (process.env.NODE_ENV === 'development') {
-    const { withHydrationOverlay } = require("@builder.io/react-hydration-overlay/next");
-    module.exports = withHydrationOverlay()(nextConfig);
-} else {
-    module.exports = nextConfig;
-}
+module.exports = nextConfig;
