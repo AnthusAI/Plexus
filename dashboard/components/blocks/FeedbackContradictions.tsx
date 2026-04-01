@@ -80,7 +80,7 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           </span>
         ) : (
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             className="text-xs h-6 shrink-0"
             disabled={loading}
