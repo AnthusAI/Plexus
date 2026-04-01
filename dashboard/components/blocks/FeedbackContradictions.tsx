@@ -187,9 +187,9 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
 
       {/* Original explanation */}
       {exemplar.score_result_explanation && (
-        <div className="border-l-2 border-muted-foreground/30 pl-3">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Original explanation</p>
-          <div className="text-sm text-muted-foreground prose prose-sm dark:prose-invert max-w-none">
+        <div>
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Original explanation</h5>
+          <div className="border-l-2 border-muted-foreground/30 pl-3 text-sm text-muted-foreground prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
               {exemplar.score_result_explanation}
             </ReactMarkdown>
@@ -197,11 +197,13 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
         </div>
       )}
 
-      {/* Reviewer comment */}
+      {/* Editor comment */}
       {exemplar.edit_comment && (
-        <div className="border-l-2 border-muted-foreground/30 pl-3">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Reviewer comment</p>
-          <p className="text-sm text-muted-foreground">{exemplar.edit_comment}</p>
+        <div>
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Editor comment</h5>
+          <div className="border-l-2 border-muted-foreground/30 pl-3">
+            <p className="text-sm text-muted-foreground">{exemplar.edit_comment}</p>
+          </div>
         </div>
       )}
 
