@@ -1,5 +1,10 @@
 # Project files
-dashboard/
+dashboard/*
+!dashboard/amplify/
+!dashboard/amplify/functions/
+!dashboard/amplify/functions/consoleRunWorker/
+!dashboard/amplify/functions/consoleRunWorker/Dockerfile
+!dashboard/amplify/functions/consoleRunWorker/app.py
 infrastructure/
 docker/
 examples/
@@ -16,6 +21,7 @@ scorecards/
 scripts/
 tests/
 tmp/
+project/
 *.md
 *.txt
 *.csv

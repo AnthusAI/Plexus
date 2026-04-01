@@ -1561,4 +1561,3 @@ function getMetricInformation(metricName: string): string {
   }
   return descriptions[metricName] || ""
 }
-

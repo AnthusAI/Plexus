@@ -30,7 +30,22 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
-const startConsoleRunFunction = backend.data.resources.functions.startConsoleRun;
+
+function getFunctionLambda(functionId: string): lambda.Function | undefined {
+    const functionNestedStack = backend.stack.node.tryFindChild('function');
+    if (!functionNestedStack) {
+        return undefined;
+    }
+
+    const lambdaConstruct = functionNestedStack.node.tryFindChild(functionId);
+    if (lambdaConstruct && lambdaConstruct instanceof lambda.Function) {
+        return lambdaConstruct;
+    }
+
+    return undefined;
+}
+
+const startConsoleRunLambda = getFunctionLambda('startConsoleRun-lambda');
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -129,9 +144,12 @@ const taskDispatcherStack = new TaskDispatcherStack(
     }
 );
 
-const dataCfnResources = backend.data.resources.cfnResources as any;
-const resolvedDataApiUrl = process.env.PLEXUS_API_URL || dataCfnResources?.cfnGraphqlApi?.attrGraphQlUrl || '';
-const resolvedDataApiKey = process.env.PLEXUS_API_KEY || dataCfnResources?.cfnApiKey?.attrApiKey || '';
+const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
+const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
+
+if (!resolvedDataApiUrl || !resolvedDataApiKey) {
+    throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
+}
 
 const consoleRunWorkerStack = new ConsoleRunWorkerStack(
     backend.createStack('ConsoleRunWorkerStack'),
@@ -142,16 +160,19 @@ const consoleRunWorkerStack = new ConsoleRunWorkerStack(
     }
 );
 
-if (startConsoleRunFunction) {
-    (startConsoleRunFunction as lambda.Function).addEnvironment('CONSOLE_RUN_QUEUE_URL', consoleRunWorkerStack.queue.queueUrl);
-    startConsoleRunFunction.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['appsync:*'],
-            resources: ['*']
-        })
-    );
-    consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunFunction);
+if (!startConsoleRunLambda) {
+    throw new Error('Unable to locate startConsoleRun-lambda for console queue wiring');
 }
+startConsoleRunLambda.addEnvironment('CONSOLE_RUN_QUEUE_URL', consoleRunWorkerStack.queue.queueUrl);
+startConsoleRunLambda.addEnvironment('PLEXUS_API_URL', resolvedDataApiUrl);
+startConsoleRunLambda.addEnvironment('PLEXUS_API_KEY', resolvedDataApiKey);
+consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunLambda);
+startConsoleRunLambda.addToRolePolicy(
+    new PolicyStatement({
+        actions: ['appsync:GraphQL'],
+        resources: ['*'],
+    }),
+);
 
 // Add SQS permissions
 taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(

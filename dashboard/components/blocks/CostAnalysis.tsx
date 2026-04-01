@@ -45,24 +45,19 @@ function isAllScorecardsCostAnalysisOutput(value: any): value is AllScorecardsCo
 }
 
 const CostAnalysis: React.FC<ReportBlockProps> = (props) => {
-  if (!props.output) {
-    return <p>No cost analysis data available or data is loading.</p>;
-  }
-
-  let data: CostAnalysisData | AllScorecardsCostAnalysisOutput;
+  let data: CostAnalysisData | AllScorecardsCostAnalysisOutput | null = null;
+  let parseError = false;
   try {
-    if (typeof props.output === 'string') {
+    if (!props.output) {
+      data = null;
+    } else if (typeof props.output === 'string') {
       data = yaml.load(props.output) as CostAnalysisData;
     } else {
       data = props.output as CostAnalysisData;
     }
   } catch (error) {
     console.error('❌ CostAnalysis: Failed to parse output data:', error);
-    return (
-      <div className="p-4 text-center text-destructive">
-        Error parsing cost analysis data. Please check the report generation.
-      </div>
-    );
+    parseError = true;
   }
 
   const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Cost Analysis';
@@ -90,6 +85,18 @@ const CostAnalysis: React.FC<ReportBlockProps> = (props) => {
     });
     return copy;
   }, [isAllScorecardsMode, allScorecards, sortBy]);
+
+  if (!props.output) {
+    return <p>No cost analysis data available or data is loading.</p>;
+  }
+
+  if (parseError || !data) {
+    return (
+      <div className="p-4 text-center text-destructive">
+        Error parsing cost analysis data. Please check the report generation.
+      </div>
+    );
+  }
 
   // All scorecards mode (aka "all costs")
   if (isAllScorecardsMode) {

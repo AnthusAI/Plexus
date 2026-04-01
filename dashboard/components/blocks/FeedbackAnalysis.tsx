@@ -46,6 +46,19 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
  */
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+  const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
+  const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
+  const toggleMemory = React.useCallback((id: string) => {
+    setExpandedMemoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   // Parse output unconditionally so hooks always run in the same order
   let feedbackData: FeedbackAnalysisData | null = null;
@@ -103,13 +116,6 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   if ((feedbackData as any).mode === 'all_scorecards') {
     const allScorecardsData = feedbackData as any;
     const scorecards = allScorecardsData.scorecards || [];
-
-    // State to track which scorecard is currently expanded
-    const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
-    // State to track which scorecard's memories section is expanded
-    const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
-    const toggleMemory = (id: string) =>
-      setExpandedMemoryIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
     return (
       <div className="space-y-8">

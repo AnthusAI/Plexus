@@ -87,8 +87,9 @@ describe("DashboardLayout", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Feedback")).toBeInTheDocument()
-      expect(screen.getByText("Analysis")).toBeInTheDocument()
-      expect(screen.getByText("Activity")).toBeInTheDocument()
+      expect(screen.getByText("Console")).toBeInTheDocument()
+      expect(screen.queryByText("Analysis")).not.toBeInTheDocument()
+      expect(screen.queryByText("Activity")).not.toBeInTheDocument()
       expect(screen.getByText("Scorecards")).toBeInTheDocument()
     })
   })
@@ -100,7 +101,7 @@ describe("DashboardLayout", () => {
         name: "Test Account",
         key: "test",
         settings: JSON.stringify({
-          hiddenMenuItems: ["Feedback", "Activity"]
+          hiddenMenuItems: ["Feedback", "Console"]
         }),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -112,7 +113,8 @@ describe("DashboardLayout", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Feedback")).not.toBeInTheDocument()
-      expect(screen.getByText("Analysis")).toBeInTheDocument()
+      expect(screen.queryByText("Console")).not.toBeInTheDocument()
+      expect(screen.queryByText("Analysis")).not.toBeInTheDocument()
       expect(screen.queryByText("Activity")).not.toBeInTheDocument()
       expect(screen.getByText("Scorecards")).toBeInTheDocument()
     })
@@ -137,8 +139,9 @@ describe("DashboardLayout", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Feedback")).toBeInTheDocument()
-      expect(screen.getByText("Analysis")).toBeInTheDocument()
-      expect(screen.getByText("Activity")).toBeInTheDocument()
+      expect(screen.getByText("Console")).toBeInTheDocument()
+      expect(screen.queryByText("Analysis")).not.toBeInTheDocument()
+      expect(screen.queryByText("Activity")).not.toBeInTheDocument()
       expect(screen.getByText("Scorecards")).toBeInTheDocument()
     })
   })
@@ -162,20 +165,21 @@ describe("DashboardLayout", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Feedback")).not.toBeInTheDocument()
-      expect(screen.getByText("Analysis")).toBeInTheDocument()
-      expect(screen.getByText("Activity")).toBeInTheDocument()
+      expect(screen.getByText("Console")).toBeInTheDocument()
+      expect(screen.queryByText("Analysis")).not.toBeInTheDocument()
+      expect(screen.queryByText("Activity")).not.toBeInTheDocument()
       expect(screen.getByText("Scorecards")).toBeInTheDocument()
     })
   })
 
-  it("hides Analysis when account settings exclude it", async () => {
+  it("hides Console when account settings exclude it", async () => {
     mockListFromModel.mockResolvedValue({
       data: [{
         id: "1",
         name: "Test Account",
         key: "test",
         settings: JSON.stringify({
-          hiddenMenuItems: ["Analysis"]
+          hiddenMenuItems: ["Console"]
         }),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -186,7 +190,9 @@ describe("DashboardLayout", () => {
     renderDashboardLayout()
 
     await waitFor(() => {
+      expect(screen.queryByText("Console")).not.toBeInTheDocument()
       expect(screen.queryByText("Analysis")).not.toBeInTheDocument()
+      expect(screen.queryByText("Activity")).not.toBeInTheDocument()
       expect(screen.getByText("Procedures")).toBeInTheDocument()
       expect(screen.getByText("Scorecards")).toBeInTheDocument()
     })

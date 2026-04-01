@@ -4,7 +4,7 @@ import ConversationViewer from "@/components/ui/conversation-viewer"
 
 interface ConsoleChatElementsAdapterProps {
   procedureId: string
-  accountId: string
+  accountId?: string
   selectedSessionId?: string
   onSessionSelect?: (sessionId: string) => void
 }
