@@ -63,7 +63,7 @@ export class TaskDispatcherStack extends Stack {
                     'manylinux2014_x86_64',
                     '--implementation',
                     'cp',
-                    '--python',
+                    '--python-version',
                     '3.11',
                     '--only-binary=:all:',
                     '--upgrade',

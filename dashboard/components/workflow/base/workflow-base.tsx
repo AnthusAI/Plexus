@@ -100,7 +100,7 @@ const WorkflowBase = React.forwardRef<SVGGElement, WorkflowBaseProps>(
   )
   const isPageVisibleRef = useRef(true)
   const timersRef = useRef<NodeJS.Timeout[]>([])
-  const cycleStatesFnRef = useRef<() => void>()
+  const cycleStatesFnRef = useRef<(() => void) | undefined>(undefined)
   const lastCycleTimeRef = useRef(Date.now())
 
   // Add watchdog effect
