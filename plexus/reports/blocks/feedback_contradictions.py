@@ -277,16 +277,17 @@ class FeedbackContradictions(BaseReportBlock):
                 f"Reviewer comment: \"{edit_comment}\""
                 f"{guideline_section}\n\n"
                 "Does this reviewer correction appear to CONTRADICT or be INCONSISTENT with the guidelines above? "
-                "Reply with a JSON object with two keys:\n"
+                "Reply with a JSON object with three keys:\n"
                 "  \"contradicts\": true or false\n"
-                "  \"reason\": one sentence explaining why it contradicts, or \"Consistent\" if it does not.\n"
+                "  \"reason\": one sentence explaining why it contradicts, or \"Consistent\" if it does not\n"
+                "  \"guideline_quote\": the exact short phrase or sentence from the guidelines that the reviewer correction contradicts (empty string if not contradicting)\n"
                 "Reply ONLY with valid JSON, no other text."
             )
 
             bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
             body = json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 150,
+                "max_tokens": 200,
                 "messages": [{"role": "user", "content": prompt}],
             })
             response = bedrock.invoke_model(
@@ -328,6 +329,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "editor_name": getattr(item, "editorName", None),
                 "edited_at": edited_at,
                 "reason": parsed.get("reason", ""),
+                "guideline_quote": parsed.get("guideline_quote", ""),
                 "is_invalid": getattr(item, "isInvalid", False) or False,
             }
         except Exception as exc:
