@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7a9efc4c-a67e-45f9-a428-34a722b52f02",
+  "issue_id": "plx-dd0e016e-f94f-48d2-9863-6839c9acb1c5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-31T21:44:07.847Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Inspect git history for amplify/backend.ts and related stack identity changes; inspect AWS Amplify/CloudFormation deployment events for the failed staging run; produce root-cause summary and safe remediation options.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-89448256-e87b-43f2-a401-1ffb29feb499",
+    "priority": 1,
+    "status": "open",
+    "title": "Forensic analysis of backend.ts and failed Amplify deployment events"
+  }
+}
