@@ -49,7 +49,7 @@ class FeedbackContradictions(BaseReportBlock):
     # --------------------------------------------------------------------------
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        self.log_messages = []
+        self._orm.log_messages.clear()
         try:
             return await self._run()
         except Exception as exc:
@@ -57,7 +57,7 @@ class FeedbackContradictions(BaseReportBlock):
             self._log(f"ERROR: {exc}", level="ERROR")
             self._log(traceback.format_exc())
             error_data = {"error": str(exc), "topics": []}
-            return error_data, "\n".join(self.log_messages)
+            return error_data, "\n".join(self._orm.log_messages)
 
     # --------------------------------------------------------------------------
     # Main pipeline
@@ -142,7 +142,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "total_items_analyzed": 0,
                 "contradictions_found": 0,
                 "topics": [],
-            }, "\n".join(self.log_messages)
+            }, "\n".join(self._orm.log_messages)
 
         # --- Fetch score results for each item in parallel (by itemId + scoreId) ---
         self._log(f"Fetching score results for {len(valid_items)} items…")
@@ -192,7 +192,7 @@ class FeedbackContradictions(BaseReportBlock):
             "\n"
         )
         formatted_output = context_header + json.dumps(output, indent=2, ensure_ascii=False)
-        return formatted_output, "\n".join(self.log_messages)
+        return formatted_output, "\n".join(self._orm.log_messages)
 
     # --------------------------------------------------------------------------
     # Score resolution
@@ -467,24 +467,23 @@ class FeedbackContradictions(BaseReportBlock):
         votes_text = "\n\n".join(vote_descriptions)
         yes_count = sum(1 for v in votes_meta if v["result"] is True)
         no_count = sum(1 for v in votes_meta if v["result"] is False)
+        null_count = sum(1 for v in votes_meta if v["result"] is None)
 
         synthesis_prompt = (
             f"You are reviewing the results of a multi-model voting system that evaluated "
             f"whether a feedback item represents a policy contradiction or gap.\n\n"
             f"ORIGINAL EVALUATION CONTEXT:\n{prompt}\n\n"
-            f"VOTE RESULTS ({yes_count} yes, {no_count} no):\n\n{votes_text}\n\n"
-            f"Based on the majority decision and all the reasoning above, write a SINGLE "
-            f"synthesized explanation. Your explanation should:\n"
-            f"- Describe the policy issue (not what the reviewer did)\n"
-            f"- If the votes were unanimous, synthesize the best reasoning\n"
-            f"- If the votes were split, acknowledge the ambiguity — explain "
-            f"why this case is genuinely borderline and what the different perspectives were\n\n"
-            f"Reply ONLY with a JSON object:\n"
-            f'  "reason": one or two sentences synthesizing the explanation\n'
-            f'  "category": "contradiction" or "policy_gap"\n'
-            f'  "guideline_quote": the most relevant guideline phrase, '
-            f'or "Policy gap: not addressed in guidelines"\n'
-            f"Reply ONLY with valid JSON, no other text."
+            f"VOTE RESULTS ({yes_count} yes / {no_count} no / {null_count} failed):\n\n{votes_text}\n\n"
+            f"FINAL VERDICT: This item IS a contradiction/policy gap and is included in this report "
+            f"because the majority voted YES ({yes_count} yes vs {no_count} no).\n\n"
+            f"Write a SINGLE synthesized explanation from the perspective of the YES (majority) votes. "
+            f"Your explanation should:\n"
+            f"- Describe the policy issue clearly (not what the reviewer did)\n"
+            f"- If all votes agreed, synthesize the best reasoning\n"
+            f"- If votes were split, acknowledge why this case is borderline while explaining "
+            f"why the majority position holds\n\n"
+            f'Reply ONLY with valid JSON: {{"reason": "...", "category": "contradiction" or "policy_gap", '
+            f'"guideline_quote": "most relevant guideline phrase or Policy gap: not addressed in guidelines"}}'
         )
 
         return self._invoke_bedrock(synthesis_prompt, use_thinking=use_thinking)
