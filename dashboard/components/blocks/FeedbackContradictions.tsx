@@ -2,9 +2,10 @@ import React from 'react';
 import { generateClient } from 'aws-amplify/data';
 import type { Schema } from '@/amplify/data/resource';
 import { ReportBlockProps } from './ReportBlock';
-import { ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { LabelBadgeComparison } from '@/components/LabelBadgeComparison';
 
 // ---- Types ----------------------------------------------------------------
 
@@ -17,6 +18,7 @@ interface Exemplar {
   editor_name?: string | null;
   edited_at?: string | null;
   reason: string;
+  guideline_quote?: string;
   is_invalid: boolean;
 }
 
@@ -57,52 +59,27 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
     }
   };
 
+  const isCorrect = exemplar.initial_value === exemplar.final_value;
+
   return (
-    <div
-      className={`border rounded-lg p-3 space-y-2 text-sm transition-opacity ${
-        invalidated ? 'opacity-40' : ''
-      }`}
-    >
-      {/* Value change badges */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Badge variant="outline" className="font-mono text-xs">
-          {exemplar.initial_value || '—'}
-        </Badge>
-        <span className="text-muted-foreground">→</span>
-        <Badge variant="outline" className="font-mono text-xs">
-          {exemplar.final_value || '—'}
-        </Badge>
-        {exemplar.editor_name && (
-          <span className="text-muted-foreground text-xs ml-auto">
-            {exemplar.editor_name}
-          </span>
-        )}
-      </div>
-
-      {/* Edit comment */}
-      {exemplar.edit_comment && (
-        <p className="text-muted-foreground italic">
-          &ldquo;{exemplar.edit_comment}&rdquo;
-        </p>
-      )}
-
-      {/* Contradiction reason */}
-      <p className="text-foreground">{exemplar.reason}</p>
-
-      {/* Mark invalid button */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground font-mono break-all">
-          {exemplar.feedback_item_id}
-        </span>
+    <div className={`space-y-2 py-3 transition-opacity ${invalidated ? 'opacity-40' : ''}`}>
+      {/* Score value comparison + action */}
+      <div className="flex items-center justify-between gap-4">
+        <LabelBadgeComparison
+          predictedLabel={exemplar.initial_value || '—'}
+          actualLabel={exemplar.final_value || '—'}
+          isCorrect={isCorrect}
+          showStatus={false}
+        />
         {invalidated ? (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
             <CheckCircle className="h-3 w-3" /> Marked invalid
           </span>
         ) : (
           <Button
             variant="outline"
             size="sm"
-            className="text-xs h-6"
+            className="text-xs h-6 shrink-0"
             disabled={loading}
             onClick={handleMarkInvalid}
           >
@@ -110,6 +87,26 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           </Button>
         )}
       </div>
+
+      {/* Reviewer comment */}
+      {exemplar.edit_comment && (
+        <p className="text-sm text-muted-foreground italic">
+          &ldquo;{exemplar.edit_comment}&rdquo;
+        </p>
+      )}
+
+      {/* Contradiction reason */}
+      <p className="text-sm">{exemplar.reason}</p>
+
+      {/* Guideline quote */}
+      {exemplar.guideline_quote && (
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Guideline: </span>
+          &ldquo;{exemplar.guideline_quote}&rdquo;
+        </p>
+      )}
+
+      <p className="text-xs text-muted-foreground font-mono">{exemplar.feedback_item_id}</p>
     </div>
   );
 };
@@ -120,28 +117,34 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
   const [open, setOpen] = React.useState(false);
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <button
-        className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="font-medium text-sm flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-          {topic.label}
-        </span>
-        <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0 ml-4">
-          <Badge variant="secondary">{topic.count}</Badge>
-          {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </span>
-      </button>
+    <div>
+      {/* Header row */}
+      <div className="flex items-center justify-between py-2">
+        <span className="font-medium text-sm">{topic.label}</span>
+        <Badge variant="secondary" className="shrink-0 ml-4">{topic.count}</Badge>
+      </div>
+
+      {/* Hrule + caret expand control */}
+      <div className="flex flex-col items-center">
+        <div className="w-full h-px bg-border mb-1" />
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors p-0.5"
+          aria-label={open ? 'Collapse' : 'Expand'}
+        >
+          {open
+            ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
+            : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+        </button>
+      </div>
 
       {open && (
-        <div className="p-4 space-y-3">
+        <div className="divide-y">
           {topic.exemplars.map((ex) => (
             <ExemplarRow key={ex.feedback_item_id} exemplar={ex} />
           ))}
           {topic.count > topic.exemplars.length && (
-            <p className="text-xs text-muted-foreground text-center">
+            <p className="text-xs text-muted-foreground text-center py-2">
               Showing {topic.exemplars.length} of {topic.count} contradictions in this cluster.
             </p>
           )}
@@ -156,19 +159,17 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
 const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackContradictionsData | null>(null);
 
-  // Parse inline output
-  let parsedOutput: FeedbackContradictionsData | null = null;
+  let parsedOutput: any = null;
   if (props.output) {
     if (typeof props.output === 'string') {
       try { parsedOutput = JSON.parse(props.output); } catch { /* ignore */ }
     } else {
-      parsedOutput = props.output as FeedbackContradictionsData;
+      parsedOutput = props.output;
     }
   }
 
-  // Load compacted output from S3 attachment if needed
-  const outputAttachment = (parsedOutput as any)?.output_attachment ?? null;
-  const outputCompacted = (parsedOutput as any)?.output_compacted ?? false;
+  const outputAttachment = parsedOutput?.output_attachment ?? null;
+  const outputCompacted = parsedOutput?.output_compacted ?? false;
   React.useEffect(() => {
     if (!outputCompacted || !outputAttachment || loadedOutput) return;
     (async () => {
@@ -186,12 +187,11 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     })();
   }, [outputCompacted, outputAttachment, loadedOutput]);
 
-  // Show loading state while fetching compacted output
   if (outputCompacted && !loadedOutput) {
     return <p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p>;
   }
 
-  const output = loadedOutput ?? parsedOutput;
+  const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
   if (!output) {
     return <p className="text-muted-foreground text-sm">No contradiction analysis data available.</p>;
@@ -209,27 +209,23 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const { score_name, total_items_analyzed, contradictions_found, topics = [] } = output;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-1">
       {/* Summary header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap pb-2">
         <div>
           <h3 className="text-base font-semibold">{score_name}</h3>
           <p className="text-sm text-muted-foreground mt-0.5">
             {contradictions_found} contradiction{contradictions_found !== 1 ? 's' : ''} found
-            across {total_items_analyzed} feedback item{total_items_analyzed !== 1 ? 's' : ''}
+            {' '}across {total_items_analyzed} feedback item{total_items_analyzed !== 1 ? 's' : ''}
           </p>
         </div>
-        <Badge
-          variant={contradictions_found > 0 ? 'destructive' : 'secondary'}
-          className="shrink-0"
-        >
+        <Badge variant={contradictions_found > 0 ? 'destructive' : 'secondary'} className="shrink-0">
           {contradictions_found > 0
             ? `${Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100)}% contradiction rate`
             : 'No contradictions'}
         </Badge>
       </div>
 
-      {/* Topic sections */}
       {topics.length === 0 && contradictions_found === 0 && (
         <p className="text-sm text-muted-foreground">
           All feedback items appear consistent with the score guidelines.
