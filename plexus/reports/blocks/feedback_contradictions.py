@@ -20,6 +20,25 @@ from plexus.dashboard.api.models.scorecard import Scorecard
 logger = logging.getLogger(__name__)
 
 
+def _build_prior_votes_context(votes: List[tuple]) -> str:
+    """Format prior vote results into a context block to append to a classifier prompt."""
+    lines = ["--- Prior Vote Results ---"]
+    for i, (model, r) in enumerate(votes, 1):
+        if r is None:
+            lines.append(f"Vote {i} ({model}): FAILED — no response")
+        else:
+            verdict = "YES — contradiction/policy gap" if r["contradicts"] else "NO — not a contradiction"
+            lines.append(f"Vote {i} ({model}): {verdict}")
+            if r.get("reason"):
+                lines.append(f"  Reason: {r['reason']}")
+            if r.get("category"):
+                lines.append(f"  Category: {r['category']}")
+            if r.get("guideline_quote"):
+                lines.append(f"  Guideline quote: {r['guideline_quote']}")
+    lines.append("---")
+    lines.append("Please weigh the above prior vote results in your assessment.")
+    return "\n".join(lines)
+
 
 class FeedbackContradictions(BaseReportBlock):
     """
@@ -610,17 +629,29 @@ class FeedbackContradictions(BaseReportBlock):
 
                 r2: List[tuple] = []
                 if not unanimous:
-                    # --- Round 2: Sonnet (thinking) + GPT-5.4 (high reasoning) ---
-                    r2_raw = await asyncio.gather(
-                        asyncio.to_thread(self._invoke_bedrock, prompt, True),
-                        asyncio.to_thread(self._invoke_openai, prompt, "high"),
-                        return_exceptions=True,
-                    )
-                    r2_models = ["sonnet", "gpt"]
-                    r2 = [
-                        (model, r if not isinstance(r, Exception) else None)
-                        for model, r in zip(r2_models, r2_raw)
-                    ]
+                    # --- Round 2: sequential tiebreaker — later voters see prior results ---
+                    r1_context = _build_prior_votes_context(r1)
+
+                    # Step 2a: Sonnet (thinking) sees R1 results
+                    prompt_r2_sonnet = prompt + "\n\n" + r1_context
+                    try:
+                        r2_sonnet = await asyncio.to_thread(
+                            self._invoke_bedrock, prompt_r2_sonnet, True
+                        )
+                    except Exception:
+                        r2_sonnet = None
+
+                    # Step 2b: GPT-5.4 (high reasoning) sees R1 + Sonnet tiebreaker result
+                    r2_context = _build_prior_votes_context(r1 + [("sonnet", r2_sonnet)])
+                    prompt_r2_gpt = prompt + "\n\n" + r2_context
+                    try:
+                        r2_gpt = await asyncio.to_thread(
+                            self._invoke_openai, prompt_r2_gpt, "high"
+                        )
+                    except Exception:
+                        r2_gpt = None
+
+                    r2 = [("sonnet", r2_sonnet), ("gpt", r2_gpt)]
                     valid_r2 = [(m, r) for m, r in r2 if r is not None]
                     r2_bools = [r["contradicts"] for _, r in valid_r2]
                     yes += sum(r2_bools)
