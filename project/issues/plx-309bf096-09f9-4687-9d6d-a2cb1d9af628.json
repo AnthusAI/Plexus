@@ -1,0 +1,25 @@
+{
+  "id": "plx-309bf096-09f9-4687-9d6d-a2cb1d9af628",
+  "title": "Implement plexus-scorecard-improver skill in skills/",
+  "description": "Create SKILL.md, references, and agents/openai.yaml for iterative score improvement workflows.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-22790e84-5971-4c2d-b13d-d300af929b4d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ad423abb-08ea-40ac-b571-3dabe532878e",
+      "author": "ryan",
+      "text": "Implemented new skill folder skills/plexus-scorecard-improver, wrote SKILL.md workflow, added references/improvement-playbook.md, generated agents/openai.yaml, and validated with quick_validate.py (pass).",
+      "created_at": "2026-04-01T20:34:36.298810155Z"
+    }
+  ],
+  "created_at": "2026-04-01T20:34:33.637625304Z",
+  "updated_at": "2026-04-01T20:47:06.209076088Z",
+  "closed_at": "2026-04-01T20:47:06.209076088Z",
+  "custom": {}
+}
