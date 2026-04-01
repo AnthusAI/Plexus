@@ -42,6 +42,7 @@ class Item(BaseModel):
         description: Optional[str] = None,
         scoreId: Optional[str] = None,
         attachedFiles: Optional[list] = None,
+        item_identifiers: Optional[list] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -58,6 +59,7 @@ class Item(BaseModel):
         self.scoreId = scoreId
         self.isEvaluation = isEvaluation
         self.attachedFiles = attachedFiles
+        self.item_identifiers = item_identifiers or []
 
     @classmethod
     def fields(cls) -> str:
@@ -282,6 +284,7 @@ class Item(BaseModel):
             description=data.get('description'),
             scoreId=data.get('scoreId'),
             attachedFiles=data.get('attachedFiles'),
+            item_identifiers=(data.get('itemIdentifiers') or {}).get('items') or [],
             client=client
         )
 
