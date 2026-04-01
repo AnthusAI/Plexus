@@ -288,7 +288,11 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   let parsedOutput: any = null;
   if (props.output) {
     if (typeof props.output === 'string') {
-      try { parsedOutput = JSON.parse(props.output); } catch { /* ignore */ }
+      try {
+        // Strip leading comment lines (context header added by backend) before parsing
+        const jsonText = props.output.split('\n').filter(l => !l.startsWith('#')).join('\n');
+        parsedOutput = JSON.parse(jsonText);
+      } catch { /* ignore */ }
     } else {
       parsedOutput = props.output;
     }
@@ -306,7 +310,9 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
           options: { bucket: 'reportBlockDetails' as any },
         }).result;
         const text = await result.body.text();
-        setLoadedOutput(JSON.parse(text));
+        // Strip leading comment lines (context header added by backend)
+        const jsonText = text.split('\n').filter(l => !l.startsWith('#')).join('\n');
+        setLoadedOutput(JSON.parse(jsonText));
       } catch (e) {
         console.warn('FeedbackContradictions: failed to load output attachment', e);
       }
