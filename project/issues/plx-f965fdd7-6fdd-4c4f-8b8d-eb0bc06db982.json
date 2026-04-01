@@ -1,0 +1,31 @@
+{
+  "id": "plx-f965fdd7-6fdd-4c4f-8b8d-eb0bc06db982",
+  "title": "Reinstate stack-managed backup vault creation for Amplify backup stack",
+  "description": "Replace BackupVault import-by-name with BackupVault creation in dashboard/amplify/backend.ts so new accounts/environments can bootstrap without precreating a vault. User will manually delete existing staging vault before deploy.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-89448256-e87b-43f2-a401-1ffb29feb499",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "07489a7a-e798-4ecf-b884-37f18be44b62",
+      "author": "derek.norrbom",
+      "text": "Implementing user-requested revert: replace BackupVault.fromBackupVaultName with new backup.BackupVault in dashboard/amplify/backend.ts so stack can bootstrap vaults in fresh accounts. User stated staging vault will be manually removed before deploy.",
+      "created_at": "2026-03-31T21:52:44.348111Z"
+    },
+    {
+      "id": "933f3105-ed3e-49d8-8727-a72438260e23",
+      "author": "derek.norrbom",
+      "text": "Implemented: restored stack-managed backup vault creation in dashboard/amplify/backend.ts by replacing BackupVault.fromBackupVaultName(...) with new backup.BackupVault(...).\n\nValidation:\n- Ran npm run typecheck in dashboard.\n- Typecheck fails with pre-existing TypeScript/dependency issues across many UI files (missing module/type declarations).\n- No reported errors reference dashboard/amplify/backend.ts.",
+      "created_at": "2026-03-31T21:55:49.880820Z"
+    }
+  ],
+  "created_at": "2026-03-31T21:52:39.736549Z",
+  "updated_at": "2026-03-31T21:55:54.545508Z",
+  "closed_at": "2026-03-31T21:55:54.545508Z",
+  "custom": {}
+}
