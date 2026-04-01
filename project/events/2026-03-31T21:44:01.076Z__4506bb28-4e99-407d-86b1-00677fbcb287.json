@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4506bb28-4e99-407d-86b1-00677fbcb287",
+  "issue_id": "plx-e9884d79-76e9-441b-994b-d64a810825b7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-31T21:44:01.076Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Amplify backup deployment stability\nScenario: Staging deployment after prior successful deploy\nGiven a staging environment with an existing backup vault\nWhen a new Amplify deployment runs\nThen deployment should not fail with AWS Backup vault AlreadyExists\nAnd the infrastructure definition should preserve stable ownership or intentionally import shared resources",
+    "issue_type": "story",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "As an operator, staging deploy should not fail when backup vault already exists"
+  }
+}
