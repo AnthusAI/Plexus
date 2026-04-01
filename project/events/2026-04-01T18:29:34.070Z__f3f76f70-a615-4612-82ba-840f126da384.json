@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f3f76f70-a615-4612-82ba-840f126da384",
+  "issue_id": "plx-512e5e88-ca84-4065-b348-2f255e6b9d86",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T18:29:34.070Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-004bc381-017b-4834-ae74-23af8a899ea5",
+    "priority": 1,
+    "status": "open",
+    "title": "Stop triggering app deployment pipelines in CI"
+  }
+}
