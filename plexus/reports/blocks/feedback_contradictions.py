@@ -407,7 +407,7 @@ class FeedbackContradictions(BaseReportBlock):
                 model="gpt-5.4",
                 reasoning={"effort": reasoning_effort},
                 input=input_messages,
-                max_output_tokens=400,
+                max_output_tokens=4000 if reasoning_effort == "high" else 400,
             )
             text = response.output_text.strip()
             # Extract reasoning summary if available
