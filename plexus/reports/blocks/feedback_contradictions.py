@@ -389,7 +389,7 @@ class FeedbackContradictions(BaseReportBlock):
             topics.append({
                 "label": label,
                 "count": len(items),
-                "exemplars": items[:3],
+                "exemplars": items,
             })
 
         return topics
