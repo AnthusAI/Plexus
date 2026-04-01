@@ -183,9 +183,16 @@ class ScorecardTestPatterns:
             return len(result) > 0
         
         if isinstance(result, dict):
-            # Should have scorecard details
-            required_fields = ['id', 'name']
-            return all(field in result for field in required_fields)
+            # Accept both legacy and current MCP output shapes:
+            # - Legacy: {id, name, ...}
+            # - Current: {name, additionalDetails: {id, ...}, ...}
+            has_name = 'name' in result and result.get('name') is not None
+            has_top_level_id = 'id' in result and result.get('id') is not None
+            has_nested_id = (
+                isinstance(result.get('additionalDetails'), dict)
+                and result['additionalDetails'].get('id') is not None
+            )
+            return has_name and (has_top_level_id or has_nested_id)
         
         return False
     

@@ -230,15 +230,17 @@ async def test_run_explanation_analysis_outputs_topics_with_identifiers_and_caus
     ), patch.object(
         explanation_block,
         "_generate_topic_label_llm",
-        return_value="Coverage Mismatch",
+        new=MagicMock(return_value="Coverage Mismatch"),
     ), patch.object(
         explanation_block,
         "_infer_explanation_root_cause_llm",
-        side_effect=["Missing exception handling", "Guidelines not explicit"],
+        new=MagicMock(
+            side_effect=["Missing exception handling", "Guidelines not explicit"]
+        ),
     ), patch.object(
         explanation_block,
         "_synthesize_topic_cause_llm",
-        return_value="Guidelines miss key exception wording",
+        new=MagicMock(return_value="Guidelines miss key exception wording"),
     ):
         output = await explanation_block._run_explanation_analysis(per_score_raw_texts)
 
