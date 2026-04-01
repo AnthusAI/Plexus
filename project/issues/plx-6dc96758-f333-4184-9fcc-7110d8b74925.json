@@ -1,0 +1,25 @@
+{
+  "id": "plx-6dc96758-f333-4184-9fcc-7110d8b74925",
+  "title": "Prevent py311-dev bootstrap from removing Poetry",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6ee6e69c-4e1f-42dd-ab10-3dc89d8cabac",
+      "author": "derek",
+      "text": "Updated setup_py311_dev_env.sh to remove --sync from Poetry install in py311-dev bootstrap path. This prevents Poetry from being removed from the same environment during dependency sync.",
+      "created_at": "2026-03-20T20:54:57.149829380Z"
+    }
+  ],
+  "created_at": "2026-03-20T20:54:53.275431436Z",
+  "updated_at": "2026-03-20T20:55:03.959974772Z",
+  "closed_at": "2026-03-20T20:55:03.959974772Z",
+  "custom": {}
+}

@@ -15,7 +15,7 @@ module.exports = {
     '^.+\\.(t|j)sx?$': ['@swc/jest'],
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(esm-env|@number-flow|number-flow|react-markdown|remark-|unist-|unified|bail|is-plain-obj|trough|vfile|micromark|decode-named-character-reference|character-entities)/)',
+    'node_modules/(?!(esm-env|anthus-footer|@number-flow|number-flow|react-markdown|remark-|unist-|unified|bail|is-plain-obj|trough|vfile|micromark|decode-named-character-reference|character-entities)/)',
   ],
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
 }

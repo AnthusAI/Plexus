@@ -1062,6 +1062,7 @@ export type Evaluation = {
   scorecardId?: string | null;
   scoreId?: string | null;
   scoreVersionId?: string | null;
+  parameters?: string | null;
 };
 
 // Add type definitions for subscription events

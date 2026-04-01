@@ -58,7 +58,11 @@ def get_feedback_evaluation_stage_configs(total_items: int = 0) -> Dict[str, Sta
         "Finalizing": StageConfig(
             order=3,
             status_message="Calculating metrics and updating evaluation..."
-        )
+        ),
+        "Analyzing": StageConfig(
+            order=4,
+            status_message="Running root-cause analysis..."
+        ),
     }
 
 
