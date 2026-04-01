@@ -359,8 +359,8 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
 
   const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
-  if (!output) {
-    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-muted-foreground text-sm">No contradiction analysis data available.</p></ReportBlock>;
+  if (!output || (output as any).status === 'pending') {
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Generating contradiction analysis…</p></ReportBlock>;
   }
 
   if (output.error) {
