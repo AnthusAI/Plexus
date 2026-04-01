@@ -91,7 +91,11 @@ jobs:
         
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci
+      run: npm ci --include=optional
+
+    - name: Install Tailwind native binding
+      working-directory: ./dashboard
+      run: npm install --no-save @tailwindcss/oxide-linux-x64-gnu@4.2.2
         
     - name: Run TypeScript Type Check
       working-directory: ./dashboard
@@ -117,7 +121,11 @@ jobs:
 
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci
+      run: npm ci --include=optional
+
+    - name: Install Tailwind native binding
+      working-directory: ./dashboard
+      run: npm install --no-save @tailwindcss/oxide-linux-x64-gnu@4.2.2
 
     - name: Build Storybook
       working-directory: ./dashboard

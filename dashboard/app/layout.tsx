@@ -1,24 +1,19 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, Jersey_20 } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "./client-layout";
-import { HydrationOverlay } from "@builder.io/react-hydration-overlay";
 import "@aws-amplify/ui-react/styles.css";
 import { SidebarProvider } from "./contexts/SidebarContext"
 import { BrandProvider } from "./contexts/BrandContext"
 import { BrandedTitle } from "@/components/BrandedTitle"
 
 const inter = Inter({ subsets: ["latin"] });
+const jersey20 = Jersey_20({ subsets: ["latin"], weight: "400", variable: "--font-jersey-20" });
 
 export const metadata: Metadata = {
   title: "AI Agent Incubator",
   description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+  metadataBase: new URL("https://plexus.anth.us"),
   openGraph: {
     title: "AI Agent Incubator",
     description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
@@ -44,6 +39,13 @@ export const metadata: Metadata = {
   }
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -51,28 +53,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link
-          rel="preconnect"
-          href="https://fonts.googleapis.com"
-        />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Jersey+20&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${jersey20.variable}`}>
         <BrandProvider>
           <BrandedTitle />
         <SidebarProvider>
-          <HydrationOverlay>
-            <ClientLayout>{children}</ClientLayout>
-          </HydrationOverlay>
+          <ClientLayout>{children}</ClientLayout>
         </SidebarProvider>
         </BrandProvider>
       </body>
