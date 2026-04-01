@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ca040de3-4aac-43a8-a796-516def0544b8",
+  "issue_id": "plx-d4dcd24b-0042-44de-be07-7958f55b9656",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T20:06:11.739Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Address actionable github-code-quality[bot] comments on https://github.com/AnthusAI/Plexus/pull/139 with minimal-risk fixes, then validate CI.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Remediate GitHub Code Quality findings on PR #139"
+  }
+}
