@@ -20,6 +20,26 @@ from plexus.dashboard.api.models.scorecard import Scorecard
 logger = logging.getLogger(__name__)
 
 
+async def _fetch_score_result_for_item(api_client: Any, feedback_item_id: str) -> Optional[Dict]:
+    """Fetch the ScoreResult linked to a FeedbackItem via the feedbackItemId GSI."""
+    try:
+        gql = """
+        query ListScoreResultsByFeedbackItemId($feedbackItemId: String!) {
+            listScoreResultByFeedbackItemId(feedbackItemId: $feedbackItemId) {
+                items { id value explanation }
+            }
+        }
+        """
+        result = await asyncio.to_thread(
+            api_client.execute, gql, {"feedbackItemId": feedback_item_id}
+        )
+        items = (result or {}).get("listScoreResultByFeedbackItemId", {}).get("items") or []
+        return items[0] if items else None
+    except Exception as exc:
+        logger.warning(f"_fetch_score_result_for_item failed for {feedback_item_id}: {exc}")
+        return None
+
+
 class FeedbackContradictions(BaseReportBlock):
     """
     Identifies feedback items that appear to contradict the score's guidelines.
@@ -243,20 +263,32 @@ class FeedbackContradictions(BaseReportBlock):
 
         async def analyze_one(item) -> Optional[Dict[str, Any]]:
             async with semaphore:
+                # Fetch the ScoreResult asynchronously before entering the thread
+                sr = await _fetch_score_result_for_item(self.api_client, item.id)
+                score_explanation = (sr.get("explanation") or "")[:800] if sr else ""
                 return await asyncio.to_thread(
-                    self._check_contradiction, item, guidelines
+                    self._check_contradiction, item, guidelines, score_explanation
                 )
 
         results = await asyncio.gather(*[analyze_one(it) for it in items])
         return [r for r in results if r is not None]
 
-    def _check_contradiction(self, item: Any, guidelines: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _check_contradiction(
+        self, item: Any, guidelines: Optional[str], score_explanation: str = ""
+    ) -> Optional[Dict[str, Any]]:
         """
-        Call Bedrock Haiku to decide whether this feedback item contradicts
-        the score guidelines.  Returns a contradiction dict or None.
+        Call Bedrock to decide whether this feedback item contradicts the score
+        guidelines.  Returns a contradiction dict or None.
+
+        The prompt explicitly describes the full chain of events so the LLM
+        understands the context: a phone call was scored by an AI, then a human
+        reviewer corrected the AI's score.  The `reason` output should describe
+        what happened on the call and why the correction contradicts guidelines —
+        not what the reviewer said.
         """
         try:
             import boto3
+            import re as _re
 
             initial = getattr(item, "initialAnswerValue", "") or ""
             final = getattr(item, "finalAnswerValue", "") or ""
@@ -266,33 +298,51 @@ class FeedbackContradictions(BaseReportBlock):
             if initial == final and not edit_comment:
                 return None
 
+            # Build the situation description
+            situation_lines = [
+                "A phone call was evaluated by an AI scoring system.",
+                f"- AI score result: '{initial}'",
+            ]
+            if score_explanation:
+                situation_lines.append(f"- AI reasoning: {score_explanation}")
+            if initial != final:
+                situation_lines.append(f"- A human reviewer then changed the score to '{final}'.")
+            else:
+                situation_lines.append(f"- A human reviewer left the score as '{final}' but added a comment.")
+            situation_lines.append(f"- Reviewer's comment: \"{edit_comment}\"")
+
+            situation = "\n".join(situation_lines)
+
             guideline_section = ""
             if guidelines:
-                # Truncate to keep prompt manageable
-                guideline_section = f"\n\nScore Guidelines:\n{guidelines[:3000]}"
+                guideline_section = f"\nScore Guidelines:\n{guidelines[:3000]}\n"
 
             prompt = (
-                f"A quality reviewer corrected a score prediction. "
-                f"The score changed from '{initial}' to '{final}'. "
-                f"Reviewer comment: \"{edit_comment}\""
-                f"{guideline_section}\n\n"
-                "Does this reviewer correction appear to CONTRADICT or be INCONSISTENT with the guidelines above? "
-                "Reply with a JSON object with three keys:\n"
+                f"{situation}\n"
+                f"{guideline_section}\n"
+                "Based on the above, does this reviewer correction appear to CONTRADICT or be "
+                "INCONSISTENT with the score guidelines?\n\n"
+                "Focus on what likely happened on the phone call itself — not on what the reviewer "
+                "said. The reason should describe the agent behavior or call content that creates "
+                "the contradiction with the guidelines.\n\n"
+                "Reply ONLY with a JSON object with three keys:\n"
                 "  \"contradicts\": true or false\n"
-                "  \"reason\": one sentence explaining why it contradicts, or \"Consistent\" if it does not\n"
-                "  \"guideline_quote\": the exact short phrase or sentence from the guidelines that the reviewer correction contradicts (empty string if not contradicting)\n"
+                "  \"reason\": one sentence describing the agent behavior or call content that "
+                "contradicts the guidelines (or \"Consistent\" if it does not contradict)\n"
+                "  \"guideline_quote\": the exact short phrase from the guidelines being "
+                "contradicted (empty string if not contradicting)\n"
                 "Reply ONLY with valid JSON, no other text."
             )
 
             bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
             body = json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 200,
+                "max_tokens": 300,
                 "temperature": 0,
                 "messages": [{"role": "user", "content": prompt}],
             })
             response = bedrock.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                modelId="us.anthropic.claude-sonnet-4-6",
                 body=body,
                 contentType="application/json",
                 accept="application/json",
@@ -302,13 +352,11 @@ class FeedbackContradictions(BaseReportBlock):
 
             # Strip markdown code fences if present
             if "```" in text:
-                import re as _re
                 m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
                 if m:
                     text = m.group(1).strip()
 
             # Extract JSON object even if surrounded by prose
-            import re as _re
             obj_m = _re.search(r"\{[\s\S]*\}", text)
             if obj_m:
                 text = obj_m.group(0)
@@ -333,6 +381,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "item_external_id": item_external_id,
                 "initial_value": initial,
                 "final_value": final,
+                "score_result_explanation": score_explanation,
                 "edit_comment": edit_comment,
                 "editor_name": getattr(item, "editorName", None),
                 "edited_at": edited_at,
@@ -341,7 +390,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "is_invalid": getattr(item, "isInvalid", False) or False,
             }
         except Exception as exc:
-            logger.debug(f"Contradiction check failed for item {getattr(item, 'id', '?')}: {exc}")
+            logger.warning(f"Contradiction check failed for item {getattr(item, 'id', '?')}: {exc}")
             return None
 
     # --------------------------------------------------------------------------
@@ -369,14 +418,18 @@ class FeedbackContradictions(BaseReportBlock):
         cluster_prompt = (
             f"Below are {len(contradictions)} short descriptions of reviewer corrections that contradict score guidelines.\n\n"
             f"{reasons_text}\n\n"
-            f"Group these into at most {num_topics} semantic topic clusters. "
-            "For each item number assign a short topic label (3-6 words). "
+            f"YOUR TASK: Assign every item to one of EXACTLY {num_topics} topic clusters (no more, no fewer).\n"
+            f"You MUST use exactly {num_topics} distinct cluster labels across all items. "
+            "Aggressively merge similar items: items that describe the same type of violation belong in the same cluster. "
+            "For example, all variations of 'guaranteeing copays will stay the same' are ONE cluster. "
+            "Use a short, generic topic label (3-6 words) that covers the whole cluster.\n\n"
             "Reply ONLY with a JSON object mapping item number (as a string) to topic label. "
+            f"The JSON must have exactly {len(contradictions)} keys (one per item) and use exactly {num_topics} distinct values.\n"
             "Example: {{\"1\": \"Copay guarantee language\", \"2\": \"Copay guarantee language\", \"3\": \"Qualifying insurance not mentioned\"}}"
         )
 
         try:
-            topic_map: Dict[str, str] = await asyncio.to_thread(self._call_bedrock_for_topics, cluster_prompt)
+            topic_map: Dict[str, str] = await asyncio.to_thread(self._call_bedrock_for_topics, cluster_prompt, model_id="us.anthropic.claude-sonnet-4-6")
             # Unwrap if LLM returned {assignments: {...}} shape
             if "assignments" in topic_map:
                 topic_map = topic_map["assignments"]
@@ -417,20 +470,25 @@ class FeedbackContradictions(BaseReportBlock):
             except Exception as exc:
                 self._log(f"Topic enrichment LLM call failed: {exc}", level="WARNING")
 
-        # Build sorted topic list (most common first)
+        # Build sorted topic list (most common first); exemplars sorted newest-first
         topics = []
         for label, items in sorted(label_to_items.items(), key=lambda kv: -len(kv[1])):
+            sorted_items = sorted(
+                items,
+                key=lambda x: x.get("edited_at") or "",
+                reverse=True,
+            )
             topics.append({
                 "label": label,
                 "summary": summary_map.get(label, ""),
                 "guideline_quote": guideline_quote_map.get(label, ""),
-                "count": len(items),
-                "exemplars": items,
+                "count": len(sorted_items),
+                "exemplars": sorted_items,
             })
 
         return topics
 
-    def _call_bedrock_for_topics(self, prompt: str) -> Dict:
+    def _call_bedrock_for_topics(self, prompt: str, model_id: str = "us.anthropic.claude-sonnet-4-6") -> Dict:
         """Synchronous Bedrock call for topic labeling — runs in a thread."""
         import boto3
         import re
@@ -442,7 +500,7 @@ class FeedbackContradictions(BaseReportBlock):
             "messages": [{"role": "user", "content": prompt}],
         })
         response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+            modelId=model_id,
             body=body,
             contentType="application/json",
             accept="application/json",
