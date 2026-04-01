@@ -17,6 +17,7 @@ interface Exemplar {
   item_external_id?: string | null;
   initial_value: string;
   final_value: string;
+  score_result_explanation?: string | null;
   edit_comment: string;
   editor_name?: string | null;
   edited_at?: string | null;
@@ -43,6 +44,20 @@ interface FeedbackContradictionsData {
 
 // ---- Exemplar row ----------------------------------------------------------
 
+function formatTimeAgo(isoString: string | null | undefined): string {
+  if (!isoString) return '';
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
 const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
   const [invalidated, setInvalidated] = React.useState(exemplar.is_invalid);
   const [loading, setLoading] = React.useState(false);
@@ -65,10 +80,11 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
   };
 
   const isCorrect = exemplar.initial_value === exemplar.final_value;
+  const timeAgo = formatTimeAgo(exemplar.edited_at);
 
   return (
     <div className={`space-y-2 py-3 transition-opacity ${invalidated ? 'opacity-40' : ''}`}>
-      {/* Score value comparison + action */}
+      {/* Score value comparison + action + timestamp */}
       <div className="flex items-center justify-between gap-4">
         <LabelBadgeComparison
           predictedLabel={exemplar.initial_value || '—'}
@@ -76,31 +92,45 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           isCorrect={isCorrect}
           showStatus={false}
         />
-        {invalidated ? (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-            <CheckCircle className="h-3 w-3" /> Marked invalid
-          </span>
-        ) : (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="text-xs h-6 shrink-0"
-            disabled={loading}
-            onClick={handleMarkInvalid}
-          >
-            {loading ? 'Saving…' : 'Mark Invalid'}
-          </Button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {timeAgo && (
+            <span className="text-xs text-muted-foreground">{timeAgo}</span>
+          )}
+          {invalidated ? (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <CheckCircle className="h-3 w-3" /> Marked invalid
+            </span>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs h-6"
+              disabled={loading}
+              onClick={handleMarkInvalid}
+            >
+              {loading ? 'Saving…' : 'Mark Invalid'}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Score reasoning */}
+      {exemplar.score_result_explanation && (
+        <p className="text-sm text-muted-foreground italic">
+          <span className="font-medium text-foreground not-italic">Score reasoning: </span>
+          {exemplar.score_result_explanation}
+        </p>
+      )}
 
       {/* Reviewer comment */}
       {exemplar.edit_comment && (
         <p className="text-sm text-muted-foreground italic">
+          <span className="font-medium text-foreground not-italic">Reviewer comment: </span>
           &ldquo;{exemplar.edit_comment}&rdquo;
         </p>
       )}
 
-      {/* Contradiction reason */}
+      {/* Contradiction analysis */}
       <p className="text-sm">{exemplar.reason}</p>
 
       {/* Guideline quote */}
