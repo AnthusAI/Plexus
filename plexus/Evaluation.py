@@ -3022,8 +3022,6 @@ class FeedbackEvaluation(Evaluation):
                 "disagreements": overall_analysis.get("disagreements"),
             }
             
-            import json
-
             # Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data
             self.logger.info(f"Creating ScoreResult records for {len(feedback_items)} feedback items")
             await self._create_score_results_from_feedback(
@@ -3393,7 +3391,6 @@ class FeedbackEvaluation(Evaluation):
         or an empty list if there is not enough data or analysis fails (non-fatal).
         """
         try:
-            import asyncio
             import tempfile
             from datetime import datetime, timezone as _tz
             from biblicus.analysis.reinforcement_memory import (
