@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Microscope, Scale, MessageSquareMore, MessageCircleMore, UnfoldVertical, Text, View, ChevronDown, ChevronUp, Ellipsis } from 'lucide-react'
+import { X, Microscope, Scale, MessageSquareMore, MessageCircleMore, UnfoldVertical, Text, View, ChevronDown, ChevronUp, Ellipsis, MessageSquareCode, Copy } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CardButton } from '@/components/CardButton'
@@ -22,6 +22,7 @@ export interface ScoreResultData {
     correct: boolean
     human_explanation?: string | null
     text?: string | null
+    [key: string]: any
   }
   trace?: any | null
   itemId: string | null
@@ -32,6 +33,10 @@ export interface ScoreResultData {
   }> | null
   feedbackItem?: {
     editCommentValue: string | null
+    initialAnswerValue?: string | null
+    finalAnswerValue?: string | null
+    editorName?: string | null
+    editedAt?: string | null
   } | null
 }
 
@@ -55,6 +60,7 @@ export function ScoreResultComponent({
   navigationControls
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   
 
 
@@ -135,6 +141,15 @@ export function ScoreResultComponent({
         </div>
         <div className="flex items-center gap-2">
           {navigationControls}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => setShowCode(v => !v)}
+            title="Show code"
+          >
+            <MessageSquareCode className="w-3.5 h-3.5 text-muted-foreground" />
+          </Button>
           {onClose && <CardButton icon={X} onClick={onClose} />}
         </div>
       </div>
@@ -322,6 +337,31 @@ export function ScoreResultComponent({
                   <p className="text-sm text-muted-foreground">Trace</p>
                 </div>
                 <ScoreResultTrace trace={result.trace} />
+              </div>
+            )}
+
+            {/* Code representation */}
+            {showCode && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">JSON</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(JSON.stringify(result, null, 2))
+                      } catch {}
+                    }}
+                  >
+                    <Copy className="w-3 h-3 mr-1" />
+                    <span className="text-xs">Copy</span>
+                  </Button>
+                </div>
+                <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
               </div>
             )}
           </div>
