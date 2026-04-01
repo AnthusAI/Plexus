@@ -257,6 +257,14 @@ async def fetch_feedback_items_for_score(
                         id
                         identifiers
                         externalId
+                        itemIdentifiers {
+                            items {
+                                name
+                                value
+                                url
+                                position
+                            }
+                        }
                     }
                 }
                 nextToken
