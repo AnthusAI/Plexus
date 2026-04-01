@@ -1,0 +1,25 @@
+{
+  "id": "plx-4ebae891-cece-4f15-acba-95f41cd39fbe",
+  "title": "Remove user-specific hardcoded paths from dev env setup script",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "52943399-2ae4-47be-88f0-e18b7052e068",
+      "author": "derek",
+      "text": "Removed hardcoded user paths from setup_py311_dev_env.sh. Conda discovery now uses HOME-based paths, /opt/conda, or PATH lookup only. Commit pushed: 27b6328c.",
+      "created_at": "2026-03-20T20:44:18.634766280Z"
+    }
+  ],
+  "created_at": "2026-03-20T20:43:59.971819639Z",
+  "updated_at": "2026-03-20T20:44:18.644969645Z",
+  "closed_at": "2026-03-20T20:44:18.644969645Z",
+  "custom": {}
+}

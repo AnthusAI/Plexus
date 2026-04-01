@@ -1,0 +1,31 @@
+{
+  "id": "plx-512e5e88-ca84-4065-b348-2f255e6b9d86",
+  "title": "Stop triggering app deployment pipelines in CI",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-004bc381-017b-4834-ae74-23af8a899ea5",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0353de5e-f720-4aca-bb5c-237deadf29d1",
+      "author": "derek.norrbom",
+      "text": "Updated .github/workflows/ci.yaml trigger-deployment job to stop starting app deployment pipelines; job now only triggers infrastructure pipeline where configured.",
+      "created_at": "2026-04-01T18:29:38.298541Z"
+    },
+    {
+      "id": "e70012df-08ca-4f33-be12-cf8413c5a0af",
+      "author": "derek.norrbom",
+      "text": "Change landed in commit 1043efc5 on feature/poetry-conversion: CI trigger-deployment job no longer starts app deployment pipelines, only infrastructure pipeline triggers remain.",
+      "created_at": "2026-04-01T18:29:50.738609Z"
+    }
+  ],
+  "created_at": "2026-04-01T18:29:34.070645Z",
+  "updated_at": "2026-04-01T18:29:50.751394Z",
+  "closed_at": "2026-04-01T18:29:50.751394Z",
+  "custom": {}
+}
