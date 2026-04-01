@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5b9750ff-73ee-4df3-ad58-e82e0002d62c",
+  "issue_id": "plx-6dc96758-f333-4184-9fcc-7110d8b74925",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-20T20:54:53.275Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Prevent py311-dev bootstrap from removing Poetry"
+  }
+}
