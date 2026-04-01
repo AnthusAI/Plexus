@@ -152,7 +152,7 @@ class FeedbackContradictions(BaseReportBlock):
         topics: List[Dict[str, Any]] = []
         if contradictions:
             self._log(f"Clustering {len(contradictions)} contradictions into up to {num_topics} topics…")
-            topics = await self._cluster_topics(contradictions, num_topics)
+            topics = await self._cluster_topics(contradictions, num_topics, guidelines)
             self._log(f"Produced {len(topics)} topic clusters.")
 
         output = {
@@ -288,6 +288,7 @@ class FeedbackContradictions(BaseReportBlock):
             body = json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 200,
+                "temperature": 0,
                 "messages": [{"role": "user", "content": prompt}],
             })
             response = bedrock.invoke_model(
@@ -348,20 +349,24 @@ class FeedbackContradictions(BaseReportBlock):
     # --------------------------------------------------------------------------
 
     async def _cluster_topics(
-        self, contradictions: List[Dict[str, Any]], num_topics: int
+        self, contradictions: List[Dict[str, Any]], num_topics: int,
+        guidelines: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Group contradictions into semantic topic clusters using a single LLM call.
 
         Each contradiction's 'reason' string is sent to the LLM with instructions
-        to assign a short topic label.  Results are grouped and sorted by count.
+        to assign a short topic label, a one-sentence summary, and the specific
+        guideline quote that the cluster contradicts.
+        Results are grouped and sorted by count.
         """
         # Build a numbered list of reason strings
         reasons_text = "\n".join(
             f"{i + 1}. {c['reason']}" for i, c in enumerate(contradictions)
         )
 
-        prompt = (
+        # --- Pass 1: cluster by semantic similarity (no guidelines — keeps prompt focused) ---
+        cluster_prompt = (
             f"Below are {len(contradictions)} short descriptions of reviewer corrections that contradict score guidelines.\n\n"
             f"{reasons_text}\n\n"
             f"Group these into at most {num_topics} semantic topic clusters. "
@@ -371,10 +376,12 @@ class FeedbackContradictions(BaseReportBlock):
         )
 
         try:
-            topic_map = await asyncio.to_thread(self._call_bedrock_for_topics, prompt)
+            topic_map: Dict[str, str] = await asyncio.to_thread(self._call_bedrock_for_topics, cluster_prompt)
+            # Unwrap if LLM returned {assignments: {...}} shape
+            if "assignments" in topic_map:
+                topic_map = topic_map["assignments"]
         except Exception as exc:
             self._log(f"Topic clustering LLM call failed: {exc}", level="WARNING")
-            # Fall back: each contradiction is its own topic
             topic_map = {str(i + 1): "Unclustered" for i in range(len(contradictions))}
 
         # Group contradictions by label
@@ -383,25 +390,55 @@ class FeedbackContradictions(BaseReportBlock):
             label = topic_map.get(str(i + 1), "Other")
             label_to_items.setdefault(label, []).append(contradiction)
 
-        # Build sorted topic list (most common first), keep up to 3 exemplars per topic
+        # --- Pass 2: generate summary + guideline quote per cluster ---
+        summary_map: Dict[str, str] = {}
+        guideline_quote_map: Dict[str, str] = {}
+        if guidelines and label_to_items:
+            cluster_descriptions = "\n".join(
+                f"- {label}: {'; '.join(it['reason'][:120] for it in items[:3])}"
+                for label, items in label_to_items.items()
+            )
+            enrich_prompt = (
+                f"Below are topic clusters of reviewer corrections that contradict score guidelines, "
+                f"with sample contradiction descriptions.\n\n"
+                f"Score Guidelines:\n{guidelines[:4000]}\n\n"
+                f"Topic clusters:\n{cluster_descriptions}\n\n"
+                "For each cluster label, provide:\n"
+                "  1. A one-sentence summary of the contradiction pattern\n"
+                "  2. The exact short phrase from the guidelines that is violated\n"
+                "Reply ONLY with a JSON object with two keys:\n"
+                "  \"summaries\": object mapping topic label to one-sentence summary\n"
+                "  \"guideline_quotes\": object mapping topic label to exact guideline phrase violated\n"
+            )
+            try:
+                enrich_result = await asyncio.to_thread(self._call_bedrock_for_topics, enrich_prompt)
+                summary_map = enrich_result.get("summaries", {})
+                guideline_quote_map = enrich_result.get("guideline_quotes", {})
+            except Exception as exc:
+                self._log(f"Topic enrichment LLM call failed: {exc}", level="WARNING")
+
+        # Build sorted topic list (most common first)
         topics = []
         for label, items in sorted(label_to_items.items(), key=lambda kv: -len(kv[1])):
             topics.append({
                 "label": label,
+                "summary": summary_map.get(label, ""),
+                "guideline_quote": guideline_quote_map.get(label, ""),
                 "count": len(items),
                 "exemplars": items,
             })
 
         return topics
 
-    def _call_bedrock_for_topics(self, prompt: str) -> Dict[str, str]:
+    def _call_bedrock_for_topics(self, prompt: str) -> Dict:
         """Synchronous Bedrock call for topic labeling — runs in a thread."""
         import boto3
         import re
         bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
         body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2048,
+            "max_tokens": 4096,
+            "temperature": 0,
             "messages": [{"role": "user", "content": prompt}],
         })
         response = bedrock.invoke_model(
@@ -415,7 +452,6 @@ class FeedbackContradictions(BaseReportBlock):
 
         # Strip markdown fences
         if "```" in text:
-            # Extract content between first ``` pair
             match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
             if match:
                 text = match.group(1).strip()
