@@ -170,6 +170,13 @@ class FeedbackContradictions(BaseReportBlock):
             "total_items_analyzed": len(valid_items),
             "contradictions_found": len(contradictions),
             "topics": topics,
+            "block_configuration": {
+                "scorecard": scorecard_param,
+                "score": score_param,
+                "days": days,
+                "max_concurrent": max_concurrent,
+                "num_topics": num_topics,
+            },
         }
         context_header = (
             "# Feedback Contradictions Report Output\n"
@@ -371,18 +378,20 @@ class FeedbackContradictions(BaseReportBlock):
         raise last_exc  # type: ignore[misc]
 
     def _invoke_openai(self, prompt: str, reasoning_effort: str = "low") -> Dict:
-        """Single GPT-5.4 classifier call with one JSON-parse retry. Returns parsed dict or raises."""
+        """GPT-5.4 classifier call with multi-turn corrective retry. Returns parsed dict or raises."""
         import os
         from dotenv import load_dotenv
         from openai import OpenAI
         load_dotenv(override=False)  # load .env if OPENAI_API_KEY not already in environment
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        input_messages: List[Dict] = [{"role": "user", "content": prompt}]
         last_exc = None
-        for _ in range(2):
+        reasoning_summary = ""
+        for attempt in range(4):  # 4 total: 1 initial + up to 3 corrective retries
             response = client.responses.create(
                 model="gpt-5.4",
                 reasoning={"effort": reasoning_effort},
-                input=[{"role": "user", "content": prompt}],
+                input=input_messages,
                 max_output_tokens=400,
             )
             text = response.output_text.strip()
@@ -400,6 +409,17 @@ class FeedbackContradictions(BaseReportBlock):
                 return parsed
             except json.JSONDecodeError as exc:
                 last_exc = exc
+                # Append corrective turn for next attempt
+                input_messages.append({"role": "assistant", "content": text or "(empty response)"})
+                input_messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your response was not valid JSON. Respond ONLY with a valid JSON object "
+                        "with exactly these keys: \"contradicts\" (boolean), \"reason\" (string), "
+                        "\"category\" (string), \"guideline_quote\" (string). "
+                        "No prose, no code blocks, no extra text."
+                    ),
+                })
         raise last_exc  # type: ignore[misc]
 
     def _build_exemplar(
@@ -469,19 +489,27 @@ class FeedbackContradictions(BaseReportBlock):
         no_count = sum(1 for v in votes_meta if v["result"] is False)
         null_count = sum(1 for v in votes_meta if v["result"] is None)
 
+        if no_count > 0:
+            split_instruction = (
+                f"\nIMPORTANT — the votes are split. Your 'reason' field MUST explicitly:\n"
+                f"1. State what the YES votes identified as the contradiction or policy gap\n"
+                f"2. State what the NO votes saw differently — the specific point of disagreement\n"
+                f"3. Briefly explain why the majority YES position prevails\n"
+                f"This helps reviewers understand the genuine ambiguity.\n"
+            )
+        else:
+            split_instruction = ""
+
         synthesis_prompt = (
             f"You are reviewing the results of a multi-model voting system that evaluated "
             f"whether a feedback item represents a policy contradiction or gap.\n\n"
             f"ORIGINAL EVALUATION CONTEXT:\n{prompt}\n\n"
             f"VOTE RESULTS ({yes_count} yes / {no_count} no / {null_count} failed):\n\n{votes_text}\n\n"
             f"FINAL VERDICT: This item IS a contradiction/policy gap and is included in this report "
-            f"because the majority voted YES ({yes_count} yes vs {no_count} no).\n\n"
+            f"because the majority voted YES ({yes_count} yes vs {no_count} no).\n"
+            f"{split_instruction}\n"
             f"Write a SINGLE synthesized explanation from the perspective of the YES (majority) votes. "
-            f"Your explanation should:\n"
-            f"- Describe the policy issue clearly (not what the reviewer did)\n"
-            f"- If all votes agreed, synthesize the best reasoning\n"
-            f"- If votes were split, acknowledge why this case is borderline while explaining "
-            f"why the majority position holds\n\n"
+            f"Your explanation should describe the policy issue clearly (not what the reviewer did).\n\n"
             f'Reply ONLY with valid JSON: {{"reason": "...", "category": "contradiction" or "policy_gap", '
             f'"guideline_quote": "most relevant guideline phrase or Policy gap: not addressed in guidelines"}}'
         )

@@ -103,8 +103,11 @@ const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'l
           : v.result
             ? 'bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100'
             : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100';
-        const label = v.model === 'sonnet' ? 'S' : 'G';
-        const title = `${v.model === 'sonnet' ? 'Sonnet' : 'GPT-5.4'}: ${v.result === null ? 'failed' : v.result ? 'yes' : 'no'}`;
+        const label = v.result === null ? '×' : (v.model === 'sonnet' ? 'S' : 'G');
+        const modelName = v.model === 'sonnet' ? 'Sonnet' : 'GPT-5.4';
+        const title = v.result === null
+          ? `${modelName}: call failed — no response received`
+          : `${modelName}: ${v.result ? 'yes — is a contradiction' : 'no — not a contradiction'}`;
         return (
           <React.Fragment key={i}>
             {showSep && <span className="text-muted-foreground/40 text-xs mx-0.5">|</span>}
@@ -343,9 +346,11 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     })();
   }, [outputCompacted, outputAttachment, loadedOutput]);
 
-  // Pass full loaded output to ReportBlock for code view
+  // Pass full loaded output to ReportBlock for code view.
+  // Use only rawOutput — omit compact stub fields (status, preview, output_compacted, etc.)
+  // so ReportBlock's config YAML section shows block_configuration from the real output.
   const reportBlockOutput = rawOutputString
-    ? { ...(parsedOutput ?? {}), rawOutput: rawOutputString }
+    ? { rawOutput: rawOutputString }
     : props.output;
 
   if (outputCompacted && !loadedOutput) {
