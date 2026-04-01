@@ -282,8 +282,29 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
 
 // ---- Main block component --------------------------------------------------
 
+const CONTEXT_HEADER = `# Feedback Contradictions Report Output
+#
+# This report analyzes feedback items against score guidelines to identify
+# contradictions and policy gaps. Items are classified by a multi-model voting
+# system (Sonnet + GPT-5.4) with optional tiebreaker rounds using extended thinking.
+#
+# Structure:
+#   score_name: The score being analyzed
+#   total_items_analyzed: Number of feedback items evaluated
+#   contradictions_found: Number of items flagged as contradictions or policy gaps
+#   topics: Clustered groups of contradictions with exemplar items
+#     Each exemplar includes:
+#       - voting: Per-model votes with reasoning traces
+#       - confidence: high/medium/low based on vote agreement
+#       - reason: Synthesized explanation of the policy issue
+#       - score_result_explanation: Original AI score explanation
+#       - edit_comment: Human reviewer's correction comment
+
+`;
+
 const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackContradictionsData | null>(null);
+  const [rawOutputString, setRawOutputString] = React.useState<string | null>(null);
 
   let parsedOutput: any = null;
   if (props.output) {
@@ -312,26 +333,34 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         const text = await result.body.text();
         // Strip leading comment lines (context header added by backend)
         const jsonText = text.split('\n').filter(l => !l.startsWith('#')).join('\n');
-        setLoadedOutput(JSON.parse(jsonText));
+        const parsed = JSON.parse(jsonText);
+        setLoadedOutput(parsed);
+        // Build full raw output string for code view
+        setRawOutputString(CONTEXT_HEADER + JSON.stringify(parsed, null, 2));
       } catch (e) {
         console.warn('FeedbackContradictions: failed to load output attachment', e);
       }
     })();
   }, [outputCompacted, outputAttachment, loadedOutput]);
 
+  // Pass full loaded output to ReportBlock for code view
+  const reportBlockOutput = rawOutputString
+    ? { ...(parsedOutput ?? {}), rawOutput: rawOutputString }
+    : props.output;
+
   if (outputCompacted && !loadedOutput) {
-    return <ReportBlock {...props}><p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p></ReportBlock>;
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p></ReportBlock>;
   }
 
   const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
   if (!output) {
-    return <ReportBlock {...props}><p className="text-muted-foreground text-sm">No contradiction analysis data available.</p></ReportBlock>;
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-muted-foreground text-sm">No contradiction analysis data available.</p></ReportBlock>;
   }
 
   if (output.error) {
     return (
-      <ReportBlock {...props}>
+      <ReportBlock {...props} output={reportBlockOutput}>
         <div className="text-destructive text-sm">
           <p>Error generating FeedbackContradictions block:</p>
           <pre className="mt-1 text-xs whitespace-pre-wrap">{output.error}</pre>
@@ -343,7 +372,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const { score_name, total_items_analyzed, contradictions_found, topics = [] } = output;
 
   return (
-    <ReportBlock {...props}>
+    <ReportBlock {...props} output={reportBlockOutput}>
       <div className="space-y-1">
         {/* Summary header */}
         <div className="flex items-start justify-between gap-4 flex-wrap pb-2">
