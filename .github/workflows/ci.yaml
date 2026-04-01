@@ -98,7 +98,7 @@ jobs:
         
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci
+      run: npm ci --include=optional
         
     - name: Run TypeScript Type Check
       working-directory: ./dashboard
@@ -124,7 +124,7 @@ jobs:
 
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci
+      run: npm ci --include=optional
 
     - name: Build Storybook
       working-directory: ./dashboard
