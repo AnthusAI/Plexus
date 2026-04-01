@@ -94,7 +94,6 @@ def _compact_output_json_for_storage(
     """
     compact_payload: Dict[str, Any] = {
         "status": "ok",
-        "summary": "Large output moved to attached file due storage limits.",
         "output_compacted": True,
         "preview": _safe_output_preview(output_payload),
     }

@@ -20,25 +20,6 @@ from plexus.dashboard.api.models.scorecard import Scorecard
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_score_result_for_item(api_client: Any, feedback_item_id: str) -> Optional[Dict]:
-    """Fetch the ScoreResult linked to a FeedbackItem via the feedbackItemId GSI."""
-    try:
-        gql = """
-        query ListScoreResultsByFeedbackItemId($feedbackItemId: String!) {
-            listScoreResultByFeedbackItemId(feedbackItemId: $feedbackItemId) {
-                items { id value explanation }
-            }
-        }
-        """
-        result = await asyncio.to_thread(
-            api_client.execute, gql, {"feedbackItemId": feedback_item_id}
-        )
-        items = (result or {}).get("listScoreResultByFeedbackItemId", {}).get("items") or []
-        return items[0] if items else None
-    except Exception as exc:
-        logger.warning(f"_fetch_score_result_for_item failed for {feedback_item_id}: {exc}")
-        return None
-
 
 class FeedbackContradictions(BaseReportBlock):
     """
@@ -163,9 +144,18 @@ class FeedbackContradictions(BaseReportBlock):
                 "topics": [],
             }, "\n".join(self.log_messages)
 
+        # --- Fetch score results for each item in parallel (by itemId + scoreId) ---
+        self._log(f"Fetching score results for {len(valid_items)} items…")
+        item_ids = [getattr(it, "itemId", None) for it in valid_items]
+        item_ids = [iid for iid in item_ids if iid]
+        score_results_by_item = await self._fetch_score_results_by_item_ids(
+            item_ids, score_obj.id
+        )
+        self._log(f"Loaded {len(score_results_by_item)} score results.")
+
         # --- Per-item LLM contradiction analysis ---
         self._log(f"Running contradiction analysis (max_concurrent={max_concurrent})…")
-        contradictions = await self._analyze_items(valid_items, guidelines, max_concurrent)
+        contradictions = await self._analyze_items(valid_items, guidelines, max_concurrent, score_results_by_item)
         self._log(f"Contradictions found: {len(contradictions)} / {len(valid_items)}")
 
         # --- Topic clustering ---
@@ -181,7 +171,28 @@ class FeedbackContradictions(BaseReportBlock):
             "contradictions_found": len(contradictions),
             "topics": topics,
         }
-        return output, "\n".join(self.log_messages)
+        context_header = (
+            "# Feedback Contradictions Report Output\n"
+            "#\n"
+            "# This report analyzes feedback items against score guidelines to identify\n"
+            "# contradictions and policy gaps. Items are classified by a multi-model voting\n"
+            "# system (Sonnet + GPT-5.4) with optional tiebreaker rounds using extended thinking.\n"
+            "#\n"
+            "# Structure:\n"
+            "#   score_name: The score being analyzed\n"
+            "#   total_items_analyzed: Number of feedback items evaluated\n"
+            "#   contradictions_found: Number of items flagged as contradictions or policy gaps\n"
+            "#   topics: Clustered groups of contradictions with exemplar items\n"
+            "#     Each exemplar includes:\n"
+            "#       - voting: Per-model votes with reasoning traces\n"
+            "#       - confidence: high/medium/low based on vote agreement\n"
+            "#       - reason: Synthesized explanation of the policy issue\n"
+            "#       - score_result_explanation: Original AI score explanation\n"
+            "#       - edit_comment: Human reviewer's correction comment\n"
+            "\n"
+        )
+        formatted_output = context_header + json.dumps(output, indent=2, ensure_ascii=False)
+        return formatted_output, "\n".join(self.log_messages)
 
     # --------------------------------------------------------------------------
     # Score resolution
@@ -252,102 +263,87 @@ class FeedbackContradictions(BaseReportBlock):
     # Per-item contradiction analysis
     # --------------------------------------------------------------------------
 
-    async def _analyze_items(
-        self,
-        items: List[Any],
-        guidelines: Optional[str],
-        max_concurrent: int,
-    ) -> List[Dict[str, Any]]:
-        """Return a list of contradiction dicts for items that contradict guidelines."""
-        semaphore = asyncio.Semaphore(max_concurrent)
+    def _build_contradiction_prompt(
+        self, item: Any, guidelines: Optional[str], score_explanation: str
+    ) -> Optional[str]:
+        """Build the classifier prompt for a feedback item. Returns None if item should be skipped."""
+        initial = getattr(item, "initialAnswerValue", "") or ""
+        final = getattr(item, "finalAnswerValue", "") or ""
+        edit_comment = getattr(item, "editCommentValue", "") or ""
 
-        async def analyze_one(item) -> Optional[Dict[str, Any]]:
-            async with semaphore:
-                # Fetch the ScoreResult asynchronously before entering the thread
-                sr = await _fetch_score_result_for_item(self.api_client, item.id)
-                score_explanation = (sr.get("explanation") or "")[:800] if sr else ""
-                return await asyncio.to_thread(
-                    self._check_contradiction, item, guidelines, score_explanation
-                )
+        if initial == final and not edit_comment:
+            return None
 
-        results = await asyncio.gather(*[analyze_one(it) for it in items])
-        return [r for r in results if r is not None]
+        situation_lines = [
+            "A phone call was evaluated by an AI scoring system.",
+            f"- AI score result: '{initial}'",
+        ]
+        if score_explanation:
+            situation_lines.append(f"- AI reasoning: {score_explanation}")
+        if initial != final:
+            situation_lines.append(f"- A human reviewer then changed the score to '{final}'.")
+        else:
+            situation_lines.append(f"- A human reviewer left the score as '{final}' but added a comment.")
+        situation_lines.append(f"- Reviewer's comment: \"{edit_comment}\"")
 
-    def _check_contradiction(
-        self, item: Any, guidelines: Optional[str], score_explanation: str = ""
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Call Bedrock to decide whether this feedback item contradicts the score
-        guidelines.  Returns a contradiction dict or None.
+        situation = "\n".join(situation_lines)
+        guideline_section = f"\nScore Guidelines:\n{guidelines[:3000]}\n" if guidelines else ""
 
-        The prompt explicitly describes the full chain of events so the LLM
-        understands the context: a phone call was scored by an AI, then a human
-        reviewer corrected the AI's score.  The `reason` output should describe
-        what happened on the call and why the correction contradicts guidelines —
-        not what the reviewer said.
-        """
-        try:
-            import boto3
-            import re as _re
+        return (
+            f"{situation}\n"
+            f"{guideline_section}\n"
+            "Based on the above, evaluate whether this feedback item falls into EITHER of "
+            "these two categories:\n\n"
+            "  A) CONTRADICTION: The reviewer's correction is INCONSISTENT with what the "
+            "guidelines say. For example, the guidelines prohibit something but the reviewer "
+            "approved it, or the guidelines permit something but the reviewer flagged it.\n\n"
+            "  B) POLICY GAP: The reviewer's comment describes agent behavior that the "
+            "guidelines do NOT address at all — neither permitting nor prohibiting it. This "
+            "means the guidelines may need to be updated to cover this behavior.\n\n"
+            "Mark `contradicts` as true for EITHER category A or B.\n\n"
+            "Reply ONLY with a JSON object with four keys:\n"
+            '  "contradicts": true or false\n'
+            '  "category": "contradiction" or "policy_gap" (or null if contradicts is false)\n'
+            '  "reason": one sentence focused on the POLICY issue — for contradictions, '
+            "name the specific guideline policy that is violated and what the agent did that "
+            "violates it; for policy gaps, name the agent behavior that the guidelines should "
+            "address but currently do not. Do NOT describe what the reviewer did.\n"
+            '  "guideline_quote": the exact short phrase from the guidelines being '
+            'contradicted (for category A), or "Policy gap: not addressed in guidelines" '
+            "(for category B), or empty string if not contradicting\n"
+            "Reply ONLY with valid JSON, no other text."
+        )
 
-            initial = getattr(item, "initialAnswerValue", "") or ""
-            final = getattr(item, "finalAnswerValue", "") or ""
-            edit_comment = getattr(item, "editCommentValue", "") or ""
+    def _parse_classifier_response(self, text: str) -> Dict:
+        """Extract and parse the JSON classifier response. Raises json.JSONDecodeError on failure."""
+        import re as _re
+        if "```" in text:
+            m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+            if m:
+                text = m.group(1).strip()
+        obj_m = _re.search(r"\{[\s\S]*\}", text)
+        if obj_m:
+            text = obj_m.group(0)
+        return json.loads(text)
 
-            # Skip items where nothing actually changed or comment is missing
-            if initial == final and not edit_comment:
-                return None
-
-            # Build the situation description
-            situation_lines = [
-                "A phone call was evaluated by an AI scoring system.",
-                f"- AI score result: '{initial}'",
-            ]
-            if score_explanation:
-                situation_lines.append(f"- AI reasoning: {score_explanation}")
-            if initial != final:
-                situation_lines.append(f"- A human reviewer then changed the score to '{final}'.")
-            else:
-                situation_lines.append(f"- A human reviewer left the score as '{final}' but added a comment.")
-            situation_lines.append(f"- Reviewer's comment: \"{edit_comment}\"")
-
-            situation = "\n".join(situation_lines)
-
-            guideline_section = ""
-            if guidelines:
-                guideline_section = f"\nScore Guidelines:\n{guidelines[:3000]}\n"
-
-            prompt = (
-                f"{situation}\n"
-                f"{guideline_section}\n"
-                "Based on the above, evaluate whether this feedback item falls into EITHER of "
-                "these two categories:\n\n"
-                "  A) CONTRADICTION: The reviewer's correction is INCONSISTENT with what the "
-                "guidelines say. For example, the guidelines prohibit something but the reviewer "
-                "approved it, or the guidelines permit something but the reviewer flagged it.\n\n"
-                "  B) POLICY GAP: The reviewer's comment describes agent behavior that the "
-                "guidelines do NOT address at all — neither permitting nor prohibiting it. This "
-                "means the guidelines may need to be updated to cover this behavior.\n\n"
-                "Mark `contradicts` as true for EITHER category A or B.\n\n"
-                "Focus on what likely happened on the phone call itself — not on what the reviewer "
-                "said. The reason should describe the agent behavior or call content.\n\n"
-                "Reply ONLY with a JSON object with three keys:\n"
-                "  \"contradicts\": true or false\n"
-                "  \"reason\": one sentence describing the agent behavior or call content that "
-                "is notable (or \"Consistent\" if neither category A nor B applies)\n"
-                "  \"guideline_quote\": the exact short phrase from the guidelines being "
-                "contradicted (for category A), or \"Policy gap: not addressed in guidelines\" "
-                "(for category B), or empty string if not contradicting\n"
-                "Reply ONLY with valid JSON, no other text."
-            )
-
-            bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 300,
-                "temperature": 0,
-                "messages": [{"role": "user", "content": prompt}],
-            })
+    def _invoke_bedrock(self, prompt: str, use_thinking: bool = False) -> Dict:
+        """Single Sonnet classifier call with one JSON-parse retry. Returns parsed dict or raises."""
+        import boto3
+        bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+        body_dict: Dict[str, Any] = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if use_thinking:
+            body_dict["max_tokens"] = 4000
+            body_dict["temperature"] = 1  # required when thinking is enabled
+            body_dict["thinking"] = {"type": "enabled", "budget_tokens": 3000}
+        else:
+            body_dict["max_tokens"] = 400
+            body_dict["temperature"] = 0
+        body = json.dumps(body_dict)
+        last_exc = None
+        for _ in range(2):
             response = bedrock.invoke_model(
                 modelId="us.anthropic.claude-sonnet-4-6",
                 body=body,
@@ -355,50 +351,283 @@ class FeedbackContradictions(BaseReportBlock):
                 accept="application/json",
             )
             raw = json.loads(response["body"].read())
-            text = raw["content"][0]["text"].strip()
+            # When thinking is enabled, response has thinking + text blocks
+            thinking_text = ""
+            text = ""
+            for block in raw["content"]:
+                if block.get("type") == "thinking":
+                    thinking_text = block.get("thinking", "")
+                elif block.get("type") == "text":
+                    text = block["text"].strip()
+            if not text:
+                text = raw["content"][0]["text"].strip()
+            try:
+                parsed = self._parse_classifier_response(text)
+                if thinking_text:
+                    parsed["_thinking"] = thinking_text
+                return parsed
+            except json.JSONDecodeError as exc:
+                last_exc = exc
+        raise last_exc  # type: ignore[misc]
 
-            # Strip markdown code fences if present
-            if "```" in text:
-                m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-                if m:
-                    text = m.group(1).strip()
+    def _invoke_openai(self, prompt: str, reasoning_effort: str = "low") -> Dict:
+        """Single GPT-5.4 classifier call with one JSON-parse retry. Returns parsed dict or raises."""
+        import os
+        from dotenv import load_dotenv
+        from openai import OpenAI
+        load_dotenv(override=False)  # load .env if OPENAI_API_KEY not already in environment
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        last_exc = None
+        for _ in range(2):
+            response = client.responses.create(
+                model="gpt-5.4",
+                reasoning={"effort": reasoning_effort},
+                input=[{"role": "user", "content": prompt}],
+                max_output_tokens=400,
+            )
+            text = response.output_text.strip()
+            # Extract reasoning summary if available
+            reasoning_summary = ""
+            for item in response.output:
+                if getattr(item, "type", None) == "reasoning":
+                    for part in getattr(item, "summary", []) or []:
+                        if getattr(part, "type", None) == "summary_text":
+                            reasoning_summary += getattr(part, "text", "")
+            try:
+                parsed = self._parse_classifier_response(text)
+                if reasoning_summary:
+                    parsed["_thinking"] = reasoning_summary
+                return parsed
+            except json.JSONDecodeError as exc:
+                last_exc = exc
+        raise last_exc  # type: ignore[misc]
 
-            # Extract JSON object even if surrounded by prose
-            obj_m = _re.search(r"\{[\s\S]*\}", text)
-            if obj_m:
-                text = obj_m.group(0)
+    def _build_exemplar(
+        self,
+        item: Any,
+        best_result: Dict,
+        votes_meta: List[Dict],
+        score_explanation: str,
+        confidence: str = "high",
+    ) -> Dict:
+        """Build the exemplar dict from item metadata and the winning classifier result."""
+        edited_at = getattr(item, "editedAt", None)
+        if hasattr(edited_at, "isoformat"):
+            edited_at = edited_at.isoformat()
 
-            parsed = json.loads(text)
-            if not parsed.get("contradicts"):
-                return None
+        nested_item = getattr(item, "item", None)
+        item_external_id = getattr(nested_item, "externalId", None) if nested_item else None
 
-            edited_at = getattr(item, "editedAt", None)
-            if hasattr(edited_at, "isoformat"):
-                edited_at = edited_at.isoformat()
-
-            # Pull identifiers from the nested Item record if available
-            nested_item = getattr(item, "item", None)
+        modern_identifiers = getattr(nested_item, "item_identifiers", None) if nested_item else None
+        if modern_identifiers:
+            item_identifiers = json.dumps(
+                [{"name": i.get("name", ""), "id": i.get("value", ""), "url": i.get("url")}
+                 for i in sorted(modern_identifiers, key=lambda x: x.get("position") or 0)]
+            )
+        else:
             item_identifiers = getattr(nested_item, "identifiers", None) if nested_item else None
-            item_external_id = getattr(nested_item, "externalId", None) if nested_item else None
 
-            return {
-                "feedback_item_id": item.id,
-                "item_id": getattr(item, "itemId", None),
-                "item_identifiers": item_identifiers,
-                "item_external_id": item_external_id,
-                "initial_value": initial,
-                "final_value": final,
-                "score_result_explanation": score_explanation,
-                "edit_comment": edit_comment,
-                "editor_name": getattr(item, "editorName", None),
-                "edited_at": edited_at,
-                "reason": parsed.get("reason", ""),
-                "guideline_quote": parsed.get("guideline_quote", ""),
-                "is_invalid": getattr(item, "isInvalid", False) or False,
+        return {
+            "feedback_item_id": item.id,
+            "item_id": getattr(item, "itemId", None),
+            "item_identifiers": item_identifiers,
+            "item_external_id": item_external_id,
+            "initial_value": getattr(item, "initialAnswerValue", "") or "",
+            "final_value": getattr(item, "finalAnswerValue", "") or "",
+            "score_result_explanation": score_explanation,
+            "edit_comment": getattr(item, "editCommentValue", "") or "",
+            "editor_name": getattr(item, "editorName", None),
+            "edited_at": edited_at,
+            "reason": best_result.get("reason", ""),
+            "category": best_result.get("category", ""),
+            "guideline_quote": best_result.get("guideline_quote", ""),
+            "is_invalid": getattr(item, "isInvalid", False) or False,
+            "confidence": confidence,
+            "voting": votes_meta,
+        }
+
+    def _synthesize_explanation(self, prompt: str, votes_meta: List[Dict],
+                               use_thinking: bool = False) -> Dict:
+        """Synthesize a final explanation from all vote responses using Sonnet."""
+        vote_descriptions = []
+        for i, v in enumerate(votes_meta, 1):
+            if v["result"] is None:
+                vote_descriptions.append(f"Vote {i} ({v['model']}): FAILED (no response)")
+            else:
+                label = "CONTRADICTION" if v["result"] else "NOT A CONTRADICTION"
+                desc = (
+                    f"Vote {i} ({v['model']}): {label}\n"
+                    f"  Reason: {v.get('reason', 'N/A')}\n"
+                    f"  Category: {v.get('category', 'N/A')}\n"
+                    f"  Guideline quote: {v.get('guideline_quote', 'N/A')}"
+                )
+                if v.get("thinking"):
+                    desc += f"\n  Internal reasoning: {v['thinking'][:500]}"
+                vote_descriptions.append(desc)
+        votes_text = "\n\n".join(vote_descriptions)
+        yes_count = sum(1 for v in votes_meta if v["result"] is True)
+        no_count = sum(1 for v in votes_meta if v["result"] is False)
+
+        synthesis_prompt = (
+            f"You are reviewing the results of a multi-model voting system that evaluated "
+            f"whether a feedback item represents a policy contradiction or gap.\n\n"
+            f"ORIGINAL EVALUATION CONTEXT:\n{prompt}\n\n"
+            f"VOTE RESULTS ({yes_count} yes, {no_count} no):\n\n{votes_text}\n\n"
+            f"Based on the majority decision and all the reasoning above, write a SINGLE "
+            f"synthesized explanation. Your explanation should:\n"
+            f"- Describe the policy issue (not what the reviewer did)\n"
+            f"- If the votes were unanimous, synthesize the best reasoning\n"
+            f"- If the votes were split, acknowledge the ambiguity — explain "
+            f"why this case is genuinely borderline and what the different perspectives were\n\n"
+            f"Reply ONLY with a JSON object:\n"
+            f'  "reason": one or two sentences synthesizing the explanation\n'
+            f'  "category": "contradiction" or "policy_gap"\n'
+            f'  "guideline_quote": the most relevant guideline phrase, '
+            f'or "Policy gap: not addressed in guidelines"\n'
+            f"Reply ONLY with valid JSON, no other text."
+        )
+
+        return self._invoke_bedrock(synthesis_prompt, use_thinking=use_thinking)
+
+    async def _fetch_score_results_by_item_ids(
+        self, item_ids: List[str], score_id: str
+    ) -> Dict[str, Any]:
+        """Fetch ScoreResults for a list of item IDs, filtered to a specific score."""
+        gql = """
+        query GetScoreResultsByItemId($itemId: String!, $scoreId: String!) {
+            listScoreResultByItemId(
+                itemId: $itemId,
+                filter: { scoreId: { eq: $scoreId } }
+                limit: 5
+            ) {
+                items { id value explanation itemId scoreId }
             }
-        except Exception as exc:
-            logger.warning(f"Contradiction check failed for item {getattr(item, 'id', '?')}: {exc}")
-            return None
+        }
+        """
+        sem = asyncio.Semaphore(20)
+
+        async def fetch_one(item_id: str):
+            async with sem:
+                try:
+                    result = await asyncio.to_thread(
+                        self.api_client.execute, gql,
+                        {"itemId": item_id, "scoreId": score_id}
+                    )
+                    items = (result or {}).get("listScoreResultByItemId", {}).get("items") or []
+                    return item_id, items[0] if items else None
+                except Exception as exc:
+                    logger.warning(f"score result fetch failed for item {item_id}: {exc}")
+                    return item_id, None
+
+        results = await asyncio.gather(*[fetch_one(iid) for iid in item_ids])
+        return {iid: sr for iid, sr in results if sr is not None}
+
+    async def _analyze_items(
+        self,
+        items: List[Any],
+        guidelines: Optional[str],
+        max_concurrent: int,
+        score_results_by_item: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Return a list of contradiction dicts for items that contradict guidelines."""
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def analyze_one(item) -> Optional[Dict[str, Any]]:
+            async with semaphore:
+                item_id = getattr(item, "itemId", None)
+                sr = score_results_by_item.get(item_id) if item_id else None
+                score_explanation = (sr.get("explanation") or "") if sr else ""
+
+                prompt = self._build_contradiction_prompt(item, guidelines, score_explanation)
+                if prompt is None:
+                    return None
+
+                # --- Round 1: Sonnet + GPT-5.4 + Sonnet (all 3 in parallel) ---
+                r1_raw = await asyncio.gather(
+                    asyncio.to_thread(self._invoke_bedrock, prompt),
+                    asyncio.to_thread(self._invoke_openai, prompt),
+                    asyncio.to_thread(self._invoke_bedrock, prompt),
+                    return_exceptions=True,
+                )
+                r1_models = ["sonnet", "gpt", "sonnet"]
+                r1 = [
+                    (model, r if not isinstance(r, Exception) else None)
+                    for model, r in zip(r1_models, r1_raw)
+                ]
+
+                valid_r1 = [(m, r) for m, r in r1 if r is not None]
+                if len(valid_r1) < 2:
+                    logger.warning(f"Too many vote failures for item {item.id}, skipping")
+                    return None
+
+                r1_bools = [r["contradicts"] for _, r in valid_r1]
+                yes = sum(r1_bools)
+                no = len(r1_bools) - yes
+                any_r1_failed = len(valid_r1) < len(r1)
+                unanimous = not any_r1_failed and ((yes == len(r1_bools)) or (no == len(r1_bools)))
+
+                r2: List[tuple] = []
+                if not unanimous:
+                    # --- Round 2: Sonnet (thinking) + GPT-5.4 (high reasoning) ---
+                    r2_raw = await asyncio.gather(
+                        asyncio.to_thread(self._invoke_bedrock, prompt, True),
+                        asyncio.to_thread(self._invoke_openai, prompt, "high"),
+                        return_exceptions=True,
+                    )
+                    r2_models = ["sonnet", "gpt"]
+                    r2 = [
+                        (model, r if not isinstance(r, Exception) else None)
+                        for model, r in zip(r2_models, r2_raw)
+                    ]
+                    valid_r2 = [(m, r) for m, r in r2 if r is not None]
+                    r2_bools = [r["contradicts"] for _, r in valid_r2]
+                    yes += sum(r2_bools)
+                    no += len(r2_bools) - sum(r2_bools)
+
+                if yes <= no:
+                    return None
+
+                # Build full vote metadata (with reasons) for synthesis
+                all_votes = r1 + r2
+                votes_with_reasons = [
+                    {
+                        "model": m,
+                        "result": r["contradicts"] if r is not None else None,
+                        "reason": r.get("reason", "") if r else "",
+                        "category": r.get("category", "") if r else "",
+                        "guideline_quote": r.get("guideline_quote", "") if r else "",
+                        "thinking": r.get("_thinking", "") if r else "",
+                    }
+                    for m, r in all_votes
+                ]
+
+                # Compute confidence from all votes (nulls count as non-agreements)
+                total_votes = len(votes_with_reasons)
+                yes_total = sum(1 for v in votes_with_reasons if v["result"] is True)
+                confidence_ratio = yes_total / total_votes if total_votes > 0 else 0
+                if confidence_ratio == 1.0:
+                    confidence = "high"
+                elif confidence_ratio >= 0.8:
+                    confidence = "medium"
+                else:
+                    confidence = "low"
+
+                # Synthesize a unified explanation from all vote responses
+                try:
+                    best = await asyncio.to_thread(
+                        self._synthesize_explanation, prompt, votes_with_reasons,
+                        not unanimous,
+                    )
+                except Exception:
+                    # Fall back to first winning-side Sonnet result
+                    all_valid = [(m, r) for m, r in all_votes if r is not None and r.get("contradicts")]
+                    sonnet_winners = [r for m, r in all_valid if m == "sonnet"]
+                    best = sonnet_winners[0] if sonnet_winners else all_valid[0][1]
+
+                return self._build_exemplar(item, best, votes_with_reasons, score_explanation, confidence)
+
+        results = await asyncio.gather(*[analyze_one(it) for it in items])
+        return [r for r in results if r is not None]
 
     # --------------------------------------------------------------------------
     # Topic clustering
@@ -436,7 +665,7 @@ class FeedbackContradictions(BaseReportBlock):
             "  - delivery timeline claims\n"
             "...should each be their OWN cluster, not merged together.\n"
             "Single-item clusters are fine if the behavior is genuinely distinct.\n\n"
-            "Assign each item a short topic label (3-7 words) that precisely names the agent behavior. "
+            "Assign each item a short topic label (3-7 words) that names the policy concern — either the guideline being contradicted or the unaddressed agent behavior. "
             "Reply ONLY with a JSON object mapping item number (as string) to topic label. "
             f"The JSON must have exactly {len(contradictions)} keys (one per item).\n"
             "Example: {{\"1\": \"Free medication claims\", \"2\": \"Free medication claims\", \"3\": \"High-pressure enrollment tactics\"}}"
@@ -466,16 +695,22 @@ class FeedbackContradictions(BaseReportBlock):
                 for label, items in label_to_items.items()
             )
             enrich_prompt = (
-                f"Below are topic clusters of reviewer corrections that contradict score guidelines, "
-                f"with sample contradiction descriptions.\n\n"
+                "Below are topic clusters from a feedback contradictions report. Each cluster "
+                "groups feedback items where reviewer corrections appear to conflict with the "
+                "score guidelines, or where reviewer comments flag agent behaviors not covered "
+                "by the guidelines.\n\n"
                 f"Score Guidelines:\n{guidelines[:4000]}\n\n"
                 f"Topic clusters:\n{cluster_descriptions}\n\n"
                 "For each cluster label, provide:\n"
-                "  1. A one-sentence summary of the contradiction pattern\n"
-                "  2. The exact short phrase from the guidelines that is violated\n"
+                "  1. summary: A one-sentence description of the POLICY issue — what guideline "
+                "is being contradicted or what policy gap exists. Focus on the implication for "
+                "the guidelines, NOT on what reviewers did.\n"
+                "  2. guideline_quote: The exact short phrase from the guidelines that is "
+                'contradicted, or "Policy gap: not addressed in guidelines" if the behavior '
+                "is absent from the guidelines entirely.\n"
                 "Reply ONLY with a JSON object with two keys:\n"
-                "  \"summaries\": object mapping topic label to one-sentence summary\n"
-                "  \"guideline_quotes\": object mapping topic label to exact guideline phrase violated\n"
+                '  "summaries": object mapping topic label to one-sentence policy-focused summary\n'
+                '  "guideline_quotes": object mapping topic label to guideline phrase or policy gap note\n'
             )
             try:
                 enrich_result = await asyncio.to_thread(self._call_bedrock_for_topics, enrich_prompt)
