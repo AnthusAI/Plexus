@@ -77,7 +77,7 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           </span>
         ) : (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             className="text-xs h-6 shrink-0"
             disabled={loading}
