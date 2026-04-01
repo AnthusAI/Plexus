@@ -121,7 +121,7 @@ class FeedbackContradictions(BaseReportBlock):
         # --- Fetch champion version guidelines ---
         guidelines = await self._fetch_guidelines(score_obj.id)
         if guidelines:
-            self._log(f"Loaded guidelines ({len(guidelines)} chars)")
+            self._log(f"Loaded guidelines ({len(guidelines)} chars, {guidelines.count(chr(10))+1} lines)")
         else:
             self._log("WARNING: No guidelines found for this score — contradiction detection will be limited.", level="WARNING")
 
@@ -134,7 +134,8 @@ class FeedbackContradictions(BaseReportBlock):
 
         # Exclude already-invalid items
         valid_items = [it for it in all_items if not getattr(it, "isInvalid", False)]
-        self._log(f"Fetched {len(all_items)} items; {len(valid_items)} eligible after excluding already-invalid.")
+        invalid_count = len(all_items) - len(valid_items)
+        self._log(f"Fetched {len(all_items)} feedback items; {len(valid_items)} eligible ({invalid_count} excluded as already-invalid).")
 
         if not valid_items:
             return {
@@ -151,12 +152,26 @@ class FeedbackContradictions(BaseReportBlock):
         score_results_by_item = await self._fetch_score_results_by_item_ids(
             item_ids, score_obj.id
         )
-        self._log(f"Loaded {len(score_results_by_item)} score results.")
+        self._log(f"Loaded {len(score_results_by_item)} score results ({len(score_results_by_item)}/{len(item_ids)} items have explanations).")
 
         # --- Per-item LLM contradiction analysis ---
         self._log(f"Running contradiction analysis (max_concurrent={max_concurrent})…")
         contradictions = await self._analyze_items(valid_items, guidelines, max_concurrent, score_results_by_item)
-        self._log(f"Contradictions found: {len(contradictions)} / {len(valid_items)}")
+        # Summarize vote statistics
+        all_votes = [v for c in contradictions for v in (c.get("voting") or [])]
+        yes_votes = sum(1 for v in all_votes if v.get("result") is True)
+        no_votes = sum(1 for v in all_votes if v.get("result") is False)
+        null_votes = sum(1 for v in all_votes if v.get("result") is None)
+        tiebreaker_items = sum(1 for c in contradictions if len(c.get("voting") or []) > 3)
+        high_conf = sum(1 for c in contradictions if c.get("confidence") == "high")
+        med_conf = sum(1 for c in contradictions if c.get("confidence") == "medium")
+        low_conf = sum(1 for c in contradictions if c.get("confidence") == "low")
+        self._log(
+            f"Contradictions found: {len(contradictions)} / {len(valid_items)} "
+            f"(confidence: {high_conf} high, {med_conf} medium, {low_conf} low; "
+            f"tiebreakers: {tiebreaker_items}; "
+            f"votes: {yes_votes} yes / {no_votes} no / {null_votes} failed)"
+        )
 
         # --- Topic clustering ---
         topics: List[Dict[str, Any]] = []
