@@ -320,9 +320,16 @@ class FeedbackContradictions(BaseReportBlock):
             if hasattr(edited_at, "isoformat"):
                 edited_at = edited_at.isoformat()
 
+            # Pull identifiers from the nested Item record if available
+            nested_item = getattr(item, "item", None)
+            item_identifiers = getattr(nested_item, "identifiers", None) if nested_item else None
+            item_external_id = getattr(nested_item, "externalId", None) if nested_item else None
+
             return {
                 "feedback_item_id": item.id,
                 "item_id": getattr(item, "itemId", None),
+                "item_identifiers": item_identifiers,
+                "item_external_id": item_external_id,
                 "initial_value": initial,
                 "final_value": final,
                 "edit_comment": edit_comment,
