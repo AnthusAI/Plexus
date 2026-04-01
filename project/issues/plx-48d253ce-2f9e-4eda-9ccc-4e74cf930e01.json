@@ -3,7 +3,7 @@
   "title": "Define behavior for scorecard-improvement skill",
   "description": "As a Plexus operator, I want a reusable skill that guides iterative score improvement, so that I can raise score quality with measurable evidence.\n\nFeature: Improve score quality with a reusable skill\nScenario: Use a structured loop to improve one score\nGiven a score, baseline evaluation metrics, and feedback examples\nWhen the agent applies the skill workflow\nThen it proposes focused changes, validates impact, and reports baseline-vs-new metrics",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-04-01T20:34:30.930273387Z",
-  "updated_at": "2026-04-01T20:34:30.930273387Z",
-  "closed_at": null,
+  "updated_at": "2026-04-01T20:47:06.294294923Z",
+  "closed_at": "2026-04-01T20:47:06.294294923Z",
   "custom": {}
 }
