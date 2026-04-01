@@ -10,6 +10,9 @@ import { IdentifierDisplay } from '@/components/ui/identifier-display';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import type { PluggableList } from 'unified';
+
+const markdownPlugins: PluggableList = [remarkGfm, remarkBreaks];
 
 // ---- Types ----------------------------------------------------------------
 
@@ -138,7 +141,8 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
     setLoading(true);
     try {
       const client = generateClient<Schema>();
-      await client.models.FeedbackItem.update({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (client.models.FeedbackItem.update as any)({
         id: exemplar.feedback_item_id,
         isInvalid: true,
       });
@@ -190,7 +194,7 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
         <div>
           <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Original explanation</h5>
           <div className="border-l-2 border-muted-foreground/30 pl-3 text-sm text-muted-foreground prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+            <ReactMarkdown remarkPlugins={markdownPlugins}>
               {exemplar.score_result_explanation}
             </ReactMarkdown>
           </div>
