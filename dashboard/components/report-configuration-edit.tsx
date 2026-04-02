@@ -13,7 +13,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react'
 import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { load as parseYaml, dump as stringifyYaml } from 'js-yaml'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
 
 // Define types based on Amplify schema
