@@ -4,6 +4,7 @@ Tests for FeedbackEvaluation class.
 
 import pytest
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
 from plexus.Evaluation import FeedbackEvaluation
@@ -540,3 +541,82 @@ class TestFeedbackEvaluation:
 
         assert len(sampled_id_sets[0]) == 5
         assert sampled_id_sets[0] == sampled_id_sets[1]
+
+    @pytest.mark.asyncio
+    async def test_root_cause_analysis_passes_max_exemplars_to_biblicus(self, mock_api_client, monkeypatch):
+        """RCA should pass exemplar limits through to the current Biblicus constructor."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key"
+        )
+        evaluation.dashboard_client = None
+
+        feedback_items = []
+        score_result_map = {}
+        for i in range(5):
+            item = MagicMock()
+            item.id = f"feedback-{i}"
+            item.itemId = f"item-{i}"
+            item.initialAnswerValue = "No"
+            item.finalAnswerValue = "Yes"
+            item.editCommentValue = f"Comment {i}"
+            item.editedAt = datetime.now(timezone.utc)
+            feedback_items.append(item)
+            score_result_map[item.id] = {
+                "value": "No",
+                "human_label": "Yes",
+                "explanation": f"Explanation {i}",
+            }
+
+        import biblicus.analysis.reinforcement_memory as rm_mod
+        captured = {}
+
+        class FakeReinforcementMemory:
+            def __init__(
+                self,
+                data_dir,
+                vector_store,
+                embed,
+                label=None,
+                infer_cause=None,
+                synthesize_cause=None,
+                min_topic_size=10,
+                embedding_dim=384,
+                max_exemplars=5,
+            ):
+                self.data_dir = data_dir
+                captured["max_exemplars"] = max_exemplars
+
+            def ingest(self, texts):
+                self.texts = texts
+
+            def analyze(self, group_id, min_topic_size=3):
+                return SimpleNamespace(topics=[])
+
+        monkeypatch.setattr(rm_mod, "ReinforcementMemory", FakeReinforcementMemory)
+        monkeypatch.setattr(rm_mod, "LocalVectorStore", lambda store_dir: object())
+        monkeypatch.setattr(
+            rm_mod,
+            "sentence_transformer_embedder",
+            lambda model_id: (lambda texts: [[0.0] * 384 for _ in texts]),
+        )
+        monkeypatch.setattr(rm_mod, "bedrock_labeler", lambda: None)
+        monkeypatch.setattr(rm_mod, "bedrock_causal", lambda: None)
+        monkeypatch.setattr(rm_mod, "bedrock_synthesizer", lambda: None)
+
+        result = await evaluation._run_root_cause_analysis(
+            feedback_items,
+            score_result_map=score_result_map,
+            original_explanations={},
+            max_report_exemplars=20,
+        )
+
+        assert captured["max_exemplars"] == 20
+        assert result["topics"] == []

@@ -2014,9 +2014,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 text = row['text']
                 content_id = row.get('content_id', '')
                 session_id = row.get('Session ID', content_id)
-                columns = row.get('columns', {})
-                form_id = columns.get('form_id', '')
-                metadata_string = columns.get('metadata', {})
+                columns = row.get('columns', {}) if isinstance(row.get('columns', {}), dict) else {}
+                form_id = row.get('form_id', columns.get('form_id', ''))
+                # Prefer top-level metadata from dataframe rows (e.g., FeedbackItems),
+                # but keep legacy support for nested row['columns']['metadata'].
+                metadata_string = row.get('metadata', columns.get('metadata', {}))
 
                 # Get feedback_item_id from the dataset if available
                 feedback_item_id = row.get('feedback_item_id', None)
@@ -2107,11 +2109,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 # Skip visualization if score instance not found
                                 pass
                 
-                scorecard_results = await self.scorecard.score_entire_text(
-                    text=text,
-                    metadata=metadata,
-                    subset_of_score_names=score_names_to_process,
-                    item=item
+                per_item_timeout_seconds = float(os.getenv("PLEXUS_EVALUATION_ITEM_TIMEOUT_SECONDS", "180"))
+                scorecard_results = await asyncio.wait_for(
+                    self.scorecard.score_entire_text(
+                        text=text,
+                        metadata=metadata,
+                        subset_of_score_names=score_names_to_process,
+                        item=item
+                    ),
+                    timeout=per_item_timeout_seconds,
                 )
 
                 # Create a new dictionary for filtered results
@@ -2296,7 +2302,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                 return result # Return the processed result dict
 
-            except (Timeout, RequestException) as e:
+            except (Timeout, RequestException, asyncio.TimeoutError) as e:
                 if attempt == max_attempts - 1:  # Last attempt
                     logging.error(f"Max attempts reached for content_id {row.get('content_id')}. Error: {e}")
                     # Return an error result instead of raising
@@ -3854,7 +3860,6 @@ class FeedbackEvaluation(Evaluation):
             import traceback
             self.logger.debug(traceback.format_exc())
             return {}
-
 
 class AccuracyEvaluation(Evaluation):
     def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
