@@ -11,6 +11,14 @@ Performance: Prefer kbs (Rust) when available; kanbus (Python) is equivalent but
 Warning: Editing project/ directly is a sin against The Way. Do not read or write anything in project/; work only through Kanbus.
 Architecture rule: NEVER EVER add 'fallback' logic for ANYTHING unless the user EXPLICITLY says to do that. Never add additional complexity that creates additional ways to do things. There should be one correct way to do everything. Do not add layers of complexity for backward compatibility. Our goal is to make ONE WAY work. Do not add fallbacks.
 
+## Git workflow rules
+
+**Never create commits, push branches, or open pull requests without the user explicitly asking.**
+
+This means: do not run `git commit`, `git push`, or `gh pr create` on your own initiative, even when work seems complete. If you think it's time to commit or open a PR, say so in text and wait for the user to confirm.
+
+Why: Prematurely opening PRs causes problems between the user and other humans on the project (code review expectations, merge timing, branch protection, deployment pipelines). The user decides when work is ready to be committed and when a PR should be opened.
+
 ## Overview
 
 Plexus provides comprehensive AI agent integration through the MCP (Model Context Protocol) server, enabling AI assistants like Claude and Cursor to interact natively with Plexus functionality. This integration transforms Plexus from a passive framework into an active **AI Agent Incubator** where human developers and AI agents collaborate on scoring, evaluation, and improvement workflows.
