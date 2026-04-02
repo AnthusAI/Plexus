@@ -175,6 +175,7 @@ stages:
   - finalize
 
 code: |
+
   -- Helper functions
   local function has_text(s)
     return type(s) == "string" and #s > 0
@@ -257,7 +258,11 @@ code: |
     local inject = "EXECUTE TOOL NOW: " .. tool_name .. "\nUSE THESE EXACT PARAMETERS (do not rename): " .. args_json .. "\nCALL THE TOOL IMMEDIATELY."
 
     local start_count = Tool.get_call_count(tool_name)
-    orchestrator({message = inject})
+
+    local status, err = pcall(function() orchestrator({message = inject}) end)
+    if not status then
+      error("Failed to call orchestrator agent: " .. tostring(err))
+    end
 
     -- Wait for the tool to be called (max 5 turns)
     for turn = 1, 5 do
@@ -282,8 +287,10 @@ code: |
   Log.info("Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score)
 
   -- Validate scorecard exists
+  -- plexus_scorecard_info returns the scorecard dict directly (no wrapper):
+  -- { name, key, externalId, additionalDetails: { id, ... }, sections: {...} }
   local scorecard_info = call_plexus_tool("plexus_scorecard_info", {scorecard_identifier = params.scorecard})
-  if not scorecard_info or not scorecard_info.scorecard then
+  if not scorecard_info or not scorecard_info.additionalDetails then
     return {
       success = false,
       status = "error",
@@ -291,17 +298,18 @@ code: |
     }
   end
 
-  local scorecard_data = scorecard_info.scorecard
-  local scorecard_id = scorecard_data.id
-  local scorecard_name = scorecard_data.name or scorecard_data.key
+  local scorecard_id = scorecard_info.additionalDetails.id
+  local scorecard_name = scorecard_info.name or scorecard_info.key
 
   -- Validate score exists
+  -- plexus_score_info returns the score dict directly:
+  -- { found, scoreId, scoreName, scoreKey, externalId, code, guidelines, location: {...}, ... }
   local score_info = call_plexus_tool("plexus_score_info", {
     score_identifier = params.score,
     scorecard_identifier = params.scorecard
   })
 
-  if not score_info or not score_info.score then
+  if not score_info or not score_info.scoreId then
     return {
       success = false,
       status = "error",
@@ -309,9 +317,8 @@ code: |
     }
   end
 
-  local score_data = score_info.score
-  local score_id = score_data.id
-  local score_name = score_data.name or score_data.key
+  local score_id = score_info.scoreId
+  local score_name = score_info.scoreName or score_info.scoreKey
 
   Log.info("Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id)
 
@@ -335,7 +342,8 @@ code: |
 
   local baseline_eval = call_plexus_tool("plexus_evaluation_run", baseline_eval_params)
 
-  if not baseline_eval or not baseline_eval.evaluation_id then
+  -- wait=true path returns "id", non-wait returns "evaluation_id"
+  if not baseline_eval or not (baseline_eval.id or baseline_eval.evaluation_id) then
     return {
       success = false,
       status = "error",
@@ -343,7 +351,7 @@ code: |
     }
   end
 
-  local baseline_evaluation_id = baseline_eval.evaluation_id
+  local baseline_evaluation_id = baseline_eval.id or baseline_eval.evaluation_id
   local baseline_metrics = extract_metrics(baseline_eval)
 
   State.set("baseline_evaluation_id", baseline_evaluation_id)
@@ -374,22 +382,41 @@ code: |
     Log.info("Starting iteration " .. iteration .. " of " .. params.max_iterations)
     State.set("current_iteration", iteration)
 
-    -- Fetch current score configuration
-    local score_pull_result = call_plexus_tool("plexus_score_pull", {
-      scorecard = params.scorecard,
-      score = params.score
+    -- Fetch current score configuration via pull (writes to local file)
+    -- plexus_score_pull returns { success, codeFilePath, guidelinesFilePath, ... }
+    local score_pull = call_plexus_tool("plexus_score_pull", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score
     })
 
-    if not score_pull_result or not has_text(score_pull_result.code) then
+    if not score_pull or not score_pull.success then
       return {
         success = false,
         status = "error",
-        message = "Failed to fetch current score configuration at iteration " .. iteration
+        message = "Failed to pull score configuration at iteration " .. iteration
       }
     end
 
-    local current_code = score_pull_result.code
-    local current_guidelines = score_pull_result.guidelines or ""
+    -- Read the pulled code from the local file (must be inside Step.checkpoint for determinism)
+    local current_code = Step.checkpoint(function()
+      return File.read(score_pull.codeFilePath)
+    end)
+    if not has_text(current_code) then
+      return {
+        success = false,
+        status = "error",
+        message = "Failed to read score code file at iteration " .. iteration
+      }
+    end
+    local current_guidelines = ""
+    if score_pull.guidelinesFilePath then
+      local g_result = Step.checkpoint(function()
+        return File.read(score_pull.guidelinesFilePath)
+      end)
+      if has_text(g_result) then
+        current_guidelines = g_result
+      end
+    end
 
     -- Prepare analysis context for agent
     local analysis_context = {
@@ -403,7 +430,7 @@ code: |
     }
 
     -- Agent analyzes RCA and proposes changes
-    analyzer.reset()
+    analyzer.clear_history()
 
     local analysis_inject = "Analyze the RCA output and propose a targeted improvement for iteration " .. tostring(iteration) .. ".\n\n" ..
       "Baseline metrics:\n" ..
@@ -428,8 +455,37 @@ code: |
     end
 
     local done_call = Tool.last_call("done")
-    local proposal_json = done_call.args.reason or "{}"
-    local proposal = Json.decode(proposal_json)
+    -- The done() tool encodes all kwargs into "reason" in its return value.
+    -- Decode: done_call.result is a JSON string like {"status":..., "reason": "{...}"}
+    local proposal = nil
+    local ok_res, done_result = pcall(function() return safe_decode(done_call.result) end)
+    if ok_res and done_result and has_text(done_result.reason) then
+      local ok_p, p = pcall(function() return Json.decode(done_result.reason) end)
+      if ok_p and type(p) == "table" then proposal = p end
+    end
+    -- Fallback: try args.reason (agent called done(reason=JSON_STRING))
+    if not proposal then
+      local ok_r, reason_val = pcall(function() return done_call.args.reason end)
+      if ok_r and has_text(reason_val) then
+        local ok_p, p = pcall(function() return Json.decode(reason_val) end)
+        if ok_p and type(p) == "table" then proposal = p end
+      end
+    end
+    -- Fallback: agent passed fields as direct kwargs (accessible via args table)
+    if not proposal then
+      local ok_h, hyp = pcall(function() return done_call.args.hypothesis end)
+      local ok_c, new_code = pcall(function() return done_call.args.new_code end)
+      if ok_h and has_text(hyp) and ok_c and has_text(new_code) then
+        local ok_ch, changes = pcall(function() return done_call.args.changes end)
+        local ok_rt, rationale = pcall(function() return done_call.args.rationale end)
+        proposal = {
+          hypothesis = hyp,
+          new_code = new_code,
+          changes = (ok_ch and changes) or "",
+          rationale = (ok_rt and rationale) or ""
+        }
+      end
+    end
 
     if not proposal or not has_text(proposal.hypothesis) or not has_text(proposal.new_code) then
       return {
@@ -477,7 +533,7 @@ code: |
         version_note = "Iteration " .. iteration .. ": " .. proposal.hypothesis
       })
 
-      if not update_result or not update_result.version_id then
+      if not update_result or not update_result.newVersionId then
         return {
           success = false,
           status = "error",
@@ -485,7 +541,7 @@ code: |
         }
       end
 
-      Log.info("Created score version: " .. update_result.version_id)
+      Log.info("Created score version: " .. update_result.newVersionId)
     end
 
     -- Run evaluation with fixed baseline
@@ -510,7 +566,7 @@ code: |
 
       eval_result = call_plexus_tool("plexus_evaluation_run", eval_params)
 
-      if not eval_result or not eval_result.evaluation_id then
+      if not eval_result or not (eval_result.id or eval_result.evaluation_id) then
         return {
           success = false,
           status = "error",
@@ -541,8 +597,8 @@ code: |
     -- Store iteration log
     local iteration_log = {
       iteration = iteration,
-      score_version_id = update_result and update_result.version_id or "dry_run",
-      evaluation_id = eval_result.evaluation_id,
+      score_version_id = update_result and update_result.newVersionId or "dry_run",
+      evaluation_id = eval_result.id or eval_result.evaluation_id,
       hypothesis = proposal.hypothesis,
       changes = proposal.changes or "",
       rationale = proposal.rationale or "",
