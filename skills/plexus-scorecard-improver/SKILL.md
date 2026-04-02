@@ -1,81 +1,89 @@
 ---
 name: plexus-scorecard-improver
-description: Improve Plexus scorecard performance through iterative, evidence-driven changes based on evaluation metrics and feedback analysis. Use when a user asks to raise accuracy, reduce false positives/false negatives, tune prompts or guidelines, or recover score quality after regressions.
+description: Improve alignment for a single Plexus score using feedback edits as ground-truth labels. Use when a user wants iterative score-code improvements driven by feedback evaluations, contradictions cleanup, and fixed-baseline comparisons.
 ---
 
 # Plexus Scorecard Improver
 
-Use this skill to run a repeatable score-improvement loop for an existing Plexus score.
+Use this skill for feedback-driven alignment improvement of one score at a time.
 
-## Improvement Loop
+## Input Contract
 
-1. Establish baseline.
-2. Diagnose error patterns.
-3. Propose the smallest high-impact change.
-4. Validate with evaluation.
-5. Decide to keep, revise, or revert.
-6. Summarize impact and next action.
+Required:
+- `scorecard`
+- `score`
 
-## Step 1: Establish Baseline
+Optional:
+- `days` (default: `90`)
 
-Collect the exact scorecard and score being tuned, then capture:
-- Current version/config reference.
-- Latest evaluation metrics (accuracy, precision/recall, AC1 if available).
-- Known pain pattern from the user (for example: too many false positives on disclosures).
+If `days` is omitted, explicitly use `90`.
 
-If the target metric is unclear, define one primary objective before changing anything.
+## Phase Workflow
 
-## Step 2: Diagnose with Evidence
+1. Select target
+- Confirm `scorecard` and `score`.
+- Confirm `days` window (default `90`).
 
-Use feedback/evaluation analysis to separate symptoms from causes:
-- Identify top false-positive and false-negative clusters.
-- Pull concrete examples, not just aggregate percentages.
-- Distinguish guideline ambiguity from prompt/config failure.
+2. Dataset sufficiency scan
+- Run `plexus_feedback_analysis` for the selected scorecard/score/window.
+- Treat this as a data sufficiency and coverage scan, not an optimization signal.
+- Summarize item count, agreement patterns, and comment richness.
 
-Favor the dominant error cluster first. Do not optimize multiple unrelated failure modes in one pass.
+3. Soft data gate (required discussion)
+- Discuss with the user whether data is sufficient to proceed.
+- No hard minimum item count.
+- If sample size is small but comments are high quality, explicitly allow proceeding with caution.
+- Do not advance without explicit user agreement.
 
-## Step 3: Choose the Right Executor
+4. Contradictions analysis
+- Run `plexus_report_run` using the parameterized Feedback Contradictions configuration for the same scorecard/score/window.
+- Review outcomes with user/SMEs:
+  - possible invalid feedback items,
+  - policy conflicts,
+  - candidate new policies.
 
-Use specialized agents based on change type:
-- Guidelines/content criteria edits: `plexus-score-guidelines-updater`.
-- YAML score configuration and scoring logic edits: `plexus-score-config-updater`.
-- Pattern diagnosis and confusion analysis: `plexus-alignment-analyzer`.
+5. Contradictions exit gate
+- Resolve contradiction/policy gaps before code iteration.
+- Route guideline work through `plexus-guidelines` workflow/tooling.
+- Require explicit user sign-off that contradictions/guidelines are ready before code iteration starts.
 
-If a request touches YAML config, delegate that work to `plexus-score-config-updater` instead of editing directly.
+6. Baseline feedback evaluation
+- Run `plexus_evaluation_run` with `evaluation_type="feedback"` for current score version.
+- Execute synchronously and wait for final output.
+- Capture and persist the baseline evaluation ID.
 
-## Step 4: Implement Minimal Change
+7. Iterative score-code loop
+- Make one focused score-code change (new ScoreVersion).
+- Record intent in Kanbus comments and ScoreVersion update message.
+- Run feedback evaluation synchronously for the new version.
+- Always set comparison baseline to the original baseline evaluation ID from phase 6.
+- Review metric deltas and root-cause analysis output.
+- Repeat until stop criteria are reached.
 
-Apply one focused change per iteration:
-- Tighten a specific boundary condition.
-- Add or revise one decision rule.
-- Clarify one ambiguous guideline phrase.
+## Execution Rules
 
-Avoid broad rewrites unless the baseline indicates systemic failure.
+- Feedback evaluations must run in synchronous/wait mode.
+- Do not run feedback evaluations in background async mode and poll later.
+- Always wait for final output, including root-cause analysis.
+- Keep baseline fixed to the original baseline evaluation ID for all post-baseline comparisons.
+- Do not promote a new champion unless explicitly authorized by the user.
 
-## Step 5: Validate
+## Handoff Boundaries
 
-Run a new evaluation after each change and compare against baseline:
-- Confirm primary objective improved.
-- Check for collateral regressions in other major classes.
-- Keep notes on what changed and why.
+- Guidelines changes: use `plexus-guidelines` workflow/tooling.
+- Score code/config changes: use the score config/code updater workflow.
 
-If results are mixed, prefer rollback and a narrower follow-up change over stacking unverified edits.
+## Iteration Log Requirements
 
-## Step 6: Report and Handoff
-
-Return a concise change summary:
-- Baseline metric vs. latest metric.
-- What changed (guidelines/config/prompt behavior).
-- Which error pattern improved.
-- Remaining risk and recommended next iteration.
-
-## Guardrails
-
-- Do not declare success without metric comparison against baseline.
-- Do not bundle unrelated fixes into one experiment.
-- Do not hide uncertainty; call out low sample size or noisy data.
-- Keep each loop auditable and reversible.
+For each iteration, log:
+- score version ID,
+- hypothesis,
+- concrete change,
+- evaluation ID,
+- baseline ID used,
+- key metric deltas,
+- keep/revise/revert decision.
 
 ## Optional Reference
 
-For quick triage patterns and decision rules, use [references/improvement-playbook.md](references/improvement-playbook.md).
+Use [references/improvement-playbook.md](references/improvement-playbook.md) for discussion prompts, contradiction triage outcomes, and fixed-baseline logging format.
