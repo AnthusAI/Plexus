@@ -43,7 +43,7 @@ echo "Installing Poetry and dev dependencies in $DEV_ENV"
 "$CONDA_BIN" run -n "$DEV_ENV" bash -lc "
 set -euo pipefail
 cd '$APP_DIR'
-python -m pip install --upgrade 'pip<25' 'poetry>=1.8,<2.0'
+python -m pip install --upgrade 'pip<25' 'poetry>=2.3,<2.4'
 POETRY_VIRTUALENVS_CREATE=false python -m poetry install --with dev --no-interaction --no-ansi
 "
 
