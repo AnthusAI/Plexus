@@ -9,15 +9,22 @@ from io import BytesIO
 from datetime import datetime, timezone
 import importlib
 import boto3
+import socket
+import json
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from botocore.exceptions import NoCredentialsError
 
 from plexus.CustomLogging import logging
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.item import Item
 from plexus.dashboard.api.models.data_source import DataSource
+from plexus.dashboard.api.models.feedback_item import FeedbackItem
+from plexus.dashboard.api.models.task import Task
 # from plexus.dashboard.api.models.data_set import DataSet
 from plexus.data.DataCache import DataCache
+from plexus.data.FeedbackItems import FeedbackItems
 from plexus.cli.shared.identifier_resolution import resolve_data_source
+from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
 
 
 def create_client() -> PlexusDashboardClient:
@@ -141,7 +148,13 @@ def dataset():
 @click.option('--source', 'source_identifier', required=True, help='Identifier (ID, key, or name) of the DataSource to load.')
 @click.option('--fresh', is_flag=True, help='Force a fresh load, ignoring any caches.')
 @click.option('--reload', is_flag=True, help='Reload existing dataset by refreshing values for current records only.')
-def load(source_identifier: str, fresh: bool, reload: bool):
+@click.option('--deterministic-order/--no-deterministic-order', default=True, help='Deterministically sort rows before materializing parquet.')
+def load(
+    source_identifier: str,
+    fresh: bool,
+    reload: bool,
+    deterministic_order: bool
+):
     """Loads a dataset from a DataSource, generates a Parquet file, and attaches it to a new DataSet record."""
 
     async def _load():
@@ -194,7 +207,7 @@ def load(source_identifier: str, fresh: bool, reload: bool):
                 
                 # Handle built-in Plexus classes vs client-specific extensions
                 class_name = config['class']
-                if class_name in ['FeedbackItems']:
+                if class_name in ['FeedbackItems', 'ScorecardExampleReferenceItems']:
                     # Built-in Plexus classes (single file modules)
                     class_path = f"plexus.data.{class_name}"
                 else:
@@ -274,6 +287,13 @@ def load(source_identifier: str, fresh: bool, reload: bool):
         if item_config:
             logging.info("Applying item pipeline from item_config to dataset text...")
             dataframe = apply_item_pipeline_to_dataframe(dataframe, item_config, client)
+
+        if deterministic_order and not dataframe.empty:
+            for sort_column in ("content_id", "feedback_item_id", "item_id", "id"):
+                if sort_column in dataframe.columns:
+                    dataframe = dataframe.sort_values(by=sort_column, kind="stable").reset_index(drop=True)
+                    logging.info(f"Applied deterministic row ordering by '{sort_column}'.")
+                    break
         
         # Basic dataset logging (optimized for large datasets)
         logging.info(f"Dataset loaded: {dataframe.shape[0]} rows x {dataframe.shape[1]} columns")
@@ -352,7 +372,7 @@ def load(source_identifier: str, fresh: bool, reload: bool):
             dataset_input["scorecardId"] = data_source.scorecardId
         if hasattr(data_source, 'scoreId') and data_source.scoreId:
             dataset_input["scoreId"] = data_source.scoreId
-            
+
         new_dataset_record = client.execute(
             """
             mutation CreateDataSet($input: CreateDataSetInput!) {
@@ -435,3 +455,467 @@ def load(source_identifier: str, fresh: bool, reload: bool):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(_load()) 
+
+
+def _normalize_feedback_item_ids(raw_ids: Sequence[str]) -> List[str]:
+    """Parse repeated/comma-delimited feedback item ids into deterministic unique list."""
+    parsed: List[str] = []
+    for raw in raw_ids:
+        if raw is None:
+            continue
+        for token in str(raw).split(","):
+            token = token.strip()
+            if token:
+                parsed.append(token)
+    return sorted(set(parsed))
+
+
+def _fetch_scorecard_name(client: PlexusDashboardClient, scorecard_id: str) -> str:
+    result = client.execute(
+        """
+        query GetScorecardName($id: ID!) {
+            getScorecard(id: $id) {
+                id
+                name
+            }
+        }
+        """,
+        {"id": scorecard_id},
+    )
+    return (result.get("getScorecard") or {}).get("name") or scorecard_id
+
+
+def _fetch_score_name(client: PlexusDashboardClient, score_id: str) -> str:
+    result = client.execute(
+        """
+        query GetScoreName($id: ID!) {
+            getScore(id: $id) {
+                id
+                name
+                championVersionId
+            }
+        }
+        """,
+        {"id": score_id},
+    )
+    score_data = result.get("getScore") or {}
+    return (score_data.get("name") or score_id)
+
+
+def _fetch_score_champion_version(client: PlexusDashboardClient, score_id: str) -> Optional[str]:
+    result = client.execute(
+        """
+        query GetScoreChampionVersion($id: ID!) {
+            getScore(id: $id) {
+                id
+                championVersionId
+            }
+        }
+        """,
+        {"id": score_id},
+    )
+    return (result.get("getScore") or {}).get("championVersionId")
+
+
+def _fetch_feedback_item_with_item(client: PlexusDashboardClient, feedback_item_id: str) -> Optional[FeedbackItem]:
+    return FeedbackItem.get(
+        id=feedback_item_id,
+        client=client,
+        relationship_fields={
+            "item": [
+                "id",
+                "externalId",
+                "text",
+                "metadata",
+                "identifiers",
+                "createdAt",
+                "updatedAt",
+            ],
+        },
+    )
+
+
+def _create_associated_dataset_datasource_version(
+    client: PlexusDashboardClient,
+    *,
+    account_id: str,
+    scorecard_id: str,
+    score_id: str,
+    score_name: str,
+    source_report_block_id: Optional[str],
+    eligibility_rule: str,
+    feedback_item_ids: Sequence[str],
+) -> Tuple[str, str]:
+    """Create a dedicated DataSource + DataSourceVersion for this associated dataset build."""
+    timestamp = datetime.now(timezone.utc)
+    timestamp_label = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    ds_name = f"Associated Dataset Builder - {score_name} - {timestamp_label}"
+    ds_description = "Generated directly from vetted feedback item IDs."
+
+    ds_result = client.execute(
+        """
+        mutation CreateDataSource($input: CreateDataSourceInput!) {
+            createDataSource(input: $input) {
+                id
+                name
+                accountId
+                scorecardId
+                scoreId
+            }
+        }
+        """,
+        {
+            "input": {
+                "name": ds_name,
+                "description": ds_description,
+                "accountId": account_id,
+                "scorecardId": scorecard_id,
+                "scoreId": score_id,
+                "createdAt": timestamp.isoformat(),
+                "updatedAt": timestamp.isoformat(),
+            }
+        },
+    )
+    data_source = ds_result.get("createDataSource") or {}
+    data_source_id = data_source.get("id")
+    if not data_source_id:
+        raise ValueError("Failed to create DataSource for associated dataset build.")
+
+    yaml_configuration = yaml.safe_dump(
+        {
+            "class": "FeedbackItems",
+            "scorecard_id": scorecard_id,
+            "score_id": score_id,
+            "source_report_block_id": source_report_block_id,
+            "eligibility_rule": eligibility_rule,
+            "feedback_item_ids": list(feedback_item_ids),
+        },
+        sort_keys=False,
+    )
+
+    version_result = client.execute(
+        """
+        mutation CreateDataSourceVersion($input: CreateDataSourceVersionInput!) {
+            createDataSourceVersion(input: $input) {
+                id
+                dataSourceId
+            }
+        }
+        """,
+        {
+            "input": {
+                "dataSourceId": data_source_id,
+                "yamlConfiguration": yaml_configuration,
+                "isFeatured": False,
+                "note": "Generated by vetted-feedback associated dataset build command.",
+                "createdAt": timestamp.isoformat(),
+                "updatedAt": timestamp.isoformat(),
+            }
+        },
+    )
+    version_id = (version_result.get("createDataSourceVersion") or {}).get("id")
+    if not version_id:
+        raise ValueError("Failed to create DataSourceVersion for associated dataset build.")
+
+    client.execute(
+        """
+        mutation UpdateDataSource($input: UpdateDataSourceInput!) {
+            updateDataSource(input: $input) {
+                id
+                currentVersionId
+            }
+        }
+        """,
+        {"input": {"id": data_source_id, "currentVersionId": version_id}},
+    )
+
+    return data_source_id, version_id
+
+
+def _upload_dataset_parquet(
+    *,
+    dataframe: pd.DataFrame,
+    account_id: str,
+    dataset_id: str,
+) -> str:
+    """Materialize dataframe parquet and upload to datasets bucket; return s3 key."""
+    buffer = BytesIO()
+    table = pa.Table.from_pandas(dataframe)
+    pq.write_table(table, buffer)
+    buffer.seek(0)
+
+    bucket_name = get_amplify_bucket()
+    if not bucket_name:
+        raise ValueError("S3 bucket name not found. Set AMPLIFY_STORAGE_DATASETS_BUCKET_NAME.")
+
+    s3_key = f"datasets/{account_id}/{dataset_id}/dataset.parquet"
+    s3_client = boto3.client("s3")
+    s3_client.upload_fileobj(buffer, bucket_name, s3_key)
+    return s3_key
+
+
+def build_reference_dataset_from_feedback_ids(
+    *,
+    client: PlexusDashboardClient,
+    scorecard_identifier: str,
+    score_identifier: str,
+    feedback_item_ids: Sequence[str],
+    source_report_block_id: Optional[str] = None,
+    eligibility_rule: str = "unanimous non-contradiction",
+    task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Build an associated dataset directly from explicit feedback item IDs.
+
+    One strict label source is supported: FeedbackItem.finalAnswerValue.
+    """
+    normalized_ids = _normalize_feedback_item_ids(feedback_item_ids)
+    if not normalized_ids:
+        raise ValueError("At least one --feedback-item-id is required.")
+
+    scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise ValueError(f"Could not resolve scorecard identifier: {scorecard_identifier}")
+
+    score_id = resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise ValueError(
+            f"Could not resolve score identifier '{score_identifier}' within scorecard '{scorecard_id}'"
+        )
+
+    scorecard_name = _fetch_scorecard_name(client, scorecard_id)
+    score_name = _fetch_score_name(client, score_id)
+
+    task: Optional[Task] = None
+    if task_id:
+        task = Task.get_by_id(task_id, client)
+        if not task:
+            raise ValueError(f"Task not found: {task_id}")
+        worker_id = f"{socket.gethostname()}-{os.getpid()}"
+        task.update(
+            status="RUNNING",
+            dispatchStatus="DISPATCHED",
+            startedAt=datetime.now(timezone.utc).isoformat(),
+            workerNodeId=worker_id,
+            errorMessage=None,
+            error=None,
+        )
+
+    try:
+        feedback_items: List[FeedbackItem] = []
+        missing_ids: List[str] = []
+        mismatched_ids: List[str] = []
+        missing_label_ids: List[str] = []
+
+        for feedback_item_id in normalized_ids:
+            feedback_item = _fetch_feedback_item_with_item(client, feedback_item_id)
+            if feedback_item is None:
+                missing_ids.append(feedback_item_id)
+                continue
+
+            if feedback_item.scorecardId != scorecard_id or feedback_item.scoreId != score_id:
+                mismatched_ids.append(feedback_item_id)
+                continue
+
+            final_label = (feedback_item.finalAnswerValue or "").strip()
+            if not final_label:
+                missing_label_ids.append(feedback_item_id)
+                continue
+
+            feedback_items.append(feedback_item)
+
+        if missing_ids:
+            raise ValueError(f"Feedback items not found: {', '.join(missing_ids)}")
+        if mismatched_ids:
+            raise ValueError(
+                "Feedback items do not match the requested scorecard/score: "
+                + ", ".join(mismatched_ids)
+            )
+        if missing_label_ids:
+            raise ValueError(
+                "Feedback items are missing finalAnswerValue (required label source): "
+                + ", ".join(missing_label_ids)
+            )
+        if not feedback_items:
+            raise ValueError("No valid feedback items remain after validation.")
+
+        feedback_items = sorted(feedback_items, key=lambda item: item.id or "")
+        account_id = feedback_items[0].accountId
+        if not account_id:
+            raise ValueError("Feedback item accountId is missing.")
+        if any(item.accountId != account_id for item in feedback_items):
+            raise ValueError("All feedback items must belong to the same account.")
+
+        row_builder = FeedbackItems(scorecard=scorecard_id, score=score_id)
+        dataframe = row_builder._create_dataset_rows(feedback_items, score_name)
+        if dataframe.empty:
+            raise ValueError("Associated dataset build produced zero rows.")
+
+        if "feedback_item_id" in dataframe.columns:
+            dataframe = dataframe.sort_values(by="feedback_item_id", kind="stable").reset_index(drop=True)
+
+        _data_source_id, data_source_version_id = _create_associated_dataset_datasource_version(
+            client,
+            account_id=account_id,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            score_name=score_name,
+            source_report_block_id=source_report_block_id,
+            eligibility_rule=eligibility_rule,
+            feedback_item_ids=normalized_ids,
+        )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        dataset_input: Dict[str, Any] = {
+            "name": f"Associated Dataset - {score_name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
+            "description": "Associated dataset built directly from vetted feedback IDs.",
+            "accountId": account_id,
+            "scorecardId": scorecard_id,
+            "scoreId": score_id,
+            "dataSourceVersionId": data_source_version_id,
+            "provenance": {
+                "source": "vetted_feedback_ids",
+                "feedback_item_ids": normalized_ids,
+                "label_source": "finalAnswerValue",
+                "source_report_block_id": source_report_block_id,
+                "eligibility_rule": eligibility_rule,
+            },
+            "buildContext": {
+                "builder": "dataset.reference-from-feedback",
+                "scorecard_id": scorecard_id,
+                "scorecard_name": scorecard_name,
+                "score_id": score_id,
+                "score_name": score_name,
+                "feedback_item_count": len(normalized_ids),
+                "deterministic_order": True,
+                "row_count": int(len(dataframe)),
+                "column_count": int(len(dataframe.columns)),
+                "columns": dataframe.columns.tolist(),
+                "source_report_block_id": source_report_block_id,
+                "eligibility_rule": eligibility_rule,
+                "built_at": now_iso,
+            },
+        }
+
+        champion_version_id = _fetch_score_champion_version(client, score_id)
+        if champion_version_id:
+            dataset_input["scoreVersionId"] = champion_version_id
+
+        create_dataset_result = client.execute(
+            """
+            mutation CreateDataSet($input: CreateDataSetInput!) {
+                createDataSet(input: $input) {
+                    id
+                    name
+                    scoreId
+                    scorecardId
+                    dataSourceVersionId
+                }
+            }
+            """,
+            {"input": dataset_input},
+        )
+        dataset_record = create_dataset_result.get("createDataSet") or {}
+        dataset_id = dataset_record.get("id")
+        if not dataset_id:
+            raise ValueError("Failed to create DataSet record.")
+
+        s3_key = _upload_dataset_parquet(
+            dataframe=dataframe,
+            account_id=account_id,
+            dataset_id=dataset_id,
+        )
+
+        client.execute(
+            """
+            mutation UpdateDataSet($input: UpdateDataSetInput!) {
+                updateDataSet(input: $input) {
+                    id
+                    file
+                }
+            }
+            """,
+            {"input": {"id": dataset_id, "file": s3_key}},
+        )
+
+        result_payload: Dict[str, Any] = {
+            "dataset_id": dataset_id,
+            "dataset_name": dataset_input["name"],
+            "scorecard_id": scorecard_id,
+            "score_id": score_id,
+            "row_count": int(len(dataframe)),
+            "feedback_item_count": len(normalized_ids),
+            "eligibility_rule": eligibility_rule,
+            "source_report_block_id": source_report_block_id,
+            "s3_key": s3_key,
+        }
+
+        if task:
+            task.update(
+                status="COMPLETED",
+                completedAt=datetime.now(timezone.utc).isoformat(),
+                output=json.dumps(result_payload),
+                errorMessage=None,
+                error=None,
+            )
+
+        return result_payload
+    except Exception as exc:
+        if task:
+            task.update(
+                status="FAILED",
+                completedAt=datetime.now(timezone.utc).isoformat(),
+                errorMessage=str(exc),
+                error=str(exc),
+            )
+        raise
+
+
+@dataset.command(name="reference-from-feedback")
+@click.option("--scorecard", "scorecard_identifier", required=True, help="Scorecard identifier (id, key, name, or external id).")
+@click.option("--score", "score_identifier", required=True, help="Score identifier (id, key, name, or external id).")
+@click.option(
+    "--feedback-item-id",
+    "feedback_item_ids",
+    multiple=True,
+    required=True,
+    help="Feedback item ID to include (repeatable; comma-separated values also accepted).",
+)
+@click.option("--source-report-block-id", default=None, help="Optional source report block ID for provenance.")
+@click.option(
+    "--eligibility-rule",
+    default="unanimous non-contradiction",
+    show_default=True,
+    help="Eligibility rule recorded in dataset provenance/build context.",
+)
+@click.option("--task-id", default=None, help="Optional Task ID for dashboard task-backed execution.")
+def reference_from_feedback(
+    scorecard_identifier: str,
+    score_identifier: str,
+    feedback_item_ids: Tuple[str, ...],
+    source_report_block_id: Optional[str],
+    eligibility_rule: str,
+    task_id: Optional[str],
+):
+    """Build an associated dataset directly from explicit feedback item IDs."""
+    client = create_client()
+    try:
+        result = build_reference_dataset_from_feedback_ids(
+            client=client,
+            scorecard_identifier=scorecard_identifier,
+            score_identifier=score_identifier,
+            feedback_item_ids=feedback_item_ids,
+            source_report_block_id=source_report_block_id,
+            eligibility_rule=eligibility_rule,
+            task_id=task_id,
+        )
+        logging.info(
+            "Created associated dataset %s (%s rows) from %s feedback items.",
+            result["dataset_id"],
+            result["row_count"],
+            result["feedback_item_count"],
+        )
+        click.echo(json.dumps(result))
+    except Exception as exc:
+        logging.error(f"Associated dataset build failed: {exc}")
+        raise click.ClickException(str(exc))

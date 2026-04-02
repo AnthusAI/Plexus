@@ -5,7 +5,8 @@ Dataset tools for Plexus MCP Server
 import os
 import sys
 import logging
-from typing import Dict, Any, Union, Optional
+import json
+from typing import Dict, Any, Union, Optional, List
 from io import StringIO
 from fastmcp import FastMCP
 
@@ -283,4 +284,60 @@ def register_dataset_tools(mcp: FastMCP):
             if captured_output:
                 logger.warning(f"Captured unexpected stdout during dataset_load: {captured_output}")
             # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_dataset_reference_from_feedback(
+        scorecard: str,
+        score: str,
+        feedback_item_ids: List[str],
+        source_report_block_id: Optional[str] = None,
+        eligibility_rule: str = "unanimous non-contradiction",
+    ) -> str:
+        """
+        Build an associated dataset directly from explicit vetted feedback IDs.
+
+        Parameters:
+        - scorecard: Scorecard identifier (id/key/name/external id)
+        - score: Score identifier (id/key/name/external id)
+        - feedback_item_ids: Explicit feedback item IDs to include (labels come from finalAnswerValue)
+        - source_report_block_id: Optional report block ID for provenance
+        - eligibility_rule: Eligibility rule string recorded in provenance/build context
+
+        Returns:
+        - JSON payload with dataset_id, row_count, and provenance summary
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        try:
+            try:
+                from plexus.cli.dataset.datasets import create_client, build_reference_dataset_from_feedback_ids
+            except ImportError as exc:
+                return f"Error: Could not import dataset builder: {exc}"
+
+            if not isinstance(feedback_item_ids, list) or not feedback_item_ids:
+                return "Error: feedback_item_ids must be a non-empty list of feedback item IDs."
+
+            client = create_client()
+            result = build_reference_dataset_from_feedback_ids(
+                client=client,
+                scorecard_identifier=scorecard,
+                score_identifier=score,
+                feedback_item_ids=feedback_item_ids,
+                source_report_block_id=source_report_block_id,
+                eligibility_rule=eligibility_rule,
+                task_id=None,
+            )
+            return json.dumps(result)
+        except Exception as exc:
+            logger.error("Error creating associated dataset from feedback IDs: %s", exc, exc_info=True)
+            return f"Error: {str(exc)}"
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_dataset_reference_from_feedback: %s",
+                    captured_output,
+                )
             sys.stdout = old_stdout

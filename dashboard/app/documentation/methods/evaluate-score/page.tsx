@@ -128,6 +128,53 @@ results = batch.get_results()`}</code>
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Deterministic Associated Dataset Workflow</h2>
+          <p className="text-muted-foreground mb-4">
+            For repeatable regression checks, build deterministic associated datasets and run
+            evaluation directly against score-associated datasets.
+          </p>
+          <div className="space-y-4">
+            <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
+              <code>{`# Build a deterministic associated dataset
+plexus dataset load \\
+  --source <data_source_identifier> \\
+  --deterministic-order
+
+# Or build directly from vetted aligned feedback IDs
+plexus dataset reference-from-feedback \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --feedback-item-id <id1> \\
+  --feedback-item-id <id2> \\
+  --source-report-block-id <report_block_id>
+
+# Evaluate against latest associated dataset for this score
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --number-of-samples 200
+
+# Evaluate across all associated datasets for this score
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --all-score-associated-datasets \\
+  --number-of-samples 200`}</code>
+            </pre>
+            <p className="text-muted-foreground">
+              This keeps evaluation source-agnostic once the DataSet artifact exists and enforces
+              a single score-association selection path.
+            </p>
+            <p className="text-muted-foreground">
+              In the dashboard, the aligned mode of the Feedback Contradictions block can launch
+              this vetted-feedback associated dataset build directly from the report snapshot.
+            </p>
+          </div>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
           <p className="text-muted-foreground">
             Detailed documentation about evaluations is currently being developed. Check back soon for:
