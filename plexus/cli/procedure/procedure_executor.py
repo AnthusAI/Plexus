@@ -598,25 +598,9 @@ async def _execute_tactus(
                 from tactus.adapters.mcp import PydanticAIMCPAdapter
                 from pydantic_ai.toolsets import FunctionToolset
 
-                # Use a proxy so tool calls are recorded into the ToolPrimitive that the
-                # Tactus runtime creates during execute() (after this setup code runs).
-                # Without this, runtime.tool_primitive is None here and Tool.get_call_count()
-                # in Lua would never see any recorded calls.
-                class _RuntimeToolPrimitiveProxy:
-                    def __init__(self, rt):
-                        self._rt = rt
-
-                    def __bool__(self):
-                        return True
-
-                    def record_call(self, tool_name, args, result, agent_name=None):
-                        tp = self._rt.tool_primitive
-                        if tp:
-                            tp.record_call(tool_name, args, result, agent_name=agent_name)
-
                 mcp_adapter = PydanticAIMCPAdapter(
                     mcp_client_for_bridge,
-                    tool_primitive=_RuntimeToolPrimitiveProxy(runtime),
+                    runtime=runtime,
                 )
                 mcp_tools = await mcp_adapter.load_tools()
                 if mcp_tools and "plexus" not in runtime.toolset_registry:
