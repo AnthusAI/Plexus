@@ -89,7 +89,7 @@ export default function BasicsPage() {
               <p className="text-muted-foreground mb-4">
                 Deterministic score-associated datasets used for repeatable regression testing and score-optimization decisions.
               </p>
-              <Link href="/documentation/concepts/reference-datasets">
+              <Link href="/documentation/concepts/associated-datasets">
                 <DocButton>Learn about Associated Datasets</DocButton>
               </Link>
             </div>

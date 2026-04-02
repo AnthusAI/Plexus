@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "How deterministic score-associated datasets work and how to use them in evaluation workflows."
 }
 
-export default function ReferenceDatasetsPage() {
+export default function AssociatedDatasetsPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-6 space-y-8">
       <div>
