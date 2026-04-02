@@ -1,3 +1,6 @@
+@config "../tailwind.config.js";
+@import "tailwindcss";
+
 :root {
   --background: hsl(var(--mauve-1));
   --foreground: hsl(var(--mauve-11));
@@ -154,10 +157,6 @@
   --editor-number: hsl(var(--pink-9));
   --editor-keyword: hsl(var(--violet-9));
 }
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 @layer base {
   body {
@@ -316,6 +315,15 @@ body {
   }
   50% { 
     box-shadow: 0 0 15px hsl(var(--destructive)), 0 0 25px hsl(var(--destructive));
+  }
+}
+
+@keyframes console-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
   }
 }
 

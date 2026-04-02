@@ -20,9 +20,6 @@ def get_stages_from_state_machine() -> Dict[str, StageConfig]:
     Returns:
         Dictionary mapping stage names to StageConfig objects
     """
-    # Import the state machine to get the states
-    from .state_machine import ProcedureStateMachine
-    
     # For now, hardcode the stages based on the state machine
     # States: start, evaluation, hypothesis, test, insights, completed, error
     # We only create stages for the workflow states, not terminal states
@@ -86,4 +83,3 @@ def parse_state_machine_from_yaml(yaml_code: str) -> Dict[str, StageConfig]:
     # For now, return the hardcoded stages
     # Future: Parse YAML for custom state machine definition
     return get_stages_from_state_machine()
-

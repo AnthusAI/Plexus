@@ -1,0 +1,31 @@
+{
+  "id": "plx-3300df28-6b1d-4ef1-b30d-d411d0400a48",
+  "title": "Add per-item misclassification classification to the evaluation RCA pipeline",
+  "description": "## Summary\nAdd a per-item misclassification-classification stage to the evaluation RCA pipeline.\n\n## Deliverables\n- For each incorrect item, classify it into exactly one of the four categories.\n- Use all relevant per-item context available to the evaluation pipeline.\n- Keep this classification stage distinct from the optimization-focused RCA stage.\n- Ensure only `score_configuration_problem` items feed into score-fix recommendation logic.\n\n## Dependency note\nThis work should align with the RCA pipeline work under the reliability epic so the result persists reliably.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-428bb6",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-e3a500",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-3cbdef",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-02T13:21:09.680034Z",
+  "updated_at": "2026-04-02T13:21:09.680034Z",
+  "closed_at": null,
+  "custom": {}
+}

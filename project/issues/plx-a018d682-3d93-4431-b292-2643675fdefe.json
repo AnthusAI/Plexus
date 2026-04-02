@@ -1,0 +1,31 @@
+{
+  "id": "plx-a018d682-3d93-4431-b292-2643675fdefe",
+  "title": "Document scorecard 1039 evaluation",
+  "description": "Feature: Capture the requested feedback evaluation metrics\nScenario: Run the synchronous evaluation for scorecard 1039\n  Given the evaluation parameters (scorecard=1039, score=45427, version=b77666bf-2d90-4522-8796-1d27fe8317f6, days=30)\n  When the Plexus evaluation CLI completes in synchronous mode with logs saved\n  Then I have a concise JSON summary containing evaluation_id, metrics, root cause data, and baseline metadata",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4abf6318-5ba9-4998-9fd4-680d58950cf9",
+      "author": "ryan",
+      "text": "Plan added previously.",
+      "created_at": "2026-04-01T23:59:17.749821369Z"
+    },
+    {
+      "id": "a5794221-6aec-47a3-9e89-ed16228e6c81",
+      "author": "ryan",
+      "text": "Plan: Run plexus evaluate feedback --scorecard=1039 --score=45427 --days=30 --version=b77666bf-2d90-4522-8796-1d27fe8317f6, redirect output to logs/feedback_eval_1039.log, capture evaluation metadata, attach baseline metadata, and deliver requested JSON summary.",
+      "created_at": "2026-04-01T23:59:55.537325671Z"
+    }
+  ],
+  "created_at": "2026-04-01T23:56:17.158213231Z",
+  "updated_at": "2026-04-01T23:59:55.537325671Z",
+  "closed_at": null,
+  "custom": {}
+}

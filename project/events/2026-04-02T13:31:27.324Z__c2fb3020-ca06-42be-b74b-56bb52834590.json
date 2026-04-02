@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c2fb3020-ca06-42be-b74b-56bb52834590",
+  "issue_id": "plx-22533ff5-30cd-423a-8fbc-26af614f24af",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.324Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nBuild the workflow runner/orchestrator that executes the staged optimization protocol and records the resulting assessment bundle.\n\n## Deliverables\n- Execute deterministic and random evaluation stages in the defined order.\n- Capture the evaluation IDs involved in one candidate assessment bundle.\n- Record the combined result and workflow decision in a standardized way for operators and future agents.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 1,
+    "status": "open",
+    "title": "Build staged optimization runner and assessment-bundle recording workflow"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "title": "Feedback Evaluation Reliability and RCA Contract",
+  "description": "## Summary\nMake feedback-backed evaluations operationally reliable, with root-cause analysis treated as required process output rather than best-effort optional output.\n\n## Scope\n- RCA reliability is a separate workstream from deterministic dataset design.\n- The goal is a single correct RCA path for feedback-backed evaluations.\n- Successful completion should mean metrics and RCA are both present when RCA is enabled.\n\n## Key assumptions\n- RCA reliability is a dependency for high-trust optimization workflows.\n- Missing RCA with incorrect items is a process-critical defect.\n- Evaluation orchestration should treat the evaluation record as source of truth, not local CLI exit.\n\n## Notes\nCreate the child bug/tasks in this epic exactly as planned so operational reliability work stays visible and auditable.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ce2b7d1b-eee5-4776-a66f-c62d8d3fca0f",
+      "author": "ryan",
+      "text": "Investigating RCA design scope: comparing current feedback-evaluation RCA flow with the reusable feedback-contradictions analysis path to design a broader malfunction-classification layer. Goal is to distinguish score-config root causes from information gaps, SME/rubric questions, and mechanical/system failures without adding fallback paths.",
+      "created_at": "2026-04-02T13:00:49.291675Z"
+    },
+    {
+      "id": "1043e3a2-3849-48f4-9a66-eb029a677b11",
+      "author": "ryan",
+      "text": "## Investigation findings: RCA scope is too narrow\n\nCurrent feedback evaluation RCA assumes every wrong prediction should end in a score-configuration fix. That assumption is baked into the per-exemplar helper and the topic synthesis prompts.\n\n### Current code findings\n- `FeedbackEvaluation.run()` persists `parameters.root_cause` only when the RCA result has non-empty `topics`, and the evaluation still completes if RCA is absent. See `plexus/Evaluation.py` around the feedback RCA call and persistence gate.\n- `_run_root_cause_analysis()` clusters incorrect items and then asks for `suggested_fix` / `overall_improvement_suggestion`, always framed as score-configuration changes.\n- The reusable helper `plexus.rca_analysis.analyze_score_result()` is also explicitly score-fix oriented: it returns `(detailed_cause, suggested_fix)` and asks for one concrete score-code change.\n- Separately, `plexus.reports.blocks.feedback_contradictions.FeedbackContradictions` already contains a distinct per-item classifier for `contradiction` vs `policy_gap`, plus topic clustering and confidence/voting data.\n\n### Design implication\nRCA should not be the first or only analysis layer for misclassifications. We need a preceding or enclosing `malfunction classification` layer that classifies each wrong item into broad buckets before root-cause synthesis:\n- `score_configuration_gap`\n- `guideline_contradiction`\n- `policy_gap_question_for_sme`\n- `information_gap`\n- `mechanical_system_failure`\n- optionally `mixed_or_uncertain`\n\n### Why this matters\nOnly the `score_configuration_gap` bucket should flow into the existing \"suggest a code/config fix\" RCA path. The other buckets need different next actions:\n- contradiction -> invalidate/review feedback label or reconcile rubric drift\n- policy gap -> SME/rubric clarification\n- information gap -> acknowledge unverifiable item; do not optimize score against it\n- mechanical/system_failure -> bug investigation, not prompt iteration\n\n### Reuse / DRY direction\nDo not duplicate the contradictions logic inside evaluation RCA. Extract a shared analysis module from `FeedbackContradictions` so evaluation RCA and reports can call the same per-item policy classifier and topicing primitives.\n\n### Payload / UI direction\nThe evaluation payload should grow beyond `root_cause` to include a structured malfunction summary that the dashboard can surface as a glanceable breakdown by bucket and recommended next action.",
+      "created_at": "2026-04-02T13:01:47.226602Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:48:45.177043Z",
+  "updated_at": "2026-04-02T13:01:47.226602Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -2061,7 +2061,7 @@ def accuracy(
                 raise
                 
 
-            # Finalizing stage advancement now handled in AccuracyEvaluation.run()
+            # Analyzing stage advancement now handled in AccuracyEvaluation.run()
             
             # Final update to the evaluation record
             if evaluation_record:
@@ -2170,11 +2170,11 @@ def accuracy(
             
             logging.info('='*60)
             
-            # Complete the Finalizing stage
+            # Complete the Analyzing stage
             if tracker:
                 tracker.current_stage.complete()
                 tracker._update_api_task_progress(force_critical=True)
-                logging.info("Finalizing stage completed")
+                logging.info("Analyzing stage completed")
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
@@ -3033,6 +3033,9 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID). REQUIRED - feedback evaluations must be run on a single score.')
 @click.option('--days', default=7, type=int, help='Number of days to look back for feedback items (default: 7)')
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
+@click.option('--max-samples', default=None, type=int, help='Optional maximum number of feedback items/samples to evaluate.')
+@click.option('--sample-seed', default=None, type=int, help='Optional random seed used when sampling feedback items.')
+@click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 def feedback(
@@ -3040,6 +3043,9 @@ def feedback(
     score: str,
     days: int,
     version: Optional[str],
+    max_samples: Optional[int],
+    sample_seed: Optional[int],
+    baseline: Optional[str],
     use_yaml: bool,
     task_id: Optional[str]
 ):
@@ -3082,6 +3088,14 @@ def feedback(
     console.print(f"Scorecard: {scorecard}")
     console.print(f"Score: {score}")
     console.print(f"Time Period: Last {days} days")
+    if max_samples is not None:
+        console.print(f"Max Samples: {max_samples}")
+    if sample_seed is not None:
+        console.print(f"Sample Seed: {sample_seed}")
+
+    if max_samples is not None and max_samples <= 0:
+        console.print("[bold red]Error: --max-samples must be a positive integer[/bold red]")
+        return
     
     try:
         # Create API client
@@ -3328,7 +3342,12 @@ def feedback(
                         "scorecard": scorecard,
                         "score": score,
                         "version": version,
-                        "mode": "accuracy_with_feedback_dataset"
+                        "max_samples": max_samples,
+                        "sample_seed": sample_seed,
+                        "mode": "accuracy_with_feedback_dataset",
+                        "metadata": {
+                            "baseline": baseline
+                        } if baseline else {}
                     }),
                     "taskId": task_id
                 }
@@ -3352,17 +3371,19 @@ def feedback(
                     scorecard_id=scorecard_id,
                     task_id=task_id,
                     skip_local_reports=True,
-                    number_of_texts_to_sample=10000,  # Process all feedback items, not just default 100
+                    # Keep legacy behavior unless an explicit cap is supplied.
+                    number_of_texts_to_sample=max_samples if max_samples is not None else 10000,
+                    random_seed=sample_seed,
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                 )
                 
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
 
-                # Advance to Analyzing stage for root-cause analysis
+                # Update Analyzing stage status for root-cause analysis
+                # (AccuracyEvaluation.run() already advanced to Analyzing stage)
                 if tracker:
                     try:
-                        tracker.advance_stage()
                         if tracker.current_stage:
                             tracker.current_stage.status_message = "Running root-cause analysis..."
                     except Exception as exc:
@@ -3387,6 +3408,8 @@ def feedback(
                         evaluation_id=evaluation_id,
                         account_id=account_id,
                         api_client=client,
+                        max_samples=max_samples,
+                        sample_seed=sample_seed,
                     )
 
                     async def _run_rca():
@@ -3517,9 +3540,9 @@ def feedback(
                             tracker=tracker,
                         )
 
-                    root_cause_topics = asyncio.run(_run_rca())
+                    root_cause_result = asyncio.run(_run_rca())
 
-                    if root_cause_topics:
+                    if root_cause_result and root_cause_result.get("topics"):
                         eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
                         existing = {}
                         if eval_rec.parameters:
@@ -3527,9 +3550,10 @@ def feedback(
                                 existing = json.loads(eval_rec.parameters) if isinstance(eval_rec.parameters, str) else (eval_rec.parameters or {})
                             except Exception:
                                 existing = {}
-                        existing["root_cause"] = {"topics": root_cause_topics}
+                        existing["root_cause"] = root_cause_result
                         eval_rec.update(parameters=json.dumps(existing))
-                        console.print(f"[green]Root-cause analysis: {len(root_cause_topics)} topic(s) identified[/green]")
+                        num_topics = len(root_cause_result["topics"])
+                        console.print(f"[green]Root-cause analysis: {num_topics} topic(s) identified[/green]")
                     else:
                         console.print("[dim]Root-cause analysis: insufficient data or no topics found[/dim]")
                 except Exception as _rca_err:
@@ -3574,7 +3598,12 @@ def feedback(
             "parameters": json.dumps({
                 "days": days,
                 "scorecard": scorecard,
-                "score": score
+                "score": score,
+                "max_samples": max_samples,
+                "sample_seed": sample_seed,
+                "metadata": {
+                    "baseline": baseline
+                } if baseline else {}
             }),
             "taskId": task_id
         }
@@ -3595,7 +3624,9 @@ def feedback(
             evaluation_id=evaluation_id,
             account_id=account_id,
             task_id=task_id,
-            api_client=client  # Pass as keyword arg for FeedbackEvaluation
+            api_client=client,  # Pass as keyword arg for FeedbackEvaluation
+            max_samples=max_samples,
+            sample_seed=sample_seed,
         )
         
         # Run the evaluation
@@ -3904,7 +3935,9 @@ def await_run_single_feedback_evaluation(
     days: int,
     start_date: datetime,
     end_date: datetime,
-    task_id: Optional[str] = None
+    task_id: Optional[str] = None,
+    max_samples: Optional[int] = 200,
+    sample_seed: Optional[int] = None,
 ):
     """
     Helper function to run a single feedback evaluation.
@@ -3922,6 +3955,8 @@ def await_run_single_feedback_evaluation(
         start_date: Start date for filtering (UTC aware)
         end_date: End date for filtering (UTC aware)
         task_id: Optional task ID for progress tracking
+        max_samples: Optional maximum feedback items to process
+        sample_seed: Optional random seed used when sampling feedback items
         
     Returns:
         Evaluation record if successful, None otherwise
@@ -3976,7 +4011,9 @@ def await_run_single_feedback_evaluation(
             "parameters": json.dumps({
                 "days": days,
                 "scorecard": scorecard_name,
-                "score": score_name
+                "score": score_name,
+                "max_samples": max_samples,
+                "sample_seed": sample_seed,
             }),
             "taskId": task_id
         }
@@ -3984,8 +4021,8 @@ def await_run_single_feedback_evaluation(
         evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
         evaluation_id = evaluation_record.id
         
-        # Create FeedbackEvaluation instance
-        # Limit to max 200 samples to avoid performance issues
+        # Create FeedbackEvaluation instance.
+        # Defaults to 200 for feedback-all compatibility unless overridden.
         feedback_eval = FeedbackEvaluation(
             scorecard_name=scorecard_name,
             scorecard=None,
@@ -3996,7 +4033,8 @@ def await_run_single_feedback_evaluation(
             account_id=account_id,
             task_id=task_id,
             api_client=client,
-            max_samples=200  # Limit feedback items to process
+            max_samples=max_samples,
+            sample_seed=sample_seed,
         )
         
         # Run the evaluation with tracker

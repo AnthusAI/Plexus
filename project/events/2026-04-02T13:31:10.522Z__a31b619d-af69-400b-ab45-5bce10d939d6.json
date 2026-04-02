@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "a31b619d-af69-400b-ab45-5bce10d939d6",
+  "issue_id": "plx-aebf38bf-2c1a-4d96-b937-792e24073ad6",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T13:31:10.522Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "parent": {
+        "from": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+        "to": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72"
+      }
+    }
+  }
+}

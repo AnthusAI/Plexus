@@ -216,12 +216,14 @@ export const TaskStatus = React.memo(({
     // If we have an explicit currentStageName, use it
     if (currentStageName) return currentStageName;
 
-    // If task is completed or failed, use completion
-    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
-
-    // Find the first RUNNING stage from the stage configs
+    // Check stage-level status first — it's more granular than task-level status.
+    // A RUNNING stage takes priority even if the task-level status says COMPLETED,
+    // which can happen due to real-time data races during stage transitions.
     const runningStage = stageConfigs.find(s => s.status === 'RUNNING');
     if (runningStage) return runningStage.name;
+
+    // Only fall back to task-level status when no stage is actively running
+    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
 
     // If no running stage, find the first PENDING stage
     const pendingStage = stageConfigs.find(s => s.status === 'PENDING');

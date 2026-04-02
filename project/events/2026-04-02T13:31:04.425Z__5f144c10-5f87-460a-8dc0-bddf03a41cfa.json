@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5f144c10-5f87-460a-8dc0-bddf03a41cfa",
+  "issue_id": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:04.425Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nOperationalize score optimization as a staged workflow that combines fixed deterministic evidence, random generalization evidence, malfunction analysis, and explicit decision policy.\n\n## Scope\n- Candidate score changes are assessed with both fixed deterministic datasets and random-sample evaluations.\n- The workflow produces an assessment bundle rather than relying on one raw evaluation in isolation.\n- The workflow computes comparison signals such as generalization gap and stability/variance across random runs.\n- The workflow decides whether to keep optimizing, stop for SME clarification, route upstream remediation, or fix a mechanical/system issue.\n\n## Key assumptions\n- This epic depends on deterministic dataset infrastructure, reliable evaluation/RCA execution, and misclassification classification.\n- Public-facing web app documentation is required as part of this workflow.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+    "priority": 1,
+    "status": "open",
+    "title": "Optimization Workflow, Generalization, and Decision Policy"
+  }
+}

@@ -2014,9 +2014,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 text = row['text']
                 content_id = row.get('content_id', '')
                 session_id = row.get('Session ID', content_id)
-                columns = row.get('columns', {})
-                form_id = columns.get('form_id', '')
-                metadata_string = columns.get('metadata', {})
+                columns = row.get('columns', {}) if isinstance(row.get('columns', {}), dict) else {}
+                form_id = row.get('form_id', columns.get('form_id', ''))
+                # Prefer top-level metadata from dataframe rows (e.g., FeedbackItems),
+                # but keep legacy support for nested row['columns']['metadata'].
+                metadata_string = row.get('metadata', columns.get('metadata', {}))
 
                 # Get feedback_item_id from the dataset if available
                 feedback_item_id = row.get('feedback_item_id', None)
@@ -2107,11 +2109,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 # Skip visualization if score instance not found
                                 pass
                 
-                scorecard_results = await self.scorecard.score_entire_text(
-                    text=text,
-                    metadata=metadata,
-                    subset_of_score_names=score_names_to_process,
-                    item=item
+                per_item_timeout_seconds = float(os.getenv("PLEXUS_EVALUATION_ITEM_TIMEOUT_SECONDS", "180"))
+                scorecard_results = await asyncio.wait_for(
+                    self.scorecard.score_entire_text(
+                        text=text,
+                        metadata=metadata,
+                        subset_of_score_names=score_names_to_process,
+                        item=item
+                    ),
+                    timeout=per_item_timeout_seconds,
                 )
 
                 # Create a new dictionary for filtered results
@@ -2296,7 +2302,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                 return result # Return the processed result dict
 
-            except (Timeout, RequestException) as e:
+            except (Timeout, RequestException, asyncio.TimeoutError) as e:
                 if attempt == max_attempts - 1:  # Last attempt
                     logging.error(f"Max attempts reached for content_id {row.get('content_id')}. Error: {e}")
                     # Return an error result instead of raising
@@ -2664,6 +2670,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                 except (json.JSONDecodeError, TypeError) as e:
                     logging.warning(f"Could not parse parameters: {e}")
                     parameters = evaluation.parameters
+
+            baseline_evaluation_id = None
+            if isinstance(parameters, dict):
+                metadata = parameters.get("metadata")
+                if isinstance(metadata, dict):
+                    baseline_evaluation_id = metadata.get("baseline")
             
             # Parse confusion matrix if available
             confusion_matrix = None
@@ -2712,6 +2724,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'accuracy': evaluation.accuracy,
                 'metrics': metrics,
                 'parameters': parameters,
+                'baseline_evaluation_id': baseline_evaluation_id,
                 'confusion_matrix': confusion_matrix,
                 'predicted_class_distribution': predicted_class_distribution,
                 'dataset_class_distribution': dataset_class_distribution,
@@ -2877,6 +2890,7 @@ class FeedbackEvaluation(Evaluation):
         task_id: Optional[str] = None,
         api_client=None,
         max_samples: Optional[int] = None,
+        sample_seed: Optional[int] = None,
         **kwargs
     ):
         """
@@ -2891,12 +2905,14 @@ class FeedbackEvaluation(Evaluation):
             task_id: Optional task ID for progress tracking
             api_client: Optional API client (if not provided, will be created from kwargs)
             max_samples: Optional maximum number of feedback items to process (default: None = all)
+            sample_seed: Optional random seed used when sampling feedback items
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
         # Remove it from kwargs since parent Evaluation doesn't accept it
         self.api_client = api_client
         self.max_samples = max_samples
+        self.sample_seed = sample_seed
         
         # Call parent init (which expects scorecard_name and scorecard at minimum)
         # For FeedbackEvaluation, we don't need a full scorecard object
@@ -2977,7 +2993,11 @@ class FeedbackEvaluation(Evaluation):
             if self.max_samples and len(feedback_items) > self.max_samples:
                 import random
                 self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
-                feedback_items = random.sample(feedback_items, self.max_samples)
+                if self.sample_seed is not None:
+                    rng = random.Random(self.sample_seed)
+                    feedback_items = rng.sample(feedback_items, self.max_samples)
+                else:
+                    feedback_items = random.sample(feedback_items, self.max_samples)
             
             # Perform analysis on the feedback items
             overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
@@ -3033,7 +3053,7 @@ class FeedbackEvaluation(Evaluation):
             )
 
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
-            root_cause_topics = await self._run_root_cause_analysis(feedback_items)
+            root_cause_result = await self._run_root_cause_analysis(feedback_items)
 
             # Merge root-cause topics into existing parameters (preserving mode/score/days metadata)
             existing_params = evaluation_record.parameters
@@ -3043,8 +3063,8 @@ class FeedbackEvaluation(Evaluation):
                 except Exception:
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
-            if root_cause_topics:
-                parameters_dict["root_cause"] = {"topics": root_cause_topics}
+            if root_cause_result and root_cause_result.get("topics"):
+                parameters_dict["root_cause"] = root_cause_result
 
             # Update evaluation record with results
             # Ensure accuracy is never None (GraphQL schema requires Float!)
@@ -3537,42 +3557,27 @@ class FeedbackEvaluation(Evaluation):
                 _update_status(f"Analyzing {len(transcript_cache)} transcripts...")
 
             def _detailed_analysis(transcript: str, predicted: str, correct: str,
-                                   explanation: str, topic_label: str) -> str:
-                """Run a deep Bedrock call with the full transcript."""
-                import json as _json
-                import boto3 as _boto3
-                system = (
-                    "You are an expert quality analyst reviewing AI scoring errors on customer calls. "
-                    "Write a single concise paragraph (2-4 sentences) explaining specifically why "
-                    "the AI prediction was wrong for this call. Focus on what was said or not said "
-                    "in the transcript that makes the correct answer clear."
+                                   explanation: str, topic_label: str,
+                                   score_guidelines: str = "", score_yaml_code: str = "") -> tuple:
+                """Run a two-turn Bedrock Haiku conversation per exemplar.
+
+                Delegates to plexus.rca_analysis.analyze_score_result() for DRY reuse
+                with the plexus_score_result_investigate MCP tool.
+
+                Returns (detailed_cause, suggested_fix):
+                  - detailed_cause: why the AI prediction was wrong (2-4 sentences)
+                  - suggested_fix: one concrete score code change to prevent this error
+                """
+                from plexus.rca_analysis import analyze_score_result
+                return analyze_score_result(
+                    transcript=transcript,
+                    predicted=predicted,
+                    correct=correct,
+                    explanation=explanation,
+                    topic_label=topic_label,
+                    score_guidelines=score_guidelines,
+                    score_yaml_code=score_yaml_code,
                 )
-                prompt = (
-                    f"Topic cluster: {topic_label}\n"
-                    f"AI predicted: {predicted}\n"
-                    f"Correct answer: {correct}\n"
-                    f"AI reasoning: {(explanation or '')[:400]}\n\n"
-                    f"Call transcript:\n{transcript[:6000]}\n\n"
-                    "Why was the AI prediction wrong? (2-4 sentences)"
-                )
-                try:
-                    client = _boto3.client("bedrock-runtime", region_name="us-east-1")
-                    body = _json.dumps({
-                        "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": 200,
-                        "system": system,
-                        "messages": [{"role": "user", "content": prompt}],
-                    })
-                    resp = client.invoke_model(
-                        modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                        body=body,
-                        contentType="application/json",
-                        accept="application/json",
-                    )
-                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
-                except Exception as exc:
-                    self.logger.debug("Detailed analysis call failed: %s", exc)
-                    return ""
 
             # --- Fetch score context for synthesis (once for all topics) ---
             score_guidelines = ""
@@ -3632,7 +3637,9 @@ class FeedbackEvaluation(Evaluation):
                 deep_parts = []
                 for ex in exemplar_dicts:
                     if ex.get("detailed_cause"):
-                        deep_parts.append(f"- {ex['detailed_cause']}")
+                        deep_parts.append(f"- Analysis: {ex['detailed_cause']}")
+                    if ex.get("suggested_fix"):
+                        deep_parts.append(f"  Suggested fix: {ex['suggested_fix']}")
                 meta_parts = []
                 for ex in exemplar_dicts:
                     pred = ex.get("initial_answer_value", "")
@@ -3642,12 +3649,14 @@ class FeedbackEvaluation(Evaluation):
                         meta_parts.append(f"- Predicted '{pred}' → correct '{correct}': {text}")
 
                 turn1_prompt = "I have a cluster of AI scoring errors from a quality evaluation.\n\n"
+                if score_guidelines:
+                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:3000]}\n\n"
+                if score_yaml_code:
+                    turn1_prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:6000]}\n```\n\n"
                 if deep_parts:
                     turn1_prompt += "Detailed analysis of individual errors:\n" + "\n".join(deep_parts) + "\n\n"
                 if meta_parts:
                     turn1_prompt += f"All {len(exemplar_dicts)} items in this cluster:\n" + "\n".join(meta_parts) + "\n\n"
-                if score_guidelines:
-                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:3000]}\n\n"
                 turn1_prompt += (
                     "Explain in 2-3 paragraphs what patterns of errors exist in this cluster. "
                     "Be specific about the directionality of errors (what was predicted vs what "
@@ -3660,32 +3669,29 @@ class FeedbackEvaluation(Evaluation):
 
                 # Turn 2: improvement suggestion (same conversation)
                 improvement_suggestion = ""
-                if detailed_explanation and score_yaml_code:
+                if detailed_explanation:
                     messages.append({"role": "assistant", "content": detailed_explanation})
                     turn2_prompt = (
-                        "Now suggest how the score classifier could be improved to avoid these "
-                        "errors in the future. Here is the current score configuration code:\n\n"
-                        f"```yaml\n{score_yaml_code[:8000]}\n```\n"
-                    )
-                    if score_guidelines:
-                        turn2_prompt += f"\nScore guidelines:\n{score_guidelines[:3000]}\n"
-                    turn2_prompt += (
-                        "\nBased on the error patterns above and the current score code, write "
-                        "1-2 paragraphs suggesting specific improvements to the score configuration "
-                        "that would reduce these misclassifications."
+                        "Based on the error patterns above, suggest specific improvements to the "
+                        "score configuration that would reduce these misclassifications. Write "
+                        "1-2 paragraphs with concrete, actionable changes."
                     )
                     messages.append({"role": "user", "content": turn2_prompt})
                     improvement_suggestion = _bedrock_converse(system, messages, max_tokens=600)
 
                 return detailed_explanation, improvement_suggestion
 
-            def _generate_title(detailed_explanation: str, existing_titles: list) -> str:
+            def _generate_title(detailed_explanation: str, existing_titles: list,
+                                score_guidelines: str = "") -> str:
                 """Generate a concise, distinct topic title based on the detailed explanation."""
                 system = (
                     "You generate concise topic titles — 3 to 8 words, title case. "
                     "No preamble, no punctuation, no quotes. Just the title."
                 )
-                prompt = f"Error pattern summary:\n{detailed_explanation[:1500]}\n\n"
+                prompt = ""
+                if score_guidelines:
+                    prompt += f"Score guidelines (for context):\n{score_guidelines[:1000]}\n\n"
+                prompt += f"Error pattern summary:\n{detailed_explanation[:1500]}\n\n"
                 if existing_titles:
                     prompt += "Existing titles (do NOT reuse or closely repeat these):\n"
                     prompt += "\n".join(f"- {t}" for t in existing_titles) + "\n\n"
@@ -3693,45 +3699,109 @@ class FeedbackEvaluation(Evaluation):
                 messages = [{"role": "user", "content": prompt}]
                 return _bedrock_converse(system, messages, max_tokens=30)
 
+            def _top_level_synthesis(topics: list, score_guidelines: str = "",
+                                     score_yaml_code: str = "") -> tuple:
+                """Synthesize all per-topic analyses into an overall root cause summary and improvement suggestion."""
+                topic_parts = []
+                for t in topics:
+                    header_parts = [f"**{t.get('label', 'Unknown')}** ({t.get('member_count', 0)} item(s)"]
+                    if t.get('days_inactive') is not None:
+                        header_parts.append(f", {t['days_inactive']}d inactive")
+                    if t.get('is_new'):
+                        header_parts.append(", new")
+                    if t.get('is_trending'):
+                        header_parts.append(", trending")
+                    header_parts.append(f", {t.get('memory_tier', 'unknown')} memory)")
+                    header = "".join(header_parts)
+                    explanation = t.get("detailed_explanation", "").strip()
+                    suggestion = t.get("improvement_suggestion", "").strip()
+                    topic_parts.append(
+                        f"{header}\nAnalysis: {explanation}\nSuggested fix: {suggestion}"
+                    )
+                topics_text = "\n\n".join(topic_parts)
+
+                system = (
+                    "You are an expert QA analyst reviewing patterns in AI scoring errors "
+                    "on customer service calls. Be specific and concrete."
+                )
+                prompt1 = ""
+                if score_guidelines:
+                    prompt1 += f"Score guidelines:\n{score_guidelines[:2000]}\n\n"
+                if score_yaml_code:
+                    prompt1 += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
+                prompt1 += (
+                    f"Below are root-cause analysis results for {len(topics)} identified "
+                    f"error pattern(s), each with item counts and temporal context:\n\n"
+                    f"{topics_text}\n\n"
+                    "Write a 2-3 sentence executive summary of the overall root causes of "
+                    "misclassification across all topics. Prioritize by frequency and recency. "
+                    "Be specific and concrete."
+                )
+                messages = [{"role": "user", "content": prompt1}]
+                overall_explanation = _bedrock_converse(system, messages, max_tokens=300)
+
+                if not overall_explanation:
+                    return "", ""
+
+                messages.append({"role": "assistant", "content": overall_explanation})
+                messages.append({"role": "user", "content": (
+                    "Based on all the above error patterns and their individual improvement "
+                    "suggestions, write a 2-3 sentence overall recommendation for the most "
+                    "impactful changes to the score configuration. Prioritize by frequency "
+                    "and recency. Reference specific aspects of the score code or guidelines "
+                    "where relevant."
+                )})
+                overall_suggestion = _bedrock_converse(system, messages, max_tokens=300)
+
+                return overall_explanation, overall_suggestion
+
             # Convert TopicResult dataclasses → dicts matching the Topic interface
             # in dashboard/components/ui/topic-list.tsx
-            topics = []
+            # Topics and their exemplars are processed in parallel for speed.
             num_topics = len(result.topics)
-            for topic_idx, tr in enumerate(result.topics):
-                _update_status(f"Analyzing topic {topic_idx + 1}/{num_topics}...")
-                exemplar_dicts = []
-                for idx, ex in enumerate(tr.exemplars or []):
+
+            async def _process_topic(topic_idx: int, tr) -> dict:
+                """Process a single topic: analyze all exemplars in parallel, then synthesize."""
+                async def _analyze_exemplar(idx: int, ex) -> dict:
                     above_fold = idx < max_summarization_exemplars
                     item_id = ex.metadata.get("item_id")
                     transcript = transcript_cache.get(item_id) if item_id else None
 
                     detailed_cause = ""
+                    suggested_fix = ""
                     if above_fold and transcript:
                         predicted = ex.metadata.get("initial_answer_value", "")
                         correct = ex.metadata.get("final_answer_value", "")
                         explanation = ex.metadata.get("score_explanation", "")
-                        detailed_cause = await asyncio.to_thread(
+                        detailed_cause, suggested_fix = await asyncio.to_thread(
                             _detailed_analysis, transcript, predicted, correct,
-                            explanation, tr.label
+                            explanation, tr.label, score_guidelines, score_yaml_code
                         )
 
-                    exemplar_dicts.append({
+                    score_explanation = ex.metadata.get("score_explanation", "")
+                    return {
                         "text": ex.text,
                         "item_id": item_id,
                         "initial_answer_value": ex.metadata.get("initial_answer_value"),
                         "final_answer_value": ex.metadata.get("final_answer_value"),
                         "timestamp": ex.timestamp,
                         "above_fold": above_fold,
+                        **({"score_explanation": score_explanation} if score_explanation else {}),
                         **({"detailed_cause": detailed_cause} if detailed_cause else {}),
-                    })
+                        **({"suggested_fix": suggested_fix} if suggested_fix else {}),
+                    }
+
+                # Analyze all exemplars in this topic in parallel
+                exemplar_dicts = list(await asyncio.gather(
+                    *[_analyze_exemplar(idx, ex) for idx, ex in enumerate(tr.exemplars or [])]
+                ))
 
                 # Multi-turn synthesis: detailed explanation + improvement suggestion
-                _update_status(f"Synthesizing topic {topic_idx + 1}/{num_topics}...")
                 detailed_explanation, improvement_suggestion = await asyncio.to_thread(
                     _multi_turn_synthesis, exemplar_dicts, score_guidelines, score_yaml_code
                 )
 
-                topics.append({
+                return {
                     "topic_id": tr.topic_id,
                     "label": tr.label,
                     "keywords": tr.keywords,
@@ -3746,15 +3816,22 @@ class FeedbackEvaluation(Evaluation):
                     "cause": tr.root_cause,
                     "detailed_explanation": detailed_explanation,
                     "improvement_suggestion": improvement_suggestion,
-                })
+                }
 
-            # Post-loop: generate distinct topic titles informed by the detailed explanations
+            _update_status(f"Analyzing {num_topics} topic(s) in parallel...")
+            topics = list(await asyncio.gather(
+                *[_process_topic(i, tr) for i, tr in enumerate(result.topics)]
+            ))
+
+            # Post-loop: generate distinct topic titles informed by the detailed explanations.
+            # Must remain sequential to avoid duplicate titles (each call knows prior titles).
             _update_status("Generating topic titles...")
             existing_titles = []
             for topic in topics:
                 if topic.get("detailed_explanation"):
                     new_title = await asyncio.to_thread(
-                        _generate_title, topic["detailed_explanation"], existing_titles
+                        _generate_title, topic["detailed_explanation"], existing_titles,
+                        score_guidelines
                     )
                     if new_title:
                         topic["label"] = new_title
@@ -3764,14 +3841,25 @@ class FeedbackEvaluation(Evaluation):
                 else:
                     existing_titles.append(topic["label"])
 
-            return topics
+            overall_explanation = ""
+            overall_improvement_suggestion = ""
+            if len(topics) > 1:
+                _update_status("Synthesizing overall root cause summary...")
+                overall_explanation, overall_improvement_suggestion = await asyncio.to_thread(
+                    _top_level_synthesis, topics, score_guidelines, score_yaml_code
+                )
+
+            return {
+                "topics": topics,
+                "overall_explanation": overall_explanation,
+                "overall_improvement_suggestion": overall_improvement_suggestion,
+            }
 
         except Exception as e:
             self.logger.warning(f"Root-cause analysis failed (non-fatal): {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
-            return []
-
+            return {}
 
 class AccuracyEvaluation(Evaluation):
     def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
@@ -4016,10 +4104,10 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
-            # Advance to Finalizing stage after all processing is complete
+            # Advance to Analyzing stage after all processing is complete
             if tracker:
                 tracker.advance_stage()
-                self.logging.info("==== STAGE: Finalizing ====")
+                self.logging.info("==== STAGE: Analyzing ====")
 
             # Calculate metrics from results
             

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c684e540-c84e-4232-9792-a915b195e5fe",
+  "issue_id": "plx-5bb538cc-2ed9-4c63-8621-27ac9834885d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T05:07:33.129Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Expose /lab/analysis in the dashboard nav, add a proper analysis shell, and fix Settings navigation/redirect behavior.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Add analysis console shell to dashboard"
+  }
+}

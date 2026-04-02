@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4944c079-5545-45cc-818f-174ebd91a7cf",
+  "issue_id": "plx-eab09458-9e86-4b0e-a7c4-04bcbcfe9f55",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:21:09.803Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAdd a new evaluation-task visualization that shows the breakdown of misclassification categories at a glance.\n\n## Deliverables\n- Add a segmented-bar style visualization in the evaluation task UI for the four-category breakdown.\n- Show counts/proportions for `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, and `mechanical_malfunction`.\n- Present an overall assessment for whether the evaluation suggests optimization, SME clarification, upstream data remediation, or bug investigation.\n\n## Reuse direction\nBuild on the existing segmented progress bar / task-stage visual language rather than inventing a wholly separate pattern.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+    "priority": 1,
+    "status": "open",
+    "title": "Add evaluation-task visualization for misclassification category breakdown"
+  }
+}

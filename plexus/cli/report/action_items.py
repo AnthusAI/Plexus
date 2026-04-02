@@ -14,129 +14,11 @@ from plexus.cli.shared.console import console
 from plexus.cli.shared.client_utils import create_client
 from plexus.dashboard.api.models.report import Report
 from plexus.dashboard.api.models.report_block import ReportBlock
-from plexus.reports.s3_utils import download_report_block_file
+from plexus.reports.action_items_utils import collect_action_items, fetch_block_output
 
 from .utils import resolve_account_id_for_command, resolve_report
 
 logger = logging.getLogger(__name__)
-
-
-def _fetch_output(block: ReportBlock) -> Optional[dict]:
-    """Fetch and parse the block's output JSON, following output_attachment if compacted."""
-    raw = block.output
-    if not raw:
-        return None
-    if isinstance(raw, str):
-        raw = json.loads(raw)
-    if raw.get("output_compacted") and raw.get("output_attachment"):
-        content, _ = download_report_block_file(raw["output_attachment"])
-        # The attached output file may be YAML (feedback_analysis emits YAML)
-        # or JSON; try YAML first since it is a superset of JSON.
-        raw = yaml.safe_load(content)
-    return raw
-
-
-def _fetch_memories(memories_file: str) -> dict:
-    """Download a memories YAML file from S3 and return the parsed dict."""
-    content, _ = download_report_block_file(memories_file)
-    return yaml.safe_load(content) or {}
-
-
-def _extract_topics_for_scores(scores: list, memories: dict, scorecard_name: str,
-                                ac1_threshold: float, recency_days: int) -> list:
-    """Extract action items from a list of scores using a memories dict."""
-    items = []
-    topics_by_score_id = {
-        s["score_id"]: s.get("topics", [])
-        for s in memories.get("scores", [])
-        if s.get("score_id")
-    }
-    for score in scores:
-        score_ac1 = score.get("ac1")
-        if score_ac1 is not None and score_ac1 >= ac1_threshold:
-            continue
-        if score.get("mismatches", 0) == 0:
-            continue
-        topics = topics_by_score_id.get(score.get("score_id"), [])
-        for topic in topics:
-            days_inactive = topic.get("days_inactive")
-            if days_inactive is None or days_inactive > recency_days:
-                continue
-            items.append({
-                "scorecard_name": scorecard_name,
-                "score_name": score.get("score_name", "Unknown"),
-                "score_ac1": score_ac1,
-                "score_mismatches": score.get("mismatches", 0),
-                "topic_label": topic.get("label") or "Unnamed topic",
-                "cause": topic.get("cause"),
-                "keywords": topic.get("keywords", []),
-                "member_count": topic.get("member_count", 0),
-                "days_inactive": days_inactive,
-                "is_new": topic.get("is_new", False),
-                "is_trending": topic.get("is_trending", False),
-                "exemplars": topic.get("exemplars", []),
-            })
-    return items
-
-
-def _collect_action_items(output: dict, ac1_threshold: float, recency_days: int,
-                          scorecard_name_hint: str = None) -> list:
-    """Walk the report output and return filtered, annotated action items.
-
-    Handles both all-scorecards mode (output has a 'scorecards' list) and
-    single-scorecard mode (output has 'scores' and 'memories_file' at root).
-    """
-    items = []
-
-    if output.get("mode") == "all_scorecards":
-        # All-scorecards mode: one memories file per scorecard
-        for scorecard in output.get("scorecards", []):
-            sc_ac1 = scorecard.get("overall_ac1")
-            if sc_ac1 is not None and sc_ac1 >= ac1_threshold:
-                continue
-
-            memories_file = scorecard.get("memories_file")
-            if not memories_file:
-                continue
-            try:
-                memories = _fetch_memories(memories_file)
-            except Exception as e:
-                logger.warning(f"Could not fetch memories for {scorecard.get('scorecard_name')}: {e}")
-                continue
-
-            items.extend(_extract_topics_for_scores(
-                scorecard.get("scores", []),
-                memories,
-                scorecard.get("scorecard_name", "Unknown"),
-                ac1_threshold,
-                recency_days,
-            ))
-    else:
-        # Single-scorecard mode: memories at root level
-        sc_ac1 = output.get("overall_ac1")
-        if sc_ac1 is not None and sc_ac1 >= ac1_threshold:
-            return []
-
-        memories_file = output.get("memories_file")
-        memories = output.get("memories") or {}
-        if memories_file:
-            try:
-                memories = _fetch_memories(memories_file)
-            except Exception as e:
-                logger.warning(f"Could not fetch memories file: {e}")
-
-        scorecard_name = output.get("scorecard_name") or scorecard_name_hint or "Unknown Scorecard"
-        items.extend(_extract_topics_for_scores(
-            output.get("scores", []),
-            memories,
-            scorecard_name,
-            ac1_threshold,
-            recency_days,
-        ))
-
-    # Sort: most recent first, then highest item count
-    items.sort(key=lambda x: (x["days_inactive"], -x["member_count"]))
-    return items
 
 
 def _render_markdown(items: list, ac1_threshold: float, recency_days: int, date_range: dict) -> str:
@@ -144,9 +26,9 @@ def _render_markdown(items: list, ac1_threshold: float, recency_days: int, date_
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     period = ""
     if date_range:
-        period = f" ({date_range.get('start', '')[:10]} – {date_range.get('end', '')[:10]})"
+        period = f" ({date_range.get('start', '')[:10]} - {date_range.get('end', '')[:10]})"
     lines.append(f"# Action Items — All Feedback{period}")
-    lines.append(f"Generated: {today}  |  Thresholds: AC1 < {ac1_threshold:.2f}, inactive ≤ {recency_days}d\n")
+    lines.append(f"Generated: {today}  |  Thresholds: AC1 < {ac1_threshold:.2f}, inactive <= {recency_days}d\n")
 
     if not items:
         lines.append("_No action items found matching the specified thresholds._")
@@ -160,13 +42,13 @@ def _render_markdown(items: list, ac1_threshold: float, recency_days: int, date_
 
         ac1_str = f"{item['score_ac1']:.3f}" if item["score_ac1"] is not None else "N/A"
         urgency = ""
-        if item["is_trending"]:
-            urgency = " 📈 TRENDING"
-        elif item["is_new"]:
-            urgency = " 🆕 NEW"
+        if item.get("lifecycle_tier") == "new" or item["is_new"]:
+            urgency = " [NEW]"
+        elif item["is_trending"]:
+            urgency = " [TRENDING]"
 
         lines.append(
-            f"\n### {item['score_name']} › {item['topic_label']}{urgency}"
+            f"\n### {item['score_name']} > {item['topic_label']}{urgency}"
         )
         lines.append(
             f"AC1: {ac1_str}  |  {item['member_count']} items  |  {item['days_inactive']}d ago"
@@ -177,11 +59,24 @@ def _render_markdown(items: list, ac1_threshold: float, recency_days: int, date_
             lines.append(f"**Keywords:** {', '.join(item['keywords'])}")
 
         for ex in item["exemplars"][:2]:
-            text = ex.get("text", "") if isinstance(ex, dict) else str(ex)
-            identifiers = ex.get("identifiers", []) if isinstance(ex, dict) else []
+            if not isinstance(ex, dict):
+                lines.append(f"\n> {str(ex)[:200]}")
+                continue
+            text = ex.get("text", "")
+            identifiers = ex.get("identifiers", [])
             link = next((i.get("url") for i in identifiers if i.get("url")), None)
-            ref = f" ([link]({link}))" if link else ""
+            ref = f" ({link})" if link else ""
+
             lines.append(f"\n> {text[:200]}{ref}")
+
+            initial = ex.get("initial_answer_value")
+            final = ex.get("final_answer_value")
+            if initial is not None or final is not None:
+                lines.append(f"> Original: {initial}  ->  Corrected: {final}")
+
+            explanation = ex.get("score_explanation")
+            if explanation:
+                lines.append(f"> AI reasoning: {explanation[:300]}")
 
     return "\n".join(lines)
 
@@ -218,7 +113,7 @@ def action_items_command(
             console.print(f"[red]Report '{report_id}' not found.[/red]")
             raise click.Abort()
     else:
-        console.print("[dim]Fetching most recent report…[/dim]")
+        console.print("[dim]Fetching most recent report...[/dim]")
         reports = Report.list_by_account_id(account_id=account_id, client=client, limit=10)
         if not reports:
             console.print("[red]No reports found for this account.[/red]")
@@ -237,15 +132,28 @@ def action_items_command(
         console.print("[red]No FeedbackAnalysis block found in this report.[/red]")
         raise click.Abort()
 
-    console.print("[dim]Fetching report output…[/dim]")
-    output = _fetch_output(fa_block)
+    console.print("[dim]Fetching report output...[/dim]")
+    output = fetch_block_output(fa_block)
     if not output:
         console.print("[red]Could not read block output.[/red]")
         raise click.Abort()
 
-    console.print("[dim]Collecting action items…[/dim]")
-    items = _collect_action_items(output, ac1_threshold, recency_days,
-                                  scorecard_name_hint=fa_block.name)
+    # Try to get a human-readable scorecard name from report parameters
+    report_params = report_instance.parameters or {}
+    if isinstance(report_params, str):
+        try:
+            report_params = json.loads(report_params)
+        except Exception:
+            report_params = {}
+    scorecard_name_hint = (
+        report_params.get("param_scorecard_name")
+        or report_params.get("scorecard_name")
+        or fa_block.name
+    )
+
+    console.print("[dim]Collecting action items...[/dim]")
+    items = collect_action_items(output, ac1_threshold, recency_days,
+                                 scorecard_name_hint=scorecard_name_hint)
 
     console.print(f"[dim]Found {len(items)} action item(s).[/dim]\n")
 
