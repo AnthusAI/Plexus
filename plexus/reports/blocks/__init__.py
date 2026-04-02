@@ -7,6 +7,7 @@ from .explanation_analysis import ExplanationAnalysis
 from .topic_analysis import TopicAnalysis
 from .cost_analysis import CostAnalysis
 from .vector_topic_memory import VectorTopicMemory
+from .action_items_block import ActionItems
 from .feedback_contradictions import FeedbackContradictions
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "TopicAnalysis",
     "CostAnalysis",
     "VectorTopicMemory",
+    "ActionItems",
     "FeedbackContradictions",
 ]

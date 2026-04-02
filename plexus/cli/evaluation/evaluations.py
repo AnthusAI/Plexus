@@ -2061,7 +2061,7 @@ def accuracy(
                 raise
                 
 
-            # Finalizing stage advancement now handled in AccuracyEvaluation.run()
+            # Analyzing stage advancement now handled in AccuracyEvaluation.run()
             
             # Final update to the evaluation record
             if evaluation_record:
@@ -2170,11 +2170,11 @@ def accuracy(
             
             logging.info('='*60)
             
-            # Complete the Finalizing stage
+            # Complete the Analyzing stage
             if tracker:
                 tracker.current_stage.complete()
                 tracker._update_api_task_progress(force_critical=True)
-                logging.info("Finalizing stage completed")
+                logging.info("Analyzing stage completed")
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
@@ -3359,10 +3359,10 @@ def feedback(
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
 
-                # Advance to Analyzing stage for root-cause analysis
+                # Update Analyzing stage status for root-cause analysis
+                # (AccuracyEvaluation.run() already advanced to Analyzing stage)
                 if tracker:
                     try:
-                        tracker.advance_stage()
                         if tracker.current_stage:
                             tracker.current_stage.status_message = "Running root-cause analysis..."
                     except Exception as exc:
@@ -3517,9 +3517,9 @@ def feedback(
                             tracker=tracker,
                         )
 
-                    root_cause_topics = asyncio.run(_run_rca())
+                    root_cause_result = asyncio.run(_run_rca())
 
-                    if root_cause_topics:
+                    if root_cause_result and root_cause_result.get("topics"):
                         eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
                         existing = {}
                         if eval_rec.parameters:
@@ -3527,9 +3527,10 @@ def feedback(
                                 existing = json.loads(eval_rec.parameters) if isinstance(eval_rec.parameters, str) else (eval_rec.parameters or {})
                             except Exception:
                                 existing = {}
-                        existing["root_cause"] = {"topics": root_cause_topics}
+                        existing["root_cause"] = root_cause_result
                         eval_rec.update(parameters=json.dumps(existing))
-                        console.print(f"[green]Root-cause analysis: {len(root_cause_topics)} topic(s) identified[/green]")
+                        num_topics = len(root_cause_result["topics"])
+                        console.print(f"[green]Root-cause analysis: {num_topics} topic(s) identified[/green]")
                     else:
                         console.print("[dim]Root-cause analysis: insufficient data or no topics found[/dim]")
                 except Exception as _rca_err:

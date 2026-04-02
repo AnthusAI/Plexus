@@ -383,6 +383,9 @@ mcp = FastMCP(
       Monitor evaluation status via Plexus Dashboard or system logs.
     - plexus_evaluation_info: Get detailed information about a specific evaluation by ID or get the latest evaluation.
       Supports multiple output formats (json, yaml, text) and optional examples/quadrants.
+    - plexus_score_result_investigate: Investigate a single score result by running LLM inference to determine why
+      the prediction was wrong and suggest a concrete fix. Fetches score result, feedback item, transcript, and
+      score configuration, then uses an LLM to analyze the misclassification. Use after plexus_evaluation_score_result_find.
     
     ## Report Tools
     - plexus_reports_list: List available reports with optional filtering by report configuration

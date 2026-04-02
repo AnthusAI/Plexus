@@ -6,6 +6,7 @@ import { CardButton } from '@/components/CardButton'
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { Button } from '@/components/ui/button'
 import { ScoreResultTrace } from './score-result-trace'
+import { Timestamp } from './timestamp'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -34,9 +35,11 @@ export interface ScoreResultData {
   feedbackItem?: {
     editCommentValue: string | null
     initialAnswerValue?: string | null
+    initialCommentValue?: string | null
     finalAnswerValue?: string | null
     editorName?: string | null
     editedAt?: string | null
+    createdAt?: string | null
   } | null
 }
 
@@ -47,17 +50,21 @@ export interface ScoreResultComponentProps {
   onSelect?: () => void
   onClose?: () => void
   navigationControls?: React.ReactNode
+  rcaDetailedCause?: string
+  rcaSuggestedFix?: string
 }
 
 
 
-export function ScoreResultComponent({ 
+export function ScoreResultComponent({
   result,
   variant = 'list',
   isFocused = false,
   onSelect,
   onClose,
-  navigationControls
+  navigationControls,
+  rcaDetailedCause,
+  rcaSuggestedFix,
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -112,8 +119,24 @@ export function ScoreResultComponent({
                   isFocused={isFocused}
                 />
                 {result.explanation && (
-                  <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {result.explanation}
+                  <div className="text-sm text-muted-foreground mt-1 line-clamp-2 prose prose-sm max-w-none prose-p:text-muted-foreground prose-strong:text-foreground prose-em:text-muted-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <span>{children}</span>,
+                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        ul: ({ children }) => <span>{children}</span>,
+                        ol: ({ children }) => <span>{children}</span>,
+                        li: ({ children }) => <span>{children} </span>,
+                        h1: ({ children }) => <span className="font-semibold">{children}</span>,
+                        h2: ({ children }) => <span className="font-semibold">{children}</span>,
+                        h3: ({ children }) => <span className="font-semibold">{children}</span>,
+                        code: ({ children }) => <code className="bg-muted px-0.5 rounded text-xs font-mono">{children}</code>,
+                      }}
+                    >
+                      {result.explanation}
+                    </ReactMarkdown>
                   </div>
                 )}
               </div>
@@ -180,20 +203,6 @@ export function ScoreResultComponent({
               />
             </div>
 
-            {result.feedbackItem?.editCommentValue && (
-              <div>
-                <div className="flex items-center mb-1">
-                  <MessageCircleMore className="w-4 h-4 mr-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Feedback edit comment</p>
-                </div>
-                <div className="bg-background rounded-md p-3">
-                  <p className="text-sm whitespace-pre-wrap text-foreground">
-                    {result.feedbackItem.editCommentValue}
-                  </p>
-                </div>
-              </div>
-            )}
-
             {result.explanation && (
               <div>
                 <div className="flex items-center mb-1">
@@ -226,6 +235,85 @@ export function ScoreResultComponent({
               </div>
             )}
 
+            {result.feedbackItem?.initialAnswerValue && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center">
+                    <Scale className="w-4 h-4 mr-1 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Original value</p>
+                  </div>
+                  {result.feedbackItem.createdAt && (
+                    <Timestamp time={result.feedbackItem.createdAt} variant="relative" className="text-xs text-muted-foreground" />
+                  )}
+                </div>
+                <Badge variant="secondary" className="text-sm px-2 py-0.5 rounded-md text-focus">
+                  {result.feedbackItem.initialAnswerValue}
+                </Badge>
+              </div>
+            )}
+
+            {result.feedbackItem?.initialCommentValue && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Original explanation</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                        pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                        h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                      }}
+                    >
+                      {result.feedbackItem.initialCommentValue}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {result.feedbackItem?.finalAnswerValue && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center">
+                    <Scale className="w-4 h-4 mr-1 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Feedback edit value</p>
+                  </div>
+                  {result.feedbackItem.editedAt && (
+                    <Timestamp time={result.feedbackItem.editedAt} variant="relative" className="text-xs text-muted-foreground" />
+                  )}
+                </div>
+                <Badge variant="secondary" className="text-sm px-2 py-0.5 rounded-md text-focus">
+                  {result.feedbackItem.finalAnswerValue}
+                </Badge>
+              </div>
+            )}
+
+            {result.feedbackItem?.editCommentValue && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageCircleMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Feedback edit comment</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <p className="text-sm whitespace-pre-wrap text-foreground">
+                    {result.feedbackItem.editCommentValue}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {!result.metadata.correct && result.metadata.human_explanation && (
               <div>
                 <div className="flex items-center mb-1">
@@ -252,6 +340,56 @@ export function ScoreResultComponent({
                   >
                     {result.metadata.human_explanation}
                   </ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {rcaDetailedCause && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Root cause analysis</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      }}
+                    >
+                      {rcaDetailedCause}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {rcaSuggestedFix && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Suggested fix</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      }}
+                    >
+                      {rcaSuggestedFix}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}

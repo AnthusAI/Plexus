@@ -19,7 +19,7 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
         topic_id: number;
         label: string;
         keywords: string[];
-        exemplars: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null }>;
+        exemplars: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null; initial_answer_value?: string | null; final_answer_value?: string | null; score_explanation?: string | null }>;
         member_count: number;
         memory_weight: number;
         memory_tier: "hot" | "warm" | "cold";

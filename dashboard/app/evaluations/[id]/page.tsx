@@ -62,7 +62,7 @@ export class EvaluationService {
                 trace
                 itemId
                 createdAt
-                feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
+                feedbackItem { id editCommentValue initialAnswerValue initialCommentValue finalAnswerValue editorName editedAt createdAt scoreResults { items { id value explanation type } } }
                 item { id itemIdentifiers { items { name value url position } } }
               }
               nextToken
