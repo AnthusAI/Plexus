@@ -138,8 +138,8 @@
     "zen-observable-ts": "^1.1.0"
   },
   "devDependencies": {
-    "@aws-amplify/backend": "^1.22.0",
-    "@aws-amplify/backend-cli": "^1.8.2",
+    "@aws-amplify/backend": "^1.8.0",
+    "@aws-amplify/backend-cli": "^1.2.6",
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.26.3",
@@ -211,7 +211,6 @@
     "tinyglobby": {
       "picomatch": "4.0.4"
     },
-    "fast-xml-parser": "4.5.5",
     "sha.js": "2.4.12",
     "tapable": "2.3.0",
     "webpack": "5.99.9"
