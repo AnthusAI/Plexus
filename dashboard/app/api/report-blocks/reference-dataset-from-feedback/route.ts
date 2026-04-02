@@ -60,8 +60,11 @@ export async function POST(request: NextRequest) {
     normalizedTaskId,
   ]
 
-  if (days !== null) {
+  if (days !== null && feedbackItemIds.length === 0) {
     args.push('--days', String(days))
+  }
+  if (feedbackItemIds.length > 0) {
+    args.push('--feedback-item-ids', feedbackItemIds.join(','))
   }
 
   const child = spawn('plexus', args, {
@@ -93,5 +96,6 @@ export async function POST(request: NextRequest) {
     accepted: true,
     taskId: normalizedTaskId,
     requestedMaxItems: maxItems ?? Math.max(feedbackItemIds.length, 100),
+    explicitFeedbackItemCount: feedbackItemIds.length,
   })
 }
