@@ -13,7 +13,6 @@ from plexus.data.FeedbackItems import FeedbackItems
 from plexus.cli.dataset.datasets import (
     _create_associated_dataset_datasource_version,
     _fetch_score_name,
-    _fetch_scorecard_name,
     _fetch_score_champion_version,
     _upload_dataset_parquet,
 )
@@ -190,7 +189,6 @@ def build_associated_dataset_from_feedback_window(
     days: Optional[int] = None,
     task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    scorecard_name = _fetch_scorecard_name(client, scorecard_id)
     score_name = _fetch_score_name(client, score_id)
     account_id = _fetch_scorecard_account_id(client, scorecard_id)
 
@@ -241,7 +239,6 @@ def build_associated_dataset_from_feedback_window(
             feedback_item_ids=selected_feedback_ids,
         )
 
-        now_iso = datetime.now(timezone.utc).isoformat()
         dataset_input: Dict[str, Any] = {
             "name": f"Associated Dataset - {score_name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
             "description": "Associated dataset curated from recent qualifying feedback.",
@@ -249,28 +246,6 @@ def build_associated_dataset_from_feedback_window(
             "scorecardId": scorecard_id,
             "scoreId": score_id,
             "dataSourceVersionId": data_source_version_id,
-            "provenance": {
-                "source": "feedback_window_curation",
-                "label_source": "finalAnswerValue",
-                "feedback_item_ids": selected_feedback_ids,
-                "max_items": max_items,
-                "days": days,
-            },
-            "buildContext": {
-                "builder": "score.dataset-curate",
-                "scorecard_id": scorecard_id,
-                "scorecard_name": scorecard_name,
-                "score_id": score_id,
-                "score_name": score_name,
-                "feedback_item_count": len(selected_feedback_ids),
-                "deterministic_order": True,
-                "row_count": int(len(dataframe)),
-                "column_count": int(len(dataframe.columns)),
-                "columns": dataframe.columns.tolist(),
-                "max_items": max_items,
-                "days": days,
-                "built_at": now_iso,
-            },
         }
 
         champion_version_id = _fetch_score_champion_version(client, score_id)
