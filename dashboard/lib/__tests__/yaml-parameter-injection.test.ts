@@ -1,4 +1,4 @@
-import yaml from 'yaml'
+import { load as parseYaml, dump as stringifyYaml } from 'js-yaml'
 
 /**
  * Helper function to inject parameter values into YAML template
@@ -6,7 +6,7 @@ import yaml from 'yaml'
  */
 function injectParameterValues(templateYaml: string, parameters: Record<string, any>): string {
   try {
-    const parsed = yaml.parse(templateYaml)
+    const parsed = parseYaml(templateYaml) as any
     
     // If there's a parameters section, add values to it
     if (parsed.parameters && Array.isArray(parsed.parameters)) {
@@ -17,7 +17,7 @@ function injectParameterValues(templateYaml: string, parameters: Record<string, 
     }
     
     // Convert back to YAML
-    return yaml.stringify(parsed)
+    return stringifyYaml(parsed)
   } catch (error) {
     console.warn('Could not parse template YAML, using original:', error)
     return templateYaml
@@ -50,7 +50,7 @@ value: |
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.parameters).toHaveLength(2)
       expect(parsed.parameters[0].name).toBe('scorecard_id')
@@ -76,7 +76,7 @@ parameters:
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.parameters[0]).toEqual({
         name: 'test_param',
@@ -104,7 +104,7 @@ exploration: |
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.class).toBe('BeamSearch')
       expect(parsed.parameters).toBeUndefined()
@@ -122,7 +122,7 @@ parameters:
       const parameters = {}
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.parameters[0].name).toBe('scorecard_id')
       // When a parameter is not in the parameters object, it gets undefined which YAML converts to null
@@ -150,7 +150,7 @@ parameters:
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.parameters[0].value).toBe('hello world')
       expect(parsed.parameters[1].value).toBe(42)
@@ -175,7 +175,7 @@ parameters:
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.parameters[0].value).toBeNull()
       expect(parsed.parameters[1].value).toBe('value')
@@ -205,7 +205,7 @@ conversation_flow:
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.class).toBe('BeamSearch')
       expect(parsed.value).toContain('local score')
@@ -248,7 +248,7 @@ parameters:
       }
 
       const result = injectParameterValues(templateYaml, parameters)
-      const parsed = yaml.parse(result)
+      const parsed = parseYaml(result) as any
 
       expect(parsed.parameters[0].value).toBe('option1')
       expect(parsed.parameters[0].options).toHaveLength(2)
@@ -256,4 +256,3 @@ parameters:
     })
   })
 })
-
