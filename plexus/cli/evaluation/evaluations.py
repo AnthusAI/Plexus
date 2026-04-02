@@ -689,7 +689,7 @@ def get_latest_accuracy_evaluation_for_score_since(
     created_after_iso: str
 ) -> Optional[dict]:
     query = """
-    query ListRecentAccuracyEvaluations($scoreId: String!, $createdAfter: AWSDateTime!, $limit: Int!) {
+    query ListRecentAccuracyEvaluations($scoreId: String!, $createdAfter: String!, $limit: Int!) {
         listEvaluations(
             filter: {
                 scoreId: { eq: $scoreId }
