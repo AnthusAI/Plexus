@@ -1,0 +1,35 @@
+{
+  "id": "plx-a78f021b-dd89-426b-a583-266ef8f7b383",
+  "title": "Document deterministic reference datasets and evaluation-selection workflow in the public web app",
+  "description": "## Summary\nDocument the deterministic reference dataset, curation, value-function, and evaluation-selection features in the public-facing documentation pages of the web app.\n\n## Deliverables\n- Add end-user/operator documentation for deterministic reference datasets, including what they are, how they are assigned to a score, and why they are used.\n- Document curation inputs, label provenance concepts, and the deterministic label-resolution policy at the product level.\n- Document how deterministic reference datasets fit into evaluation runs, regression testing, value-function comparisons, and optimization acceptance decisions.\n- Ensure the documentation lives in the public-facing documentation section of the dashboard/web app rather than only in code comments or internal notes.\n\n## Notes\nThis task should land with the feature work so new capabilities ship with usable public documentation.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-25e99b",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-612be1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-7fcaff",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-21138f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-02T13:03:44.927848Z",
+  "updated_at": "2026-04-02T13:03:44.927848Z",
+  "closed_at": null,
+  "custom": {}
+}

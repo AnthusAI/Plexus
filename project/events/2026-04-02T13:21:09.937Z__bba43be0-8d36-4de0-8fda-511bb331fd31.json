@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bba43be0-8d36-4de0-8fda-511bb331fd31",
+  "issue_id": "plx-7f1e1e39-77e4-4e56-b0da-7a910a4c900c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:21:09.937Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nDocument the misclassification-classification feature in the public-facing web app documentation.\n\n## Deliverables\n- Document the four categories and what they mean operationally.\n- Document how operators should interpret the overall breakdown and evaluation-level red flags.\n- Document how this classification layer relates to optimization RCA and how it differs from the feedback contradictions report.\n- Ensure the documentation ships in the public web app documentation section.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+    "priority": 2,
+    "status": "open",
+    "title": "Document misclassification classification and evaluation triage in the public web app"
+  }
+}

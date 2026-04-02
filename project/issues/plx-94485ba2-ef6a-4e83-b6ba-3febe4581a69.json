@@ -1,0 +1,18 @@
+{
+  "id": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "title": "Deterministic Reference Datasets, Curation, and Evaluation Selection",
+  "description": "## Summary\nMake score optimization repeatable with deterministic reference datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Deterministic reference datasets are frozen `DataSet` artifacts.\n- Reference datasets are single-score datasets.\n- Active reference assignment lives on `Score`, not on `DataSet`.\n- Scorecard-level examples are the maintained curated source pool unless later work changes that contract.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the frozen dataset, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nCreate the child tasks in this epic exactly as planned so this work stays separate from RCA/reliability fixes.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-02T12:48:39.894398Z",
+  "updated_at": "2026-04-02T13:23:04.432177Z",
+  "closed_at": null,
+  "custom": {}
+}

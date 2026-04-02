@@ -10,8 +10,10 @@ Tests the most critical business logic:
 - Edge cases and error handling
 """
 
+import asyncio
+import os
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 from datetime import datetime
 
@@ -173,6 +175,64 @@ class TestMetricsCalculation:
         assert 'confusionMatrix' in metrics  # Should have default matrix
         assert len(metrics['predictedClassDistribution']) == 1
         assert len(metrics['datasetClassDistribution']) == 1
+
+
+class TestScoreTextProcessing:
+    """Regression tests for row processing in score_text."""
+
+    @pytest.mark.asyncio
+    async def test_score_text_prefers_top_level_metadata_for_feedback_rows(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+
+        mock_result = create_mock_score_result("yes", "yes")
+        mock_evaluation.scorecard.score_entire_text = AsyncMock(
+            return_value={"test_score": mock_result}
+        )
+
+        row = pd.Series({
+            "text": "feedback transcript",
+            "content_id": "content-123",
+            "metadata": {"source": "top-level", "human_label": "yes"},
+            "columns": {"metadata": {"source": "nested"}, "form_id": "form-123"},
+            "test_score_label": "yes",
+        })
+
+        await mock_evaluation.score_text(row, score_name="test_score")
+
+        passed_metadata = mock_evaluation.scorecard.score_entire_text.call_args.kwargs["metadata"]
+        assert passed_metadata["source"] == "top-level"
+        assert passed_metadata["human_label"] == "yes"
+
+    @pytest.mark.asyncio
+    async def test_score_text_times_out_and_returns_error_result(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+
+        async def never_returns(**kwargs):
+            await asyncio.Future()
+
+        mock_evaluation.scorecard.score_entire_text = never_returns
+
+        row = pd.Series({
+            "text": "feedback transcript",
+            "content_id": "content-456",
+            "columns": {"form_id": "form-456"},
+            "test_score_label": "yes",
+        })
+
+        with patch.dict(os.environ, {"PLEXUS_EVALUATION_ITEM_TIMEOUT_SECONDS": "0.01"}):
+            with patch("plexus.Evaluation.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+                result = await mock_evaluation.score_text(row, score_name="test_score")
+
+        assert mock_sleep.await_count == 4
+        error_result = result["results"]["test_score"]
+        assert error_result.value == "Error"
+        assert "Timeout/RequestException" in error_result.error
 
 
 class TestLabelStandardization:

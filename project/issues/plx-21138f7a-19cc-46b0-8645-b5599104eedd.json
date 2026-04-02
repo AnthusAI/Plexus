@@ -1,0 +1,23 @@
+{
+  "id": "plx-21138f7a-19cc-46b0-8645-b5599104eedd",
+  "title": "Define acceptance policy for optimization loops",
+  "description": "## Summary\nDefine the accept/reject policy for score-optimization loops so \"did the needle move?\" becomes an explicit, auditable rule.\n\n## Deliverables\n- Specify how deterministic reference runs and random-sample runs combine into one decision.\n- Define clear acceptance/rejection criteria for iterative score changes.\n- Keep the policy stable and reviewable across optimization cycles.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-7fcaff",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-02T12:49:33.212086Z",
+  "updated_at": "2026-04-02T12:49:33.212086Z",
+  "closed_at": null,
+  "custom": {}
+}

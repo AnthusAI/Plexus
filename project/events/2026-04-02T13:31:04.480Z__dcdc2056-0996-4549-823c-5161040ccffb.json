@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dcdc2056-0996-4549-823c-5161040ccffb",
+  "issue_id": "plx-eab3179f-2d1e-44eb-9b34-5cd80e12644b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:04.480Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAs a score operator, I want optimization workflows to route me toward the right next action, so that I do not waste time optimizing scores that are blocked by missing information, unclear guidelines, or mechanical failures.\n\nFeature: Optimization routing and stop/go decisions\nScenario: Operator reviews an evaluation with mixed failure causes\nGiven an evaluation with misclassification categories and evaluation-level red flags\nWhen Plexus computes the overall assessment for the evaluation\nThen it should indicate whether the next action is score optimization, SME clarification, upstream remediation, or bug investigation\nAnd it should make that recommendation visible in the workflow output",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+    "priority": 1,
+    "status": "open",
+    "title": "Route optimization work based on malfunction mix and evaluation flags"
+  }
+}

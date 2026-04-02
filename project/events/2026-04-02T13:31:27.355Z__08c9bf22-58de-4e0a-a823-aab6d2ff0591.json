@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "08c9bf22-58de-4e0a-a823-aab6d2ff0591",
+  "issue_id": "plx-cface030-48b9-42ea-9549-3becb6b01560",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.355Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nCompute comparison metrics that quantify whether a score is generalizing beyond curated cases.\n\n## Deliverables\n- Compute the benchmark-versus-random generalization gap.\n- Compute stability/variance signals across random runs.\n- Define how these signals are stored and surfaced in workflow results.\n\n## Notes\nThese metrics should be interpretable by operators, not just raw math outputs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 1,
+    "status": "open",
+    "title": "Compute and persist generalization-gap and stability metrics"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "plx-4ebeceb6-5916-48df-ad2d-73772ee2624d",
+  "title": "Investigate dashboard build failure resolving yaml package",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0785a633-a0ce-4b04-a4af-4153be68827a",
+      "author": "ryan",
+      "text": "Root cause identified: dashboard code imports the npm package  in  and , but  declares  only, not . Git history shows commit 68d98d85d introduced the  import in  without a matching dependency change.  contains transitive  entries, so older installs may have worked accidentally via hoisting, but a clean/fresh install leaves no resolvable top-level  module for Next/Webpack.",
+      "created_at": "2026-04-02T02:59:16.287954Z"
+    },
+    {
+      "id": "ea0d53c1-7558-4ad8-acc0-1ee7814b738c",
+      "author": "ryan",
+      "text": "Root cause identified: dashboard app code imports the npm package yaml in dashboard/components/ui/score-component.tsx and dashboard/components/report-configuration-edit.tsx, but dashboard/package.json declares js-yaml only, not yaml. Git history shows commit 68d98d85d introduced the yaml import in score-component.tsx without a matching dependency change. dashboard/package-lock.json contains yaml only as a transitive dependency, so older installs may have worked accidentally via hoisting, but a clean install leaves no resolvable top-level yaml module for Next/Webpack.",
+      "created_at": "2026-04-02T02:59:21.552304Z"
+    },
+    {
+      "id": "08ad65d5-5afc-40c8-9721-1c90d6958817",
+      "author": "ryan",
+      "text": "Implemented fix by standardizing dashboard YAML usage on js-yaml (already declared dependency). Updated imports/usages in score-component, report-configuration-edit, procedures-dashboard, ScoreSidebarVersionHistory story, and yaml-parameter-injection test. Verified no remaining dashboard references to the yaml package import or require.",
+      "created_at": "2026-04-02T03:01:22.002167Z"
+    },
+    {
+      "id": "2f7dcf3b-b406-4b45-8867-3b81c79e116e",
+      "author": "ryan",
+      "text": "Standardized dashboard YAML handling to js-yaml and removed direct yaml package usage in affected components, stories, and tests. Commit cd3779b29 pushed to develop.",
+      "created_at": "2026-04-02T03:05:48.190693Z"
+    }
+  ],
+  "created_at": "2026-04-02T02:59:03.370332Z",
+  "updated_at": "2026-04-02T03:05:48.265160Z",
+  "closed_at": "2026-04-02T03:05:48.265160Z",
+  "custom": {}
+}
