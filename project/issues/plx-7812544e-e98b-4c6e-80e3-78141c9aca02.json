@@ -88,10 +88,16 @@
       "author": "ryan",
       "text": "Implemented canonical curation flow: added plexus score dataset-curate (scorecard, score, max-items default 100, optional days, optional task-id), backed by new dataset curation helper module with deterministic newest-first collection (editedAt DESC) and strict finalAnswerValue plus linked item qualification. Removed dataset reference-from-feedback from active dataset CLI commands. Updated docs and dashboard task launcher route to invoke score dataset-curate. Validation: pytest subset passed (11 tests), py_compile passed, CLI help shows score dataset-curate and dataset group no longer exposes reference-from-feedback.",
       "created_at": "2026-04-02T20:30:12.317255Z"
+    },
+    {
+      "id": "21ec5f2f-627a-4040-b3e1-e4f025b0fccd",
+      "author": "ryan",
+      "text": "Runtime test completed for new command. Initial run of score dataset-curate failed due deployed CreateDataSetInput rejecting extra fields; fixed curation path to send only supported dataset fields. Retest succeeded: plexus score dataset-curate --scorecard 1039 --score 45425 --max-items 20 --days 180 created dataset 71289e19-e160-4e1e-89bd-8bd1cdd0f8df (20/20). Follow-up accuracy run succeeded against associated dataset selection: evaluation f437bce3-418a-4586-b391-42810d3f0575 COMPLETED, sample size 20, accuracy 45.0%.",
+      "created_at": "2026-04-02T20:40:30.920111Z"
     }
   ],
   "created_at": "2026-04-02T16:02:43.498942Z",
-  "updated_at": "2026-04-02T20:30:12.317255Z",
+  "updated_at": "2026-04-02T20:40:30.920111Z",
   "closed_at": null,
   "custom": {}
 }
