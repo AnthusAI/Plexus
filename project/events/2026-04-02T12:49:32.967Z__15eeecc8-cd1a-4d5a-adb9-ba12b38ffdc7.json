@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "15eeecc8-cd1a-4d5a-adb9-ba12b38ffdc7",
+  "issue_id": "plx-818f07b6-a896-4a61-bdb1-64b72beea7a8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:32.967Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nInventory GraphQL model/resource usage and reclaim capacity needed for deterministic reference datasets and gold-standard curation.\n\n## Deliverables\n- Identify low-value removable schema resources.\n- Produce the exact cleanup list required to support the preferred curation design.\n- Establish whether the preferred vetting model can ship as designed after cleanup.\n\n## Dependency note\nThis work should precede the final storage-model choice for gold-standard curation.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Audit GraphQL schema budget and reclaim capacity for curation/reference features"
+  }
+}

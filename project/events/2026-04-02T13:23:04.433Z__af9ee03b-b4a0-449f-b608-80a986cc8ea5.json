@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "af9ee03b-b4a0-449f-b608-80a986cc8ea5",
+  "issue_id": "plx-428bb632-db9c-4f2b-a4bd-701aad13fcf6",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T13:23:04.433Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Summary\nDefine the operator-facing taxonomy and evidence contract for per-item misclassification classification in evaluations.\n\n## Deliverables\n- Lock the four required categories: `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, and `mechanical_malfunction`.\n- Define what evidence is available at item scope and what cannot be inferred at item scope.\n- Define the classifier output contract for one item, including primary category, rationale, confidence, and evidence snippets.\n- Explicitly keep feedback contradictions / label inconsistency analysis out of this classifier in v1.",
+        "to": "## Summary\nDefine the operator-facing taxonomy and evidence contract for per-item misclassification classification in evaluations.\n\n## Deliverables\n- Lock the four required categories: `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, and `mechanical_malfunction`.\n- Define what evidence is available at item scope and what cannot be inferred at item scope.\n- Define the classifier output contract for one item, including primary category, rationale, confidence, and evidence snippets.\n- Explicitly keep feedback contradictions / label inconsistency analysis out of this classifier."
+      }
+    }
+  }
+}

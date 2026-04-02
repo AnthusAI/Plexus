@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "b3dcf2f0-f84f-4203-92e5-ba461749bdd8",
+  "issue_id": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T13:23:04.433Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Summary\nMake score optimization repeatable with deterministic reference datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Deterministic reference datasets are frozen `DataSet` artifacts.\n- Reference datasets are single-score in v1.\n- Active reference assignment lives on `Score`, not on `DataSet`.\n- Scorecard-level examples are the maintained curated source pool unless later work changes that contract.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the frozen dataset, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nCreate the child tasks in this epic exactly as planned so this work stays separate from RCA/reliability fixes.",
+        "to": "## Summary\nMake score optimization repeatable with deterministic reference datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Deterministic reference datasets are frozen `DataSet` artifacts.\n- Reference datasets are single-score datasets.\n- Active reference assignment lives on `Score`, not on `DataSet`.\n- Scorecard-level examples are the maintained curated source pool unless later work changes that contract.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the frozen dataset, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nCreate the child tasks in this epic exactly as planned so this work stays separate from RCA/reliability fixes."
+      }
+    }
+  }
+}
