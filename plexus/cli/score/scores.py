@@ -236,6 +236,19 @@ score.add_command(list)
     type=str,
     help='Comma-separated explicit vetted feedback item IDs to include.',
 )
+@click.option(
+    '--source-report-block-id',
+    default=None,
+    type=str,
+    help='Optional report block ID to record as the source of explicit vetted IDs.',
+)
+@click.option(
+    '--eligibility-rule',
+    default="explicit vetted feedback labels",
+    type=str,
+    show_default=True,
+    help='Eligibility rule label recorded for explicit vetted-ID dataset builds.',
+)
 @click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
 def dataset_curate(
     scorecard: str,
@@ -243,6 +256,8 @@ def dataset_curate(
     max_items: int,
     days: Optional[int],
     feedback_item_ids: Optional[str],
+    source_report_block_id: Optional[str],
+    eligibility_rule: str,
     task_id: Optional[str],
 ):
     """Build an associated dataset by scanning feedback backward from now until max qualifying labels are found."""
@@ -255,6 +270,10 @@ def dataset_curate(
         normalized_feedback_item_ids = [token.strip() for token in feedback_item_ids.split(",") if token.strip()]
     if normalized_feedback_item_ids and days is not None:
         raise click.ClickException("--days cannot be combined with --feedback-item-ids.")
+    if (source_report_block_id or eligibility_rule != "explicit vetted feedback labels") and not normalized_feedback_item_ids:
+        raise click.ClickException(
+            "--source-report-block-id and --eligibility-rule require --feedback-item-ids."
+        )
 
     client = create_client()
 
@@ -265,8 +284,8 @@ def dataset_curate(
                 scorecard_identifier=scorecard,
                 score_identifier=score,
                 feedback_item_ids=normalized_feedback_item_ids,
-                source_report_block_id="score.dataset-curate",
-                eligibility_rule="explicit vetted feedback labels",
+                source_report_block_id=source_report_block_id or "score.dataset-curate",
+                eligibility_rule=eligibility_rule,
                 task_id=task_id,
             )
         else:

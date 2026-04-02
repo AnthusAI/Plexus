@@ -63,6 +63,10 @@ def test_score_dataset_curate_explicit_feedback_ids_path():
                 "45425",
                 "--feedback-item-ids",
                 "fi-2,fi-1",
+                "--source-report-block-id",
+                "block-123",
+                "--eligibility-rule",
+                "unanimous non-contradiction",
             ],
         )
 
@@ -71,7 +75,8 @@ def test_score_dataset_curate_explicit_feedback_ids_path():
     mock_build.assert_called_once()
     kwargs = mock_build.call_args.kwargs
     assert kwargs["feedback_item_ids"] == ["fi-2", "fi-1"]
-    assert kwargs["eligibility_rule"] == "explicit vetted feedback labels"
+    assert kwargs["source_report_block_id"] == "block-123"
+    assert kwargs["eligibility_rule"] == "unanimous non-contradiction"
 
 
 def test_score_dataset_curate_rejects_days_with_explicit_feedback_ids():
@@ -94,6 +99,26 @@ def test_score_dataset_curate_rejects_days_with_explicit_feedback_ids():
 
     assert result.exit_code != 0
     assert "--days cannot be combined with --feedback-item-ids." in result.output
+
+
+def test_score_dataset_curate_rejects_provenance_options_without_feedback_ids():
+    runner = CliRunner()
+    with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()):
+        result = runner.invoke(
+            score,
+            [
+                "dataset-curate",
+                "--scorecard",
+                "1039",
+                "--score",
+                "45425",
+                "--source-report-block-id",
+                "block-123",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "--source-report-block-id and --eligibility-rule require --feedback-item-ids." in result.output
 
 
 def test_score_dataset_curate_invalid_max_items():
