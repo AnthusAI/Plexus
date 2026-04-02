@@ -523,14 +523,14 @@ vision = ["Pillow (>=9.2.0)", "accelerate (>=0.19.0)"]
 
 [[package]]
 name = "biblicus"
-version = "1.6.0"
+version = "1.9.1"
 description = "Command line interface and Python library for corpus ingestion, retrieval, and evaluation."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "biblicus-1.6.0-py3-none-any.whl", hash = "sha256:ca41fd3b9abb088a444c3f4c624bef59b1373eb3534b7ddec077459ea753a157"},
-    {file = "biblicus-1.6.0.tar.gz", hash = "sha256:b4b51487f7de8639848f18b8905faf547c98e23d35492894cc30183e19479acc"},
+    {file = "biblicus-1.9.1-py3-none-any.whl", hash = "sha256:00d19831fa6a71293150f3c8b6bfda37274e621c1619efc8e652e5059956b5ea"},
+    {file = "biblicus-1.9.1.tar.gz", hash = "sha256:d6e59134df8666b2f9b22fbbf431c3c2f21dd0d3ba290bfb9bca55c557010de0"},
 ]
 
 [package.dependencies]

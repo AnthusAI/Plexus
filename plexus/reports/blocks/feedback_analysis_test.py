@@ -353,6 +353,8 @@ class TestEnrichedExemplars:
         async def fake_identifiers(client, item_id):
             return [{"url": f"https://example.com/r/{item_id}"}]
 
+        import biblicus.analysis.reinforcement_memory  # ensure module is loaded before patching
+        import biblicus.analysis.reinforcement_memory._clusterer  # noqa: F401
         with patch("biblicus.analysis.reinforcement_memory.sentence_transformer_embedder",
                    return_value=mock_embedder), \
              patch("biblicus.analysis.reinforcement_memory._clusterer.TopicClusterer",

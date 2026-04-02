@@ -192,16 +192,26 @@
   "overrides": {
     "@tailwindcss/node": "4.0.0",
     "@tailwindcss/oxide": "4.0.0",
+    "ajv": "8.18.0",
+    "bn.js": "5.2.3",
+    "brace-expansion": "1.1.13",
     "diff": "5.2.2",
     "dompurify": "3.3.2",
     "immutable": "4.3.8",
+    "lodash": "4.18.1",
+    "lodash-es": "4.18.1",
     "mdast-util-to-hast": "13.2.1",
     "mermaid": "11.14.0",
     "minimatch": "3.1.4",
     "picomatch": "2.3.2",
     "postcss": "8.4.31",
+    "qs": "6.14.2",
     "serve": "14.2.6",
-    "serve-handler": "6.1.7"
+    "serve-handler": "6.1.7",
+    "tinyglobby": {
+      "picomatch": "4.0.4"
+    },
+    "yaml": "2.8.3"
   },
   "release": {
     "branches": [

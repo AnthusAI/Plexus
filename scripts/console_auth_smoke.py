@@ -292,12 +292,12 @@ def cleanup_auth(*, region: str, user_pool_id: str, auth: AuthArtifacts) -> None
     cognito = boto3.client("cognito-idp", region_name=region)
     try:
         cognito.admin_delete_user(UserPoolId=user_pool_id, Username=auth.temp_user_email)
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001
+        pass  # best-effort cleanup; ignore errors
     try:
         cognito.delete_user_pool_client(UserPoolId=user_pool_id, ClientId=auth.app_client_id)
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001
+        pass  # best-effort cleanup; ignore errors
 
 
 def resolve_or_create_account(*, args: argparse.Namespace, auth: AuthArtifacts) -> Dict[str, Any]:
