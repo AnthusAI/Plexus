@@ -27,7 +27,8 @@
     "ci:unit": "npm run test:coverage",
     "ci:storybook": "npm run test-storybook:ci",
     "ci": "npm run ci:typecheck && npm run ci:unit && npm run ci:storybook",
-    "ci:watch": "npx concurrently -k -n \"TYPE,TEST\" -c \"cyan,green\" \"tsc --noEmit --watch --pretty\" \"jest --watchAll --coverage\""
+    "ci:watch": "npx concurrently -k -n \"TYPE,TEST\" -c \"cyan,green\" \"tsc --noEmit --watch --pretty\" \"jest --watchAll --coverage\"",
+    "postinstall": "node scripts/patch-next-config.js"
   },
   "dependencies": {
     "@aws-amplify/api": "^6.3.0",
