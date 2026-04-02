@@ -3096,6 +3096,9 @@ def feedback(
     if max_samples is not None and max_samples <= 0:
         console.print("[bold red]Error: --max-samples must be a positive integer[/bold red]")
         return
+
+    def _has_usable_root_cause(root_cause_payload) -> bool:
+        return isinstance(root_cause_payload, dict) and len(root_cause_payload) > 0
     
     try:
         # Create API client
@@ -3380,6 +3383,12 @@ def feedback(
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
 
+                # AccuracyEvaluation marks status COMPLETED when predictions are done.
+                # Feedback-backed completion must include RCA persistence, so move back
+                # to RUNNING until RCA contract checks finish.
+                eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+                eval_rec.update(status="RUNNING")
+
                 # Update Analyzing stage status for root-cause analysis
                 # (AccuracyEvaluation.run() already advanced to Analyzing stage)
                 if tracker:
@@ -3393,7 +3402,7 @@ def feedback(
                             exc_info=True,
                         )
 
-                # Run root-cause analysis on feedback edit comments (non-fatal)
+                # Run root-cause analysis on feedback edit comments.
                 console.print("\n[bold]Running root-cause analysis on feedback edit comments...[/bold]")
                 try:
                     from plexus.Evaluation import FeedbackEvaluation
@@ -3465,6 +3474,12 @@ def feedback(
 
                         console.print(f"[dim]Found {len(score_result_map)} incorrectly predicted item(s) to analyse[/dim]")
 
+                        if not score_result_map:
+                            return {
+                                "incorrect_items": 0,
+                                "root_cause": {},
+                            }
+
                         # Fetch all feedback items in the date window
                         start_date = datetime.now(timezone.utc) - timedelta(days=days)
                         end_date = datetime.now(timezone.utc)
@@ -3532,33 +3547,65 @@ def feedback(
                             f"{len(original_explanations)} item(s)[/dim]"
                         )
 
-                        # Pass only the incorrect items + both context maps
-                        return await fe._run_root_cause_analysis(
+                        root_cause = await fe._run_root_cause_analysis(
                             feedback_items, score_result_map, original_explanations,
                             max_report_exemplars=20,
                             max_summarization_exemplars=6,
                             tracker=tracker,
                         )
+                        return {
+                            "incorrect_items": len(score_result_map),
+                            "root_cause": root_cause,
+                        }
 
-                    root_cause_result = asyncio.run(_run_rca())
+                    rca_outcome = asyncio.run(_run_rca())
+                    incorrect_items = int(rca_outcome.get("incorrect_items") or 0)
+                    root_cause_result = rca_outcome.get("root_cause")
+                    root_cause_required = incorrect_items > 0
+                    has_usable_root_cause = _has_usable_root_cause(root_cause_result)
 
-                    if root_cause_result and root_cause_result.get("topics"):
-                        eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-                        existing = {}
-                        if eval_rec.parameters:
-                            try:
-                                existing = json.loads(eval_rec.parameters) if isinstance(eval_rec.parameters, str) else (eval_rec.parameters or {})
-                            except Exception:
-                                existing = {}
+                    eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+                    existing = {}
+                    if eval_rec.parameters:
+                        try:
+                            existing = json.loads(eval_rec.parameters) if isinstance(eval_rec.parameters, str) else (eval_rec.parameters or {})
+                        except Exception:
+                            existing = {}
+
+                    existing["root_cause_required"] = root_cause_required
+                    if has_usable_root_cause:
                         existing["root_cause"] = root_cause_result
-                        eval_rec.update(parameters=json.dumps(existing))
-                        num_topics = len(root_cause_result["topics"])
+
+                    if root_cause_required and not has_usable_root_cause:
+                        error_message = (
+                            f"Feedback-backed evaluation has {incorrect_items} incorrect item(s), "
+                            "but no usable RCA payload was persisted."
+                        )
+                        eval_rec.update(
+                            status="FAILED",
+                            errorMessage=error_message,
+                            parameters=json.dumps(existing),
+                        )
+                        raise RuntimeError(error_message)
+
+                    eval_rec.update(
+                        status="COMPLETED",
+                        parameters=json.dumps(existing),
+                    )
+                    if has_usable_root_cause:
+                        num_topics = len(root_cause_result.get("topics", []))
                         console.print(f"[green]Root-cause analysis: {num_topics} topic(s) identified[/green]")
                     else:
-                        console.print("[dim]Root-cause analysis: insufficient data or no topics found[/dim]")
+                        console.print("[dim]Root-cause analysis: no incorrect items in this run[/dim]")
                 except Exception as _rca_err:
-                    console.print(f"[yellow]Warning: root-cause analysis failed (non-fatal): {_rca_err}[/yellow]")
+                    eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+                    eval_rec.update(
+                        status="FAILED",
+                        errorMessage=f"Feedback RCA stage failed: {_rca_err}",
+                    )
+                    console.print(f"[bold red]Error: root-cause analysis failed: {_rca_err}[/bold red]")
                     logging.debug("Root-cause analysis traceback:", exc_info=True)
+                    raise
 
                 # Complete the tracker with a clear completion message
                 if tracker:
