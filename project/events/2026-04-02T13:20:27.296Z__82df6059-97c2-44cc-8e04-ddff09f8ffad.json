@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "82df6059-97c2-44cc-8e04-ddff09f8ffad",
+  "issue_id": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T13:20:27.296Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Summary\nAdd a first-class misclassification-classification layer to evaluation analysis so incorrect items are classified by what kind of problem they represent, rather than assuming every error is fixable by score optimization.\n\n## Scope\n- Each misclassified item is classified into exactly one of four operator-facing categories: , , , or .\n- Evaluations also gain evaluation-level red flags for cross-item mechanical/pathological patterns that are not item-local, such as all predictions collapsing to one class or score results containing execution errors.\n- The dashboard evaluation view gains a visual breakdown of the misclassification categories plus item-level drill-down.\n- This work remains distinct from deterministic reference datasets and distinct from RCA reliability/contract work.\n\n## Key assumptions\n- Feedback contradictions remain a separate report/workstream and are not folded into the per-item four-category classifier in v1.\n- The new classification layer becomes part of the broader RCA pipeline, not an unrelated side feature.\n- Public-facing web app documentation is required as part of this feature.\n",
+        "to": "## Summary\nAdd a first-class misclassification-classification layer to evaluation analysis so incorrect items are classified by what kind of problem they represent, rather than assuming every error is fixable by score optimization.\n\n## Scope\n- Each misclassified item is classified into exactly one of four operator-facing categories: `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, or `mechanical_malfunction`.\n- Evaluations also gain evaluation-level red flags for cross-item mechanical/pathological patterns that are not item-local, such as all predictions collapsing to one class or score results containing execution errors.\n- The dashboard evaluation view gains a visual breakdown of the misclassification categories plus item-level drill-down.\n- This work remains distinct from deterministic reference datasets and distinct from RCA reliability/contract work.\n\n## Key assumptions\n- Feedback contradictions remain a separate report/workstream and are not folded into the per-item four-category classifier in v1.\n- The new classification layer becomes part of the broader RCA pipeline, not an unrelated side feature.\n- Public-facing web app documentation is required as part of this feature."
+      }
+    }
+  }
+}

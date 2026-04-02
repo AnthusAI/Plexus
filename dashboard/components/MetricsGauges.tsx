@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils'
 
 interface GaugeConfig {
   value?: number
+  beforeValue?: number
+  showComparisonLabel?: boolean
   target?: number
   label: string
   segments?: Segment[]
@@ -93,6 +95,8 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
           >
             <Gauge
               value={gauge.value}
+              beforeValue={gauge.beforeValue}
+              showComparisonLabel={gauge.showComparisonLabel}
               target={gauge.target}
               title={gauge.label}
               min={gauge.min}

@@ -1214,7 +1214,7 @@ class FeedbackItems(DataCache):
 
         # Add item metadata if available - use the cached metadata directly from API
         if feedback_item.item:
-            logger.info(f"Adding item metadata for feedback_item_id={feedback_item.id}, item_id={feedback_item.item.id}")
+            logger.debug(f"Adding item metadata for feedback_item_id={feedback_item.id}, item_id={feedback_item.item.id}")
             item_metadata = {
                 'item_id': feedback_item.item.id,
                 'external_id': getattr(feedback_item.item, 'externalId', None),
@@ -1223,32 +1223,32 @@ class FeedbackItems(DataCache):
                 'item_metadata': getattr(feedback_item.item, 'metadata', None)
             }
             metadata['item'] = item_metadata
-            logger.info(f"Item metadata added: {item_metadata}")
+            logger.debug(f"Item metadata added: {item_metadata}")
             
             # Use the Item's cached metadata directly (it should already have the API structure)
             original_item_metadata = getattr(feedback_item.item, 'metadata', None)
-            logger.info(f"DEBUG: Checking item metadata for item_id={feedback_item.item.id}")
-            logger.info(f"DEBUG: feedback_item.item type: {type(feedback_item.item)}")
-            logger.info(f"DEBUG: feedback_item.item attributes: {dir(feedback_item.item)}")
-            logger.info(f"DEBUG: original_item_metadata: {original_item_metadata}")
-            logger.info(f"DEBUG: original_item_metadata type: {type(original_item_metadata)}")
+            logger.debug(f"DEBUG: Checking item metadata for item_id={feedback_item.item.id}")
+            logger.debug(f"DEBUG: feedback_item.item type: {type(feedback_item.item)}")
+            logger.debug(f"DEBUG: feedback_item.item attributes: {dir(feedback_item.item)}")
+            logger.debug(f"DEBUG: original_item_metadata: {original_item_metadata}")
+            logger.debug(f"DEBUG: original_item_metadata type: {type(original_item_metadata)}")
             if original_item_metadata:
-                logger.info(f"Found original item metadata for item_id={feedback_item.item.id}: type={type(original_item_metadata)}")
+                logger.debug(f"Found original item metadata for item_id={feedback_item.item.id}: type={type(original_item_metadata)}")
                 try:
                     # Parse the original item metadata if it's a JSON string
                     if isinstance(original_item_metadata, str):
                         parsed_metadata = json.loads(original_item_metadata)
-                        logger.info(f"Parsed item metadata from JSON string for item_id={feedback_item.item.id}")
+                        logger.debug(f"Parsed item metadata from JSON string for item_id={feedback_item.item.id}")
                     else:
                         parsed_metadata = original_item_metadata
-                        logger.info(f"Using item metadata as object for item_id={feedback_item.item.id}")
+                        logger.debug(f"Using item metadata as object for item_id={feedback_item.item.id}")
                     
                     # Merge the API-cached metadata directly (should already have other_data, etc.)
                     if isinstance(parsed_metadata, dict):
                         metadata.update(parsed_metadata)
-                        logger.info(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
+                        logger.debug(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
                     else:
-                        logger.info(f"Parsed item metadata is not a dict for item_id={feedback_item.item.id}, type={type(parsed_metadata)}")
+                        logger.debug(f"Parsed item metadata is not a dict for item_id={feedback_item.item.id}, type={type(parsed_metadata)}")
                 except Exception as e:
                     logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
                     # Continue without the cached metadata
@@ -1262,7 +1262,7 @@ class FeedbackItems(DataCache):
                 if value and value[0] in ('[', '{'):  # Looks like JSON
                     try:
                         metadata[field] = json.loads(value)
-                        logger.info(f"Parsed {field} from JSON string for item_id={feedback_item.item.id}")
+                        logger.debug(f"Parsed {field} from JSON string for item_id={feedback_item.item.id}")
                     except (json.JSONDecodeError, TypeError) as e:
                         logger.warning(f"Could not parse {field} JSON string for item_id={feedback_item.item.id}: {e}")
                         # Keep as string if parsing fails

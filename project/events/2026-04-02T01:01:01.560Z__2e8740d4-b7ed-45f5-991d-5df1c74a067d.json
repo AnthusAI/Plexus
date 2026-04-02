@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2e8740d4-b7ed-45f5-991d-5df1c74a067d",
+  "issue_id": "plx-b5b81df0-29d1-45c6-b742-38dc1661e0f9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T01:01:01.560Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Evaluation detail gauges show before needles again but are missing the secondary numeric comparison subtitle. Restore canonical subtitle rendering in Gauge and enable only for EvaluationTask detail metrics with baseline.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-309bf096-09f9-4687-9d6d-a2cb1d9af628",
+    "priority": 1,
+    "status": "open",
+    "title": "Restore evaluation gauge before/delta subtitle in detail view"
+  }
+}

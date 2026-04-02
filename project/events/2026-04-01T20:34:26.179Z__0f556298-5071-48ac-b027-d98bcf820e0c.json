@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0f556298-5071-48ac-b027-d98bcf820e0c",
+  "issue_id": "plx-dc22f539-45b2-4364-9008-be998617ce8d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T20:34:26.179Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "initiative",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Improve Plexus scorecard quality workflows"
+  }
+}

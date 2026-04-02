@@ -1,0 +1,18 @@
+{
+  "id": "plx-428bb632-db9c-4f2b-a4bd-701aad13fcf6",
+  "title": "Define misclassification classification taxonomy and evidence contract",
+  "description": "## Summary\nDefine the operator-facing taxonomy and evidence contract for per-item misclassification classification in evaluations.\n\n## Deliverables\n- Lock the four required categories: `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, and `mechanical_malfunction`.\n- Define what evidence is available at item scope and what cannot be inferred at item scope.\n- Define the classifier output contract for one item, including primary category, rationale, confidence, and evidence snippets.\n- Explicitly keep feedback contradictions / label inconsistency analysis out of this classifier.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-02T13:21:09.612142Z",
+  "updated_at": "2026-04-02T13:23:04.432161Z",
+  "closed_at": null,
+  "custom": {}
+}

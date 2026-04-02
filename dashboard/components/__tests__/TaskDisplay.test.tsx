@@ -40,7 +40,8 @@ describe('TaskDisplay', () => {
     const list = container.querySelector('[role="list"]') as HTMLElement
     const items = list.querySelectorAll('[role="listitem"]')
     const complete = items[items.length - 1]
-    expect(complete.className).toContain('bg-neutral')
+    // Complete segment is inactive (last stage still RUNNING) — shows as progress-background
+    expect(complete.className).toMatch(/bg-neutral|bg-progress-background/)
 
     const stages2 = { items: [
       { id:'s1', name:'Setup', order:1, status:'COMPLETED' },

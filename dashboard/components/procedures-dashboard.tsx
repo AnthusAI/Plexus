@@ -16,6 +16,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
+import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -547,9 +548,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       if (parameters && template.code) {
         // Parse the YAML to find the parameters section
-        const yaml = require('yaml')
         try {
-          const parsed = yaml.parse(template.code)
+          const parsed = parseYaml(template.code) as any
           
           // If there's a parameters section, add values to it
           if (parsed.parameters && Array.isArray(parsed.parameters)) {
@@ -569,7 +569,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           }
           
           // Convert back to YAML
-          processedCode = yaml.stringify(parsed)
+          processedCode = stringifyYaml(parsed)
         } catch (yamlError) {
           console.warn('Could not parse template YAML, using original:', yamlError)
         }

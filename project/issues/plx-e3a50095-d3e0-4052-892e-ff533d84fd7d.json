@@ -1,0 +1,18 @@
+{
+  "id": "plx-e3a50095-d3e0-4052-892e-ff533d84fd7d",
+  "title": "Standardize item-level context and provenance for misclassification classification",
+  "description": "## Summary\nStandardize the evaluation item context and provenance needed to classify a misclassification correctly.\n\n## Deliverables\n- Define the canonical per-item context passed into classification, including transcript, prediction, label, score explanation, score configuration, score guidelines, scorecard guidance, feedback comments, and label provenance.\n- Ensure the payload can distinguish when feedback-derived context is present versus absent.\n- Define what metadata must be persisted so item-level classifications remain auditable after the run completes.\n\n## Notes\nThis task is about the data contract for classification, not the classifier logic itself.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-02T13:21:09.652428Z",
+  "updated_at": "2026-04-02T13:21:09.652428Z",
+  "closed_at": null,
+  "custom": {}
+}

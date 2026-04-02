@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "76fe1704-3296-42a7-9b02-50fb4f45864a",
+  "issue_id": "plx-7fcaff59-0b56-489b-b683-f88a4946a40a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.182Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAdd a value function over evaluation records plus a pairwise winner-selection wrapper for comparing evaluation outcomes.\n\n## Deliverables\n- Implement a quantitative core `value(E)`.\n- Implement a comparative wrapper `best_of(A, B)`.\n- Permit `inconclusive` when runs are not comparable enough.\n- Make AC1 primary with explicit guardrails for recall, precision, invalid RCA, sample-protocol mismatch, and related quality signals.\n\n## Dependency note\nThis should follow the reference dataset assignment/build work when the value function is intended to judge deterministic regression runs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement evaluation value function and pairwise winner selection"
+  }
+}

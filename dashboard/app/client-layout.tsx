@@ -10,12 +10,56 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Toaster } from "sonner";
 
+function inferRegionFromGraphqlUrl(url: string): string | null {
+  try {
+    const hostname = new URL(url).hostname
+    const match = hostname.match(/appsync-api\.([a-z0-9-]+)\.amazonaws\.com$/i)
+    return match?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+
+function resolveAmplifyOutputs(): Record<string, any> | null {
+  try {
+    const outputs = require('@/amplify_outputs.json')
+    const endpointOverride = process.env.NEXT_PUBLIC_PLEXUS_API_URL?.trim()
+    const apiKeyOverride = process.env.NEXT_PUBLIC_PLEXUS_API_KEY?.trim()
+    const regionOverride = process.env.NEXT_PUBLIC_PLEXUS_API_REGION?.trim()
+
+    if (!endpointOverride && !apiKeyOverride) {
+      return outputs
+    }
+
+    if (!endpointOverride || !apiKeyOverride) {
+      console.warn(
+        'Partial Amplify data override detected. Both NEXT_PUBLIC_PLEXUS_API_URL and NEXT_PUBLIC_PLEXUS_API_KEY are required; ignoring override.',
+      )
+      return outputs
+    }
+
+    const resolvedRegion = regionOverride || inferRegionFromGraphqlUrl(endpointOverride) || outputs?.data?.aws_region
+    return {
+      ...outputs,
+      data: {
+        ...outputs.data,
+        url: endpointOverride,
+        api_key: apiKeyOverride,
+        aws_region: resolvedRegion,
+        default_authorization_type: "API_KEY",
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
 // Only configure Amplify if we're not in a CI environment
 if (process.env.NODE_ENV !== 'test') {
-  try {
-    const outputs = require('@/amplify_outputs.json');
+  const outputs = resolveAmplifyOutputs()
+  if (outputs) {
     Amplify.configure(outputs);
-  } catch (error) {
+  } else {
     console.warn('Amplify outputs not found - skipping configuration');
   }
 }

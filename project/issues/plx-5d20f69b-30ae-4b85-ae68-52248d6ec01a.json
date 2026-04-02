@@ -1,0 +1,23 @@
+{
+  "id": "plx-5d20f69b-30ae-4b85-ae68-52248d6ec01a",
+  "title": "Document optimization workflow and KPI interpretation in the public web app",
+  "description": "## Summary\nDocument the optimization workflow and KPI interpretation in the public-facing web app documentation.\n\n## Deliverables\n- Document the staged deterministic/random workflow.\n- Document how to interpret generalization gap, stability, malfunction mix, and workflow routing decisions.\n- Document how this workflow relates to deterministic datasets, RCA, and misclassification classification.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-eb6f72",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-02T13:31:27.447691Z",
+  "updated_at": "2026-04-02T13:31:27.447691Z",
+  "closed_at": null,
+  "custom": {}
+}

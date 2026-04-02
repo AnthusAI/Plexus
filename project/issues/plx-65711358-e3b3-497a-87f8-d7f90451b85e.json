@@ -1,0 +1,18 @@
+{
+  "id": "plx-65711358-e3b3-497a-87f8-d7f90451b85e",
+  "title": "CMG EDU improvements",
+  "description": "",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-02T03:18:39.213206Z",
+  "updated_at": "2026-04-02T03:18:45.672725Z",
+  "closed_at": null,
+  "custom": {}
+}

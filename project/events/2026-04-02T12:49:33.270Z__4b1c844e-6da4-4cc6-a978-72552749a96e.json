@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4b1c844e-6da4-4cc6-a978-72552749a96e",
+  "issue_id": "plx-1147a8e6-b483-4e95-9a96-eeecc9952dd0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.270Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nMake RCA required by default for feedback-backed evaluations.\n\n## Deliverables\n- RCA is enabled by default in feedback-backed evaluation flows.\n- Disabling RCA becomes an explicit special option rather than the normal path.\n- The default behavior reflects that RCA is required process output.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+    "priority": 1,
+    "status": "open",
+    "title": "Make RCA required by default for feedback-backed evaluations"
+  }
+}

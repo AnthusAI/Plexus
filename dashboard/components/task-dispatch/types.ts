@@ -1,16 +1,27 @@
 // Types for task dispatch configuration
 
-export interface TaskAction {
+export interface TaskActionBase {
   name: string
   icon: React.ReactNode
-  command: string | ((data: any) => string)
-  target?: string
-  dialogType: string
   description?: string
 }
 
+export interface TaskCommandAction extends TaskActionBase {
+  actionType?: 'dispatch'
+  command: string | ((data: any) => string)
+  target?: string
+  dialogType: string
+}
+
+export interface TaskUiAction extends TaskActionBase {
+  actionType: 'ui'
+  onSelect: () => void | Promise<void>
+}
+
+export type TaskAction = TaskCommandAction | TaskUiAction
+
 export interface TaskDialogProps {
-  action: TaskAction
+  action: TaskCommandAction
   isOpen: boolean
   onClose: () => void
   onDispatch: (command: string, target?: string) => Promise<void>

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "819c45e3-13db-4474-b8d2-a7187f254166",
+  "issue_id": "plx-c7fda36f-88b0-466b-851f-d224432e07a4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:21:09.743Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nPersist the new misclassification-analysis results in a structured evaluation payload.\n\n## Deliverables\n- Define the stored payload shape for per-item classifications, category totals, overall assessment, and evaluation-level red flags.\n- Persist the payload on the evaluation record alongside existing analysis data.\n- Ensure downstream consumers can read the payload without scraping prose from RCA summaries.\n\n## Notes\nThis is the storage/interface task for the new feature.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+    "priority": 1,
+    "status": "open",
+    "title": "Persist structured misclassification-analysis payloads on evaluations"
+  }
+}

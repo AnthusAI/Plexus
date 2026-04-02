@@ -1,0 +1,18 @@
+{
+  "id": "plx-a9ce3375-41e3-4328-80c4-1f94137c4f6f",
+  "title": "Feedback-backed evaluations can complete without usable RCA payload",
+  "description": "## Summary\nFeedback-backed evaluations can currently be marked complete even when a usable RCA payload is absent or never persisted.\n\n## Symptom\nA feedback-backed evaluation may complete without usable `root_cause` output even when incorrect items exist.\n\n## Impact\nThis is a process-critical reliability defect because RCA is required to make evaluation results actionable in the optimization loop.",
+  "type": "bug",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-02T12:49:33.241383Z",
+  "updated_at": "2026-04-02T12:49:33.241383Z",
+  "closed_at": null,
+  "custom": {}
+}

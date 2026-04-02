@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cc1c610f-5bbc-450f-885a-827dac78a7f4",
+  "issue_id": "plx-65711358-e3b3-497a-87f8-d7f90451b85e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T03:18:39.214Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+    "priority": 1,
+    "status": "open",
+    "title": "CMG EDU improvements"
+  }
+}

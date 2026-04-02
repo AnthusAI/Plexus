@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "db7c0264-a958-4b0f-ba5a-a970c34a7471",
+  "issue_id": "plx-defa9655-425a-4e6c-97b5-ad1c2a7774ea",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T00:16:12.093Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-309bf096-09f9-4687-9d6d-a2cb1d9af628",
+    "priority": 0,
+    "status": "open",
+    "title": "Fix dashboard startup failure: missing @tailwindcss/postcss and Jersey 20 font override"
+  }
+}
