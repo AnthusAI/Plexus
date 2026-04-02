@@ -368,7 +368,6 @@ def test_build_reference_dataset_from_feedback_ids_success(
 
     mock_client = MagicMock()
     mock_client.execute = MagicMock(side_effect=[
-        {'getScorecard': {'id': 'scorecard-1', 'name': 'Test Scorecard'}},
         {'getScore': {'id': 'score-1', 'name': 'Test Score'}},
         {'getScore': {'id': 'score-1', 'championVersionId': 'version-1'}},
         {'createDataSet': {'id': 'dataset-1'}},
@@ -388,11 +387,10 @@ def test_build_reference_dataset_from_feedback_ids_success(
     assert result['row_count'] == 2
     assert result['feedback_item_count'] == 2
 
-    create_dataset_call = mock_client.execute.call_args_list[3]
+    create_dataset_call = mock_client.execute.call_args_list[2]
     dataset_input = create_dataset_call.args[1]['input']
     assert dataset_input['scoreId'] == 'score-1'
-    assert dataset_input['provenance']['label_source'] == 'finalAnswerValue'
-    assert dataset_input['provenance']['feedback_item_ids'] == ['fi-1', 'fi-2']
+    assert dataset_input['dataSourceVersionId'] == 'datasource-version-1'
 
 
 @patch('plexus.cli.dataset.datasets.resolve_score_identifier')
