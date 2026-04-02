@@ -1,0 +1,22 @@
+# Snyk (https://snyk.io) policy file
+version: v1.25.1
+
+ignore:
+  GHSA-8fgc-7cc6-rx7x:
+    - '*':
+        reason: >
+          webpack buildHttp SSRF (low severity) affects only the experimental
+          buildHttp plugin which is not used in this project. All affected
+          packages are devDependencies only (webpack never ships to production).
+          main branch carries the same webpack@5.99.9 vulnerability; this is
+          not a new introduction in this PR.
+        expires: 2026-10-01T00:00:00.000Z
+  GHSA-38r7-794h-5758:
+    - '*':
+        reason: >
+          webpack buildHttp SSRF (low severity, HTTP redirect variant) — same
+          rationale as GHSA-8fgc-7cc6-rx7x above. Dev-only, buildHttp not used,
+          same version already on main.
+        expires: 2026-10-01T00:00:00.000Z
+
+patch: {}
