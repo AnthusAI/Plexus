@@ -461,9 +461,9 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
 
       const task = await createTask({
         accountId: selectedAccount.id,
-        type: 'dataset reference build',
+        type: 'dataset associated build',
         status: 'PENDING',
-        target: 'dataset/reference',
+        target: 'dataset/associated',
         command: taskCommand,
         description: `Curate associated dataset from qualifying feedback labels (max ${requestedMaxItems})`,
         dispatchStatus: 'PENDING',
