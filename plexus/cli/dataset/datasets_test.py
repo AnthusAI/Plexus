@@ -5,7 +5,7 @@ import os
 from types import SimpleNamespace
 import pandas as pd
 
-from plexus.cli.dataset.datasets import dataset, build_reference_dataset_from_feedback_ids
+from plexus.cli.dataset.datasets import dataset, build_associated_dataset_from_feedback_ids
 from plexus.dashboard.api.models.data_source import DataSource
 
 @pytest.fixture
@@ -320,7 +320,7 @@ async def test_resolve_data_source_by_name(mock_create_client):
 @patch('plexus.cli.dataset.datasets.resolve_scorecard_identifier')
 @patch('plexus.cli.dataset.datasets._fetch_feedback_item_with_item')
 @patch('plexus.cli.dataset.datasets.FeedbackItems')
-def test_build_reference_dataset_from_feedback_ids_success(
+def test_build_associated_dataset_from_feedback_ids_success(
     mock_feedback_items_class,
     mock_fetch_feedback_item,
     mock_resolve_scorecard,
@@ -374,7 +374,7 @@ def test_build_reference_dataset_from_feedback_ids_success(
         {'updateDataSet': {'id': 'dataset-1', 'file': 'datasets/account-1/dataset-1/dataset.parquet'}},
     ])
 
-    result = build_reference_dataset_from_feedback_ids(
+    result = build_associated_dataset_from_feedback_ids(
         client=mock_client,
         scorecard_identifier='CMG EDU',
         score_identifier='Branding and Matching',
@@ -396,7 +396,7 @@ def test_build_reference_dataset_from_feedback_ids_success(
 @patch('plexus.cli.dataset.datasets.resolve_score_identifier')
 @patch('plexus.cli.dataset.datasets.resolve_scorecard_identifier')
 @patch('plexus.cli.dataset.datasets._fetch_feedback_item_with_item')
-def test_build_reference_dataset_from_feedback_ids_rejects_mismatched_score(
+def test_build_associated_dataset_from_feedback_ids_rejects_mismatched_score(
     mock_fetch_feedback_item,
     mock_resolve_scorecard,
     mock_resolve_score,
@@ -419,7 +419,7 @@ def test_build_reference_dataset_from_feedback_ids_rejects_mismatched_score(
     ])
 
     with pytest.raises(ValueError, match='do not match the requested scorecard/score'):
-        build_reference_dataset_from_feedback_ids(
+        build_associated_dataset_from_feedback_ids(
             client=mock_client,
             scorecard_identifier='CMG EDU',
             score_identifier='Branding and Matching',
