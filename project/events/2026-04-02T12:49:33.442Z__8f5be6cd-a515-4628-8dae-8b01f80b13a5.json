@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8f5be6cd-a515-4628-8dae-8b01f80b13a5",
+  "issue_id": "plx-9aa37016-4764-4c62-8507-3b1ae33aaaf7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.442Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nBuild a reliable runner/orchestrator for feedback optimization loops.\n\n## Deliverables\n- Start evaluation and capture the evaluation ID immediately.\n- Wait on backend evaluation status rather than trusting local CLI exit.\n- Collect final metrics and RCA.\n- Write a standardized Kanbus comment for each run.\n- Treat the evaluation record as the source of truth for run state.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+    "priority": 2,
+    "status": "open",
+    "title": "Build a reliable evaluation runner/orchestrator for feedback loops"
+  }
+}

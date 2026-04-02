@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e9dd3d11-bd00-440b-ab73-c369e4bcc594",
+  "issue_id": "plx-3e14e5c0-4769-4352-8ec1-21219be0baca",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.386Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nIntegrate workflow decisions with value-function scoring, malfunction analysis, and red-flag heuristics.\n\n## Deliverables\n- Define how deterministic metrics, random metrics, malfunction mix, and evaluation-level flags combine into one accept/reject/reroute decision.\n- Ensure the workflow can recommend score optimization, SME clarification, upstream remediation, or bug investigation.\n- Keep the decision policy auditable and explainable.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 1,
+    "status": "open",
+    "title": "Integrate optimization decisions with value function, malfunction mix, and red flags"
+  }
+}

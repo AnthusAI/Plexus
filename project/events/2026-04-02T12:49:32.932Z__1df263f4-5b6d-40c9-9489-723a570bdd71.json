@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1df263f4-5b6d-40c9-9489-723a570bdd71",
+  "issue_id": "plx-6466e1a3-221d-4e8a-9a04-f42937f655d4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:32.932Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nInspect `ScorecardExampleItem`, current dashboard flows, and ownership semantics to define how existing examples can serve as the curated source pool.\n\n## Deliverables\n- Document the current scorecard-vs-score ownership behavior.\n- Resolve the ambiguity in how examples are currently used.\n- Produce the exact contract for examples as a curated source pool for deterministic reference datasets.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Audit existing examples schema and behavior for reuse as curated source pool"
+  }
+}

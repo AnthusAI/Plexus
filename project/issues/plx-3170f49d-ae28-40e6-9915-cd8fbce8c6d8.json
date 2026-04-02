@@ -112,10 +112,184 @@
       "author": "ryan",
       "text": "Confirmed the earlier RCA-missing concern was timing, not data loss. Evaluation 95514799-011c-478e-9076-e431eeba1c07 is now fully completed with persisted RCA (3 topics). Final metrics on the fixed seeded sample: Accuracy 74.0%, AC1 0.6510, Precision 100.0%, Recall 73.47%, up from baseline 59964640-6d7e-4ba3-83ed-84c385706fa1 at Accuracy 52.0% and AC1 0.2443. Pushed a new non-champion score version: e74601f9-e280-41b0-88b6-bafce78739a3.",
       "created_at": "2026-04-02T05:07:05.985324Z"
+    },
+    {
+      "id": "1eb2ccd1-f8ae-45b1-a739-df0404f14a4d",
+      "author": "ryan",
+      "text": "Iteration 2 started from version e74601f9-e280-41b0-88b6-bafce78739a3. Applying additional school-name normalization guidance from RCA: stronger abbreviation equivalence (UEI/SU), explicit ignoring of campus/modality suffix tokens in school name checks, and context-based institution identity matching. Running seeded 50-sample feedback eval with baseline 95514799-011c-478e-9076-e431eeba1c07.",
+      "created_at": "2026-04-02T05:09:52.726014Z"
+    },
+    {
+      "id": "db74e01c-2d5a-4cb1-b569-07071a9262db",
+      "author": "ryan",
+      "text": "Iteration 3 started: tightened reviewer-aligned leniency in Branding and Matching prompt for program intent and school-name transcription variants. Running seeded 50-sample eval with baseline 95514799-011c-478e-9076-e431eeba1c07 and waiting for full completion + RCA.",
+      "created_at": "2026-04-02T05:20:20.451118Z"
+    },
+    {
+      "id": "7ccbefc1-eed8-4806-9978-f4d961813a7c",
+      "author": "ryan",
+      "text": "Resetting optimization cycle per new directive: iteration count reset to 0; new run config is days=180, max_samples=100, random sample each run (no sample_seed), baseline=59964640-6d7e-4ba3-83ed-84c385706fa1, up to 15 iterations without manual prompting.",
+      "created_at": "2026-04-02T05:27:29.196675Z"
+    },
+    {
+      "id": "1a445b48-1145-4cee-b085-e5f29c72f1b1",
+      "author": "ryan",
+      "text": "Iteration 0 complete (eval 38189d38-9622-4c5a-9ed5-13f7cf687f38): status=COMPLETED, AC1=0.8460536443839185, Accuracy=87, Precision=95.4545, Recall=90.4762, RCA topics=0. Error mix: 11 FN (No->yes), 2 FP (Yes->no). Proceeding to iteration 1 with targeted transcription-variant heuristic refinement.",
+      "created_at": "2026-04-02T05:41:17.121509Z"
+    },
+    {
+      "id": "bcda8afc-0ff5-4a1b-997a-eb9da5984ed0",
+      "author": "ryan",
+      "text": "Iteration 1 change set: expanded transcription-safe institution aliases from iteration 0 errors (SouthConverse~South University, Union College~UEI College, Allstate Career~All-State Career School, Peisley~Keiser). Launching next 180d/100-sample run against baseline 59964640-6d7e-4ba3-83ed-84c385706fa1.",
+      "created_at": "2026-04-02T05:41:23.960998Z"
+    },
+    {
+      "id": "70786cb7-959f-4e92-9f7b-406d1911c42f",
+      "author": "ryan",
+      "text": "Iteration 1 complete (eval 5736a5a7-2309-419b-a607-6023a381f830): status=COMPLETED, AC1=0.6675752941958646, Accuracy=75, Precision=93.5897, Recall=78.4946, RCA topics=5. Error mix: 20 FN (No->yes), 5 FP (Yes->no). Iteration 2 change: added explicit consistency gate (if reasoning confirms required elements, must output YES) and explicit handling for school-specific consent in multi-school sequences.",
+      "created_at": "2026-04-02T05:58:43.479728Z"
+    },
+    {
+      "id": "6aa3efdd-73c5-4669-b644-cf48e471150d",
+      "author": "ryan",
+      "text": "Iteration 2 complete (eval e6d6e15b-7969-43c0-be41-7c598415d371): status=COMPLETED, AC1=0.8620372499425155, Accuracy=88, Precision=96.6667, Recall=90.625, RCA topics=3. Error mix: 9 FN (No->yes), 3 FP (Yes->no). Iteration 3 change: expanded institution equivalence for AIU Online long-form IDs, Fortis Institute of <city>, and UEI <city> shorthand.",
+      "created_at": "2026-04-02T06:16:17.368807Z"
+    },
+    {
+      "id": "c56cdb93-8fb2-40b5-819a-9878cadb8ecf",
+      "author": "ryan",
+      "text": "Iteration 3 complete (eval a128d2e9-3967-4253-9442-ee2ca23f23aa): status=COMPLETED, AC1=0.7560975609756099, Accuracy=80, Precision=90.9091, Recall=86.9565, RCA topics=4. Error mix: 12 FN (No->yes), 8 FP (Yes->no). Iteration 4 change: strengthened contradiction guardrails so reasoning that says all schools passed/correctly stated cannot end with NO unless a concrete missing required element is cited.",
+      "created_at": "2026-04-02T06:32:02.048438Z"
+    },
+    {
+      "id": "3894f46f-037a-4fcb-9e76-c5308f998122",
+      "author": "ryan",
+      "text": "Iteration 4 complete (eval 7e595db2-1e78-44e6-b5f3-cbb68488cf49): status=COMPLETED, AC1=0.7847404927050944, Accuracy=82, Precision=90.1099, Recall=90.1099, RCA topics=0. Error mix: 9 FP (Yes->no), 9 FN (No->yes). Iteration 5 change: removed generic all-schools-pass implication and enforced school-specific evidence/consent linkage for multi-school calls.",
+      "created_at": "2026-04-02T06:45:36.895030Z"
+    },
+    {
+      "id": "d332639b-66bd-4316-b4e6-65c4fadf802d",
+      "author": "ryan",
+      "text": "Iteration 5 complete (eval 35b0e737-61c7-4018-8005-bf0f985e7094): status=COMPLETED, AC1=0.7210953346855984, Accuracy=78, Precision=92.7711, Recall=82.7957, RCA topics=0. Error mix: 16 FN (No->yes), 6 FP (Yes->no). Iteration 6 change: added NUC/AUC school-name equivalence and enforced that generic 'all schools passed' conclusions cannot drive YES without school-specific evidence.",
+      "created_at": "2026-04-02T06:59:40.246955Z"
+    },
+    {
+      "id": "928f8ef0-5f01-4529-9f51-5677af25b553",
+      "author": "ryan",
+      "text": "Iteration 6 complete (eval 677acfb3-444e-433a-8bfa-cc66e0ac3a7c): status=COMPLETED, AC1=0.8325759387706291, Accuracy=86, Precision=93.3333, Recall=91.3043, RCA topics=3. Error mix: 8 FN (No->yes), 6 FP (Yes->no). Iteration 7 change: added explicit final-label sanity check requiring YES when reasoning states pass language, and requiring concrete missing-element citation when returning NO.",
+      "created_at": "2026-04-02T07:15:53.769772Z"
+    },
+    {
+      "id": "34841f00-8a7a-4168-b090-4326d66b745d",
+      "author": "ryan",
+      "text": "Iteration 7 complete (eval bdf56252-d2f1-4923-a5b3-39601788a046): status=COMPLETED, AC1=0.7946983877785159, Accuracy=83, Precision=94.2529, Recall=87.2340, RCA topics=0. Error mix: 12 FN (No->yes), 5 FP (Yes->no). Iteration 8 change: reinforced school-name identity rule to allow core institution name without exact city token, and added strict prohibition on NO when reasoning uses pass-language ('all schools properly branded/passed').",
+      "created_at": "2026-04-02T07:27:49.042837Z"
+    },
+    {
+      "id": "b20f1548-2b45-4ffa-9008-b11ea3389623",
+      "author": "ryan",
+      "text": "Iteration 8 complete (eval 014bdb39-65a8-432a-a7c7-b6b16b233bbe): status=COMPLETED, AC1=0.8325759387706291, Accuracy=86, Precision=91.3043, Recall=93.3333, RCA topics=3. Error mix: 8 FP (Yes->no), 6 FN (No->yes). Iteration 9 plan: keep school-specific evidence rule and add stricter contradiction handling for generic pass-language causing YES->no flips.",
+      "created_at": "2026-04-02T07:41:27.381427Z"
+    },
+    {
+      "id": "e2b035b5-cefc-4bc7-8aeb-c56de47007fd",
+      "author": "ryan",
+      "text": "Iteration 9 complete (eval 1402f271-c2d2-491f-b3f6-2595f253fd49): status=COMPLETED, AC1=0.7156888084776428, Accuracy=78, Precision=91.5663, Recall=83.5165, RCA topics=4. Error mix: 15 FN (No->yes), 7 FP (Yes->no). Iteration 10 plan: simplify to conservative school-match acceptance rules and remove extra contradictory guardrails that appear to increase FN/FP oscillation.",
+      "created_at": "2026-04-02T07:56:31.855853Z"
+    },
+    {
+      "id": "be509e66-704f-44bc-bc13-4fa546c1e39f",
+      "author": "ryan",
+      "text": "Iteration 11 complete. Eval: 66100fa2-19db-4f01-a02f-1be5caab0339 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100, random sample. Metrics: Alignment(AC1)=0.849, Accuracy=87, Precision=0.956, Recall=0.905. Confusion matrix: [[1,4],[9,86]]. RCA executed and produced 3 topics.",
+      "created_at": "2026-04-02T08:32:14.279386Z"
+    },
+    {
+      "id": "f2bb4347-f1eb-4ba0-8bed-2dd5721e3c87",
+      "author": "ryan",
+      "text": "Iteration 12 complete. Eval: ab09085c-cb19-4201-8e4f-478dcd99089d (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.836, Accuracy=86, Precision=0.966, Recall=0.885. Confusion matrix: [[1,3],[11,85]]. RCA executed with 3 topics.",
+      "created_at": "2026-04-02T08:45:53.883628Z"
+    },
+    {
+      "id": "f4d04f71-42e6-409e-9620-2468ed02178e",
+      "author": "ryan",
+      "text": "Iteration 13 complete. Eval: 997b22db-1318-4101-b02a-e59325379592 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.837, Accuracy=85, Precision=0.944, Recall=0.894. Confusion matrix included NA class: [[0,0,1],[0,1,4],[1,9,84]]. RCA executed with 3 topics. Next adjustment: tighten YES/NO parsing fallback to reduce NA outputs.",
+      "created_at": "2026-04-02T08:59:22.619353Z"
+    },
+    {
+      "id": "3c12e2d7-d288-4470-b61c-98c28388532b",
+      "author": "ryan",
+      "text": "Iteration 14 complete. Eval: eff9817b-0170-4ec0-9202-b0e66ac1d8a7 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.811, Accuracy=83, Precision=0.964, Recall=0.862. Confusion matrix: [[0,1,0],[0,2,3],[0,13,81]]. RCA executed with 3 topics. Regression mostly from yes->no misses (13).",
+      "created_at": "2026-04-02T09:15:52.413366Z"
+    },
+    {
+      "id": "95e909fd-c8ce-4825-af46-b267cb550ce3",
+      "author": "ryan",
+      "text": "Iteration 15 complete. Eval: abf87c78-627e-49ca-8e60-75fdf8403dbc (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.836, Accuracy=86, Precision=0.944, Recall=0.904. Confusion matrix: [[1,5],[9,85]]. RCA executed with 3 topics. Result recovered from Iter14 regression but still below best AC1 in this cycle.",
+      "created_at": "2026-04-02T09:30:13.037385Z"
+    },
+    {
+      "id": "348d1458-d306-4e3c-be03-5511f91f24f0",
+      "author": "ryan",
+      "text": "Iteration 16 complete. Eval: 07a4fb2e-4cf2-4ea1-9475-53f7865363b6 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.791, Accuracy=83, Precision=0.976, Recall=0.844. Confusion matrix: [[2,2],[15,81]]. RCA executed with 2 topics. Precision rose but recall dropped significantly (yes->no misses increased).",
+      "created_at": "2026-04-02T09:44:45.169219Z"
+    },
+    {
+      "id": "e70ec76c-125e-4f81-ae62-1f9bf036d675",
+      "author": "ryan",
+      "text": "Iteration 17 complete. Eval: 2e16b95e-9d89-42b9-b2c5-8bec4261a83a (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.885, Accuracy=90, Precision=0.946, Recall=0.946. Confusion matrix: [[2,5],[5,88]]. RCA executed with 3 topics. This is the best AC1/accuracy seen in this extended run.",
+      "created_at": "2026-04-02T09:58:29.800093Z"
+    },
+    {
+      "id": "9b3438a8-82cf-4ea6-a357-8ee09b334527",
+      "author": "ryan",
+      "text": "Iteration 18 complete. Eval: 92ae3821-af65-4f9e-a426-60dd5d696113 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.726, Accuracy=78, Precision=0.918, Recall=0.839. Confusion matrix: [[0,7],[15,78]]. RCA executed with 4 topics. Significant regression likely due to difficult random sample; continuing iterations with fresh batches.",
+      "created_at": "2026-04-02T10:14:38.872400Z"
+    },
+    {
+      "id": "fa71d869-6089-4d02-862c-57b8db8a3fdb",
+      "author": "ryan",
+      "text": "Iteration 19 complete. Eval: 4bc89a1a-ab50-4267-b2dd-b79f94299f62 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.836, Accuracy=85, Precision=0.976, Recall=0.865. Confusion matrix: [[0,0,0],[0,2,2],[1,12,83]]. RCA executed with 2 topics.",
+      "created_at": "2026-04-02T10:28:22.663474Z"
+    },
+    {
+      "id": "05910766-becc-44b2-b922-574b2c9c6d36",
+      "author": "ryan",
+      "text": "Iteration 20 complete. Eval: 531306df-e792-452e-bb91-aa7f55a6dec0 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.799, Accuracy=83, Precision=0.954, Recall=0.865. Confusion matrix: [[0,4],[13,83]]. RCA executed with 3 topics.",
+      "created_at": "2026-04-02T10:41:35.092423Z"
+    },
+    {
+      "id": "61eaf9e7-e664-4b21-ac92-fd2d6facd9e3",
+      "author": "ryan",
+      "text": "Iteration 21 complete. Eval: 49e5ad1e-5690-46e3-affb-a70321d1011f (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.799, Accuracy=82, Precision=0.919, Recall=0.878. Confusion matrix: [[0,0,1],[0,3,6],[0,11,79]]. RCA executed with 3 topics.",
+      "created_at": "2026-04-02T10:55:29.386397Z"
+    },
+    {
+      "id": "2e85b0a0-7661-41b3-a3ba-19025dd03704",
+      "author": "ryan",
+      "text": "Iteration 22 complete. Eval: 8f4ef5aa-4713-4c06-93ac-4dd2ffd4de75 (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.759, Accuracy=79, Precision=0.882, Recall=0.882. Confusion matrix: [[0,1,0],[0,4,10],[0,10,75]]. RCA executed with 3 topics.",
+      "created_at": "2026-04-02T11:09:56.205703Z"
+    },
+    {
+      "id": "0deb8c8e-f16a-47a1-9737-44cb85bb37d5",
+      "author": "ryan",
+      "text": "Iteration 23 complete. Eval: e2693e9e-030e-4b4e-983c-f07b8df2a9ff (baseline: 59964640-6d7e-4ba3-83ed-84c385706fa1). Config: days=180, max_samples=100. Metrics: Alignment(AC1)=0.680, Accuracy=75, Precision=0.9036, Recall=0.8152. Confusion matrix: [[0,8],[17,75]]. RCA topics in parameters: 0.",
+      "created_at": "2026-04-02T11:24:12.581965Z"
+    },
+    {
+      "id": "54d1d856-77ed-4a16-9f43-ade1a5880ef1",
+      "author": "ryan",
+      "text": "Configuration shift requested: moving from max_samples=100 to max_samples=200 for broader-batch feedback evaluations (still days=180, baseline=59964640-6d7e-4ba3-83ed-84c385706fa1, no champion promotion).",
+      "created_at": "2026-04-02T11:24:43.997714Z"
+    },
+    {
+      "id": "7cc4fb84-60f4-4c28-bc7f-136550e6e378",
+      "author": "ryan",
+      "text": "Preparing finalization: committing pending Kanbus planning artifacts and merging feature/plx-3170f4-feedback-sampling into develop, then creating a new feature branch for the next initiative phase.",
+      "created_at": "2026-04-02T13:36:49.038091Z"
     }
   ],
   "created_at": "2026-04-02T03:18:45.677297Z",
-  "updated_at": "2026-04-02T05:07:05.985324Z",
+  "updated_at": "2026-04-02T13:36:49.038091Z",
   "closed_at": null,
   "custom": {}
 }

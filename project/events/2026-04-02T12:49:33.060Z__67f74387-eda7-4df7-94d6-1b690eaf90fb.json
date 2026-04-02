@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "67f74387-eda7-4df7-94d6-1b690eaf90fb",
+  "issue_id": "plx-cc3cf381-35c4-4d9f-875e-321308ae1fbf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.060Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nBuild deterministic single-score reference datasets from curated examples and resolved labels.\n\n## Deliverables\n- Support inputs from scorecard examples, feedback items, score results, and imported/generated examples.\n- Materialize a frozen single-score `DataSet` artifact.\n- Snapshot labels into the dataset artifact so evaluation never dereferences live source records during regression runs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Build deterministic single-score reference datasets from curated examples and labels"
+  }
+}
