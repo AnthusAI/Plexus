@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.11
+FROM public.ecr.aws/lambda/python:3.12
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,7 +10,7 @@ WORKDIR /var/task
 COPY . /workspace
 
 # Required for git-based dependencies (for example openai-cost-calculator).
-RUN yum install -y git && yum clean all && rm -rf /var/cache/yum
+RUN dnf install -y git && dnf clean all && rm -rf /var/cache/dnf
 
 # Install Plexus and dependencies required for procedure execution.
 RUN python -m pip install --upgrade pip && \
