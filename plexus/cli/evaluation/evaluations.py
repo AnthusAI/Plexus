@@ -41,6 +41,7 @@ import socket
 import types  # Add this at the top with other imports
 import uuid
 import inspect
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 def truncate_dict_strings(d, max_length=100):
@@ -581,6 +582,144 @@ def get_dataset_by_id(client: PlexusDashboardClient, dataset_id: str) -> dict:
     if not result or 'getDataSet' not in result or not result['getDataSet']:
         raise ValueError(f"Dataset with ID {dataset_id} not found")
     return result['getDataSet']
+
+
+def list_associated_datasets_for_score(client: PlexusDashboardClient, score_id: str, limit: int = 200) -> list[dict]:
+    """List datasets associated to a score ordered newest-first by createdAt then id."""
+    query = """
+    query ListAssociatedDataSets($scoreId: String!, $limit: Int!) {
+        listDataSets(
+            filter: {
+                scoreId: { eq: $scoreId }
+            }
+            limit: $limit
+        ) {
+            items {
+                id
+                name
+                description
+                file
+                dataSourceVersionId
+                attachedFiles
+                createdAt
+                updatedAt
+                accountId
+                scoreId
+            }
+        }
+    }
+    """
+    result = client.execute(query, {"scoreId": score_id, "limit": limit})
+    items = ((result or {}).get("listDataSets") or {}).get("items") or []
+    datasets = [item for item in items if item]
+    datasets.sort(key=lambda ds: (ds.get("createdAt") or "", ds.get("id") or ""), reverse=True)
+    return datasets
+
+
+def get_latest_associated_dataset_for_score(client: PlexusDashboardClient, score_id: str) -> dict:
+    datasets = list_associated_datasets_for_score(client, score_id)
+    if not datasets:
+        raise ValueError(f"No associated dataset found for score {score_id}.")
+    return datasets[0]
+
+
+def _is_uuid_like(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    text = str(value)
+    return text.count("-") == 4 and len(text) >= 32
+
+
+def resolve_primary_score_id_for_accuracy(
+    client: PlexusDashboardClient,
+    scorecard_identifier: str,
+    score_identifier: str,
+    use_yaml: bool,
+    specific_version: Optional[str]
+) -> str:
+    target_score_identifiers = [s.strip() for s in score_identifier.split(",") if s.strip()]
+    if not target_score_identifiers:
+        raise ValueError("--score is required when using score-associated datasets.")
+
+    primary_score_identifier = target_score_identifiers[0]
+    if use_yaml:
+        scorecard_instance = load_scorecard_from_yaml_files(
+            scorecard_identifier,
+            target_score_identifiers,
+            specific_version=specific_version
+        )
+    else:
+        scorecard_instance = load_scorecard_from_api(
+            scorecard_identifier,
+            target_score_identifiers,
+            use_cache=False,
+            specific_version=specific_version
+        )
+
+    primary_score_id = None
+    for sc_config in (scorecard_instance.scores or []):
+        if (
+            sc_config.get('name') == primary_score_identifier or
+            sc_config.get('key') == primary_score_identifier or
+            str(sc_config.get('id', '')) == primary_score_identifier or
+            sc_config.get('externalId') == primary_score_identifier or
+            sc_config.get('originalExternalId') == primary_score_identifier
+        ):
+            primary_score_id = sc_config.get("id")
+            break
+
+    if _is_uuid_like(primary_score_id):
+        return str(primary_score_id)
+
+    from plexus.cli.shared.direct_identifier_resolution import direct_resolve_score_identifier
+    scorecard_id_for_resolution = getattr(scorecard_instance, "id", None)
+    resolved_score_id = direct_resolve_score_identifier(
+        client,
+        scorecard_id_for_resolution or str(scorecard_identifier),
+        str(primary_score_id or primary_score_identifier),
+    )
+    if not resolved_score_id:
+        raise ValueError(f"Could not resolve primary score ID for '{primary_score_identifier}'.")
+    return resolved_score_id
+
+
+def get_latest_accuracy_evaluation_for_score_since(
+    client: PlexusDashboardClient,
+    score_id: str,
+    created_after_iso: str
+) -> Optional[dict]:
+    query = """
+    query ListRecentAccuracyEvaluations($scoreId: String!, $createdAfter: AWSDateTime!, $limit: Int!) {
+        listEvaluations(
+            filter: {
+                scoreId: { eq: $scoreId }
+                type: { eq: "accuracy" }
+                createdAt: { ge: $createdAfter }
+            }
+            limit: $limit
+        ) {
+            items {
+                id
+                createdAt
+                status
+                accuracy
+                metrics
+                processedItems
+                totalItems
+                errorMessage
+            }
+        }
+    }
+    """
+    result = client.execute(
+        query,
+        {"scoreId": score_id, "createdAfter": created_after_iso, "limit": 50}
+    )
+    items = ((result or {}).get("listEvaluations") or {}).get("items") or []
+    if not items:
+        return None
+    items.sort(key=lambda item: (item.get("createdAt") or "", item.get("id") or ""), reverse=True)
+    return items[0]
 
 def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config: dict,
                                    number_of_samples: Optional[int] = None,
@@ -1269,6 +1408,8 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--data-source-key', default=None, type=str, help='Key of the cloud data source to use (overrides score data config)')
 @click.option('--data-source-id', default=None, type=str, help='ID of the cloud data source to use (overrides score data config)')
 @click.option('--dataset-id', default=None, type=str, help='Specific dataset ID to use (overrides score data config)')
+@click.option('--use-score-associated-dataset', is_flag=True, default=False, help='Use the latest dataset associated with the score.')
+@click.option('--all-score-associated-datasets', is_flag=True, default=False, help='Run one evaluation per dataset associated with the score.')
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
 def accuracy(
     scorecard: str,
@@ -1291,6 +1432,8 @@ def accuracy(
     data_source_key: Optional[str],
     data_source_id: Optional[str],
     dataset_id: Optional[str],
+    use_score_associated_dataset: bool,
+    all_score_associated_datasets: bool,
     allow_no_labels: bool
     ):
     """
@@ -1307,6 +1450,11 @@ def accuracy(
     if version and latest:
         logging.error("Cannot use both --version and --latest options. Choose one.")
         console.print("[bold red]Error: Cannot use both --version and --latest options. Choose one.[/bold red]")
+        return
+
+    if all_score_associated_datasets and not use_score_associated_dataset:
+        logging.error("--all-score-associated-datasets requires --use-score-associated-dataset.")
+        console.print("[bold red]Error: --all-score-associated-datasets requires --use-score-associated-dataset.[/bold red]")
         return
     
     # Determine effective version for logging
@@ -1344,6 +1492,133 @@ def accuracy(
         console.print("\n[bold green]Dry run completed successfully.[/bold green]")
         console.print("[dim]No actual evaluation or database operations were performed.[/dim]")
         console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
+        return
+
+    if all_score_associated_datasets and not dataset_id:
+        coordinator_client = PlexusDashboardClient()
+        primary_score_id = resolve_primary_score_id_for_accuracy(
+            client=coordinator_client,
+            scorecard_identifier=str(scorecard),
+            score_identifier=score or "",
+            use_yaml=yaml,
+            specific_version=resolved_version
+        )
+        associated_datasets = list_associated_datasets_for_score(coordinator_client, primary_score_id)
+        if not associated_datasets:
+            raise ValueError(
+                f"No associated datasets found for score {primary_score_id}."
+            )
+
+        console.print(
+            f"[cyan]Running accuracy evaluation across {len(associated_datasets)} "
+            f"associated datasets for score {primary_score_id}[/cyan]"
+        )
+        run_summaries = []
+        for dataset in associated_datasets:
+            dataset_id_value = dataset["id"]
+            started_at_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            cmd = [
+                sys.executable,
+                "-m",
+                "plexus.cli.CommandLineInterface",
+                "evaluate",
+                "accuracy",
+                "--scorecard",
+                str(scorecard),
+                "--dataset-id",
+                dataset_id_value,
+                "--number-of-samples",
+                str(number_of_samples),
+                "--sampling-method",
+                sampling_method,
+            ]
+
+            if yaml:
+                cmd.append("--yaml")
+            if use_langsmith_trace:
+                cmd.append("--use-langsmith-trace")
+            if random_seed is not None:
+                cmd.extend(["--random-seed", str(random_seed)])
+            if content_ids_to_sample:
+                cmd.extend(["--content-ids-to-sample", content_ids_to_sample])
+            if score:
+                cmd.extend(["--score", score])
+            if version:
+                cmd.extend(["--version", version])
+            if latest:
+                cmd.append("--latest")
+            if experiment_label:
+                cmd.extend(["--experiment-label", experiment_label])
+            if fresh:
+                cmd.append("--fresh")
+            if reload:
+                cmd.append("--reload")
+            if visualize:
+                cmd.append("--visualize")
+            if allow_no_labels:
+                cmd.append("--allow-no-labels")
+
+            completed = subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False
+            )
+
+            if completed.returncode != 0:
+                run_summaries.append({
+                    "datasetId": dataset_id_value,
+                    "status": f"FAILED (exit {completed.returncode})",
+                    "ac1": "n/a",
+                    "accuracy": "n/a",
+                })
+                continue
+
+            evaluation = None
+            for _ in range(5):
+                evaluation = get_latest_accuracy_evaluation_for_score_since(
+                    coordinator_client,
+                    primary_score_id,
+                    started_at_iso
+                )
+                if evaluation:
+                    break
+                time.sleep(1)
+
+            ac1_value = "n/a"
+            accuracy_value = "n/a"
+            status_value = "UNKNOWN"
+            if evaluation:
+                status_value = evaluation.get("status") or "UNKNOWN"
+                accuracy_raw = evaluation.get("accuracy")
+                if isinstance(accuracy_raw, (int, float)):
+                    accuracy_value = f"{accuracy_raw:.2f}"
+                metrics_raw = evaluation.get("metrics")
+                if metrics_raw:
+                    try:
+                        metrics = json.loads(metrics_raw) if isinstance(metrics_raw, str) else metrics_raw
+                        alignment_metric = next(
+                            (m for m in metrics if (m.get("name") or "").lower() == "alignment"),
+                            None
+                        )
+                        if alignment_metric and alignment_metric.get("value") is not None:
+                            ac1_value = f"{float(alignment_metric['value']):.4f}"
+                    except Exception:
+                        pass
+
+            run_summaries.append({
+                "datasetId": dataset_id_value,
+                "status": status_value,
+                "ac1": ac1_value,
+                "accuracy": accuracy_value,
+            })
+
+        console.print("\n[bold]Associated Dataset Evaluation Summary[/bold]")
+        console.print("dataset_id                             status               AC1      Accuracy")
+        for row in run_summaries:
+            console.print(
+                f"{row['datasetId']:<38} {row['status']:<20} {row['ac1']:<8} {row['accuracy']}"
+            )
         return
     
     # Proceeding with normal evaluation
@@ -1814,7 +2089,7 @@ def accuracy(
                 logging.info(f"Using fallback: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             
             # Check if any cloud dataset options are provided
-            use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id])
+            use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id, use_score_associated_dataset])
             
             if use_cloud_dataset:
                 # Load samples from cloud dataset
@@ -1822,6 +2097,16 @@ def accuracy(
                     if dataset_id:
                         logging.info(f"Using specific dataset ID: {dataset_id}")
                         cloud_dataset = get_dataset_by_id(client, dataset_id)
+                    elif use_score_associated_dataset:
+                        primary_score_id = primary_score_config.get('id') if primary_score_config else None
+                        if not primary_score_id:
+                            raise ValueError(
+                                "Cannot resolve score-associated dataset: primary score ID is unavailable."
+                            )
+                        logging.info(
+                            f"Using latest score-associated dataset for score ID: {primary_score_id}"
+                        )
+                        cloud_dataset = get_latest_associated_dataset_for_score(client, primary_score_id)
                     else:
                         # Look up data source and get latest dataset
                         data_source = lookup_data_source(
