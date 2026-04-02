@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "34dfdb72-145d-45d2-9693-7849e2d58212",
+  "issue_id": "plx-2536a150-6366-4c8e-a8f0-f66710d6a96b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:42:00.113Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix RemoveSpeakerIdentifiersTranscriptFilter for generic labels like User123"
+  }
+}
