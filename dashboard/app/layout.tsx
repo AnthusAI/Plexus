@@ -8,7 +8,12 @@ import { BrandProvider } from "./contexts/BrandContext"
 import { BrandedTitle } from "@/components/BrandedTitle"
 
 const inter = Inter({ subsets: ["latin"] });
-const jersey20 = Jersey_20({ subsets: ["latin"], weight: "400", variable: "--font-jersey-20" });
+const jersey20 = Jersey_20({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-jersey-20",
+  adjustFontFallback: false,
+});
 
 export const metadata: Metadata = {
   title: "AI Agent Incubator",

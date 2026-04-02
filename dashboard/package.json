@@ -88,7 +88,7 @@
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
     "@tailwindcss/container-queries": "^0.1.1",
-    "@tailwindcss/postcss": "^4.2.2",
+    "@tailwindcss/postcss": "4.0.0",
     "@types/aws-lambda": "^8.10.0",
     "@xyflow/react": "^12.10.1",
     "ai": "^6.0.136",
@@ -109,7 +109,7 @@
     "media-chrome": "^4.18.2",
     "monaco-editor": "^0.52.2",
     "motion": "^12.38.0",
-    "nanoid": "^5.1.7",
+    "nanoid": "^3.3.8",
     "next": "^15.5.14",
     "next-themes": "^0.4.6",
     "node-fetch": "^2.7.0",
@@ -184,19 +184,20 @@
     "postcss": "8.4.31",
     "storybook": "^8.6.18",
     "storybook-dark-mode": "^4.0.2",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "4.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.2",
     "wait-on": "^8.0.1"
   },
   "overrides": {
+    "@tailwindcss/node": "4.0.0",
+    "@tailwindcss/oxide": "4.0.0",
     "diff": "5.2.2",
     "dompurify": "3.3.2",
     "immutable": "4.3.8",
     "mdast-util-to-hast": "13.2.1",
     "mermaid": "11.14.0",
     "minimatch": "3.1.4",
-    "nanoid": "$nanoid",
     "picomatch": "2.3.2",
     "postcss": "8.4.31",
     "serve": "14.2.6",
@@ -212,6 +213,7 @@
     ]
   },
   "optionalDependencies": {
-    "@parcel/watcher": "^2.5.1"
+    "@parcel/watcher": "^2.5.1",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.0.0"
   }
 }
