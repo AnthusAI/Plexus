@@ -654,7 +654,7 @@ def _upload_dataset_parquet(
     return s3_key
 
 
-def build_reference_dataset_from_feedback_ids(
+def build_associated_dataset_from_feedback_ids(
     *,
     client: PlexusDashboardClient,
     scorecard_identifier: str,
