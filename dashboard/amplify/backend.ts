@@ -6,7 +6,7 @@ import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ConsoleRunWorkerStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
-import { Duration } from 'aws-cdk-lib';
+import { Duration, Stack } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -154,12 +154,17 @@ if (!resolvedDataApiUrl || !resolvedDataApiKey) {
     throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
 }
 
+const consoleRunWorkerScope = backend.createStack('ConsoleRunWorkerStack');
 const consoleRunWorkerStack = new ConsoleRunWorkerStack(
-    backend.createStack('ConsoleRunWorkerStack'),
+    consoleRunWorkerScope,
     'ConsoleRunWorker',
     {
         plexusApiUrl: resolvedDataApiUrl,
         plexusApiKey: resolvedDataApiKey,
+        env: {
+            account: Stack.of(consoleRunWorkerScope).account,
+            region: Stack.of(consoleRunWorkerScope).region,
+        },
     }
 );
 
