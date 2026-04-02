@@ -133,7 +133,13 @@ class TestFeedbackEvaluation:
         with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
             with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
-                    result = await evaluation.run()
+                    with patch.object(
+                        evaluation,
+                        '_run_root_cause_analysis',
+                        new_callable=AsyncMock,
+                        return_value={"topics": [{"label": "topic-1"}]},
+                    ):
+                        result = await evaluation.run()
                     
                     assert result["status"] == "success"
                     assert result["evaluation_id"] == "eval-789"
@@ -204,7 +210,13 @@ class TestFeedbackEvaluation:
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
                     with patch('plexus.analysis.feedback_analyzer.analyze_feedback_items', return_value=mapped_analysis):
                         with patch('plexus.dashboard.api.models.score_result.ScoreResult.create', return_value=MagicMock(id="score-result-123")):
-                            await evaluation.run()
+                            with patch.object(
+                                evaluation,
+                                '_run_root_cause_analysis',
+                                new_callable=AsyncMock,
+                                return_value={"topics": [{"label": "topic-1"}]},
+                            ):
+                                await evaluation.run()
 
         final_call = mock_eval_record.update.call_args_list[-1]
         metrics_payload = json.loads(final_call.kwargs["metrics"])
@@ -466,8 +478,14 @@ class TestFeedbackEvaluation:
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
                     with patch('plexus.dashboard.api.models.score_result.ScoreResult.create') as mock_create:
                         mock_create.return_value = MagicMock(id="score-result-123")
-                        
-                        result = await evaluation.run()
+
+                        with patch.object(
+                            evaluation,
+                            '_run_root_cause_analysis',
+                            new_callable=AsyncMock,
+                            return_value={"topics": [{"label": "topic-1"}]},
+                        ):
+                            result = await evaluation.run()
                         
                         # Verify ScoreResult.create was called for each feedback item
                         assert mock_create.call_count == len(mock_feedback_items)
@@ -532,7 +550,13 @@ class TestFeedbackEvaluation:
                                     "class_distribution": {},
                                     "predicted_class_distribution": {},
                                 }
-                                await evaluation.run()
+                                with patch.object(
+                                    evaluation,
+                                    '_run_root_cause_analysis',
+                                    new_callable=AsyncMock,
+                                    return_value={"topics": [{"label": "topic-1"}]},
+                                ):
+                                    await evaluation.run()
                                 analyzed_items = mock_analyze.call_args.args[0]
                                 sampled_id_sets.append({i.id for i in analyzed_items})
 
@@ -620,3 +644,89 @@ class TestFeedbackEvaluation:
 
         assert captured["max_exemplars"] == 20
         assert result["topics"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_fails_when_incorrect_items_and_rca_missing(self, mock_api_client, mock_feedback_items):
+        """Feedback-backed runs with incorrect items must fail if RCA payload is missing."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        for item in mock_feedback_items:
+            item.itemId = f"item-{item.id}"
+            item.isAgreement = item.initialAnswerValue == item.finalAnswerValue
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
+                    with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value={}):
+                        with pytest.raises(RuntimeError, match="no usable RCA payload"):
+                            await evaluation.run()
+
+        failed_call = any(call.kwargs.get('status') == 'FAILED' for call in mock_eval_record.update.call_args_list)
+        assert failed_call
+
+    @pytest.mark.asyncio
+    async def test_run_succeeds_without_rca_when_no_incorrect_items(self, mock_api_client):
+        """RCA is not required when there are zero incorrect items."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        perfect_items = []
+        for i in range(3):
+            item = MagicMock()
+            item.id = f"item-{i}"
+            item.itemId = f"raw-item-{i}"
+            item.initialAnswerValue = "Yes"
+            item.finalAnswerValue = "Yes"
+            item.isAgreement = True
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+            perfect_items.append(item)
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=perfect_items):
+                    with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value={}):
+                        result = await evaluation.run()
+
+        assert result["status"] == "success"
+        final_call = mock_eval_record.update.call_args_list[-1]
+        assert final_call.kwargs.get("status") == "COMPLETED"
