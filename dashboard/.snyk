@@ -20,4 +20,14 @@ ignore:
           Dev-only dependency, buildHttp not used, same version on main.
         expires: 2026-10-01T00:00:00.000Z
 
+  SNYK-JS-IMMUTABLE-15423650:
+    - '*':
+        reason: >
+          immutable Prototype Pollution (CVE-2026-29063) via
+          @excalidraw/excalidraw@0.18.0 → sass@1.51.0. Snyk resolves from
+          excalidraw's published manifest; the npm override forces sass@1.98.0
+          (immutable@^5.1.5, clean) in the actual installation. Upstream
+          excalidraw@0.18.0 is the latest release and has not yet updated sass.
+        expires: 2026-10-01T00:00:00.000Z
+
 patch: {}
