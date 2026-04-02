@@ -27,7 +27,8 @@ import type { GraphQLResult } from '@aws-amplify/api'
 import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { load as _loadYaml, dump as stringifyYaml } from 'js-yaml'
-const parseYaml = (str: string): Record<string, unknown> => _loadYaml(str) as Record<string, unknown>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const parseYaml = (str: string): Record<string, any> => _loadYaml(str) as Record<string, any>
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
