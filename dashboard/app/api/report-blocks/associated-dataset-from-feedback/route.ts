@@ -24,6 +24,12 @@ function parsePositiveInteger(value: unknown): number | null {
   return parsed
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 export async function POST(request: NextRequest) {
   let payload: unknown
   try {
@@ -38,6 +44,12 @@ export async function POST(request: NextRequest) {
   const maxItems = parsePositiveInteger((payload as { maxItems?: unknown })?.maxItems)
   const days = parsePositiveInteger((payload as { days?: unknown })?.days)
   const feedbackItemIds = normalizeFeedbackItemIds((payload as { feedbackItemIds?: unknown })?.feedbackItemIds)
+  const sourceReportBlockId = normalizeOptionalString(
+    (payload as { sourceReportBlockId?: unknown })?.sourceReportBlockId
+  )
+  const eligibilityRule = normalizeOptionalString(
+    (payload as { eligibilityRule?: unknown })?.eligibilityRule
+  )
 
   if (!isNonEmptyString(taskId) || !UUID_RE.test(taskId.trim())) {
     return NextResponse.json({ accepted: false, error: 'taskId must be a UUID' }, { status: 400 })
@@ -65,6 +77,12 @@ export async function POST(request: NextRequest) {
   }
   if (feedbackItemIds.length > 0) {
     args.push('--feedback-item-ids', feedbackItemIds.join(','))
+    if (sourceReportBlockId) {
+      args.push('--source-report-block-id', sourceReportBlockId)
+    }
+    if (eligibilityRule) {
+      args.push('--eligibility-rule', eligibilityRule)
+    }
   }
 
   const child = spawn('plexus', args, {

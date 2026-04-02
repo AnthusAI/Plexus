@@ -479,6 +479,8 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         scorecard: String(scorecard),
         score: String(score),
         feedbackItemIds: eligibleIds,
+        sourceReportBlockId: output.source_report_block_id || undefined,
+        eligibilityRule: output.eligibility_rule || undefined,
         maxItems: requestedMaxItems,
         days: Number.isInteger(configuredDays) && configuredDays > 0 ? configuredDays : undefined,
       };
