@@ -1,0 +1,408 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.conversation_filter module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.conversation_utils module" href="plexus.cli.procedure.conversation_utils.html" />
+    <link rel="prev" title="plexus.cli.procedure.chat_recorder module" href="plexus.cli.procedure.chat_recorder.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.conversation_filter module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.conversation_filter.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.conversation_filter">
+<span id="plexus-cli-procedure-conversation-filter-module"></span><h1>plexus.cli.procedure.conversation_filter module<a class="headerlink" href="#module-plexus.cli.procedure.conversation_filter" title="Link to this heading"></a></h1>
+<p>Token-aware conversation filtering for procedure AI execution.</p>
+<p>This module provides specialized conversation filtering that considers both
+message content and token limits for optimal model context management.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ConversationFilter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.conversation_filter.</span></span><span class="sig-name descname"><span class="pre">ConversationFilter</span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ConversationFilter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>Abstract base class for conversation filtering strategies.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ConversationFilter.filter_conversation">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">filter_conversation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation_history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span></span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ConversationFilter.filter_conversation" title="Link to this definition"></a></dt>
+<dd><p>Filter conversation history according to specific strategy.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ConversationFilterBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.conversation_filter.</span></span><span class="sig-name descname"><span class="pre">ConversationFilterBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ConversationFilterBase" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for conversation filtering with token measurement capabilities.</p>
+<p>This class provides token counting and measurement functionality without
+performing any actual filtering. Other filters can inherit from this class
+to get token measurement capabilities and then implement their own filtering logic.</p>
+<p>Initialize the base conversation filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ConversationFilterBase.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ConversationFilterBase.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the base conversation filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ConversationFilterBase.analyze_conversation_tokens">
+<span class="sig-name descname"><span class="pre">analyze_conversation_tokens</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation_history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ConversationFilterBase.analyze_conversation_tokens" title="Link to this definition"></a></dt>
+<dd><p>Analyze token usage in conversation history without modifying it.</p>
+<p>This method provides pure measurement and analysis functionality.
+It reports on token usage, message breakdown, and whether limits are exceeded,
+but does not perform any filtering or modification of the conversation.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>conversation_history: List of conversation messages
+max_tokens: Optional maximum token limit for analysis</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dictionary with token analysis results</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ManagerAgentConversationFilter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.conversation_filter.</span></span><span class="sig-name descname"><span class="pre">ManagerAgentConversationFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ManagerAgentConversationFilter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.ConversationFilterBase" title="plexus.cli.procedure.conversation_filter.ConversationFilterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConversationFilterBase</span></code></a>, <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.ConversationFilter" title="plexus.cli.procedure.conversation_filter.ConversationFilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConversationFilter</span></code></a></p>
+<p>Specialized conversation filter for manager/orchestration agents that provides high-level oversight.</p>
+<p>The manager agent needs a strategic overview of the conversation rather than detailed technical execution.
+This filter creates a filtered message list optimized for orchestration decisions, with proper
+system message setup for manager-style responses.</p>
+<p>This filter is designed for SOP (Standard Operating Procedure) agents and other manager-level
+agents that need to understand conversation flow and guide the overall process.</p>
+<p>Initialize the manager agent filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ManagerAgentConversationFilter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ManagerAgentConversationFilter.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the manager agent filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.ManagerAgentConversationFilter.filter_conversation">
+<span class="sig-name descname"><span class="pre">filter_conversation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation_history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">manager_system_prompt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span></span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.ManagerAgentConversationFilter.filter_conversation" title="Link to this definition"></a></dt>
+<dd><p>Filter conversation history for manager agent consumption.</p>
+<p>This creates a filtered message list that:
+1. Replaces the original system message with a manager-specific system prompt
+2. Preserves recent messages in full (last 3-5 messages)
+3. Summarizes older messages for context
+4. Adds a final system message instructing manager-style response</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>conversation_history: Complete conversation history
+max_tokens: Optional maximum token limit (affects summary length)
+manager_system_prompt: System prompt specifically for the manager agent</p>
+</dd>
+<dt>Returns:</dt><dd><p>Filtered list of messages optimized for manager agent oversight</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.SOPAgentConversationFilter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.conversation_filter.</span></span><span class="sig-name descname"><span class="pre">SOPAgentConversationFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.SOPAgentConversationFilter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.ConversationFilterBase" title="plexus.cli.procedure.conversation_filter.ConversationFilterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConversationFilterBase</span></code></a>, <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.ConversationFilter" title="plexus.cli.procedure.conversation_filter.ConversationFilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConversationFilter</span></code></a></p>
+<p>Specialized conversation filter for SOP (Standard Operating Procedure) agents that need 
+minimal conversation context to make orchestration decisions.</p>
+<p>This filter is designed to prevent the SOP agent from getting overwhelmed by detailed 
+conversation history while still providing enough context to make informed guidance decisions.</p>
+<p>Key behaviors:
+1. Preserves only the most recent message (last assistant or user message)
+2. Truncates all other messages to brief summaries
+3. Maintains conversation flow indicators for stage awareness
+4. Optimized for orchestration/guidance rather than detailed technical work</p>
+<p>Initialize the SOP agent conversation filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.SOPAgentConversationFilter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.SOPAgentConversationFilter.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the SOP agent conversation filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.SOPAgentConversationFilter.filter_conversation">
+<span class="sig-name descname"><span class="pre">filter_conversation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation_history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span></span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.SOPAgentConversationFilter.filter_conversation" title="Link to this definition"></a></dt>
+<dd><p>Filter conversation history for SOP agent consumption.</p>
+<p>This creates a minimal context that preserves:
+1. The most recent message in full (for immediate context)
+2. Brief summaries of earlier messages (for flow awareness)
+3. Stage transition indicators</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>conversation_history: Complete conversation history
+max_tokens: Optional maximum token limit</p>
+</dd>
+<dt>Returns:</dt><dd><p>Filtered conversation history with minimal context for SOP oversight</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.conversation_filter.</span></span><span class="sig-name descname"><span class="pre">TokenAwareConversationFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.ConversationFilterBase" title="plexus.cli.procedure.conversation_filter.ConversationFilterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConversationFilterBase</span></code></a>, <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.ConversationFilter" title="plexus.cli.procedure.conversation_filter.ConversationFilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConversationFilter</span></code></a></p>
+<p>Token-aware conversation filter that combines character-based and token-based filtering.</p>
+<p>This filter implements intelligent conversation management by:
+1. Identifying tool result messages (ToolMessage or SystemMessage with tool patterns)
+2. Counting tokens per message for precise context management (inherited from base)
+3. Applying filtering rules based on both content size and token limits
+4. Preserving recent tool results while truncating older ones</p>
+<p>Initialize the token-aware filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the token-aware filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter.filter_conversation">
+<span class="sig-name descname"><span class="pre">filter_conversation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation_history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span></span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter.filter_conversation" title="Link to this definition"></a></dt>
+<dd><p>Filter conversation history with token awareness.</p>
+<p>Behavior Driven Design:
+GIVEN a conversation history with tool result messages
+WHEN the conversation exceeds token limits
+THEN filter by keeping recent tool results full and truncating older ones
+AND provide detailed per-message token reporting</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>conversation_history: Complete conversation history
+max_tokens: Optional maximum token limit</p>
+</dd>
+<dt>Returns:</dt><dd><p>Filtered conversation history</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.WorkerAgentConversationFilter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.conversation_filter.</span></span><span class="sig-name descname"><span class="pre">WorkerAgentConversationFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-4o'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.WorkerAgentConversationFilter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter" title="plexus.cli.procedure.conversation_filter.TokenAwareConversationFilter"><code class="xref py py-class docutils literal notranslate"><span class="pre">TokenAwareConversationFilter</span></code></a></p>
+<p>Specialized conversation filter for worker agents that performs specific filtering:</p>
+<ol class="arabic simple">
+<li><p>Filters tool result messages (keeps most recent 2, truncates older ones)</p></li>
+<li><p>Filters empty AI messages that contain only tool calls (no text content)</p></li>
+</ol>
+<p>This filter is designed for coding assistant workers that make tool calls
+but may produce empty reasoning messages that just contain tool calls.</p>
+<p>Initialize the token-aware filter.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Model name for token encoding (default: “gpt-4o”)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.procedure.conversation_filter.WorkerAgentConversationFilter.filter_conversation">
+<span class="sig-name descname"><span class="pre">filter_conversation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conversation_history</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tokens</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span></span></span><a class="headerlink" href="#plexus.cli.procedure.conversation_filter.WorkerAgentConversationFilter.filter_conversation" title="Link to this definition"></a></dt>
+<dd><p>Filter conversation history for worker agents with enhanced filtering.</p>
+<p>This method applies both tool result filtering and empty AI message filtering
+while maintaining OpenAI API requirements and preserving the current conversation state:
+1. Applies the standard tool result filtering (most recent 2 kept, others truncated)
+2. Removes OLD AI messages that contain only tool calls with no text content
+3. CRITICAL: Preserves the MOST RECENT AI message (current tool call) to avoid infinite loops
+4. Also removes corresponding tool results to maintain API compliance</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>conversation_history: Complete conversation history
+max_tokens: Optional maximum token limit</p>
+</dd>
+<dt>Returns:</dt><dd><p>Filtered conversation history with both tool result and empty AI message filtering</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.chat_recorder.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.chat_recorder module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.conversation_utils.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.conversation_utils module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
