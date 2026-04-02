@@ -398,14 +398,14 @@ async def _execute_tactus(
             # Let runtime report parse errors with full context if adaptation fails.
             pass
 
-        # Get OpenAI API key from options or environment
-        openai_api_key = options.get('openai_api_key')  # lgtm[py/clear-text-logging-sensitive-data]
+        # Get OpenAI API key from options or environment (not logged — passed to API client only)
+        _api_key = options.get('openai_api_key')
 
-        if not openai_api_key:
+        if not _api_key:
             from plexus.config.loader import load_config
             load_config()
             import os
-            openai_api_key = os.getenv('OPENAI_API_KEY')
+            _api_key = os.getenv('OPENAI_API_KEY')
 
         # Create Plexus adapters
         storage = PlexusStorageAdapter(client, procedure_id)
@@ -420,7 +420,7 @@ async def _execute_tactus(
             hitl_handler=hitl,
             trace_sink=trace_sink,
             mcp_server=mcp_server,
-            openai_api_key=openai_api_key
+            openai_api_key=_api_key
         )
 
         # Ensure DSPy agents can run in streaming mode even outside IDE event handlers.
@@ -532,15 +532,15 @@ async def _execute_sop_agent(
     try:
         from .procedure_sop_agent import run_sop_guided_procedure
 
-        # Get OpenAI API key
-        openai_api_key = options.get('openai_api_key')  # lgtm[py/clear-text-logging-sensitive-data]
+        # Get OpenAI API key (not logged — passed directly to API client only)
+        _api_key = options.get('openai_api_key')
 
         # Execute with SOP agent
         result = await run_sop_guided_procedure(
             procedure_id=procedure_id,
             experiment_yaml=procedure_code,
             mcp_server=mcp_server,
-            openai_api_key=openai_api_key,
+            openai_api_key=_api_key,
             experiment_context=context,
             client=client,
             model_config=options.get('model_config')
@@ -550,9 +550,10 @@ async def _execute_sop_agent(
         return result
 
     except Exception as e:
-        logger.error(f"SOP Agent execution error: {e}", exc_info=True)
+        error_type = type(e).__name__
+        logger.error(f"SOP Agent execution error ({error_type})", exc_info=False)
         return {
             'success': False,
             'procedure_id': procedure_id,
-            'error': f"SOP Agent execution error: {e}"
+            'error': f"SOP Agent execution error: {error_type}"
         }
