@@ -211,7 +211,7 @@
     "tinyglobby": {
       "picomatch": "4.0.4"
     },
-    "webpack": "5.99.9"
+    "webpack": "5.104.1"
   },
   "release": {
     "branches": [
