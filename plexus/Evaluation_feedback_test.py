@@ -471,3 +471,72 @@ class TestFeedbackEvaluation:
                         # Verify ScoreResult.create was called for each feedback item
                         assert mock_create.call_count == len(mock_feedback_items)
                         assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_run_evaluation_sampling_with_seed_is_deterministic(self, mock_api_client):
+        """Sampling with sample_seed should produce the same subset across runs."""
+        feedback_items = []
+        for i in range(10):
+            item = MagicMock()
+            item.id = f"item-{i}"
+            item.itemId = f"raw-item-{i}"
+            item.initialAnswerValue = "Yes" if i % 2 == 0 else "No"
+            item.finalAnswerValue = "No" if i % 2 == 0 else "Yes"
+            item.isAgreement = False
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+            feedback_items.append(item)
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        sampled_id_sets = []
+
+        async def _run_once():
+            evaluation = FeedbackEvaluation(
+                scorecard_name="Test Scorecard",
+                scorecard=None,
+                api_client=mock_api_client,
+                days=7,
+                scorecard_id="scorecard-123",
+                score_id="score-456",
+                evaluation_id="eval-789",
+                account_id="account-123",
+                account_key="test-account-key",
+                max_samples=5,
+                sample_seed=1337,
+            )
+
+            with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+                with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                    with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=feedback_items):
+                        with patch.object(evaluation, '_create_score_results_from_feedback', new_callable=AsyncMock):
+                            with patch('plexus.analysis.feedback_analyzer.analyze_feedback_items') as mock_analyze:
+                                mock_analyze.return_value = {
+                                    "ac1": 0.5,
+                                    "accuracy": 50.0,
+                                    "precision": 50.0,
+                                    "recall": 50.0,
+                                    "total_items": 5,
+                                    "agreements": 0,
+                                    "disagreements": 5,
+                                    "confusion_matrix": {},
+                                    "class_distribution": {},
+                                    "predicted_class_distribution": {},
+                                }
+                                await evaluation.run()
+                                analyzed_items = mock_analyze.call_args.args[0]
+                                sampled_id_sets.append({i.id for i in analyzed_items})
+
+        await _run_once()
+        await _run_once()
+
+        assert len(sampled_id_sets[0]) == 5
+        assert sampled_id_sets[0] == sampled_id_sets[1]

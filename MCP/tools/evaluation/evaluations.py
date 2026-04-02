@@ -305,6 +305,8 @@ def register_evaluation_tools(mcp: FastMCP):
         evaluation_type: str = "accuracy",
         n_samples: int = 10,
         days: int = 7,
+        max_feedback_samples: Optional[int] = None,
+        sample_seed: Optional[int] = None,
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
@@ -323,9 +325,10 @@ def register_evaluation_tools(mcp: FastMCP):
         - score_name: Name of specific score to evaluate (optional for feedback; if omitted, runs all scores in the scorecard)
         - evaluation_type: Type of evaluation - "accuracy" (default) or "feedback"
         - n_samples: Number of samples for accuracy evaluation (default: 10)
-        - days: Number of days to look back for feedback evaluation (default: 7). The feedback items
-                collected in this window become the evaluation dataset — no random sampling, all
-                feedback items in the window are used as ground truth. Use 30-60 days for more data.
+        - days: Number of days to look back for feedback evaluation (default: 7). Use 30-60 days for more data.
+        - max_feedback_samples: Optional cap for feedback evaluations. When provided, a random
+                subset up to this size is evaluated.
+        - sample_seed: Optional random seed for reproducible feedback sampling.
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
         - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if
                    provided, overrides the auto-fetched champion version.
@@ -366,7 +369,15 @@ def register_evaluation_tools(mcp: FastMCP):
         if version and latest:
             return "Error: Cannot use both version and latest options. Choose one."
 
-        logger.info(f"MCP Evaluation - Type: {evaluation_type}, Scorecard: {scorecard_name}, Score: {score_name}, Days: {days}, YAML: {yaml}, Samples: {n_samples}")
+        if max_feedback_samples is not None and max_feedback_samples <= 0:
+            return "Error: max_feedback_samples must be a positive integer"
+
+        logger.info(
+            "MCP Evaluation - Type: %s, Scorecard: %s, Score: %s, Days: %s, "
+            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s",
+            evaluation_type, scorecard_name, score_name, days, yaml, n_samples,
+            max_feedback_samples, sample_seed
+        )
 
         try:
             import json
@@ -420,7 +431,15 @@ def register_evaluation_tools(mcp: FastMCP):
                                 scores.append(_score)
                     return scores
 
-                async def _run_feedback_sync(sc: str, sco: str, d: int, ver: Optional[str], bl: Optional[str] = None) -> subprocess.CompletedProcess:
+                async def _run_feedback_sync(
+                    sc: str,
+                    sco: str,
+                    d: int,
+                    ver: Optional[str],
+                    bl: Optional[str] = None,
+                    max_fb_samples: Optional[int] = None,
+                    seed: Optional[int] = None,
+                ) -> subprocess.CompletedProcess:
                     """Run plexus evaluate feedback synchronously in a thread, blocking until complete."""
                     cmd = [plexus_bin, "evaluate", "feedback",
                            "--scorecard", sc, "--score", sco, "--days", str(d)]
@@ -428,6 +447,10 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--version", ver]
                     if bl:
                         cmd += ["--baseline", bl]
+                    if max_fb_samples is not None:
+                        cmd += ["--max-samples", str(max_fb_samples)]
+                    if seed is not None:
+                        cmd += ["--sample-seed", str(seed)]
                     return await asyncio.to_thread(
                         subprocess.run,
                         cmd,
@@ -475,7 +498,15 @@ def register_evaluation_tools(mcp: FastMCP):
                             pass
                     return None
 
-                def _spawn_feedback(sc: str, sco: str, d: int, ver: Optional[str], bl: Optional[str] = None) -> None:
+                def _spawn_feedback(
+                    sc: str,
+                    sco: str,
+                    d: int,
+                    ver: Optional[str],
+                    bl: Optional[str] = None,
+                    max_fb_samples: Optional[int] = None,
+                    seed: Optional[int] = None,
+                ) -> None:
                     """Fire-and-forget: spawn plexus evaluate feedback as a detached background process."""
                     cmd = [plexus_bin, "evaluate", "feedback",
                            "--scorecard", sc, "--score", sco, "--days", str(d)]
@@ -483,6 +514,10 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--version", ver]
                     if bl:
                         cmd += ["--baseline", bl]
+                    if max_fb_samples is not None:
+                        cmd += ["--max-samples", str(max_fb_samples)]
+                    if seed is not None:
+                        cmd += ["--sample-seed", str(seed)]
                     subprocess.Popen(
                         cmd,
                         stdout=subprocess.DEVNULL,
@@ -511,7 +546,15 @@ def register_evaluation_tools(mcp: FastMCP):
                         # Background mode: fire-and-forget, return as soon as evaluation record appears.
                         logger.info(f"Spawning feedback evaluation for '{score_name}' (background)")
                         spawn_time = _time.time()
-                        _spawn_feedback(scorecard_name, score_name, days, resolved_version, baseline)
+                        _spawn_feedback(
+                            scorecard_name,
+                            score_name,
+                            days,
+                            resolved_version,
+                            baseline,
+                            max_feedback_samples,
+                            sample_seed,
+                        )
                         await asyncio.sleep(3)
                         # Quick poll to get the evaluation ID
                         import datetime as _dt
@@ -540,6 +583,8 @@ def register_evaluation_tools(mcp: FastMCP):
                                 "score": score_name,
                                 "days": days,
                                 "champion_version_id": resolved_version,
+                                "max_feedback_samples": max_feedback_samples,
+                                "sample_seed": sample_seed,
                                 "message": "Evaluation running in background. Use plexus_evaluation_info to check status.",
                                 "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
                             })
@@ -555,7 +600,15 @@ def register_evaluation_tools(mcp: FastMCP):
                     spawn_time = _time.time()
 
                     run_task = asyncio.create_task(
-                        _run_feedback_sync(scorecard_name, score_name, days, resolved_version, baseline)
+                        _run_feedback_sync(
+                            scorecard_name,
+                            score_name,
+                            days,
+                            resolved_version,
+                            baseline,
+                            max_feedback_samples,
+                            sample_seed,
+                        )
                     )
                     eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=900.0)
                     await run_task  # ensure subprocess is fully done
@@ -571,6 +624,8 @@ def register_evaluation_tools(mcp: FastMCP):
                             "scorecard": eval_info.get('scorecard_name') or scorecard_name,
                             "score": eval_info.get('score_name') or score_name,
                             "score_version_id": eval_info.get('score_version_id'),
+                            "max_feedback_samples": max_feedback_samples,
+                            "sample_seed": sample_seed,
                             "total_items": eval_info.get('total_items'),
                             "processed_items": eval_info.get('processed_items'),
                             "metrics": eval_info.get('metrics'),
@@ -611,7 +666,15 @@ def register_evaluation_tools(mcp: FastMCP):
                         sn = sc_score['name']
                         cv = sc_score['championVersionId']
                         try:
-                            _spawn_feedback(scorecard_name, sn, days, cv)
+                            _spawn_feedback(
+                                scorecard_name,
+                                sn,
+                                days,
+                                cv,
+                                None,
+                                max_feedback_samples,
+                                sample_seed,
+                            )
                             dispatched.append({"score_name": sn, "status": "dispatched", "champion_version_id": cv})
                             logger.info(f"Dispatched feedback evaluation for '{sn}'")
                         except Exception as exc:
@@ -622,6 +685,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         "status": "dispatched",
                         "scorecard": scorecard_name,
                         "days": days,
+                        "max_feedback_samples": max_feedback_samples,
+                        "sample_seed": sample_seed,
                         "total_scores": len(sc_scores),
                         "dispatched": len([d for d in dispatched if d["status"] == "dispatched"]),
                         "scores": dispatched,
