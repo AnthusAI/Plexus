@@ -19,7 +19,7 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
         topic_id: number;
         label: string;
         keywords: string[];
-        exemplars: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null }>;
+        exemplars: Array<{ text: string; item_id?: string | null; identifiers?: Record<string, string> | null; initial_answer_value?: string | null; final_answer_value?: string | null; score_explanation?: string | null }>;
         member_count: number;
         memory_weight: number;
         memory_tier: "hot" | "warm" | "cold";
@@ -233,6 +233,19 @@ const AllScorecardsView: React.FC<{
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackAnalysisData | null>(null);
   const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+  const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
+  const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
+  const toggleMemory = React.useCallback((id: string) => {
+    setExpandedMemoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   // Parse output unconditionally so hooks always run in the same order
   let parsedOutput: FeedbackAnalysisData | null = null;

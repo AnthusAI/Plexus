@@ -23,6 +23,24 @@ import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkBreaks from "remark-breaks"
+
+const parseJsonDeep = (value: unknown): unknown => {
+  let current = value
+  for (let i = 0; i < 3; i += 1) {
+    if (typeof current !== 'string') return current
+    const trimmed = current.trim()
+    if (!trimmed) return current
+    try {
+      current = JSON.parse(trimmed)
+    } catch {
+      return current
+    }
+  }
+  return current
+}
 
 export interface EvaluationMetric {
   name: string
@@ -525,8 +543,17 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
   // Parse feedbackItem data
+  const originalScoreResult = result.feedbackItem?.scoreResults?.items?.find(
+    (sr: any) => sr.type === 'prediction'
+  ) || null;
   const feedbackItem = result.feedbackItem ? {
-    editCommentValue: result.feedbackItem.editCommentValue || null
+    editCommentValue: result.feedbackItem.editCommentValue || null,
+    initialAnswerValue: result.feedbackItem.initialAnswerValue || originalScoreResult?.value || null,
+    initialCommentValue: result.feedbackItem.initialCommentValue || originalScoreResult?.explanation || null,
+    finalAnswerValue: result.feedbackItem.finalAnswerValue || null,
+    editorName: result.feedbackItem.editorName || null,
+    editedAt: result.feedbackItem.editedAt || null,
+    createdAt: result.feedbackItem.createdAt || null,
   } : null;
 
 
@@ -654,12 +681,21 @@ const DetailContent = React.memo(({
   const showScoreResultInNarrowView = !isWideEnoughForTwo && showResultDetail
   
   // Only show main panel if we're not in narrow view with a selected result
-  const showMainPanel = isWideEnoughForThree || 
+  const showMainPanel = isWideEnoughForThree ||
                         (isWideEnoughForTwo && (!showResultDetail || !showResultsList)) || 
                         (!isWideEnoughForTwo && !showResultDetail); // Only show main panel in narrow view if no result selected
 
   const handleScoreResultSelect = (result: Schema['ScoreResult']['type']) => {
     onSelectScoreResult?.(result.id)
+  }
+
+  const handleTopicFilter = (
+    itemIds: string[] | null,
+    rcaData: Record<string, { detailed_cause?: string; suggested_fix?: string }>
+  ) => {
+    setSelectedTopicItemIds(itemIds)
+    setRcaDataByItemId(rcaData ?? {})
+    if (itemIds) setSelectedPredictedActual({ predicted: null, actual: null })
   }
 
   const handleScoreResultClose = () => {
@@ -713,18 +749,28 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
-  const rootCauseTopics = useMemo(() => {
+  const rootCauseData = useMemo(() => {
     try {
       const params = typeof data.parameters === 'string'
         ? JSON.parse(data.parameters)
         : data.parameters
-      return params?.root_cause?.topics ?? null
+      return params?.root_cause ?? null
     } catch {
       return null
     }
   }, [data.parameters])
 
+  const rootCauseTopics = rootCauseData?.topics ?? null
+
   const [showRootCauseCode, setShowRootCauseCode] = useState(false)
+  const [selectedTopicItemIds, setSelectedTopicItemIds] = useState<string[] | null>(null)
+  const [rcaDataByItemId, setRcaDataByItemId] = useState<
+    Record<string, { detailed_cause?: string; suggested_fix?: string }>
+  >({})
+
+  const selectedItemRcaContext = selectedScoreResult?.itemId
+    ? rcaDataByItemId[selectedScoreResult.itemId]
+    : undefined
 
   return (
     <div
@@ -743,28 +789,28 @@ const DetailContent = React.memo(({
         {/* When in narrow view and a score result is selected, ONLY show the score result detail */}
         {showScoreResultInNarrowView && selectedScoreResult && (
           <div className="w-full h-full flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-hidden">
-              <ScoreResultComponent
-                result={{
-                  id: selectedScoreResult.id,
-                  value: String(selectedScoreResult.value),
-                  confidence: selectedScoreResult.confidence,
-                  explanation: selectedScoreResult.explanation,
-                  metadata: selectedScoreResult.metadata || {
-                    human_label: null,
-                    correct: false,
-                    human_explanation: null,
-                    text: null
-                  },
-                  trace: selectedScoreResult.trace,
-                  itemId: selectedScoreResult.itemId,
-                  itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
-                  feedbackItem: (selectedScoreResult as any).feedbackItem || null
-                }}
-                variant="detail"
-                onClose={handleScoreResultClose}
-              />
-            </div>
+            <ScoreResultComponent
+              result={{
+                id: selectedScoreResult.id,
+                value: String(selectedScoreResult.value),
+                confidence: selectedScoreResult.confidence,
+                explanation: selectedScoreResult.explanation,
+                metadata: selectedScoreResult.metadata || {
+                  human_label: null,
+                  correct: false,
+                  human_explanation: null,
+                  text: null
+                },
+                trace: selectedScoreResult.trace,
+                itemId: selectedScoreResult.itemId,
+                itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
+                feedbackItem: (selectedScoreResult as any).feedbackItem || null
+              }}
+              variant="detail"
+              onClose={handleScoreResultClose}
+              rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
+              rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+            />
           </div>
         )}
 
@@ -890,10 +936,38 @@ const DetailContent = React.memo(({
                     </div>
                     {showRootCauseCode ? (
                       <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
-                        {JSON.stringify(rootCauseTopics, null, 2)}
+                        {JSON.stringify(rootCauseData, null, 2)}
                       </pre>
                     ) : (
-                      <TopicList topics={rootCauseTopics} />
+                      <>
+                        {rootCauseData?.overall_explanation && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause</div>
+                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                                p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                              }}>
+                                {rootCauseData.overall_explanation}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                        {rootCauseData?.overall_improvement_suggestion && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall improvement</div>
+                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                                p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                              }}>
+                                {rootCauseData.overall_improvement_suggestion}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                        <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                      </>
                     )}
                   </div>
                 )}
@@ -906,11 +980,12 @@ const DetailContent = React.memo(({
         {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
           <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
             <div className="h-full overflow-y-auto">
-              <EvaluationTaskScoreResults 
-                results={parsedScoreResults} 
+              <EvaluationTaskScoreResults
+                results={parsedScoreResults}
                 accuracy={data.accuracy ?? 0}
                 selectedPredictedValue={selectedPredictedActual.predicted}
                 selectedActualValue={selectedPredictedActual.actual}
+                selectedItemIds={selectedTopicItemIds}
                 onResultSelect={handleScoreResultSelect}
                 selectedScoreResult={selectedScoreResult}
                 isLoading={isResultsLoading}
@@ -922,28 +997,28 @@ const DetailContent = React.memo(({
         {/* Only show the score result detail in column layout if not already showing it in narrow view */}
         {showResultDetail && !showScoreResultInNarrowView && selectedScoreResult && (
           <div className={`w-full ${showAsColumns ? 'h-full' : 'h-full'} flex flex-col overflow-hidden`}>
-            <div className="flex-1 overflow-hidden">
-              <ScoreResultComponent
-                result={{
-                  id: selectedScoreResult.id,
-                  value: String(selectedScoreResult.value),
-                  confidence: selectedScoreResult.confidence,
-                  explanation: selectedScoreResult.explanation,
-                  metadata: selectedScoreResult.metadata || {
-                    human_label: null,
-                    correct: false,
-                    human_explanation: null,
-                    text: null
-                  },
-                  trace: selectedScoreResult.trace,
-                  itemId: selectedScoreResult.itemId,
-                  itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
-                  feedbackItem: (selectedScoreResult as any).feedbackItem || null
-                }}
-                variant="detail"
-                onClose={handleScoreResultClose}
-              />
-            </div>
+            <ScoreResultComponent
+              result={{
+                id: selectedScoreResult.id,
+                value: String(selectedScoreResult.value),
+                confidence: selectedScoreResult.confidence,
+                explanation: selectedScoreResult.explanation,
+                metadata: selectedScoreResult.metadata || {
+                  human_label: null,
+                  correct: false,
+                  human_explanation: null,
+                  text: null
+                },
+                trace: selectedScoreResult.trace,
+                itemId: selectedScoreResult.itemId,
+                itemIdentifiers: (selectedScoreResult as any).itemIdentifiers,
+                feedbackItem: (selectedScoreResult as any).feedbackItem || null
+              }}
+              variant="detail"
+              onClose={handleScoreResultClose}
+              rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
+              rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+            />
           </div>
         )}
       </div>
@@ -1009,6 +1084,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     createdAt: string;
     isChampion: boolean;
   } | null>(null);
+  const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
   
@@ -1056,6 +1132,71 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
+
+  // Fetch baseline metrics when a baseline evaluation ID is stored in parameters.metadata
+  const baselineEvaluationId = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      const metadata = parseJsonDeep(params?.metadata) as Record<string, unknown> | null
+      return typeof metadata?.baseline === 'string' ? metadata.baseline : null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+
+  useEffect(() => {
+    if (!baselineEvaluationId || variant !== 'detail') {
+      setBaselineMetrics(null);
+      return;
+    }
+
+    const fetchBaselineMetrics = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetBaselineEvaluation($id: ID!) {
+              getEvaluation(id: $id) {
+                id
+                metrics
+              }
+            }
+          `,
+          variables: { id: baselineEvaluationId }
+        });
+
+        const baselineEval = (result as any).data?.getEvaluation;
+        if (baselineEval?.metrics) {
+          try {
+            const parsed = parseJsonDeep(baselineEval.metrics);
+            if (Array.isArray(parsed)) {
+              setBaselineMetrics(parsed as EvaluationMetric[]);
+            } else if (parsed && typeof parsed === 'object') {
+              const metrics = Object.entries(parsed as Record<string, unknown>)
+                .map(([name, value]) => ({
+                  name,
+                  value: typeof value === 'number' ? value : Number(value),
+                  priority: false
+                }))
+                .filter(metric => Number.isFinite(metric.value));
+              setBaselineMetrics(metrics.length > 0 ? metrics : null);
+            } else {
+              setBaselineMetrics(null);
+            }
+          } catch {
+            setBaselineMetrics(null);
+          }
+        } else {
+          setBaselineMetrics(null);
+        }
+      } catch (error) {
+        console.error('Error fetching baseline evaluation metrics:', error);
+        setBaselineMetrics(null);
+      }
+    };
+
+    fetchBaselineMetrics();
+  }, [baselineEvaluationId, variant]);
 
   // Function to generate universal YAML code for evaluation
   const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
@@ -1152,13 +1293,21 @@ evaluation:
     }
   }, [data, generateUniversalCode]);
 
-  const metrics = useMemo(() =>
-    variant === 'detail' ?
-      (data.metrics ?? []).map(metric => {
+  const metrics = useMemo(() => {
+    if (variant === 'detail') {
+      return (data.metrics ?? []).map(metric => {
+        const normalizeMetricName = (name?: string) => (name ?? '').trim().toLowerCase()
+        const baselineMetric = baselineMetrics?.find(
+          bm => normalizeMetricName(bm.name) === normalizeMetricName(metric.name)
+        )
+        const beforeValue = baselineMetric !== undefined ? baselineMetric.value : undefined
+
         // Special handling for Alignment (Gwet's AC1)
         if (metric.name === 'Alignment') {
           return {
             value: metric.value,
+            beforeValue,
+            showComparisonLabel: beforeValue !== undefined,
             label: metric.name,
             information: getMetricInformation(metric.name),
             min: -1,           // AC1 ranges from -1 to 1
@@ -1179,6 +1328,8 @@ evaluation:
         // Default handling for other metrics
         return {
           value: metric.value,
+          beforeValue,
+          showComparisonLabel: beforeValue !== undefined,
           label: metric.name,
           information: getMetricInformation(metric.name),
           max: metric.maximum ?? 100,        // Fixed: was 'maximum', should be 'max'
@@ -1186,15 +1337,16 @@ evaluation:
           priority: metric.priority
         }
       })
-      : [
-        {
-          value: data.accuracy ?? undefined,
-          label: 'Accuracy',
-          backgroundColor: 'var(--gauge-background)',
-          priority: true
-        }
-      ]
-  , [variant, data.metrics, data.accuracy])
+    }
+    return [
+      {
+        value: data.accuracy ?? undefined,
+        label: 'Accuracy',
+        backgroundColor: 'var(--gauge-background)',
+        priority: true
+      }
+    ]
+  }, [variant, data.metrics, data.accuracy, baselineMetrics])
 
   const headerContent = useMemo(() => (
     variant === 'detail' ? (
@@ -1601,4 +1753,3 @@ function getMetricInformation(metricName: string): string {
   }
   return descriptions[metricName] || ""
 }
-

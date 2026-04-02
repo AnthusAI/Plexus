@@ -3,12 +3,14 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { ConsoleRunWorkerStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
 import { Duration } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as events from 'aws-cdk-lib/aws-events';
 
 // Create the backend
@@ -31,6 +33,22 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
+
+function getFunctionLambda(functionId: string): lambda.Function | undefined {
+    const functionNestedStack = backend.stack.node.tryFindChild('function');
+    if (!functionNestedStack) {
+        return undefined;
+    }
+
+    const lambdaConstruct = functionNestedStack.node.tryFindChild(functionId);
+    if (lambdaConstruct && lambdaConstruct instanceof lambda.Function) {
+        return lambdaConstruct;
+    }
+
+    return undefined;
+}
+
+const startConsoleRunLambda = getFunctionLambda('startConsoleRun-lambda');
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -129,6 +147,36 @@ const taskDispatcherStack = new TaskDispatcherStack(
     }
 );
 
+const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
+const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
+
+if (!resolvedDataApiUrl || !resolvedDataApiKey) {
+    throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
+}
+
+const consoleRunWorkerStack = new ConsoleRunWorkerStack(
+    backend.createStack('ConsoleRunWorkerStack'),
+    'ConsoleRunWorker',
+    {
+        plexusApiUrl: resolvedDataApiUrl,
+        plexusApiKey: resolvedDataApiKey,
+    }
+);
+
+if (!startConsoleRunLambda) {
+    throw new Error('Unable to locate startConsoleRun-lambda for console queue wiring');
+}
+startConsoleRunLambda.addEnvironment('CONSOLE_RUN_QUEUE_URL', consoleRunWorkerStack.queue.queueUrl);
+startConsoleRunLambda.addEnvironment('PLEXUS_API_URL', resolvedDataApiUrl);
+startConsoleRunLambda.addEnvironment('PLEXUS_API_KEY', resolvedDataApiKey);
+consoleRunWorkerStack.queue.grantSendMessages(startConsoleRunLambda);
+startConsoleRunLambda.addToRolePolicy(
+    new PolicyStatement({
+        actions: ['appsync:GraphQL'],
+        resources: ['*'],
+    }),
+);
+
 // Add SQS permissions
 taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     new PolicyStatement({
@@ -210,4 +258,4 @@ const topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(
     }
 );
 
-export { backend, mcpStack, topicMemoryVectorStoreStack };
+export { backend, mcpStack, topicMemoryVectorStoreStack, consoleRunWorkerStack };

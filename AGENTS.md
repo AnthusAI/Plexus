@@ -9,6 +9,7 @@ When: Create/update the Kanbus task before coding; close it only after the chang
 How: See CONTRIBUTING_AGENT.md for the Kanbus workflow, hierarchy, status rules, priorities, command examples, and the sins to avoid. Never inspect project/ or issue JSON directly (including with cat or jq); use Kanbus commands only.
 Performance: Prefer kbs (Rust) when available; kanbus (Python) is equivalent but slower.
 Warning: Editing project/ directly is a sin against The Way. Do not read or write anything in project/; work only through Kanbus.
+Architecture rule: NEVER EVER add 'fallback' logic for ANYTHING unless the user EXPLICITLY says to do that. Never add additional complexity that creates additional ways to do things. There should be one correct way to do everything. Do not add layers of complexity for backward compatibility. Our goal is to make ONE WAY work. Do not add fallbacks.
 
 ## Overview
 
@@ -153,4 +154,3 @@ This workflow uses a chain of skills and agents:
 - **"Tool not found"**: Restart the MCP server (in Cursor: CMD+Shift+P -> "Cursor: Restart MCP Server").
 - **"GraphQL Error"**: Check your environment variables in `.env`.
 - **"Validation Failed"**: The score config updater protects you from pushing bad YAML. Read the error message and correct the format.
-

@@ -167,10 +167,19 @@ def _list_pending_tasks_for_account(
         },
     )
     items = response.get("listTaskByAccountIdAndUpdatedAt", {}).get("items", [])
-    pending = [
-        task for task in items
-        if task.get("dispatchStatus") == "PENDING" and task.get("status") == "PENDING"
-    ]
+    pending = []
+    for task in items:
+        if task.get("dispatchStatus") != "PENDING" or task.get("status") != "PENDING":
+            continue
+
+        metadata = _normalize_metadata(task.get("metadata"))
+        if metadata.get("dispatch_mode") == "console_async_worker":
+            # Console runs are dispatched via startConsoleRun -> SQS worker.
+            # Skip them in the generic dispatcher to avoid duplicate execution.
+            continue
+
+        pending.append(task)
+
     # Run newest items first so fresh UI-triggered runs are not starved by stale backlog tasks.
     pending.sort(key=lambda task: task.get("createdAt") or "", reverse=True)
     return pending
@@ -818,6 +827,9 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                     metadata["local_command"] = " ".join(run_args)
                     metadata["local_timeout_seconds"] = local_timeout_seconds
                     metadata["phase"] = "execute_cli"
+                    child_env = os.environ.copy()
+                    # Let downstream CLI runners bind tracking updates to this claimed task.
+                    child_env["PLEXUS_DISPATCH_TASK_ID"] = task.id
                     try:
                         result = subprocess.run(
                             run_args,
@@ -825,6 +837,7 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                             capture_output=True,
                             check=False,
                             timeout=local_timeout_seconds,
+                            env=child_env,
                         )
                     except subprocess.TimeoutExpired as timeout_exc:
                         completed_at = datetime.datetime.now(timezone.utc).isoformat()

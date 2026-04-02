@@ -279,7 +279,9 @@ export default function ProcedureTask({
     output: (procedure as any).output, // May not exist in type definition yet
     data: taskData,
     stages: formattedStages, // Use formatted stages with colors
-    currentStageName: procedure.task?.currentStageId, // Get from task
+    currentStageName: procedure.task?.currentStageId
+      ? procedure.task.stages?.items?.find(s => s.id === procedure.task?.currentStageId)?.name
+      : undefined, // Resolve ID to name
     processedItems: (procedure as any).processedItems, // May not exist in type definition yet
     totalItems: (procedure as any).totalItems, // May not exist in type definition yet
     startedAt: procedure.task?.startedAt, // Get from task

@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
-import { ModelListResult, AmplifyListResult } from '@/types/shared'
+import { AmplifyListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
-
-export const client = generateClient<Schema>()
+import { getClient } from "@/utils/amplify-client"
 
 export interface ScorecardContextProps {
   selectedScorecard: string | null;
@@ -19,6 +17,7 @@ export interface ScorecardContextProps {
 }
 
 async function listScorecards(): Promise<{ data: Schema['Scorecard']['type'][], nextToken: string | null }> {
+  const client = getClient()
   // Handle pagination to get ALL scorecards
   let allScorecards: Schema['Scorecard']['type'][] = []
   let nextToken: string | null = null
@@ -38,6 +37,7 @@ async function listScorecards(): Promise<{ data: Schema['Scorecard']['type'][], 
 }
 
 async function listSections(scorecardId: string): Promise<{ data: Schema['ScorecardSection']['type'][], nextToken: string | null }> {
+  const client = getClient()
   // Handle pagination to get ALL sections
   let allSections: Schema['ScorecardSection']['type'][] = []
   let nextToken: string | null = null
@@ -57,6 +57,7 @@ async function listSections(scorecardId: string): Promise<{ data: Schema['Scorec
 }
 
 async function listScores(sectionId: string): Promise<{ data: Schema['Score']['type'][], nextToken: string | null }> {
+  const client = getClient()
   // Handle pagination to get ALL scores
   let allScores: Schema['Score']['type'][] = []
   let nextToken: string | null = null

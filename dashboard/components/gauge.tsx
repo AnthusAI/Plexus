@@ -18,6 +18,7 @@ export interface Segment {
 interface GaugeProps {
   value?: number
   beforeValue?: number
+  showComparisonLabel?: boolean
   target?: number
   segments?: Segment[]
   min?: number
@@ -76,6 +77,7 @@ const formatDecimalValue = (value: number, decimalPlaces: number): string => {
 const GaugeComponent: React.FC<GaugeProps> = ({ 
   value, 
   beforeValue,
+  showComparisonLabel = false,
   target,
   segments, 
   min = 0, 
@@ -487,6 +489,21 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const valueLabelTop = valueLabelBaseTop - (valueFontSizePx / viewBoxHeight) * 0.5;
   // Calculate the top offset for the title label, using the same base plus a fixed offset and the title font size
   const titleLabelTop = valueLabelBaseTop + 0.195 + (titleFontSizePx / viewBoxHeight) * 0.2;
+  const comparisonLabelTop = titleLabelTop + 0.09;
+
+  const comparisonLabel = React.useMemo(() => {
+    if (!showComparisonLabel || beforeValue === undefined || value === undefined) {
+      return null;
+    }
+
+    const delta = value - beforeValue;
+    const beforeFormatted = `${formatDecimalValue(beforeValue, decimalPlaces)}${valueUnit}`;
+    const deltaAbs = formatDecimalValue(Math.abs(delta), decimalPlaces);
+    const deltaSign = delta >= 0 ? '+' : '-';
+    const deltaFormatted = `${deltaSign}${deltaAbs}${valueUnit}`;
+
+    return `${beforeFormatted} ${deltaFormatted}`;
+  }, [showComparisonLabel, beforeValue, value, decimalPlaces, valueUnit]);
 
   // Calculate the pixel Y position of the clipped bottom of the gauge (corrected)
   const clippedBottomY_px = containerHeight > 0 ? containerHeight * (clipHeight / viewBoxHeight) : 0;
@@ -635,6 +652,18 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                       </PopoverTrigger>
                     )}
                   </span>
+                </div>
+              )}
+              {comparisonLabel && (
+                <div
+                  className="absolute left-0 right-0 flex justify-center items-center whitespace-nowrap text-muted-foreground transition-colors duration-500 ease-in-out"
+                  style={{
+                    fontSize: `${Math.max(titleFontSizePx * 0.82, 10)}px`,
+                    top: `${comparisonLabelTop * 100}%`,
+                    textAlign: 'center'
+                  }}
+                >
+                  <span>{comparisonLabel}</span>
                 </div>
               )}
             </div>

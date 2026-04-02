@@ -26,7 +26,9 @@ import { toast } from 'sonner'
 import type { GraphQLResult } from '@aws-amplify/api'
 import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { load as _loadYaml, dump as stringifyYaml } from 'js-yaml'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const parseYaml = (str: string): Record<string, any> => _loadYaml(str) as Record<string, any>
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
@@ -1037,7 +1039,7 @@ const DetailContent = React.memo(({
 
             {/* Tabbed Content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-border">
                   <TabsList className="h-auto p-0 bg-transparent justify-start">
                     <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
@@ -1199,7 +1201,7 @@ const DetailContent = React.memo(({
         <div className="flex flex-col h-full w-full">
           {/* Fullscreen Tabs */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <Tabs value={fullscreenActiveTab} onValueChange={(value) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between border-b border-border">
                 <TabsList className="h-auto p-0 bg-transparent justify-start">
                   <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>

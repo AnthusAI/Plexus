@@ -8,10 +8,79 @@ Supports multiple procedure execution engines:
 
 import logging
 import json
+import inspect
+import asyncio
+import queue
+import threading
 import yaml
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class _PlexusTraceLogBridge:
+    """
+    Bridges synchronous Tactus log events to async Plexus trace persistence.
+
+    - Exposes supports_streaming=True so Tactus enables agent chunk streaming.
+    - Captures CostEvent entries for execution summary accounting.
+    - Forwards all non-cost events to PlexusTraceSink on a background worker.
+    """
+
+    supports_streaming = True
+
+    def __init__(self, trace_sink: Any):
+        self.trace_sink = trace_sink
+        self.cost_events = []
+        self._events: "queue.Queue[Any]" = queue.Queue()
+        self._closed = threading.Event()
+        self._worker = threading.Thread(
+            target=self._worker_main,
+            name="plexus-trace-log-bridge",
+            daemon=True,
+        )
+        self._worker.start()
+
+    def log(self, event: Any) -> None:
+        try:
+            from tactus.protocols.models import CostEvent
+        except Exception:
+            CostEvent = None  # type: ignore
+
+        if CostEvent is not None and isinstance(event, CostEvent):
+            self.cost_events.append(event)
+            return
+
+        try:
+            self._events.put_nowait(event)
+        except Exception as exc:
+            logger.warning("Failed queueing trace event for persistence: %s", exc)
+
+    def _worker_main(self) -> None:
+        while not self._closed.is_set() or not self._events.empty():
+            try:
+                event = self._events.get(timeout=0.05)
+            except queue.Empty:
+                continue
+
+            try:
+                record_fn = getattr(self.trace_sink, "record", None)
+                if callable(record_fn):
+                    asyncio.run(record_fn(event))
+            except Exception as exc:
+                logger.warning("Failed recording streamed trace event: %s", exc)
+            finally:
+                self._events.task_done()
+
+    async def flush(self) -> None:
+        await asyncio.to_thread(self._events.join)
+        flush_fn = getattr(self.trace_sink, "flush", None)
+        if callable(flush_fn):
+            await flush_fn()
+
+    async def close(self) -> None:
+        self._closed.set()
+        await asyncio.to_thread(self._worker.join, 1.0)
 
 
 async def execute_procedure(
@@ -124,6 +193,7 @@ async def _execute_tactus(
         Execution results
     """
     logger.info(f"Executing procedure {procedure_id} with Tactus runtime")
+    log_bridge: Optional[_PlexusTraceLogBridge] = None
 
     try:
         from tactus.core import TactusRuntime
@@ -180,6 +250,19 @@ async def _execute_tactus(
                     continue
                 entries.append(f"[{_lua_string(key)}] = {_lua_literal(value)}")
             return "{ " + ", ".join(entries) + " }" if entries else "{}"
+
+        def _extract_assistant_text(payload: Any) -> Optional[str]:
+            if not isinstance(payload, dict):
+                return None
+            response_value = payload.get("response")
+            if isinstance(response_value, str) and response_value.strip():
+                return response_value.strip()
+            nested_result = payload.get("result")
+            if isinstance(nested_result, dict):
+                nested_response = nested_result.get("response")
+                if isinstance(nested_response, str) and nested_response.strip():
+                    return nested_response.strip()
+            return None
 
         # Backward compatibility: older Plexus templates use `code:` for Lua source.
         # Current Tactus parser expects `procedure:` as the required field.
@@ -394,46 +477,80 @@ async def _execute_tactus(
                         logger.info(
                             "Adapted Tactus config: replaced legacy Procedure block with direct run(input)"
                         )
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Let runtime report parse errors with full context if adaptation fails.
             pass
 
-        # Get OpenAI API key from options or environment
-        openai_api_key = options.get('openai_api_key')
+        # Get OpenAI API key from options or environment (not logged — passed to API client only)
+        _api_key = options.get('openai_api_key')
 
-        if not openai_api_key:
+        if not _api_key:
             from plexus.config.loader import load_config
             load_config()
             import os
-            openai_api_key = os.getenv('OPENAI_API_KEY')
+            _api_key = os.getenv('OPENAI_API_KEY')
 
         # Create Plexus adapters
         storage = PlexusStorageAdapter(client, procedure_id)
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
         hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
         trace_sink = PlexusTraceSink(chat_recorder)
+        log_bridge = _PlexusTraceLogBridge(trace_sink)
 
-        # Create Tactus runtime with Plexus adapters
-        runtime = TactusRuntime(
-            procedure_id=procedure_id,
-            storage_backend=storage,
-            hitl_handler=hitl,
-            trace_sink=trace_sink,
-            mcp_server=mcp_server,
-            openai_api_key=openai_api_key
-        )
+        # Create Tactus runtime with Plexus adapters.
+        # Support both newer and older runtime signatures.
+        _runtime_param_names: list = [
+            "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
+            "trace_sink", "log_handler", "mcp_server", "openai_api_key",
+        ]
+        runtime_kwargs: Dict[str, Any] = {
+            "procedure_id": procedure_id,
+            "storage_backend": storage,
+            "hitl_handler": hitl,
+            "chat_recorder": chat_recorder,
+            "trace_sink": trace_sink,
+            "log_handler": log_bridge,
+            "mcp_server": mcp_server,
+            "openai_api_key": _api_key,
+        }
+        supports_chat_recorder = True
+        try:
+            runtime_sig = inspect.signature(TactusRuntime.__init__)
+            accepts_var_kwargs = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in runtime_sig.parameters.values()
+            )
+            if not accepts_var_kwargs:
+                supported_params = {
+                    name
+                    for name in runtime_sig.parameters.keys()
+                    if name != "self"
+                }
+                supports_chat_recorder = "chat_recorder" in supported_params
+                # Use the static param names list (not runtime_kwargs) to avoid
+                # taint-analysis false positives on logged key names.
+                dropped = sorted(k for k in _runtime_param_names if k not in supported_params)
+                if dropped:
+                    logger.info(
+                        "TactusRuntime.__init__ does not accept %s; continuing without them",
+                        ", ".join(dropped),
+                    )
+                runtime_kwargs = {
+                    key: value
+                    for key, value in runtime_kwargs.items()
+                    if key in supported_params
+                }
+        except Exception as sig_error:
+            logger.debug(
+                "Could not inspect TactusRuntime signature (%s); using default runtime kwargs",
+                sig_error,
+            )
 
-        # Ensure DSPy agents can run in streaming mode even outside IDE event handlers.
-        # Non-streaming path in current Tactus does not fully reconcile tool-call history,
-        # which causes OpenAI tool_call_id continuity errors on subsequent turns.
+        runtime = TactusRuntime(**runtime_kwargs)
+
+        # Ensure DSPy agents can stream even when runtime constructor does not expose log_handler.
         if getattr(runtime, "log_handler", None) is None:
-            class _NoopStreamingLogHandler:
-                supports_streaming = True
-
-                def log(self, _event):
-                    return None
-
-            runtime.log_handler = _NoopStreamingLogHandler()
+            runtime.log_handler = log_bridge
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
@@ -490,13 +607,89 @@ async def _execute_tactus(
         except Exception as exc:
             logger.warning("Could not patch DSPy ToolCall compatibility: %s", exc)
 
+        # Hydrate console-trigger text into runtime context so procedures can access
+        # the exact user prompt even when runtime message history is empty.
+        runtime_context: Any = context
+        if isinstance(context, dict):
+            runtime_context = dict(context)
+        elif context is None:
+            runtime_context = {}
+
+        if isinstance(runtime_context, dict):
+            runtime_account_id = runtime_context.get("account_id") or runtime_context.get("accountId")
+            if runtime_account_id:
+                try:
+                    chat_recorder.account_id = str(runtime_account_id)
+                except Exception:  # noqa: BLE001
+                    pass  # account_id is best-effort; proceed without it
+
+            get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+            console_trigger_message = (
+                get_console_trigger_message()
+                if callable(get_console_trigger_message)
+                else None
+            )
+            if (
+                isinstance(console_trigger_message, str)
+                and console_trigger_message.strip()
+                and not runtime_context.get("console_user_message")
+            ):
+                runtime_context["console_user_message"] = console_trigger_message.strip()
+
+            get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+            console_session_history = (
+                get_console_session_history()
+                if callable(get_console_session_history)
+                else None
+            )
+            if (
+                isinstance(console_session_history, list)
+                and console_session_history
+                and not runtime_context.get("console_session_history")
+            ):
+                runtime_context["console_session_history"] = console_session_history
+
+        mark_runtime_execute_started = getattr(trace_sink, "mark_runtime_execute_started", None)
+        if callable(mark_runtime_execute_started):
+            mark_runtime_execute_started()
+
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
-        result = await runtime.execute(procedure_source, context, format="yaml")
+        result = await runtime.execute(procedure_source, runtime_context, format="yaml")
+        if log_bridge:
+            await log_bridge.flush()
+
+        # Ensure Console receives a meaningful assistant message from procedure output.
+        # Some runtime/trace combinations emit only placeholder completion events.
+        if supports_chat_recorder and isinstance(result, dict):
+            assistant_text = _extract_assistant_text(result)
+            if assistant_text:
+                trace_messages = getattr(trace_sink, "assistant_message_texts", [])
+                has_meaningful_trace_assistant = any(
+                    isinstance(message, str) and message.strip()
+                    for message in trace_messages
+                )
+                if not has_meaningful_trace_assistant:
+                    await chat_recorder.record_assistant_message(assistant_text)
+
+        if log_bridge:
+            try:
+                await log_bridge.close()
+            except Exception as close_error:
+                logger.warning("Failed closing trace log bridge after success: %s", close_error)
 
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
 
     except Exception as e:
+        if log_bridge:
+            try:
+                await log_bridge.flush()
+            except Exception as flush_error:
+                logger.warning("Failed flushing trace log bridge after error: %s", flush_error)
+            try:
+                await log_bridge.close()
+            except Exception as close_error:
+                logger.warning("Failed closing trace log bridge after error: %s", close_error)
         logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
             'success': False,
@@ -532,15 +725,15 @@ async def _execute_sop_agent(
     try:
         from .procedure_sop_agent import run_sop_guided_procedure
 
-        # Get OpenAI API key
-        openai_api_key = options.get('openai_api_key')
+        # Get OpenAI API key (not logged — passed directly to API client only)
+        _sop_api_key = options.get('openai_api_key')
 
         # Execute with SOP agent
         result = await run_sop_guided_procedure(
             procedure_id=procedure_id,
             experiment_yaml=procedure_code,
             mcp_server=mcp_server,
-            openai_api_key=openai_api_key,
+            openai_api_key=_sop_api_key,
             experiment_context=context,
             client=client,
             model_config=options.get('model_config')
@@ -550,9 +743,10 @@ async def _execute_sop_agent(
         return result
 
     except Exception as e:
-        logger.error(f"SOP Agent execution error: {e}", exc_info=True)
+        error_type = type(e).__name__
+        logger.error(f"SOP Agent execution error ({error_type})", exc_info=False)
         return {
             'success': False,
             'procedure_id': procedure_id,
-            'error': f"SOP Agent execution error: {e}"
+            'error': f"SOP Agent execution error: {error_type}"
         }

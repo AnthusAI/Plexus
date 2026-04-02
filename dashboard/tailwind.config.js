@@ -203,7 +203,6 @@ module.exports = {
         }
     },
     plugins: [
-        require("tailwindcss-animate"),
-        require('@tailwindcss/container-queries')
+        require("tailwindcss-animate")
     ],
 }
