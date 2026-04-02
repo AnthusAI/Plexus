@@ -1,0 +1,669 @@
+name: Feedback Alignment Optimizer
+version: 1.0.0
+class: Tactus
+description: "Iteratively optimize Plexus score alignment using feedback evaluations with root-cause analysis (RCA). Runs baseline → analyze RCA → propose changes → evaluate → repeat until convergence or max iterations."
+
+params:
+  scorecard:
+    type: string
+    required: true
+    description: "Scorecard identifier (name, key, or ID)"
+
+  score:
+    type: string
+    required: true
+    description: "Score identifier (name, key, or ID)"
+
+  days:
+    type: number
+    default: 90
+    description: "Feedback window in days for evaluation dataset"
+
+  max_samples:
+    type: number
+    default: null
+    required: false
+    description: "Maximum number of feedback samples to use per evaluation (null = all available)"
+
+  max_iterations:
+    type: number
+    default: 10
+    description: "Maximum number of optimization iterations"
+
+  improvement_threshold:
+    type: number
+    default: 0.02
+    description: "Minimum AC1 (Gwet's alignment) improvement to continue iterating (0.02 = 2%)"
+
+  dry_run:
+    type: boolean
+    default: false
+    description: "If true, run analysis only without making score updates"
+
+outputs:
+  success:
+    type: boolean
+    required: true
+
+  status:
+    type: string
+    required: true
+    description: "Completion status: converged, max_iterations, user_stopped, improvement_plateau, or error"
+
+  message:
+    type: string
+    required: true
+
+  baseline_evaluation_id:
+    type: string
+    required: false
+
+  final_evaluation_id:
+    type: string
+    required: false
+
+  iterations:
+    type: array
+    required: false
+    description: "Array of iteration results with metrics and deltas"
+
+  improvement:
+    type: number
+    required: false
+    description: "Total AC1 improvement from baseline to final"
+
+  scorecard_id:
+    type: string
+    required: false
+
+  score_id:
+    type: string
+    required: false
+
+agents:
+  orchestrator:
+    system_prompt: |
+      DIRECT TOOL EXECUTOR - NO THINKING REQUIRED
+
+      When you receive "Call TOOL_NAME with arguments: JSON_ARGS", immediately:
+      1. Call the exact tool with those exact arguments
+      2. Do NOT explain, analyze, discuss, or modify anything
+      3. Just execute the tool call
+
+      Example:
+      Input: "Call plexus_scorecard_info with arguments: {"scorecard": "731"}"
+      Action: Call plexus_scorecard_info({"scorecard": "731"})
+
+      NO PREAMBLE. NO POSTAMBLE. JUST TOOL CALLS.
+
+    initial_message: Ready.
+
+    tools:
+      - plexus_scorecard_info
+      - plexus_score_info
+      - plexus_score_pull
+      - plexus_score_update
+      - plexus_evaluation_run
+      - plexus_evaluation_info
+      - plexus_predict
+      - plexus_item_last
+
+  analyzer:
+    system_prompt: |
+      You are an expert in analyzing Plexus score performance and proposing alignment improvements.
+
+      Your role:
+      1. Analyze root-cause analysis (RCA) output from feedback evaluations
+      2. Identify systematic error patterns (false positives, false negatives)
+      3. Propose specific, targeted changes to score YAML configuration
+      4. Formulate clear hypotheses about expected improvements
+
+      Analysis approach:
+      - Focus on RCA topics/clusters showing highest error rates
+      - Look for missing criteria, threshold issues, or overly broad rules
+      - Propose minimal, focused changes (one concept per iteration)
+      - Consider both guidelines and code configuration
+
+      When ready to propose changes, call the done() tool with JSON containing:
+      {
+        "hypothesis": "Brief description of expected improvement",
+        "changes": "Detailed description of what will change",
+        "new_code": "Complete updated YAML code",
+        "rationale": "Why this change should improve alignment"
+      }
+
+      Always include the COMPLETE updated YAML in new_code, not just diffs.
+
+    initial_message: |
+      Waiting for baseline metrics and RCA data to analyze.
+
+    tools:
+      - plexus_evaluation_info
+      - plexus_score_info
+      - plexus_score_pull
+      - plexus_scorecard_info
+
+  validator:
+    system_prompt: |
+      You are a score configuration validation expert.
+
+      Your role:
+      1. Review proposed score configuration changes
+      2. Spot-check predictions to verify the change behaves as expected
+      3. Identify potential issues or unintended side effects
+      4. Approve or suggest refinements
+
+      Use plexus_predict to test the updated configuration on sample items.
+
+      When ready, call done() with JSON:
+      {
+        "approved": true/false,
+        "feedback": "Comments on the proposed change"
+      }
+
+    initial_message: |
+      Waiting for proposed changes to validate.
+
+    tools:
+      - plexus_predict
+      - plexus_item_last
+
+stages:
+  - setup
+  - baseline
+  - optimize
+  - finalize
+
+code: |
+  -- Helper functions
+  local function has_text(s)
+    return type(s) == "string" and #s > 0
+  end
+
+  local function safe_decode(value)
+    if value == nil then
+      return nil, "nil"
+    end
+    if type(value) ~= "string" then
+      local ok_encode, encoded = pcall(function()
+        return Json.encode(value)
+      end)
+      if ok_encode then
+        local ok_decode, decoded = pcall(function()
+          return Json.decode(encoded)
+        end)
+        if ok_decode then
+          return decoded, nil
+        end
+      end
+      return value, nil
+    end
+    local ok, decoded = pcall(function()
+      return Json.decode(value)
+    end)
+    if ok then
+      return decoded, nil
+    end
+    return nil, decoded
+  end
+
+  local function safe_get_metric(metrics, name)
+    if type(metrics) ~= "table" then return nil end
+    for _, m in ipairs(metrics) do
+      if type(m) == "table" and m.name == name then
+        return m.value
+      end
+    end
+    return nil
+  end
+
+  local function extract_metrics(eval_result)
+    local metrics = eval_result.metrics or {}
+    return {
+      alignment = safe_get_metric(metrics, "Alignment") or 0,
+      accuracy = safe_get_metric(metrics, "Accuracy") or 0,
+      precision = safe_get_metric(metrics, "Precision") or 0,
+      recall = safe_get_metric(metrics, "Recall") or 0
+    }
+  end
+
+  local function calculate_deltas(current, baseline)
+    return {
+      alignment = current.alignment - baseline.alignment,
+      accuracy = current.accuracy - baseline.accuracy,
+      precision = current.precision - baseline.precision,
+      recall = current.recall - baseline.recall
+    }
+  end
+
+  local function wait_for_agent_done(agent, max_turns, inject_msg)
+    if has_text(inject_msg) then
+      agent({message = inject_msg})
+    end
+
+    for turn = 1, max_turns do
+      if Tool.called("done") then
+        return true
+      end
+      agent()
+    end
+
+    return false
+  end
+
+  local function call_plexus_tool(tool_name, args_table)
+    -- Use orchestrator agent to call Plexus MCP tools
+    local args_json = Json.encode(args_table or {})
+    local inject = "EXECUTE TOOL NOW: " .. tool_name .. "\nUSE THESE EXACT PARAMETERS (do not rename): " .. args_json .. "\nCALL THE TOOL IMMEDIATELY."
+
+    local start_count = Tool.get_call_count(tool_name)
+    orchestrator({message = inject})
+
+    -- Wait for the tool to be called (max 5 turns)
+    for turn = 1, 5 do
+      if Tool.get_call_count(tool_name) > start_count then
+        local call_result = Tool.last_call(tool_name)
+        -- Decode JSON result
+        local decoded_result, decode_err = safe_decode(call_result.result)
+        if not decoded_result then
+          error("Failed to decode " .. tool_name .. " result: " .. tostring(decode_err))
+        end
+        return decoded_result
+      end
+      orchestrator()
+    end
+
+    -- Tool was not called
+    error("Orchestrator failed to call " .. tool_name)
+  end
+
+  -- Phase A: Setup & Baseline
+  Stage.set("setup")
+  Log.info("Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score)
+
+  -- Validate scorecard exists
+  local scorecard_info = call_plexus_tool("plexus_scorecard_info", {scorecard_identifier = params.scorecard})
+  if not scorecard_info or not scorecard_info.scorecard then
+    return {
+      success = false,
+      status = "error",
+      message = "Scorecard not found: " .. tostring(params.scorecard)
+    }
+  end
+
+  local scorecard_data = scorecard_info.scorecard
+  local scorecard_id = scorecard_data.id
+  local scorecard_name = scorecard_data.name or scorecard_data.key
+
+  -- Validate score exists
+  local score_info = call_plexus_tool("plexus_score_info", {
+    score_identifier = params.score,
+    scorecard_identifier = params.scorecard
+  })
+
+  if not score_info or not score_info.score then
+    return {
+      success = false,
+      status = "error",
+      message = "Score not found: " .. tostring(params.score) .. " in scorecard: " .. tostring(scorecard_name)
+    }
+  end
+
+  local score_data = score_info.score
+  local score_id = score_data.id
+  local score_name = score_data.name or score_data.key
+
+  Log.info("Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id)
+
+  -- Run baseline feedback evaluation with RCA
+  Stage.set("baseline")
+  Human.notify({
+    message = "Running baseline feedback evaluation with RCA for " .. score_name .. "...",
+    level = "info"
+  })
+
+  local baseline_eval_params = {
+    scorecard_name = params.scorecard,
+    score_name = params.score,
+    evaluation_type = "feedback",
+    days = params.days,
+    wait = true
+  }
+  if params.max_samples then
+    baseline_eval_params.max_feedback_samples = params.max_samples
+  end
+
+  local baseline_eval = call_plexus_tool("plexus_evaluation_run", baseline_eval_params)
+
+  if not baseline_eval or not baseline_eval.evaluation_id then
+    return {
+      success = false,
+      status = "error",
+      message = "Failed to run baseline evaluation"
+    }
+  end
+
+  local baseline_evaluation_id = baseline_eval.evaluation_id
+  local baseline_metrics = extract_metrics(baseline_eval)
+
+  State.set("baseline_evaluation_id", baseline_evaluation_id)
+  State.set("baseline_metrics", baseline_metrics)
+  State.set("scorecard_id", scorecard_id)
+  State.set("score_id", score_id)
+  State.set("iterations", {})
+
+  Log.info(string.format(
+    "Baseline evaluation complete: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+    baseline_metrics.alignment,
+    baseline_metrics.accuracy,
+    baseline_metrics.precision,
+    baseline_metrics.recall
+  ))
+
+  -- Extract RCA data
+  local baseline_rca = baseline_eval.root_cause or {}
+  State.set("last_rca", baseline_rca)
+
+  -- Phase B: Optimization Loop
+  Stage.set("optimize")
+
+  local stop_reason = nil
+  local iterations = {}
+
+  for iteration = 1, params.max_iterations do
+    Log.info("Starting iteration " .. iteration .. " of " .. params.max_iterations)
+    State.set("current_iteration", iteration)
+
+    -- Fetch current score configuration
+    local score_pull_result = call_plexus_tool("plexus_score_pull", {
+      scorecard = params.scorecard,
+      score = params.score
+    })
+
+    if not score_pull_result or not has_text(score_pull_result.code) then
+      return {
+        success = false,
+        status = "error",
+        message = "Failed to fetch current score configuration at iteration " .. iteration
+      }
+    end
+
+    local current_code = score_pull_result.code
+    local current_guidelines = score_pull_result.guidelines or ""
+
+    -- Prepare analysis context for agent
+    local analysis_context = {
+      iteration = iteration,
+      baseline_metrics = baseline_metrics,
+      last_rca = State.get("last_rca"),
+      current_code = current_code,
+      current_guidelines = current_guidelines,
+      score_name = score_name,
+      scorecard_name = scorecard_name
+    }
+
+    -- Agent analyzes RCA and proposes changes
+    analyzer.reset()
+
+    local analysis_inject = "Analyze the RCA output and propose a targeted improvement for iteration " .. tostring(iteration) .. ".\n\n" ..
+      "Baseline metrics:\n" ..
+      "- AC1 (Alignment): " .. string.format("%.3f", baseline_metrics.alignment) .. "\n" ..
+      "- Accuracy: " .. string.format("%.3f", baseline_metrics.accuracy) .. "\n" ..
+      "- Precision: " .. string.format("%.3f", baseline_metrics.precision) .. "\n" ..
+      "- Recall: " .. string.format("%.3f", baseline_metrics.recall) .. "\n\n" ..
+      "Root Cause Analysis:\n" .. Json.encode(State.get("last_rca")) .. "\n\n" ..
+      "Current Score Configuration:\n" .. current_code .. "\n\n" ..
+      "Current Guidelines:\n" .. current_guidelines .. "\n\n" ..
+      "Propose ONE focused change that addresses the most impactful error pattern.\n" ..
+      "Call done() with your proposal JSON when ready."
+
+    local analyzer_done = wait_for_agent_done(analyzer, 10, analysis_inject)
+
+    if not analyzer_done then
+      return {
+        success = false,
+        status = "error",
+        message = "Analyzer timed out at iteration " .. iteration
+      }
+    end
+
+    local done_call = Tool.last_call("done")
+    local proposal_json = done_call.args.reason or "{}"
+    local proposal = Json.decode(proposal_json)
+
+    if not proposal or not has_text(proposal.hypothesis) or not has_text(proposal.new_code) then
+      return {
+        success = false,
+        status = "error",
+        message = "Invalid proposal from analyzer at iteration " .. iteration
+      }
+    end
+
+    Log.info("Hypothesis: " .. proposal.hypothesis)
+
+    -- HITL gate: review proposed changes
+    if not params.dry_run then
+      local approval_context = {
+        iteration = iteration,
+        hypothesis = proposal.hypothesis,
+        changes = proposal.changes or "",
+        rationale = proposal.rationale or "",
+        current_metrics = baseline_metrics,
+        code_preview = string.sub(proposal.new_code, 1, 500) .. "..."
+      }
+
+      local approved = Human.approve({
+        message = "Iteration " .. iteration .. ": Review proposed changes\n\nHypothesis: " .. proposal.hypothesis,
+        context = approval_context,
+        timeout = 3600
+      })
+
+      if not approved then
+        Log.info("User rejected iteration " .. iteration)
+        stop_reason = "user_stopped"
+        break
+      end
+    else
+      Log.info("Dry run mode: skipping approval gate")
+    end
+
+    -- Apply changes (create new score version)
+    local update_result = nil
+    if not params.dry_run then
+      update_result = call_plexus_tool("plexus_score_update", {
+        scorecard_identifier = params.scorecard,
+        score_identifier = params.score,
+        code = proposal.new_code,
+        version_note = "Iteration " .. iteration .. ": " .. proposal.hypothesis
+      })
+
+      if not update_result or not update_result.version_id then
+        return {
+          success = false,
+          status = "error",
+          message = "Failed to create score version at iteration " .. iteration
+        }
+      end
+
+      Log.info("Created score version: " .. update_result.version_id)
+    end
+
+    -- Run evaluation with fixed baseline
+    Human.notify({
+      message = "Running evaluation for iteration " .. iteration .. "...",
+      level = "info"
+    })
+
+    local eval_result = nil
+    if not params.dry_run then
+      local eval_params = {
+        scorecard_name = params.scorecard,
+        score_name = params.score,
+        evaluation_type = "feedback",
+        days = params.days,
+        baseline = baseline_evaluation_id,
+        wait = true
+      }
+      if params.max_samples then
+        eval_params.max_feedback_samples = params.max_samples
+      end
+
+      eval_result = call_plexus_tool("plexus_evaluation_run", eval_params)
+
+      if not eval_result or not eval_result.evaluation_id then
+        return {
+          success = false,
+          status = "error",
+          message = "Failed to run evaluation at iteration " .. iteration
+        }
+      end
+    else
+      -- In dry run, simulate evaluation with baseline metrics
+      eval_result = {
+        evaluation_id = "dry_run_" .. iteration,
+        metrics = baseline_eval.metrics,
+        root_cause = baseline_rca
+      }
+    end
+
+    local eval_metrics = extract_metrics(eval_result)
+    local deltas = calculate_deltas(eval_metrics, baseline_metrics)
+
+    Log.info(string.format(
+      "Iteration %d results: AC1=%.3f (Δ%+.3f), Accuracy=%.3f (Δ%+.3f)",
+      iteration,
+      eval_metrics.alignment,
+      deltas.alignment,
+      eval_metrics.accuracy,
+      deltas.accuracy
+    ))
+
+    -- Store iteration log
+    local iteration_log = {
+      iteration = iteration,
+      score_version_id = update_result and update_result.version_id or "dry_run",
+      evaluation_id = eval_result.evaluation_id,
+      hypothesis = proposal.hypothesis,
+      changes = proposal.changes or "",
+      rationale = proposal.rationale or "",
+      metrics = eval_metrics,
+      deltas = deltas,
+      rca_summary = {
+        topic_count = (eval_result.root_cause and eval_result.root_cause.topics and #eval_result.root_cause.topics) or 0
+      }
+    }
+
+    table.insert(iterations, iteration_log)
+    State.set("iterations", iterations)
+    State.set("last_rca", eval_result.root_cause or {})
+
+    -- Decision logic
+    if deltas.alignment < params.improvement_threshold then
+      Log.info(string.format(
+        "AC1 improvement (%.4f) below threshold (%.4f)",
+        deltas.alignment,
+        params.improvement_threshold
+      ))
+
+      if not params.dry_run then
+        local decision = Human.input({
+          message = string.format(
+            "Iteration %d: AC1 improvement is %.4f (below %.4f threshold). Continue?",
+            iteration,
+            deltas.alignment,
+            params.improvement_threshold
+          ),
+          options = {"continue", "stop"}
+        })
+
+        if decision == "stop" then
+          stop_reason = "improvement_plateau"
+          break
+        end
+      else
+        Log.info("Dry run: would ask user whether to continue")
+        stop_reason = "improvement_plateau"
+        break
+      end
+    end
+
+    if deltas.alignment < 0 then
+      Log.warn(string.format("AC1 regressed by %.4f", math.abs(deltas.alignment)))
+    end
+
+    -- Check for stop request
+    if Stop.requested() then
+      stop_reason = "user_stopped"
+      break
+    end
+  end
+
+  -- Determine final stop reason
+  if not stop_reason then
+    if #iterations >= params.max_iterations then
+      stop_reason = "max_iterations"
+    else
+      stop_reason = "converged"
+    end
+  end
+
+  -- Phase C: Finalization
+  Stage.set("finalize")
+
+  if #iterations == 0 then
+    return {
+      success = false,
+      status = "error",
+      message = "No iterations completed"
+    }
+  end
+
+  local final_iter = iterations[#iterations]
+  local total_improvement = final_iter.metrics.alignment - baseline_metrics.alignment
+
+  Log.info(string.format(
+    "Optimization complete: %d iterations, total AC1 improvement: %+.4f",
+    #iterations,
+    total_improvement
+  ))
+
+  -- HITL gate: promote champion? (only if not dry run and improvement > 0)
+  local promotion_approved = false
+  if not params.dry_run and total_improvement > 0 then
+    promotion_approved = Human.approve({
+      message = string.format(
+        "Optimization complete with AC1 improvement of %+.4f. Promote final version as champion?",
+        total_improvement
+      ),
+      context = {
+        total_iterations = #iterations,
+        total_improvement = total_improvement,
+        final_metrics = final_iter.metrics,
+        baseline_metrics = baseline_metrics,
+        stop_reason = stop_reason
+      }
+    })
+
+    if promotion_approved then
+      -- Note: Champion promotion would be done via plexus_score_metadata_update
+      -- Currently not implementing auto-promotion to avoid unintended changes
+      Log.info("Champion promotion approved (manual promotion required)")
+    end
+  end
+
+  return {
+    success = true,
+    status = stop_reason,
+    message = string.format(
+      "Completed %d iterations with total AC1 improvement of %+.4f (%s)",
+      #iterations,
+      total_improvement,
+      stop_reason
+    ),
+    baseline_evaluation_id = baseline_evaluation_id,
+    final_evaluation_id = final_iter.evaluation_id,
+    iterations = iterations,
+    improvement = total_improvement,
+    scorecard_id = scorecard_id,
+    score_id = score_id
+  }
