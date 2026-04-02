@@ -13,6 +13,16 @@ class RemoveSpeakerIdentifiersTranscriptFilter(Processor):
     Removes patterns like "Agent:", "Customer:", etc. from the beginning of lines.
     """
 
+    SPEAKER_LABEL_PATTERN = re.compile(
+        r'(?:(?<=^)|(?<=\s))'
+        r'(?:'
+        r'speaker(?:\s+[A-Za-z0-9_-]+)?|'
+        r'unknown\s+speaker|'
+        r'agent|customer|contact|representative|rep'
+        r')\s*:\s*',
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
     def process(self, score_input: 'Score.Input') -> 'Score.Input':
         """
         Process the Score.Input by removing speaker identifiers.
@@ -25,13 +35,13 @@ class RemoveSpeakerIdentifiersTranscriptFilter(Processor):
         """
         from plexus.scores.Score import Score
 
-        # Remove speaker identifiers
-        filtered_text = re.sub(
-            r'(?:^|\b)\w+:\s*',
-            '',
-            str(score_input.text),
-            flags=re.MULTILINE
-        )
+        # Remove speaker identifiers, including multi-token forms like "Speaker 0:"
+        filtered_text = self.SPEAKER_LABEL_PATTERN.sub('', str(score_input.text))
+
+        # Normalize spacing left behind by label removal.
+        filtered_text = re.sub(r'[ \t]{2,}', ' ', filtered_text)
+        filtered_text = re.sub(r'[ \t]*\n[ \t]*', '\n', filtered_text)
+        filtered_text = filtered_text.strip()
 
         # Return new Score.Input with filtered text
         return Score.Input(
