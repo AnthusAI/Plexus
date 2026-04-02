@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.12
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,13 +10,15 @@ WORKDIR /var/task
 COPY . /workspace
 
 # Required for git-based dependencies (for example openai-cost-calculator).
-RUN dnf install -y git && dnf clean all && rm -rf /var/cache/dnf
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Plexus and dependencies required for procedure execution.
+# Install Plexus, Lambda runtime interface client, and required dependencies.
 RUN python -m pip install --upgrade pip && \
     python -m pip install --no-cache-dir -e /workspace && \
-    python -m pip install --no-cache-dir "python-statemachine>=2.5.0"
+    python -m pip install --no-cache-dir "python-statemachine>=2.5.0" awslambdaric
 
 COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
 
+ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]
 CMD ["app.handler"]
