@@ -85,6 +85,16 @@ export default function BasicsPage() {
             </div>
 
             <div>
+              <h3 className="text-xl font-medium mb-2">Associated Datasets</h3>
+              <p className="text-muted-foreground mb-4">
+                Deterministic score-associated datasets used for repeatable regression testing and score-optimization decisions.
+              </p>
+              <Link href="/documentation/concepts/reference-datasets">
+                <DocButton>Learn about Associated Datasets</DocButton>
+              </Link>
+            </div>
+
+            <div>
               <h3 className="text-xl font-medium mb-2">Reports</h3>
               <p className="text-muted-foreground mb-4">
                 Flexible, template-driven analyses and summaries generated from your Plexus data using reusable components.

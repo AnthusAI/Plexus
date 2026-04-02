@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison';
 import { IdentifierDisplay } from '@/components/ui/identifier-display';
+import { createTask } from '@/utils/data-operations';
+import { useAccount } from '@/app/contexts/AccountContext';
+import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -42,6 +45,8 @@ interface Exemplar {
   is_invalid: boolean;
   confidence?: 'high' | 'medium' | 'low';
   voting?: Vote[] | null;
+  verdict?: 'contradiction' | 'aligned' | string;
+  reference_dataset_eligible?: boolean;
 }
 
 interface Topic {
@@ -53,10 +58,23 @@ interface Topic {
 }
 
 interface FeedbackContradictionsData {
+  mode?: 'contradictions' | 'aligned' | string;
   score_name: string;
   total_items_analyzed: number;
+  items_vetted?: number;
   contradictions_found: number;
+  aligned_found?: number;
+  selected_items_count?: number;
   topics: Topic[];
+  eligible_reference_feedback_item_ids?: string[];
+  eligible_count?: number;
+  eligibility_rule?: string;
+  source_report_block_id?: string | null;
+  block_configuration?: {
+    scorecard?: string;
+    score?: string;
+    mode?: string;
+  };
   error?: string;
 }
 
@@ -291,21 +309,22 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
 
 // ---- Main block component --------------------------------------------------
 
-const CONTEXT_HEADER = `# Feedback Contradictions Report Output
+const CONTEXT_HEADER = `# Feedback Guideline-Vetting Report Output
 #
-# This report analyzes feedback items against score guidelines to identify
-# contradictions and policy gaps. Items are classified by a multi-model voting
-# system (Sonnet + GPT-5.4) with optional tiebreaker rounds using extended thinking.
+# This report evaluates feedback items against score guidelines using shared
+# multi-model voting (Sonnet + GPT-5.4 with optional tiebreakers).
 #
 # Structure:
+#   mode: contradictions | aligned
 #   score_name: The score being analyzed
 #   total_items_analyzed: Number of feedback items evaluated
 #   contradictions_found: Number of items flagged as contradictions or policy gaps
-#   topics: Clustered groups of contradictions with exemplar items
+#   aligned_found: Number of items that were non-contradicting
+#   topics: Clustered groups for the selected mode
 #     Each exemplar includes:
 #       - voting: Per-model votes with reasoning traces
 #       - confidence: high/medium/low based on vote agreement
-#       - reason: Synthesized explanation of the policy issue
+#       - verdict: contradiction | aligned
 #       - score_result_explanation: Original AI score explanation
 #       - edit_comment: Human reviewer's correction comment
 
@@ -314,6 +333,9 @@ const CONTEXT_HEADER = `# Feedback Contradictions Report Output
 const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackContradictionsData | null>(null);
   const [rawOutputString, setRawOutputString] = React.useState<string | null>(null);
+  const [creatingReferenceDataset, setCreatingReferenceDataset] = React.useState(false);
+  const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null);
+  const { selectedAccount } = useAccount();
 
   let parsedOutput: any = null;
   if (props.output) {
@@ -360,13 +382,130 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     : props.output;
 
   if (outputCompacted && !loadedOutput) {
-    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p></ReportBlock>;
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Loading guideline-vetting data…</p></ReportBlock>;
   }
 
   const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
+  const pollReferenceDatasetTask = React.useCallback(async (taskId: string) => {
+    const client = generateClient<Schema>();
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await (client.models.Task.get as any)({ id: taskId });
+      const task = response?.data;
+      if (task) {
+        const status = String(task.status || '').toUpperCase();
+        if (status === 'COMPLETED') {
+          let datasetId = '';
+          try {
+            const parsed = task.output ? JSON.parse(task.output) : {};
+            datasetId = parsed.dataset_id || '';
+          } catch {
+            datasetId = '';
+          }
+          toast.success(
+            datasetId
+              ? `Associated dataset created: ${datasetId}`
+              : 'Associated dataset build completed.'
+          );
+          return;
+        }
+        if (status === 'FAILED' || status === 'ERROR') {
+          const message = task.errorMessage || task.error || 'Associated dataset build failed.';
+          toast.error(String(message));
+          return;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+    toast.error('Timed out waiting for associated dataset task to complete.');
+  }, []);
+
+  const handleCreateReferenceDataset = React.useCallback(async () => {
+    if (!output) return;
+    if (!selectedAccount?.id) {
+      toast.error('No account selected.');
+      return;
+    }
+    const mode = output.mode || 'contradictions';
+    if (mode !== 'aligned') {
+      toast.error('Associated dataset creation is only available in aligned mode.');
+      return;
+    }
+    const eligibleIds = output.eligible_reference_feedback_item_ids || [];
+    const scorecard = output.block_configuration?.scorecard;
+    const score = output.block_configuration?.score;
+    if (!scorecard || !score) {
+      toast.error('Missing scorecard/score configuration in report output.');
+      return;
+    }
+    if (eligibleIds.length === 0) {
+      toast.error('No eligible aligned feedback IDs available for dataset creation.');
+      return;
+    }
+
+    setCreatingReferenceDataset(true);
+    try {
+      const taskCommand = [
+        'dataset',
+        'reference-from-feedback',
+        '--scorecard',
+        String(scorecard),
+        '--score',
+        String(score),
+        '--feedback-item-id',
+        '<snapshot_ids>',
+      ].join(' ');
+
+      const task = await createTask({
+        accountId: selectedAccount.id,
+        type: 'dataset reference build',
+        status: 'PENDING',
+        target: 'dataset/reference',
+        command: taskCommand,
+        description: `Build associated dataset from aligned report snapshot (${eligibleIds.length} IDs)`,
+        dispatchStatus: 'PENDING',
+      });
+
+      if (!task?.id) {
+        toast.error('Failed to create background task.');
+        return;
+      }
+
+      const payload = {
+        taskId: task.id,
+        scorecard: String(scorecard),
+        score: String(score),
+        feedbackItemIds: eligibleIds,
+        sourceReportBlockId: output.source_report_block_id || props.id,
+        eligibilityRule: output.eligibility_rule || 'unanimous non-contradiction',
+      };
+
+      const response = await fetch('/api/report-blocks/reference-dataset-from-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.accepted) {
+        toast.error(data?.error || 'Failed to launch associated dataset build.');
+        return;
+      }
+
+      setActiveTaskId(task.id);
+      toast.success(`Associated dataset build started (task: ${task.id}).`);
+      await pollReferenceDatasetTask(task.id);
+    } catch (error) {
+      console.error('Failed to create associated dataset from aligned report:', error);
+      toast.error('Failed to launch associated dataset build.');
+    } finally {
+      setCreatingReferenceDataset(false);
+      setActiveTaskId(null);
+    }
+  }, [output, selectedAccount?.id, pollReferenceDatasetTask, props.id]);
+
   if (!output || (output as any).status === 'pending') {
-    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Generating contradiction analysis…</p></ReportBlock>;
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Generating guideline-vetting analysis…</p></ReportBlock>;
   }
 
   if (output.error) {
@@ -380,7 +519,19 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     );
   }
 
-  const { score_name, total_items_analyzed, contradictions_found, topics = [] } = output;
+  const {
+    mode = 'contradictions',
+    score_name,
+    total_items_analyzed,
+    contradictions_found,
+    aligned_found = 0,
+    selected_items_count = contradictions_found,
+    topics = [],
+    eligible_count = 0,
+  } = output;
+  const isAlignedMode = mode === 'aligned';
+  const contradictionRate = Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100);
+  const alignedRate = Math.round((aligned_found / Math.max(total_items_analyzed, 1)) * 100);
 
   return (
     <ReportBlock {...props} output={reportBlockOutput}>
@@ -390,20 +541,41 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
           <div>
             <h3 className="text-base font-semibold">{score_name}</h3>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {contradictions_found} contradiction{contradictions_found !== 1 ? 's' : ''} found
-              {' '}across {total_items_analyzed} feedback item{total_items_analyzed !== 1 ? 's' : ''}
+              {isAlignedMode
+                ? `${aligned_found} aligned item${aligned_found !== 1 ? 's' : ''} across ${total_items_analyzed} feedback item${total_items_analyzed !== 1 ? 's' : ''}`
+                : `${contradictions_found} contradiction${contradictions_found !== 1 ? 's' : ''} found across ${total_items_analyzed} feedback item${total_items_analyzed !== 1 ? 's' : ''}`
+              }
             </p>
           </div>
-          <Badge variant={contradictions_found > 0 ? 'destructive' : 'secondary'} className="shrink-0">
-            {contradictions_found > 0
-              ? `${Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100)}% contradiction rate`
-              : 'No contradictions'}
+          <Badge
+            variant={isAlignedMode ? 'secondary' : (contradictions_found > 0 ? 'destructive' : 'secondary')}
+            className="shrink-0"
+          >
+            {isAlignedMode ? `${alignedRate}% aligned` : (contradictions_found > 0 ? `${contradictionRate}% contradiction rate` : 'No contradictions')}
           </Badge>
         </div>
 
-        {topics.length === 0 && contradictions_found === 0 && (
+        {isAlignedMode && eligible_count > 0 && (
+          <div className="pb-2 flex items-center gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCreateReferenceDataset}
+              disabled={creatingReferenceDataset}
+            >
+              {creatingReferenceDataset ? 'Creating Associated Dataset...' : `Create Associated Dataset (${eligible_count})`}
+            </Button>
+            {activeTaskId && (
+              <span className="text-xs text-muted-foreground">Task: {activeTaskId}</span>
+            )}
+          </div>
+        )}
+
+        {topics.length === 0 && selected_items_count === 0 && (
           <p className="text-sm text-muted-foreground">
-            All feedback items appear consistent with the score guidelines.
+            {isAlignedMode
+              ? 'No aligned vetted items found in this run.'
+              : 'All feedback items appear consistent with the score guidelines.'}
           </p>
         )}
 
