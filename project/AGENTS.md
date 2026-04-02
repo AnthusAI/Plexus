@@ -1,6 +1,6 @@
-# DO NOT EDIT HERE
+# Project directory
 
-Editing anything under project/ directly is hacking the data and is a sin against The Way.
-Do not read or write in this folder. Use Kanbus commands instead.
+Do not edit issues/ or events/ directly; use Kanbus for issues and events.
+You may edit wiki/ (e.g. Markdown) directly.
 
 See ../AGENTS.md and ../CONTRIBUTING_AGENT.md for required process.
