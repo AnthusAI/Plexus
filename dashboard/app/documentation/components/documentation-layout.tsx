@@ -90,7 +90,7 @@ const docSections: DocSidebarItem[] = [
       { name: "Sources", href: "/documentation/concepts/sources" },
       { name: "Scores", href: "/documentation/concepts/scores" },
       { name: "Scorecards", href: "/documentation/concepts/scorecards" },
-      { name: "Associated Datasets", href: "/documentation/concepts/reference-datasets" },
+      { name: "Associated Datasets", href: "/documentation/concepts/associated-datasets" },
       { name: "Score Results", href: "/documentation/concepts/score-results" },
       { name: "Evaluations", href: "/documentation/concepts/evaluations" },
       { name: "Tasks", href: "/documentation/concepts/tasks" },
