@@ -16,11 +16,16 @@ class RemoveSpeakerIdentifiersTranscriptFilter(Processor):
     SPEAKER_LABEL_PATTERN = re.compile(
         r'(?:(?<=^)|(?<=\s))'
         r'(?:'
-        r'speaker(?:\s+[A-Za-z0-9_-]+)?|'
+        r'speaker(?:\s*[A-Za-z0-9_-]+)?|'
         r'unknown\s+speaker|'
         r'agent|customer|contact|representative|rep'
         r')\s*:\s*',
         flags=re.IGNORECASE | re.MULTILINE,
+    )
+    GENERIC_SPEAKER_LABEL_PATTERN = re.compile(
+        r'(?:(?<=^)|(?<=\n)|(?<=\.\s))'
+        r'[A-Za-z][A-Za-z0-9_-]{1,31}\s*:\s*',
+        flags=re.MULTILINE,
     )
 
     def process(self, score_input: 'Score.Input') -> 'Score.Input':
@@ -37,6 +42,7 @@ class RemoveSpeakerIdentifiersTranscriptFilter(Processor):
 
         # Remove speaker identifiers, including multi-token forms like "Speaker 0:"
         filtered_text = self.SPEAKER_LABEL_PATTERN.sub('', str(score_input.text))
+        filtered_text = self.GENERIC_SPEAKER_LABEL_PATTERN.sub('', filtered_text)
 
         # Normalize spacing left behind by label removal.
         filtered_text = re.sub(r'[ \t]{2,}', ' ', filtered_text)
