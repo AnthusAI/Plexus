@@ -287,7 +287,7 @@ def register_dataset_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
-    async def plexus_dataset_reference_from_feedback(
+    async def plexus_dataset_associated_from_feedback(
         scorecard: str,
         score: str,
         feedback_item_ids: List[str],
@@ -312,7 +312,7 @@ def register_dataset_tools(mcp: FastMCP):
         sys.stdout = temp_stdout
         try:
             try:
-                from plexus.cli.dataset.datasets import create_client, build_reference_dataset_from_feedback_ids
+                from plexus.cli.dataset.datasets import create_client, build_associated_dataset_from_feedback_ids
             except ImportError as exc:
                 return f"Error: Could not import dataset builder: {exc}"
 
@@ -320,7 +320,7 @@ def register_dataset_tools(mcp: FastMCP):
                 return "Error: feedback_item_ids must be a non-empty list of feedback item IDs."
 
             client = create_client()
-            result = build_reference_dataset_from_feedback_ids(
+            result = build_associated_dataset_from_feedback_ids(
                 client=client,
                 scorecard_identifier=scorecard,
                 score_identifier=score,
@@ -337,7 +337,7 @@ def register_dataset_tools(mcp: FastMCP):
             captured_output = temp_stdout.getvalue()
             if captured_output:
                 logger.warning(
-                    "Captured unexpected stdout during plexus_dataset_reference_from_feedback: %s",
+                    "Captured unexpected stdout during plexus_dataset_associated_from_feedback: %s",
                     captured_output,
                 )
             sys.stdout = old_stdout

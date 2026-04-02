@@ -43,7 +43,7 @@ def test_score_dataset_curate_success():
 def test_score_dataset_curate_explicit_feedback_ids_path():
     runner = CliRunner()
     with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
-        "plexus.cli.score.scores.build_reference_dataset_from_feedback_ids",
+        "plexus.cli.score.scores.build_associated_dataset_from_feedback_ids",
         return_value={
             "dataset_id": "dataset-2",
             "row_count": 2,

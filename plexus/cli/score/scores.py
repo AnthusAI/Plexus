@@ -26,7 +26,7 @@ from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
 from plexus.cli.dataset.curation import build_associated_dataset_from_feedback_window
-from plexus.cli.dataset.datasets import build_reference_dataset_from_feedback_ids
+from plexus.cli.dataset.datasets import build_associated_dataset_from_feedback_ids
 from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_scorecard_identifier,
     memoized_resolve_score_identifier,
@@ -260,7 +260,7 @@ def dataset_curate(
 
     try:
         if normalized_feedback_item_ids:
-            result = build_reference_dataset_from_feedback_ids(
+            result = build_associated_dataset_from_feedback_ids(
                 client=client,
                 scorecard_identifier=scorecard,
                 score_identifier=score,
