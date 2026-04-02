@@ -125,8 +125,8 @@ parameters:
       const parsed = parseYaml(result) as any
 
       expect(parsed.parameters[0].name).toBe('scorecard_id')
-      // When a parameter is not in the parameters object, it gets undefined which YAML converts to null
-      expect(parsed.parameters[0].value).toBeNull()
+      // When a parameter is not in the parameters object, js-yaml omits undefined values
+      expect(parsed.parameters[0].value).toBeUndefined()
     })
 
     it('should handle parameters with different data types', () => {
