@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ad891991-bef4-4f72-98e6-614948cfde92",
+  "issue_id": "plx-612be1f3-14ba-4424-9e69-94a720bae8f0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.152Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nIntegrate deterministic reference datasets into evaluation flows so a score can be evaluated against its frozen reference dataset.\n\n## Deliverables\n- Allow evaluation tooling to run directly against the score's assigned reference dataset.\n- Keep evaluation source-agnostic once the dataset exists.\n- Make deterministic reference datasets the basis for repeatable regression testing.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Integrate deterministic reference datasets into evaluation flow"
+  }
+}

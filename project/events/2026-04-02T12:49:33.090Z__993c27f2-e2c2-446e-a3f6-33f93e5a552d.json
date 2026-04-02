@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "993c27f2-e2c2-446e-a3f6-33f93e5a552d",
+  "issue_id": "plx-602664de-61f5-4f6e-b048-1890d04afbe2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.090Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nDefine and implement deterministic label resolution for reference dataset builds.\n\n## Label priority\n1. vetted/gold feedback\n2. regular final feedback\n3. score-result or imported example label\n\n## Deliverables\n- Resolve labels according to the priority order above.\n- Skip unresolved items.\n- Emit skipped counts and item IDs/reasons so the build result is auditable.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement deterministic label-resolution policy for reference dataset builds"
+  }
+}

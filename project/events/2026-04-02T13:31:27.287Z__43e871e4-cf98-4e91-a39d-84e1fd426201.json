@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "43e871e4-cf98-4e91-a39d-84e1fd426201",
+  "issue_id": "plx-076ad293-3b00-4c13-a800-fd1e7d7883e9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.287Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nDefine the candidate assessment bundle that combines all the evidence used to judge a score change.\n\n## Deliverables\n- Define the bundle contents, including deterministic results, random results, malfunction analysis, evaluation-level red flags, and comparison metadata.\n- Define how the bundle is compared across candidate versions.\n- Keep the bundle first-class rather than requiring manual comparison of separate evaluation records.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 1,
+    "status": "open",
+    "title": "Define candidate assessment bundle for score-version comparison"
+  }
+}

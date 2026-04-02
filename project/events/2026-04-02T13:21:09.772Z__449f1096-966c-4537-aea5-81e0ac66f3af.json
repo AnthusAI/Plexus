@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "449f1096-966c-4537-aea5-81e0ac66f3af",
+  "issue_id": "plx-2f755b33-114e-424f-8535-af52676dffe1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:21:09.772Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nExpose the new misclassification-analysis payload through evaluation info surfaces and API consumers.\n\n## Deliverables\n- Include the structured payload in evaluation info responses used by MCP and dashboard consumers.\n- Keep the payload first-class rather than burying it inside free-form text.\n- Preserve a clear separation between item classifications, evaluation-level flags, and optimization RCA.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+    "priority": 2,
+    "status": "open",
+    "title": "Expose misclassification-analysis payloads through evaluation info surfaces"
+  }
+}

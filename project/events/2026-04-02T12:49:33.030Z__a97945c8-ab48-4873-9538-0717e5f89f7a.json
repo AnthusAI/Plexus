@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a97945c8-ab48-4873-9538-0717e5f89f7a",
+  "issue_id": "plx-89660a0c-6756-4309-b82d-236112c5a3c4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T12:49:33.030Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nExtend `DataSet` with the minimum metadata needed to distinguish frozen reference datasets from generic dataset artifacts.\n\n## Deliverables\n- Add provenance/build-context metadata for frozen reference datasets.\n- Preserve `DataSet` as a generic artifact type.\n- Keep active-reference selection on `Score` rather than moving it onto `DataSet`.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Extend DataSet for frozen reference-dataset provenance"
+  }
+}

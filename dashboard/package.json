@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "npx concurrently -n \"WEB,DISPATCH\" -c \"cyan,magenta\" \"npm run dev:web\" \"npm run dev:dispatcher\"",
     "dev:web": "bash -c 'set -a; [ -f ../.env ] && . ../.env; [ -f ./.env.local ] && . ./.env.local; set +a; for v in PLEXUS_API_URL PLEXUS_API_KEY PLEXUS_ACCOUNT_KEY; do if [ -z \"${!v:-}\" ]; then echo \"Missing $v for dev:web\" >&2; exit 1; fi; done; export NEXT_PUBLIC_PLEXUS_API_URL=\"$PLEXUS_API_URL\"; export NEXT_PUBLIC_PLEXUS_API_KEY=\"$PLEXUS_API_KEY\"; export NEXT_PUBLIC_PLEXUS_API_REGION=\"${PLEXUS_API_REGION:-${NEXT_PUBLIC_PLEXUS_API_REGION:-}}\"; export NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY=\"$PLEXUS_ACCOUNT_KEY\"; NEXT_TYPESCRIPT_CHECK=0 next dev'",
-    "dev:dispatcher": "bash -c 'set -a; [ -f ../.env ] && . ../.env; [ -f ./.env.local ] && . ./.env.local; set +a; for v in PLEXUS_API_URL PLEXUS_API_KEY PLEXUS_ACCOUNT_KEY OPENAI_API_KEY; do if [ -z \"${!v:-}\" ]; then echo \"Missing $v for dev:dispatcher\" >&2; exit 1; fi; done; PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT=false PLEXUS_DISPATCH_MODE=local plexus command dispatcher --interval 0.5 --loglevel INFO'",
+    "dev:dispatcher": "bash -c 'set -a; [ -f ../.env ] && . ../.env; [ -f ./.env.local ] && . ./.env.local; set +a; for v in PLEXUS_API_URL PLEXUS_API_KEY PLEXUS_ACCOUNT_KEY OPENAI_API_KEY; do if [ -z \"${!v:-}\" ]; then echo \"Missing $v for dev:dispatcher\" >&2; exit 1; fi; done; PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT=false PLEXUS_DISPATCH_MODE=local /Users/ryan/miniconda3/bin/python -m plexus.cli command dispatcher --interval 0.5 --loglevel INFO'",
     "build": "next build",
     "build:fast": "NEXT_TYPESCRIPT_CHECK=0 next build --no-lint",
     "start": "next start",
