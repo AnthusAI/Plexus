@@ -43,7 +43,7 @@ export default function ReferenceDatasetsPage() {
         </p>
         <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
           <li><code>dataset load</code> path: uses deterministic label-source priority and reports skipped IDs.</li>
-          <li><code>dataset reference-from-feedback</code> path: label source is strictly <code>FeedbackItem.finalAnswerValue</code>.</li>
+          <li><code>score dataset-curate</code> path: scans qualifying feedback newest-first and uses <code>FeedbackItem.finalAnswerValue</code> labels.</li>
         </ul>
       </section>
 
@@ -58,15 +58,14 @@ export default function ReferenceDatasetsPage() {
   --deterministic-order`}</code>
         </pre>
         <p className="text-muted-foreground">
-          Or build directly from vetted aligned feedback IDs (no score-linked DataSource required):
+          Or curate directly from qualifying feedback labels:
         </p>
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
-          <code>{`plexus dataset reference-from-feedback \\
+          <code>{`plexus score dataset-curate \\
   --scorecard "CMG EDU" \\
   --score "Identify Objections" \\
-  --feedback-item-id <id1> \\
-  --feedback-item-id <id2> \\
-  --source-report-block-id <report_block_id>`}</code>
+  --max-items 100 \\
+  --days 180`}</code>
         </pre>
       </section>
 
