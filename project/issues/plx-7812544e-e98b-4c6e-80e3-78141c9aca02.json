@@ -70,10 +70,28 @@
       "author": "ryan",
       "text": "Runtime validation follow-up: fixed GraphQL query variable type mismatch in recent evaluation lookup by changing createdAfter variable type to String to match deployed schema. Re-ran associated dataset tests and latest/all selection flow now reaches evaluation summary path.",
       "created_at": "2026-04-02T20:02:54.764434Z"
+    },
+    {
+      "id": "937b2a89-641d-43b2-91a0-b04c9554890e",
+      "author": "ryan",
+      "text": "End-to-end associated-dataset runtime validation completed successfully for score 45425 on scorecard 1039. Created file-backed associated dataset bb30680d-694d-41a1-b18c-6cbeed0d8cf1 (12 rows from labeled feedback items), then ran accuracy with --use-score-associated-dataset and completed evaluation 38040d31-a060-4fe7-b6b0-af904a0827af (status COMPLETED, processedItems 12/12, accuracy 66.6667, precision 100, recall 63.6364). Key runtime requirement discovered: AMPLIFY_STORAGE_DATASETS_BUCKET_NAME must be set for cloud dataset read/write in this shell; without it, setup fails with S3 bucket name not found.",
+      "created_at": "2026-04-02T20:18:00.002593Z"
+    },
+    {
+      "id": "2322fc37-4678-4f33-ace5-29b5a98768fb",
+      "author": "ryan",
+      "text": "Starting implementation for new canonical curation path: add plexus score dataset-curate with --max-items default 100 and optional --days, using newest-first feedback selection by editedAt and strict finalAnswerValue qualification; remove dataset reference-from-feedback from active CLI entrypoints to enforce one-path usage.",
+      "created_at": "2026-04-02T20:26:18.089005Z"
+    },
+    {
+      "id": "a5911eb8-882e-4dfb-841c-24e4a6239d23",
+      "author": "ryan",
+      "text": "Implemented canonical curation flow: added plexus score dataset-curate (scorecard, score, max-items default 100, optional days, optional task-id), backed by new dataset curation helper module with deterministic newest-first collection (editedAt DESC) and strict finalAnswerValue plus linked item qualification. Removed dataset reference-from-feedback from active dataset CLI commands. Updated docs and dashboard task launcher route to invoke score dataset-curate. Validation: pytest subset passed (11 tests), py_compile passed, CLI help shows score dataset-curate and dataset group no longer exposes reference-from-feedback.",
+      "created_at": "2026-04-02T20:30:12.317255Z"
     }
   ],
   "created_at": "2026-04-02T16:02:43.498942Z",
-  "updated_at": "2026-04-02T20:02:54.764434Z",
+  "updated_at": "2026-04-02T20:30:12.317255Z",
   "closed_at": null,
   "custom": {}
 }
