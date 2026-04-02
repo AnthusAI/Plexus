@@ -615,6 +615,12 @@ def register_evaluation_tools(mcp: FastMCP):
 
                     if eval_info:
                         evaluation_id = eval_info.get("id")
+                        if evaluation_id:
+                            try:
+                                # Re-fetch after CLI exits so payload includes final RCA/status.
+                                eval_info = Evaluation.get_evaluation_info(evaluation_id)
+                            except Exception as refresh_err:
+                                logger.debug("Could not refresh completed evaluation %s: %s", evaluation_id, refresh_err)
                         logger.info(f"Evaluation completed: {evaluation_id}")
 
                         payload: Dict[str, Any] = {

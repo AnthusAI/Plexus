@@ -2931,6 +2931,11 @@ class FeedbackEvaluation(Evaluation):
         self.account_id = account_id
         self.task_id = task_id
         self.logger = logging.getLogger('plexus/evaluation')
+
+    @staticmethod
+    def _has_usable_root_cause(root_cause_payload) -> bool:
+        """A usable RCA payload is any non-empty object payload."""
+        return isinstance(root_cause_payload, dict) and len(root_cause_payload) > 0
     
     async def run(self, tracker=None):
         """
@@ -3055,7 +3060,7 @@ class FeedbackEvaluation(Evaluation):
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
             root_cause_result = await self._run_root_cause_analysis(feedback_items)
 
-            # Merge root-cause topics into existing parameters (preserving mode/score/days metadata)
+            # Merge root-cause payload into existing parameters (preserving mode/score/days metadata)
             existing_params = evaluation_record.parameters
             if isinstance(existing_params, str):
                 try:
@@ -3063,8 +3068,33 @@ class FeedbackEvaluation(Evaluation):
                 except Exception:
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
-            if root_cause_result and root_cause_result.get("topics"):
+            incorrect_items = int(overall_analysis.get("disagreements") or 0)
+            root_cause_required = incorrect_items > 0
+            has_usable_root_cause = self._has_usable_root_cause(root_cause_result)
+            parameters_dict["root_cause_required"] = root_cause_required
+
+            if has_usable_root_cause:
                 parameters_dict["root_cause"] = root_cause_result
+
+            if root_cause_required and not has_usable_root_cause:
+                error_message = (
+                    f"Feedback-backed evaluation has {incorrect_items} incorrect item(s), "
+                    "but no usable RCA payload was persisted."
+                )
+                failure_kwargs = dict(
+                    status="FAILED",
+                    errorMessage=error_message,
+                    accuracy=accuracy if accuracy is not None else 0.0,
+                    metrics=json.dumps(metrics_for_api),
+                    confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
+                    totalItems=overall_analysis.get("total_items"),
+                    processedItems=overall_analysis.get("total_items"),
+                    datasetClassDistribution=json.dumps(overall_analysis.get("class_distribution")),
+                    predictedClassDistribution=json.dumps(overall_analysis.get("predicted_class_distribution")),
+                    parameters=json.dumps(parameters_dict),
+                )
+                evaluation_record.update(**failure_kwargs)
+                raise RuntimeError(error_message)
 
             # Update evaluation record with results
             # Ensure accuracy is never None (GraphQL schema requires Float!)
