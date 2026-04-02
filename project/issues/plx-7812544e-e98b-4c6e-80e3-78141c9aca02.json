@@ -58,10 +58,22 @@
       "author": "ryan",
       "text": "Implemented associated-dataset hard cutover in active paths.\n\nShipped changes:\n- evaluate accuracy flags renamed to --use-score-associated-dataset and --all-score-associated-datasets.\n- Selection logic now uses only DataSet.scoreId association plus newest-first ordering by createdAt, tie-break id.\n- Removed marker-based selection from resolver/query path; isReferenceDataset and referenceAt are not queried or filtered.\n- dataset load removed --reference-dataset marker behavior; score association remains scoreId when source is score-linked.\n- Updated associated-dataset language in docs and aligned-report UI messaging.\n- Updated MCP dataset tool messaging to associated-dataset terminology.\n\nValidation:\n- pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py plexus/cli/dataset/datasets_test.py -k \"reference or associated or load_command_success or build_reference_dataset_from_feedback_ids\" => 8 passed.\n- python -m py_compile plexus/cli/evaluation/evaluations.py plexus/cli/dataset/datasets.py MCP/tools/dataset/datasets.py plexus/dashboard/api/models/data_set.py => passed.\n- CLI help checks: evaluate accuracy --help shows new associated-dataset flags; dataset load --help no longer exposes --reference-dataset.\n\nArchitecture note:\n- Active behavior is now one-path association-only selection; no fallback aliases were added.",
       "created_at": "2026-04-02T19:49:46.192990Z"
+    },
+    {
+      "id": "14c0f085-4cf6-448f-80a8-f946428342cb",
+      "author": "ryan",
+      "text": "Live validation continued after commit push.\n\nRuntime checks executed:\n1) evaluate accuracy with --use-score-associated-dataset for scorecard 1039 / score 45425.\n   - Confirmed selector path logs: Using latest score-associated dataset.\n2) evaluate accuracy with --use-score-associated-dataset --all-score-associated-datasets.\n   - Confirmed aggregate runner path logs and summary table render.\n3) evaluate accuracy with both --dataset-id and --use-score-associated-dataset.\n   - Confirmed precedence logs: Using specific dataset ID.\n\nFollow-up fix applied:\n- Corrected GraphQL variable type in recent-evaluation lookup helper (createdAfter now String in query signature) to prevent type mismatch in all-associated-datasets path.\n\nCurrent runtime blocker for full success:\n- Dataset used for runtime checks has no file/attachedFiles payload in backend record, so evaluation fails at sample loading with No Parquet or CSV files found.\n- Selection behavior itself is validated; successful metric run still requires a valid dataset artifact file.",
+      "created_at": "2026-04-02T20:02:04.424524Z"
+    },
+    {
+      "id": "086b29f8-370d-4fab-89b0-046fb5e47f03",
+      "author": "ryan",
+      "text": "Runtime validation follow-up: fixed GraphQL query variable type mismatch in recent evaluation lookup by changing createdAfter variable type to String to match deployed schema. Re-ran associated dataset tests and latest/all selection flow now reaches evaluation summary path.",
+      "created_at": "2026-04-02T20:02:54.764434Z"
     }
   ],
   "created_at": "2026-04-02T16:02:43.498942Z",
-  "updated_at": "2026-04-02T19:49:51.791348Z",
+  "updated_at": "2026-04-02T20:02:54.764434Z",
   "closed_at": null,
   "custom": {}
 }
