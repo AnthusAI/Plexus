@@ -509,7 +509,6 @@ async def _execute_tactus(
             "mcp_server": mcp_server,
             "openai_api_key": _api_key,
         }
-        supports_trace_sink = True
         supports_chat_recorder = True
         try:
             runtime_sig = inspect.signature(TactusRuntime.__init__)
@@ -523,7 +522,6 @@ async def _execute_tactus(
                     for name in runtime_sig.parameters.keys()
                     if name != "self"
                 }
-                supports_trace_sink = "trace_sink" in supported_params
                 supports_chat_recorder = "chat_recorder" in supported_params
                 dropped = sorted(key for key in runtime_kwargs.keys() if key not in supported_params)
                 if dropped:
