@@ -447,6 +447,31 @@ async def _execute_tactus(
                     elif context is None:
                         context = legacy_input
 
+                # CRITICAL FIX: For YAML format with class: Tactus, the Tactus runtime does NOT
+                # automatically inject context dict values into the params table in Lua.
+                # We need to manually inject params by prepending Lua code that builds the params table.
+                # This ensures params.scorecard, params.score, etc. are available in the Lua code.
+                if parsed_source.get('class') == 'Tactus' and context:
+                    lua_source = parsed_source.get('code') or parsed_source.get('procedure')
+                    if isinstance(lua_source, str):
+                        # Build params table from context dict
+                        params_dict = {}
+                        params_schema = parsed_source.get('params', {})
+                        for param_name in params_schema.keys():
+                            if param_name in context:
+                                params_dict[param_name] = context[param_name]
+
+                        if params_dict:
+                            # Inject params initialization at the start of Lua code
+                            params_lua = _lua_table_literal(params_dict)
+                            injected_lua = f"-- Injected params from runtime context\nparams = {params_lua}\n\n{lua_source}"
+                            if 'code' in parsed_source:
+                                parsed_source['code'] = injected_lua
+                            else:
+                                parsed_source['procedure'] = injected_lua
+                            procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+                            logger.info(f"Injected params into Lua code: {list(params_dict.keys())}")
+
                 lua_source = parsed_source.get('procedure')
                 if (
                     isinstance(lua_source, str)
@@ -573,8 +598,25 @@ async def _execute_tactus(
                 from tactus.adapters.mcp import PydanticAIMCPAdapter
                 from pydantic_ai.toolsets import FunctionToolset
 
+                # Use a proxy so tool calls are recorded into the ToolPrimitive that the
+                # Tactus runtime creates during execute() (after this setup code runs).
+                # Without this, runtime.tool_primitive is None here and Tool.get_call_count()
+                # in Lua would never see any recorded calls.
+                class _RuntimeToolPrimitiveProxy:
+                    def __init__(self, rt):
+                        self._rt = rt
+
+                    def __bool__(self):
+                        return True
+
+                    def record_call(self, tool_name, args, result, agent_name=None):
+                        tp = self._rt.tool_primitive
+                        if tp:
+                            tp.record_call(tool_name, args, result, agent_name=agent_name)
+
                 mcp_adapter = PydanticAIMCPAdapter(
-                    mcp_client_for_bridge, tool_primitive=runtime.tool_primitive
+                    mcp_client_for_bridge,
+                    tool_primitive=_RuntimeToolPrimitiveProxy(runtime),
                 )
                 mcp_tools = await mcp_adapter.load_tools()
                 if mcp_tools and "plexus" not in runtime.toolset_registry:
@@ -583,6 +625,13 @@ async def _execute_tactus(
                         "Registered bridged MCP toolset 'plexus' with %d tool(s)",
                         len(mcp_tools),
                     )
+                    # Also register each tool individually so agent configs can reference
+                    # specific tool names (e.g., tools: [plexus_scorecard_info]) instead of
+                    # only the whole toolset name "plexus".
+                    for tool in mcp_tools:
+                        tool_name = getattr(tool, "name", None)
+                        if tool_name and tool_name not in runtime.toolset_registry:
+                            runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
 
