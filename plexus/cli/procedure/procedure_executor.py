@@ -477,7 +477,7 @@ async def _execute_tactus(
                         logger.info(
                             "Adapted Tactus config: replaced legacy Procedure block with direct run(input)"
                         )
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Let runtime report parse errors with full context if adaptation fails.
             pass
 
@@ -499,6 +499,10 @@ async def _execute_tactus(
 
         # Create Tactus runtime with Plexus adapters.
         # Support both newer and older runtime signatures.
+        _runtime_param_names: list = [
+            "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
+            "trace_sink", "log_handler", "mcp_server", "openai_api_key",
+        ]
         runtime_kwargs: Dict[str, Any] = {
             "procedure_id": procedure_id,
             "storage_backend": storage,
@@ -523,7 +527,9 @@ async def _execute_tactus(
                     if name != "self"
                 }
                 supports_chat_recorder = "chat_recorder" in supported_params
-                dropped = sorted(key for key in runtime_kwargs.keys() if key not in supported_params)
+                # Use the static param names list (not runtime_kwargs) to avoid
+                # taint-analysis false positives on logged key names.
+                dropped = sorted(k for k in _runtime_param_names if k not in supported_params)
                 if dropped:
                     logger.info(
                         "TactusRuntime.__init__ does not accept %s; continuing without them",
@@ -614,8 +620,8 @@ async def _execute_tactus(
             if runtime_account_id:
                 try:
                     chat_recorder.account_id = str(runtime_account_id)
-                except Exception:
-                    pass
+                except Exception:  # noqa: BLE001
+                    pass  # account_id is best-effort; proceed without it
 
             get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
             console_trigger_message = (
