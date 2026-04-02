@@ -2884,6 +2884,7 @@ class FeedbackEvaluation(Evaluation):
         task_id: Optional[str] = None,
         api_client=None,
         max_samples: Optional[int] = None,
+        sample_seed: Optional[int] = None,
         **kwargs
     ):
         """
@@ -2898,12 +2899,14 @@ class FeedbackEvaluation(Evaluation):
             task_id: Optional task ID for progress tracking
             api_client: Optional API client (if not provided, will be created from kwargs)
             max_samples: Optional maximum number of feedback items to process (default: None = all)
+            sample_seed: Optional random seed used when sampling feedback items
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
         # Remove it from kwargs since parent Evaluation doesn't accept it
         self.api_client = api_client
         self.max_samples = max_samples
+        self.sample_seed = sample_seed
         
         # Call parent init (which expects scorecard_name and scorecard at minimum)
         # For FeedbackEvaluation, we don't need a full scorecard object
@@ -2984,7 +2987,11 @@ class FeedbackEvaluation(Evaluation):
             if self.max_samples and len(feedback_items) > self.max_samples:
                 import random
                 self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
-                feedback_items = random.sample(feedback_items, self.max_samples)
+                if self.sample_seed is not None:
+                    rng = random.Random(self.sample_seed)
+                    feedback_items = rng.sample(feedback_items, self.max_samples)
+                else:
+                    feedback_items = random.sample(feedback_items, self.max_samples)
             
             # Perform analysis on the feedback items
             overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)

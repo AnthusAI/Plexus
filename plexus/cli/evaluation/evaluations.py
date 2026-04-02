@@ -3033,6 +3033,8 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID). REQUIRED - feedback evaluations must be run on a single score.')
 @click.option('--days', default=7, type=int, help='Number of days to look back for feedback items (default: 7)')
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
+@click.option('--max-samples', default=None, type=int, help='Optional maximum number of feedback items/samples to evaluate.')
+@click.option('--sample-seed', default=None, type=int, help='Optional random seed used when sampling feedback items.')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
@@ -3041,6 +3043,8 @@ def feedback(
     score: str,
     days: int,
     version: Optional[str],
+    max_samples: Optional[int],
+    sample_seed: Optional[int],
     baseline: Optional[str],
     use_yaml: bool,
     task_id: Optional[str]
@@ -3084,6 +3088,14 @@ def feedback(
     console.print(f"Scorecard: {scorecard}")
     console.print(f"Score: {score}")
     console.print(f"Time Period: Last {days} days")
+    if max_samples is not None:
+        console.print(f"Max Samples: {max_samples}")
+    if sample_seed is not None:
+        console.print(f"Sample Seed: {sample_seed}")
+
+    if max_samples is not None and max_samples <= 0:
+        console.print("[bold red]Error: --max-samples must be a positive integer[/bold red]")
+        return
     
     try:
         # Create API client
@@ -3330,6 +3342,8 @@ def feedback(
                         "scorecard": scorecard,
                         "score": score,
                         "version": version,
+                        "max_samples": max_samples,
+                        "sample_seed": sample_seed,
                         "mode": "accuracy_with_feedback_dataset",
                         "metadata": {
                             "baseline": baseline
@@ -3357,7 +3371,9 @@ def feedback(
                     scorecard_id=scorecard_id,
                     task_id=task_id,
                     skip_local_reports=True,
-                    number_of_texts_to_sample=10000,  # Process all feedback items, not just default 100
+                    # Keep legacy behavior unless an explicit cap is supplied.
+                    number_of_texts_to_sample=max_samples if max_samples is not None else 10000,
+                    random_seed=sample_seed,
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                 )
                 
@@ -3392,6 +3408,8 @@ def feedback(
                         evaluation_id=evaluation_id,
                         account_id=account_id,
                         api_client=client,
+                        max_samples=max_samples,
+                        sample_seed=sample_seed,
                     )
 
                     async def _run_rca():
@@ -3581,6 +3599,8 @@ def feedback(
                 "days": days,
                 "scorecard": scorecard,
                 "score": score,
+                "max_samples": max_samples,
+                "sample_seed": sample_seed,
                 "metadata": {
                     "baseline": baseline
                 } if baseline else {}
@@ -3604,7 +3624,9 @@ def feedback(
             evaluation_id=evaluation_id,
             account_id=account_id,
             task_id=task_id,
-            api_client=client  # Pass as keyword arg for FeedbackEvaluation
+            api_client=client,  # Pass as keyword arg for FeedbackEvaluation
+            max_samples=max_samples,
+            sample_seed=sample_seed,
         )
         
         # Run the evaluation
@@ -3913,7 +3935,9 @@ def await_run_single_feedback_evaluation(
     days: int,
     start_date: datetime,
     end_date: datetime,
-    task_id: Optional[str] = None
+    task_id: Optional[str] = None,
+    max_samples: Optional[int] = 200,
+    sample_seed: Optional[int] = None,
 ):
     """
     Helper function to run a single feedback evaluation.
@@ -3931,6 +3955,8 @@ def await_run_single_feedback_evaluation(
         start_date: Start date for filtering (UTC aware)
         end_date: End date for filtering (UTC aware)
         task_id: Optional task ID for progress tracking
+        max_samples: Optional maximum feedback items to process
+        sample_seed: Optional random seed used when sampling feedback items
         
     Returns:
         Evaluation record if successful, None otherwise
@@ -3985,7 +4011,9 @@ def await_run_single_feedback_evaluation(
             "parameters": json.dumps({
                 "days": days,
                 "scorecard": scorecard_name,
-                "score": score_name
+                "score": score_name,
+                "max_samples": max_samples,
+                "sample_seed": sample_seed,
             }),
             "taskId": task_id
         }
@@ -3993,8 +4021,8 @@ def await_run_single_feedback_evaluation(
         evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
         evaluation_id = evaluation_record.id
         
-        # Create FeedbackEvaluation instance
-        # Limit to max 200 samples to avoid performance issues
+        # Create FeedbackEvaluation instance.
+        # Defaults to 200 for feedback-all compatibility unless overridden.
         feedback_eval = FeedbackEvaluation(
             scorecard_name=scorecard_name,
             scorecard=None,
@@ -4005,7 +4033,8 @@ def await_run_single_feedback_evaluation(
             account_id=account_id,
             task_id=task_id,
             api_client=client,
-            max_samples=200  # Limit feedback items to process
+            max_samples=max_samples,
+            sample_seed=sample_seed,
         )
         
         # Run the evaluation with tracker
