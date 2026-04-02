@@ -140,13 +140,11 @@ plexus dataset load \\
   --source <data_source_identifier> \\
   --deterministic-order
 
-# Or build directly from vetted aligned feedback IDs
-plexus dataset reference-from-feedback \\
+# Or curate from qualifying feedback labels (newest-first)
+plexus score dataset-curate \\
   --scorecard "CMG EDU" \\
   --score "Identify Objections" \\
-  --feedback-item-id <id1> \\
-  --feedback-item-id <id2> \\
-  --source-report-block-id <report_block_id>
+  --max-items 100
 
 # Evaluate against latest associated dataset for this score
 plexus evaluate accuracy \\

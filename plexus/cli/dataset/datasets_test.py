@@ -12,6 +12,12 @@ from plexus.dashboard.api.models.data_source import DataSource
 def runner():
     return CliRunner()
 
+
+def test_dataset_group_does_not_expose_reference_from_feedback_command(runner):
+    result = runner.invoke(dataset, ["--help"])
+    assert result.exit_code == 0
+    assert "reference-from-feedback" not in result.output
+
 @patch('plexus.cli.dataset.datasets.resolve_data_source')  # Patch in the right module  
 def test_load_command_success(mock_resolve, runner):
     """Test the happy path of the load command."""
