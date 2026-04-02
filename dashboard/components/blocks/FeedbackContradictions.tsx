@@ -46,7 +46,7 @@ interface Exemplar {
   confidence?: 'high' | 'medium' | 'low';
   voting?: Vote[] | null;
   verdict?: 'contradiction' | 'aligned' | string;
-  reference_dataset_eligible?: boolean;
+  associated_dataset_eligible?: boolean;
 }
 
 interface Topic {
@@ -66,7 +66,7 @@ interface FeedbackContradictionsData {
   aligned_found?: number;
   selected_items_count?: number;
   topics: Topic[];
-  eligible_reference_feedback_item_ids?: string[];
+  eligible_associated_feedback_item_ids?: string[];
   eligible_count?: number;
   eligibility_rule?: string;
   source_report_block_id?: string | null;
@@ -333,7 +333,7 @@ const CONTEXT_HEADER = `# Feedback Guideline-Vetting Report Output
 const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackContradictionsData | null>(null);
   const [rawOutputString, setRawOutputString] = React.useState<string | null>(null);
-  const [creatingReferenceDataset, setCreatingReferenceDataset] = React.useState(false);
+  const [creatingAssociatedDataset, setCreatingAssociatedDataset] = React.useState(false);
   const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null);
   const { selectedAccount } = useAccount();
 
@@ -421,7 +421,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     toast.error('Timed out waiting for associated dataset task to complete.');
   }, []);
 
-  const handleCreateReferenceDataset = React.useCallback(async () => {
+  const handleCreateAssociatedDataset = React.useCallback(async () => {
     if (!output) return;
     if (!selectedAccount?.id) {
       toast.error('No account selected.');
@@ -432,7 +432,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
       toast.error('Associated dataset creation is only available in aligned mode.');
       return;
     }
-    const eligibleIds = output.eligible_reference_feedback_item_ids || [];
+    const eligibleIds = output.eligible_associated_feedback_item_ids || [];
     const scorecard = output.block_configuration?.scorecard;
     const score = output.block_configuration?.score;
     if (!scorecard || !score) {
@@ -444,7 +444,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
       return;
     }
 
-    setCreatingReferenceDataset(true);
+    setCreatingAssociatedDataset(true);
     try {
       const requestedMaxItems = Math.max(eligibleIds.length, 100);
       const configuredDays = Number(output?.block_configuration?.days);
@@ -501,7 +501,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
       console.error('Failed to create associated dataset from aligned report:', error);
       toast.error('Failed to launch associated dataset build.');
     } finally {
-      setCreatingReferenceDataset(false);
+      setCreatingAssociatedDataset(false);
       setActiveTaskId(null);
     }
   }, [output, selectedAccount?.id, pollReferenceDatasetTask, props.id]);
@@ -562,10 +562,10 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleCreateReferenceDataset}
-              disabled={creatingReferenceDataset}
+              onClick={handleCreateAssociatedDataset}
+              disabled={creatingAssociatedDataset}
             >
-              {creatingReferenceDataset ? 'Creating Associated Dataset...' : `Create Associated Dataset (${eligible_count})`}
+              {creatingAssociatedDataset ? 'Creating Associated Dataset...' : `Create Associated Dataset (${eligible_count})`}
             </Button>
             {activeTaskId && (
               <span className="text-xs text-muted-foreground">Task: {activeTaskId}</span>
