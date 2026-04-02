@@ -34,10 +34,46 @@
       "author": "ryan",
       "text": "Baseline execution attempt started with local CLI command: python -m plexus.cli evaluate feedback --scorecard 1039 --score 45425 --days 60 --max-samples 50. The run launched and created evaluation record f7e38287-ef46-4129-8900-734afcf868e2, but emitted extremely high-volume per-item logs in foreground. Stopped interactive run to avoid terminal flooding; no champion promotion actions were performed.",
       "created_at": "2026-04-02T03:31:25.900068Z"
+    },
+    {
+      "id": "8decd057-245a-4c6e-9b91-4346bbaac01e",
+      "author": "ryan",
+      "text": "Committed implementation on branch chore/plx-3170f4-feedback-sampling at commit 3dbfcd445.\n\nValidation run:\n- pytest -q plexus/cli/evaluation/feedback_integration_test.py plexus/Evaluation_feedback_test.py\n- Result: 21 passed, 1 deselected\n\nNo champion promotion operations were executed.",
+      "created_at": "2026-04-02T03:31:55.400929Z"
+    },
+    {
+      "id": "1356cb68-e13b-42ec-b3fd-4f5af91ca78f",
+      "author": "ryan",
+      "text": "Starting baseline run for scorecard 1039 / score 45425 with 60-day window and 50-sample cap (no champion promotion). Command will run in background; will log evaluation ID and final metrics (AC1/accuracy/precision/recall) when complete.",
+      "created_at": "2026-04-02T03:33:13.771213Z"
+    },
+    {
+      "id": "aed110f6-5941-4921-85db-21b42d03ad4e",
+      "author": "ryan",
+      "text": "Identified root cause for 100% errors: metadata was being read from row.columns.metadata only, while FeedbackItems provides metadata as a top-level dataframe column. Patched AccuracyEvaluation row extraction to prefer row.metadata with fallback to columns.metadata. Re-ran targeted tests: plexus/Evaluation_feedback_test.py passed.",
+      "created_at": "2026-04-02T03:40:28.200668Z"
+    },
+    {
+      "id": "01772385-0780-414d-a4f8-e9ccbee0fb51",
+      "author": "ryan",
+      "text": "Observed run d50e0c75-bb88-417e-8f70-6273b8dd74c6 stalled at 39/50. Starting a fresh baseline run to obtain a completed baseline evaluation ID for dashboard comparisons.",
+      "created_at": "2026-04-02T03:48:35.716684Z"
+    },
+    {
+      "id": "0a701c80-a774-476f-81f5-aaf65bf1496f",
+      "author": "ryan",
+      "text": "Implemented the no-fallback RCA fix path: feedback-backed accuracy now uses top-level metadata, per-item score execution has a hard timeout, Plexus resolves Biblicus RCA from ../Biblicus editable install, and focused regression tests were added for metadata precedence and timeout recovery.",
+      "created_at": "2026-04-02T04:11:27.647405Z"
+    },
+    {
+      "id": "15eacc8c-a83a-4c90-a078-0754d1f7d091",
+      "author": "ryan",
+      "text": "Corrected the Biblicus branch mismatch: switched ../Biblicus to main, reinstalled editable biblicus 1.10.0, restored max_exemplars support in Plexus RCA, and launched validation evaluation 88025217-f490-4856-af58-4d0109c21936 using baseline b8b46fd5-93de-4502-a60f-c5e9beb1a4dc.",
+      "created_at": "2026-04-02T04:22:08.092772Z"
     }
   ],
   "created_at": "2026-04-02T03:18:45.677297Z",
-  "updated_at": "2026-04-02T03:31:25.900068Z",
+  "updated_at": "2026-04-02T04:22:08.092772Z",
   "closed_at": null,
   "custom": {}
 }
