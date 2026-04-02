@@ -730,3 +730,75 @@ class TestFeedbackEvaluation:
         assert result["status"] == "success"
         final_call = mock_eval_record.update.call_args_list[-1]
         assert final_call.kwargs.get("status") == "COMPLETED"
+
+    @pytest.mark.asyncio
+    async def test_small_set_path_invoked_for_fewer_than_five_items(self, mock_api_client):
+        """_run_root_cause_analysis should delegate to small-set RCA when candidate count < 5."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        feedback_items = []
+        score_result_map = {}
+        for i in range(3):
+            item = MagicMock()
+            item.id = f"feedback-{i}"
+            item.itemId = f"item-{i}"
+            item.initialAnswerValue = "No"
+            item.finalAnswerValue = "Yes"
+            item.editCommentValue = f"comment-{i}"
+            item.editedAt = datetime.now(timezone.utc)
+            feedback_items.append(item)
+            score_result_map[item.id] = {"value": "No", "human_label": "Yes", "explanation": f"exp-{i}"}
+
+        expected = {
+            "topics": [{"label": "Small-set RCA Summary"}],
+            "overall_explanation": "summary",
+            "overall_improvement_suggestion": "improve",
+        }
+
+        with patch.object(
+            evaluation,
+            "_run_small_set_root_cause_analysis",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ) as mock_small:
+            result = await evaluation._run_root_cause_analysis(
+                feedback_items=feedback_items,
+                score_result_map=score_result_map,
+                original_explanations={},
+            )
+
+        assert result == expected
+        assert mock_small.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_small_set_path_returns_empty_when_no_candidates(self, mock_api_client):
+        """_run_root_cause_analysis should return empty payload when no incorrect candidates exist."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        result = await evaluation._run_root_cause_analysis(
+            feedback_items=[],
+            score_result_map={},
+            original_explanations={},
+        )
+
+        assert result == {}

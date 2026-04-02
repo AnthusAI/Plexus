@@ -3491,12 +3491,23 @@ class FeedbackEvaluation(Evaluation):
             else:
                 candidate_items = [fi for fi in feedback_items if fi.editCommentValue]
 
+            if len(candidate_items) == 0:
+                self.logger.info("Root-cause analysis skipped: no incorrect items available")
+                return {}
+
             if len(candidate_items) < 5:
                 self.logger.info(
-                    f"Root-cause analysis skipped: only {len(candidate_items)} incorrect "
-                    f"items available (need ≥5)"
+                    f"Using small-set RCA summarization for {len(candidate_items)} "
+                    "incorrect item(s)"
                 )
-                return []
+                return await self._run_small_set_root_cause_analysis(
+                    candidate_items=candidate_items,
+                    score_result_map=score_result_map,
+                    original_explanations=original_explanations or {},
+                    max_report_exemplars=max_report_exemplars,
+                    max_summarization_exemplars=max_summarization_exemplars,
+                    tracker=tracker,
+                )
 
             now = datetime.now(_tz.utc)
             texts = []
@@ -3918,6 +3929,170 @@ class FeedbackEvaluation(Evaluation):
             import traceback
             self.logger.debug(traceback.format_exc())
             return {}
+
+    async def _run_small_set_root_cause_analysis(
+        self,
+        candidate_items,
+        score_result_map: dict,
+        original_explanations: dict,
+        max_report_exemplars: int = 20,
+        max_summarization_exemplars: int = 6,
+        tracker=None,
+    ) -> dict:
+        """Run RCA summarization for small incorrect sets (<5 items)."""
+        from datetime import datetime, timezone as _tz
+        from plexus.rca_analysis import analyze_score_result
+
+        def _update_status(msg: str):
+            if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
+                tracker.current_stage.status_message = msg
+
+        def _build_item_text(fi, sr: dict) -> str:
+            new_pred = (sr.get("value") or "")
+            correct_label = (sr.get("human_label") or fi.finalAnswerValue or "")
+            our_explanation = sr.get("explanation", "")
+            orig_explanation = (original_explanations or {}).get(fi.id, "")
+            reviewer_agreed = (fi.initialAnswerValue or "") == (fi.finalAnswerValue or "")
+            if reviewer_agreed:
+                text = orig_explanation or fi.editCommentValue or our_explanation
+            else:
+                text = fi.editCommentValue or orig_explanation or our_explanation
+            if not text:
+                text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+            return text
+
+        now_iso = datetime.now(_tz.utc).isoformat()
+        exemplars = []
+        for fi in candidate_items[:max_report_exemplars]:
+            sr = score_result_map.get(fi.id, {}) if score_result_map is not None else {}
+            predicted = (sr.get("value") or fi.initialAnswerValue or "")
+            correct = (sr.get("human_label") or fi.finalAnswerValue or "")
+            score_explanation = sr.get("explanation", "")
+            ts = fi.editedAt or getattr(fi, "updatedAt", None) or getattr(fi, "createdAt", None)
+            ts_str = (
+                (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
+                if ts else now_iso
+            )
+            exemplars.append({
+                "text": _build_item_text(fi, sr),
+                "item_id": fi.itemId,
+                "initial_answer_value": predicted,
+                "final_answer_value": correct,
+                "timestamp": ts_str,
+                "above_fold": len(exemplars) < max_summarization_exemplars,
+                **({"score_explanation": score_explanation} if score_explanation else {}),
+            })
+
+        _update_status(f"Running small-set RCA on {len(exemplars)} item(s)...")
+
+        transcript_cache = {}
+        dashboard_client = getattr(self, "dashboard_client", None)
+        if dashboard_client:
+            from plexus.dashboard.api.models.item import Item as DashboardItem
+
+            item_ids = [ex.get("item_id") for ex in exemplars if ex.get("item_id")]
+
+            async def _fetch_transcript(item_id: str):
+                try:
+                    item = await asyncio.to_thread(
+                        DashboardItem.get_by_id, item_id, dashboard_client
+                    )
+                    return item_id, (item.text if item else None)
+                except Exception as exc:
+                    self.logger.debug("Transcript fetch failed for %s: %s", item_id, exc)
+                    return item_id, None
+
+            fetched = await asyncio.gather(*[_fetch_transcript(iid) for iid in item_ids])
+            transcript_cache = {iid: txt for iid, txt in fetched if txt}
+
+        for ex in exemplars[:max_summarization_exemplars]:
+            transcript = transcript_cache.get(ex.get("item_id"))
+            if not transcript:
+                continue
+            detailed_cause, suggested_fix = await asyncio.to_thread(
+                analyze_score_result,
+                transcript=transcript,
+                predicted=ex.get("initial_answer_value", ""),
+                correct=ex.get("final_answer_value", ""),
+                explanation=ex.get("score_explanation", ""),
+                topic_label="Small-set RCA Summary",
+                score_guidelines="",
+                score_yaml_code="",
+            )
+            if detailed_cause:
+                ex["detailed_cause"] = detailed_cause
+            if suggested_fix:
+                ex["suggested_fix"] = suggested_fix
+
+        def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:
+            import boto3 as _boto3
+            import json as _json
+
+            brt = _boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            resp = brt.invoke_model(
+                modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+        exemplar_text = "\n".join([
+            (
+                f"- Predicted '{ex.get('initial_answer_value')}' vs correct "
+                f"'{ex.get('final_answer_value')}': {ex.get('text', '')[:280]}"
+            )
+            for ex in exemplars
+        ])
+        system = (
+            "You are an expert QA analyst reviewing AI scoring failures. "
+            "Provide concrete, implementation-oriented analysis."
+        )
+        explanation_prompt = (
+            "Summarize root causes across this small set of misclassifications in 2-3 "
+            "sentences. Include concrete error direction patterns.\n\n"
+            f"{exemplar_text}"
+        )
+        improvement_prompt = (
+            "Based on this same small set, provide 2-3 sentences with specific "
+            "score-configuration changes that would reduce these errors.\n\n"
+            f"{exemplar_text}"
+        )
+
+        detailed_explanation = await asyncio.to_thread(
+            _bedrock_converse, system, explanation_prompt, 500
+        )
+        improvement_suggestion = await asyncio.to_thread(
+            _bedrock_converse, system, improvement_prompt, 500
+        )
+
+        topic = {
+            "topic_id": 0,
+            "label": "Small-set RCA Summary",
+            "keywords": [],
+            "exemplars": exemplars,
+            "member_count": len(exemplars),
+            "memory_weight": 1.0,
+            "memory_tier": "hot",
+            "lifecycle_tier": "new",
+            "is_new": True,
+            "is_trending": False,
+            "days_inactive": 0,
+            "cause": "Small incorrect-set analysis",
+            "detailed_explanation": detailed_explanation,
+            "improvement_suggestion": improvement_suggestion,
+        }
+        return {
+            "topics": [topic],
+            "overall_explanation": detailed_explanation,
+            "overall_improvement_suggestion": improvement_suggestion,
+        }
 
 class AccuracyEvaluation(Evaluation):
     def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
