@@ -26,6 +26,7 @@ from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
 from plexus.cli.dataset.curation import build_associated_dataset_from_feedback_window
+from plexus.cli.dataset.datasets import build_reference_dataset_from_feedback_ids
 from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_scorecard_identifier,
     memoized_resolve_score_identifier,
@@ -229,32 +230,62 @@ score.add_command(list)
 @click.option('--score', required=True, help='Score to curate associated dataset for (accepts ID, name, key, or external ID)')
 @click.option('--max-items', default=100, type=int, show_default=True, help='Maximum number of qualifying feedback items to include.')
 @click.option('--days', default=None, type=int, help='Optional lookback window in days. Omit to scan all available history.')
+@click.option(
+    '--feedback-item-ids',
+    default=None,
+    type=str,
+    help='Comma-separated explicit vetted feedback item IDs to include.',
+)
 @click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
-def dataset_curate(scorecard: str, score: str, max_items: int, days: Optional[int], task_id: Optional[str]):
+def dataset_curate(
+    scorecard: str,
+    score: str,
+    max_items: int,
+    days: Optional[int],
+    feedback_item_ids: Optional[str],
+    task_id: Optional[str],
+):
     """Build an associated dataset by scanning feedback backward from now until max qualifying labels are found."""
     if max_items <= 0:
         raise click.ClickException("--max-items must be greater than 0.")
     if days is not None and days <= 0:
         raise click.ClickException("--days must be greater than 0 when provided.")
+    normalized_feedback_item_ids: list[str] = []
+    if feedback_item_ids:
+        normalized_feedback_item_ids = [token.strip() for token in feedback_item_ids.split(",") if token.strip()]
+    if normalized_feedback_item_ids and days is not None:
+        raise click.ClickException("--days cannot be combined with --feedback-item-ids.")
 
     client = create_client()
-    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
-    if not scorecard_id:
-        raise click.ClickException(f"Scorecard not found: {scorecard}")
-
-    score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
-    if not score_id:
-        raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
 
     try:
-        result = build_associated_dataset_from_feedback_window(
-            client=client,
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            max_items=max_items,
-            days=days,
-            task_id=task_id,
-        )
+        if normalized_feedback_item_ids:
+            result = build_reference_dataset_from_feedback_ids(
+                client=client,
+                scorecard_identifier=scorecard,
+                score_identifier=score,
+                feedback_item_ids=normalized_feedback_item_ids,
+                source_report_block_id="score.dataset-curate",
+                eligibility_rule="explicit vetted feedback labels",
+                task_id=task_id,
+            )
+        else:
+            scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                raise click.ClickException(f"Scorecard not found: {scorecard}")
+
+            score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
+
+            result = build_associated_dataset_from_feedback_window(
+                client=client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                max_items=max_items,
+                days=days,
+                task_id=task_id,
+            )
         click.echo(json.dumps(result))
     except Exception as exc:
         raise click.ClickException(str(exc))

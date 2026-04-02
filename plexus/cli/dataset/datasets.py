@@ -683,7 +683,6 @@ def build_reference_dataset_from_feedback_ids(
             f"Could not resolve score identifier '{score_identifier}' within scorecard '{scorecard_id}'"
         )
 
-    scorecard_name = _fetch_scorecard_name(client, scorecard_id)
     score_name = _fetch_score_name(client, score_id)
 
     task: Optional[Task] = None
@@ -765,7 +764,6 @@ def build_reference_dataset_from_feedback_ids(
             feedback_item_ids=normalized_ids,
         )
 
-        now_iso = datetime.now(timezone.utc).isoformat()
         dataset_input: Dict[str, Any] = {
             "name": f"Associated Dataset - {score_name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
             "description": "Associated dataset built directly from vetted feedback IDs.",
@@ -773,28 +771,6 @@ def build_reference_dataset_from_feedback_ids(
             "scorecardId": scorecard_id,
             "scoreId": score_id,
             "dataSourceVersionId": data_source_version_id,
-            "provenance": {
-                "source": "vetted_feedback_ids",
-                "feedback_item_ids": normalized_ids,
-                "label_source": "finalAnswerValue",
-                "source_report_block_id": source_report_block_id,
-                "eligibility_rule": eligibility_rule,
-            },
-            "buildContext": {
-                "builder": "dataset.reference-from-feedback",
-                "scorecard_id": scorecard_id,
-                "scorecard_name": scorecard_name,
-                "score_id": score_id,
-                "score_name": score_name,
-                "feedback_item_count": len(normalized_ids),
-                "deterministic_order": True,
-                "row_count": int(len(dataframe)),
-                "column_count": int(len(dataframe.columns)),
-                "columns": dataframe.columns.tolist(),
-                "source_report_block_id": source_report_block_id,
-                "eligibility_rule": eligibility_rule,
-                "built_at": now_iso,
-            },
         }
 
         champion_version_id = _fetch_score_champion_version(client, score_id)
@@ -869,4 +845,3 @@ def build_reference_dataset_from_feedback_ids(
                 error=str(exc),
             )
         raise
-
