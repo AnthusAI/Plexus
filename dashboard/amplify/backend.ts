@@ -147,17 +147,8 @@ const taskDispatcherStack = new TaskDispatcherStack(
     }
 );
 
-const dataCfnResources = backend.data.resources.cfnResources as any;
-const resolvedDataApiUrl = (
-    process.env.PLEXUS_API_URL ||
-    dataCfnResources?.cfnGraphqlApi?.attrGraphQlUrl ||
-    ''
-).trim();
-const resolvedDataApiKey = (
-    process.env.PLEXUS_API_KEY ||
-    dataCfnResources?.cfnApiKey?.attrApiKey ||
-    ''
-).trim();
+const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
+const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
 
 if (!resolvedDataApiUrl || !resolvedDataApiKey) {
     throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
