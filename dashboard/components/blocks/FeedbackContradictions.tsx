@@ -483,7 +483,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         days: Number.isInteger(configuredDays) && configuredDays > 0 ? configuredDays : undefined,
       };
 
-      const response = await fetch('/api/report-blocks/reference-dataset-from-feedback', {
+      const response = await fetch('/api/report-blocks/associated-dataset-from-feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
