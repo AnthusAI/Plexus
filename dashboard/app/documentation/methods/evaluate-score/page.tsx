@@ -146,6 +146,12 @@ plexus score dataset-curate \\
   --score "Identify Objections" \\
   --max-items 100
 
+# Or curate from an explicit vetted report snapshot
+plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --feedback-item-ids "<id1>,<id2>,<id3>"
+
 # Evaluate against latest associated dataset for this score
 plexus evaluate accuracy \\
   --scorecard "CMG EDU" \\

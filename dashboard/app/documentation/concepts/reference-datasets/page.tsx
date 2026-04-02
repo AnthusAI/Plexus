@@ -44,6 +44,7 @@ export default function ReferenceDatasetsPage() {
         <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
           <li><code>dataset load</code> path: uses deterministic label-source priority and reports skipped IDs.</li>
           <li><code>score dataset-curate</code> path: scans qualifying feedback newest-first and uses <code>FeedbackItem.finalAnswerValue</code> labels.</li>
+          <li><code>score dataset-curate --feedback-item-ids</code> path: builds from an explicit vetted snapshot of feedback IDs.</li>
         </ul>
       </section>
 
@@ -66,6 +67,15 @@ export default function ReferenceDatasetsPage() {
   --score "Identify Objections" \\
   --max-items 100 \\
   --days 180`}</code>
+        </pre>
+        <p className="text-muted-foreground">
+          Or curate from an explicit vetted snapshot:
+        </p>
+        <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
+          <code>{`plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --feedback-item-ids "<id1>,<id2>,<id3>"`}</code>
         </pre>
       </section>
 
