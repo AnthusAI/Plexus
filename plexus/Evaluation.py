@@ -2936,6 +2936,37 @@ class FeedbackEvaluation(Evaluation):
     def _has_usable_root_cause(root_cause_payload) -> bool:
         """A usable RCA payload is any non-empty object payload."""
         return isinstance(root_cause_payload, dict) and len(root_cause_payload) > 0
+
+    @classmethod
+    def root_cause_contract_outcome(cls, incorrect_items: int, root_cause_payload):
+        """Shared RCA contract evaluation for all feedback-backed paths."""
+        root_cause_required = incorrect_items > 0
+        has_usable_root_cause = cls._has_usable_root_cause(root_cause_payload)
+        error_message = None
+        if root_cause_required and not has_usable_root_cause:
+            error_message = (
+                f"Feedback-backed evaluation has {incorrect_items} incorrect item(s), "
+                "but no usable RCA payload was persisted."
+            )
+        return {
+            "root_cause_required": root_cause_required,
+            "has_usable_root_cause": has_usable_root_cause,
+            "error_message": error_message,
+        }
+
+    @staticmethod
+    def apply_root_cause_contract_to_parameters(
+        existing_parameters,
+        root_cause_payload,
+        root_cause_required: bool,
+        has_usable_root_cause: bool,
+    ) -> dict:
+        """Shared parameter shaping for feedback-backed RCA contract."""
+        params = dict(existing_parameters) if existing_parameters else {}
+        params["root_cause_required"] = root_cause_required
+        if has_usable_root_cause:
+            params["root_cause"] = root_cause_payload
+        return params
     
     async def run(self, tracker=None):
         """
@@ -3069,21 +3100,18 @@ class FeedbackEvaluation(Evaluation):
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
             incorrect_items = int(overall_analysis.get("disagreements") or 0)
-            root_cause_required = incorrect_items > 0
-            has_usable_root_cause = self._has_usable_root_cause(root_cause_result)
-            parameters_dict["root_cause_required"] = root_cause_required
+            contract = self.root_cause_contract_outcome(incorrect_items, root_cause_result)
+            parameters_dict = self.apply_root_cause_contract_to_parameters(
+                parameters_dict,
+                root_cause_result,
+                contract["root_cause_required"],
+                contract["has_usable_root_cause"],
+            )
 
-            if has_usable_root_cause:
-                parameters_dict["root_cause"] = root_cause_result
-
-            if root_cause_required and not has_usable_root_cause:
-                error_message = (
-                    f"Feedback-backed evaluation has {incorrect_items} incorrect item(s), "
-                    "but no usable RCA payload was persisted."
-                )
+            if contract["error_message"]:
                 failure_kwargs = dict(
                     status="FAILED",
-                    errorMessage=error_message,
+                    errorMessage=contract["error_message"],
                     accuracy=accuracy if accuracy is not None else 0.0,
                     metrics=json.dumps(metrics_for_api),
                     confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
@@ -3094,7 +3122,7 @@ class FeedbackEvaluation(Evaluation):
                     parameters=json.dumps(parameters_dict),
                 )
                 evaluation_record.update(**failure_kwargs)
-                raise RuntimeError(error_message)
+                raise RuntimeError(contract["error_message"])
 
             # Update evaluation record with results
             # Ensure accuracy is never None (GraphQL schema requires Float!)

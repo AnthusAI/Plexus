@@ -3097,9 +3097,6 @@ def feedback(
         console.print("[bold red]Error: --max-samples must be a positive integer[/bold red]")
         return
 
-    def _has_usable_root_cause(root_cause_payload) -> bool:
-        return isinstance(root_cause_payload, dict) and len(root_cause_payload) > 0
-    
     try:
         # Create API client
         client = create_client()
@@ -3561,8 +3558,10 @@ def feedback(
                     rca_outcome = asyncio.run(_run_rca())
                     incorrect_items = int(rca_outcome.get("incorrect_items") or 0)
                     root_cause_result = rca_outcome.get("root_cause")
-                    root_cause_required = incorrect_items > 0
-                    has_usable_root_cause = _has_usable_root_cause(root_cause_result)
+                    contract = FeedbackEvaluation.root_cause_contract_outcome(
+                        incorrect_items,
+                        root_cause_result,
+                    )
 
                     eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
                     existing = {}
@@ -3572,27 +3571,26 @@ def feedback(
                         except Exception:
                             existing = {}
 
-                    existing["root_cause_required"] = root_cause_required
-                    if has_usable_root_cause:
-                        existing["root_cause"] = root_cause_result
+                    existing = FeedbackEvaluation.apply_root_cause_contract_to_parameters(
+                        existing,
+                        root_cause_result,
+                        contract["root_cause_required"],
+                        contract["has_usable_root_cause"],
+                    )
 
-                    if root_cause_required and not has_usable_root_cause:
-                        error_message = (
-                            f"Feedback-backed evaluation has {incorrect_items} incorrect item(s), "
-                            "but no usable RCA payload was persisted."
-                        )
+                    if contract["error_message"]:
                         eval_rec.update(
                             status="FAILED",
-                            errorMessage=error_message,
+                            errorMessage=contract["error_message"],
                             parameters=json.dumps(existing),
                         )
-                        raise RuntimeError(error_message)
+                        raise RuntimeError(contract["error_message"])
 
                     eval_rec.update(
                         status="COMPLETED",
                         parameters=json.dumps(existing),
                     )
-                    if has_usable_root_cause:
+                    if contract["has_usable_root_cause"]:
                         num_topics = len(root_cause_result.get("topics", []))
                         console.print(f"[green]Root-cause analysis: {num_topics} topic(s) identified[/green]")
                     else:
