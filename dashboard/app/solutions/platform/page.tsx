@@ -72,6 +72,41 @@ export default function PlatformPage() {
       />
 
       <StandardSection
+        headline="Where Plexus fits in the Anthus Platform"
+        headlinePosition="top"
+        leftContent={
+          <div>
+            <p className="text-xl text-muted-foreground">
+              In the Anthus Platform, Plexus is the system that turns experiments into governed operations. It is where
+              scorecards, evaluations, feedback loops, and deployment controls live while the rest of the stack handles
+              runtime, workflow, corpus, and monitoring concerns.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-4 text-sm font-semibold">
+              <a href="https://tactus.anth.us" className="text-foreground hover:text-primary">
+                Evaluates Tactus procedures
+              </a>
+              <a href="https://anth.us/platform/biblicus" className="text-foreground hover:text-primary">
+                Benefits from Biblicus-backed datasets
+              </a>
+              <a href="https://korpor.us" className="text-foreground hover:text-primary">
+                Powers Korporus-hosted agent apps
+              </a>
+            </div>
+          </div>
+        }
+        rightContent={
+          <div className="rounded-xl bg-card p-6">
+            <h3 className="text-xl font-semibold text-foreground">Common combination</h3>
+            <p className="mt-3 text-muted-foreground">
+              A typical Anthus service uses <strong>Tactus</strong> for the procedure, <strong>Plexus</strong> for
+              measurement and RLHF-style improvement, <strong>Korporus</strong> for the application shell, and
+              <strong>Caducus</strong> for operator visibility.
+            </p>
+          </div>
+        }
+      />
+
+      <StandardSection
         headline="Don't Just Guess — Guess and Test"
         headlinePosition="top"
         layout="twoColumn"

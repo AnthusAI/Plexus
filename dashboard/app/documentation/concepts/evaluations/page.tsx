@@ -82,6 +82,18 @@ export default function EvaluationsPage() {
         before deploying them to production.
       </p>
 
+      <section className="mb-10 rounded-xl bg-card p-6">
+        <h2 className="text-2xl font-semibold mb-3">How evaluations fit the Anthus Platform</h2>
+        <p className="text-muted-foreground leading-7">
+          In Anthus systems, Plexus evaluations sit above the underlying workflow and data layers. A
+          <a href="https://tactus.anth.us" className="font-semibold text-foreground hover:text-primary"> Tactus</a>
+          procedure can define the behavior being measured, and
+          <a href="https://anth.us/platform/biblicus" className="font-semibold text-foreground hover:text-primary"> Biblicus</a>
+          can supply the evidence-oriented datasets or source corpora behind the test. Plexus is where those pieces
+          become an explicit quality loop.
+        </p>
+      </section>
+
       <div className="space-y-8">
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Evaluations?</h2>

@@ -87,6 +87,41 @@ export default function LandingPage() {
       />
 
       <StandardSection
+        headline="Where Plexus fits in the Anthus Platform"
+        headlinePosition="top"
+        leftContent={
+          <div>
+            <p className="text-xl text-muted-foreground">
+              Plexus is the MLOps and evaluation layer in the Anthus Platform. It is the part of the stack that helps
+              durable procedures, corpus workflows, and hosted agent services stay measurable and continuously
+              improvable after launch.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-4 text-sm font-semibold">
+              <a href="https://tactus.anth.us" className="text-foreground hover:text-primary">
+                Works with Tactus
+              </a>
+              <a href="https://anth.us/platform/biblicus" className="text-foreground hover:text-primary">
+                Uses Biblicus-style evidence inputs
+              </a>
+              <a href="https://korpor.us" className="text-foreground hover:text-primary">
+                Runs inside Korporus-powered services
+              </a>
+            </div>
+          </div>
+        }
+        rightContent={
+          <div className="rounded-xl bg-card p-6">
+            <h3 className="text-xl font-semibold text-foreground">Common combination</h3>
+            <p className="mt-3 text-muted-foreground">
+              Start with <strong>Tactus</strong> to define a durable agent procedure, use <strong>Biblicus</strong> to
+              supply grounded evidence, evaluate and refine behavior in <strong>Plexus</strong>, then expose the result
+              through <strong>Korporus</strong> with <strong>Caducus</strong> watching production health.
+            </p>
+          </div>
+        }
+      />
+
+      <StandardSection
         headline="Intelligence at Scale"
         headlinePosition="top"
         rightColumnAlign="middle"

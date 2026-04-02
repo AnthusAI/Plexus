@@ -10,6 +10,23 @@ export default function DocumentationPage() {
         to help you start working with Plexus as quickly as possible.
       </p>
 
+      <section className="mb-10 rounded-xl bg-card p-6">
+        <h2 className="text-2xl font-semibold mb-3">Where this fits in the Anthus Platform</h2>
+        <p className="text-muted-foreground leading-7">
+          Plexus is the MLOps and evaluation layer in the Anthus Platform. It pairs especially well with
+          <a href="https://tactus.anth.us" className="font-semibold text-foreground hover:text-primary"> Tactus</a>
+          {" "}for durable procedures,
+          <a href="https://anth.us/platform/biblicus" className="font-semibold text-foreground hover:text-primary"> Biblicus</a>
+          {" "}for evidence-backed datasets, and
+          <a href="https://korpor.us" className="font-semibold text-foreground hover:text-primary"> Korporus</a>
+          {" "}for the hosted application shell.
+        </p>
+        <p className="text-muted-foreground leading-7 mt-4">
+          Common recipe: define the procedure in Tactus, evaluate it in Plexus, run it inside Korporus, and add
+          Caducus when operators need a better picture of live incidents and regressions.
+        </p>
+      </section>
+
       <div className="space-y-8">
         <section>
           <h2 className="text-2xl font-semibold mb-4">Getting Started</h2>

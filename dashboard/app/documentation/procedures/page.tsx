@@ -15,6 +15,17 @@ export default function ProceduresPage() {
         Configuration-based agentic workflow programming with first-class human-in-the-loop support.
       </p>
 
+      <section className="mb-10 rounded-xl bg-card p-6">
+        <h2 className="text-2xl font-semibold mb-3">How procedures fit the Anthus Platform</h2>
+        <p className="text-muted-foreground leading-7">
+          Plexus Procedures overlap with the same problem space as <a href="https://tactus.anth.us" className="font-semibold text-foreground hover:text-primary">Tactus</a>:
+          durable, inspectable agent workflows. In Anthus projects, Tactus is the dedicated procedure language and
+          runtime, while Plexus adds the surrounding evaluation, deployment, and operational control loops. Procedures
+          also work better when their inputs come from evidence-oriented systems like
+          <a href="https://anth.us/platform/biblicus" className="font-semibold text-foreground hover:text-primary"> Biblicus</a>.
+        </p>
+      </section>
+
       <div className="space-y-8">
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Procedures?</h2>
