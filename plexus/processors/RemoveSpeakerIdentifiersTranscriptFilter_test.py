@@ -27,6 +27,14 @@ class TestRemoveSpeakerIdentifiersTranscriptFilter(unittest.TestCase):
         self.assertNotIn("0:", result)
         self.assertNotIn("1:", result)
 
+    def test_removes_compact_speaker_number_labels(self):
+        text = "Agent: Hello. Customer: Hi. Speaker1: Test."
+
+        result = _process_text(text)
+
+        self.assertEqual(result, "Hello. Hi. Test.")
+        self.assertNotIn("Speaker1:", result)
+
     def test_removes_generic_speaker_labels_without_ids(self):
         text = (
             "Speaker: hello Speaker: hello Speaker: tasha "
@@ -47,6 +55,14 @@ class TestRemoveSpeakerIdentifiersTranscriptFilter(unittest.TestCase):
         self.assertNotIn("Agent:", result)
         self.assertNotIn("Customer:", result)
         self.assertNotIn("Representative:", result)
+
+    def test_removes_generic_user_identifier_labels(self):
+        text = "User123: Message here"
+
+        result = _process_text(text)
+
+        self.assertEqual(result, "Message here")
+        self.assertNotIn("User123:", result)
 
 
 if __name__ == "__main__":
