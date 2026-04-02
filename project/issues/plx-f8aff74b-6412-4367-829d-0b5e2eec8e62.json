@@ -1,0 +1,18 @@
+{
+  "id": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+  "title": "Evaluation operations",
+  "description": "Run and track ad-hoc feedback evaluations",
+  "type": "initiative",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-01T23:56:10.573993644Z",
+  "updated_at": "2026-04-01T23:56:10.573993644Z",
+  "closed_at": null,
+  "custom": {}
+}

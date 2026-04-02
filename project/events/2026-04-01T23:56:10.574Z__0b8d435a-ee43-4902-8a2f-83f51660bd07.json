@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0b8d435a-ee43-4902-8a2f-83f51660bd07",
+  "issue_id": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T23:56:10.574Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run and track ad-hoc feedback evaluations",
+    "issue_type": "initiative",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Evaluation operations"
+  }
+}
