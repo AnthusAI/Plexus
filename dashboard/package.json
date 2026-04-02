@@ -212,7 +212,7 @@
       "picomatch": "4.0.4"
     },
     "tapable": "2.3.0",
-    "webpack": "5.104.1"
+    "webpack": "5.99.9"
   },
   "release": {
     "branches": [
