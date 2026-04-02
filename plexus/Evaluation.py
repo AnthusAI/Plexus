@@ -2664,6 +2664,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                 except (json.JSONDecodeError, TypeError) as e:
                     logging.warning(f"Could not parse parameters: {e}")
                     parameters = evaluation.parameters
+
+            baseline_evaluation_id = None
+            if isinstance(parameters, dict):
+                metadata = parameters.get("metadata")
+                if isinstance(metadata, dict):
+                    baseline_evaluation_id = metadata.get("baseline")
             
             # Parse confusion matrix if available
             confusion_matrix = None
@@ -2712,6 +2718,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'accuracy': evaluation.accuracy,
                 'metrics': metrics,
                 'parameters': parameters,
+                'baseline_evaluation_id': baseline_evaluation_id,
                 'confusion_matrix': confusion_matrix,
                 'predicted_class_distribution': predicted_class_distribution,
                 'dataset_class_distribution': dataset_class_distribution,

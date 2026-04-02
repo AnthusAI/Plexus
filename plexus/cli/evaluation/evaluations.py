@@ -3033,6 +3033,7 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID). REQUIRED - feedback evaluations must be run on a single score.')
 @click.option('--days', default=7, type=int, help='Number of days to look back for feedback items (default: 7)')
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
+@click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 def feedback(
@@ -3040,6 +3041,7 @@ def feedback(
     score: str,
     days: int,
     version: Optional[str],
+    baseline: Optional[str],
     use_yaml: bool,
     task_id: Optional[str]
 ):
@@ -3328,7 +3330,10 @@ def feedback(
                         "scorecard": scorecard,
                         "score": score,
                         "version": version,
-                        "mode": "accuracy_with_feedback_dataset"
+                        "mode": "accuracy_with_feedback_dataset",
+                        "metadata": {
+                            "baseline": baseline
+                        } if baseline else {}
                     }),
                     "taskId": task_id
                 }
@@ -3575,7 +3580,10 @@ def feedback(
             "parameters": json.dumps({
                 "days": days,
                 "scorecard": scorecard,
-                "score": score
+                "score": score,
+                "metadata": {
+                    "baseline": baseline
+                } if baseline else {}
             }),
             "taskId": task_id
         }

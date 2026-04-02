@@ -27,6 +27,21 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
 
+const parseJsonDeep = (value: unknown): unknown => {
+  let current = value
+  for (let i = 0; i < 3; i += 1) {
+    if (typeof current !== 'string') return current
+    const trimmed = current.trim()
+    if (!trimmed) return current
+    try {
+      current = JSON.parse(trimmed)
+    } catch {
+      return current
+    }
+  }
+  return current
+}
+
 export interface EvaluationMetric {
   name: string
   value: number
@@ -1118,13 +1133,12 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
 
-  // Fetch baseline metrics when a baseline evaluation ID is stored in parameters
+  // Fetch baseline metrics when a baseline evaluation ID is stored in parameters.metadata
   const baselineEvaluationId = useMemo(() => {
     try {
-      const params = typeof data.parameters === 'string'
-        ? JSON.parse(data.parameters)
-        : data.parameters
-      return params?.baseline ?? null
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      const metadata = parseJsonDeep(params?.metadata) as Record<string, unknown> | null
+      return typeof metadata?.baseline === 'string' ? metadata.baseline : null
     } catch {
       return null
     }
@@ -1154,10 +1168,21 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         const baselineEval = (result as any).data?.getEvaluation;
         if (baselineEval?.metrics) {
           try {
-            const parsed = typeof baselineEval.metrics === 'string'
-              ? JSON.parse(baselineEval.metrics)
-              : baselineEval.metrics;
-            setBaselineMetrics(Array.isArray(parsed) ? parsed : null);
+            const parsed = parseJsonDeep(baselineEval.metrics);
+            if (Array.isArray(parsed)) {
+              setBaselineMetrics(parsed as EvaluationMetric[]);
+            } else if (parsed && typeof parsed === 'object') {
+              const metrics = Object.entries(parsed as Record<string, unknown>)
+                .map(([name, value]) => ({
+                  name,
+                  value: typeof value === 'number' ? value : Number(value),
+                  priority: false
+                }))
+                .filter(metric => Number.isFinite(metric.value));
+              setBaselineMetrics(metrics.length > 0 ? metrics : null);
+            } else {
+              setBaselineMetrics(null);
+            }
           } catch {
             setBaselineMetrics(null);
           }
@@ -1271,7 +1296,10 @@ evaluation:
   const metrics = useMemo(() => {
     if (variant === 'detail') {
       return (data.metrics ?? []).map(metric => {
-        const baselineMetric = baselineMetrics?.find(bm => bm.name === metric.name)
+        const normalizeMetricName = (name?: string) => (name ?? '').trim().toLowerCase()
+        const baselineMetric = baselineMetrics?.find(
+          bm => normalizeMetricName(bm.name) === normalizeMetricName(metric.name)
+        )
         const beforeValue = baselineMetric !== undefined ? baselineMetric.value : undefined
 
         // Special handling for Alignment (Gwet's AC1)
@@ -1279,6 +1307,7 @@ evaluation:
           return {
             value: metric.value,
             beforeValue,
+            showComparisonLabel: beforeValue !== undefined,
             label: metric.name,
             information: getMetricInformation(metric.name),
             min: -1,           // AC1 ranges from -1 to 1
@@ -1300,6 +1329,7 @@ evaluation:
         return {
           value: metric.value,
           beforeValue,
+          showComparisonLabel: beforeValue !== undefined,
           label: metric.name,
           information: getMetricInformation(metric.name),
           max: metric.maximum ?? 100,        // Fixed: was 'maximum', should be 'max'

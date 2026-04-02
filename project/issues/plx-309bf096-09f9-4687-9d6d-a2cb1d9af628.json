@@ -16,10 +16,46 @@
       "author": "ryan",
       "text": "Implemented new skill folder skills/plexus-scorecard-improver, wrote SKILL.md workflow, added references/improvement-playbook.md, generated agents/openai.yaml, and validated with quick_validate.py (pass).",
       "created_at": "2026-04-01T20:34:36.298810155Z"
+    },
+    {
+      "id": "c7c8fc9d-7885-4f57-b070-34424d6803ed",
+      "author": "ryan",
+      "text": "Investigating baseline display failure by checking frontend/dashboard code for exact expected evaluation metadata key/path for baseline linkage before next run.",
+      "created_at": "2026-04-02T00:05:42.298986046Z"
+    },
+    {
+      "id": "2068da13-d158-4463-be55-c4534be53109",
+      "author": "ryan",
+      "text": "Starting integration request: merge feature/combine-analyzing-stage into develop to preserve baseline-diff/evaluation improvements and avoid branch drift.",
+      "created_at": "2026-04-02T00:11:08.466889093Z"
+    },
+    {
+      "id": "8b317808-f0bc-42cc-8be3-5e2320f6bbf1",
+      "author": "ryan",
+      "text": "Merged feature/combine-analyzing-stage into develop at commit bae097ca. Conflict resolved in plexus/cli/procedure/procedure_executor.py by keeping the runtime-signature-compatible constructor path and SOP key wiring. Re-applied pre-merge local workstash afterward.",
+      "created_at": "2026-04-02T00:11:40.191805174Z"
+    },
+    {
+      "id": "fc7a27d0-02f5-411d-9187-78f9d7d5383a",
+      "author": "ryan",
+      "text": "Updating PR #142 description to include newly merged scope from feature/combine-analyzing-stage, including the plexus-scorecard-improver skill and feedback-alignment workflow updates.",
+      "created_at": "2026-04-02T00:13:07.409325824Z"
+    },
+    {
+      "id": "6145b72b-27b2-41db-9855-d7aab49ebe6c",
+      "author": "ryan",
+      "text": "Updated PR #142 description to include newly integrated scope from merge, including the new skills/plexus-scorecard-improver workflow, ActionItems block additions, RCA/evaluation updates, and revised test plan items.",
+      "created_at": "2026-04-02T00:13:22.514134288Z"
+    },
+    {
+      "id": "1edb2cf8-10a3-419b-b0cb-f4b9a8f4d762",
+      "author": "ryan",
+      "text": "Auditing merge-conflict resolution in procedure_executor.py and applying a targeted follow-up fix if needed.",
+      "created_at": "2026-04-02T00:14:03.616800519Z"
     }
   ],
   "created_at": "2026-04-01T20:34:33.637625304Z",
-  "updated_at": "2026-04-01T20:47:06.209076088Z",
+  "updated_at": "2026-04-02T00:14:03.616800519Z",
   "closed_at": "2026-04-01T20:47:06.209076088Z",
   "custom": {}
 }
