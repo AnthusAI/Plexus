@@ -1,11 +1,13 @@
 import click
 import os
 import json
+import io
 import rich
 import tempfile
 import urllib3.exceptions
 import requests
 import sys
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from pathlib import Path
 from ruamel.yaml import YAML
 from rich.table import Table
@@ -28,6 +30,7 @@ from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score
 from plexus.cli.dataset.curation import (
     build_associated_dataset_from_feedback_window,
     build_associated_dataset_from_vetted_report,
+    resolve_score_valid_classes_from_score_yaml,
 )
 from plexus.cli.dataset.datasets import build_associated_dataset_from_feedback_ids
 from plexus.cli.shared.memoized_resolvers import (
@@ -58,6 +61,33 @@ def create_client() -> PlexusDashboardClient:
 def generate_key(name: str) -> str:
     """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""
     return name.lower().replace(' ', '-')
+
+
+def _run_dataset_curation_preflight(
+    *,
+    client: PlexusDashboardClient,
+    score_id: str,
+    enable_balance: bool,
+    score_version_id: Optional[str],
+) -> None:
+    if not os.getenv("AMPLIFY_STORAGE_DATASETS_BUCKET_NAME"):
+        raise click.ClickException(
+            "Dataset curation requires AMPLIFY_STORAGE_DATASETS_BUCKET_NAME in the environment."
+        )
+    if not enable_balance:
+        return
+    try:
+        resolve_score_valid_classes_from_score_yaml(
+            client=client,
+            score_id=score_id,
+            score_version_id=score_version_id,
+        )
+    except Exception as exc:
+        score_version_hint = score_version_id or "champion"
+        raise click.ClickException(
+            "Dataset curation preflight failed: final output classes could not be resolved "
+            f"for score {score_id} (version source: {score_version_hint}). {exc}"
+        ) from exc
 
 @scores.command()
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
@@ -260,6 +290,7 @@ score.add_command(list)
     help='Eligibility rule label recorded for explicit vetted-ID dataset builds.',
 )
 @click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
+@click.option('--json-only', is_flag=True, default=False, help='Emit only final JSON payload (suppress runtime logs).')
 def dataset_curate(
     scorecard: str,
     score: str,
@@ -271,6 +302,7 @@ def dataset_curate(
     source_report_block_id: Optional[str],
     eligibility_rule: str,
     task_id: Optional[str],
+    json_only: bool,
 ):
     """Build an associated dataset by scanning feedback backward from now until max qualifying labels are found."""
     if max_items <= 0:
@@ -289,40 +321,62 @@ def dataset_curate(
             "--source-report-block-id and --eligibility-rule require --feedback-item-ids."
         )
 
-    client = create_client()
-
     try:
-        if normalized_feedback_item_ids:
-            result = build_associated_dataset_from_feedback_ids(
-                client=client,
-                scorecard_identifier=scorecard,
-                score_identifier=score,
-                feedback_item_ids=normalized_feedback_item_ids,
-                source_report_block_id=source_report_block_id or "score.dataset-curate",
-                eligibility_rule=eligibility_rule,
-                task_id=task_id,
-            )
-        else:
-            scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
-            if not scorecard_id:
-                raise click.ClickException(f"Scorecard not found: {scorecard}")
+        capture = io.StringIO()
+        stream_context = (
+            redirect_stdout(capture) if json_only else nullcontext()
+        )
+        err_context = (
+            redirect_stderr(capture) if json_only else nullcontext()
+        )
+        with stream_context, err_context:
+            client = create_client()
+            if normalized_feedback_item_ids:
+                _run_dataset_curation_preflight(
+                    client=client,
+                    score_id="explicit-feedback-item-ids",
+                    enable_balance=False,
+                    score_version_id=None,
+                )
+                result = build_associated_dataset_from_feedback_ids(
+                    client=client,
+                    scorecard_identifier=scorecard,
+                    score_identifier=score,
+                    feedback_item_ids=normalized_feedback_item_ids,
+                    source_report_block_id=source_report_block_id or "score.dataset-curate",
+                    eligibility_rule=eligibility_rule,
+                    task_id=task_id,
+                )
+            else:
+                scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+                if not scorecard_id:
+                    raise click.ClickException(f"Scorecard not found: {scorecard}")
 
-            score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
-            if not score_id:
-                raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
+                score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+                if not score_id:
+                    raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
 
-            result = build_associated_dataset_from_feedback_window(
-                client=client,
-                scorecard_id=scorecard_id,
-                score_id=score_id,
-                max_items=max_items,
-                days=days,
-                balance=not no_balance,
-                class_source_score_version_id=score_version_id,
-                task_id=task_id,
-            )
+                _run_dataset_curation_preflight(
+                    client=client,
+                    score_id=score_id,
+                    enable_balance=not no_balance,
+                    score_version_id=score_version_id,
+                )
+                result = build_associated_dataset_from_feedback_window(
+                    client=client,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    max_items=max_items,
+                    days=days,
+                    balance=not no_balance,
+                    class_source_score_version_id=score_version_id,
+                    task_id=task_id,
+                )
         click.echo(json.dumps(result))
     except Exception as exc:
+        if json_only:
+            click.echo(json.dumps({"error": str(exc)}))
+            raise SystemExit(1)
         raise click.ClickException(str(exc))
 
 
@@ -338,6 +392,7 @@ def dataset_curate(
     help='Optional score version ID to use as the class source for balancing. Defaults to champion when omitted.',
 )
 @click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
+@click.option('--json-only', is_flag=True, default=False, help='Emit only final JSON payload (suppress runtime logs).')
 def dataset_curate_vetted(
     scorecard: str,
     score: str,
@@ -345,6 +400,7 @@ def dataset_curate_vetted(
     days: int,
     score_version_id: Optional[str],
     task_id: Optional[str],
+    json_only: bool,
 ):
     """Run aligned vetting report, then build a balanced associated dataset from vetted feedback."""
     if max_items <= 0:
@@ -352,27 +408,44 @@ def dataset_curate_vetted(
     if days <= 0:
         raise click.ClickException("--days must be greater than 0.")
 
-    client = create_client()
     try:
-        scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
-        if not scorecard_id:
-            raise click.ClickException(f"Scorecard not found: {scorecard}")
-
-        score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
-        if not score_id:
-            raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
-
-        result = build_associated_dataset_from_vetted_report(
-            client=client,
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            max_items=max_items,
-            days=days,
-            class_source_score_version_id=score_version_id,
-            task_id=task_id,
+        capture = io.StringIO()
+        stream_context = (
+            redirect_stdout(capture) if json_only else nullcontext()
         )
+        err_context = (
+            redirect_stderr(capture) if json_only else nullcontext()
+        )
+        with stream_context, err_context:
+            client = create_client()
+            scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                raise click.ClickException(f"Scorecard not found: {scorecard}")
+
+            score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
+
+            _run_dataset_curation_preflight(
+                client=client,
+                score_id=score_id,
+                enable_balance=True,
+                score_version_id=score_version_id,
+            )
+            result = build_associated_dataset_from_vetted_report(
+                client=client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                max_items=max_items,
+                days=days,
+                class_source_score_version_id=score_version_id,
+                task_id=task_id,
+            )
         click.echo(json.dumps(result))
     except Exception as exc:
+        if json_only:
+            click.echo(json.dumps({"error": str(exc)}))
+            raise SystemExit(1)
         raise click.ClickException(str(exc))
 
 @score.command()
