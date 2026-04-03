@@ -150,7 +150,9 @@ plexus score dataset-curate \\
 plexus score dataset-curate \\
   --scorecard "CMG EDU" \\
   --score "Identify Objections" \\
-  --feedback-item-ids "<id1>,<id2>,<id3>"
+  --feedback-item-ids "<id1>,<id2>,<id3>" \\
+  --source-report-block-id "<report_block_id>" \\
+  --eligibility-rule "unanimous non-contradiction"
 
 # Evaluate against latest associated dataset for this score
 plexus evaluate accuracy \\
