@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, PhysicalName, Stack, StackProps } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as sqs from "aws-cdk-lib/aws-sqs";
@@ -24,6 +24,7 @@ export class ConsoleRunWorkerStack extends Stack {
     });
 
     this.queue = new sqs.Queue(this, "ConsoleRunWorkerQueue", {
+      queueName: PhysicalName.GENERATE_IF_NEEDED,
       visibilityTimeout: Duration.minutes(15),
       retentionPeriod: Duration.days(4),
       deadLetterQueue: {
