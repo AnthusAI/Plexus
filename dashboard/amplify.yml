@@ -8,15 +8,14 @@ applications:
             - node --version
             - npm --version
             - |
-              if ! docker info > /dev/null 2>&1; then
-                echo "Docker not available, installing..."
-                yum install -y docker 2>&1 | tail -5 || apt-get install -y docker.io 2>&1 | tail -5
-                service docker start 2>&1 || systemctl start docker 2>&1
-                sleep 5
-                docker info > /dev/null 2>&1 && echo "Docker started" || echo "Docker failed to start"
-              else
-                echo "Docker already running"
-              fi
+              echo "=== Checking container tools ==="
+              which docker 2>/dev/null && docker info 2>/dev/null | head -3 || echo "docker: not available"
+              which finch 2>/dev/null && echo "finch: available" || echo "finch: not available"
+              which podman 2>/dev/null && echo "podman: available" || echo "podman: not available"
+              which nerdctl 2>/dev/null && echo "nerdctl: available" || echo "nerdctl: not available"
+              ls /usr/bin/docker* /usr/local/bin/docker* /usr/bin/finch /usr/local/bin/finch 2>/dev/null || echo "none found"
+              cat /etc/os-release | grep -E "(NAME|VERSION)" | head -4
+              echo "=== End container check ==="
             - export PARCEL_WATCHER_BACKEND=inotify
             - npm ci --cache .npm --prefer-offline
             - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID --debug
