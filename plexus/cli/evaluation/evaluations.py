@@ -1411,6 +1411,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--use-score-associated-dataset', is_flag=True, default=False, help='Use the latest dataset associated with the score.')
 @click.option('--all-score-associated-datasets', is_flag=True, default=False, help='Run one evaluation per dataset associated with the score.')
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
+@click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for before/after dashboard comparison.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 def accuracy(
     scorecard: str,
@@ -1436,6 +1437,7 @@ def accuracy(
     use_score_associated_dataset: bool,
     all_score_associated_datasets: bool,
     allow_no_labels: bool,
+    baseline: Optional[str],
     json_only: bool,
     ):
     """
@@ -1510,6 +1512,7 @@ def accuracy(
                 "score": score or None,
                 "version_source": version or "champion",
                 "number_of_samples": number_of_samples,
+                "baseline": baseline,
             }))
         return
 
@@ -1576,6 +1579,10 @@ def accuracy(
                 cmd.append("--visualize")
             if allow_no_labels:
                 cmd.append("--allow-no-labels")
+            if baseline:
+                cmd.extend(["--baseline", baseline])
+            if json_only:
+                cmd.append("--json-only")
 
             completed = subprocess.run(
                 cmd,
@@ -1643,6 +1650,7 @@ def accuracy(
                 "score_id": primary_score_id,
                 "runs": run_summaries,
                 "all_score_associated_datasets": True,
+                "baseline": baseline,
             }))
         return
     
@@ -1746,7 +1754,8 @@ def accuracy(
                             "processedItems": 0,
                             "parameters": json.dumps({
                                 "sampling_method": sampling_method,
-                                "sample_size": number_of_samples
+                                "sample_size": number_of_samples,
+                                "metadata": {"baseline": baseline} if baseline else {},
                             }),
                             "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                             "estimatedRemainingSeconds": number_of_samples,
@@ -1815,7 +1824,8 @@ def accuracy(
                     "processedItems": 0,
                     "parameters": json.dumps({
                         "sampling_method": sampling_method,
-                        "sample_size": number_of_samples
+                        "sample_size": number_of_samples,
+                        "metadata": {"baseline": baseline} if baseline else {},
                     }),
                     "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                     "estimatedRemainingSeconds": number_of_samples,
@@ -2114,6 +2124,7 @@ def accuracy(
                 logging.info(f"Using fallback: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             
             # Check if any cloud dataset options are provided
+            data_set_id_for_eval = None
             use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id, use_score_associated_dataset])
             
             if use_cloud_dataset:
@@ -2143,6 +2154,7 @@ def accuracy(
                         cloud_dataset = get_latest_dataset_for_data_source(client, data_source['id'])
                     
                     logging.info(f"Using cloud dataset: {cloud_dataset['name']} (ID: {cloud_dataset['id']})")
+                    data_set_id_for_eval = cloud_dataset.get('id')
                     
                     labeled_samples_data = load_samples_from_cloud_dataset(
                         cloud_dataset, primary_score_name, primary_score_config,
@@ -2245,7 +2257,7 @@ def accuracy(
                         score_id_for_eval = None
 
             # Update the evaluation record with scoreId and scoreVersionId now that they're resolved
-            if evaluation_record and (score_id_for_eval or score_version_id_for_eval):
+            if evaluation_record and (score_id_for_eval or score_version_id_for_eval or data_set_id_for_eval):
                 try:
                     update_params = {}
                     if score_id_for_eval:
@@ -2254,6 +2266,22 @@ def accuracy(
                     if score_version_id_for_eval:
                         update_params['scoreVersionId'] = score_version_id_for_eval
                         logging.info(f"Updating evaluation record with scoreVersionId: {score_version_id_for_eval}")
+                    if data_set_id_for_eval:
+                        existing_parameters = {}
+                        try:
+                            raw_parameters = evaluation_record.parameters
+                            if isinstance(raw_parameters, str):
+                                existing_parameters = json.loads(raw_parameters) if raw_parameters else {}
+                            elif isinstance(raw_parameters, dict):
+                                existing_parameters = dict(raw_parameters)
+                        except Exception:
+                            existing_parameters = {}
+                        existing_parameters["dataset_id"] = data_set_id_for_eval
+                        update_params["parameters"] = json.dumps(existing_parameters)
+                        logging.info(
+                            "Updating evaluation parameters.dataset_id: %s",
+                            data_set_id_for_eval,
+                        )
 
                     if update_params:
                         mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
@@ -2261,6 +2289,7 @@ def accuracy(
                                 id
                                 scoreId
                                 scoreVersionId
+                                parameters
                             }
                         }"""
                         client.execute(mutation, {
@@ -2424,6 +2453,19 @@ def accuracy(
                         logging.info("Using --yaml flag: not setting scoreVersionId in final evaluation update (local YAML represents champion version)")
                     
                     # Add other data fields
+                    if data_set_id_for_eval:
+                        existing_parameters = {}
+                        try:
+                            raw_parameters = evaluation_record.parameters
+                            if isinstance(raw_parameters, str):
+                                existing_parameters = json.loads(raw_parameters) if raw_parameters else {}
+                            elif isinstance(raw_parameters, dict):
+                                existing_parameters = dict(raw_parameters)
+                        except Exception:
+                            existing_parameters = {}
+                        existing_parameters["dataset_id"] = data_set_id_for_eval
+                        update_fields["parameters"] = json.dumps(existing_parameters)
+
                     if final_metrics.get("confusionMatrix"):
                         update_fields['confusionMatrix'] = json.dumps(final_metrics.get("confusionMatrix"))
                     
@@ -2531,6 +2573,7 @@ def accuracy(
             "dataset_id": dataset_id,
             "use_score_associated_dataset": use_score_associated_dataset,
             "all_score_associated_datasets": all_score_associated_datasets,
+            "baseline": baseline,
         }
         click.echo(json.dumps(payload))
     return evaluation_record

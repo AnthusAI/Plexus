@@ -55,6 +55,11 @@ class FeedbackItems(DataCache):
     This balancing helps models learn from both agreements and corrections across
     different prediction types, rather than being dominated by the most common pattern.
     """
+
+    LABEL_SOURCE_VETTED = "vetted_feedback"
+    LABEL_SOURCE_FINAL = "regular_final_feedback"
+    LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED = "score_result_or_imported"
+    LABEL_SOURCE_UNRESOLVED = "unresolved"
     
     class Parameters(DataCache.Parameters):
         """Parameters for FeedbackItems data cache."""
@@ -247,6 +252,84 @@ class FeedbackItems(DataCache):
             Normalized value (lowercase, stripped) or None
         """
         return self._normalize_value(value)
+
+    def _normalize_label_candidate(self, value: Optional[Any]) -> Optional[str]:
+        """Normalize a potential label candidate to a non-empty string."""
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+        return normalized
+
+    def _is_vetted_feedback_item(self, feedback_item: FeedbackItem) -> bool:
+        """Determine whether a feedback item is explicitly marked as vetted/gold."""
+        raw = getattr(feedback_item, "_raw_data", None)
+        if not isinstance(raw, dict):
+            return False
+        vetted_keys = ("isVetted", "isGold", "isGoldStandard", "is_vetted", "is_gold")
+        for key in vetted_keys:
+            if raw.get(key) is True:
+                return True
+        return False
+
+    def _extract_imported_example_label(self, feedback_item: FeedbackItem, score_name: str) -> Optional[str]:
+        """Extract imported/example label from item metadata using deterministic key order."""
+        if not feedback_item.item:
+            return None
+        raw_metadata = getattr(feedback_item.item, "metadata", None)
+        if raw_metadata is None:
+            return None
+        metadata = raw_metadata
+        if isinstance(raw_metadata, str):
+            try:
+                metadata = json.loads(raw_metadata)
+            except Exception:
+                return None
+        if not isinstance(metadata, dict):
+            return None
+
+        keys_in_order = (
+            score_name,
+            "reference_label",
+            "label",
+            "final_label",
+        )
+        for key in keys_in_order:
+            candidate = self._normalize_label_candidate(metadata.get(key))
+            if candidate is not None:
+                return candidate
+
+        score_labels = metadata.get("score_labels")
+        if isinstance(score_labels, dict):
+            candidate = self._normalize_label_candidate(score_labels.get(score_name))
+            if candidate is not None:
+                return candidate
+        return None
+
+    def _resolve_label_for_reference_dataset(self, feedback_item: FeedbackItem, score_name: str) -> Tuple[Optional[str], str]:
+        """
+        Deterministically resolve a dataset label with strict source priority:
+        1) vetted/gold feedback
+        2) regular final feedback
+        3) score-result or imported example label
+        """
+        final_label = self._normalize_label_candidate(feedback_item.finalAnswerValue)
+        if self._is_vetted_feedback_item(feedback_item) and final_label is not None:
+            return final_label, self.LABEL_SOURCE_VETTED
+
+        if final_label is not None:
+            return final_label, self.LABEL_SOURCE_FINAL
+
+        initial_label = self._normalize_label_candidate(feedback_item.initialAnswerValue)
+        if initial_label is not None:
+            return initial_label, self.LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED
+
+        imported_label = self._extract_imported_example_label(feedback_item, score_name)
+        if imported_label is not None:
+            return imported_label, self.LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED
+
+        return None, self.LABEL_SOURCE_UNRESOLVED
 
     def _load_identifier_extractor(self, extractor_class_name: str):
         """
@@ -1050,6 +1133,7 @@ class FeedbackItems(DataCache):
         
         # Create properly formatted dataset rows
         rows = []
+        skipped_feedback_item_ids = []
         
         for i, feedback_item in enumerate(feedback_items):
             # content_id: Use DynamoDB item ID
@@ -1092,14 +1176,26 @@ class FeedbackItems(DataCache):
 
                 # Text content retrieved for processing
             
+            # Resolve label source deterministically for reference dataset builds
+            score_value, label_source = self._resolve_label_for_reference_dataset(feedback_item, mapped_score_name)
+            if score_value is None:
+                skipped_feedback_item_ids.append(feedback_item_id)
+                continue
+
             # metadata: Create JSON string of metadata structure
             metadata = self._create_metadata_structure(feedback_item)
+            try:
+                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else dict(metadata)
+            except Exception:
+                metadata_dict = {}
+            metadata_dict["label_resolution"] = {
+                "source": label_source,
+                "resolved_label": score_value,
+            }
+            metadata = json.dumps(metadata_dict)
             
             # IDs: Create hash of identifiers from Item
             ids_hash = self._create_ids_hash(feedback_item)
-            
-            # Score value: Final answer value (ground truth)
-            score_value = feedback_item.finalAnswerValue
             
             # Score comment: Complex logic for determining the comment
             score_comment = self._determine_score_comment(feedback_item)
@@ -1110,7 +1206,6 @@ class FeedbackItems(DataCache):
             # Extract call_date from metadata for separate column
             call_date = None
             try:
-                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else metadata
                 call_date = metadata_dict.get('call_date')
             except:
                 pass
@@ -1142,7 +1237,22 @@ class FeedbackItems(DataCache):
         else:
             df = pd.DataFrame(rows)
             
+        label_resolution_report = {
+            "total_feedback_items": len(feedback_items),
+            "resolved_rows": len(rows),
+            "skipped_count": len(skipped_feedback_item_ids),
+            "skipped_feedback_item_ids": skipped_feedback_item_ids,
+        }
+        self.last_label_resolution_report = label_resolution_report
+        df.attrs["label_resolution_report"] = label_resolution_report
+
         logger.info(f"Created dataset with {len(df)} rows and {len(df.columns)} columns: {list(df.columns)}")
+        logger.info(
+            "Label resolution report: resolved_rows=%s skipped_count=%s skipped_feedback_item_ids=%s",
+            label_resolution_report["resolved_rows"],
+            label_resolution_report["skipped_count"],
+            label_resolution_report["skipped_feedback_item_ids"],
+        )
         logger.debug(f"Sample row data: {rows[0] if rows else 'No rows'}")
         
         # Use the comprehensive debug utility from base class

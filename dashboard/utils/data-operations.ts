@@ -682,6 +682,7 @@ export function observeRecentEvaluations(
               id
               name
             }
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -731,6 +732,7 @@ export function observeRecentEvaluations(
               id
               name
             }
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution

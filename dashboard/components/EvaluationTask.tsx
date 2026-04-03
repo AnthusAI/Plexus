@@ -148,6 +148,7 @@ export interface EvaluationTaskData extends BaseTaskData {
   task?: TaskData | null
   universalCode?: string | null
   parameters?: string | null
+  dataSetId?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
@@ -183,6 +184,7 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     scorecardId?: string
     scoreId?: string
     scoreVersionId?: string
+    dataSetId?: string
   }
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
@@ -1144,6 +1146,15 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     }
   }, [data.parameters])
 
+  const dataSetIdFromParameters = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      return typeof params?.dataset_id === 'string' ? params.dataset_id : null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+
   useEffect(() => {
     if (!baselineEvaluationId || variant !== 'detail') {
       setBaselineMetrics(null);
@@ -1449,9 +1460,10 @@ evaluation:
       errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
       scorecardId: task.scorecardId,
       scoreId: task.scoreId,
-      scoreVersionId: task.scoreVersionId
+      scoreVersionId: task.scoreVersionId,
+      dataSetId: task.data?.dataSetId ?? task.dataSetId ?? dataSetIdFromParameters ?? undefined
     };
-  }, [task, taskData, variant]);
+  }, [task, taskData, variant, dataSetIdFromParameters]);
 
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {
@@ -1561,33 +1573,53 @@ evaluation:
               {props.task.score && props.task.score.trim() !== '' && (
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.score}</span>
-            {variant === 'detail' && taskWithDefaults.scorecardId && taskWithDefaults.scoreId && (() => {
-              
-              const scoreLink = taskWithDefaults.scoreVersionId 
-                ? `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`
-                : `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}`;
-              
-                    
-                    return (
-                      <Link 
-                        href={scoreLink}
+                  {variant === 'detail' &&
+                    taskWithDefaults.scorecardId &&
+                    taskWithDefaults.scoreId &&
+                    taskWithDefaults.scoreVersionId && (
+                      <Link
+                        href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
                         className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Link>
-                    );
-                  })()}
+                    )}
                 </div>
               )}
-              {variant === 'detail' && scoreVersionInfo && (
+              {variant === 'detail' && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>Score Version:</span>
-                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
-                  {scoreVersionInfo.isChampion && (
-                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                      Champion
-                    </span>
+                  {scoreVersionInfo ? (
+                    <>
+                      <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
+                      {scoreVersionInfo.isChampion && (
+                        <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                          Champion
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span>Unavailable</span>
+                  )}
+                </div>
+              )}
+              {variant === 'detail' && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Dataset:</span>
+                  {taskWithDefaults.dataSetId ? (
+                    <>
+                      <span className="font-mono truncate max-w-[22rem]">{taskWithDefaults.dataSetId}</span>
+                      <Link
+                        href={`/lab/datasets/${taskWithDefaults.dataSetId}`}
+                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    </>
+                  ) : (
+                    <span>Unavailable</span>
                   )}
                 </div>
               )}

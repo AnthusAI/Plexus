@@ -141,6 +141,22 @@ plexus evaluate accuracy \\
         <p className="text-muted-foreground">
           Add <code>--json-only</code> for machine-friendly output payloads.
         </p>
+        <p className="text-muted-foreground">
+          Each new dataset-backed evaluation persists dataset provenance and exposes direct links in the evaluation detail view.
+        </p>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Data Routes</h2>
+        <p className="text-muted-foreground">
+          Sources and datasets are exposed as separate routes for clarity.
+        </p>
+        <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+          <li>Default Data entrypoint: <code>/lab/datasets</code></li>
+          <li>Sources: <code>/lab/data/sources</code></li>
+          <li>Datasets inventory: <code>/lab/datasets</code></li>
+          <li>Dataset detail: <code>/lab/datasets/&lt;datasetId&gt;</code></li>
+        </ul>
       </section>
 
       <section className="space-y-3">

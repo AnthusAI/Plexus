@@ -224,6 +224,22 @@ plexus evaluate accuracy \\
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Evaluation Provenance Links</h2>
+          <p className="text-muted-foreground mb-3">
+            Evaluation detail views now surface direct provenance links for the exact score version
+            and dataset used by the run.
+          </p>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+            <li><strong>Score Version</strong> links directly to the tested version when <code>scoreVersionId</code> is present.</li>
+            <li><strong>Dataset</strong> links directly to <code>/lab/datasets/&lt;id&gt;</code> when <code>parameters.dataset_id</code> is present.</li>
+            <li>Legacy evaluations without stored provenance show <strong>Unavailable</strong> instead of inferred links.</li>
+          </ul>
+          <p className="text-muted-foreground mt-3">
+            The Data navigation lands on <code>/lab/datasets</code> by default; browse sources at <code>/lab/data/sources</code>.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
           <p className="text-muted-foreground">
             Detailed documentation about evaluations is currently being developed. Check back soon for:

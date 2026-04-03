@@ -372,6 +372,26 @@ code: |
   local baseline_rca = baseline_eval.root_cause or {}
   State.set("last_rca", baseline_rca)
 
+  -- Early exit: if metrics are already perfect or RCA is empty, nothing to optimize
+  local rca_topics = (type(baseline_rca) == "table" and baseline_rca.topics) or {}
+  local has_rca = type(rca_topics) == "table" and #rca_topics > 0
+  if baseline_metrics.alignment >= 0.99 or not has_rca then
+    local reason = baseline_metrics.alignment >= 0.99 and
+      string.format("Baseline alignment is already %.1f%% — nothing to optimize.", baseline_metrics.alignment * 100) or
+      "No RCA data available — cannot identify improvement opportunities."
+    Log.info(reason)
+    return {
+      success = true,
+      status = "converged",
+      message = reason,
+      baseline_evaluation_id = baseline_evaluation_id,
+      iterations = {},
+      improvement = 0,
+      scorecard_id = scorecard_id,
+      score_id = score_id
+    }
+  end
+
   -- Phase B: Optimization Loop
   Stage.set("optimize")
 
@@ -668,9 +688,14 @@ code: |
 
   if #iterations == 0 then
     return {
-      success = false,
-      status = "error",
-      message = "No iterations completed"
+      success = true,
+      status = stop_reason or "converged",
+      message = "No changes were applied.",
+      baseline_evaluation_id = baseline_evaluation_id,
+      iterations = {},
+      improvement = 0,
+      scorecard_id = scorecard_id,
+      score_id = score_id
     }
   end
 
