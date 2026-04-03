@@ -602,3 +602,92 @@ def test_build_associated_dataset_from_vetted_report_orchestrates_flow(
         vetting_pool_limit=10,
     )
     mock_build_dataset.assert_called_once()
+
+
+@patch("plexus.cli.dataset.curation.build_associated_dataset_from_vetted_feedback_items")
+@patch("plexus.cli.dataset.curation._run_aligned_vetting_report")
+@patch("plexus.cli.dataset.curation._ensure_auto_vetted_report_configuration")
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+def test_build_associated_dataset_from_vetted_report_expands_pool_until_target_or_cap(
+    _mock_account,
+    mock_ensure_config,
+    mock_run_report,
+    mock_build_dataset,
+):
+    mock_ensure_config.return_value = SimpleNamespace(id="config-1")
+    mock_run_report.side_effect = [
+        {
+            "report_id": "report-1",
+            "report_task_id": "task-1",
+            "report_block_id": "block-1",
+            "eligible_items": [{"feedback_item_id": "fi-1"}],
+            "eligible_count": 1,
+            "total_items_analyzed": 10,
+            "eligibility_rule": "unanimous non-contradiction",
+        },
+        {
+            "report_id": "report-2",
+            "report_task_id": "task-2",
+            "report_block_id": "block-2",
+            "eligible_items": [{"feedback_item_id": f"fi-{i}"} for i in range(10)],
+            "eligible_count": 10,
+            "total_items_analyzed": 20,
+            "eligibility_rule": "unanimous non-contradiction",
+        },
+    ]
+    mock_build_dataset.return_value = {"dataset_id": "dataset-1"}
+
+    result = build_associated_dataset_from_vetted_report(
+        client=MagicMock(),
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        max_items=10,
+        days=180,
+        class_source_score_version_id="sv-1",
+    )
+
+    assert result["dataset_id"] == "dataset-1"
+    assert result["vetted_pool_limit"] == 20
+    assert result["vetted_pool_attempts"] == 2
+    assert result["vetted_pool_attempted_limits"] == [10, 20]
+    assert mock_ensure_config.call_count == 2
+    assert mock_build_dataset.call_args.kwargs["vetted_feedback_items"] == [
+        {"feedback_item_id": f"fi-{i}"} for i in range(10)
+    ]
+
+
+@patch("plexus.cli.dataset.curation.build_associated_dataset_from_vetted_feedback_items")
+@patch("plexus.cli.dataset.curation._run_aligned_vetting_report")
+@patch("plexus.cli.dataset.curation._ensure_auto_vetted_report_configuration")
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+def test_build_associated_dataset_from_vetted_report_stops_when_window_exhausted(
+    _mock_account,
+    mock_ensure_config,
+    mock_run_report,
+    mock_build_dataset,
+):
+    mock_ensure_config.return_value = SimpleNamespace(id="config-1")
+    mock_run_report.return_value = {
+        "report_id": "report-1",
+        "report_task_id": "task-1",
+        "report_block_id": "block-1",
+        "eligible_items": [{"feedback_item_id": "fi-1"}, {"feedback_item_id": "fi-2"}],
+        "eligible_count": 2,
+        "total_items_analyzed": 7,
+        "eligibility_rule": "unanimous non-contradiction",
+    }
+    mock_build_dataset.return_value = {"dataset_id": "dataset-1"}
+
+    result = build_associated_dataset_from_vetted_report(
+        client=MagicMock(),
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        max_items=10,
+        days=180,
+    )
+
+    assert result["dataset_id"] == "dataset-1"
+    assert result["vetted_pool_limit"] == 10
+    assert result["vetted_pool_attempts"] == 1
+    assert result["vetted_pool_attempted_limits"] == [10]
+    mock_ensure_config.assert_called_once()

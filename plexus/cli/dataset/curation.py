@@ -48,6 +48,8 @@ AUTO_VETTED_REPORT_CONFIG_DESCRIPTION = (
     "Auto-managed aligned guideline-vetting report configuration used as evidence for "
     "vetted associated dataset curation."
 )
+AUTO_VETTED_POOL_MULTIPLIER = 5
+AUTO_VETTED_POOL_ABSOLUTE_CAP = 2000
 
 
 def _render_auto_vetted_report_configuration_markdown(
@@ -186,6 +188,8 @@ def _run_aligned_vetting_report(
         "report_task_id": report_task_id,
         "report_block_id": aligned_block.id,
         "eligible_items": eligible_items,
+        "eligible_count": len(eligible_items),
+        "total_items_analyzed": int(output_payload.get("total_items_analyzed") or 0),
         "eligibility_rule": output_payload.get("eligibility_rule") or "unanimous non-contradiction",
     }
 
@@ -838,21 +842,53 @@ def build_associated_dataset_from_vetted_report(
 ) -> Dict[str, Any]:
     if days <= 0:
         raise ValueError("--days must be greater than 0.")
+    if max_items <= 0:
+        raise ValueError("--max-items must be greater than 0.")
+
     vetting_pool_limit = max_items
+    max_vetting_pool_limit = min(
+        max(max_items, max_items * AUTO_VETTED_POOL_MULTIPLIER),
+        AUTO_VETTED_POOL_ABSOLUTE_CAP,
+    )
     account_id = _fetch_scorecard_account_id(client, scorecard_id)
-    report_config = _ensure_auto_vetted_report_configuration(
-        client=client,
-        account_id=account_id,
-        scorecard_id=scorecard_id,
-        score_id=score_id,
-        days=days,
-        vetting_pool_limit=vetting_pool_limit,
-    )
-    report_run = _run_aligned_vetting_report(
-        client=client,
-        report_configuration_id=report_config.id,
-        account_id=account_id,
-    )
+    report_run: Optional[Dict[str, Any]] = None
+    report_config: Optional[ReportConfiguration] = None
+    attempts = 0
+    attempted_pool_limits: List[int] = []
+
+    while True:
+        attempts += 1
+        attempted_pool_limits.append(vetting_pool_limit)
+        report_config = _ensure_auto_vetted_report_configuration(
+            client=client,
+            account_id=account_id,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            days=days,
+            vetting_pool_limit=vetting_pool_limit,
+        )
+        report_run = _run_aligned_vetting_report(
+            client=client,
+            report_configuration_id=report_config.id,
+            account_id=account_id,
+        )
+        eligible_count = int(report_run.get("eligible_count") or 0)
+        total_items_analyzed = int(report_run.get("total_items_analyzed") or 0)
+        if eligible_count >= max_items:
+            break
+        if total_items_analyzed < vetting_pool_limit:
+            # Source is exhausted inside the requested lookback window.
+            break
+        if vetting_pool_limit >= max_vetting_pool_limit:
+            break
+        next_limit = min(max_vetting_pool_limit, vetting_pool_limit * 2)
+        if next_limit <= vetting_pool_limit:
+            break
+        vetting_pool_limit = next_limit
+
+    if not report_run or not report_config:
+        raise ValueError("Unable to run aligned vetting report.")
+
     eligible_items = report_run["eligible_items"]
     if not eligible_items:
         raise ValueError(
@@ -874,6 +910,9 @@ def build_associated_dataset_from_vetted_report(
     dataset_result["report_configuration_id"] = report_config.id
     dataset_result["report_task_id"] = report_run["report_task_id"]
     dataset_result["vetted_pool_limit"] = vetting_pool_limit
+    dataset_result["vetted_pool_attempts"] = attempts
+    dataset_result["vetted_pool_attempted_limits"] = attempted_pool_limits
+    dataset_result["vetted_pool_max_limit"] = max_vetting_pool_limit
     return dataset_result
 
 
