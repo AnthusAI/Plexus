@@ -230,6 +230,7 @@ score.add_command(list)
 @click.option('--score', required=True, help='Score to curate associated dataset for (accepts ID, name, key, or external ID)')
 @click.option('--max-items', default=100, type=int, show_default=True, help='Maximum number of qualifying feedback items to include.')
 @click.option('--days', default=None, type=int, help='Optional lookback window in days. Omit to scan all available history.')
+@click.option('--no-balance', is_flag=True, default=False, help='Disable class balancing during curation.')
 @click.option(
     '--feedback-item-ids',
     default=None,
@@ -255,6 +256,7 @@ def dataset_curate(
     score: str,
     max_items: int,
     days: Optional[int],
+    no_balance: bool,
     feedback_item_ids: Optional[str],
     source_report_block_id: Optional[str],
     eligibility_rule: str,
@@ -303,6 +305,7 @@ def dataset_curate(
                 score_id=score_id,
                 max_items=max_items,
                 days=days,
+                balance=not no_balance,
                 task_id=task_id,
             )
         click.echo(json.dumps(result))
@@ -1417,9 +1420,11 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     # Run with task tracking
     import asyncio
     from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.procedure.tactus_adapters.terminal_hitl import TerminalHITLAdapter
 
     options = {
-        'context': params
+        'context': params,
+        'hitl_adapter': TerminalHITLAdapter(auto_approve=dry_run),
     }
 
     exec_result = asyncio.run(run_experiment_with_task_tracking(

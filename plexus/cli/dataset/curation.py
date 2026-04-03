@@ -146,6 +146,79 @@ def _is_qualifying_feedback_item(
     return True
 
 
+def _normalize_label(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _compute_label_distribution(feedback_items: List[FeedbackItem]) -> Dict[str, int]:
+    distribution: Dict[str, int] = {}
+    for item in feedback_items:
+        label = _normalize_label(getattr(item, "finalAnswerValue", ""))
+        if not label:
+            continue
+        distribution[label] = distribution.get(label, 0) + 1
+    return dict(sorted(distribution.items(), key=lambda pair: pair[0]))
+
+
+def _select_balanced_feedback_items(
+    *,
+    all_qualifying_items: List[FeedbackItem],
+    class_list: List[str],
+    max_items: int,
+) -> List[FeedbackItem]:
+    if max_items <= 0:
+        raise ValueError("--max-items must be greater than 0.")
+    if not class_list:
+        raise ValueError("Class list is required for balancing.")
+
+    known_classes = [_normalize_label(label) for label in class_list if _normalize_label(label)]
+    if not known_classes:
+        raise ValueError("Class list is required for balancing.")
+
+    buckets: Dict[str, List[FeedbackItem]] = {label: [] for label in known_classes}
+    for item in all_qualifying_items:
+        label = _normalize_label(getattr(item, "finalAnswerValue", ""))
+        if label in buckets:
+            buckets[label].append(item)
+
+    selected: List[FeedbackItem] = []
+    selected_ids = set()
+    bucket_indices = {label: 0 for label in known_classes}
+
+    made_progress = True
+    while len(selected) < max_items and made_progress:
+        made_progress = False
+        for label in known_classes:
+            bucket = buckets[label]
+            index = bucket_indices[label]
+            if index >= len(bucket):
+                continue
+            item = bucket[index]
+            bucket_indices[label] = index + 1
+            item_key = str(getattr(item, "id", "")) or f"idx-{len(selected)}"
+            if item_key in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(item_key)
+            made_progress = True
+            if len(selected) >= max_items:
+                break
+
+    if len(selected) < max_items:
+        for item in all_qualifying_items:
+            item_key = str(getattr(item, "id", "")) or f"idx-fill-{len(selected)}"
+            if item_key in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(item_key)
+            if len(selected) >= max_items:
+                break
+
+    return selected[:max_items]
+
+
 def collect_qualifying_feedback_items(
     *,
     client: PlexusDashboardClient,
@@ -154,6 +227,7 @@ def collect_qualifying_feedback_items(
     score_id: str,
     max_items: int,
     days: Optional[int],
+    stop_at_max: bool = True,
 ) -> List[FeedbackItem]:
     if max_items <= 0:
         raise ValueError("--max-items must be greater than 0.")
@@ -235,7 +309,7 @@ def collect_qualifying_feedback_items(
     }
 
     qualifying_items: List[FeedbackItem] = []
-    while len(qualifying_items) < max_items:
+    while True:
         response = client.execute(query, variables)
         result_data = response.get("listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt") or {}
         items_data = result_data.get("items") or []
@@ -250,9 +324,11 @@ def collect_qualifying_feedback_items(
                 score_id=score_id,
             ):
                 qualifying_items.append(feedback_item)
-                if len(qualifying_items) >= max_items:
+                if stop_at_max and len(qualifying_items) >= max_items:
                     break
 
+        if stop_at_max and len(qualifying_items) >= max_items:
+            break
         next_token = result_data.get("nextToken")
         if not next_token:
             break
@@ -266,7 +342,9 @@ def collect_qualifying_feedback_items(
         ),
         reverse=True,
     )
-    return qualifying_items[:max_items]
+    if stop_at_max:
+        return qualifying_items[:max_items]
+    return qualifying_items
 
 
 def build_associated_dataset_from_feedback_window(
@@ -276,6 +354,7 @@ def build_associated_dataset_from_feedback_window(
     score_id: str,
     max_items: int = 100,
     days: Optional[int] = None,
+    balance: bool = True,
     task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     score_name = _fetch_score_name(client, score_id)
@@ -297,16 +376,32 @@ def build_associated_dataset_from_feedback_window(
         )
 
     try:
-        feedback_items = collect_qualifying_feedback_items(
+        all_qualifying_items = collect_qualifying_feedback_items(
             client=client,
             account_id=account_id,
             scorecard_id=scorecard_id,
             score_id=score_id,
             max_items=max_items,
             days=days,
+            stop_at_max=not balance,
         )
-        if not feedback_items:
+        if not all_qualifying_items:
             raise ValueError("No qualifying feedback items found for dataset curation.")
+
+        seed_items = all_qualifying_items[:max_items]
+        class_list_used: List[str] = []
+        if balance:
+            class_list_used = resolve_score_valid_classes_from_champion_yaml(
+                client=client,
+                score_id=score_id,
+            )
+            feedback_items = _select_balanced_feedback_items(
+                all_qualifying_items=all_qualifying_items,
+                class_list=class_list_used,
+                max_items=max_items,
+            )
+        else:
+            feedback_items = seed_items
 
         selected_feedback_ids = [item.id for item in feedback_items if item.id]
         row_builder = FeedbackItems(scorecard=scorecard_id, score=score_id)
@@ -380,11 +475,15 @@ def build_associated_dataset_from_feedback_window(
         result_payload: Dict[str, Any] = {
             "dataset_id": dataset_id,
             "requested_max_items": max_items,
-            "qualifying_found": len(selected_feedback_ids),
+            "qualifying_found": len(all_qualifying_items),
             "rows_written": int(len(dataframe)),
             "score_id": score_id,
             "scorecard_id": scorecard_id,
             "s3_key": s3_key,
+            "balance_applied": balance,
+            "class_list_used": class_list_used,
+            "class_distribution_before": _compute_label_distribution(seed_items),
+            "class_distribution_after": _compute_label_distribution(feedback_items),
         }
 
         if task:
