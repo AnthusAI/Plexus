@@ -15,8 +15,7 @@ import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { listDataSetsForBrowse } from '@/components/data-sets/data-set-query'
-
-const ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION = 'Generated directly from vetted feedback item IDs.'
+import { ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION } from '@/components/data-sources/constants'
 
 
 interface DataSourcesDashboardProps {

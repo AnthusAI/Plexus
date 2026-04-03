@@ -160,6 +160,20 @@ plexus evaluate accuracy \\
       </section>
 
       <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Datasets Filter Modes</h2>
+        <p className="text-muted-foreground">
+          The datasets inventory at <code>/lab/datasets</code> uses explicit filter modes with
+          standard selectors and index-backed queries only.
+        </p>
+        <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+          <li><strong>All</strong>: account-wide newest-first dataset list.</li>
+          <li><strong>By Score</strong>: scorecard/score selectors with optional score-version selector.</li>
+          <li><strong>By Source Version</strong>: data source selector, then source-version selector.</li>
+          <li>No raw ID text entry is required in the normal filter flow.</li>
+        </ul>
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-2xl font-semibold">Score Page Visibility</h2>
         <p className="text-muted-foreground">
           The score detail page includes an <strong>Associated Datasets</strong> panel that lists datasets
