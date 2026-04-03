@@ -24,7 +24,7 @@ import {
 
 export function CollapsibleText({
   content,
-  maxLines = 10,
+  maxLines,
   className = "whitespace-pre-wrap break-words",
   enableMarkdown = true
 }: {
