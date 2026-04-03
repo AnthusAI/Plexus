@@ -41,6 +41,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
+import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import MetricsSummary from '@/components/MetricsSummary'
 
 const client = generateClient();
@@ -987,6 +988,7 @@ const DetailContent = React.memo(({
   const [associatedDatasets, setAssociatedDatasets] = React.useState<AssociatedDatasetView[]>([])
   const [isAssociatedDatasetsLoading, setIsAssociatedDatasetsLoading] = React.useState(false)
   const [associatedDatasetsError, setAssociatedDatasetsError] = React.useState<string | null>(null)
+  const [isAssociatedDatasetsExpanded, setIsAssociatedDatasetsExpanded] = React.useState(false)
 
   // Sort versions by creation date (newest first)
   const sortedVersions = React.useMemo(() => {
@@ -1051,7 +1053,7 @@ const DetailContent = React.memo(({
 
   return (
     <div className={cn(
-      "w-full h-full flex flex-col",
+      "w-full h-full flex flex-col overflow-y-auto",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Description Section - Above sidebar, not versioned */}
@@ -1153,11 +1155,23 @@ const DetailContent = React.memo(({
               externalIdPlaceholder="External ID"
             />
 
-            <div className="rounded-md border border-border bg-background p-3">
+            <div className="rounded-md bg-card p-3">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-medium">Associated Datasets</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAssociatedDatasetsExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-sm font-medium hover:opacity-80 transition-opacity"
+                    aria-label={isAssociatedDatasetsExpanded ? 'Collapse associated datasets' : 'Expand associated datasets'}
+                  >
+                    {isAssociatedDatasetsExpanded
+                      ? <ChevronDown className="h-4 w-4" />
+                      : <ChevronRight className="h-4 w-4" />}
+                    Associated Datasets
+                  </button>
+                </div>
                 <div className="text-xs text-muted-foreground">
-                  {associatedDatasets.length} total
+                  {isAssociatedDatasetsExpanded ? `${associatedDatasets.length} total` : 'Latest'}
                 </div>
               </div>
 
@@ -1169,31 +1183,27 @@ const DetailContent = React.memo(({
                 <div className="text-xs text-muted-foreground">No associated datasets found for this score.</div>
               ) : (
                 <div className="space-y-3">
-                  {associatedDatasets.map((dataset) => {
+                  {(isAssociatedDatasetsExpanded ? associatedDatasets : associatedDatasets.slice(0, 1)).map((dataset) => {
                     const distributionEntries = dataset.labelDistribution
                       ? Object.entries(dataset.labelDistribution)
                           .sort(([a], [b]) => a.localeCompare(b))
                       : []
                     const totalLabels = distributionEntries.reduce((sum, [, count]) => sum + count, 0)
                     const rowCount = dataset.rowCount ?? totalLabels
+                    const distributionText = distributionEntries.length > 0
+                      ? distributionEntries.map(([label, count]) => `${label}: ${count}`).join(' · ')
+                      : 'Label distribution unavailable'
                     return (
-                      <div key={dataset.id} className="rounded-sm border border-border/70 p-2">
+                      <div key={dataset.id} className="rounded-sm bg-background p-2">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-xs font-medium truncate">
-                              {dataset.name || `Dataset ${dataset.id}`}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground truncate font-mono">
-                              {dataset.id}
-                            </div>
+                          <div className="min-w-0 pr-2">
+                            <IdentifierDisplay
+                              identifiers={[{ name: 'Dataset ID', value: dataset.id }]}
+                            />
                           </div>
                           <div className="text-[11px] text-muted-foreground shrink-0">
                             <Timestamp time={dataset.createdAt} variant="relative" className="text-[11px]" />
                           </div>
-                        </div>
-
-                        <div className="mt-2 text-[11px] text-muted-foreground">
-                          Rows: {rowCount ?? 'stats unavailable'}
                         </div>
 
                         {distributionEntries.length > 0 && totalLabels > 0 ? (
@@ -1213,17 +1223,15 @@ const DetailContent = React.memo(({
                                 )
                               })}
                             </div>
-                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                              {distributionEntries.map(([label, count]) => (
-                                <div key={`${dataset.id}-legend-${label}`} className="text-[11px] text-muted-foreground">
-                                  {label}: {count}
-                                </div>
-                              ))}
+                            <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                              <div>Rows: {rowCount ?? 'stats unavailable'}</div>
+                              <div className="text-right">{distributionText}</div>
                             </div>
                           </div>
                         ) : (
-                          <div className="mt-2 text-[11px] text-muted-foreground">
-                            Label distribution stats unavailable for this dataset.
+                          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <div>Rows: {rowCount ?? 'stats unavailable'}</div>
+                            <div className="text-right">Label distribution unavailable</div>
                           </div>
                         )}
                       </div>
