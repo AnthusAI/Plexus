@@ -3477,6 +3477,7 @@ class FeedbackEvaluation(Evaluation):
                 bedrock_labeler, bedrock_causal, bedrock_synthesizer,
                 TimestampedText,
             )
+            from plexus.rca_analysis import build_misclassification_classification_contract
 
             def _update_status(msg: str):
                 """Update tracker status message if tracker is available."""
@@ -3922,6 +3923,7 @@ class FeedbackEvaluation(Evaluation):
                 "topics": topics,
                 "overall_explanation": overall_explanation,
                 "overall_improvement_suggestion": overall_improvement_suggestion,
+                "misclassification_classification_contract": build_misclassification_classification_contract(),
             }
 
         except Exception as e:
@@ -3941,7 +3943,10 @@ class FeedbackEvaluation(Evaluation):
     ) -> dict:
         """Run RCA summarization for small incorrect sets (<5 items)."""
         from datetime import datetime, timezone as _tz
-        from plexus.rca_analysis import analyze_score_result
+        from plexus.rca_analysis import (
+            analyze_score_result,
+            build_misclassification_classification_contract,
+        )
 
         def _update_status(msg: str):
             if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
@@ -4092,6 +4097,7 @@ class FeedbackEvaluation(Evaluation):
             "topics": [topic],
             "overall_explanation": detailed_explanation,
             "overall_improvement_suggestion": improvement_suggestion,
+            "misclassification_classification_contract": build_misclassification_classification_contract(),
         }
 
 class AccuracyEvaluation(Evaluation):

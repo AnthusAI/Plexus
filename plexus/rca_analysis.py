@@ -10,6 +10,95 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+MISCLASSIFICATION_CATEGORIES = (
+    "score_configuration_problem",
+    "information_gap",
+    "guideline_gap_requires_sme",
+    "mechanical_malfunction",
+)
+
+MISCLASSIFICATION_EXCLUDED_ANALYSES = (
+    "feedback_label_contradictions",
+    "label_inconsistency_audit",
+)
+
+
+def get_misclassification_item_scope_evidence_contract() -> dict:
+    """Return the item-scope evidence contract for misclassification classification."""
+    return {
+        "available_at_item_scope": [
+            "feedback_item_id",
+            "item_id",
+            "predicted_value",
+            "correct_value",
+            "score_explanation",
+            "edit_comment",
+            "initial_comment",
+            "final_comment",
+            "guidelines_text",
+            "score_yaml_configuration",
+            "transcript_text",
+            "metadata_snapshot",
+        ],
+        "cannot_infer_at_item_scope": [
+            "global_feedback_label_consistency",
+            "cross-item_guideline_conflict_rate",
+            "systemic_prediction_mode_collapse",
+            "organization_policy_change_history",
+        ],
+    }
+
+
+def get_misclassification_classifier_output_contract() -> dict:
+    """Return the per-item classifier output contract for misclassification analysis."""
+    return {
+        "required_fields": [
+            "primary_category",
+            "rationale",
+            "confidence",
+            "evidence_snippets",
+        ],
+        "field_contracts": {
+            "primary_category": {
+                "type": "enum",
+                "allowed_values": list(MISCLASSIFICATION_CATEGORIES),
+            },
+            "rationale": {
+                "type": "string",
+                "max_sentences": 3,
+            },
+            "confidence": {
+                "type": "enum",
+                "allowed_values": ["high", "medium", "low"],
+            },
+            "evidence_snippets": {
+                "type": "array",
+                "min_items": 1,
+                "item_schema": {
+                    "required_fields": ["source", "quote_or_fact"],
+                    "source_allowed_values": [
+                        "edit_comment",
+                        "score_explanation",
+                        "guidelines",
+                        "score_yaml",
+                        "transcript",
+                        "metadata",
+                    ],
+                },
+            },
+        },
+    }
+
+
+def build_misclassification_classification_contract() -> dict:
+    """Build the full operator-facing misclassification taxonomy/evidence contract."""
+    return {
+        "categories": list(MISCLASSIFICATION_CATEGORIES),
+        "excluded_analyses": list(MISCLASSIFICATION_EXCLUDED_ANALYSES),
+        "item_scope_evidence": get_misclassification_item_scope_evidence_contract(),
+        "item_classifier_output": get_misclassification_classifier_output_contract(),
+    }
+
 
 def analyze_score_result(
     transcript: str,
