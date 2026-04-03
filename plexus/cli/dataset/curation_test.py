@@ -6,6 +6,7 @@ import pytest
 from plexus.cli.dataset.curation import (
     _compute_label_distribution,
     _select_balanced_feedback_items,
+    build_associated_dataset_from_feedback_window,
     collect_qualifying_feedback_items,
     resolve_score_valid_classes_from_champion_yaml,
 )
@@ -193,3 +194,84 @@ def test_select_balanced_feedback_items_round_robins_and_preserves_size():
 
     assert len(selected) == 4
     assert _compute_label_distribution(selected) == {"No": 1, "Yes": 3}
+
+
+@patch("plexus.cli.dataset.curation._upload_dataset_parquet", return_value="datasets/account-1/dataset-1/dataset.parquet")
+@patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)
+@patch("plexus.cli.dataset.curation._create_associated_dataset_datasource_version", return_value=("ds-1", "dsv-1"))
+@patch("plexus.cli.dataset.curation.FeedbackItems")
+@patch("plexus.cli.dataset.curation._select_balanced_feedback_items")
+@patch("plexus.cli.dataset.curation.resolve_score_valid_classes_from_champion_yaml", return_value=["Yes", "No"])
+@patch("plexus.cli.dataset.curation.collect_qualifying_feedback_items")
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+@patch("plexus.cli.dataset.curation._fetch_score_name", return_value="Test Score")
+def test_build_associated_dataset_from_feedback_window_persists_stats(
+    _mock_score_name,
+    _mock_account,
+    mock_collect,
+    _mock_class_resolver,
+    mock_select_balanced,
+    mock_feedback_items_class,
+    mock_create_datasource_version,
+    _mock_champion,
+    _mock_upload,
+):
+    fi_yes = SimpleNamespace(
+        id="fi-1",
+        accountId="account-1",
+        scorecardId="scorecard-1",
+        scoreId="score-1",
+        finalAnswerValue="Yes",
+        editedAt="2026-03-03T00:00:00Z",
+        item=SimpleNamespace(id="item-1", text="t1"),
+    )
+    fi_no = SimpleNamespace(
+        id="fi-2",
+        accountId="account-1",
+        scorecardId="scorecard-1",
+        scoreId="score-1",
+        finalAnswerValue="No",
+        editedAt="2026-03-02T00:00:00Z",
+        item=SimpleNamespace(id="item-2", text="t2"),
+    )
+    mock_collect.return_value = [fi_yes, fi_no]
+    mock_select_balanced.return_value = [fi_yes, fi_no]
+
+    built_df = SimpleNamespace(empty=False)
+    # Replace with DataFrame-like object used for len() and optional sort branch
+    import pandas as pd
+    built_df = pd.DataFrame(
+        {
+            "feedback_item_id": ["fi-1", "fi-2"],
+            "text": ["t1", "t2"],
+            "metadata": ["{}", "{}"],
+            "IDs": ["[]", "[]"],
+            "Test Score": ["Yes", "No"],
+        }
+    )
+    row_builder = MagicMock()
+    row_builder._create_dataset_rows.return_value = built_df
+    mock_feedback_items_class.return_value = row_builder
+
+    mock_client = MagicMock()
+    mock_client.execute = MagicMock(
+        side_effect=[
+            {"createDataSet": {"id": "dataset-1"}},
+            {"updateDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet"}},
+        ]
+    )
+
+    result = build_associated_dataset_from_feedback_window(
+        client=mock_client,
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        max_items=2,
+        days=30,
+        balance=True,
+    )
+
+    assert result["dataset_id"] == "dataset-1"
+    stats = mock_create_datasource_version.call_args.kwargs["dataset_stats"]
+    assert stats["row_count"] == 2
+    assert stats["label_distribution"] == {"No": 1, "Yes": 1}
+    assert stats["balance_applied"] is True
