@@ -17,13 +17,6 @@ function normalizeFeedbackItemIds(value: unknown): string[] {
   return [...new Set(ids)].sort()
 }
 
-function parsePositiveInteger(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed <= 0) return null
-  return parsed
-}
-
 function normalizeOptionalString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -41,8 +34,6 @@ export async function POST(request: NextRequest) {
   const taskId = (payload as { taskId?: unknown })?.taskId
   const scorecard = (payload as { scorecard?: unknown })?.scorecard
   const score = (payload as { score?: unknown })?.score
-  const maxItems = parsePositiveInteger((payload as { maxItems?: unknown })?.maxItems)
-  const days = parsePositiveInteger((payload as { days?: unknown })?.days)
   const feedbackItemIds = normalizeFeedbackItemIds((payload as { feedbackItemIds?: unknown })?.feedbackItemIds)
   const sourceReportBlockId = normalizeOptionalString(
     (payload as { sourceReportBlockId?: unknown })?.sourceReportBlockId
@@ -57,6 +48,12 @@ export async function POST(request: NextRequest) {
   if (!isNonEmptyString(scorecard) || !isNonEmptyString(score)) {
     return NextResponse.json({ accepted: false, error: 'scorecard and score are required' }, { status: 400 })
   }
+  if (feedbackItemIds.length === 0) {
+    return NextResponse.json(
+      { accepted: false, error: 'feedbackItemIds is required and must be a non-empty array' },
+      { status: 400 },
+    )
+  }
 
   const normalizedTaskId = taskId.trim()
   const args = [
@@ -66,23 +63,16 @@ export async function POST(request: NextRequest) {
     scorecard.trim(),
     '--score',
     score.trim(),
-    '--max-items',
-    String(maxItems ?? Math.max(feedbackItemIds.length, 100)),
     '--task-id',
     normalizedTaskId,
   ]
 
-  if (days !== null && feedbackItemIds.length === 0) {
-    args.push('--days', String(days))
+  args.push('--feedback-item-ids', feedbackItemIds.join(','))
+  if (sourceReportBlockId) {
+    args.push('--source-report-block-id', sourceReportBlockId)
   }
-  if (feedbackItemIds.length > 0) {
-    args.push('--feedback-item-ids', feedbackItemIds.join(','))
-    if (sourceReportBlockId) {
-      args.push('--source-report-block-id', sourceReportBlockId)
-    }
-    if (eligibilityRule) {
-      args.push('--eligibility-rule', eligibilityRule)
-    }
+  if (eligibilityRule) {
+    args.push('--eligibility-rule', eligibilityRule)
   }
 
   const child = spawn('plexus', args, {
@@ -113,7 +103,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     accepted: true,
     taskId: normalizedTaskId,
-    requestedMaxItems: maxItems ?? Math.max(feedbackItemIds.length, 100),
     explicitFeedbackItemCount: feedbackItemIds.length,
   })
 }
