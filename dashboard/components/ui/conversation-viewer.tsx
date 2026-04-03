@@ -2414,7 +2414,7 @@ function ConversationViewer({
                             </Tool>
                           ) : (
                             <div className="text-sm">
-                              <CollapsibleText content={message.content} maxLines={10} />
+                              <CollapsibleText content={message.content} />
                             </div>
                           )}
 
