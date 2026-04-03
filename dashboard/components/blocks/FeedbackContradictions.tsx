@@ -446,8 +446,6 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
 
     setCreatingAssociatedDataset(true);
     try {
-      const requestedMaxItems = Math.max(eligibleIds.length, 100);
-      const configuredDays = Number(output?.block_configuration?.days);
       const taskCommand = [
         'score',
         'dataset-curate',
@@ -455,8 +453,8 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         String(scorecard),
         '--score',
         String(score),
-        '--max-items',
-        String(requestedMaxItems),
+        '--feedback-item-ids',
+        `<${eligibleIds.length} vetted IDs>`,
       ].join(' ');
 
       const task = await createTask({
@@ -465,7 +463,7 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         status: 'PENDING',
         target: 'dataset/associated',
         command: taskCommand,
-        description: `Curate associated dataset from qualifying feedback labels (max ${requestedMaxItems})`,
+        description: `Curate associated dataset from vetted aligned feedback snapshot (${eligibleIds.length} IDs)`,
         dispatchStatus: 'PENDING',
       });
 
@@ -481,8 +479,6 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         feedbackItemIds: eligibleIds,
         sourceReportBlockId: output.source_report_block_id || undefined,
         eligibilityRule: output.eligibility_rule || undefined,
-        maxItems: requestedMaxItems,
-        days: Number.isInteger(configuredDays) && configuredDays > 0 ? configuredDays : undefined,
       };
 
       const response = await fetch('/api/report-blocks/associated-dataset-from-feedback', {
