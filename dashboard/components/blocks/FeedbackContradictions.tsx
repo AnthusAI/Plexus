@@ -104,7 +104,11 @@ function computeConfidence(votes: Vote[]): 'high' | 'medium' | 'low' {
   return 'low';
 }
 
-const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'low' }> = ({ votes, confidence }) => {
+const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'low'; isAlignedMode: boolean }> = ({
+  votes,
+  confidence,
+  isAlignedMode,
+}) => {
   const confidenceClass =
     confidence === 'high'
       ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
@@ -116,16 +120,19 @@ const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'l
     <div className="flex items-center gap-1.5 shrink-0">
       {votes.map((v, i) => {
         const showSep = i === 3;
+        const isAgreement = v.result !== null && (isAlignedMode ? v.result === false : v.result === true);
         const circleClass = v.result === null
           ? 'bg-muted text-muted-foreground'
-          : v.result
+          : isAgreement
             ? 'bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100'
             : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100';
         const label = v.result === null ? '×' : (v.model === 'sonnet' ? 'S' : 'G');
         const modelName = v.model === 'sonnet' ? 'Sonnet' : 'GPT-5.4';
         const title = v.result === null
           ? `${modelName}: call failed — no response received`
-          : `${modelName}: ${v.result ? 'yes — is a contradiction' : 'no — not a contradiction'}`;
+          : isAlignedMode
+            ? `${modelName}: ${v.result ? 'disagree — contradiction' : 'agree — aligned'}`
+            : `${modelName}: ${v.result ? 'agree — contradiction' : 'disagree — not a contradiction'}`;
         return (
           <React.Fragment key={i}>
             {showSep && <span className="text-muted-foreground/40 text-xs mx-0.5">|</span>}
@@ -147,7 +154,11 @@ const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'l
 
 // ---- Exemplar row ----------------------------------------------------------
 
-const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
+const ExemplarRow: React.FC<{ exemplar: Exemplar; allowInvalidation: boolean; isAlignedMode: boolean }> = ({
+  exemplar,
+  allowInvalidation,
+  isAlignedMode,
+}) => {
   const [invalidated, setInvalidated] = React.useState(exemplar.is_invalid);
   const [loading, setLoading] = React.useState(false);
 
@@ -186,20 +197,22 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           {timeAgo && (
             <span className="text-xs text-muted-foreground">{timeAgo}</span>
           )}
-          {invalidated ? (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <CheckCircle className="h-3 w-3" /> Marked invalid
-            </span>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="text-xs h-6"
-              disabled={loading}
-              onClick={handleMarkInvalid}
-            >
-              {loading ? 'Saving…' : 'Mark Invalid'}
-            </Button>
+          {allowInvalidation && (
+            invalidated ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <CheckCircle className="h-3 w-3" /> Marked invalid
+              </span>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="text-xs h-6"
+                disabled={loading}
+                onClick={handleMarkInvalid}
+              >
+                {loading ? 'Saving…' : 'Mark Invalid'}
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -246,6 +259,7 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           <VotingBadges
             votes={exemplar.voting}
             confidence={exemplar.confidence ?? computeConfidence(exemplar.voting)}
+            isAlignedMode={isAlignedMode}
           />
         )}
       </div>
@@ -255,7 +269,11 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
 
 // ---- Topic section ---------------------------------------------------------
 
-const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
+const TopicSection: React.FC<{ topic: Topic; allowInvalidation: boolean; isAlignedMode: boolean }> = ({
+  topic,
+  allowInvalidation,
+  isAlignedMode,
+}) => {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -296,7 +314,12 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
             </div>
           )}
           {topic.exemplars.map((ex) => (
-            <ExemplarRow key={ex.feedback_item_id} exemplar={ex} />
+            <ExemplarRow
+              key={ex.feedback_item_id}
+              exemplar={ex}
+              allowInvalidation={allowInvalidation}
+              isAlignedMode={isAlignedMode}
+            />
           ))}
         </div>
       )}
@@ -441,7 +464,12 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
         )}
 
         {topics.map((topic) => (
-          <TopicSection key={topic.label} topic={topic} />
+          <TopicSection
+            key={topic.label}
+            topic={topic}
+            allowInvalidation={!isAlignedMode}
+            isAlignedMode={isAlignedMode}
+          />
         ))}
       </div>
     </ReportBlock>
