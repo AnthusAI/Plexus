@@ -237,6 +237,10 @@ plexus evaluate accuracy \\
           <p className="text-muted-foreground mt-3">
             The Data navigation lands on <code>/lab/datasets</code> by default; browse sources at <code>/lab/data/sources</code>.
           </p>
+          <p className="text-muted-foreground mt-3">
+            On <code>/lab/datasets</code>, use the explicit filter modes (<code>All</code>, <code>By Score</code>,
+            <code>By Source Version</code>) and standard selectors for score version and source version selection.
+          </p>
         </section>
 
         <section>
