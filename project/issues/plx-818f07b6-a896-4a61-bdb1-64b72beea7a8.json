@@ -3,16 +3,29 @@
   "title": "Audit GraphQL schema budget and reclaim capacity for curation/reference features",
   "description": "## Summary\nInventory GraphQL model/resource usage and reclaim capacity needed for deterministic reference datasets and gold-standard curation.\n\n## Deliverables\n- Identify low-value removable schema resources.\n- Produce the exact cleanup list required to support the preferred curation design.\n- Establish whether the preferred vetting model can ship as designed after cleanup.\n\n## Dependency note\nThis work should precede the final storage-model choice for gold-standard curation.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "d922d2bc-e79c-46f5-a6a0-0d7960365f12",
+      "author": "ryan",
+      "text": "Starting schema-budget audit: inventory model footprint + repo usage, then propose removable/mergeable low-value schema resources needed to free capacity for deterministic curation/reference features.",
+      "created_at": "2026-04-02T14:53:10.727824Z"
+    },
+    {
+      "id": "61422dcc-2c9a-4309-be83-7efb00bd08ff",
+      "author": "ryan",
+      "text": "## Schema-budget audit result\n\n### Inventory snapshot\n- Current GraphQL schema defines **30 top-level resources** (models + custom ops) in `dashboard/amplify/data/resource.ts`.\n- For the deterministic-curation roadmap, the pressure point is adding new curation/reference capability without inflating schema surface area.\n\n### Usage-driven findings\n- `ScorecardExampleItem` is active and should be retained (it is the curated pool primitive).\n- `ChatSession` / `ChatMessage` / `Procedure` are active in procedures + HITL flows; not good cleanup targets.\n- `ShareLink` + `getResourceByShareToken` are active for shared report/evaluation views; not immediate cleanup targets.\n- `GraphNode` has broad historical usage but already has active deprecation/migration work (`plx-ea1528`), making it the strongest budget-reclaim candidate.\n- `BatchJobScoringJob` appears primarily as a linkage model with limited direct product surface; candidate for consolidation after explicit migration design.\n\n### Required cleanup list (prioritized)\n1. **Reclaim `GraphNode` model** via completion of `plx-ea1528` and follow-on schema removal task.\n2. **Design and execute `BatchJobScoringJob` consolidation** (replace explicit join model with direct relation/index strategy) if additional schema headroom is still required.\n3. **No-new-model rule for deterministic dataset work until #1 lands**: implement reference-assignment/provenance using field additions on existing `Score`/`DataSet` models first.\n\n### Decision guardrails for upcoming curation design\n- Prefer extending existing models over introducing new curation models until at least one reclaim item completes.\n- Re-evaluate schema budget after `GraphNode` removal; only then decide whether dedicated gold-curation model is justified.\n\nThis satisfies the task deliverable: inventory + low-value removable resource candidates + concrete cleanup sequence.",
+      "created_at": "2026-04-02T14:53:56.584282Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:32.967156Z",
-  "updated_at": "2026-04-02T12:49:32.967156Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T14:53:59.701170Z",
+  "closed_at": "2026-04-02T14:53:59.701170Z",
   "custom": {}
 }

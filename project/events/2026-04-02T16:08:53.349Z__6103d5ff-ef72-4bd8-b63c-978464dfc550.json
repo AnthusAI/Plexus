@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "6103d5ff-ef72-4bd8-b63c-978464dfc550",
+  "issue_id": "plx-bc6a7330-43c1-40d9-9feb-7678cbc61cf2",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T16:08:53.349Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Validate that all components are working before running on real data.\n\n## Test Checklist\n\n- [ ] YAML syntax validation passes\n- [ ] MCP tool `plexus_evaluation_compare` is registered\n- [ ] CLI command `plexus procedure optimize` exists and shows help\n- [ ] Identifier resolution works for name/key/ID/externalID\n- [ ] Procedure YAML loads without errors\n\n## Commands to Run\n\n```bash\n# 1. Validate YAML syntax\npython3 -c \"import yaml; yaml.safe_load(open('plexus/procedures/feedback_alignment_optimizer.yaml'))\"\n\n# 2. Check CLI help\nplexus procedure optimize --help\n\n# 3. Test identifier resolution (dry run, quick)\nplexus procedure optimize -s \"AW Confirmation\" -c <test-score> --days 7 --dry-run\n```\n\n## Success Criteria\n\nAll smoke tests pass without errors.",
+        "to": "Validate that all components are working before running on real data.\n\n## Test Checklist\n\n- [ ] YAML syntax validation passes\n- [ ] MCP tool plexus_evaluation_compare is registered\n- [ ] CLI command plexus procedure optimize exists and shows help\n- [ ] Identifier resolution works for name/key/ID/externalID\n- [ ] Procedure YAML loads without errors\n\n## Commands to Run\n\n```bash\n# 1. Validate YAML syntax\npython3 -c \"import yaml; yaml.safe_load(open('plexus/procedures/feedback_alignment_optimizer.yaml'))\"\n\n# 2. Check CLI help\nplexus procedure optimize --help\n\n# 3. Test identifier resolution (dry run, quick on test scorecard)\nplexus procedure optimize -s <scorecard> -c <score> --days 7 --dry-run\n```\n\n## Success Criteria\n\nAll smoke tests pass without errors."
+      }
+    }
+  }
+}

@@ -14,18 +14,23 @@ import { useAccount } from "@/app/contexts/AccountContext"
 import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { listDataSetsForBrowse } from '@/components/data-sets/data-set-query'
+
+const ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION = 'Generated directly from vetted feedback item IDs.'
 
 
 interface DataSourcesDashboardProps {
   selectedSourceId?: string
   selectedDatasetId?: string
   selectedVersionId?: string
+  pathBase?: string
 }
 
 export default function DataSourcesDashboard({ 
   selectedSourceId, 
   selectedDatasetId, 
-  selectedVersionId 
+  selectedVersionId,
+  pathBase = '/lab/data/sources',
 }: DataSourcesDashboardProps = {}) {
   const { selectedAccount } = useAccount()
   const router = useRouter()
@@ -35,14 +40,14 @@ export default function DataSourcesDashboard({
 
   // Function to update URL with RESTful paths without navigation
   const updateUrlPath = (params: { sourceId?: string | null; datasetId?: string | null; versionId?: string | null }) => {
-    let newPath = '/lab/sources'
+    let newPath = pathBase
     
     if (params.versionId) {
       // Version-specific route
-      newPath = `/lab/sources/versions/${params.versionId}`
+      newPath = `${pathBase}/versions/${params.versionId}`
     } else if (params.sourceId) {
       // Source-specific route
-      newPath = `/lab/sources/${params.sourceId}`
+      newPath = `${pathBase}/${params.sourceId}`
       if (params.datasetId) {
         // Dataset-specific route
         newPath += `/datasets/${params.datasetId}`
@@ -105,7 +110,10 @@ export default function DataSourcesDashboard({
       const sortedData = [...result.data].sort((a, b) => 
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       )
-      setDataSources(sortedData)
+      const visibleSources = sortedData.filter(
+        (source) => (source.description || '').trim() !== ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION
+      )
+      setDataSources(visibleSources)
       
       setIsLoading(false)
     } catch (error) {
@@ -160,19 +168,13 @@ export default function DataSourcesDashboard({
         return
       }
 
-      // Fetch datasets that belong to this specific data source version
-      const result = await amplifyClient.DataSet.list({
-        filter: { 
-          dataSourceVersionId: { eq: dataSource.currentVersionId },
-          accountId: { eq: selectedAccount?.id || '' }
-        }
+      const datasets = await listDataSetsForBrowse({
+        accountId: selectedAccount?.id || '',
+        mode: 'sourceScoped',
+        dataSourceVersionId: dataSource.currentVersionId,
       })
 
-      // Sort by createdAt descending
-      const sortedDataSets = result.data
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-      setDataSets(sortedDataSets)
+      setDataSets(datasets)
     } catch (error) {
       console.error('Error fetching datasets:', error)
       setDataSets([])
@@ -228,7 +230,7 @@ export default function DataSourcesDashboard({
       })
     } else {
       // Only navigate if we're already on a version-specific route
-      router.push(`/lab/sources/versions/${version.id}`)
+      router.push(`${pathBase}/versions/${version.id}`)
     }
   }
   
@@ -373,7 +375,7 @@ export default function DataSourcesDashboard({
     
     // Navigate back to sources list or update URL based on route type
     if (selectedSourceId || selectedVersionId) {
-      router.push('/lab/sources')
+      router.push('/lab/data/sources')
     } else {
       updateUrlPath({ 
         sourceId: null, 
@@ -391,7 +393,7 @@ export default function DataSourcesDashboard({
     
     // Navigate back to source or update URL based on route type
     if (selectedDatasetId && selectedDataSource?.id) {
-      router.push(`/lab/sources/${selectedDataSource.id}`)
+      router.push(`${pathBase}/${selectedDataSource.id}`)
     } else if (selectedDataSource?.id) {
       updateUrlPath({ 
         sourceId: selectedDataSource.id,

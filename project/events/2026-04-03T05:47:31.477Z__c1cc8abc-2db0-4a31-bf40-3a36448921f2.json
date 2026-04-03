@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c1cc8abc-2db0-4a31-bf40-3a36448921f2",
+  "issue_id": "plx-f95e986f-db0f-46ae-8b5c-56e640bb6d12",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.477Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Documentation: Data dashboard and evaluation provenance links"
+  }
+}

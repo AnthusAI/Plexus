@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "## High-level plan for bringing the data flywheel home\n\nThis initiative now has four coordinated epics:\n\n1. `plx-94485b` Deterministic Reference Datasets, Curation, and Evaluation Selection\n2. `plx-cf41c2` Feedback Evaluation Reliability and RCA Contract\n3. `plx-f78d08` Misclassification Classification and Evaluation Triage\n4. `plx-c2f8bb` Optimization Workflow, Generalization, and Decision Policy\n\n### Dependency shape\n\n```mermaid\nflowchart LR\n  A[plx-94485b Deterministic datasets] --> D[plx-c2f8bb Optimization workflow]\n  B[plx-cf41c2 RCA reliability] --> C[plx-f78d08 Misclassification triage]\n  B --> D\n  C --> D\n```\n\n### Key sequencing notes\n- Deterministic dataset work establishes the fixed evaluation assets and now includes `plx-25e99b` for separate fixed dataset roles such as regression set versus benchmark set.\n- RCA reliability work establishes the trustworthy execution/persistence contract that later analysis layers depend on.\n- Misclassification triage adds the per-item four-category classifier, evaluation-level red flags, structured payloads, and evaluation-task UI breakdowns.\n- Optimization workflow work operationalizes the full loop: fixed deterministic checks, random generalization checks, assessment bundles, generalization-gap metrics, and stop/go/reroute decisions.\n\n### Planning intent\nThe workflow epic should not be treated as independent implementation work. It is downstream of the deterministic, reliability, and triage tracks and should use those artifacts rather than recreating parallel mechanisms.\n\n### Documentation requirement\nEach epic now includes public-facing web app documentation work so the resulting operator workflow is documented where users actually look for it.",
       "created_at": "2026-04-02T13:32:39.742010Z"
+    },
+    {
+      "id": "c75b10b7-5ef7-4f78-bfd2-f559e59c1a40",
+      "author": "ryan",
+      "text": "Context-preservation note: For session restarts, canonical operational context now lives in plx-9aa370 (runner runbook) and plx-cf41c2/plx-424687 (RCA reliability + tests). Future work should append run outcomes and RCA anomalies there so Kanbus remains sufficient as sole handoff surface.",
+      "created_at": "2026-04-02T14:37:21.101886Z"
     }
   ],
   "created_at": "2026-04-02T03:18:39.213158Z",
-  "updated_at": "2026-04-02T13:32:39.742010Z",
+  "updated_at": "2026-04-02T14:37:21.101886Z",
   "closed_at": null,
   "custom": {}
 }

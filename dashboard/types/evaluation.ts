@@ -88,6 +88,7 @@ export interface EvaluationTaskData {
   errorDetails: any;
   task: TaskData | null;
   universalCode?: string | null;
+  dataSetId?: string | null;
 }
 
 export interface EvaluationTaskPropsInternal {

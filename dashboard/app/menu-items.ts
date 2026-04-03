@@ -16,6 +16,6 @@ export const menuItems: MenuItem[] = [
   { name: "Evaluation", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Analysis", icon: Sparkles, path: "/lab/analysis" },
   { name: "Scorecards", icon: ListTodo, path: "/lab/scorecards" },
-  { name: "Data", icon: Database, path: "/lab/data" },
+  { name: "Data", icon: Database, path: "/lab/datasets" },
   { name: "Settings", icon: Settings, path: "/lab/settings" },
 ]

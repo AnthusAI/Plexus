@@ -890,6 +890,180 @@ def watch(interval: int):
 
 
 @procedure.command()
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--days', '-d', default=90, help='Feedback window in days (default: 90)')
+@click.option('--max-samples', type=int, default=None, help='Maximum feedback samples per evaluation (default: all available)')
+@click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
+@click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
+@click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, output: str):
+    """Run feedback alignment optimization with RCA for a score.
+
+    This command runs the iterative optimization loop:
+    1. Run baseline feedback evaluation with RCA
+    2. Analyze RCA and propose targeted improvements
+    3. Create new score version and evaluate
+    4. Compare metrics against baseline
+    5. Repeat until convergence or max iterations
+
+    Examples:
+        # Basic optimization
+        plexus procedure optimize -s customer-service -c empathy
+
+        # With custom parameters
+        plexus procedure optimize -s sales -c dnc-check --days 60 --max-iterations 5
+
+        # Dry run (no changes)
+        plexus procedure optimize -s test-sc -c test-score --dry-run
+
+        # Conservative threshold (only continue if ≥5% improvement)
+        plexus procedure optimize -s compliance -c safety --improvement-threshold 0.05
+    """
+    import os
+    from pathlib import Path
+
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    # Find the feedback alignment optimizer YAML
+    # First check if we're in the Plexus repo
+    yaml_path = Path(__file__).parent.parent.parent / "procedures" / "feedback_alignment_optimizer.yaml"
+
+    if not yaml_path.exists():
+        console.print(f"[red]Error: Could not find feedback_alignment_optimizer.yaml at {yaml_path}[/red]")
+        console.print("[yellow]Hint: This command requires the procedure YAML to be in plexus/procedures/[/yellow]")
+        return
+
+    console.print(f"[cyan]Starting feedback alignment optimization...[/cyan]")
+    console.print(f"  Scorecard: {scorecard}")
+    console.print(f"  Score: {score}")
+    console.print(f"  Feedback window: {days} days")
+    console.print(f"  Max iterations: {max_iterations}")
+    console.print(f"  Improvement threshold: {improvement_threshold:.2%}")
+    console.print(f"  Dry run: {'Yes' if dry_run else 'No'}")
+    console.print()
+
+    # Build params JSON
+    params = {
+        "scorecard": scorecard,
+        "score": score,
+        "days": days,
+        "max_iterations": max_iterations,
+        "improvement_threshold": improvement_threshold,
+        "dry_run": dry_run
+    }
+    if max_samples is not None:
+        params["max_samples"] = max_samples
+
+    # Load YAML
+    try:
+        with open(yaml_path, 'r') as f:
+            yaml_config = f.read()
+    except Exception as e:
+        console.print(f"[red]Error reading procedure YAML: {str(e)}[/red]")
+        return
+
+    # Create procedure
+    service = ProcedureService(client)
+    account = os.environ.get('PLEXUS_ACCOUNT_KEY')
+    if not account:
+        console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
+        return
+
+    console.print("Creating optimization procedure...")
+    result = service.create_procedure(
+        account_identifier=account,
+        scorecard_identifier=None,
+        score_identifier=None,
+        yaml_config=yaml_config,
+        featured=False,
+        create_root_node=False
+    )
+
+    if not result.success:
+        console.print(f"[red]Error creating procedure: {result.message}[/red]")
+        return
+
+    procedure_id = result.procedure.id
+    console.print(f"[green]✓ Created procedure {procedure_id}[/green]")
+    console.print()
+
+    # Run the procedure
+    console.print(f"[cyan]Running optimization procedure...[/cyan]")
+    console.print(f"[dim]You will be prompted to approve each iteration's proposed changes.[/dim]")
+    console.print()
+
+    # Get account ID for task tracking
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    account_id = resolve_account_id_for_command(client, None)
+
+    # Run with task tracking
+    import asyncio
+    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+
+    from plexus.cli.procedure.tactus_adapters.terminal_hitl import TerminalHITLAdapter
+    options = {
+        'context': params,
+        'hitl_adapter': TerminalHITLAdapter(auto_approve=dry_run),
+    }
+
+    exec_result = asyncio.run(run_experiment_with_task_tracking(
+        procedure_id=procedure_id,
+        client=client,
+        account_id=account_id,
+        **options
+    ))
+
+    if exec_result.get('status') == 'error':
+        console.print(f"[red]Error: {exec_result.get('error')}[/red]")
+        return
+
+    # Parse result
+    if output == 'json':
+        console.print(JSON.from_data(exec_result))
+    elif output == 'yaml':
+        console.print(yaml.dump(exec_result, default_flow_style=False))
+    else:
+        # Table format - show summary
+        console.print()
+        console.print("[green]✓ Optimization complete[/green]")
+        console.print()
+
+        # Extract key info from result
+        iterations = exec_result.get('result', {}).get('iterations', [])
+        improvement = exec_result.get('result', {}).get('improvement', 0)
+        status = exec_result.get('result', {}).get('status', 'unknown')
+
+        table = Table(title="Optimization Results")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="white")
+
+        table.add_row("Status", status)
+        table.add_row("Total Iterations", str(len(iterations)))
+        table.add_row("AC1 Improvement", f"{improvement:+.4f}")
+
+        if iterations:
+            baseline = iterations[0]['metrics']
+            final = iterations[-1]['metrics']
+            table.add_row("Baseline AC1", f"{baseline['alignment']:.4f}")
+            table.add_row("Final AC1", f"{final['alignment']:.4f}")
+
+        console.print(table)
+
+        if iterations:
+            console.print()
+            console.print("[bold]Iteration Summary:[/bold]")
+            for it in iterations:
+                delta = it['deltas']['alignment']
+                delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
+                console.print(f"  {it['iteration']}. {it['hypothesis'][:60]}... (AC1 {delta_str})")
+
+
+@procedure.command()
 @click.argument('procedure_id')
 @click.option('--after', '-a', help='Clear checkpoints after this step name')
 def reset(procedure_id: str, after: Optional[str]):

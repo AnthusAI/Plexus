@@ -98,6 +98,7 @@ export const EvaluationCard = React.memo(({
     startedAt: evaluation.startedAt || undefined,
     errorMessage: evaluation.errorMessage || undefined,
     errorDetails: evaluation.errorDetails || null,
+    dataSetId: (evaluation as any).dataSetId ?? null,
     scoreResults: evaluation.scoreResults as any, // Pass the transformed score results with itemIdentifiers
     task: taskData
   }

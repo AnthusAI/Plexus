@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, SquareTerminal } from "lucide-react"
+import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, SquareTerminal } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -100,7 +100,7 @@ export const menuItems = [
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
-  { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
+  { name: "Data", icon: Database, path: "/lab/datasets" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Alerts", icon: Siren, path: "/lab/alerts" },
   { name: "Console", icon: SquareTerminal, path: "/lab/console" },

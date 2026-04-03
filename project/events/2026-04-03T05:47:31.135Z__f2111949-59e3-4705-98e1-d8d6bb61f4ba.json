@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f2111949-59e3-4705-98e1-d8d6bb61f4ba",
+  "issue_id": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.135Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+    "priority": 1,
+    "status": "open",
+    "title": "Evaluation Provenance and Data Dashboard Flexibility"
+  }
+}

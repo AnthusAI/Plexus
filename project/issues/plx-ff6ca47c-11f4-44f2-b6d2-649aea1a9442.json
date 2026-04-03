@@ -3,16 +3,29 @@
   "title": "Add active reference dataset assignment to Score",
   "description": "## Summary\nAdd a score-owned pointer such as `referenceDataSetId` so each score can name its active deterministic regression dataset.\n\n## Deliverables\n- Make the score-owned reference dataset pointer the authoritative active reference.\n- Expose it through client models, dashboard utilities, and MCP/API surfaces as needed.\n- Keep active-reference selection on `Score`, not on `DataSet`.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "b772a729-e1e7-48f2-85c2-b0342f02fdd6",
+      "author": "ryan",
+      "text": "Starting implementation: add score-owned active reference dataset pointer (referenceDataSetId) in schema and wire through runtime/API surfaces used by dashboard and MCP.",
+      "created_at": "2026-04-02T14:54:10.731058Z"
+    },
+    {
+      "id": "dceedeaf-7ae8-4acd-8133-ea36690f01d8",
+      "author": "ryan",
+      "text": "Implemented active reference dataset pointer on Score.\n\nChanges:\n- Added `referenceDataSetId` + `referenceDataSet` relation to `Score` schema in `dashboard/amplify/data/resource.ts`.\n- Extended dashboard client Score create/update typings and update mutation selection in `dashboard/utils/amplify-client.ts`.\n- Extended Python Score model (`plexus/dashboard/api/models/score.py`) with `referenceDataSetId` in constructor/fields/from_dict.\n- Exposed `referenceDataSetId` in MCP score surfaces (`MCP/tools/score/scores.py`, `MCP/tools/score/management.py`).\n\nValidation:\n- `python -m py_compile` passed for modified Python files.\n- Editable install refreshed (`pip install -e .`).\n- `plexus evaluate feedback --help` confirms current CLI options are present (`--max-samples`, `--sample-seed`, `--baseline`).",
+      "created_at": "2026-04-02T14:56:09.685903Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:32.997691Z",
-  "updated_at": "2026-04-02T12:49:32.997691Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T14:56:11.261515Z",
+  "closed_at": "2026-04-02T14:56:11.261515Z",
   "custom": {}
 }

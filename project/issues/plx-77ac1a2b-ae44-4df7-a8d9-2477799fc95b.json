@@ -1,0 +1,25 @@
+{
+  "id": "plx-77ac1a2b-ae44-4df7-a8d9-2477799fc95b",
+  "title": "Schema cutover: allow datasets without dataSourceVersionId and remove scaffold source creation",
+  "description": "",
+  "type": "task",
+  "status": "blocked",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "11d625e6-4bfb-4e2f-89d1-25b5646d99a9",
+      "author": "ryan",
+      "text": "Deferred by design: requires GraphQL schema migration to make DataSet.dataSourceVersionId optional and only then remove scaffold DataSource/DataSourceVersion creation in curation workflows. Keep current scaffold behavior until schema deployment is complete.",
+      "created_at": "2026-04-03T12:37:37.650580Z"
+    }
+  ],
+  "created_at": "2026-04-03T12:37:28.495860Z",
+  "updated_at": "2026-04-03T12:37:37.650580Z",
+  "closed_at": null,
+  "custom": {}
+}
