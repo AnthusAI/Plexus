@@ -146,6 +146,13 @@ plexus score dataset-curate \\
   --score "Identify Objections" \\
   --max-items 100
 
+# Disable balancing when pure recency sampling is preferred
+plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --max-items 100 \\
+  --no-balance
+
 # Or curate from an explicit vetted report snapshot
 plexus score dataset-curate \\
   --scorecard "CMG EDU" \\
@@ -176,6 +183,10 @@ plexus evaluate accuracy \\
             <p className="text-muted-foreground">
               In the dashboard, the aligned mode of the Feedback Contradictions block can launch
               this vetted-feedback associated dataset build directly from the report snapshot.
+            </p>
+            <p className="text-muted-foreground">
+              The score detail page also includes an <strong>Associated Datasets</strong> panel that
+              shows per-dataset row counts and label distributions from persisted build metadata.
             </p>
           </div>
         </section>

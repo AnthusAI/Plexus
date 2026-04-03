@@ -43,7 +43,7 @@ export default function AssociatedDatasetsPage() {
         </p>
         <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
           <li><code>dataset load</code> path: uses deterministic label-source priority and reports skipped IDs.</li>
-          <li><code>score dataset-curate</code> path: scans qualifying feedback newest-first and uses <code>FeedbackItem.finalAnswerValue</code> labels.</li>
+          <li><code>score dataset-curate</code> path: scans qualifying feedback newest-first, uses <code>FeedbackItem.finalAnswerValue</code> labels, and balances class coverage by default.</li>
           <li><code>score dataset-curate --feedback-item-ids</code> path: builds from an explicit vetted snapshot of feedback IDs.</li>
         </ul>
       </section>
@@ -67,6 +67,16 @@ export default function AssociatedDatasetsPage() {
   --score "Identify Objections" \\
   --max-items 100 \\
   --days 180`}</code>
+        </pre>
+        <p className="text-muted-foreground">
+          Balancing is enabled by default. Use <code>--no-balance</code> to keep pure recency sampling.
+        </p>
+        <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
+          <code>{`plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --max-items 100 \\
+  --no-balance`}</code>
         </pre>
         <p className="text-muted-foreground">
           Or curate from an explicit vetted snapshot:
@@ -99,6 +109,22 @@ export default function AssociatedDatasetsPage() {
         </pre>
         <p className="text-muted-foreground">
           Without <code>--all-score-associated-datasets</code>, the latest associated dataset is used.
+        </p>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Score Page Visibility</h2>
+        <p className="text-muted-foreground">
+          The score detail page includes an <strong>Associated Datasets</strong> panel that lists datasets
+          linked by <code>scoreId</code> and shows:
+        </p>
+        <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+          <li>Dataset creation recency</li>
+          <li>Row count from persisted build metadata</li>
+          <li>Label distribution as a segmented bar</li>
+        </ul>
+        <p className="text-muted-foreground">
+          Older datasets without persisted stats are shown with an explicit “stats unavailable” message.
         </p>
       </section>
 
