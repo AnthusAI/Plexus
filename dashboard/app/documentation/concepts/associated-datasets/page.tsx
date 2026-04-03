@@ -18,6 +18,34 @@ export default function AssociatedDatasetsPage() {
       </div>
 
       <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">Quickstart</h2>
+        <p className="text-muted-foreground">
+          Canonical two-step flow: build an associated dataset, then evaluate against the latest one.
+        </p>
+        <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
+          <code>{`# 1) Build associated dataset from recent feedback
+plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --max-items 100 \\
+  --days 180
+
+# 2) Evaluate against latest associated dataset for that score
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset
+
+# Optional machine-friendly output
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --json-only`}</code>
+        </pre>
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-2xl font-semibold">What They Are</h2>
         <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
           <li>Single-score datasets with fixed labels.</li>
@@ -109,6 +137,9 @@ export default function AssociatedDatasetsPage() {
         </pre>
         <p className="text-muted-foreground">
           Without <code>--all-score-associated-datasets</code>, the latest associated dataset is used.
+        </p>
+        <p className="text-muted-foreground">
+          Add <code>--json-only</code> for machine-friendly output payloads.
         </p>
       </section>
 

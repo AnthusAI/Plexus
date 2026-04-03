@@ -8,6 +8,31 @@ export default function EvaluateScorePage() {
 
       <div className="space-y-8">
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Quickstart: Evaluate Latest Associated Dataset</h2>
+          <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
+            <code>{`# Build/update dataset for the score
+plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --max-items 100 \\
+  --days 180
+
+# Evaluate against the latest associated dataset
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset
+
+# Optional machine-friendly output
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --json-only`}</code>
+          </pre>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Running an Evaluation</h2>
           <p className="text-muted-foreground mb-4">
             You can evaluate content using individual scores or entire scorecards. The evaluation
@@ -166,6 +191,14 @@ plexus evaluate accuracy \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --number-of-samples 200
+
+# Same run with machine-friendly output
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --number-of-samples 200 \\
+  --json-only
 
 # Evaluate across all associated datasets for this score
 plexus evaluate accuracy \\
