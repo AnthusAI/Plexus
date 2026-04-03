@@ -8,6 +8,9 @@ from plexus.cli.score.scores import score
 def test_score_dataset_curate_success():
     runner = CliRunner()
     with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
+        "plexus.cli.score.scores._run_dataset_curation_preflight",
+        return_value=None,
+    ), patch(
         "plexus.cli.score.scores.memoized_resolve_scorecard_identifier",
         return_value="scorecard-1",
     ), patch(
@@ -45,6 +48,9 @@ def test_score_dataset_curate_success():
 def test_score_dataset_curate_explicit_feedback_ids_path():
     runner = CliRunner()
     with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
+        "plexus.cli.score.scores._run_dataset_curation_preflight",
+        return_value=None,
+    ), patch(
         "plexus.cli.score.scores.build_associated_dataset_from_feedback_ids",
         return_value={
             "dataset_id": "dataset-2",
@@ -145,6 +151,9 @@ def test_score_dataset_curate_invalid_max_items():
 def test_score_dataset_curate_no_balance_flag_passes_false():
     runner = CliRunner()
     with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
+        "plexus.cli.score.scores._run_dataset_curation_preflight",
+        return_value=None,
+    ), patch(
         "plexus.cli.score.scores.memoized_resolve_scorecard_identifier",
         return_value="scorecard-1",
     ), patch(
@@ -181,6 +190,9 @@ def test_score_dataset_curate_no_balance_flag_passes_false():
 def test_score_dataset_curate_passes_explicit_score_version_for_class_source():
     runner = CliRunner()
     with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
+        "plexus.cli.score.scores._run_dataset_curation_preflight",
+        return_value=None,
+    ), patch(
         "plexus.cli.score.scores.memoized_resolve_scorecard_identifier",
         return_value="scorecard-1",
     ), patch(
@@ -240,6 +252,9 @@ def test_score_dataset_curate_rejects_score_version_with_explicit_feedback_ids()
 def test_score_dataset_curate_vetted_success():
     runner = CliRunner()
     with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
+        "plexus.cli.score.scores._run_dataset_curation_preflight",
+        return_value=None,
+    ), patch(
         "plexus.cli.score.scores.memoized_resolve_scorecard_identifier",
         return_value="scorecard-1",
     ), patch(
@@ -276,6 +291,34 @@ def test_score_dataset_curate_vetted_success():
     assert kwargs["max_items"] == 100
     assert kwargs["days"] == 180
     assert kwargs["class_source_score_version_id"] is None
+
+
+def test_score_dataset_curate_json_only_emits_structured_error():
+    runner = CliRunner()
+    with patch("plexus.cli.score.scores.create_client", return_value=MagicMock()), patch(
+        "plexus.cli.score.scores.memoized_resolve_scorecard_identifier",
+        return_value="scorecard-1",
+    ), patch(
+        "plexus.cli.score.scores.memoized_resolve_score_identifier",
+        return_value="score-1",
+    ), patch(
+        "plexus.cli.score.scores._run_dataset_curation_preflight",
+        side_effect=Exception("preflight failed"),
+    ):
+        result = runner.invoke(
+            score,
+            [
+                "dataset-curate",
+                "--scorecard",
+                "1039",
+                "--score",
+                "45425",
+                "--json-only",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert result.output.strip() == '{"error": "preflight failed"}'
 
 
 def test_score_dataset_curate_vetted_rejects_non_positive_days():
