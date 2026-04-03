@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Context-preservation note: For session restarts, canonical operational context now lives in plx-9aa370 (runner runbook) and plx-cf41c2/plx-424687 (RCA reliability + tests). Future work should append run outcomes and RCA anomalies there so Kanbus remains sufficient as sole handoff surface.",
       "created_at": "2026-04-02T14:37:21.101886Z"
+    },
+    {
+      "id": "54760e4d-ef14-417b-83cd-69d6802b349d",
+      "author": "ryan",
+      "text": "Streaming fix complete and verified. Root cause: _get_console_dispatch_metadata() called on every stream chunk event with no caching of None results \u2014 each call triggered a full paginated DynamoDB scan (~30 pages x 0.3s = ~10s). Fix: cache negative results with False sentinel; eagerly warm cache during _ensure_session(); move metadata construction to only run when persistence is triggered. Verified: 204 successful GraphQL UPDATE mutations at 0.27s avg in overnight test run (optimizer-debug10.log). Non-persisting chunks now complete in sub-milliseconds. Committed in 0259a2cff.",
+      "created_at": "2026-04-03T12:42:51.025486Z"
     }
   ],
   "created_at": "2026-04-02T03:18:39.213158Z",
-  "updated_at": "2026-04-02T14:37:21.101886Z",
+  "updated_at": "2026-04-03T12:42:51.025486Z",
   "closed_at": null,
   "custom": {}
 }

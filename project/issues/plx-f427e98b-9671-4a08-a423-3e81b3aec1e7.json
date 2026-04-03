@@ -1,0 +1,25 @@
+{
+  "id": "plx-f427e98b-9671-4a08-a423-3e81b3aec1e7",
+  "title": "ProcedureMetadata status validation error on load",
+  "description": "",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bd0a186e-9d80-4955-8d20-c4984dfdf515",
+      "author": "ryan",
+      "text": "Error: '1 validation error for ProcedureMetadata status Input should be a valid string' at storage.py:110 on every procedure load.\n\nRoot cause: storage.py:116 passes procedure_data.get('status', 'RUNNING') (raw string from GraphQL) to ProcedureMetadata which expects a typed enum for status. The Pydantic error message is misleading \u2014 it says 'valid string' but the field is actually an enum.\n\nFix: Coerce the string to the correct ProcedureStatus enum from tactus.protocols.models before passing to ProcedureMetadata constructor.\n\nFile: plexus/cli/procedure/tactus_adapters/storage.py ~line 116.",
+      "created_at": "2026-04-03T12:44:58.591158Z"
+    }
+  ],
+  "created_at": "2026-04-03T12:44:49.866568Z",
+  "updated_at": "2026-04-03T12:44:58.591158Z",
+  "closed_at": null,
+  "custom": {}
+}
