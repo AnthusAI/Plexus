@@ -644,18 +644,18 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
 // Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
-  maxLines = 10, 
+  maxLines,
   className = "whitespace-pre-wrap break-words",
   enableMarkdown = true
-}: { 
-  content: string, 
+}: {
+  content: string,
   maxLines?: number,
   className?: string,
   enableMarkdown?: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lines = content.split('\n')
-  const shouldTruncate = lines.length > maxLines
+  const shouldTruncate = maxLines != null && lines.length > maxLines
   const displayContent = shouldTruncate && !isExpanded 
     ? lines.slice(0, maxLines).join('\n') + '...'
     : content
