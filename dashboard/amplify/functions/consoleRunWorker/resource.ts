@@ -1,4 +1,4 @@
-import { Duration, Stack, StackProps } from "aws-cdk-lib";
+import { Duration, NestedStack, NestedStackProps } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as sqs from "aws-cdk-lib/aws-sqs";
@@ -6,12 +6,12 @@ import { Construct } from "constructs";
 import * as path from "path";
 import { existsSync } from "fs";
 
-interface ConsoleRunWorkerStackProps extends StackProps {
+interface ConsoleRunWorkerStackProps extends NestedStackProps {
   plexusApiUrl?: string;
   plexusApiKey?: string;
 }
 
-export class ConsoleRunWorkerStack extends Stack {
+export class ConsoleRunWorkerStack extends NestedStack {
   public readonly queue: sqs.Queue;
   public readonly deadLetterQueue: sqs.Queue;
   public readonly workerFunction: lambda.DockerImageFunction;
