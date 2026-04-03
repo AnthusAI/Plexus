@@ -1411,6 +1411,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--use-score-associated-dataset', is_flag=True, default=False, help='Use the latest dataset associated with the score.')
 @click.option('--all-score-associated-datasets', is_flag=True, default=False, help='Run one evaluation per dataset associated with the score.')
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
+@click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 def accuracy(
     scorecard: str,
     yaml: bool,
@@ -1434,7 +1435,8 @@ def accuracy(
     dataset_id: Optional[str],
     use_score_associated_dataset: bool,
     all_score_associated_datasets: bool,
-    allow_no_labels: bool
+    allow_no_labels: bool,
+    json_only: bool,
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -1444,16 +1446,25 @@ def accuracy(
     # Validate mutually exclusive options
     if fresh and reload:
         logging.error("Cannot use both --fresh and --reload options. Choose one.")
+        if json_only:
+            click.echo(json.dumps({"error": "Cannot use both --fresh and --reload options. Choose one."}))
+            raise SystemExit(1)
         console.print("[bold red]Error: Cannot use both --fresh and --reload options. Choose one.[/bold red]")
         return
     
     if version and latest:
         logging.error("Cannot use both --version and --latest options. Choose one.")
+        if json_only:
+            click.echo(json.dumps({"error": "Cannot use both --version and --latest options. Choose one."}))
+            raise SystemExit(1)
         console.print("[bold red]Error: Cannot use both --version and --latest options. Choose one.[/bold red]")
         return
 
     if all_score_associated_datasets and not use_score_associated_dataset:
         logging.error("--all-score-associated-datasets requires --use-score-associated-dataset.")
+        if json_only:
+            click.echo(json.dumps({"error": "--all-score-associated-datasets requires --use-score-associated-dataset."}))
+            raise SystemExit(1)
         console.print("[bold red]Error: --all-score-associated-datasets requires --use-score-associated-dataset.[/bold red]")
         return
     
@@ -1492,6 +1503,14 @@ def accuracy(
         console.print("\n[bold green]Dry run completed successfully.[/bold green]")
         console.print("[dim]No actual evaluation or database operations were performed.[/dim]")
         console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
+        if json_only:
+            click.echo(json.dumps({
+                "dry_run": True,
+                "scorecard": scorecard,
+                "score": score or None,
+                "version_source": version or "champion",
+                "number_of_samples": number_of_samples,
+            }))
         return
 
     if all_score_associated_datasets and not dataset_id:
@@ -1619,6 +1638,12 @@ def accuracy(
             console.print(
                 f"{row['datasetId']:<38} {row['status']:<20} {row['ac1']:<8} {row['accuracy']}"
             )
+        if json_only:
+            click.echo(json.dumps({
+                "score_id": primary_score_id,
+                "runs": run_summaries,
+                "all_score_associated_datasets": True,
+            }))
         return
     
     # Proceeding with normal evaluation
@@ -2497,6 +2522,17 @@ def accuracy(
             logging.error(f"Error during cleanup: {e}")
 
     # Return the evaluation record ID so MCP tool can retrieve it
+    if json_only:
+        payload = {
+            "evaluation_id": getattr(evaluation_record, "id", None) if evaluation_record else None,
+            "status": getattr(evaluation_record, "status", None) if evaluation_record else None,
+            "scorecard": scorecard,
+            "score": score or None,
+            "dataset_id": dataset_id,
+            "use_score_associated_dataset": use_score_associated_dataset,
+            "all_score_associated_datasets": all_score_associated_datasets,
+        }
+        click.echo(json.dumps(payload))
     return evaluation_record
 
 def get_data_driven_samples(
