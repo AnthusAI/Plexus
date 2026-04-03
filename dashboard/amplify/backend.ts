@@ -155,15 +155,11 @@ if (!resolvedDataApiUrl || !resolvedDataApiKey) {
 }
 
 const consoleRunWorkerStack = new ConsoleRunWorkerStack(
-    backend.createStack('ConsoleRunWorkerStack'),
+    backend.stack,
     'ConsoleRunWorker',
     {
         plexusApiUrl: resolvedDataApiUrl,
         plexusApiKey: resolvedDataApiKey,
-        env: {
-            account: process.env.CDK_DEFAULT_ACCOUNT,
-            region: process.env.CDK_DEFAULT_REGION,
-        },
     }
 );
 
