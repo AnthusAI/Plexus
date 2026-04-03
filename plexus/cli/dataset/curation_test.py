@@ -3,7 +3,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from plexus.cli.dataset.curation import collect_qualifying_feedback_items
+from plexus.cli.dataset.curation import (
+    collect_qualifying_feedback_items,
+    resolve_score_valid_classes_from_champion_yaml,
+)
 
 
 def _make_feedback_item_dict(
@@ -97,3 +100,65 @@ def test_collect_qualifying_feedback_items_rejects_non_positive_max():
             max_items=0,
             days=None,
         )
+
+
+def test_resolve_score_valid_classes_from_champion_yaml_extracts_deterministically():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+classes:
+  - name: Yes
+  - name: No
+graph:
+  - name: classifier_one
+    valid_classes: ["No", "Maybe"]
+  - name: classifier_two
+    valid_classes: ["Escalate", "Yes"]
+""",
+                }
+            },
+        ]
+    )
+
+    classes = resolve_score_valid_classes_from_champion_yaml(
+        client=client,
+        score_id="score-1",
+    )
+
+    assert classes == ["Yes", "No", "Maybe", "Escalate"]
+
+
+def test_resolve_score_valid_classes_from_champion_yaml_requires_champion():
+    client = MagicMock()
+    client.execute = MagicMock(
+        return_value={"getScore": {"id": "score-1", "championVersionId": None}}
+    )
+
+    with pytest.raises(ValueError, match="No champion version configured"):
+        resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
+
+
+def test_resolve_score_valid_classes_from_champion_yaml_fails_when_missing_classes():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+graph:
+  - name: classifier_one
+""",
+                }
+            },
+        ]
+    )
+
+    with pytest.raises(ValueError, match="No valid classes found"):
+        resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")

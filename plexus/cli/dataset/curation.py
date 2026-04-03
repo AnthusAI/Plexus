@@ -3,6 +3,7 @@ import os
 import socket
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+import yaml
 
 from plexus.CustomLogging import logging
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -34,6 +35,94 @@ def _fetch_scorecard_account_id(client: PlexusDashboardClient, scorecard_id: str
     if not account_id:
         raise ValueError(f"Scorecard accountId is missing for scorecard {scorecard_id}.")
     return account_id
+
+
+def resolve_score_valid_classes_from_champion_yaml(
+    *,
+    client: PlexusDashboardClient,
+    score_id: str,
+) -> List[str]:
+    score_result = client.execute(
+        """
+        query GetScoreChampionVersion($id: ID!) {
+            getScore(id: $id) {
+                id
+                championVersionId
+            }
+        }
+        """,
+        {"id": score_id},
+    )
+    score_data = score_result.get("getScore") or {}
+    champion_version_id = score_data.get("championVersionId")
+    if not champion_version_id:
+        raise ValueError(f"No champion version configured for score {score_id}.")
+
+    version_result = client.execute(
+        """
+        query GetScoreVersionConfiguration($id: ID!) {
+            getScoreVersion(id: $id) {
+                id
+                configuration
+            }
+        }
+        """,
+        {"id": champion_version_id},
+    )
+    version_data = version_result.get("getScoreVersion") or {}
+    configuration_text = version_data.get("configuration")
+    if not configuration_text:
+        raise ValueError(
+            f"Champion score version {champion_version_id} has no configuration for score {score_id}."
+        )
+
+    try:
+        parsed = yaml.safe_load(configuration_text)
+    except Exception as exc:
+        raise ValueError(
+            f"Champion score configuration is invalid YAML for score {score_id}: {exc}"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Champion score configuration must be a mapping for score {score_id}.")
+
+    valid_classes: List[str] = []
+    seen = set()
+
+    def add_class(value: Any):
+        if isinstance(value, bool):
+            candidate = "Yes" if value else "No"
+        elif isinstance(value, str):
+            candidate = value.strip()
+        else:
+            return
+        if not candidate or candidate in seen:
+            return
+        seen.add(candidate)
+        valid_classes.append(candidate)
+
+    classes_section = parsed.get("classes")
+    if isinstance(classes_section, list):
+        for class_def in classes_section:
+            if isinstance(class_def, dict):
+                add_class(class_def.get("name"))
+
+    graph_nodes = parsed.get("graph")
+    if isinstance(graph_nodes, list):
+        for node in graph_nodes:
+            if not isinstance(node, dict):
+                continue
+            node_classes = node.get("valid_classes")
+            if isinstance(node_classes, list):
+                for node_class in node_classes:
+                    add_class(node_class)
+
+    if not valid_classes:
+        raise ValueError(
+            f"No valid classes found in champion score YAML for score {score_id}."
+        )
+
+    return valid_classes
 
 
 def _is_qualifying_feedback_item(
