@@ -58,7 +58,10 @@ class FeedbackContradictions(BaseReportBlock):
         start_date_str = self.config.get("start_date")
         end_date_str = self.config.get("end_date")
         max_concurrent = int(self.config.get("max_concurrent", 20))
+        max_feedback_items = int(self.config.get("max_feedback_items", 0))
         num_topics = int(self.config.get("num_topics", 8))
+        if max_feedback_items < 0:
+            raise ValueError("'max_feedback_items' must be >= 0.")
 
         if start_date_str:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -127,6 +130,7 @@ class FeedbackContradictions(BaseReportBlock):
             score_obj.id,
             start_date,
             end_date,
+            max_feedback_items if max_feedback_items > 0 else None,
         )
 
         valid_items = [item for item in all_items if not getattr(item, "isInvalid", False)]
@@ -134,6 +138,11 @@ class FeedbackContradictions(BaseReportBlock):
         self._log(
             f"Fetched {len(all_items)} feedback items; {len(valid_items)} eligible ({invalid_count} excluded as already-invalid)."
         )
+        if max_feedback_items > 0 and len(valid_items) > max_feedback_items:
+            valid_items = valid_items[:max_feedback_items]
+            self._log(
+                f"Capped eligible feedback items to newest {len(valid_items)} via max_feedback_items={max_feedback_items}."
+            )
 
         if not valid_items:
             base_output: Dict[str, Any] = {
@@ -209,22 +218,30 @@ class FeedbackContradictions(BaseReportBlock):
                 "score": score_param,
                 "mode": mode,
                 "days": days,
+                "max_feedback_items": max_feedback_items if max_feedback_items > 0 else None,
                 "max_concurrent": max_concurrent,
                 "num_topics": num_topics,
             },
         }
 
         if mode == "aligned":
-            eligible_ids = sorted(
+            eligible_items = [
                 {
-                    item["feedback_item_id"]
-                    for item in aligned_items
-                    if item.get("associated_dataset_eligible") is True
+                    "feedback_item_id": item["feedback_item_id"],
+                    "edited_at": item.get("edited_at"),
+                    "final_value": item.get("final_value"),
                 }
-            )
+                for item in aligned_items
+                if item.get("associated_dataset_eligible") is True and item.get("feedback_item_id")
+            ]
+            # Deterministic order: newest first by edited_at, tie-break by feedback_item_id.
+            eligible_items.sort(key=lambda row: str(row["feedback_item_id"] or ""))
+            eligible_items.sort(key=lambda row: str(row.get("edited_at") or ""), reverse=True)
+            eligible_ids = [item["feedback_item_id"] for item in eligible_items]
             output.update(
                 {
                     "eligible_associated_feedback_item_ids": eligible_ids,
+                    "eligible_associated_feedback_items": eligible_items,
                     "eligible_count": len(eligible_ids),
                     "eligibility_rule": "unanimous non-contradiction",
                     "source_report_block_id": self.report_block_id,
@@ -259,7 +276,8 @@ class FeedbackContradictions(BaseReportBlock):
         )
         if is_uuid_like:
             score_obj = await asyncio.to_thread(Score.get_by_id, id=score_param, client=self.api_client)
-            if score_obj and score_obj.scorecard_id == scorecard_id:
+            scorecard_link = getattr(score_obj, "scorecardId", None) or getattr(score_obj, "scorecard_id", None)
+            if score_obj and scorecard_link == scorecard_id:
                 return score_obj
 
         scores = await feedback_utils.fetch_scores_for_scorecard(self.api_client, scorecard_id)

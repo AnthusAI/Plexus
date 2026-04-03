@@ -25,7 +25,10 @@ import requests
 from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
-from plexus.cli.dataset.curation import build_associated_dataset_from_feedback_window
+from plexus.cli.dataset.curation import (
+    build_associated_dataset_from_feedback_window,
+    build_associated_dataset_from_vetted_report,
+)
 from plexus.cli.dataset.datasets import build_associated_dataset_from_feedback_ids
 from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_scorecard_identifier,
@@ -232,6 +235,12 @@ score.add_command(list)
 @click.option('--days', default=None, type=int, help='Optional lookback window in days. Omit to scan all available history.')
 @click.option('--no-balance', is_flag=True, default=False, help='Disable class balancing during curation.')
 @click.option(
+    '--score-version-id',
+    default=None,
+    type=str,
+    help='Optional score version ID to use as the class source for balancing. Defaults to champion when omitted.',
+)
+@click.option(
     '--feedback-item-ids',
     default=None,
     type=str,
@@ -257,6 +266,7 @@ def dataset_curate(
     max_items: int,
     days: Optional[int],
     no_balance: bool,
+    score_version_id: Optional[str],
     feedback_item_ids: Optional[str],
     source_report_block_id: Optional[str],
     eligibility_rule: str,
@@ -272,6 +282,8 @@ def dataset_curate(
         normalized_feedback_item_ids = [token.strip() for token in feedback_item_ids.split(",") if token.strip()]
     if normalized_feedback_item_ids and days is not None:
         raise click.ClickException("--days cannot be combined with --feedback-item-ids.")
+    if normalized_feedback_item_ids and score_version_id:
+        raise click.ClickException("--score-version-id cannot be combined with --feedback-item-ids.")
     if (source_report_block_id or eligibility_rule != "explicit vetted feedback labels") and not normalized_feedback_item_ids:
         raise click.ClickException(
             "--source-report-block-id and --eligibility-rule require --feedback-item-ids."
@@ -306,8 +318,59 @@ def dataset_curate(
                 max_items=max_items,
                 days=days,
                 balance=not no_balance,
+                class_source_score_version_id=score_version_id,
                 task_id=task_id,
             )
+        click.echo(json.dumps(result))
+    except Exception as exc:
+        raise click.ClickException(str(exc))
+
+
+@score.command(name="dataset-curate-vetted")
+@click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
+@click.option('--score', required=True, help='Score to curate associated dataset for (accepts ID, name, key, or external ID)')
+@click.option('--max-items', default=100, type=int, show_default=True, help='Maximum number of vetted feedback items to include.')
+@click.option('--days', default=180, type=int, show_default=True, help='Lookback window in days for aligned-vetting report evidence.')
+@click.option(
+    '--score-version-id',
+    default=None,
+    type=str,
+    help='Optional score version ID to use as the class source for balancing. Defaults to champion when omitted.',
+)
+@click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
+def dataset_curate_vetted(
+    scorecard: str,
+    score: str,
+    max_items: int,
+    days: int,
+    score_version_id: Optional[str],
+    task_id: Optional[str],
+):
+    """Run aligned vetting report, then build a balanced associated dataset from vetted feedback."""
+    if max_items <= 0:
+        raise click.ClickException("--max-items must be greater than 0.")
+    if days <= 0:
+        raise click.ClickException("--days must be greater than 0.")
+
+    client = create_client()
+    try:
+        scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+        if not scorecard_id:
+            raise click.ClickException(f"Scorecard not found: {scorecard}")
+
+        score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+        if not score_id:
+            raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
+
+        result = build_associated_dataset_from_vetted_report(
+            client=client,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            max_items=max_items,
+            days=days,
+            class_source_score_version_id=score_version_id,
+            task_id=task_id,
+        )
         click.echo(json.dumps(result))
     except Exception as exc:
         raise click.ClickException(str(exc))
@@ -1390,6 +1453,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
         return
 
+    from plexus.cli.procedure.state_machine_stages import get_alignment_optimizer_stage_configs
     console.print("Creating optimization procedure...")
     result = service.create_procedure(
         account_identifier=account,
@@ -1397,7 +1461,8 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         score_identifier=None,
         yaml_config=yaml_config,
         featured=False,
-        create_root_node=False
+        create_root_node=False,
+        stage_configs=get_alignment_optimizer_stage_configs(),
     )
 
     if not result.success:
@@ -1451,10 +1516,12 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print("[green]✓ Optimization complete[/green]")
         console.print()
 
-        # Extract key info from result
-        iterations = exec_result.get('result', {}).get('iterations', [])
-        improvement = exec_result.get('result', {}).get('improvement', 0)
-        status = exec_result.get('result', {}).get('status', 'unknown')
+        # Extract key info from result — procedure returns fields at the top level
+        iterations = exec_result.get('iterations') or []
+        if not hasattr(iterations, '__iter__') or hasattr(iterations, 'items'):
+            iterations = []
+        improvement = exec_result.get('improvement') or 0
+        status = exec_result.get('status', 'unknown')
 
         table = Table(title="Optimization Results")
         table.add_column("Metric", style="cyan")
@@ -1462,20 +1529,30 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
         table.add_row("Status", status)
         table.add_row("Total Iterations", str(len(iterations)))
-        table.add_row("AC1 Improvement", f"{improvement:+.4f}")
+        if isinstance(improvement, (int, float)):
+            table.add_row("AC1 Improvement", f"{improvement:+.4f}")
 
         if iterations:
-            baseline = iterations[0]['metrics']
-            final = iterations[-1]['metrics']
-            table.add_row("Baseline AC1", f"{baseline['alignment']:.4f}")
-            table.add_row("Final AC1", f"{final['alignment']:.4f}")
+            baseline = iterations[0].get('metrics') or {}
+            final = iterations[-1].get('metrics') or {}
+            if baseline.get('alignment') is not None:
+                table.add_row("Baseline AC1", f"{baseline['alignment']:.4f}")
+            if final.get('alignment') is not None:
+                table.add_row("Final AC1", f"{final['alignment']:.4f}")
 
         console.print(table)
+
+        if not iterations and status == 'converged':
+            console.print()
+            console.print(f"[yellow]{exec_result.get('message', 'No changes needed.')}[/yellow]")
 
         if iterations:
             console.print()
             console.print("[bold]Iteration Summary:[/bold]")
             for it in iterations:
-                delta = it['deltas']['alignment']
+                if not isinstance(it, dict):
+                    continue
+                delta = (it.get('deltas') or {}).get('alignment', 0) or 0
                 delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
-                console.print(f"  {it['iteration']}. {it['hypothesis'][:60]}... (AC1 {delta_str})")
+                hypothesis = str(it.get('hypothesis') or '')[:60]
+                console.print(f"  {it.get('iteration', '?')}. {hypothesis}... (AC1 {delta_str})")

@@ -153,13 +153,12 @@ plexus score dataset-curate \\
   --max-items 100 \\
   --no-balance
 
-# Or curate from an explicit vetted report snapshot
-plexus score dataset-curate \\
+# Or run vetted+balanced curation with report evidence
+plexus score dataset-curate-vetted \\
   --scorecard "CMG EDU" \\
   --score "Identify Objections" \\
-  --feedback-item-ids "<id1>,<id2>,<id3>" \\
-  --source-report-block-id "<report_block_id>" \\
-  --eligibility-rule "unanimous non-contradiction"
+  --days 180 \\
+  --max-items 100
 
 # Evaluate against latest associated dataset for this score
 plexus evaluate accuracy \\
@@ -181,8 +180,8 @@ plexus evaluate accuracy \\
               a single score-association selection path.
             </p>
             <p className="text-muted-foreground">
-              In the dashboard, the aligned mode of the Feedback Contradictions block can launch
-              this vetted-feedback associated dataset build directly from the report snapshot.
+              The vetted workflow automatically creates fresh report evidence in the Reports tab
+              before creating the associated dataset.
             </p>
             <p className="text-muted-foreground">
               The score detail page also includes an <strong>Associated Datasets</strong> panel that
