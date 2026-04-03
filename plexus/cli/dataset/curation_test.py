@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from plexus.cli.dataset.curation import (
+    _compute_label_distribution,
+    _select_balanced_feedback_items,
     collect_qualifying_feedback_items,
     resolve_score_valid_classes_from_champion_yaml,
 )
@@ -162,3 +164,32 @@ graph:
 
     with pytest.raises(ValueError, match="No valid classes found"):
         resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
+
+
+def test_select_balanced_feedback_items_round_robins_and_preserves_size():
+    def item(item_id: str, label: str):
+        return SimpleNamespace(
+            id=item_id,
+            finalAnswerValue=label,
+            editedAt="2026-03-03T00:00:00Z",
+            scorecardId="scorecard-1",
+            scoreId="score-1",
+            item=SimpleNamespace(id=f"i-{item_id}", text="x"),
+        )
+
+    all_items = [
+        item("1", "Yes"),
+        item("2", "Yes"),
+        item("3", "Yes"),
+        item("4", "No"),
+        item("5", "Yes"),
+    ]
+
+    selected = _select_balanced_feedback_items(
+        all_qualifying_items=all_items,
+        class_list=["Yes", "No"],
+        max_items=4,
+    )
+
+    assert len(selected) == 4
+    assert _compute_label_distribution(selected) == {"No": 1, "Yes": 3}
