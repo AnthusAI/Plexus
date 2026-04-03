@@ -167,6 +167,34 @@ graph:
         resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
 
 
+def test_resolve_score_valid_classes_from_conditions_output_values():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+graph:
+  - name: decision_node
+    conditions:
+      - if: "something"
+        output:
+          value: "Yes"
+      - if: "other"
+        output:
+          value: "No"
+""",
+                }
+            },
+        ]
+    )
+
+    classes = resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
+    assert classes == ["Yes", "No"]
+
+
 def test_select_balanced_feedback_items_round_robins_and_preserves_size():
     def item(item_id: str, label: str):
         return SimpleNamespace(

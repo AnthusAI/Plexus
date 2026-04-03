@@ -116,6 +116,15 @@ def resolve_score_valid_classes_from_champion_yaml(
             if isinstance(node_classes, list):
                 for node_class in node_classes:
                     add_class(node_class)
+            node_conditions = node.get("conditions")
+            if isinstance(node_conditions, list):
+                for condition in node_conditions:
+                    if not isinstance(condition, dict):
+                        continue
+                    condition_output = condition.get("output")
+                    if not isinstance(condition_output, dict):
+                        continue
+                    add_class(condition_output.get("value"))
 
     if not valid_classes:
         raise ValueError(
