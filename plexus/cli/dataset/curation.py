@@ -412,6 +412,9 @@ def build_associated_dataset_from_feedback_window(
         if "feedback_item_id" in dataframe.columns:
             dataframe = dataframe.sort_values(by="feedback_item_id", kind="stable").reset_index(drop=True)
 
+        class_distribution_before = _compute_label_distribution(seed_items)
+        class_distribution_after = _compute_label_distribution(feedback_items)
+
         _data_source_id, data_source_version_id = _create_associated_dataset_datasource_version(
             client,
             account_id=account_id,
@@ -421,6 +424,15 @@ def build_associated_dataset_from_feedback_window(
             source_report_block_id="score.dataset-curate",
             eligibility_rule="latest qualifying feedback labels",
             feedback_item_ids=selected_feedback_ids,
+            dataset_stats={
+                "row_count": int(len(dataframe)),
+                "label_distribution": class_distribution_after,
+                "class_list_used": class_list_used,
+                "curation_policy": "balanced_latest_feedback_labels" if balance else "latest_feedback_labels",
+                "balance_applied": balance,
+                "class_distribution_before": class_distribution_before,
+                "class_distribution_after": class_distribution_after,
+            },
         )
 
         dataset_input: Dict[str, Any] = {
@@ -482,8 +494,8 @@ def build_associated_dataset_from_feedback_window(
             "s3_key": s3_key,
             "balance_applied": balance,
             "class_list_used": class_list_used,
-            "class_distribution_before": _compute_label_distribution(seed_items),
-            "class_distribution_after": _compute_label_distribution(feedback_items),
+            "class_distribution_before": class_distribution_before,
+            "class_distribution_after": class_distribution_after,
         }
 
         if task:

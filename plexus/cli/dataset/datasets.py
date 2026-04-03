@@ -545,6 +545,7 @@ def _create_associated_dataset_datasource_version(
     source_report_block_id: Optional[str],
     eligibility_rule: str,
     feedback_item_ids: Sequence[str],
+    dataset_stats: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, str]:
     """Create a dedicated DataSource + DataSourceVersion for this associated dataset build."""
     timestamp = datetime.now(timezone.utc)
@@ -589,6 +590,7 @@ def _create_associated_dataset_datasource_version(
             "source_report_block_id": source_report_block_id,
             "eligibility_rule": eligibility_rule,
             "feedback_item_ids": list(feedback_item_ids),
+            "dataset_stats": dataset_stats or {},
         },
         sort_keys=False,
     )
@@ -753,6 +755,13 @@ def build_associated_dataset_from_feedback_ids(
         if "feedback_item_id" in dataframe.columns:
             dataframe = dataframe.sort_values(by="feedback_item_id", kind="stable").reset_index(drop=True)
 
+        label_distribution: Dict[str, int] = {}
+        for item in feedback_items:
+            label = str((item.finalAnswerValue or "")).strip()
+            if not label:
+                continue
+            label_distribution[label] = label_distribution.get(label, 0) + 1
+
         _data_source_id, data_source_version_id = _create_associated_dataset_datasource_version(
             client,
             account_id=account_id,
@@ -762,6 +771,12 @@ def build_associated_dataset_from_feedback_ids(
             source_report_block_id=source_report_block_id,
             eligibility_rule=eligibility_rule,
             feedback_item_ids=normalized_ids,
+            dataset_stats={
+                "row_count": int(len(dataframe)),
+                "label_distribution": dict(sorted(label_distribution.items(), key=lambda pair: pair[0])),
+                "class_list_used": sorted(label_distribution.keys()),
+                "curation_policy": "explicit_vetted_feedback_ids",
+            },
         )
 
         dataset_input: Dict[str, Any] = {

@@ -391,6 +391,11 @@ def test_build_associated_dataset_from_feedback_ids_success(
     dataset_input = create_dataset_call.args[1]['input']
     assert dataset_input['scoreId'] == 'score-1'
     assert dataset_input['dataSourceVersionId'] == 'datasource-version-1'
+    assert mock_create_datasource_version.call_args.kwargs["dataset_stats"]["row_count"] == 2
+    assert mock_create_datasource_version.call_args.kwargs["dataset_stats"]["label_distribution"] == {
+        "No": 1,
+        "Yes": 1,
+    }
 
 
 @patch('plexus.cli.dataset.datasets.resolve_score_identifier')
