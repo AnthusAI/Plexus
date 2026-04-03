@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Implementing datasets-first IA with canonical routes /lab/datasets and /lab/data/sources, tab shell on both pages, index-backed single-active dataset filter mode, and scaffold-source exclusion in sources list using deterministic description marker.",
       "created_at": "2026-04-03T12:37:39.749836Z"
+    },
+    {
+      "id": "eb1ae116-4852-4fd3-bb3f-611ec48f8098",
+      "author": "ryan",
+      "text": "Implemented: Data nav defaults to /lab/datasets; shared tabs on /lab/datasets and /lab/data/sources; dataset browse uses single-active index-backed filters only; source list excludes scaffold builder sources by deterministic description marker; docs updated for datasets-first canonical routes. Validation: dashboard build:fast succeeded.",
+      "created_at": "2026-04-03T12:42:34.711077Z"
     }
   ],
   "created_at": "2026-04-03T12:37:24.777503Z",
-  "updated_at": "2026-04-03T12:37:39.749836Z",
+  "updated_at": "2026-04-03T12:42:34.711077Z",
   "closed_at": null,
   "custom": {}
 }
