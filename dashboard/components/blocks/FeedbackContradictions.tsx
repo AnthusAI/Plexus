@@ -7,9 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison';
 import { IdentifierDisplay } from '@/components/ui/identifier-display';
-import { createTask } from '@/utils/data-operations';
-import { useAccount } from '@/app/contexts/AccountContext';
-import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -333,9 +330,6 @@ const CONTEXT_HEADER = `# Feedback Guideline-Vetting Report Output
 const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackContradictionsData | null>(null);
   const [rawOutputString, setRawOutputString] = React.useState<string | null>(null);
-  const [creatingAssociatedDataset, setCreatingAssociatedDataset] = React.useState(false);
-  const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null);
-  const { selectedAccount } = useAccount();
 
   let parsedOutput: any = null;
   if (props.output) {
@@ -387,123 +381,6 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
 
   const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
-  const pollReferenceDatasetTask = React.useCallback(async (taskId: string) => {
-    const client = generateClient<Schema>();
-    for (let attempt = 0; attempt < 240; attempt += 1) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await (client.models.Task.get as any)({ id: taskId });
-      const task = response?.data;
-      if (task) {
-        const status = String(task.status || '').toUpperCase();
-        if (status === 'COMPLETED') {
-          let datasetId = '';
-          try {
-            const parsed = task.output ? JSON.parse(task.output) : {};
-            datasetId = parsed.dataset_id || '';
-          } catch {
-            datasetId = '';
-          }
-          toast.success(
-            datasetId
-              ? `Associated dataset created: ${datasetId}`
-              : 'Associated dataset build completed.'
-          );
-          return;
-        }
-        if (status === 'FAILED' || status === 'ERROR') {
-          const message = task.errorMessage || task.error || 'Associated dataset build failed.';
-          toast.error(String(message));
-          return;
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    }
-    toast.error('Timed out waiting for associated dataset task to complete.');
-  }, []);
-
-  const handleCreateAssociatedDataset = React.useCallback(async () => {
-    if (!output) return;
-    if (!selectedAccount?.id) {
-      toast.error('No account selected.');
-      return;
-    }
-    const mode = output.mode || 'contradictions';
-    if (mode !== 'aligned') {
-      toast.error('Associated dataset creation is only available in aligned mode.');
-      return;
-    }
-    const eligibleIds = output.eligible_associated_feedback_item_ids || [];
-    const scorecard = output.block_configuration?.scorecard;
-    const score = output.block_configuration?.score;
-    if (!scorecard || !score) {
-      toast.error('Missing scorecard/score configuration in report output.');
-      return;
-    }
-    if (eligibleIds.length === 0) {
-      toast.error('No eligible aligned feedback IDs available for dataset creation.');
-      return;
-    }
-
-    setCreatingAssociatedDataset(true);
-    try {
-      const taskCommand = [
-        'score',
-        'dataset-curate',
-        '--scorecard',
-        String(scorecard),
-        '--score',
-        String(score),
-        '--feedback-item-ids',
-        `<${eligibleIds.length} vetted IDs>`,
-      ].join(' ');
-
-      const task = await createTask({
-        accountId: selectedAccount.id,
-        type: 'dataset associated build',
-        status: 'PENDING',
-        target: 'dataset/associated',
-        command: taskCommand,
-        description: `Curate associated dataset from vetted aligned feedback snapshot (${eligibleIds.length} IDs)`,
-        dispatchStatus: 'PENDING',
-      });
-
-      if (!task?.id) {
-        toast.error('Failed to create background task.');
-        return;
-      }
-
-      const payload = {
-        taskId: task.id,
-        scorecard: String(scorecard),
-        score: String(score),
-        feedbackItemIds: eligibleIds,
-        sourceReportBlockId: output.source_report_block_id || undefined,
-        eligibilityRule: output.eligibility_rule || undefined,
-      };
-
-      const response = await fetch('/api/report-blocks/associated-dataset-from-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!response.ok || !data?.accepted) {
-        toast.error(data?.error || 'Failed to launch associated dataset build.');
-        return;
-      }
-
-      setActiveTaskId(task.id);
-      toast.success(`Associated dataset build started (task: ${task.id}).`);
-      await pollReferenceDatasetTask(task.id);
-    } catch (error) {
-      console.error('Failed to create associated dataset from aligned report:', error);
-      toast.error('Failed to launch associated dataset build.');
-    } finally {
-      setCreatingAssociatedDataset(false);
-      setActiveTaskId(null);
-    }
-  }, [output, selectedAccount?.id, pollReferenceDatasetTask, props.id]);
-
   if (!output || (output as any).status === 'pending') {
     return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Generating guideline-vetting analysis…</p></ReportBlock>;
   }
@@ -554,22 +431,6 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
             {isAlignedMode ? `${alignedRate}% aligned` : (contradictions_found > 0 ? `${contradictionRate}% contradiction rate` : 'No contradictions')}
           </Badge>
         </div>
-
-        {isAlignedMode && eligible_count > 0 && (
-          <div className="pb-2 flex items-center gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCreateAssociatedDataset}
-              disabled={creatingAssociatedDataset}
-            >
-              {creatingAssociatedDataset ? 'Creating Associated Dataset...' : `Create Associated Dataset (${eligible_count})`}
-            </Button>
-            {activeTaskId && (
-              <span className="text-xs text-muted-foreground">Task: {activeTaskId}</span>
-            )}
-          </div>
-        )}
 
         {topics.length === 0 && selected_items_count === 0 && (
           <p className="text-sm text-muted-foreground">
