@@ -406,6 +406,49 @@ class TestFetchFeedbackItemsForScore:
         assert len(result) == 5
         assert mock_api_client.execute.call_count == 2
 
+    @pytest.mark.asyncio
+    async def test_fetch_feedback_items_respects_max_items(self, mock_api_client, sample_feedback_items):
+        """Test that pagination stops once max_items is reached."""
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+
+        mock_response_page1 = {
+            'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt': {
+                'items': [
+                    {'id': 'feedback-item-1', 'accountId': 'test-account-id', 'scorecardId': 'scorecard-1', 'scoreId': 'score-1', 'itemId': 'item-1', 'editedAt': datetime.now(timezone.utc).isoformat()},
+                    {'id': 'feedback-item-2', 'accountId': 'test-account-id', 'scorecardId': 'scorecard-1', 'scoreId': 'score-1', 'itemId': 'item-2', 'editedAt': datetime.now(timezone.utc).isoformat()},
+                    {'id': 'feedback-item-3', 'accountId': 'test-account-id', 'scorecardId': 'scorecard-1', 'scoreId': 'score-1', 'itemId': 'item-3', 'editedAt': datetime.now(timezone.utc).isoformat()},
+                ],
+                'nextToken': 'page2-token',
+            }
+        }
+        mock_response_page2 = {
+            'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt': {
+                'items': [
+                    {'id': 'feedback-item-4', 'accountId': 'test-account-id', 'scorecardId': 'scorecard-1', 'scoreId': 'score-1', 'itemId': 'item-4', 'editedAt': datetime.now(timezone.utc).isoformat()},
+                ],
+                'nextToken': None,
+            }
+        }
+        mock_api_client.execute = MagicMock(side_effect=[mock_response_page1, mock_response_page2])
+
+        with patch(
+            'plexus.dashboard.api.models.feedback_item.FeedbackItem.from_dict',
+            side_effect=sample_feedback_items,
+        ):
+            result = await feedback_utils.fetch_feedback_items_for_score(
+                mock_api_client,
+                "test-account-id",
+                "scorecard-1",
+                "score-1",
+                start_date,
+                end_date,
+                max_items=2,
+            )
+
+        assert len(result) == 2
+        assert mock_api_client.execute.call_count == 1
+
 
 class TestIdentifyScorecardsWithFeedback:
     """Tests for identify_scorecards_with_feedback function."""
@@ -619,4 +662,3 @@ class TestFetchScoreResultsForScoreCache:
         assert len(feedback_utils._score_results_window_cache) == 1
         remaining_key = next(iter(feedback_utils._score_results_window_cache.keys()))
         assert remaining_key[1] == "scorecard-2"
-

@@ -44,7 +44,7 @@ export default function AssociatedDatasetsPage() {
         <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
           <li><code>dataset load</code> path: uses deterministic label-source priority and reports skipped IDs.</li>
           <li><code>score dataset-curate</code> path: scans qualifying feedback newest-first, uses <code>FeedbackItem.finalAnswerValue</code> labels, and balances class coverage by default.</li>
-          <li><code>score dataset-curate --feedback-item-ids</code> path: builds from an explicit vetted snapshot of feedback IDs.</li>
+          <li><code>score dataset-curate-vetted</code> path: runs aligned guideline-vetting report evidence and curates from vetted-good feedback with balancing.</li>
         </ul>
       </section>
 
@@ -79,18 +79,18 @@ export default function AssociatedDatasetsPage() {
   --no-balance`}</code>
         </pre>
         <p className="text-muted-foreground">
-          Or curate from an explicit vetted snapshot:
+          Or run the canonical vetted workflow (report evidence first, then dataset build):
         </p>
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
-          <code>{`plexus score dataset-curate \\
+          <code>{`plexus score dataset-curate-vetted \\
   --scorecard "CMG EDU" \\
   --score "Identify Objections" \\
-  --feedback-item-ids "<id1>,<id2>,<id3>" \\
-  --source-report-block-id "<report_block_id>" \\
-  --eligibility-rule "unanimous non-contradiction"`}</code>
+  --days 180 \\
+  --max-items 100`}</code>
         </pre>
         <p className="text-muted-foreground">
-          Use the provenance options when IDs come from a vetted report snapshot to keep build context auditable.
+          This command auto-runs an aligned guideline-vetting report, uses unanimously non-contradicting
+          items in newest-first order, applies balancing, and returns both report and dataset IDs.
         </p>
       </section>
 

@@ -1,18 +1,64 @@
 {
   "id": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
-  "title": "Deterministic Reference Datasets, Curation, and Evaluation Selection",
-  "description": "## Summary\nMake score optimization repeatable with deterministic reference datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Deterministic reference datasets are frozen `DataSet` artifacts.\n- Reference datasets are single-score datasets.\n- Active reference assignment lives on `Score`, not on `DataSet`.\n- Scorecard-level examples are the maintained curated source pool unless later work changes that contract.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the frozen dataset, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nCreate the child tasks in this epic exactly as planned so this work stays separate from RCA/reliability fixes.",
+  "title": "Deterministic Associated Datasets, Curation, and Evaluation Selection",
+  "description": "## Summary\nMake score optimization repeatable with deterministic associated datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Associated datasets are DataSet artifacts linked to a score via DataSet.scoreId.\n- Selection is association-only with deterministic newest-first ordering.\n- Curation builds deterministic, single-score datasets from vetted labels.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the associated DataSet artifact, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nKeep this epic separate from RCA reliability and misclassification triage workstreams.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "af9a2f51-508a-4c0e-b6ad-6f5ed6fefbe8",
+      "author": "ryan",
+      "text": "Epic is now active. Current implementation is running in child task plx-cc3cf3 (deterministic single-score reference dataset builds), with completed dependencies: plx-6466e1, plx-818f07, plx-ff6ca4, plx-89660a, plx-25e99b, plx-602664.",
+      "created_at": "2026-04-02T15:16:38.811497Z"
+    },
+    {
+      "id": "b99d5a4b-2354-45a7-b8f6-aa53646080c4",
+      "author": "ryan",
+      "text": "Progress checkpoint:\n- Deterministic reference dataset model/API surfaces, deterministic label-resolution policy, dataset build/assignment CLI, evaluation integration, value function, and acceptance policy are implemented and passing targeted tests.\n- Public docs task (plx-a78f02) has been implemented and validated, pending final commit/merge closure.\n",
+      "created_at": "2026-04-02T15:49:24.161864Z"
+    },
+    {
+      "id": "db1c7a31-ca75-4167-b217-24865729d254",
+      "author": "ryan",
+      "text": "New child task opened: plx-781254\n\nPurpose: simplify reference dataset handling to one DataSet-owned path (no role pointers, no role selector), with strict frozen-only selection and deterministic newest-first resolution.\n",
+      "created_at": "2026-04-02T16:02:47.840712Z"
+    },
+    {
+      "id": "8b570f08-c8e3-484b-a2d9-730d148e56d1",
+      "author": "ryan",
+      "text": "Progress from child task plx-781254:\n- Reference dataset selection simplified to one DataSet-owned path (scoreId + isReferenceFrozen + newest-first ordering).\n- Role-based score pointers and dataset role tagging removed from active code paths and docs.\n- Accuracy CLI now uses --use-score-reference and optional --all-score-references.\n",
+      "created_at": "2026-04-02T16:07:19.343223Z"
+    },
+    {
+      "id": "0cafbb90-97db-4395-a9a9-def74130c98a",
+      "author": "ryan",
+      "text": "plx-781254 update: removed frozen terminology and completed hard-cut rename to reference-dataset terminology across schema, CLI, resolver logic, tests, and docs (no compatibility aliases).\n",
+      "created_at": "2026-04-02T18:15:10.530901Z"
+    },
+    {
+      "id": "5e4e6e03-9e90-4fe9-9827-26ca78674375",
+      "author": "ryan",
+      "text": "Architecture terminology cleanup: active implementation now uses association-only semantics (DataSet.scoreId) and operator language should use 'associated dataset'. This epic title was updated to match shipped behavior and avoid marker/role confusion.",
+      "created_at": "2026-04-02T23:23:04.902024Z"
+    },
+    {
+      "id": "c1ef0e1e-41db-4ddf-96f0-2ee47b57feb8",
+      "author": "ryan",
+      "text": "plx-2efd16 completed and closed. Vetted+balanced associated dataset curation pipeline is now report-evidence-first via score dataset-curate-vetted, with runtime validation on 1039/45425 and sub-task closures recorded.",
+      "created_at": "2026-04-03T02:41:52.321528Z"
+    }
+  ],
   "created_at": "2026-04-02T12:48:39.894398Z",
-  "updated_at": "2026-04-02T13:23:04.432177Z",
+  "updated_at": "2026-04-03T02:41:52.321528Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }

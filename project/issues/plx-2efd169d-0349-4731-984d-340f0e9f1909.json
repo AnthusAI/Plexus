@@ -1,18 +1,196 @@
 {
   "id": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
-  "title": "Add gold-standard curation workflow for feedback-backed labels",
-  "description": "## Summary\nAdd a gold-standard curation workflow that determines which feedback-backed labels are eligible for deterministic reference dataset builds.\n\n## Deliverables\n- Prefer a dedicated review/curation model if schema budget allows after cleanup.\n- If schema budget is constrained, this issue still owns the final storage-design decision rather than weakening the requirement informally.\n- Define the workflow output that marks labels/items as eligible for reference dataset inclusion.\n\n## Dependency note\nDepends on the schema-budget audit to confirm the preferred implementation path.",
+  "title": "Add gold-standard curation workflow for feedback-backed labels for associated datasets",
+  "description": "## Summary\nAdd a gold-standard curation workflow that determines which feedback-backed labels are eligible for deterministic associated-dataset builds.\n\n## Deliverables\n- Prefer a dedicated review/curation model if schema budget allows after cleanup.\n- If schema budget is constrained, this issue still owns the final storage-design decision rather than weakening the requirement informally.\n- Define the workflow output that marks labels/items as eligible for associated-dataset inclusion.\n\n## Dependency note\nDepends on the schema-budget audit to confirm the preferred implementation path.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "dcca4262-a68d-43e6-acce-497017f2ca6a",
+      "author": "ryan",
+      "text": "Terminology cleanup: this task now targets gold-standard curation for score-associated dataset builds. Scope is unchanged; only wording aligned with the association-only architecture decision.",
+      "created_at": "2026-04-02T23:23:04.900822Z"
+    },
+    {
+      "id": "2164826b-8bee-4611-95f2-ce3ccb5d9407",
+      "author": "ryan",
+      "text": "Starting implementation. Immediate scope: define and ship a concrete gold-standard eligibility contract for feedback-backed labels and wire it into associated-dataset curation flow. Plan: (1) codify eligibility schema/output in shared guideline-vetting artifacts, (2) integrate eligibility filtering into score dataset-curate path, (3) add tests for selection determinism + eligibility enforcement, (4) update docs/help text and Kanbus progress notes.",
+      "created_at": "2026-04-02T23:23:35.473158Z"
+    },
+    {
+      "id": "af9a2d0f-d865-480d-8f35-070106d44b2e",
+      "author": "ryan",
+      "text": "Progress update: implemented explicit vetted-ID curation in the canonical score dataset-curate flow so gold-standard builds can be snapshot-bound to aligned-vetting output. Changes shipped: (1) score dataset-curate now accepts --feedback-item-ids (comma-separated) and routes to the explicit feedback-ID builder; (2) dashboard report-block API now passes vetted IDs to CLI via --feedback-item-ids instead of recomputing only by time window; (3) explicit-ID dataset builder now uses schema-compatible CreateDataSet input (removed unsupported provenance/buildContext fields). Validation: targeted tests passed (scores_dataset_curate_test + datasets_test subset, 6 passed).",
+      "created_at": "2026-04-02T23:28:38.108490Z"
+    },
+    {
+      "id": "a56c08fd-9492-4b17-8b22-47e75726223a",
+      "author": "ryan",
+      "text": "Runtime smoke test of explicit vetted-ID path executed with score dataset-curate --feedback-item-ids (scorecard 1039 / score 45425). Command reached row construction and failed at upload due environment prerequisite: AMPLIFY_STORAGE_DATASETS_BUCKET_NAME not configured in current shell. This is an environment blocker, not a command-path regression.",
+      "created_at": "2026-04-02T23:29:25.731260Z"
+    },
+    {
+      "id": "08916e8a-55fc-4d56-9fe2-7d4ef5f131cd",
+      "author": "ryan",
+      "text": "Code committed on feature branch: 8d11b6463 (explicit vetted-ID path in score dataset-curate, dashboard API pass-through of vetted IDs, schema-compatible dataset create input).",
+      "created_at": "2026-04-02T23:43:56.294086Z"
+    },
+    {
+      "id": "594a378b-3161-4dcf-a81f-ab6737d2fff2",
+      "author": "ryan",
+      "text": "Follow-up commit: 8664ba4d3 adds public docs for explicit vetted snapshot curation via score dataset-curate --feedback-item-ids in both concepts/reference-datasets and methods/evaluate-score pages.",
+      "created_at": "2026-04-02T23:44:08.403491Z"
+    },
+    {
+      "id": "796dd393-aab0-457a-9bed-7bda63302da8",
+      "author": "ryan",
+      "text": "Progress update: completed hard-cut payload rename for aligned vetting outputs to associated-dataset terminology. Backend: guideline vetting now emits associated_dataset_eligible per item; feedback contradictions aligned output now emits eligible_associated_feedback_item_ids. Frontend block updated to consume new fields and renamed local action state/handler to associated-dataset terms. Validation: pytest -q plexus/reports/blocks/guideline_vetting_test.py plexus/reports/blocks/feedback_contradictions_test.py => 4 passed.",
+      "created_at": "2026-04-02T23:50:41.376111Z"
+    },
+    {
+      "id": "520ff18f-bba6-4d65-b7e6-f8f6669c0276",
+      "author": "ryan",
+      "text": "Code committed on feature branch: a00b74ab9 (payload contract rename to associated-dataset terms across vetting service, contradictions output, frontend consumer, and tests).",
+      "created_at": "2026-04-02T23:50:50.619238Z"
+    },
+    {
+      "id": "3ae37a9d-7337-4f08-bb63-0e4f6a3962b2",
+      "author": "ryan",
+      "text": "Code committed on feature branch: 6cbbbd450. Hard-cut route naming cleanup: /api/report-blocks/reference-dataset-from-feedback was renamed to /api/report-blocks/associated-dataset-from-feedback and the aligned-report UI caller was updated accordingly.",
+      "created_at": "2026-04-02T23:51:27.274365Z"
+    },
+    {
+      "id": "43d12c3f-514d-4900-8a8f-6d433a16734f",
+      "author": "ryan",
+      "text": "Progress update: hard-cut naming cleanup in code interfaces. Renamed dataset builder helper to build_associated_dataset_from_feedback_ids and updated score dataset-curate + MCP dataset tool to use associated naming (MCP tool now plexus_dataset_associated_from_feedback). Removed remaining reference-named identifiers in this active flow. Validation: pytest targeted subset passed (6) and py_compile passed for MCP/CLI modules.",
+      "created_at": "2026-04-02T23:52:45.221616Z"
+    },
+    {
+      "id": "6b70f7fd-55a7-4e85-8a71-a6b87ac1f40f",
+      "author": "ryan",
+      "text": "Code committed on feature branch: 4891fce23 (renamed builder + MCP tool + CLI references to associated terminology).",
+      "created_at": "2026-04-02T23:52:52.919349Z"
+    },
+    {
+      "id": "0ce97921-bd5f-4061-b33c-ef23290d25be",
+      "author": "ryan",
+      "text": "Code committed on feature branch: b36f61454. Documentation route hard-cut: /documentation/concepts/reference-datasets renamed to /documentation/concepts/associated-datasets, including sidebar and concepts landing links.",
+      "created_at": "2026-04-02T23:53:56.278930Z"
+    },
+    {
+      "id": "56823a6b-ee4c-4d8b-a323-9264b70ebedf",
+      "author": "ryan",
+      "text": "Progress update: added provenance pass-through for explicit vetted-ID builds in canonical score dataset-curate flow. New CLI options: --source-report-block-id and --eligibility-rule (valid only with --feedback-item-ids). Dashboard aligned report action now sends source_report_block_id + eligibility_rule to the associated-dataset API route, which forwards them to CLI. Validation: pytest -q plexus/cli/score/scores_dataset_curate_test.py => 5 passed; py_compile scores.py passed.",
+      "created_at": "2026-04-02T23:55:36.808669Z"
+    },
+    {
+      "id": "1d5e0418-f0c9-4290-b789-88034e31f48f",
+      "author": "ryan",
+      "text": "Code committed on feature branch: d2cacbe56 (provenance pass-through options for explicit vetted-ID curation path and dashboard route wiring).",
+      "created_at": "2026-04-02T23:55:41.339096Z"
+    },
+    {
+      "id": "979d0849-61a7-4edf-954b-583ffb34d610",
+      "author": "ryan",
+      "text": "Minor terminology cleanup in active dashboard flow: task launch metadata now uses associated terms (type=dataset associated build, target=dataset/associated) instead of reference wording.",
+      "created_at": "2026-04-02T23:55:53.071528Z"
+    },
+    {
+      "id": "1abeff71-1a3f-4eaa-8f14-ccfd52c19ff2",
+      "author": "ryan",
+      "text": "Runtime smoke test of new provenance options executed: score dataset-curate --feedback-item-ids ... --source-report-block-id block-456 --eligibility-rule \"unanimous non-contradiction\". Command path parsed options correctly and reached row construction; failure remained the known environment prerequisite (AMPLIFY_STORAGE_DATASETS_BUCKET_NAME missing) at upload stage.",
+      "created_at": "2026-04-02T23:56:41.490770Z"
+    },
+    {
+      "id": "f1db9a0b-a2b0-4181-9b51-aa41441456dc",
+      "author": "ryan",
+      "text": "Progress update: removed fallback behavior from dashboard associated-dataset build route. The route now requires explicit feedbackItemIds and always invokes score dataset-curate with --feedback-item-ids (snapshot-bound), plus optional source_report_block_id/eligibility_rule pass-through. Frontend aligned action updated to stop sending max/days fallback controls and to record task command/description as vetted snapshot curation. Tried targeted eslint on touched files, but local dashboard eslint currently fails in this environment with AJV/eslintrc runtime error (NOT SUPPORTED: option missingRefs).",
+      "created_at": "2026-04-03T00:01:07.998687Z"
+    },
+    {
+      "id": "faf7e540-25b6-4136-bda5-a033c842b72e",
+      "author": "ryan",
+      "text": "Docs update in progress: added explicit provenance options to associated-dataset curation examples (score dataset-curate --feedback-item-ids with --source-report-block-id and --eligibility-rule) in concepts/associated-datasets and methods/evaluate-score pages.",
+      "created_at": "2026-04-03T00:01:42.623386Z"
+    },
+    {
+      "id": "6a301090-c4cc-40be-aa85-f99040c64d06",
+      "author": "ryan",
+      "text": "End-to-end verification run completed on 2026-04-03 UTC. Set AMPLIFY_STORAGE_DATASETS_BUCKET_NAME from dashboard/amplify_outputs.json and executed snapshot-bound build + associated evaluation. Dataset curate command succeeded with explicit vetted ID/provenance: dataset_id=10e1d33b-863e-4d42-8ceb-e1f84a37444f, row_count=1, feedback_item_count=1, eligibility_rule=\"unanimous non-contradiction\", source_report_block_id=block-456. Follow-up accuracy evaluation against latest associated dataset succeeded: evaluation_id=72b20c4d-f8f4-4fd9-a81d-9ddbee521103, status=COMPLETED, processedItems=1, totalItems=1, accuracy=0.0.",
+      "created_at": "2026-04-03T00:09:46.443204Z"
+    },
+    {
+      "id": "acdd2db6-7767-4cf3-96cc-45ffc5e0e08d",
+      "author": "ryan",
+      "text": "Practical-scale run executed after 1-item plumbing check. Built associated dataset from 180-day window with max-items=100: dataset_id=c09c5f03-f957-4b9f-90e3-495af0f7f26f, qualifying_found=100, rows_written=100. Started associated-dataset accuracy evaluations: (a) eval 807552e6-6361-4eef-9612-a52b4064b667 on 100 samples currently RUNNING with 39/100 processed (updatedAt 2026-04-03T00:16:29.806Z, accuracy 41.0256 so far); (b) eval 915b738a-0f4c-4cb8-b638-e6e91a12981b on 20 samples currently SETUP pending worker availability.",
+      "created_at": "2026-04-03T00:16:57.353276Z"
+    },
+    {
+      "id": "ca37a933-5c53-44bc-ba9a-769b033a1b24",
+      "author": "ryan",
+      "text": "Planned sub-task split approved: PR #78 gate first, then champion-class resolver, balanced curation, persisted dataset stats, score-page associated datasets UI, docs, and runtime validation.\n\nImplementation assumptions locked:\n- no fallback paths\n- no schema migration required for PR #78 validation contract itself\n- class source for balancing is champion score YAML\n- balancing default is on; --no-balance is explicit opt-out\n\nDependency chain:\nplx-82a3aa -> plx-01fa70 -> plx-072c43 -> plx-9402ab -> plx-9fc883\nplx-072c43 -> plx-eca6cb\nplx-9fc883 + plx-eca6cb -> plx-ea7193",
+      "created_at": "2026-04-03T00:33:58.428325Z"
+    },
+    {
+      "id": "8fadfebf-3f89-493d-8b0c-f1ea9e513f12",
+      "author": "ryan",
+      "text": "Design adjustment for active implementation: class-list resolution currently hard-requires champion YAML, which blocks non-champion iteration. Implementing one explicit path for dataset-curate balancing: optional --score-version-id to source class contract from that exact score version; if omitted, use champion. No fallback paths beyond this explicit selector.",
+      "created_at": "2026-04-03T01:02:30.909479Z"
+    },
+    {
+      "id": "21d9fdda-f9bb-4767-a56d-45718a4c7918",
+      "author": "ryan",
+      "text": "Implemented non-champion class-source support for associated dataset curation balancing. Changes: (1) class resolver generalized to resolve_score_valid_classes_from_score_yaml with optional score_version_id; when provided, class extraction uses that exact version (no champion lookup), otherwise champion is used. (2) score dataset-curate now accepts --score-version-id and passes it into window-curation balancing path. (3) validation added: --score-version-id cannot be combined with --feedback-item-ids (explicit-ID path does not use balancing classes). Tests: pytest -q plexus/cli/dataset/curation_test.py plexus/cli/score/scores_dataset_curate_test.py -q => 17 passed.",
+      "created_at": "2026-04-03T01:03:30.210207Z"
+    },
+    {
+      "id": "22be17cb-8126-4265-8d08-c4a55be14e55",
+      "author": "ryan",
+      "text": "Runtime validation complete for non-champion class source path. Using --score-version-id with score dataset-curate succeeded end-to-end on scorecard 1039 / score 45425. Command: score dataset-curate --scorecard 1039 --score 45425 --score-version-id 95db98ae-bcec-4cd2-8a6e-3025d4056371 --max-items 25 --days 180. Result: dataset_id=2ddea930-4a6d-428f-b44c-55a5a0e6c528, qualifying_found=6888, rows_written=25, balance_applied=true.",
+      "created_at": "2026-04-03T01:15:15.629792Z"
+    },
+    {
+      "id": "cfc8330f-78c4-4251-a8eb-8454e4a93d10",
+      "author": "ryan",
+      "text": "Implementation kickoff for final-class balancing fix. Root cause confirmed: resolver collected graph-wide intermediate node classes (e.g., compliance reason categories) instead of final score output classes, causing balancing mismatch on Yes/No datasets. Architecture decision: final-output-only class resolution (ordered sources: parameters.validation.value.valid_classes -> top-level classes -> final graph node valid_classes -> final graph node conditions outputs -> static extraction from final LogicalClassifier code) + fail-fast on unusably low class/label overlap for balancing. Acceptance target: scorecard 1039 / score 45425 resolves Yes/No from non-champion score version and persists resolver diagnostics in dataset_stats/CLI output.",
+      "created_at": "2026-04-03T01:30:12.554016Z"
+    },
+    {
+      "id": "45997f6b-0aad-4702-8243-02bb9ea65cf3",
+      "author": "ryan",
+      "text": "Implemented final-output-only class resolver + fail-fast overlap contract and validated runtime behavior. Validation summary: score dataset-curate --scorecard 1039 --score 45425 --score-version-id 95db98ae-bcec-4cd2-8a6e-3025d4056371 --max-items 25 --days 180 created dataset 578df803-f093-4ba5-9cc1-f474ea64cadb. Persisted dataset_stats now include class_resolution_source=graph[-1].LogicalClassifier.code, resolved_final_classes=[Yes, No], observed_label_set=[NA, No, Yes], class_label_overlap=[No, Yes]. Distribution moved from before {No:7, Yes:18} to after {No:12, Yes:13}. Targeted tests passed: pytest -q plexus/cli/dataset/curation_test.py plexus/cli/score/scores_dataset_curate_test.py -q (20 passed).",
+      "created_at": "2026-04-03T01:33:49.938071Z"
+    },
+    {
+      "id": "9e209104-2f81-427e-b7be-e9418f04b29f",
+      "author": "ryan",
+      "text": "Sub-task split added for this implementation: plx-4ada08 (CLI orchestration), plx-3b9e2c (report config auto-management), plx-1ae746 (eligible payload ordering), plx-1d0986 (vetted+balanced builder), plx-52e63c (UI/API route removal), plx-1973d9 (docs). Beginning implementation now in this dependency order: report payload + builder + CLI orchestration + UI cleanup + docs.",
+      "created_at": "2026-04-03T01:49:48.404829Z"
+    },
+    {
+      "id": "db719780-69dd-45c7-bbd1-2d2b203a899f",
+      "author": "ryan",
+      "text": "Completed automated vetted+balanced associated dataset pipeline (report-evidence-first) and runtime validation.\n\nRuntime validation (2026-04-03 UTC, scorecard 1039 / score 45425):\n- Command: plexus score dataset-curate-vetted --scorecard 1039 --score 45425 --days 180 --max-items 100 --score-version-id 95db98ae-bcec-4cd2-8a6e-3025d4056371\n- Report configuration: b9aa195a-99f3-42f9-9f69-bc314bcc3dfd\n- Report ID: 30d4c0eb-06ef-47de-ac9c-5292ea71f935\n- Report block ID: 28b841ea-b170-43b2-ad7a-6e35cdce279a\n- Report task ID: b0b66641-13bf-4fe4-96c5-8fff5f2f4fbe\n- Dataset ID: 94e5d76d-7979-4526-a8c5-4a5d4ef7123d\n- Rows written: 51 (vetted_eligible_count=51, selected_vetted_count=51)\n- Final classes: [Yes, No] via graph[-1].LogicalClassifier.code\n- Distribution before/after balancing: {No:13, Yes:38} -> {No:13, Yes:38}\n\nOperational fix applied for reliability/performance in this path:\n- Added deterministic max_feedback_items cap in FeedbackContradictions aligned flow.\n- Enforced cap at feedback fetch pagination layer (newest-first) to avoid scanning full history when capped.\n- Auto-managed report config now sets max_feedback_items to requested max-items for predictable runtime/cost.\n- No fallback paths introduced.",
+      "created_at": "2026-04-03T02:33:17.236435Z"
+    },
+    {
+      "id": "c56e159b-f1dd-4ab0-9a23-89754c9b1a39",
+      "author": "ryan",
+      "text": "Hotfix: resolved dashboard runtime ReferenceError in FeedbackContradictions block (Button is not defined). Cause: missing Button import after UI action cleanup. Fix: added import { Button } from '@/components/ui/button' in dashboard/components/blocks/FeedbackContradictions.tsx. Verified by code inspection; local eslint remains blocked by known AJV/eslintrc environment error.",
+      "created_at": "2026-04-03T02:37:25.142521Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:33.119836Z",
-  "updated_at": "2026-04-02T12:49:33.119836Z",
-  "closed_at": null,
-  "custom": {}
+  "updated_at": "2026-04-03T02:41:52.281869Z",
+  "closed_at": "2026-04-03T02:41:52.281869Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }

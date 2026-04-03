@@ -1,14 +1,17 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
 from plexus.cli.dataset.curation import (
     _compute_label_distribution,
+    _ordered_unique_feedback_ids,
     _select_balanced_feedback_items,
+    build_associated_dataset_from_vetted_feedback_items,
+    build_associated_dataset_from_vetted_report,
     build_associated_dataset_from_feedback_window,
     collect_qualifying_feedback_items,
-    resolve_score_valid_classes_from_champion_yaml,
+    resolve_score_valid_classes_from_score_yaml,
 )
 
 
@@ -105,7 +108,7 @@ def test_collect_qualifying_feedback_items_rejects_non_positive_max():
         )
 
 
-def test_resolve_score_valid_classes_from_champion_yaml_extracts_deterministically():
+def test_resolve_score_valid_classes_from_score_yaml_extracts_deterministically():
     client = MagicMock()
     client.execute = MagicMock(
         side_effect=[
@@ -128,25 +131,25 @@ graph:
         ]
     )
 
-    classes = resolve_score_valid_classes_from_champion_yaml(
+    classes = resolve_score_valid_classes_from_score_yaml(
         client=client,
         score_id="score-1",
     )
 
-    assert classes == ["Yes", "No", "Maybe", "Escalate"]
+    assert classes == ["Yes", "No"]
 
 
-def test_resolve_score_valid_classes_from_champion_yaml_requires_champion():
+def test_resolve_score_valid_classes_from_score_yaml_requires_champion():
     client = MagicMock()
     client.execute = MagicMock(
         return_value={"getScore": {"id": "score-1", "championVersionId": None}}
     )
 
     with pytest.raises(ValueError, match="No champion version configured"):
-        resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
+        resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
 
 
-def test_resolve_score_valid_classes_from_champion_yaml_fails_when_missing_classes():
+def test_resolve_score_valid_classes_from_score_yaml_fails_when_missing_classes():
     client = MagicMock()
     client.execute = MagicMock(
         side_effect=[
@@ -163,8 +166,8 @@ graph:
         ]
     )
 
-    with pytest.raises(ValueError, match="No valid classes found"):
-        resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
+    with pytest.raises(ValueError, match="No final output classes found"):
+        resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
 
 
 def test_resolve_score_valid_classes_from_conditions_output_values():
@@ -191,8 +194,88 @@ graph:
         ]
     )
 
-    classes = resolve_score_valid_classes_from_champion_yaml(client=client, score_id="score-1")
+    classes = resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
     assert classes == ["Yes", "No"]
+
+
+def test_resolve_score_valid_classes_uses_final_node_only():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+graph:
+  - name: reason_classifier
+    valid_classes: ["Missing School Name", "Missing Program Name"]
+  - name: final_classifier
+    valid_classes: ["Yes", "No"]
+""",
+                }
+            },
+        ]
+    )
+
+    classes = resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
+    assert classes == ["Yes", "No"]
+
+
+def test_resolve_score_valid_classes_from_logical_classifier_code():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+graph:
+  - name: reason_classifier
+    class: Classifier
+    valid_classes: ["Missing School Name", "Missing Program Name"]
+  - name: final_determiner
+    class: LogicalClassifier
+    code: >
+      def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
+          if input.metadata.get('compliance_reason') == "None":
+              return Score.Result(parameters=parameters, value="Yes")
+          return Score.Result(parameters=parameters, value="No")
+""",
+                }
+            },
+        ]
+    )
+
+    classes = resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
+    assert classes == ["Yes", "No"]
+
+
+def test_resolve_score_valid_classes_from_explicit_score_version():
+    client = MagicMock()
+    client.execute = MagicMock(
+        return_value={
+            "getScoreVersion": {
+                "id": "sv-explicit",
+                "configuration": """
+classes:
+  - name: "Yes"
+  - name: "No"
+""",
+            }
+        }
+    )
+
+    classes = resolve_score_valid_classes_from_score_yaml(
+        client=client,
+        score_id="score-1",
+        score_version_id="sv-explicit",
+    )
+
+    assert classes == ["Yes", "No"]
+    first_call_query = client.execute.call_args_list[0].args[0]
+    assert "GetScoreChampionVersion" not in first_call_query
 
 
 def test_select_balanced_feedback_items_round_robins_and_preserves_size():
@@ -224,12 +307,31 @@ def test_select_balanced_feedback_items_round_robins_and_preserves_size():
     assert _compute_label_distribution(selected) == {"No": 1, "Yes": 3}
 
 
+def test_ordered_unique_feedback_ids_preserves_input_order():
+    ordered = _ordered_unique_feedback_ids(
+        [
+            {"feedback_item_id": "fi-3"},
+            {"feedback_item_id": "fi-1"},
+            {"feedback_item_id": "fi-3"},
+            {"feedback_item_id": "fi-2"},
+        ]
+    )
+    assert ordered == ["fi-3", "fi-1", "fi-2"]
+
+
 @patch("plexus.cli.dataset.curation._upload_dataset_parquet", return_value="datasets/account-1/dataset-1/dataset.parquet")
 @patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)
 @patch("plexus.cli.dataset.curation._create_associated_dataset_datasource_version", return_value=("ds-1", "dsv-1"))
 @patch("plexus.cli.dataset.curation.FeedbackItems")
 @patch("plexus.cli.dataset.curation._select_balanced_feedback_items")
-@patch("plexus.cli.dataset.curation.resolve_score_valid_classes_from_champion_yaml", return_value=["Yes", "No"])
+@patch(
+    "plexus.cli.dataset.curation._resolve_score_final_classes_from_yaml_details",
+    return_value={
+        "classes": ["Yes", "No"],
+        "source": "graph[-1].LogicalClassifier.code",
+        "score_version_id": "sv-explicit",
+    },
+)
 @patch("plexus.cli.dataset.curation.collect_qualifying_feedback_items")
 @patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
 @patch("plexus.cli.dataset.curation._fetch_score_name", return_value="Test Score")
@@ -296,10 +398,207 @@ def test_build_associated_dataset_from_feedback_window_persists_stats(
         max_items=2,
         days=30,
         balance=True,
+        class_source_score_version_id="sv-explicit",
     )
 
     assert result["dataset_id"] == "dataset-1"
+    _mock_class_resolver.assert_called_once_with(
+        client=mock_client,
+        score_id="score-1",
+        score_version_id="sv-explicit",
+    )
     stats = mock_create_datasource_version.call_args.kwargs["dataset_stats"]
     assert stats["row_count"] == 2
     assert stats["label_distribution"] == {"No": 1, "Yes": 1}
     assert stats["balance_applied"] is True
+    assert stats["class_resolution_source"] == "graph[-1].LogicalClassifier.code"
+    assert stats["observed_label_set"] == ["No", "Yes"]
+    assert stats["class_label_overlap"] == ["No", "Yes"]
+
+
+@patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)
+@patch("plexus.cli.dataset.curation._create_associated_dataset_datasource_version", return_value=("ds-1", "dsv-1"))
+@patch("plexus.cli.dataset.curation.FeedbackItems")
+@patch(
+    "plexus.cli.dataset.curation._resolve_score_final_classes_from_yaml_details",
+    return_value={
+        "classes": ["Missing School Name", "Missing Program Name"],
+        "source": "graph[-1].valid_classes",
+        "score_version_id": "sv-explicit",
+    },
+)
+@patch("plexus.cli.dataset.curation.collect_qualifying_feedback_items")
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+@patch("plexus.cli.dataset.curation._fetch_score_name", return_value="Test Score")
+def test_build_associated_dataset_from_feedback_window_fails_on_low_overlap(
+    _mock_score_name,
+    _mock_account,
+    mock_collect,
+    _mock_class_resolver_details,
+    _mock_feedback_items_class,
+    _mock_create_datasource_version,
+    _mock_champion,
+):
+    fi_yes = SimpleNamespace(
+        id="fi-1",
+        accountId="account-1",
+        scorecardId="scorecard-1",
+        scoreId="score-1",
+        finalAnswerValue="Yes",
+        editedAt="2026-03-03T00:00:00Z",
+        item=SimpleNamespace(id="item-1", text="t1"),
+    )
+    fi_no = SimpleNamespace(
+        id="fi-2",
+        accountId="account-1",
+        scorecardId="scorecard-1",
+        scoreId="score-1",
+        finalAnswerValue="No",
+        editedAt="2026-03-02T00:00:00Z",
+        item=SimpleNamespace(id="item-2", text="t2"),
+    )
+    mock_collect.return_value = [fi_yes, fi_no]
+
+    with pytest.raises(ValueError, match="Insufficient class/label overlap for balancing"):
+        build_associated_dataset_from_feedback_window(
+            client=MagicMock(),
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            max_items=2,
+            days=30,
+            balance=True,
+            class_source_score_version_id="sv-explicit",
+        )
+
+
+@patch("plexus.cli.dataset.curation._upload_dataset_parquet", return_value="datasets/account-1/dataset-1/dataset.parquet")
+@patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)
+@patch("plexus.cli.dataset.curation._create_associated_dataset_datasource_version", return_value=("ds-1", "dsv-1"))
+@patch("plexus.cli.dataset.curation.FeedbackItems")
+@patch("plexus.cli.dataset.curation._fetch_feedback_item_with_item")
+@patch(
+    "plexus.cli.dataset.curation._resolve_score_final_classes_from_yaml_details",
+    return_value={
+        "classes": ["Yes", "No"],
+        "source": "graph[-1].LogicalClassifier.code",
+        "score_version_id": "sv-explicit",
+    },
+)
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+@patch("plexus.cli.dataset.curation._fetch_score_name", return_value="Test Score")
+def test_build_associated_dataset_from_vetted_feedback_items_persists_diagnostics(
+    _mock_score_name,
+    _mock_account,
+    _mock_class_resolver,
+    mock_fetch_feedback_item,
+    mock_feedback_items_class,
+    mock_create_datasource_version,
+    _mock_champion,
+    _mock_upload,
+):
+    def _item(fid: str, label: str):
+        return SimpleNamespace(
+            id=fid,
+            accountId="account-1",
+            scorecardId="scorecard-1",
+            scoreId="score-1",
+            finalAnswerValue=label,
+            editedAt="2026-03-03T00:00:00Z",
+            item=SimpleNamespace(id=f"item-{fid}", text="hello"),
+        )
+
+    lookup = {
+        "fi-2": _item("fi-2", "No"),
+        "fi-1": _item("fi-1", "Yes"),
+        "fi-3": _item("fi-3", "Yes"),
+    }
+    mock_fetch_feedback_item.side_effect = lambda _client, fid: lookup.get(fid)
+
+    import pandas as pd
+    built_df = pd.DataFrame(
+        {
+            "feedback_item_id": ["fi-1", "fi-2", "fi-3"],
+            "text": ["a", "b", "c"],
+            "metadata": ["{}", "{}", "{}"],
+            "IDs": ["[]", "[]", "[]"],
+            "Test Score": ["Yes", "No", "Yes"],
+        }
+    )
+    row_builder = MagicMock()
+    row_builder._create_dataset_rows.return_value = built_df
+    mock_feedback_items_class.return_value = row_builder
+
+    mock_client = MagicMock()
+    mock_client.execute = MagicMock(
+        side_effect=[
+            {"createDataSet": {"id": "dataset-1"}},
+            {"updateDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet"}},
+        ]
+    )
+
+    result = build_associated_dataset_from_vetted_feedback_items(
+        client=mock_client,
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        vetted_feedback_items=[
+            {"feedback_item_id": "fi-2"},
+            {"feedback_item_id": "fi-1"},
+            {"feedback_item_id": "fi-3"},
+        ],
+        max_items=2,
+        class_source_score_version_id="sv-explicit",
+        report_id="report-1",
+        report_block_id="block-1",
+    )
+
+    assert result["dataset_id"] == "dataset-1"
+    assert result["report_id"] == "report-1"
+    assert result["report_block_id"] == "block-1"
+    stats = mock_create_datasource_version.call_args.kwargs["dataset_stats"]
+    assert stats["class_resolution_source"] == "graph[-1].LogicalClassifier.code"
+    assert stats["resolved_final_classes"] == ["Yes", "No"]
+    assert stats["vetted_eligible_count"] == 3
+
+
+@patch("plexus.cli.dataset.curation.build_associated_dataset_from_vetted_feedback_items")
+@patch("plexus.cli.dataset.curation._run_aligned_vetting_report")
+@patch("plexus.cli.dataset.curation._ensure_auto_vetted_report_configuration")
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+def test_build_associated_dataset_from_vetted_report_orchestrates_flow(
+    _mock_account,
+    mock_ensure_config,
+    mock_run_report,
+    mock_build_dataset,
+):
+    mock_ensure_config.return_value = SimpleNamespace(id="config-1")
+    mock_run_report.return_value = {
+        "report_id": "report-1",
+        "report_task_id": "task-1",
+        "report_block_id": "block-1",
+        "eligible_items": [{"feedback_item_id": "fi-1"}],
+        "eligibility_rule": "unanimous non-contradiction",
+    }
+    mock_build_dataset.return_value = {"dataset_id": "dataset-1"}
+
+    result = build_associated_dataset_from_vetted_report(
+        client=MagicMock(),
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        max_items=10,
+        days=180,
+        class_source_score_version_id="sv-1",
+    )
+
+    assert result["dataset_id"] == "dataset-1"
+    assert result["report_configuration_id"] == "config-1"
+    assert result["report_task_id"] == "task-1"
+    assert result["vetted_pool_limit"] == 10
+    mock_ensure_config.assert_called_once_with(
+        client=ANY,
+        account_id="account-1",
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        days=180,
+        vetting_pool_limit=10,
+    )
+    mock_build_dataset.assert_called_once()
