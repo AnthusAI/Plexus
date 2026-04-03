@@ -3,25 +3,24 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useAccount } from "@/app/contexts/AccountContext"
 import { ScorecardDashboardSkeleton } from "@/components/loading-skeleton"
 import DataSetComponent from "@/components/data-sets/DataSetComponent"
 import type { Schema } from "@/amplify/data/resource"
 import { listDataSetsForBrowse, type AssociatedDataSetFilterType } from "@/components/data-sets/data-set-query"
 import { amplifyClient } from "@/utils/amplify-client"
+import ScorecardContext from "@/components/ScorecardContext"
+import ScoreVersionSelector from "@/components/filters/ScoreVersionSelector"
+import DataSourceSelector from "@/components/filters/DataSourceSelector"
+import DataSourceVersionSelector from "@/components/filters/DataSourceVersionSelector"
 
 interface AssociatedDataSetsDashboardProps {
   selectedDatasetId?: string
   pathBase?: string
 }
+
+type FilterMode = "all" | "byScore" | "bySourceVersion"
 
 export default function AssociatedDataSetsDashboard({
   selectedDatasetId,
@@ -35,11 +34,48 @@ export default function AssociatedDataSetsDashboard({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [associatedFilter, setAssociatedFilter] = useState<AssociatedDataSetFilterType>('all')
-  const [filterValue, setFilterValue] = useState('')
+  const [filterMode, setFilterMode] = useState<FilterMode>("all")
+  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
+  const [selectedScore, setSelectedScore] = useState<string | null>(null)
+  const [selectedScoreVersion, setSelectedScoreVersion] = useState<string | null>(null)
+  const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null)
+  const [selectedDataSourceCurrentVersionId, setSelectedDataSourceCurrentVersionId] = useState<string | null>(null)
+  const [selectedDataSourceVersion, setSelectedDataSourceVersion] = useState<string | null>(null)
 
-  const normalizedFilterValue = useMemo(() => filterValue.trim(), [filterValue])
-  const requiresFilterValue = associatedFilter !== 'all'
+  const resolvedFilter = useMemo<{
+    filterType: AssociatedDataSetFilterType
+    filterValue: string | null
+  }>(() => {
+    if (filterMode === "all") {
+      return { filterType: "all", filterValue: selectedAccount?.id || null }
+    }
+
+    if (filterMode === "byScore") {
+      if (selectedScoreVersion) {
+        return { filterType: "scoreVersion", filterValue: selectedScoreVersion }
+      }
+      if (selectedScore) {
+        return { filterType: "score", filterValue: selectedScore }
+      }
+      if (selectedScorecard) {
+        return { filterType: "scorecard", filterValue: selectedScorecard }
+      }
+      return { filterType: "score", filterValue: null }
+    }
+
+    if (selectedDataSourceVersion) {
+      return { filterType: "dataSourceVersion", filterValue: selectedDataSourceVersion }
+    }
+
+    return { filterType: "dataSourceVersion", filterValue: null }
+  }, [
+    filterMode,
+    selectedAccount?.id,
+    selectedScorecard,
+    selectedScore,
+    selectedScoreVersion,
+    selectedDataSourceVersion,
+  ])
 
   const loadDataSets = async () => {
     try {
@@ -49,19 +85,20 @@ export default function AssociatedDataSetsDashboard({
         return
       }
 
-      setIsLoading(true)
-      setError(null)
-
-      if (requiresFilterValue && !normalizedFilterValue) {
+      if (!resolvedFilter.filterValue) {
         setDatasets([])
+        setIsLoading(false)
         return
       }
+
+      setIsLoading(true)
+      setError(null)
 
       const items = await listDataSetsForBrowse({
         accountId: selectedAccount.id,
         mode: 'associated',
-        associatedFilter,
-        associatedFilterValue: normalizedFilterValue || null,
+        associatedFilter: resolvedFilter.filterType,
+        associatedFilterValue: resolvedFilter.filterValue,
       })
 
       setDatasets(items)
@@ -76,7 +113,20 @@ export default function AssociatedDataSetsDashboard({
 
   useEffect(() => {
     loadDataSets()
-  }, [selectedAccount?.id, associatedFilter, normalizedFilterValue])
+  }, [selectedAccount?.id, resolvedFilter])
+
+  useEffect(() => {
+    if (!selectedScore) {
+      setSelectedScoreVersion(null)
+    }
+  }, [selectedScore])
+
+  useEffect(() => {
+    if (!selectedDataSourceId) {
+      setSelectedDataSourceCurrentVersionId(null)
+      setSelectedDataSourceVersion(null)
+    }
+  }, [selectedDataSourceId])
 
   useEffect(() => {
     if (!selectedDatasetId) {
@@ -112,60 +162,127 @@ export default function AssociatedDataSetsDashboard({
     router.push('/lab/datasets')
   }
 
+  const handleModeChange = (value: string) => {
+    const next = (value || "all") as FilterMode
+    setFilterMode(next)
+    if (next === "all") {
+      setSelectedScorecard(null)
+      setSelectedScore(null)
+      setSelectedScoreVersion(null)
+      setSelectedDataSourceId(null)
+      setSelectedDataSourceCurrentVersionId(null)
+      setSelectedDataSourceVersion(null)
+      return
+    }
+
+    if (next === "byScore") {
+      setSelectedDataSourceId(null)
+      setSelectedDataSourceCurrentVersionId(null)
+      setSelectedDataSourceVersion(null)
+      return
+    }
+
+    setSelectedScorecard(null)
+    setSelectedScore(null)
+    setSelectedScoreVersion(null)
+  }
+
   if (isLoading) {
     return <ScorecardDashboardSkeleton />
   }
 
-  const filterLabel =
-    associatedFilter === 'all'
-      ? 'All (account)'
-      : associatedFilter === 'scorecard'
-        ? 'Scorecard ID'
-        : associatedFilter === 'score'
-          ? 'Score ID'
-          : associatedFilter === 'scoreVersion'
-            ? 'Score Version ID'
-            : 'Data Source Version ID'
-
   return (
     <div className="flex h-full min-h-0 gap-3 overflow-hidden p-3">
       <div className={`flex min-h-0 flex-col overflow-hidden ${selectedDataSet ? 'w-1/2' : 'w-full'}`}>
-        <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
-          <Select
-            value={associatedFilter}
-            onValueChange={(value) => {
-              setAssociatedFilter(value as AssociatedDataSetFilterType)
-              setFilterValue('')
-            }}
+        <div className="mb-3 flex flex-col gap-2">
+          <ToggleGroup
+            type="single"
+            value={filterMode}
+            onValueChange={handleModeChange}
+            className="justify-start"
           >
-            <SelectTrigger className="w-full md:w-[260px] bg-card border-0">
-              <SelectValue placeholder="Choose filter" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All (account)</SelectItem>
-              <SelectItem value="scorecard">Scorecard ID</SelectItem>
-              <SelectItem value="score">Score ID</SelectItem>
-              <SelectItem value="scoreVersion">Score Version ID</SelectItem>
-              <SelectItem value="dataSourceVersion">Data Source Version ID</SelectItem>
-            </SelectContent>
-          </Select>
-          {requiresFilterValue && (
-            <Input
-              value={filterValue}
-              onChange={(event) => setFilterValue(event.target.value)}
-              placeholder={`Enter ${filterLabel}`}
-              className="w-full md:max-w-[420px]"
-            />
+            <ToggleGroupItem value="all" variant="outline" size="sm">
+              All
+            </ToggleGroupItem>
+            <ToggleGroupItem value="byScore" variant="outline" size="sm">
+              By Score
+            </ToggleGroupItem>
+            <ToggleGroupItem value="bySourceVersion" variant="outline" size="sm">
+              By Source Version
+            </ToggleGroupItem>
+          </ToggleGroup>
+
+          {filterMode === "byScore" && (
+            <div className="flex flex-col gap-2">
+              <ScorecardContext
+                selectedScorecard={selectedScorecard}
+                setSelectedScorecard={setSelectedScorecard}
+                selectedScore={selectedScore}
+                setSelectedScore={setSelectedScore}
+              />
+              <ScoreVersionSelector
+                scoreId={selectedScore}
+                value={selectedScoreVersion}
+                onChange={setSelectedScoreVersion}
+                placeholder="Select score version (optional)"
+                includeAllOption
+              />
+            </div>
           )}
-          <Button variant="ghost" onClick={() => loadDataSets()} className="bg-card">
-            Refresh
-          </Button>
-        </div>
-        {requiresFilterValue && !normalizedFilterValue && (
-          <div className="mb-3 text-xs text-muted-foreground">
-            Enter a value for <span className="font-medium">{filterLabel}</span> to run this indexed filter.
+
+          {filterMode === "bySourceVersion" && (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <DataSourceSelector
+                accountId={selectedAccount?.id || null}
+                value={selectedDataSourceId}
+                onChange={(sourceId, source) => {
+                  setSelectedDataSourceId(sourceId)
+                  setSelectedDataSourceCurrentVersionId(source?.currentVersionId || null)
+                  setSelectedDataSourceVersion(null)
+                }}
+                includeAllOption={false}
+              />
+              <DataSourceVersionSelector
+                dataSourceId={selectedDataSourceId}
+                currentVersionId={selectedDataSourceCurrentVersionId}
+                value={selectedDataSourceVersion}
+                onChange={setSelectedDataSourceVersion}
+                includeAllOption={false}
+              />
+            </div>
+          )}
+
+          {filterMode === "byScore" && !resolvedFilter.filterValue && (
+            <div className="text-xs text-muted-foreground">
+              Select a scorecard or score to view dataset results.
+            </div>
+          )}
+          {filterMode === "bySourceVersion" && !resolvedFilter.filterValue && (
+            <div className="text-xs text-muted-foreground">
+              Select a data source and a source version to view dataset results.
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setFilterMode("all")
+                setSelectedScorecard(null)
+                setSelectedScore(null)
+                setSelectedScoreVersion(null)
+                setSelectedDataSourceId(null)
+                setSelectedDataSourceCurrentVersionId(null)
+                setSelectedDataSourceVersion(null)
+              }}
+              className="bg-card"
+            >
+              Clear filters
+            </Button>
+            <Button variant="ghost" onClick={() => loadDataSets()} className="bg-card">
+              Refresh
+            </Button>
           </div>
-        )}
+        </div>
 
         {error ? (
           <div className="text-sm text-red-500">Error loading datasets: {error}</div>
