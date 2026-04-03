@@ -604,6 +604,19 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
   const type = toToolType(toolName)
 
   if (message.messageType === 'TOOL_CALL') {
+    if (message.toolResponse !== undefined && message.toolResponse !== null) {
+      // Tool call has completed — show as a single completed component
+      const errorText = extractToolErrorText(message)
+      const output = message.toolResponse
+      return {
+        type,
+        toolName,
+        state: errorText ? 'output-error' : 'output-available',
+        input: message.toolParameters || {},
+        output,
+        errorText,
+      }
+    }
     return {
       type,
       toolName,
@@ -2372,11 +2385,7 @@ function ConversationViewer({
 
                           {toolViewModel ? (
                             <Tool
-                              defaultOpen={
-                                toolViewModel.state === 'output-available'
-                                || toolViewModel.state === 'output-error'
-                                || toolViewModel.state === 'output-denied'
-                              }
+                              defaultOpen={toolViewModel.state === 'output-error'}
                             >
                               <ToolHeader
                                 toolType={toolViewModel.type}
@@ -2384,10 +2393,10 @@ function ConversationViewer({
                                 toolName={toolViewModel.toolName}
                               />
                               <ToolContent>
-                                {message.messageType === 'TOOL_CALL' && (
+                                {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
                                   <ToolInput input={toolViewModel.input} />
                                 )}
-                                {message.messageType === 'TOOL_RESPONSE' && (
+                                {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
                                   <ToolOutput
                                     errorText={toolViewModel.errorText}
                                     output={

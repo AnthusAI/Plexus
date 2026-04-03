@@ -18,6 +18,111 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
+def _complete_all_task_stages(client: Any, task_id: str) -> None:
+    """
+    Mark all PENDING or RUNNING task stages as COMPLETED.
+
+    Called after procedure execution finishes so the dashboard stage display
+    reflects completion rather than staying stuck at the last active stage.
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    logger.info(f"[STAGE_COMPLETE] Task {task_id}: found {len(stages)} stages")
+    if not stages:
+        logger.warning(f"[STAGE_COMPLETE] No stages found for task {task_id}")
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    for stage in stages:
+        stage_status = stage.get("status")
+        stage_id = stage.get("id")
+        if stage_status in ("PENDING", "RUNNING"):
+            logger.info(f"[STAGE_COMPLETE] Marking stage {stage_id} (order {stage.get('order')}) COMPLETED")
+            client.execute(update_mutation, {
+                "input": {"id": stage_id, "status": "COMPLETED", "completedAt": now}
+            })
+            logger.info(f"[STAGE_COMPLETE] Stage {stage_id} marked COMPLETED")
+        else:
+            logger.info(f"[STAGE_COMPLETE] Stage {stage_id} already {stage_status}, skipping")
+
+
+def _advance_task_to_running_stage(client: Any, task_id: str, target_order: int) -> None:
+    """
+    Advance a task's stages so that stages before target_order are COMPLETED
+    and the stage at target_order is RUNNING.
+
+    Args:
+        client: PlexusDashboardClient
+        task_id: ID of the Task whose stages to update
+        target_order: The order number of the stage to mark RUNNING
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    if not stages:
+        logger.debug("No TaskStages found for task %s; skipping stage advance.", task_id)
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    for stage in stages:
+        order = stage.get("order", 0)
+        if order < target_order:
+            if stage.get("status") != "COMPLETED":
+                client.execute(update_mutation, {
+                    "input": {"id": stage["id"], "status": "COMPLETED", "completedAt": now}
+                })
+        elif order == target_order:
+            if stage.get("status") != "RUNNING":
+                client.execute(update_mutation, {
+                    "input": {"id": stage["id"], "status": "RUNNING", "startedAt": now}
+                })
+
+
 class _PlexusTraceLogBridge:
     """
     Bridges synchronous Tactus log events to async Plexus trace persistence.
@@ -57,20 +162,24 @@ class _PlexusTraceLogBridge:
             logger.warning("Failed queueing trace event for persistence: %s", exc)
 
     def _worker_main(self) -> None:
-        while not self._closed.is_set() or not self._events.empty():
-            try:
-                event = self._events.get(timeout=0.05)
-            except queue.Empty:
-                continue
+        loop = asyncio.new_event_loop()
+        try:
+            while not self._closed.is_set() or not self._events.empty():
+                try:
+                    event = self._events.get(timeout=0.05)
+                except queue.Empty:
+                    continue
 
-            try:
-                record_fn = getattr(self.trace_sink, "record", None)
-                if callable(record_fn):
-                    asyncio.run(record_fn(event))
-            except Exception as exc:
-                logger.warning("Failed recording streamed trace event: %s", exc)
-            finally:
-                self._events.task_done()
+                try:
+                    record_fn = getattr(self.trace_sink, "record", None)
+                    if callable(record_fn):
+                        loop.run_until_complete(record_fn(event))
+                except Exception as exc:
+                    logger.warning("Failed recording streamed trace event: %s", exc)
+                finally:
+                    self._events.task_done()
+        finally:
+            loop.close()
 
     async def flush(self) -> None:
         await asyncio.to_thread(self._events.join)
@@ -518,7 +627,10 @@ async def _execute_tactus(
         # Create Plexus adapters
         storage = PlexusStorageAdapter(client, procedure_id)
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
-        hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
+        # Allow callers to inject a custom HITL adapter (e.g. TerminalHITLAdapter for CLI)
+        hitl = options.pop("hitl_adapter", None)
+        if hitl is None:
+            hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
         trace_sink = PlexusTraceSink(chat_recorder)
         log_bridge = _PlexusTraceLogBridge(trace_sink)
 
@@ -686,10 +798,26 @@ async def _execute_tactus(
         if callable(mark_runtime_execute_started):
             mark_runtime_execute_started()
 
+        # Advance task stage to the second stage (e.g. "Baseline Evaluation") now
+        # that the procedure is actually executing, giving the dashboard live feedback.
+        _task_id = options.pop("_task_id_for_stage_tracking", None)
+        if _task_id:
+            try:
+                _advance_task_to_running_stage(client, _task_id, target_order=2)
+            except Exception as _se:
+                logger.debug("Could not advance task stage at execution start: %s", _se)
+
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
         result = await runtime.execute(procedure_source, runtime_context, format="yaml")
         if log_bridge:
             await log_bridge.flush()
+
+        # Mark all remaining task stages as COMPLETED now that execution has finished.
+        if _task_id:
+            try:
+                _complete_all_task_stages(client, _task_id)
+            except Exception as _ce:
+                logger.warning("Could not complete task stages after execution: %s", _ce, exc_info=True)
 
         # Ensure Console receives a meaningful assistant message from procedure output.
         # Some runtime/trace combinations emit only placeholder completion events.
@@ -723,6 +851,11 @@ async def _execute_tactus(
                 await log_bridge.close()
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after error: %s", close_error)
+        if _task_id:
+            try:
+                _complete_all_task_stages(client, _task_id)
+            except Exception as _ce:
+                logger.warning("Could not complete task stages after error: %s", _ce, exc_info=True)
         logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
             'success': False,

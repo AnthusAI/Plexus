@@ -1,0 +1,30 @@
+{
+  "id": "plx-3adb7706-804a-4cfd-a95c-b94321eea6ac",
+  "title": "Evaluation UI provenance links for score version and dataset",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-71dcbc",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "1654fa9a-878e-4df4-a747-6d7a36e972cb",
+      "author": "ryan",
+      "text": "Evaluation UI now shows explicit provenance: score-version link only when scoreVersionId exists; dataset link from parameters.dataset_id; otherwise shows Unavailable.",
+      "created_at": "2026-04-03T06:03:40.661765Z"
+    }
+  ],
+  "created_at": "2026-04-03T05:47:31.437637Z",
+  "updated_at": "2026-04-03T06:03:40.676995Z",
+  "closed_at": "2026-04-03T06:03:40.676995Z",
+  "custom": {}
+}

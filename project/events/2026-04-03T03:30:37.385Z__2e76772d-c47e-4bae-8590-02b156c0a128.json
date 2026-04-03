@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2e76772d-c47e-4bae-8590-02b156c0a128",
+  "issue_id": "plx-dad1cb1c-0efe-4003-a77a-a837c6527261",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T03:30:37.385Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Auto-fulfill dataset-curate-vetted max-items via adaptive vetting pool"
+  }
+}

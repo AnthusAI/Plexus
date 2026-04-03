@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4ab3724b-bbbd-4ccc-84f8-f0dcfd63495d",
+  "issue_id": "plx-5eb1ddf3-2cb1-4027-8dc1-d6c8c553c690",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.282Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 1,
+    "status": "open",
+    "title": "Hard cut Data dashboard to /lab/data with Sources and Datasets tabs"
+  }
+}

@@ -55,6 +55,7 @@ interface TaskDisplayProps {
     scorecardId?: string | null | undefined
     scoreId?: string | null | undefined
     scoreVersionId?: string | null | undefined
+    dataSetId?: string | null | undefined
     parameters?: string | null
   }
   reportData?: {
@@ -292,6 +293,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         scorecardId: evaluationData.scorecardId,
         scoreId: evaluationData.scoreId,
         scoreVersionId: evaluationData.scoreVersionId,
+        dataSetId: evaluationData.dataSetId,
         data: {
           id: displayId,
           title: displayTitle,

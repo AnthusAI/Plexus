@@ -3,7 +3,7 @@
   "title": "Simplify reference dataset selection to one DataSet-owned path",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -94,10 +94,16 @@
       "author": "ryan",
       "text": "Runtime test completed for new command. Initial run of score dataset-curate failed due deployed CreateDataSetInput rejecting extra fields; fixed curation path to send only supported dataset fields. Retest succeeded: plexus score dataset-curate --scorecard 1039 --score 45425 --max-items 20 --days 180 created dataset 71289e19-e160-4e1e-89bd-8bd1cdd0f8df (20/20). Follow-up accuracy run succeeded against associated dataset selection: evaluation f437bce3-418a-4586-b391-42810d3f0575 COMPLETED, sample size 20, accuracy 45.0%.",
       "created_at": "2026-04-02T20:40:30.920111Z"
+    },
+    {
+      "id": "74ccf537-ca3b-41e4-9730-34c029858553",
+      "author": "ryan",
+      "text": "Closing: canonical score dataset-curate path implemented, old dataset reference-from-feedback CLI entrypoint retired, docs updated, and live runtime test passed (dataset-curate + associated-dataset evaluation).",
+      "created_at": "2026-04-02T23:18:31.398767Z"
     }
   ],
   "created_at": "2026-04-02T16:02:43.498942Z",
-  "updated_at": "2026-04-02T20:40:30.920111Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T23:18:31.406213Z",
+  "closed_at": "2026-04-02T23:18:31.406213Z",
   "custom": {}
 }

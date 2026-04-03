@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "8301c6a9-46c8-4fa3-8f3e-214365bde73f",
+  "issue_id": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T23:23:14.501Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Summary\nMake score optimization repeatable with deterministic reference datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Deterministic reference datasets are frozen `DataSet` artifacts.\n- Reference datasets are single-score datasets.\n- Active reference assignment lives on `Score`, not on `DataSet`.\n- Scorecard-level examples are the maintained curated source pool unless later work changes that contract.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the frozen dataset, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nCreate the child tasks in this epic exactly as planned so this work stays separate from RCA/reliability fixes.",
+        "to": "## Summary\nMake score optimization repeatable with deterministic associated datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Associated datasets are DataSet artifacts linked to a score via DataSet.scoreId.\n- Selection is association-only with deterministic newest-first ordering.\n- Curation builds deterministic, single-score datasets from vetted labels.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the associated DataSet artifact, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nKeep this epic separate from RCA reliability and misclassification triage workstreams."
+      }
+    }
+  }
+}
