@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fda79572-849f-4cfb-bfc6-7739751b29af",
+  "issue_id": "plx-3df87efc-f801-4329-9605-820c4cc0d0c3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T13:20:06.793Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+    "priority": 1,
+    "status": "open",
+    "title": "Datasets filter UX: use standard scorecard/score selectors"
+  }
+}

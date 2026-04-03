@@ -1,0 +1,31 @@
+{
+  "id": "plx-3df87efc-f801-4329-9605-820c4cc0d0c3",
+  "title": "Datasets filter UX: use standard scorecard/score selectors",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "deba62f4-73eb-4f87-ab72-80fc0a0c7fd1",
+      "author": "ryan",
+      "text": "Implementing dataset filter UX cleanup: replace mutually-exclusive ad-hoc controls with standard scorecard/score selectors, keep index-backed single-query behavior, and simplify filter interactions.",
+      "created_at": "2026-04-03T13:20:11.131140Z"
+    },
+    {
+      "id": "a328201c-1cfa-4dcc-bc05-9446e92a7859",
+      "author": "ryan",
+      "text": "Completed UX cleanup for /lab/datasets filters: replaced ad-hoc mutually-exclusive filter mode control with standard ScorecardContext selectors (scorecard + score), retained optional direct ID filters for scoreVersionId/dataSourceVersionId, and applied deterministic precedence for single index-backed query selection. Validation: dashboard build:fast succeeded.",
+      "created_at": "2026-04-03T13:22:15.176080Z"
+    }
+  ],
+  "created_at": "2026-04-03T13:20:06.791938Z",
+  "updated_at": "2026-04-03T13:22:15.187967Z",
+  "closed_at": "2026-04-03T13:22:15.187967Z",
+  "custom": {}
+}
