@@ -8,13 +8,13 @@ applications:
             - node --version
             - npm --version
             - |
-              if ! docker info > /dev/null 2>&1; then
-                echo "Docker not running, starting daemon..."
-                nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2 &>/tmp/dockerd.log &
-                timeout 30 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done' && echo "Docker started"
-              else
-                echo "Docker already running"
-              fi
+              echo "=== Docker status check ==="
+              which docker || echo "docker not in PATH"
+              which dockerd || echo "dockerd not in PATH"
+              ls /usr/local/bin/docker* 2>/dev/null || echo "No docker in /usr/local/bin"
+              ls /usr/bin/docker* 2>/dev/null || echo "No docker in /usr/bin"
+              docker info 2>&1 | head -5 || echo "docker info failed"
+              echo "=== End Docker status ==="
             - export PARCEL_WATCHER_BACKEND=inotify
             - npm ci --cache .npm --prefer-offline
             - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID --debug
