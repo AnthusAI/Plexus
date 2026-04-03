@@ -75,8 +75,13 @@ export default function AssociatedDatasetsPage() {
           <code>{`plexus score dataset-curate \\
   --scorecard "CMG EDU" \\
   --score "Identify Objections" \\
-  --feedback-item-ids "<id1>,<id2>,<id3>"`}</code>
+  --feedback-item-ids "<id1>,<id2>,<id3>" \\
+  --source-report-block-id "<report_block_id>" \\
+  --eligibility-rule "unanimous non-contradiction"`}</code>
         </pre>
+        <p className="text-muted-foreground">
+          Use the provenance options when IDs come from a vetted report snapshot to keep build context auditable.
+        </p>
       </section>
 
       <section className="space-y-3">
