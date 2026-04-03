@@ -3,7 +3,7 @@
   "title": "Data IA clarification: datasets-first tabs + clean sources",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Implemented: Data nav defaults to /lab/datasets; shared tabs on /lab/datasets and /lab/data/sources; dataset browse uses single-active index-backed filters only; source list excludes scaffold builder sources by deterministic description marker; docs updated for datasets-first canonical routes. Validation: dashboard build:fast succeeded.",
       "created_at": "2026-04-03T12:42:34.711077Z"
+    },
+    {
+      "id": "c01d83f5-50b2-4a42-b836-e6623d6f900b",
+      "author": "ryan",
+      "text": "Implementation complete for Data IA clarification: (1) Data nav defaults to /lab/datasets, (2) shared tabs shell on both /lab/datasets and /lab/data/sources routes, (3) datasets list uses single active indexed filter modes only, (4) source list excludes scaffold sources with description marker 'Generated directly from vetted feedback item IDs.', (5) docs/copy updated to canonical routes. Validation: dashboard build:fast succeeded.",
+      "created_at": "2026-04-03T13:16:21.547755Z"
     }
   ],
   "created_at": "2026-04-03T12:37:24.777503Z",
-  "updated_at": "2026-04-03T12:42:34.711077Z",
-  "closed_at": null,
+  "updated_at": "2026-04-03T13:16:24.318962Z",
+  "closed_at": "2026-04-03T13:16:24.318962Z",
   "custom": {}
 }
