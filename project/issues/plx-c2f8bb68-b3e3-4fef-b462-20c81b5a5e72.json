@@ -3,7 +3,7 @@
   "title": "Optimization Workflow, Generalization, and Decision Policy",
   "description": "## Summary\nOperationalize score optimization as a staged workflow that combines fixed deterministic evidence, random generalization evidence, malfunction analysis, and explicit decision policy.\n\n## Scope\n- Candidate score changes are assessed with both fixed deterministic datasets and random-sample evaluations.\n- The workflow produces an assessment bundle rather than relying on one raw evaluation in isolation.\n- The workflow computes comparison signals such as generalization gap and stability/variance across random runs.\n- The workflow decides whether to keep optimizing, stop for SME clarification, route upstream remediation, or fix a mechanical/system issue.\n\n## Key assumptions\n- This epic depends on deterministic dataset infrastructure, reliable evaluation/RCA execution, and misclassification classification.\n- Public-facing web app documentation is required as part of this workflow.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -29,10 +29,16 @@
       "author": "ryan",
       "text": "## Story to task mapping\n\nThis epic's stories are implemented by the following task groups:\n\n- `plx-aebf38` Assess candidate score changes with fixed and random evaluation evidence\n  - `plx-e52e77` staged optimization protocol\n  - `plx-076ad2` candidate assessment bundle definition\n  - `plx-22533f` staged runner / bundle recording workflow\n\n- `plx-eab317` Route optimization work based on malfunction mix and evaluation flags\n  - `plx-3e14e5` workflow decision integration\n  - `plx-eb6f72` dashboard surfaces for workflow decisions and bundle evidence\n\n- `plx-fe090f` Track benchmark-versus-random generalization gap and stability\n  - `plx-cface0` generalization-gap and stability metrics\n  - `plx-eb6f72` dashboard KPI surfaces\n\n## Foundation reminders\n- Fixed deterministic dataset roles come from `plx-25e99b` in the deterministic-datasets epic.\n- Reliable evaluation execution comes from `plx-9aa370` and related RCA-contract work in the reliability epic.\n- Malfunction analysis inputs come from the misclassification-triage epic, especially `plx-c7fda3`.",
       "created_at": "2026-04-02T13:33:13.372331Z"
+    },
+    {
+      "id": "a133a16a-338c-45df-b701-62a2e1858bdc",
+      "author": "ryan",
+      "text": "Locked workflow decisions for operationalization: (1) fast-loop plus hard-gate cadence: random n=50 for iterative loops and required random n=200 confirmation gate before accept decisions; default window 180 days. (2) Candidate assessment bundle persistence: full canonical JSON in task/evaluation attachment plus compact summary fields for dashboard/query speed. (3) Keep acceptance defaults unchanged: min_reference_delta=0.01 and max_generalization_drop=0.02. (4) No champion promotion in this workflow.",
+      "created_at": "2026-04-04T22:31:52.641303Z"
     }
   ],
   "created_at": "2026-04-02T13:31:04.425367Z",
-  "updated_at": "2026-04-02T13:33:13.372331Z",
+  "updated_at": "2026-04-04T22:31:52.641303Z",
   "closed_at": null,
   "custom": {}
 }

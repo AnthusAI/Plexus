@@ -3,7 +3,7 @@
   "title": "Assess candidate score changes with fixed and random evaluation evidence",
   "description": "## Summary\nAs a score operator, I want candidate score changes assessed with both fixed deterministic evidence and random generalization evidence, so that I can tell whether an apparent improvement is real or merely overfit.\n\nFeature: Staged candidate assessment\nScenario: Operator evaluates a candidate score change\nGiven a score with fixed deterministic datasets and a random-sampling policy\nWhen the operator runs the optimization workflow for a candidate score version\nThen Plexus should assess the candidate using both deterministic and random evidence\nAnd it should present the combined result as one coherent assessment bundle",
   "type": "story",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-04-02T13:31:04.451274Z",
-  "updated_at": "2026-04-02T13:31:10.521733Z",
+  "updated_at": "2026-04-04T22:31:38.178757Z",
   "closed_at": null,
   "custom": {}
 }

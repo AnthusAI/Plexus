@@ -27,9 +27,16 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "02e1ffbb-4c80-4ea9-a76e-62dce594d1d8",
+      "author": "ryan",
+      "text": "Runner contract lock-in: emit exactly one candidate assessment bundle per baseline/candidate comparison; bundle must reference stage evaluation IDs as source-of-truth; final decision must be reproducible from persisted bundle + referenced evaluation records.",
+      "created_at": "2026-04-04T22:32:01.043644Z"
+    }
+  ],
   "created_at": "2026-04-02T13:31:27.324456Z",
-  "updated_at": "2026-04-02T13:31:27.324456Z",
+  "updated_at": "2026-04-04T22:32:01.043644Z",
   "closed_at": null,
   "custom": {}
 }
