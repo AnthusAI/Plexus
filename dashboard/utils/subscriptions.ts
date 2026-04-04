@@ -418,9 +418,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           },
           error: (error: Error) => {
             console.error('Create subscription error:', error);
-            if (isSubscribed) {
-              subscriber.error(error);
-            }
+            // Don't call subscriber.error() — that terminates the entire observable
           }
         });
         subscriptions.push(createSub);
@@ -518,9 +516,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           },
           error: (error: Error) => {
             console.error('Update subscription error:', error);
-            if (isSubscribed) {
-              subscriber.error(error);
-            }
+            // Don't call subscriber.error() — that terminates the entire observable
           }
         });
         subscriptions.push(updateSub);
@@ -540,9 +536,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           },
           error: (error: Error) => {
             console.error('Delete subscription error:', error);
-            if (isSubscribed) {
-              subscriber.error(error);
-            }
+            // Don't call subscriber.error() — that terminates the entire observable
           }
         });
         subscriptions.push(deleteSub);

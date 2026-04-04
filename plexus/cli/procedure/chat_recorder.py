@@ -934,6 +934,7 @@ class ProcedureChatRecorder:
         content: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         human_interaction: Optional[str] = None,
+        tool_response: Optional[Any] = None,
     ) -> bool:
         """Update an existing chat message."""
         if not message_id:
@@ -966,6 +967,9 @@ class ProcedureChatRecorder:
 
         if human_interaction is not None:
             update_input["humanInteraction"] = human_interaction
+
+        if tool_response is not None:
+            update_input["toolResponse"] = json.dumps(tool_response) if not isinstance(tool_response, str) else tool_response
 
         if len(update_input) == 1:
             logger.debug("No update fields provided for message %s", message_id)

@@ -434,8 +434,25 @@ class EmbeddedMCPServer:
             tool_capture = ToolCapture(self)
 
             @tool_capture.tool()
-            async def done(reason: str = "", success: Optional[bool] = True):
-                """Signal agent completion with an optional reason."""
+            async def done(reason: str = "", success: Optional[bool] = True, **kwargs):
+                """Signal agent completion with an optional reason and any additional fields."""
+                import json as _json
+                # If extra fields were passed (e.g. hypothesis, new_code), encode them
+                # as JSON in the reason field so Lua can decode them with Tool.last_call("done").args.reason
+                if kwargs and not reason:
+                    reason = _json.dumps(kwargs)
+                elif kwargs:
+                    # Merge reason and extra kwargs into a single JSON blob
+                    try:
+                        existing = _json.loads(reason)
+                        if isinstance(existing, dict):
+                            existing.update(kwargs)
+                            reason = _json.dumps(existing)
+                    except (ValueError, TypeError):
+                        # reason is a plain string; wrap everything together
+                        merged = {"reason": reason}
+                        merged.update(kwargs)
+                        reason = _json.dumps(merged)
                 return {
                     "status": "completed",
                     "success": bool(True if success is None else success),

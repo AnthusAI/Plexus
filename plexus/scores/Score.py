@@ -1,7 +1,9 @@
 import os
 import json
+import re
 import pandas as pd
-from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
+from functools import wraps
+from pydantic import BaseModel, ValidationError as PydanticValidationError, field_validator, ConfigDict
 from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 # from tensorflow.keras.utils import plot_model
@@ -79,6 +81,33 @@ class Score(ABC,
             self.reason = reason
             super().__init__(f"Score '{score_name}' was skipped: {reason}")
 
+    class ValidationError(Exception):
+        """Raised when a score result violates configured validation constraints."""
+
+    class FieldValidation(BaseModel):
+        model_config = ConfigDict(protected_namespaces=())
+        valid_classes: Optional[List[str]] = None
+        patterns: Optional[List[str]] = None
+        minimum_length: Optional[int] = None
+        maximum_length: Optional[int] = None
+
+        @field_validator("patterns")
+        @classmethod
+        def validate_patterns(cls, value):
+            if not value:
+                return value
+            for pattern in value:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    raise ValueError(f"Invalid regex pattern '{pattern}': {exc}") from exc
+            return value
+
+    class ValidationConfig(BaseModel):
+        model_config = ConfigDict(protected_namespaces=())
+        value: Optional["Score.FieldValidation"] = None
+        explanation: Optional["Score.FieldValidation"] = None
+
     class Parameters(BaseModel):
         """
         Parameters required for scoring.
@@ -98,6 +127,7 @@ class Score(ABC,
         number_of_classes: Optional[int] = None
         label_score_name: Optional[str] = None
         label_field: Optional[str] = None
+        validation: Optional["Score.ValidationConfig"] = None
 
         @field_validator('data')
         @classmethod
@@ -206,6 +236,51 @@ class Score(ABC,
         def confidence_from_metadata(self) -> Optional[float]:
             """Backwards compatibility: confidence from metadata"""
             return self.metadata.get('confidence') if self.metadata else None
+
+        def validate(self, validation_config: "Score.ValidationConfig"):
+            if not validation_config:
+                return
+            self._validate_field("value", self.value, validation_config.value)
+            self._validate_field("explanation", self.explanation, validation_config.explanation)
+
+        def _validate_field(
+            self,
+            field_name: str,
+            field_value: Optional[Union[str, bool]],
+            field_validation: Optional["Score.FieldValidation"],
+        ):
+            if field_validation is None:
+                return
+
+            value_as_text = "" if field_value is None else str(field_value)
+
+            if field_validation.valid_classes:
+                if value_as_text not in field_validation.valid_classes:
+                    raise Score.ValidationError(
+                        f"Validation failed for field '{field_name}': "
+                        f"'{value_as_text}' is not in valid_classes {field_validation.valid_classes}"
+                    )
+
+            if field_validation.minimum_length is not None:
+                if len(value_as_text) < field_validation.minimum_length:
+                    raise Score.ValidationError(
+                        f"Validation failed for field '{field_name}': "
+                        f"length {len(value_as_text)} is below minimum_length {field_validation.minimum_length}"
+                    )
+
+            if field_validation.maximum_length is not None:
+                if len(value_as_text) > field_validation.maximum_length:
+                    raise Score.ValidationError(
+                        f"Validation failed for field '{field_name}': "
+                        f"length {len(value_as_text)} exceeds maximum_length {field_validation.maximum_length}"
+                    )
+
+            if field_validation.patterns:
+                if not any(re.search(pattern, value_as_text) for pattern in field_validation.patterns):
+                    raise Score.ValidationError(
+                        f"Validation failed for field '{field_name}': "
+                        f"'{value_as_text}' does not match any configured pattern"
+                    )
         
     def __init__(self, **parameters):
         """
@@ -218,7 +293,7 @@ class Score(ABC,
 
         Raises
         ------
-        ValidationError
+        PydanticValidationError
             If the provided parameters do not pass validation.
         """
         try:
@@ -227,18 +302,18 @@ class Score(ABC,
             self._number_of_classes = None
             # Generic cost accumulator available to all score types
             self._cost_accumulator: CostAccumulator = CostAccumulator()
-        except ValidationError as e:
+        except PydanticValidationError as e:
             Score.log_validation_errors(e)
             raise
 
     @staticmethod
-    def log_validation_errors(error: ValidationError):
+    def log_validation_errors(error: PydanticValidationError):
         """
         Log validation errors for the parameters.
 
         Parameters
         ----------
-        error : ValidationError
+        error : PydanticValidationError
             The validation error object containing details about the validation failures.
         """
         error_messages = []
@@ -250,6 +325,36 @@ class Score(ABC,
         logging.error("Parameter validation errors occurred:")
         for message in error_messages:
             logging.error(message)
+
+    def __getattribute__(self, name):
+        attr = super().__getattribute__(name)
+        if name != "predict" or not callable(attr):
+            return attr
+        if getattr(attr, "_score_validation_wrapped", False):
+            return attr
+
+        @wraps(attr)
+        def validated_predict(*args, **kwargs):
+            result = attr(*args, **kwargs)
+            self._validate_prediction_result(result)
+            return result
+
+        setattr(validated_predict, "_score_validation_wrapped", True)
+        return validated_predict
+
+    def _validate_prediction_result(self, result):
+        validation_config = getattr(self.parameters, "validation", None)
+        if not validation_config:
+            return
+
+        if isinstance(result, Score.Result):
+            result.validate(validation_config)
+            return
+
+        if isinstance(result, list):
+            for item in result:
+                if isinstance(item, Score.Result):
+                    item.validate(validation_config)
 
     def report_directory_path(self):
         import os

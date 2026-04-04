@@ -179,6 +179,8 @@ def register_procedure_tools(mcp):
                 "procedures": [
                     {
                         "id": exp.id,
+                        "name": getattr(exp, 'name', None),
+                        "status": getattr(exp, 'status', None),
                         "featured": exp.featured,
                         "created_at": exp.createdAt.isoformat(),
                         "updated_at": exp.updatedAt.isoformat(),
@@ -434,10 +436,14 @@ def register_procedure_tools(mcp):
             
             client = PlexusDashboardClient()
             
-            # Query for chat sessions associated with this procedure
+            # Query for chat sessions associated with this procedure using GSI
             query = '''
-            query ListChatSessions($procedureId: String!, $limit: Int!) {
-                listChatSessions(filter: {procedureId: {eq: $procedureId}}, limit: $limit) {
+            query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                listChatSessionByProcedureIdAndCreatedAt(
+                    procedureId: $procedureId
+                    sortDirection: DESC
+                    limit: $limit
+                ) {
                     items {
                         id
                         status
@@ -455,24 +461,24 @@ def register_procedure_tools(mcp):
                 }
             }
             '''
-            
+
             result = client.execute(query, {
                 'procedureId': request.procedure_id,
                 'limit': request.limit
             })
-            
+
             if 'errors' in result:
                 return {
                     "success": False,
                     "error": f"GraphQL errors: {result['errors']}"
                 }
-                
+
             # Handle both wrapped and unwrapped GraphQL responses
             sessions = []
             if 'data' in result:
-                sessions = result['data'].get('listChatSessions', {}).get('items', [])
-            elif 'listChatSessions' in result:
-                sessions = result['listChatSessions'].get('items', [])
+                sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+            elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
             
             # Process sessions to include message counts and types
             processed_sessions = []
@@ -539,6 +545,7 @@ def register_procedure_tools(mcp):
                                 messageType
                                 toolName
                                 content
+                                toolResponse
                                 sequenceNumber
                                 parentMessageId
                                 createdAt
@@ -570,10 +577,14 @@ def register_procedure_tools(mcp):
                 
                 sessions = [session]
             else:
-                # Query for all sessions in the procedure
+                # Query for all sessions in the procedure using GSI (not filter scan)
                 query = '''
-                query ListChatSessions($procedureId: String!, $limit: Int!) {
-                    listChatSessions(filter: {procedureId: {eq: $procedureId}}, limit: $limit) {
+                query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                    listChatSessionByProcedureIdAndCreatedAt(
+                        procedureId: $procedureId
+                        sortDirection: DESC
+                        limit: $limit
+                    ) {
                         items {
                             id
                             status
@@ -596,24 +607,24 @@ def register_procedure_tools(mcp):
                     }
                 }
                 '''
-                
+
                 result = client.execute(query, {
                     'procedureId': request.procedure_id,
                     'limit': request.limit
                 })
-                
+
                 if 'errors' in result:
                     return {
                         "success": False,
                         "error": f"GraphQL errors: {result['errors']}"
                     }
-                
+
                 # Handle both wrapped and unwrapped GraphQL responses
                 sessions = []
                 if 'data' in result:
-                    sessions = result['data'].get('listChatSessions', {}).get('items', [])
-                elif 'listChatSessions' in result:
-                    sessions = result['listChatSessions'].get('items', [])
+                    sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+                elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                    sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
             
             # Process sessions and messages
             processed_sessions = []
@@ -635,16 +646,16 @@ def register_procedure_tools(mcp):
                 for msg in messages[:request.limit]:
                     msg_type = msg.get('messageType', 'MESSAGE')
                     role = msg.get('role', '')
-                    
-                    # Parse content if it's JSON
-                    content = msg.get('content', '')
-                    parsed_content = content
+
+                    # Tool responses are stored in toolResponse field; content may be empty
+                    raw = msg.get('content', '') or msg.get('toolResponse', '') or ''
+                    parsed_content = raw
                     try:
-                        if content.startswith('{') and content.endswith('}'):
-                            parsed_content = json.loads(content)
+                        if raw.startswith('{') and raw.endswith('}'):
+                            parsed_content = json.loads(raw)
                     except:
                         pass  # Keep as string if not valid JSON
-                    
+
                     processed_msg = {
                         "id": msg["id"],
                         "sequence_number": msg.get("sequenceNumber", 0),
@@ -654,14 +665,17 @@ def register_procedure_tools(mcp):
                         "created_at": msg["createdAt"],
                         "parent_message_id": msg.get("parentMessageId")
                     }
-                    
+
+                    # Tool responses: SYSTEM role messages are tool responses in this schema
+                    is_tool_response = (role == 'SYSTEM' and msg.get('parentMessageId'))
+
                     # Add tool-specific fields if requested
                     if msg_type == 'TOOL_CALL' and request.show_tool_calls:
                         processed_msg["tool_name"] = msg.get("toolName")
                         session_tool_calls.append(msg["id"])
                         tool_calls += 1
-                        
-                    elif msg_type == 'TOOL_RESPONSE' and request.show_tool_responses:
+
+                    elif (msg_type == 'TOOL_RESPONSE' or is_tool_response) and request.show_tool_responses:
                         processed_msg["tool_name"] = msg.get("toolName", "Unknown")
                         session_tool_responses.append(msg["id"])
                         tool_responses += 1
@@ -674,9 +688,10 @@ def register_procedure_tools(mcp):
                 for call_id in session_tool_calls:
                     # Find if there's a response with this call as parent
                     has_response = any(
-                        resp_msg.get('parentMessageId') == call_id 
-                        for resp_msg in messages 
+                        resp_msg.get('parentMessageId') == call_id
+                        for resp_msg in messages
                         if resp_msg.get('messageType') == 'TOOL_RESPONSE'
+                        or (resp_msg.get('role') == 'SYSTEM' and resp_msg.get('parentMessageId'))
                     )
                     if not has_response:
                         session_missing += 1

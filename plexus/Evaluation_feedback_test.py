@@ -31,6 +31,16 @@ def mock_feedback_items():
     return items
 
 
+@pytest.fixture(autouse=True)
+def mock_rca_attachment_upload():
+    """Prevent tests from calling real S3 for RCA attachment persistence."""
+    with patch(
+        "plexus.Evaluation.upload_evaluation_artifact_file",
+        return_value="evaluations/eval-789/root_cause.full.json",
+    ):
+        yield
+
+
 class TestFeedbackEvaluation:
     """Tests for FeedbackEvaluation class."""
     
@@ -133,7 +143,13 @@ class TestFeedbackEvaluation:
         with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
             with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
-                    result = await evaluation.run()
+                    with patch.object(
+                        evaluation,
+                        '_run_root_cause_analysis',
+                        new_callable=AsyncMock,
+                        return_value={"topics": [{"label": "topic-1"}]},
+                    ):
+                        result = await evaluation.run()
                     
                     assert result["status"] == "success"
                     assert result["evaluation_id"] == "eval-789"
@@ -204,13 +220,134 @@ class TestFeedbackEvaluation:
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
                     with patch('plexus.analysis.feedback_analyzer.analyze_feedback_items', return_value=mapped_analysis):
                         with patch('plexus.dashboard.api.models.score_result.ScoreResult.create', return_value=MagicMock(id="score-result-123")):
-                            await evaluation.run()
+                            with patch.object(
+                                evaluation,
+                                '_run_root_cause_analysis',
+                                new_callable=AsyncMock,
+                                return_value={"topics": [{"label": "topic-1"}]},
+                            ):
+                                await evaluation.run()
 
         final_call = mock_eval_record.update.call_args_list[-1]
         metrics_payload = json.loads(final_call.kwargs["metrics"])
         alignment_metric = next((m for m in metrics_payload if m["name"] == "Alignment"), None)
         assert alignment_metric is not None
         assert alignment_metric["value"] == -1.0
+
+    @pytest.mark.asyncio
+    async def test_run_evaluation_persists_rca_attachment_and_compacts_parameters(self, mock_api_client, mock_feedback_items):
+        """Feedback evaluation should persist full RCA to attachment and store compact pointer payload."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key"
+        )
+
+        for item in mock_feedback_items:
+            item.itemId = f"item-{item.id}"
+            item.isAgreement = item.initialAnswerValue == item.finalAnswerValue
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        root_cause_payload = {
+            "overall_explanation": "summary",
+            "topics": [],
+            "misclassification_analysis": {
+                "item_classifications_all": [
+                    {
+                        "feedback_item_id": "feedback-1",
+                        "item_id": "item-1",
+                        "primary_category": "score_configuration_problem",
+                        "confidence": "high",
+                        "rationale_paragraph": "rationale",
+                        "evidence_quote": "quote",
+                    }
+                ]
+            },
+        }
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
+                    with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value=root_cause_payload):
+                        with patch(
+                            "plexus.Evaluation.upload_evaluation_artifact_file",
+                            return_value="evaluations/eval-789/root_cause.full.json",
+                        ) as mock_upload:
+                            await evaluation.run()
+
+        mock_upload.assert_called_once()
+        final_call = mock_eval_record.update.call_args_list[-1]
+        params = json.loads(final_call.kwargs["parameters"])
+        root_cause = params["root_cause"]
+        assert root_cause["output_compacted"] is True
+        assert root_cause["output_attachment"] == "evaluations/eval-789/root_cause.full.json"
+        assert root_cause["misclassification_analysis"]["item_classifications_attachment"] == "evaluations/eval-789/root_cause.full.json"
+        assert root_cause["misclassification_analysis"]["item_classifications_total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_run_evaluation_fails_when_rca_attachment_upload_fails(self, mock_api_client, mock_feedback_items):
+        """Feedback evaluation must fail if full RCA attachment upload fails."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key"
+        )
+
+        for item in mock_feedback_items:
+            item.itemId = f"item-{item.id}"
+            item.isAgreement = item.initialAnswerValue == item.finalAnswerValue
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
+                    with patch.object(
+                        evaluation,
+                        '_run_root_cause_analysis',
+                        new_callable=AsyncMock,
+                        return_value={"overall_explanation": "summary", "topics": []},
+                    ):
+                        with patch(
+                            "plexus.Evaluation.upload_evaluation_artifact_file",
+                            side_effect=RuntimeError("attachment upload failed"),
+                        ):
+                            with pytest.raises(RuntimeError, match="attachment upload failed"):
+                                await evaluation.run()
+
+        failed_call = any(call.kwargs.get('status') == 'FAILED' for call in mock_eval_record.update.call_args_list)
+        assert failed_call
     
     @pytest.mark.asyncio
     async def test_run_evaluation_without_score_id(self, mock_api_client):
@@ -466,8 +603,14 @@ class TestFeedbackEvaluation:
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
                     with patch('plexus.dashboard.api.models.score_result.ScoreResult.create') as mock_create:
                         mock_create.return_value = MagicMock(id="score-result-123")
-                        
-                        result = await evaluation.run()
+
+                        with patch.object(
+                            evaluation,
+                            '_run_root_cause_analysis',
+                            new_callable=AsyncMock,
+                            return_value={"topics": [{"label": "topic-1"}]},
+                        ):
+                            result = await evaluation.run()
                         
                         # Verify ScoreResult.create was called for each feedback item
                         assert mock_create.call_count == len(mock_feedback_items)
@@ -532,7 +675,13 @@ class TestFeedbackEvaluation:
                                     "class_distribution": {},
                                     "predicted_class_distribution": {},
                                 }
-                                await evaluation.run()
+                                with patch.object(
+                                    evaluation,
+                                    '_run_root_cause_analysis',
+                                    new_callable=AsyncMock,
+                                    return_value={"topics": [{"label": "topic-1"}]},
+                                ):
+                                    await evaluation.run()
                                 analyzed_items = mock_analyze.call_args.args[0]
                                 sampled_id_sets.append({i.id for i in analyzed_items})
 
@@ -610,6 +759,29 @@ class TestFeedbackEvaluation:
         monkeypatch.setattr(rm_mod, "bedrock_labeler", lambda: None)
         monkeypatch.setattr(rm_mod, "bedrock_causal", lambda: None)
         monkeypatch.setattr(rm_mod, "bedrock_synthesizer", lambda: None)
+        import plexus.rca_analysis as rca_mod
+        monkeypatch.setattr(
+            rca_mod,
+            "extract_misclassification_evidence_flags",
+            lambda *, item_context: {
+                "external_information_missing_or_degraded": False,
+                "guideline_or_policy_ambiguity": False,
+                "missing_required_context_due_system": False,
+                "runtime_or_parsing_failure": False,
+                "invalid_output_class_signal": False,
+                "best_evidence_source": "none",
+                "best_evidence_quote": "",
+            },
+        )
+        monkeypatch.setattr(
+            rca_mod,
+            "explain_misclassification_item_classification",
+            lambda **kwargs: {
+                "rationale_paragraph": "Score logic likely fix surface.",
+                "evidence_quote": "Explanation",
+                "config_fixability": "likely_fixable",
+            },
+        )
 
         result = await evaluation._run_root_cause_analysis(
             feedback_items,
@@ -620,3 +792,161 @@ class TestFeedbackEvaluation:
 
         assert captured["max_exemplars"] == 20
         assert result["topics"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_fails_when_incorrect_items_and_rca_missing(self, mock_api_client, mock_feedback_items):
+        """Feedback-backed runs with incorrect items must fail if RCA payload is missing."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        for item in mock_feedback_items:
+            item.itemId = f"item-{item.id}"
+            item.isAgreement = item.initialAnswerValue == item.finalAnswerValue
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
+                    with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value={}):
+                        with pytest.raises(RuntimeError, match="no usable RCA payload"):
+                            await evaluation.run()
+
+        failed_call = any(call.kwargs.get('status') == 'FAILED' for call in mock_eval_record.update.call_args_list)
+        assert failed_call
+
+    @pytest.mark.asyncio
+    async def test_run_succeeds_without_rca_when_no_incorrect_items(self, mock_api_client):
+        """RCA is not required when there are zero incorrect items."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        perfect_items = []
+        for i in range(3):
+            item = MagicMock()
+            item.id = f"item-{i}"
+            item.itemId = f"raw-item-{i}"
+            item.initialAnswerValue = "Yes"
+            item.finalAnswerValue = "Yes"
+            item.isAgreement = True
+            item.editCommentValue = None
+            item.initialCommentValue = None
+            item.finalCommentValue = None
+            item.editedAt = datetime.now(timezone.utc)
+            item.editorName = "Test Editor"
+            perfect_items.append(item)
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=perfect_items):
+                    with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value={}):
+                        result = await evaluation.run()
+
+        assert result["status"] == "success"
+        final_call = mock_eval_record.update.call_args_list[-1]
+        assert final_call.kwargs.get("status") == "COMPLETED"
+
+    @pytest.mark.asyncio
+    async def test_small_set_path_invoked_for_fewer_than_five_items(self, mock_api_client):
+        """_run_root_cause_analysis should delegate to small-set RCA when candidate count < 5."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        feedback_items = []
+        score_result_map = {}
+        for i in range(3):
+            item = MagicMock()
+            item.id = f"feedback-{i}"
+            item.itemId = f"item-{i}"
+            item.initialAnswerValue = "No"
+            item.finalAnswerValue = "Yes"
+            item.editCommentValue = f"comment-{i}"
+            item.editedAt = datetime.now(timezone.utc)
+            feedback_items.append(item)
+            score_result_map[item.id] = {"value": "No", "human_label": "Yes", "explanation": f"exp-{i}"}
+
+        expected = {
+            "topics": [{"label": "Small-set RCA Summary"}],
+            "overall_explanation": "summary",
+            "overall_improvement_suggestion": "improve",
+        }
+
+        with patch.object(
+            evaluation,
+            "_run_small_set_root_cause_analysis",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ) as mock_small:
+            result = await evaluation._run_root_cause_analysis(
+                feedback_items=feedback_items,
+                score_result_map=score_result_map,
+                original_explanations={},
+            )
+
+        assert result == expected
+        assert mock_small.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_small_set_path_returns_empty_when_no_candidates(self, mock_api_client):
+        """_run_root_cause_analysis should return empty payload when no incorrect candidates exist."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        result = await evaluation._run_root_cause_analysis(
+            feedback_items=[],
+            score_result_map={},
+            original_explanations={},
+        )
+
+        assert result == {}
