@@ -3,7 +3,7 @@
   "title": "Expose misclassification-analysis payloads through evaluation info surfaces",
   "description": "## Summary\nExpose the new misclassification-analysis payload through evaluation info surfaces and API consumers.\n\n## Deliverables\n- Include the structured payload in evaluation info responses used by MCP and dashboard consumers.\n- Keep the payload first-class rather than burying it inside free-form text.\n- Preserve a clear separation between item classifications, evaluation-level flags, and optimization RCA.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -15,9 +15,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "bd3d978b-f702-4bc0-9476-11b1eb8b1eae",
+      "author": "ryan",
+      "text": "Starting implementation: add first-class misclassification_analysis exposure in evaluation info outputs (CLI/MCP-facing) so consumers do not need to parse free-form parameters payloads.",
+      "created_at": "2026-04-04T14:47:49.025325Z"
+    },
+    {
+      "id": "28dc808c-835a-4d5e-8fee-370a7d36cf46",
+      "author": "ryan",
+      "text": "Implemented first-class payload exposure for evaluation info surfaces: Evaluation.get_evaluation_info now returns top-level root_cause and misclassification_analysis fields (extracted from persisted parameters.root_cause). Updated MCP plexus_evaluation_info and plexus_evaluation_run payload builders to consume these first-class fields directly.",
+      "created_at": "2026-04-04T14:48:52.973108Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.771823Z",
-  "updated_at": "2026-04-02T13:21:09.771823Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:48:52.977400Z",
+  "closed_at": "2026-04-04T14:48:52.977400Z",
   "custom": {}
 }

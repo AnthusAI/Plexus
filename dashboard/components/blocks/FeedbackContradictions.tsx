@@ -42,6 +42,8 @@ interface Exemplar {
   is_invalid: boolean;
   confidence?: 'high' | 'medium' | 'low';
   voting?: Vote[] | null;
+  verdict?: 'contradiction' | 'aligned' | string;
+  associated_dataset_eligible?: boolean;
 }
 
 interface Topic {
@@ -53,10 +55,23 @@ interface Topic {
 }
 
 interface FeedbackContradictionsData {
+  mode?: 'contradictions' | 'aligned' | string;
   score_name: string;
   total_items_analyzed: number;
+  items_vetted?: number;
   contradictions_found: number;
+  aligned_found?: number;
+  selected_items_count?: number;
   topics: Topic[];
+  eligible_associated_feedback_item_ids?: string[];
+  eligible_count?: number;
+  eligibility_rule?: string;
+  source_report_block_id?: string | null;
+  block_configuration?: {
+    scorecard?: string;
+    score?: string;
+    mode?: string;
+  };
   error?: string;
 }
 
@@ -89,7 +104,11 @@ function computeConfidence(votes: Vote[]): 'high' | 'medium' | 'low' {
   return 'low';
 }
 
-const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'low' }> = ({ votes, confidence }) => {
+const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'low'; isAlignedMode: boolean }> = ({
+  votes,
+  confidence,
+  isAlignedMode,
+}) => {
   const confidenceClass =
     confidence === 'high'
       ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
@@ -101,16 +120,19 @@ const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'l
     <div className="flex items-center gap-1.5 shrink-0">
       {votes.map((v, i) => {
         const showSep = i === 3;
+        const isAgreement = v.result !== null && (isAlignedMode ? v.result === false : v.result === true);
         const circleClass = v.result === null
           ? 'bg-muted text-muted-foreground'
-          : v.result
+          : isAgreement
             ? 'bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100'
             : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100';
         const label = v.result === null ? '×' : (v.model === 'sonnet' ? 'S' : 'G');
         const modelName = v.model === 'sonnet' ? 'Sonnet' : 'GPT-5.4';
         const title = v.result === null
           ? `${modelName}: call failed — no response received`
-          : `${modelName}: ${v.result ? 'yes — is a contradiction' : 'no — not a contradiction'}`;
+          : isAlignedMode
+            ? `${modelName}: ${v.result ? 'disagree — contradiction' : 'agree — aligned'}`
+            : `${modelName}: ${v.result ? 'agree — contradiction' : 'disagree — not a contradiction'}`;
         return (
           <React.Fragment key={i}>
             {showSep && <span className="text-muted-foreground/40 text-xs mx-0.5">|</span>}
@@ -132,7 +154,11 @@ const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'l
 
 // ---- Exemplar row ----------------------------------------------------------
 
-const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
+const ExemplarRow: React.FC<{ exemplar: Exemplar; allowInvalidation: boolean; isAlignedMode: boolean }> = ({
+  exemplar,
+  allowInvalidation,
+  isAlignedMode,
+}) => {
   const [invalidated, setInvalidated] = React.useState(exemplar.is_invalid);
   const [loading, setLoading] = React.useState(false);
 
@@ -171,20 +197,22 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           {timeAgo && (
             <span className="text-xs text-muted-foreground">{timeAgo}</span>
           )}
-          {invalidated ? (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <CheckCircle className="h-3 w-3" /> Marked invalid
-            </span>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="text-xs h-6"
-              disabled={loading}
-              onClick={handleMarkInvalid}
-            >
-              {loading ? 'Saving…' : 'Mark Invalid'}
-            </Button>
+          {allowInvalidation && (
+            invalidated ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <CheckCircle className="h-3 w-3" /> Marked invalid
+              </span>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="text-xs h-6"
+                disabled={loading}
+                onClick={handleMarkInvalid}
+              >
+                {loading ? 'Saving…' : 'Mark Invalid'}
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -231,6 +259,7 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
           <VotingBadges
             votes={exemplar.voting}
             confidence={exemplar.confidence ?? computeConfidence(exemplar.voting)}
+            isAlignedMode={isAlignedMode}
           />
         )}
       </div>
@@ -240,7 +269,11 @@ const ExemplarRow: React.FC<{ exemplar: Exemplar }> = ({ exemplar }) => {
 
 // ---- Topic section ---------------------------------------------------------
 
-const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
+const TopicSection: React.FC<{ topic: Topic; allowInvalidation: boolean; isAlignedMode: boolean }> = ({
+  topic,
+  allowInvalidation,
+  isAlignedMode,
+}) => {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -281,7 +314,12 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
             </div>
           )}
           {topic.exemplars.map((ex) => (
-            <ExemplarRow key={ex.feedback_item_id} exemplar={ex} />
+            <ExemplarRow
+              key={ex.feedback_item_id}
+              exemplar={ex}
+              allowInvalidation={allowInvalidation}
+              isAlignedMode={isAlignedMode}
+            />
           ))}
         </div>
       )}
@@ -291,21 +329,22 @@ const TopicSection: React.FC<{ topic: Topic }> = ({ topic }) => {
 
 // ---- Main block component --------------------------------------------------
 
-const CONTEXT_HEADER = `# Feedback Contradictions Report Output
+const CONTEXT_HEADER = `# Feedback Guideline-Vetting Report Output
 #
-# This report analyzes feedback items against score guidelines to identify
-# contradictions and policy gaps. Items are classified by a multi-model voting
-# system (Sonnet + GPT-5.4) with optional tiebreaker rounds using extended thinking.
+# This report evaluates feedback items against score guidelines using shared
+# multi-model voting (Sonnet + GPT-5.4 with optional tiebreakers).
 #
 # Structure:
+#   mode: contradictions | aligned
 #   score_name: The score being analyzed
 #   total_items_analyzed: Number of feedback items evaluated
 #   contradictions_found: Number of items flagged as contradictions or policy gaps
-#   topics: Clustered groups of contradictions with exemplar items
+#   aligned_found: Number of items that were non-contradicting
+#   topics: Clustered groups for the selected mode
 #     Each exemplar includes:
 #       - voting: Per-model votes with reasoning traces
 #       - confidence: high/medium/low based on vote agreement
-#       - reason: Synthesized explanation of the policy issue
+#       - verdict: contradiction | aligned
 #       - score_result_explanation: Original AI score explanation
 #       - edit_comment: Human reviewer's correction comment
 
@@ -360,13 +399,13 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     : props.output;
 
   if (outputCompacted && !loadedOutput) {
-    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Loading contradiction analysis data…</p></ReportBlock>;
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Loading guideline-vetting data…</p></ReportBlock>;
   }
 
   const output: FeedbackContradictionsData | null = loadedOutput ?? parsedOutput;
 
   if (!output || (output as any).status === 'pending') {
-    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Generating contradiction analysis…</p></ReportBlock>;
+    return <ReportBlock {...props} output={reportBlockOutput}><p className="text-sm text-muted-foreground p-4">Generating guideline-vetting analysis…</p></ReportBlock>;
   }
 
   if (output.error) {
@@ -380,7 +419,19 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     );
   }
 
-  const { score_name, total_items_analyzed, contradictions_found, topics = [] } = output;
+  const {
+    mode = 'contradictions',
+    score_name,
+    total_items_analyzed,
+    contradictions_found,
+    aligned_found = 0,
+    selected_items_count = contradictions_found,
+    topics = [],
+    eligible_count = 0,
+  } = output;
+  const isAlignedMode = mode === 'aligned';
+  const contradictionRate = Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100);
+  const alignedRate = Math.round((aligned_found / Math.max(total_items_analyzed, 1)) * 100);
 
   return (
     <ReportBlock {...props} output={reportBlockOutput}>
@@ -390,25 +441,35 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
           <div>
             <h3 className="text-base font-semibold">{score_name}</h3>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {contradictions_found} contradiction{contradictions_found !== 1 ? 's' : ''} found
-              {' '}across {total_items_analyzed} feedback item{total_items_analyzed !== 1 ? 's' : ''}
+              {isAlignedMode
+                ? `${aligned_found} aligned item${aligned_found !== 1 ? 's' : ''} across ${total_items_analyzed} feedback item${total_items_analyzed !== 1 ? 's' : ''}`
+                : `${contradictions_found} contradiction${contradictions_found !== 1 ? 's' : ''} found across ${total_items_analyzed} feedback item${total_items_analyzed !== 1 ? 's' : ''}`
+              }
             </p>
           </div>
-          <Badge variant={contradictions_found > 0 ? 'destructive' : 'secondary'} className="shrink-0">
-            {contradictions_found > 0
-              ? `${Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100)}% contradiction rate`
-              : 'No contradictions'}
+          <Badge
+            variant={isAlignedMode ? 'secondary' : (contradictions_found > 0 ? 'destructive' : 'secondary')}
+            className="shrink-0"
+          >
+            {isAlignedMode ? `${alignedRate}% aligned` : (contradictions_found > 0 ? `${contradictionRate}% contradiction rate` : 'No contradictions')}
           </Badge>
         </div>
 
-        {topics.length === 0 && contradictions_found === 0 && (
+        {topics.length === 0 && selected_items_count === 0 && (
           <p className="text-sm text-muted-foreground">
-            All feedback items appear consistent with the score guidelines.
+            {isAlignedMode
+              ? 'No aligned vetted items found in this run.'
+              : 'All feedback items appear consistent with the score guidelines.'}
           </p>
         )}
 
         {topics.map((topic) => (
-          <TopicSection key={topic.label} topic={topic} />
+          <TopicSection
+            key={topic.label}
+            topic={topic}
+            allowInvalidation={!isAlignedMode}
+            isAlignedMode={isAlignedMode}
+          />
         ))}
       </div>
     </ReportBlock>

@@ -3,7 +3,7 @@
   "title": "Add tests for misclassification classification, evaluation flags, and dashboard rendering",
   "description": "## Summary\nAdd test coverage for the misclassification-classification pipeline, payload contract, heuristics, and dashboard behavior.\n\n## Deliverables\n- Cover category assignment contract and payload shape.\n- Cover evaluation-level flag heuristics.\n- Cover dashboard rendering of breakdowns, alerts, and item-level drill-down.\n- Ensure the classification layer does not regress existing RCA behavior.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -29,7 +29,7 @@
   ],
   "comments": [],
   "created_at": "2026-04-02T13:21:09.890961Z",
-  "updated_at": "2026-04-02T13:21:09.890961Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:53:17.401137Z",
+  "closed_at": "2026-04-04T14:53:17.401137Z",
   "custom": {}
 }

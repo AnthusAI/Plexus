@@ -1,0 +1,18 @@
+{
+  "id": "plx-5af0b374-3c5e-43ef-81af-d924e2ac3402",
+  "title": "Test checkpoint/resume functionality",
+  "description": "Verify that optimization can be interrupted and resumed from checkpoints.\n\n## Test Procedure\n\n1. Start optimization on test score\n2. Let iteration 1 complete\n3. During iteration 2, interrupt with Ctrl+C\n4. Run: plexus procedure resume <procedure-id>\n5. Verify resumption behavior\n\n## Validation Checklist\n\n- [ ] Procedure resumes from where it left off\n- [ ] Iteration 1 is not re-executed\n- [ ] Baseline evaluation is reused (not re-run)\n- [ ] Iteration logs preserved\n- [ ] Can complete remaining iterations\n- [ ] Final results include all iterations\n\n## Test Variations\n\nTry interrupting at different points:\n- After baseline, before iteration 1\n- During iteration evaluation\n- After HITL approval, before version creation\n\n## Success Criteria\n\n- Resume works in all tested scenarios\n- No data loss\n- Checkpoint state accurately reflects progress\n\n## Documentation\n\nComment with:\n- Where interruption occurred\n- Resume behavior observed\n- Any state inconsistencies found",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-02T16:09:24.880613Z",
+  "updated_at": "2026-04-02T16:09:24.880613Z",
+  "closed_at": null,
+  "custom": {}
+}

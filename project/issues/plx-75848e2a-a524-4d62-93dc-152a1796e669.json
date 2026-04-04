@@ -3,16 +3,23 @@
   "title": "Clean Score.py CodeQL findings",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "18b21dae-2a28-4dac-a75d-b019d900040a",
+      "author": "ryan",
+      "text": "Score.py and Scorecard.py CodeQL findings resolved in commit d5c3cfb2b.",
+      "created_at": "2026-04-04T18:58:16.103809Z"
+    }
+  ],
   "created_at": "2026-03-05T20:14:27.534292516Z",
-  "updated_at": "2026-03-05T20:14:31.005293755Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T18:58:16.103809Z",
+  "closed_at": "2026-04-04T18:58:16.103809Z",
   "custom": {}
 }

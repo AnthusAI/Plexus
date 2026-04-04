@@ -55,6 +55,7 @@ interface TaskDisplayProps {
     scorecardId?: string | null | undefined
     scoreId?: string | null | undefined
     scoreVersionId?: string | null | undefined
+    dataSetId?: string | null | undefined
     parameters?: string | null
   }
   reportData?: {
@@ -292,6 +293,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         scorecardId: evaluationData.scorecardId,
         scoreId: evaluationData.scoreId,
         scoreVersionId: evaluationData.scoreVersionId,
+        dataSetId: evaluationData.dataSetId,
         data: {
           id: displayId,
           title: displayTitle,
@@ -514,7 +516,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const stagesChanged = prevStages.length !== nextStages.length || 
     prevStages.some((stage: any, index: number) => {
       const nextStage: any = nextStages[index];
-      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
+      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status || stage.statusMessage !== nextStage.statusMessage;
     });
   
   if (stagesChanged) {

@@ -3,7 +3,7 @@
   "title": "Tactus Procedure Runtime Migration",
   "description": "## Intent\nAdopt Tactus as the procedure runtime format and remove LuaDSL-era workflow/config coupling.\n\n## Definition of Done\n- Procedure configs support `class: Tactus` + `code:` execution path.\n- `workflow:` is not used for Tactus procedures.\n- Scorecard create procedure is implemented and runnable in Tactus format.\n- MCP support exists for guidelines validation + scorecards list pagination metadata.\n- Tests pass for changed areas and integration test is executed.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Added story plx-bcf813: Create Score code from guidelines via procedure.",
       "created_at": "2026-03-10T00:50:37.537464536Z"
+    },
+    {
+      "id": "bbe752ec-f195-4182-8d0a-5c5c8af41a1e",
+      "author": "ryan",
+      "text": "Tactus Procedure Runtime Migration complete; graph nodes deprecated.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-10T00:47:16.853450293Z",
-  "updated_at": "2026-03-10T00:50:37.537464536Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

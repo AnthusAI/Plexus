@@ -3,7 +3,7 @@
   "title": "Build staged optimization runner and assessment-bundle recording workflow",
   "description": "## Summary\nBuild the workflow runner/orchestrator that executes the staged optimization protocol and records the resulting assessment bundle.\n\n## Deliverables\n- Execute deterministic and random evaluation stages in the defined order.\n- Capture the evaluation IDs involved in one candidate assessment bundle.\n- Record the combined result and workflow decision in a standardized way for operators and future agents.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -27,9 +27,28 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "02e1ffbb-4c80-4ea9-a76e-62dce594d1d8",
+      "author": "ryan",
+      "text": "Runner contract lock-in: emit exactly one candidate assessment bundle per baseline/candidate comparison; bundle must reference stage evaluation IDs as source-of-truth; final decision must be reproducible from persisted bundle + referenced evaluation records.",
+      "created_at": "2026-04-04T22:32:01.043644Z"
+    },
+    {
+      "id": "e7285a10-16d3-4c03-8557-f193f610b3de",
+      "author": "ryan",
+      "text": "Unblocked and moved in_progress after bundle contract completion (plx-076ad2). Next implementation slice: wire runner orchestration to emit one bundle per baseline/candidate comparison and persist attachment + compact summary pointers.",
+      "created_at": "2026-04-04T22:46:25.100045Z"
+    },
+    {
+      "id": "6fac528d-2d55-4f53-a1c0-d63249b2d5df",
+      "author": "ryan",
+      "text": "Implemented staged workflow orchestration helper in shared CLI: run_candidate_assessment_workflow() now executes deterministic -> random_iteration -> random_gate in locked order, computes decision via assess_candidate(), emits one canonical bundle, builds compact summary, and supports strict attachment persistence interface (no fallback path). Added tests for stage order, persistence behavior, and persist-without-task-id failure. Validation: pytest -q plexus/cli/shared/candidate_assessment_bundle_test.py plexus/cli/shared/candidate_assessment_runner_test.py plexus/cli/shared/evaluation_value_function_test.py plexus/cli/shared/optimization_acceptance_policy_test.py (15 passed).",
+      "created_at": "2026-04-04T22:47:50.807119Z"
+    }
+  ],
   "created_at": "2026-04-02T13:31:27.324456Z",
-  "updated_at": "2026-04-02T13:31:27.324456Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T22:47:54.497136Z",
+  "closed_at": "2026-04-04T22:47:54.497136Z",
   "custom": {}
 }

@@ -1,0 +1,31 @@
+{
+  "id": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+  "title": "Vetted Feedback Curation and Reference Dataset Build",
+  "description": "",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ac040522-09c4-4c37-bdb2-924f6a5624ba",
+      "author": "ryan",
+      "text": "Implementation kickoff: building vetted-feedback reference dataset flow end-to-end (shared voting engine, contradictions/aligned report modes, direct CLI+MCP dataset builder from explicit feedback IDs, aligned-mode UI dataset action, and docs). No fallback paths.",
+      "created_at": "2026-04-02T18:57:32.460583Z"
+    },
+    {
+      "id": "f3faeb15-d372-48d4-a5b4-25244dce06db",
+      "author": "ryan",
+      "text": "Epic completion update: all scoped tasks for shared voting extraction, contradictions/aligned mode outputs, direct vetted-feedback dataset builder (CLI+MCP), dashboard aligned-mode action/API route, and docs are now delivered and validated with targeted tests.",
+      "created_at": "2026-04-02T19:14:45.771374Z"
+    }
+  ],
+  "created_at": "2026-04-02T18:56:22.285844Z",
+  "updated_at": "2026-04-02T19:14:45.771374Z",
+  "closed_at": "2026-04-02T19:14:45.753740Z",
+  "custom": {}
+}

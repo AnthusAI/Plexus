@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7ed72340-2e19-47ec-8963-0f0daa29fe1a",
+  "issue_id": "plx-31e899ec-651f-4283-a8b9-0c708d0c3eb1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T19:06:52.186Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-8715381c-ace8-4ec3-aaec-8a6fa1a56240",
+    "priority": 1,
+    "status": "open",
+    "title": "Information-gap diagnostics payload + banner"
+  }
+}

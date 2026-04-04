@@ -1,0 +1,30 @@
+{
+  "id": "plx-492ddf81-56f9-4c3d-9864-c4cdded9b113",
+  "title": "Add canonical dataset detail route and links",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-5eb1dd",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "539b7848-fc49-4453-98ef-ab407952425f",
+      "author": "ryan",
+      "text": "Added canonical dataset detail routing at /lab/data/datasets/[id] and wired ReportBlock + evaluation dataset links to this route.",
+      "created_at": "2026-04-03T06:03:40.605651Z"
+    }
+  ],
+  "created_at": "2026-04-03T05:47:31.337019Z",
+  "updated_at": "2026-04-03T06:03:40.619159Z",
+  "closed_at": "2026-04-03T06:03:40.619159Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dcfec9eb-4ef3-444a-b3bb-56e9c6941b12",
+  "issue_id": "plx-4ada081f-f044-4e3e-9448-068c3e6957fb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T01:49:45.739Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "CLI orchestration command: score dataset-curate-vetted"
+  }
+}

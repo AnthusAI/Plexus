@@ -1,0 +1,31 @@
+{
+  "id": "plx-bc6a7330-43c1-40d9-9feb-7678cbc61cf2",
+  "title": "Run smoke tests and validate core functionality",
+  "description": "Validate that all components are working before running on real data.\n\n## Test Checklist\n\n- [ ] YAML syntax validation passes\n- [ ] MCP tool plexus_evaluation_compare is registered\n- [ ] CLI command plexus procedure optimize exists and shows help\n- [ ] Identifier resolution works for name/key/ID/externalID\n- [ ] Procedure YAML loads without errors\n\n## Commands to Run\n\n```bash\n# 1. Validate YAML syntax\npython3 -c \"import yaml; yaml.safe_load(open('plexus/procedures/feedback_alignment_optimizer.yaml'))\"\n\n# 2. Check CLI help\nplexus procedure optimize --help\n\n# 3. Test identifier resolution (dry run, quick on test scorecard)\nplexus procedure optimize -s <scorecard> -c <score> --days 7 --dry-run\n```\n\n## Success Criteria\n\nAll smoke tests pass without errors.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "511cabf6-cb3b-414e-ac27-0580b773faf3",
+      "author": "ryan",
+      "text": "## Starting Smoke Tests\n\nTesting core functionality before running on real data.\n\n### Test 1: YAML Syntax Validation",
+      "created_at": "2026-04-02T16:10:40.357461Z"
+    },
+    {
+      "id": "adf5a821-1815-417e-9768-78b25c6a805d",
+      "author": "ryan",
+      "text": "## Smoke Test Results\n\n✅ **Test 1: YAML Syntax** - PASSED\n- File: plexus/procedures/feedback_alignment_optimizer.yaml\n- Result: Valid YAML, no syntax errors\n\n✅ **Test 2: CLI Command** - PASSED  \n- Command: plexus procedure optimize --help\n- Result: Command exists, shows proper help text\n\n✅ **Test 3: MCP Tool Registration** - PASSED\n- Tool: plexus_evaluation_compare\n- Location: MCP/tools/evaluation/evaluation_comparison.py\n- Registered in: MCP/server.py (lines 17, 114)\n\n## Next: Find Test Score\n\nMoving to task plx-c2943e to identify suitable test score with feedback data.",
+      "created_at": "2026-04-02T16:11:24.561520Z"
+    }
+  ],
+  "created_at": "2026-04-02T16:08:45.982388Z",
+  "updated_at": "2026-04-02T16:11:24.561520Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-9f21b2a5-fd83-4d7a-95dd-0ceabad5b00a",
+  "title": "Run full optimization cycle on test score",
+  "description": "Execute complete optimization with real data to validate end-to-end functionality.\n\n## Prerequisites\n\n- Test score selected (from previous task)\n- Smoke tests passing\n\n## Test Execution\n\nRun optimization with moderate settings:\n```bash\nplexus procedure optimize \\\n  -s <scorecard-key> \\\n  -c <score-key> \\\n  --days 90 \\\n  --max-iterations 3 \\\n  --improvement-threshold 0.02\n```\n\n## Validation Checklist\n\nDuring execution, verify:\n- [ ] Baseline evaluation runs with RCA\n- [ ] RCA output shows meaningful topic clusters\n- [ ] Analyzer agent proposes logical changes\n- [ ] HITL approval gate appears with clear context\n- [ ] After approval, new score version created\n- [ ] Version note contains hypothesis\n- [ ] Evaluation runs with baseline comparison\n- [ ] Metric deltas calculated correctly\n- [ ] Iteration log complete\n- [ ] Can continue through multiple iterations\n\nAfter completion, verify:\n- [ ] Final summary shows total improvement\n- [ ] All iterations logged correctly\n- [ ] No data corruption (score versions valid)\n- [ ] Baseline ID consistent across iterations\n\n## Success Criteria\n\n- Completes without errors\n- At least 1 iteration executes fully\n- Metrics improve or stay flat (no major regressions)\n- All data structures match specifications\n\n## Documentation\n\nComment with:\n- Procedure ID\n- Number of iterations completed\n- AC1 improvement (baseline → final)\n- Any issues encountered\n- Screenshots of HITL prompts (if helpful)",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1f5ef681-3d62-4756-b732-1f6224cc6c31",
+      "author": "ryan",
+      "text": "## Running Full Optimization Test\n\n**Target Score:**\n- Scorecard: AW Confirmation (ID: 731)\n- Score: Transfer Call? (ID: 47086)\n\n**Parameters:**\n- Days: 180 (last 6 months of feedback)\n- Max samples: 100 per evaluation\n- Max iterations: 3\n- Dry run: No (will make real changes)\n\nStarting optimization now...",
+      "created_at": "2026-04-02T16:15:57.823792Z"
+    }
+  ],
+  "created_at": "2026-04-02T16:09:15.727062Z",
+  "updated_at": "2026-04-02T16:15:57.823792Z",
+  "closed_at": null,
+  "custom": {}
+}
