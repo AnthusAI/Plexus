@@ -330,6 +330,41 @@ plexus evaluate feedback \\
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Interpreting Workflow KPIs and Decisions</h2>
+          <p className="text-muted-foreground mb-4">
+            Evaluation detail now includes a <strong>Candidate assessment</strong> panel with
+            compact workflow evidence. Use it to quickly decide whether to keep optimizing score
+            configuration or reroute to data/SME/system work.
+          </p>
+          <h3 className="text-xl font-medium mb-2">How to read stage evidence</h3>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
+            <li><strong>Deterministic reference</strong>: associated-dataset check of baseline vs candidate.</li>
+            <li><strong>Random iteration (n=50)</strong>: fast loop signal for iterative tuning.</li>
+            <li><strong>Random gate (n=200)</strong>: required confirmation stage before accept decisions.</li>
+            <li>Review per-stage baseline/candidate status and delta values before trusting the decision.</li>
+          </ul>
+          <h3 className="text-xl font-medium mb-2">How to read generalization KPIs</h3>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
+            <li><strong>Baseline gap</strong> and <strong>Candidate gap</strong>: reference AC1 minus random-mean AC1 for each version.</li>
+            <li><strong>Gap delta</strong>: candidate gap minus baseline gap. Positive means candidate generalized worse.</li>
+            <li><strong>Random delta mean/stddev</strong>: average and stability of candidate-vs-baseline random deltas across random stages.</li>
+            <li>Use these with policy thresholds (for example <code>min_reference_delta=0.01</code>, <code>max_generalization_drop=0.02</code>) for accept/reject outcomes.</li>
+          </ul>
+          <h3 className="text-xl font-medium mb-2">Routing guidance from malfunction context</h3>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
+            <li><strong>score_configuration_optimization</strong>: continue YAML/code optimization loop.</li>
+            <li><strong>data_remediation</strong>: information gaps dominate; improve input artifact quality or coverage first.</li>
+            <li><strong>sme_guideline_clarification</strong>: guideline ambiguity dominates; resolve rubric with SMEs.</li>
+            <li><strong>bug_investigation</strong>: mechanical failures dominate; investigate runtime/system issues.</li>
+          </ul>
+          <p className="text-muted-foreground">
+            Keep deterministic associated-dataset runs and misclassification/RCA outputs together in
+            review. Deterministic stages answer reproducibility, random stages answer generalization,
+            and triage/RCA answers what to do next.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
           <p className="text-muted-foreground">
             Detailed documentation about evaluations is currently being developed. Check back soon for:
