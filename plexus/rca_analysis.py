@@ -60,6 +60,14 @@ CONFIG_FIXABILITY_OPTIONS = (
     "needs_sme_clarification",
 )
 
+MISCLASSIFICATION_EVIDENCE_FLAG_KEYS = (
+    "external_information_missing_or_degraded",
+    "guideline_or_policy_ambiguity",
+    "missing_required_context_due_system",
+    "runtime_or_parsing_failure",
+    "invalid_output_class_signal",
+)
+
 PRIMARY_NEXT_ACTIONS = (
     "bug_investigation",
     "data_remediation",
@@ -235,6 +243,7 @@ def get_misclassification_classifier_output_contract() -> dict:
             "rationale",
             "confidence",
             "evidence_snippets",
+            "evidence_flags",
             "rationale_paragraph",
             "evidence_quote",
             "config_fixability",
@@ -270,6 +279,10 @@ def get_misclassification_classifier_output_contract() -> dict:
                         "metadata",
                     ],
                 },
+            },
+            "evidence_flags": {
+                "type": "object",
+                "required_fields": list(MISCLASSIFICATION_EVIDENCE_FLAG_KEYS),
             },
             "mechanical_subtype": {
                 "type": "enum_or_null",
@@ -461,8 +474,144 @@ def build_misclassification_item_context(
     }
 
 
-def classify_misclassification_item(item_context: dict) -> dict:
-    """Classify one misclassification using the standardized item context payload."""
+def extract_misclassification_evidence_flags(
+    *,
+    item_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Extract item-level triage evidence flags from full context (including feedback comments).
+
+    The returned flags are inputs to deterministic category assignment.
+    """
+    import boto3
+
+    system = (
+        "You extract evidence flags for misclassification triage. "
+        "Focus on explicit evidence in the provided context. "
+        "Use modality-agnostic language."
+    )
+    prompt = (
+        "Return exactly seven lines in this exact format:\n"
+        "FLAG_EXTERNAL_INFORMATION_GAP: <true|false>\n"
+        "FLAG_GUIDELINE_GAP: <true|false>\n"
+        "FLAG_SYSTEM_MISSING_CONTEXT: <true|false>\n"
+        "FLAG_RUNTIME_OR_PARSER_FAILURE: <true|false>\n"
+        "FLAG_INVALID_OUTPUT_CLASS: <true|false>\n"
+        "BEST_EVIDENCE_SOURCE: <edit_comment|score_explanation|guidelines|score_yaml|primary_input|metadata|none>\n"
+        "BEST_EVIDENCE_QUOTE: <short supporting quote/fact>\n\n"
+        "Interpretation rules:\n"
+        "- EXTERNAL_INFORMATION_GAP=true only when evidence says source evidence is degraded/insufficient externally "
+        "(e.g., transcription omissions, redaction, inaudible sections).\n"
+        "- GUIDELINE_GAP=true when feedback indicates rubric/policy ambiguity or missing policy detail.\n"
+        "- SYSTEM_MISSING_CONTEXT=true when required input/context appears missing due system/pipeline/contract issues "
+        "(including missing metadata fields).\n"
+        "- RUNTIME_OR_PARSER_FAILURE=true only for explicit runtime/parser/schema failures.\n"
+        "- INVALID_OUTPUT_CLASS=true only when output class appears invalid/out-of-schema.\n"
+        "- If multiple flags could apply, set all that are supported by explicit evidence.\n\n"
+        f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n"
+    )
+
+    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 220,
+        "system": system,
+        "messages": [{"role": "user", "content": prompt}],
+    })
+    response = client.invoke_model(
+        modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        body=body,
+        contentType="application/json",
+        accept="application/json",
+    )
+    parsed = json.loads(response["body"].read())
+    text = (
+        ((parsed.get("content") or [{}])[0]).get("text")
+        if isinstance(parsed, dict)
+        else None
+    )
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("Invalid evidence flag output: empty response")
+
+    kv: Dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        kv[key.strip().upper()] = value.strip()
+
+    required = (
+        "FLAG_EXTERNAL_INFORMATION_GAP",
+        "FLAG_GUIDELINE_GAP",
+        "FLAG_SYSTEM_MISSING_CONTEXT",
+        "FLAG_RUNTIME_OR_PARSER_FAILURE",
+        "FLAG_INVALID_OUTPUT_CLASS",
+        "BEST_EVIDENCE_SOURCE",
+        "BEST_EVIDENCE_QUOTE",
+    )
+    missing = [key for key in required if key not in kv]
+    if missing:
+        raise ValueError(
+            f"Invalid evidence flag output: missing keys {missing}. Raw output: {text[:500]}"
+        )
+
+    def _parse_bool(value: str, key: str) -> bool:
+        low = str(value or "").strip().lower()
+        if low in {"true", "yes"}:
+            return True
+        if low in {"false", "no"}:
+            return False
+        raise ValueError(f"Invalid boolean for {key}: {value}")
+
+    raw_source = _normalize_label(kv["BEST_EVIDENCE_SOURCE"]).lower()
+    source_aliases = {
+        "score_context": "score_yaml",
+        "score_guidelines": "guidelines",
+        "guideline": "guidelines",
+        "input": "primary_input",
+    }
+    source = source_aliases.get(raw_source, raw_source)
+    allowed_sources = {
+        "edit_comment",
+        "score_explanation",
+        "guidelines",
+        "score_yaml",
+        "primary_input",
+        "metadata",
+        "none",
+    }
+    if source not in allowed_sources:
+        raise ValueError(f"Invalid BEST_EVIDENCE_SOURCE: {raw_source}")
+
+    return {
+        "external_information_missing_or_degraded": _parse_bool(
+            kv["FLAG_EXTERNAL_INFORMATION_GAP"],
+            "FLAG_EXTERNAL_INFORMATION_GAP",
+        ),
+        "guideline_or_policy_ambiguity": _parse_bool(
+            kv["FLAG_GUIDELINE_GAP"],
+            "FLAG_GUIDELINE_GAP",
+        ),
+        "missing_required_context_due_system": _parse_bool(
+            kv["FLAG_SYSTEM_MISSING_CONTEXT"],
+            "FLAG_SYSTEM_MISSING_CONTEXT",
+        ),
+        "runtime_or_parsing_failure": _parse_bool(
+            kv["FLAG_RUNTIME_OR_PARSER_FAILURE"],
+            "FLAG_RUNTIME_OR_PARSER_FAILURE",
+        ),
+        "invalid_output_class_signal": _parse_bool(
+            kv["FLAG_INVALID_OUTPUT_CLASS"],
+            "FLAG_INVALID_OUTPUT_CLASS",
+        ),
+        "best_evidence_source": source,
+        "best_evidence_quote": _excerpt(kv["BEST_EVIDENCE_QUOTE"], 260),
+    }
+
+
+def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str, Any]) -> dict:
+    """Classify one misclassification using standardized context and extracted evidence flags."""
     availability = item_context.get("source_availability", {})
     prediction = item_context.get("prediction", {})
     feedback_context = item_context.get("feedback_context", {})
@@ -497,6 +646,14 @@ def classify_misclassification_item(item_context: dict) -> dict:
         if _normalize_label(class_name)
     ]
     valid_class_set = set(resolved_final_classes)
+    if not isinstance(evidence_flags, dict):
+        raise ValueError("evidence_flags must be a dictionary.")
+    normalized_flags = {
+        key: bool(evidence_flags.get(key))
+        for key in MISCLASSIFICATION_EVIDENCE_FLAG_KEYS
+    }
+    best_evidence_source = _normalize_label(evidence_flags.get("best_evidence_source"))
+    best_evidence_quote = _normalize_label(evidence_flags.get("best_evidence_quote"))
 
     evidence = []
 
@@ -551,12 +708,14 @@ def classify_misclassification_item(item_context: dict) -> dict:
 
         if parse_marker:
             mechanical_subtype = "parse_or_schema_error"
-            mechanical_details = f"marker={parse_marker}"
-            _add_evidence("score_explanation", score_explanation)
-        elif runtime_marker:
+            marker_value = parse_marker
+            mechanical_details = f"marker={marker_value}"
+            _add_evidence("score_explanation", score_explanation or marker_value)
+        elif runtime_marker or normalized_flags["runtime_or_parsing_failure"]:
             mechanical_subtype = "runtime_error"
-            mechanical_details = f"marker={runtime_marker}"
-            _add_evidence("score_explanation", score_explanation)
+            marker_value = runtime_marker or "llm_signal_runtime_or_parsing_failure"
+            mechanical_details = f"marker={marker_value}"
+            _add_evidence("score_explanation", score_explanation or marker_value)
         else:
             missing_context_markers = (
                 "missing metadata",
@@ -578,6 +737,7 @@ def classify_misclassification_item(item_context: dict) -> dict:
             if (
                 missing_required_context_keys
                 or primary_input_fetch_error
+                or normalized_flags["missing_required_context_due_system"]
                 or (
                     missing_context_marker
                     and (
@@ -601,6 +761,8 @@ def classify_misclassification_item(item_context: dict) -> dict:
                 mechanical_details = "; ".join(context_bits) or "missing_required_context_detected"
                 if missing_context_marker:
                     _add_evidence("score_explanation", score_explanation)
+                if normalized_flags["missing_required_context_due_system"] and best_evidence_quote:
+                    _add_evidence(best_evidence_source or "edit_comment", best_evidence_quote)
                 if missing_required_context_keys:
                     _add_evidence(
                         "metadata",
@@ -611,13 +773,18 @@ def classify_misclassification_item(item_context: dict) -> dict:
                         "primary_input",
                         "Primary input artifact unavailable while score required context.",
                     )
-            elif valid_class_set and predicted_value not in valid_class_set:
+            elif (
+                (valid_class_set and predicted_value not in valid_class_set)
+                or normalized_flags["invalid_output_class_signal"]
+            ):
                 mechanical_subtype = "invalid_output_class"
                 mechanical_details = (
                     f"predicted_value='{predicted_value}' not_in_resolved_valid_classes={sorted(valid_class_set)}"
                 )
                 _add_evidence("score_explanation", score_explanation or predicted_value)
                 _add_evidence("score_yaml", f"Resolved valid classes: {sorted(valid_class_set)}")
+                if normalized_flags["invalid_output_class_signal"] and best_evidence_quote:
+                    _add_evidence(best_evidence_source or "score_explanation", best_evidence_quote)
 
     if mechanical_subtype:
         if mechanical_subtype == "parse_or_schema_error":
@@ -636,36 +803,18 @@ def classify_misclassification_item(item_context: dict) -> dict:
             "mechanical_details": mechanical_details or "mechanical_failure_detected",
             "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "score_explanation", "quote_or_fact": "Execution failure indicators found."}],
+            "evidence_flags": normalized_flags,
         }
 
     # Information gap: externally missing/degraded source evidence for correct determination.
-    information_gap_markers = (
-        "transcript",
-        "inaudible",
-        "cannot hear",
-        "could not hear",
-        "redacted",
-        "missing audio",
-        "not in transcript",
-        "crosstalk",
-        "cross talk",
-        "overlap speech",
-        "speaker mismatch",
-        "corrupted",
-        "truncated",
-        "insufficient context",
-        "missing context",
-        "source degraded",
-    )
-    has_information_gap_signal = any(
-        marker in searchable_feedback
-        for marker in information_gap_markers
-    )
+    # Evidence from feedback comments is represented via LLM-derived flags, not keyword heuristics.
     if (
         not has_primary_input
-        or has_information_gap_signal
+        or normalized_flags["external_information_missing_or_degraded"]
     ):
         _add_evidence("edit_comment", edit_comment or final_comment)
+        if normalized_flags["external_information_missing_or_degraded"] and best_evidence_quote:
+            _add_evidence(best_evidence_source or "edit_comment", best_evidence_quote)
         _add_evidence(
             "primary_input",
             primary_input_excerpt
@@ -681,22 +830,14 @@ def classify_misclassification_item(item_context: dict) -> dict:
             "information_gap_subtype": (
                 "missing_primary_input" if not has_primary_input else "degraded_primary_input"
             ),
+            "evidence_flags": normalized_flags,
         }
 
-    # Guideline gap: comments point to ambiguity/policy decision rather than execution.
-    if any(
-        marker in searchable_feedback
-        for marker in (
-            "guideline",
-            "unclear",
-            "ambiguous",
-            "policy",
-            "sme",
-            "needs clarification",
-            "not addressed",
-        )
-    ) or not availability.get("has_score_guidelines"):
+    # Guideline gap: ambiguity/policy signals should come from explicit LLM evidence flags.
+    if normalized_flags["guideline_or_policy_ambiguity"] or not availability.get("has_score_guidelines"):
         _add_evidence("edit_comment", edit_comment or final_comment)
+        if normalized_flags["guideline_or_policy_ambiguity"] and best_evidence_quote:
+            _add_evidence(best_evidence_source or "edit_comment", best_evidence_quote)
         _add_evidence("guidelines", score_context.get("guidelines_excerpt", "Guidelines were unavailable."))
         return {
             "primary_category": "guideline_gap_requires_sme",
@@ -706,6 +847,7 @@ def classify_misclassification_item(item_context: dict) -> dict:
             "mechanical_details": None,
             "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "guidelines", "quote_or_fact": "Guidelines unavailable or ambiguous for this case."}],
+            "evidence_flags": normalized_flags,
         }
 
     # Default bucket for model/score logic behavior.
@@ -719,6 +861,7 @@ def classify_misclassification_item(item_context: dict) -> dict:
         "mechanical_details": None,
         "information_gap_subtype": None,
         "evidence_snippets": evidence or [{"source": "score_yaml", "quote_or_fact": "Score configuration is the primary fix surface for this item."}],
+        "evidence_flags": normalized_flags,
     }
 
 
@@ -728,24 +871,24 @@ def explain_misclassification_item_classification(
     classification: Dict[str, Any],
 ) -> Dict[str, str]:
     """
-    Generate a short, operator-focused explanation for a deterministic misclassification category.
+    Generate a short, operator-focused explanation for an assigned misclassification category.
     Raises ValueError when the LLM output is invalid.
     """
     import boto3
 
     system = (
-        "You explain deterministic misclassification triage decisions for AI evaluations. "
+        "You explain misclassification triage decisions for AI evaluations. "
         "Use neutral, modality-agnostic language. Call transcripts are only one possible example."
     )
     prompt = (
-        "You are given normalized item context and a deterministic category decision.\n"
+        "You are given normalized item context and an assigned category decision.\n"
         "Return exactly three lines in this exact format:\n"
         "RATIONALE_PARAGRAPH: <short paragraph, 2-4 sentences>\n"
         "EVIDENCE_QUOTE: <one concrete quote/fact>\n"
         "CONFIG_FIXABILITY: <one of "
         f"{', '.join(CONFIG_FIXABILITY_OPTIONS)}>\n\n"
         "Rules:\n"
-        "- Do not change the category decision.\n"
+        "- Do not change the assigned category decision.\n"
         "- If failure is execution/system/context contract related, use blocked_by_mechanical.\n"
         "- If source evidence is genuinely insufficient/degraded, use blocked_by_input.\n"
         "- If policy ambiguity dominates, use needs_sme_clarification.\n"
@@ -834,6 +977,11 @@ def build_misclassification_analysis_summary(
             "rationale_short": raw.get("rationale_short", ""),
             "rationale_full": raw.get("rationale_full", ""),
             "evidence_snippets": raw.get("evidence_snippets", []),
+            "triage_evidence_flags": (
+                raw.get("triage_evidence_flags")
+                or raw.get("evidence_flags")
+                or {}
+            ),
             "mechanical_subtype": raw.get("mechanical_subtype"),
             "mechanical_details": raw.get("mechanical_details"),
             "information_gap_subtype": raw.get("information_gap_subtype"),
@@ -1107,7 +1255,10 @@ def build_misclassification_analysis_summary(
             missing_or_degraded_signals = 0
             missing_required_context_signals = 0
             for item in items_in_category:
-                if item.get("missing_required_context"):
+                flags = item.get("triage_evidence_flags") or {}
+                if item.get("missing_required_context") or bool(
+                    flags.get("missing_required_context_due_system")
+                ):
                     missing_required_context_signals += 1
                 snippets = item.get("evidence_snippets") or []
                 has_missing_signal = any(
@@ -1124,7 +1275,9 @@ def build_misclassification_analysis_summary(
                         )
                     )
                     for snippet in snippets
-                ) or not bool(item.get("has_primary_input"))
+                ) or not bool(item.get("has_primary_input")) or bool(
+                    flags.get("external_information_missing_or_degraded")
+                )
                 if has_missing_signal:
                     missing_or_degraded_signals += 1
             missing_or_degraded_share = (

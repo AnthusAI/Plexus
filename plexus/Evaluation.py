@@ -2973,6 +2973,7 @@ class FeedbackEvaluation(Evaluation):
             "mechanical_subtype",
             "mechanical_details",
             "information_gap_subtype",
+            "triage_evidence_flags",
             "detailed_cause",
             "suggested_fix",
             "topic_id",
@@ -3685,6 +3686,7 @@ class FeedbackEvaluation(Evaluation):
                 build_misclassification_analysis_summary,
                 build_misclassification_item_context,
                 classify_misclassification_item,
+                extract_misclassification_evidence_flags,
                 explain_misclassification_item_classification,
                 resolve_final_output_classes_from_yaml_text,
             )
@@ -3917,8 +3919,13 @@ class FeedbackEvaluation(Evaluation):
                     class_resolution_source=class_resolution_source,
                     primary_input_fetch_error=primary_input_fetch_error,
                 )
+                misclassification_evidence_flags = await asyncio.to_thread(
+                    extract_misclassification_evidence_flags,
+                    item_context=misclassification_item_context,
+                )
                 misclassification_classification = classify_misclassification_item(
-                    misclassification_item_context
+                    misclassification_item_context,
+                    misclassification_evidence_flags,
                 )
                 triage_explainer = await asyncio.to_thread(
                     explain_misclassification_item_classification,
@@ -3978,6 +3985,7 @@ class FeedbackEvaluation(Evaluation):
                     ),
                     "mechanical_details": misclassification_classification.get("mechanical_details"),
                     "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
+                    "triage_evidence_flags": misclassification_classification.get("evidence_flags"),
                     "misclassification_item_context": misclassification_item_context,
                     "misclassification_classification": misclassification_classification,
                 }
@@ -4441,6 +4449,7 @@ class FeedbackEvaluation(Evaluation):
             build_misclassification_analysis_summary,
             build_misclassification_item_context,
             classify_misclassification_item,
+            extract_misclassification_evidence_flags,
             explain_misclassification_item_classification,
             resolve_final_output_classes_from_yaml_text,
         )
@@ -4642,8 +4651,13 @@ class FeedbackEvaluation(Evaluation):
                 class_resolution_source=class_resolution_source,
                 primary_input_fetch_error=primary_input_fetch_error,
             )
+            misclassification_evidence_flags = await asyncio.to_thread(
+                extract_misclassification_evidence_flags,
+                item_context=ex["misclassification_item_context"],
+            )
             classification = classify_misclassification_item(
-                ex["misclassification_item_context"]
+                ex["misclassification_item_context"],
+                misclassification_evidence_flags,
             )
             explainer = await asyncio.to_thread(
                 explain_misclassification_item_classification,
@@ -4775,6 +4789,7 @@ class FeedbackEvaluation(Evaluation):
                 "mechanical_subtype": classification.get("mechanical_subtype"),
                 "mechanical_details": classification.get("mechanical_details"),
                 "information_gap_subtype": classification.get("information_gap_subtype"),
+                "triage_evidence_flags": classification.get("evidence_flags"),
                 "detailed_cause": ex.get("detailed_cause"),
                 "suggested_fix": ex.get("suggested_fix"),
                 "misclassification_item_context": ex.get("misclassification_item_context") or {},
