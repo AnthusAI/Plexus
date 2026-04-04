@@ -231,6 +231,35 @@ type OptimizationApplicability = {
   reason?: string
 }
 
+type CandidateAssessmentStageReference = {
+  stage_key?: string
+  baseline_evaluation_id?: string
+  candidate_evaluation_id?: string
+  baseline_status?: string
+  candidate_status?: string
+  delta_ac1?: number
+  delta_value_score?: number
+}
+
+type CandidateAssessmentCompactSummary = {
+  schema_version?: string
+  attachment_key?: string
+  scorecard_id?: string
+  score_id?: string
+  baseline_score_version_id?: string
+  candidate_score_version_id?: string
+  decision?: string
+  decision_reason?: string
+  decision_confidence?: string
+  baseline_generalization_gap?: number
+  candidate_generalization_gap?: number
+  generalization_gap_delta?: number
+  random_delta_mean?: number
+  random_delta_stddev?: number
+  primary_next_action?: string
+  stage_references?: CandidateAssessmentStageReference[]
+}
+
 type MisclassificationAnalysis = {
   item_classifications_all?: Array<{
     topic_id?: number | string
@@ -362,6 +391,43 @@ const getPrimaryNextActionLabel = (action?: string | null): string => {
     default:
       return 'Unavailable'
   }
+}
+
+const getAssessmentDecisionLabel = (decision?: string | null): string => {
+  switch ((decision ?? '').toLowerCase()) {
+    case 'accept':
+      return 'Accept'
+    case 'reject':
+      return 'Reject'
+    case 'inconclusive':
+      return 'Inconclusive'
+    default:
+      return 'Unavailable'
+  }
+}
+
+const getAssessmentStageLabel = (stageKey?: string | null): string => {
+  switch ((stageKey ?? '').toLowerCase()) {
+    case 'deterministic_reference':
+      return 'Deterministic reference'
+    case 'random_iteration':
+      return 'Random iteration (n=50)'
+    case 'random_gate':
+      return 'Random gate (n=200)'
+    default:
+      return stageKey ? stageKey.replace(/_/g, ' ') : 'Unknown stage'
+  }
+}
+
+const formatSignedMetric = (value?: number | null, digits = 3): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${value.toFixed(digits)}`
+}
+
+const formatMetric = (value?: number | null, digits = 3): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A'
+  return value.toFixed(digits)
 }
 
 function formatDuration(seconds: number): string {
@@ -1158,6 +1224,23 @@ const DetailContent = React.memo(({
     return map
   }, [misclassificationCategoryBreakdown.topicCategoryBreakdown])
 
+  const candidateAssessmentSummary = useMemo<CandidateAssessmentCompactSummary | null>(() => {
+    const parsedTaskMetadata = parseJsonDeep(data.task?.metadata)
+    if (!parsedTaskMetadata || typeof parsedTaskMetadata !== 'object') return null
+    const metadataObject = parsedTaskMetadata as Record<string, unknown>
+    const rawCompactSummary = parseJsonDeep(metadataObject.candidate_assessment_compact_summary)
+    if (!rawCompactSummary || typeof rawCompactSummary !== 'object') return null
+    const compactSummary = rawCompactSummary as CandidateAssessmentCompactSummary
+    if (compactSummary.schema_version !== 'candidate_assessment_bundle.v1') return null
+    return compactSummary
+  }, [data.task?.metadata])
+
+  const candidateAssessmentStageRefs = useMemo(() => {
+    const stageRefs = candidateAssessmentSummary?.stage_references
+    if (!Array.isArray(stageRefs)) return []
+    return stageRefs.filter(ref => ref && typeof ref === 'object')
+  }, [candidateAssessmentSummary])
+
   return (
     <div
       ref={containerRef}
@@ -1275,6 +1358,92 @@ const DetailContent = React.memo(({
                     estimatedRemainingSeconds={data.estimatedRemainingSeconds}
                   />
                 </div>
+
+                {candidateAssessmentSummary && (
+                  <div className="mb-3">
+                    <div className="font-medium text-muted-foreground text-sm mb-1">
+                      Candidate assessment
+                    </div>
+                    <div className="rounded-md bg-card p-2 space-y-2">
+                      <div className="text-sm text-foreground">
+                        {getAssessmentDecisionLabel(candidateAssessmentSummary.decision)}
+                      </div>
+                      {candidateAssessmentSummary.decision_reason && (
+                        <div className="text-xs text-muted-foreground">
+                          Reason: {candidateAssessmentSummary.decision_reason}
+                        </div>
+                      )}
+                      {candidateAssessmentSummary.decision_confidence && (
+                        <div className="text-xs text-muted-foreground">
+                          Confidence: {candidateAssessmentSummary.decision_confidence}
+                        </div>
+                      )}
+                      {candidateAssessmentSummary.primary_next_action && (
+                        <div className="text-xs text-muted-foreground">
+                          Primary route action: {getPrimaryNextActionLabel(candidateAssessmentSummary.primary_next_action)}
+                        </div>
+                      )}
+
+                      {candidateAssessmentStageRefs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-xs font-medium text-muted-foreground">
+                            Stage evidence
+                          </div>
+                          {candidateAssessmentStageRefs.map((stageRef, index) => (
+                            <div key={`assessment-stage-${stageRef.stage_key ?? 'unknown'}-${index}`} className="rounded bg-muted/40 p-2 space-y-1">
+                              <div className="text-xs text-foreground font-medium">
+                                {getAssessmentStageLabel(stageRef.stage_key)}
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <div>
+                                  Baseline: {stageRef.baseline_evaluation_id ?? 'Unavailable'} ({stageRef.baseline_status ?? 'Unknown'})
+                                </div>
+                                <div>
+                                  Candidate: {stageRef.candidate_evaluation_id ?? 'Unavailable'} ({stageRef.candidate_status ?? 'Unknown'})
+                                </div>
+                                <div>
+                                  Delta AC1: {formatSignedMetric(stageRef.delta_ac1)}
+                                </div>
+                                <div>
+                                  Delta value: {formatSignedMetric(stageRef.delta_value_score)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          Generalization gap KPIs
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <div>
+                            Baseline gap: {formatMetric(candidateAssessmentSummary.baseline_generalization_gap)}
+                          </div>
+                          <div>
+                            Candidate gap: {formatMetric(candidateAssessmentSummary.candidate_generalization_gap)}
+                          </div>
+                          <div>
+                            Gap delta: {formatSignedMetric(candidateAssessmentSummary.generalization_gap_delta)}
+                          </div>
+                          <div>
+                            Random delta mean/stddev: {formatSignedMetric(candidateAssessmentSummary.random_delta_mean)} / {formatMetric(candidateAssessmentSummary.random_delta_stddev)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {candidateAssessmentSummary.attachment_key && (
+                        <div className="text-xs text-muted-foreground">
+                          Bundle attachment key:{' '}
+                          <span className="font-mono break-all text-foreground">
+                            {candidateAssessmentSummary.attachment_key}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mb-3">
                   <ClassDistributionVisualizer
