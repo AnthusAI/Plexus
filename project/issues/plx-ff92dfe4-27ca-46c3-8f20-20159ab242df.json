@@ -28,10 +28,16 @@
       "author": "ryan",
       "text": "Completed in commit adcce2431. Validation run: pytest -q plexus/rca_analysis_test.py (15 passed); dashboard tests: EvaluationTask.category-filter, EvaluationTask.memo, topic-list all passed; npm --prefix dashboard run build:fast succeeded.",
       "created_at": "2026-04-04T17:51:22.667379Z"
+    },
+    {
+      "id": "7dc2935c-cfbb-4a0a-be41-b03738682ead",
+      "author": "ryan",
+      "text": "Runtime validation completed with real feedback-backed accuracy evaluation: evaluation_id=200ebc6c-de3b-4188-b0ca-cd1f6e44d606 (scorecard 1039, score 45425, version db3df9e6-2f78-4f0a-9876-48bd16515cdd, max-samples=20). Verified status COMPLETED, processed_items=20/20, and root_cause.misclassification_analysis includes category_hierarchy with category->topic->example nodes and mechanical_subtype totals.",
+      "created_at": "2026-04-04T18:10:28.017564Z"
     }
   ],
   "created_at": "2026-04-04T17:45:58.474288Z",
-  "updated_at": "2026-04-04T17:51:22.667379Z",
+  "updated_at": "2026-04-04T18:10:28.017564Z",
   "closed_at": "2026-04-04T17:51:22.646328Z",
   "custom": {}
 }
