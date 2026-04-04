@@ -1,9 +1,9 @@
 {
   "id": "plx-e52e7786-873d-486e-9fc9-5e9fc1820383",
   "title": "Define staged optimization protocol for regression, benchmark, and random evaluations",
-  "description": "## Summary\nDefine the staged optimization protocol that combines fixed deterministic checks and random generalization checks.\n\n## Deliverables\n- Specify the role of the small fixed regression set versus the larger fixed benchmark set.\n- Define when deterministic checks run, when random checks run, and when stronger multi-random confirmation is required.\n- Define how sample size, time range, and random-run count are chosen for the workflow.\n\n## Notes\nThis task defines the operational protocol; it should stay aligned with the fixed-dataset role model.",
+  "description": "## Summary\nDefine the staged optimization protocol for workflow orchestration under plx-c2f8bb.\n\n## Locked protocol\n- Stage A: deterministic/associated-dataset reference check.\n- Stage B: random generalization loop run (n=50, default days=180).\n- Stage C: hard-gate random confirmation run (n=200) required before final accept.\n- Stage D: decision synthesis from value()/assess_candidate() plus malfunction-routing signals.\n\n## Policy defaults\n- min_reference_delta=0.01\n- max_generalization_drop=0.02\n- No champion promotion in this workflow.\n\n## Acceptance criteria\n- A final accept decision is impossible without Stage C completion.\n- Deterministic and random evidence must both be present for final decision.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-04-02T13:31:27.241856Z",
-  "updated_at": "2026-04-02T13:31:27.241856Z",
+  "updated_at": "2026-04-04T22:31:58.383681Z",
   "closed_at": null,
   "custom": {}
 }

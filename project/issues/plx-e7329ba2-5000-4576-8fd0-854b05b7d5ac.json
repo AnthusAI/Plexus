@@ -40,10 +40,22 @@
       "author": "ryan",
       "text": "Implemented full-scope item classification for semantic RCA and agent-facing payload contract. Canonical field is misclassification_analysis.item_classifications_all with analysis_scope (topic_assignment_scope=exemplar_only). Removed duplicate item_classifications payload and switched dashboard consumption to item_classifications_all only. Runtime validation: evaluation a07da29f-f6cf-4025-89f6-cca701f0ef60 completed with max-samples=50; verified classified_items_total=29, item_classifications_all_count=29, and deterministic ordering. Note: a previous 100-sample run (7bb88656-a233-4501-b0b7-89570ef92c74) hit DynamoDB parameters size limits before these payload-shaping changes.",
       "created_at": "2026-04-04T18:58:28.106803Z"
+    },
+    {
+      "id": "2d52aa94-cf5d-440a-bf66-5f007a6ffe78",
+      "author": "ryan",
+      "text": "Implemented triage hardening: removed keyword-only category heuristics for information-gap/guideline-gap classification and now require LLM-extracted evidence flags for those categories. Mechanical classification remains strict structural/runtime based. Added regression tests ensuring keyword-only comments no longer change category without flags, while LLM flags still drive correct classification. Validation: pytest -q plexus/rca_analysis_test.py (19 passed) and pytest -q plexus/Evaluation_feedback_test.py (17 passed).",
+      "created_at": "2026-04-04T21:55:18.831706Z"
+    },
+    {
+      "id": "5f0ce853-18f8-44fc-bf9a-9f5390189eb8",
+      "author": "ryan",
+      "text": "Committed and pushed triage hardening on branch feature/plx-f45a6b-data-flywheel-ops: 02b6ed3eb. Includes classifier logic update to require LLM evidence flags for information-gap/guideline-gap (keyword-only heuristics removed), plus test updates. Runtime validation evaluation: 9844d871-dec8-4ce5-b478-40a2451c1716 (50/50 processed, RCA completed).",
+      "created_at": "2026-04-04T22:13:45.513765Z"
     }
   ],
   "created_at": "2026-04-04T18:22:36.531013Z",
-  "updated_at": "2026-04-04T18:58:50.177130Z",
+  "updated_at": "2026-04-04T22:13:45.513765Z",
   "closed_at": "2026-04-04T18:58:50.177130Z",
   "custom": {}
 }
