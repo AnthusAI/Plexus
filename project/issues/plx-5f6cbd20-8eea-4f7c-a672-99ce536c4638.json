@@ -3,7 +3,7 @@
   "title": "Misclassification Triage v2: actionable mechanical detail and next-action guidance",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "ryan",
       "text": "Runtime validation complete on scorecard 1039 / score 45425 with capped sampling: plexus evaluate feedback --days 180 --max-samples 100 --max-category-summary-items 20. Evaluation ID: 889288b5-ba1a-4995-8cb4-992f04e8bb3a. Result status COMPLETED with processedItems=100/100, RCA present, misclassification_analysis present, category_summaries/topic_category_breakdown populated, primary_next_action=score_configuration_optimization, optimization_applicability=applicable, and mechanical_subtype_totals all zero (no pathological blanket mechanical classification).",
       "created_at": "2026-04-04T17:02:27.163320Z"
+    },
+    {
+      "id": "50b3c290-2007-46d4-aaad-f651ab5478dc",
+      "author": "ryan",
+      "text": "Code landed in commit 943d829e5 on feature/plx-f45a6b-data-flywheel-ops. Runtime validation used 100-sample cap and produced evaluation 889288b5-ba1a-4995-8cb4-992f04e8bb3a with populated RCA + triage v2 fields.",
+      "created_at": "2026-04-04T17:03:38.271696Z"
     }
   ],
   "created_at": "2026-04-04T16:33:19.252670Z",
-  "updated_at": "2026-04-04T17:02:27.163320Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T17:03:38.271696Z",
+  "closed_at": "2026-04-04T17:03:33.188393Z",
   "custom": {}
 }
