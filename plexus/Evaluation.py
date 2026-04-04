@@ -3507,6 +3507,7 @@ class FeedbackEvaluation(Evaluation):
                 build_misclassification_analysis_summary,
                 build_misclassification_item_context,
                 classify_misclassification_item,
+                explain_misclassification_item_classification,
                 resolve_final_output_classes_from_yaml_text,
             )
 
@@ -3603,6 +3604,61 @@ class FeedbackEvaluation(Evaluation):
             texts = []
             canonical_item_classifications = []
             canonical_item_by_feedback_id = {}
+            item_context_cache = {}
+            if dashboard_client:
+                from plexus.dashboard.api.models.item import Item as DashboardItem
+
+                all_item_ids = sorted({fi.itemId for fi in candidate_items if getattr(fi, "itemId", None)})
+
+                async def _fetch_item_context(item_id: str):
+                    try:
+                        item = await asyncio.to_thread(
+                            DashboardItem.get_by_id, item_id, dashboard_client
+                        )
+                        if not item:
+                            return item_id, {
+                                "primary_input": "",
+                                "metadata_snapshot": "",
+                                "primary_input_modality": "unknown",
+                                "primary_input_fetch_error": True,
+                            }
+                        raw_metadata = getattr(item, "metadata", None)
+                        metadata_snapshot = ""
+                        if raw_metadata:
+                            if isinstance(raw_metadata, str):
+                                metadata_snapshot = raw_metadata
+                            else:
+                                try:
+                                    metadata_snapshot = json.dumps(raw_metadata)
+                                except TypeError:
+                                    metadata_snapshot = str(raw_metadata)
+                        primary_input = item.text or ""
+                        if primary_input:
+                            primary_input_modality = "text"
+                        elif metadata_snapshot:
+                            primary_input_modality = "structured"
+                        else:
+                            primary_input_modality = "unknown"
+                        return item_id, {
+                            "primary_input": primary_input,
+                            "metadata_snapshot": metadata_snapshot,
+                            "primary_input_modality": primary_input_modality,
+                            "primary_input_fetch_error": False,
+                        }
+                    except Exception as exc:
+                        self.logger.debug("Item context fetch failed for %s: %s", item_id, exc)
+                        return item_id, {
+                            "primary_input": "",
+                            "metadata_snapshot": "",
+                            "primary_input_modality": "unknown",
+                            "primary_input_fetch_error": True,
+                        }
+
+                if all_item_ids:
+                    _update_status(f"Hydrating item context for {len(all_item_ids)} candidate item(s)...")
+                    fetched_context = await asyncio.gather(*[_fetch_item_context(iid) for iid in all_item_ids])
+                    item_context_cache = {iid: payload for iid, payload in fetched_context}
+
             for fi in candidate_items:
                 ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
                 ts_str = (
@@ -3655,6 +3711,11 @@ class FeedbackEvaluation(Evaluation):
                         metadata["final_answer_value"] = fi.finalAnswerValue
                     text = fi.editCommentValue
 
+                item_context_record = item_context_cache.get(fi.itemId or "", {})
+                primary_input_text = item_context_record.get("primary_input", "")
+                metadata_snapshot = item_context_record.get("metadata_snapshot", "")
+                primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
+                primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
                 misclassification_item_context = build_misclassification_item_context(
                     feedback_item_id=fi.id,
                     item_id=fi.itemId or "",
@@ -3670,14 +3731,30 @@ class FeedbackEvaluation(Evaluation):
                     score_guidelines_text=score_guidelines,
                     score_yaml_configuration=score_yaml_code,
                     scorecard_guidance_text=scorecard_guidance_text,
-                    transcript_text="",
-                    metadata_snapshot="",
+                    primary_input_text=primary_input_text,
+                    primary_input_modality=primary_input_modality,
+                    metadata_snapshot=metadata_snapshot,
                     label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
                     resolved_final_classes=resolved_final_classes,
                     class_resolution_source=class_resolution_source,
+                    primary_input_fetch_error=primary_input_fetch_error,
                 )
                 misclassification_classification = classify_misclassification_item(
                     misclassification_item_context
+                )
+                triage_explainer = await asyncio.to_thread(
+                    explain_misclassification_item_classification,
+                    item_context=misclassification_item_context,
+                    classification=misclassification_classification,
+                )
+                misclassification_classification["rationale_paragraph"] = triage_explainer.get(
+                    "rationale_paragraph", ""
+                )
+                misclassification_classification["evidence_quote"] = triage_explainer.get(
+                    "evidence_quote", ""
+                )
+                misclassification_classification["config_fixability"] = triage_explainer.get(
+                    "config_fixability", ""
                 )
                 primary_category = (
                     misclassification_classification.get("primary_category")
@@ -3685,7 +3762,11 @@ class FeedbackEvaluation(Evaluation):
                 )
                 confidence = misclassification_classification.get("confidence") or "unknown"
                 mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
-                rationale = (misclassification_classification.get("rationale") or "").strip()
+                rationale = (
+                    triage_explainer.get("rationale_paragraph")
+                    or misclassification_classification.get("rationale")
+                    or ""
+                ).strip()
                 rationale_single_line = " ".join(rationale.split())
                 rationale_words = rationale_single_line.split() if rationale_single_line else []
                 rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
@@ -3710,11 +3791,15 @@ class FeedbackEvaluation(Evaluation):
                     "confidence": confidence,
                     "rationale_short": rationale_excerpt,
                     "rationale_full": rationale,
+                    "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
+                    "evidence_quote": triage_explainer.get("evidence_quote", ""),
+                    "config_fixability": triage_explainer.get("config_fixability", ""),
                     "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
                     "mechanical_subtype": (
                         mechanical_subtype if mechanical_subtype != "none" else None
                     ),
                     "mechanical_details": misclassification_classification.get("mechanical_details"),
+                    "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
                     "misclassification_item_context": misclassification_item_context,
                     "misclassification_classification": misclassification_classification,
                 }
@@ -3766,53 +3851,29 @@ class FeedbackEvaluation(Evaluation):
             self.logger.info(f"Root-cause analysis produced {len(result.topics)} topic(s)")
             _update_status(f"Found {len(result.topics)} topic(s), fetching transcripts...")
 
-            # --- Issue 24d: fetch transcripts + run deep per-exemplar analysis ---
-            # Build a map of item_id → transcript for all above-fold exemplars across topics.
-            dashboard_client = getattr(self, 'dashboard_client', None)
+            # Reuse preloaded item context for topic-level detailed RCA on above-fold exemplars.
             transcript_cache: dict = {}
-            if dashboard_client:
-                from plexus.dashboard.api.models.item import Item as DashboardItem
-                above_fold_item_ids = set()
-                for tr in result.topics:
-                    for idx, ex in enumerate(tr.exemplars or []):
-                        if idx < max_summarization_exemplars and ex.metadata.get("item_id"):
-                            above_fold_item_ids.add(ex.metadata["item_id"])
+            above_fold_item_ids = set()
+            for tr in result.topics:
+                for idx, ex in enumerate(tr.exemplars or []):
+                    if idx < max_summarization_exemplars and ex.metadata.get("item_id"):
+                        above_fold_item_ids.add(ex.metadata["item_id"])
+            transcript_cache = {
+                iid: {
+                    "text": (item_context_cache.get(iid) or {}).get("primary_input", ""),
+                    "metadata_snapshot": (item_context_cache.get(iid) or {}).get("metadata_snapshot", ""),
+                }
+                for iid in above_fold_item_ids
+                if iid in item_context_cache
+            }
+            self.logger.info(
+                "Loaded primary input context for %s/%s above-fold exemplar items",
+                len(transcript_cache),
+                len(above_fold_item_ids),
+            )
+            _update_status(f"Analyzing {len(transcript_cache)} exemplar input artifact(s)...")
 
-                async def _fetch_transcript(item_id: str) -> tuple:
-                    try:
-                        item = await asyncio.to_thread(
-                            DashboardItem.get_by_id, item_id, dashboard_client
-                        )
-                        if not item:
-                            return item_id, None
-                        raw_metadata = getattr(item, "metadata", None)
-                        metadata_snapshot = ""
-                        if raw_metadata:
-                            if isinstance(raw_metadata, str):
-                                metadata_snapshot = raw_metadata
-                            else:
-                                try:
-                                    metadata_snapshot = json.dumps(raw_metadata)
-                                except TypeError:
-                                    metadata_snapshot = str(raw_metadata)
-                        return item_id, {
-                            "text": item.text or "",
-                            "metadata_snapshot": metadata_snapshot,
-                        }
-                    except Exception as exc:
-                        self.logger.debug("Transcript fetch failed for %s: %s", item_id, exc)
-                        return item_id, None
-
-                fetch_tasks = [_fetch_transcript(iid) for iid in above_fold_item_ids]
-                fetched = await asyncio.gather(*fetch_tasks)
-                transcript_cache = {iid: payload for iid, payload in fetched if payload}
-                self.logger.info(
-                    f"Fetched transcripts for {len(transcript_cache)}/{len(above_fold_item_ids)} "
-                    f"above-fold items"
-                )
-                _update_status(f"Analyzing {len(transcript_cache)} transcripts...")
-
-            def _detailed_analysis(transcript: str, predicted: str, correct: str,
+            def _detailed_analysis(primary_input: str, predicted: str, correct: str,
                                    explanation: str, topic_label: str,
                                    score_guidelines: str = "", score_yaml_code: str = "") -> tuple:
                 """Run a two-turn Bedrock Haiku conversation per exemplar.
@@ -3826,7 +3887,7 @@ class FeedbackEvaluation(Evaluation):
                 """
                 from plexus.rca_analysis import analyze_score_result
                 return analyze_score_result(
-                    transcript=transcript,
+                    primary_input=primary_input,
                     predicted=predicted,
                     correct=correct,
                     explanation=explanation,
@@ -3869,7 +3930,7 @@ class FeedbackEvaluation(Evaluation):
                 """Run multi-turn conversation to produce detailed explanation + improvement suggestion."""
                 system = (
                     "You are an expert QA analyst reviewing patterns in AI scoring errors "
-                    "on customer service calls. Be specific and concrete."
+                    "across domains and input modalities. Be specific and concrete."
                 )
 
                 # Build context for turn 1
@@ -3899,7 +3960,7 @@ class FeedbackEvaluation(Evaluation):
                 turn1_prompt += (
                     "Explain in 2-3 paragraphs what patterns of errors exist in this cluster. "
                     "Be specific about the directionality of errors (what was predicted vs what "
-                    "the correct answer should be), what the calls actually contained, and why "
+                    "the correct answer should be), what the primary input evidence contained, and why "
                     "the AI classifier got these wrong."
                 )
 
@@ -3977,7 +4038,7 @@ class FeedbackEvaluation(Evaluation):
 
                 system = (
                     "You are an expert QA analyst reviewing patterns in AI scoring errors "
-                    "on customer service calls. Be specific and concrete."
+                    "across domains and input modalities. Be specific and concrete."
                 )
                 prompt1 = ""
                 if score_guidelines:
@@ -4051,6 +4112,10 @@ class FeedbackEvaluation(Evaluation):
                     if canonical_row:
                         canonical_row["topic_id"] = tr.topic_id
                         canonical_row["topic_label"] = tr.label
+                        if detailed_cause:
+                            canonical_row["detailed_cause"] = detailed_cause
+                        if suggested_fix:
+                            canonical_row["suggested_fix"] = suggested_fix
                     score_explanation = ex.metadata.get("score_explanation", "")
                     misclassification_item_context = canonical_row.get(
                         "misclassification_item_context", {}
@@ -4175,10 +4240,10 @@ class FeedbackEvaluation(Evaluation):
             }
 
         except Exception as e:
-            self.logger.warning(f"Root-cause analysis failed (non-fatal): {e}")
+            self.logger.error(f"Root-cause analysis failed: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
-            return {}
+            raise RuntimeError(f"Root-cause analysis failed: {e}") from e
 
     async def _run_small_set_root_cause_analysis(
         self,
@@ -4198,6 +4263,7 @@ class FeedbackEvaluation(Evaluation):
             build_misclassification_analysis_summary,
             build_misclassification_item_context,
             classify_misclassification_item,
+            explain_misclassification_item_classification,
             resolve_final_output_classes_from_yaml_text,
         )
 
@@ -4287,19 +4353,24 @@ class FeedbackEvaluation(Evaluation):
 
         _update_status(f"Running small-set RCA on {len(exemplars)} item(s)...")
 
-        transcript_cache = {}
+        item_context_cache = {}
         if dashboard_client:
             from plexus.dashboard.api.models.item import Item as DashboardItem
 
             item_ids = [ex.get("item_id") for ex in exemplars if ex.get("item_id")]
 
-            async def _fetch_transcript(item_id: str):
+            async def _fetch_item_context(item_id: str):
                 try:
                     item = await asyncio.to_thread(
                         DashboardItem.get_by_id, item_id, dashboard_client
                     )
                     if not item:
-                        return item_id, None
+                        return item_id, {
+                            "primary_input": "",
+                            "metadata_snapshot": "",
+                            "primary_input_modality": "unknown",
+                            "primary_input_fetch_error": True,
+                        }
                     raw_metadata = getattr(item, "metadata", None)
                     metadata_snapshot = ""
                     if raw_metadata:
@@ -4310,25 +4381,39 @@ class FeedbackEvaluation(Evaluation):
                                 metadata_snapshot = json.dumps(raw_metadata)
                             except TypeError:
                                 metadata_snapshot = str(raw_metadata)
+                    primary_input = item.text or ""
+                    if primary_input:
+                        modality = "text"
+                    elif metadata_snapshot:
+                        modality = "structured"
+                    else:
+                        modality = "unknown"
                     return item_id, {
-                        "text": item.text or "",
+                        "primary_input": primary_input,
                         "metadata_snapshot": metadata_snapshot,
+                        "primary_input_modality": modality,
+                        "primary_input_fetch_error": False,
                     }
                 except Exception as exc:
-                    self.logger.debug("Transcript fetch failed for %s: %s", item_id, exc)
-                    return item_id, None
+                    self.logger.debug("Item context fetch failed for %s: %s", item_id, exc)
+                    return item_id, {
+                        "primary_input": "",
+                        "metadata_snapshot": "",
+                        "primary_input_modality": "unknown",
+                        "primary_input_fetch_error": True,
+                    }
 
-            fetched = await asyncio.gather(*[_fetch_transcript(iid) for iid in item_ids])
-            transcript_cache = {iid: payload for iid, payload in fetched if payload}
+            fetched = await asyncio.gather(*[_fetch_item_context(iid) for iid in item_ids])
+            item_context_cache = {iid: payload for iid, payload in fetched}
 
         for ex in exemplars[:max_summarization_exemplars]:
-            transcript_record = transcript_cache.get(ex.get("item_id"))
-            transcript = transcript_record.get("text") if transcript_record else ""
-            if not transcript:
+            item_context_record = item_context_cache.get(ex.get("item_id"))
+            primary_input = item_context_record.get("primary_input") if item_context_record else ""
+            if not primary_input:
                 continue
             detailed_cause, suggested_fix = await asyncio.to_thread(
                 analyze_score_result,
-                transcript=transcript,
+                primary_input=primary_input,
                 predicted=ex.get("initial_answer_value", ""),
                 correct=ex.get("final_answer_value", ""),
                 explanation=ex.get("score_explanation", ""),
@@ -4341,10 +4426,18 @@ class FeedbackEvaluation(Evaluation):
             if suggested_fix:
                 ex["suggested_fix"] = suggested_fix
         for ex in exemplars:
-            transcript_record = transcript_cache.get(ex.get("item_id"))
-            transcript_text = transcript_record.get("text") if transcript_record else ""
+            item_context_record = item_context_cache.get(ex.get("item_id"))
+            primary_input_text = (
+                item_context_record.get("primary_input") if item_context_record else ""
+            )
             metadata_snapshot = (
-                transcript_record.get("metadata_snapshot") if transcript_record else ""
+                item_context_record.get("metadata_snapshot") if item_context_record else ""
+            )
+            primary_input_modality = (
+                item_context_record.get("primary_input_modality") if item_context_record else "unknown"
+            )
+            primary_input_fetch_error = bool(
+                item_context_record.get("primary_input_fetch_error") if item_context_record else False
             )
             ex["misclassification_item_context"] = build_misclassification_item_context(
                 feedback_item_id=ex.get("feedback_item_id", ""),
@@ -4361,17 +4454,28 @@ class FeedbackEvaluation(Evaluation):
                 score_guidelines_text=score_guidelines,
                 score_yaml_configuration=score_yaml_code,
                 scorecard_guidance_text=scorecard_guidance_text,
-                transcript_text=transcript_text,
+                primary_input_text=primary_input_text,
+                primary_input_modality=primary_input_modality,
                 metadata_snapshot=metadata_snapshot,
                 label_provenance_source=(
                     ex.get("label_provenance_source") or "feedback_final_answer_value"
                 ),
                 resolved_final_classes=resolved_final_classes,
                 class_resolution_source=class_resolution_source,
+                primary_input_fetch_error=primary_input_fetch_error,
             )
-            ex["misclassification_classification"] = classify_misclassification_item(
+            classification = classify_misclassification_item(
                 ex["misclassification_item_context"]
             )
+            explainer = await asyncio.to_thread(
+                explain_misclassification_item_classification,
+                item_context=ex["misclassification_item_context"],
+                classification=classification,
+            )
+            classification["rationale_paragraph"] = explainer.get("rationale_paragraph", "")
+            classification["evidence_quote"] = explainer.get("evidence_quote", "")
+            classification["config_fixability"] = explainer.get("config_fixability", "")
+            ex["misclassification_classification"] = classification
 
         def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:
             import boto3 as _boto3
@@ -4474,13 +4578,27 @@ class FeedbackEvaluation(Evaluation):
                 "confidence": classification.get("confidence", ""),
                 "rationale_short": (
                     " ".join(
-                        str(classification.get("rationale", "") or "").strip().split()[:12]
+                        str(
+                            classification.get("rationale_paragraph")
+                            or classification.get("rationale", "")
+                            or ""
+                        ).strip().split()[:12]
                     )
                 ),
-                "rationale_full": classification.get("rationale", "") or "",
+                "rationale_full": (
+                    classification.get("rationale_paragraph")
+                    or classification.get("rationale", "")
+                    or ""
+                ),
+                "rationale_paragraph": classification.get("rationale_paragraph", "") or "",
+                "evidence_quote": classification.get("evidence_quote", "") or "",
+                "config_fixability": classification.get("config_fixability", "") or "",
                 "evidence_snippets": classification.get("evidence_snippets", []),
                 "mechanical_subtype": classification.get("mechanical_subtype"),
                 "mechanical_details": classification.get("mechanical_details"),
+                "information_gap_subtype": classification.get("information_gap_subtype"),
+                "detailed_cause": ex.get("detailed_cause"),
+                "suggested_fix": ex.get("suggested_fix"),
                 "misclassification_item_context": ex.get("misclassification_item_context") or {},
                 "misclassification_classification": classification,
             })

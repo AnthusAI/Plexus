@@ -55,10 +55,14 @@ export interface ScoreResultComponentProps {
   misclassificationCategory?: string
   misclassificationConfidence?: string
   misclassificationRationale?: string
+  misclassificationEvidenceQuote?: string
+  misclassificationConfigFixability?: string
   misclassificationEvidence?: Array<{
     source?: string
     quote_or_fact?: string
   }>
+  misclassificationMechanicalSubtype?: string
+  misclassificationMechanicalDetails?: string
 }
 
 
@@ -75,7 +79,11 @@ export function ScoreResultComponent({
   misclassificationCategory,
   misclassificationConfidence,
   misclassificationRationale,
+  misclassificationEvidenceQuote,
+  misclassificationConfigFixability,
   misclassificationEvidence,
+  misclassificationMechanicalSubtype,
+  misclassificationMechanicalDetails,
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -405,7 +413,7 @@ export function ScoreResultComponent({
               </div>
             )}
 
-            {(misclassificationCategory || misclassificationRationale || (misclassificationEvidence && misclassificationEvidence.length > 0)) && (
+            {(misclassificationCategory || misclassificationRationale || (misclassificationEvidence && misclassificationEvidence.length > 0) || misclassificationMechanicalSubtype || misclassificationMechanicalDetails) && (
               <div>
                 <div className="flex items-center mb-1">
                   <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
@@ -417,11 +425,23 @@ export function ScoreResultComponent({
                       {getCategoryLabel(misclassificationCategory)}
                     </Badge>
                     <Badge variant="secondary" className={`border-0 ${getConfidenceBadgeClass(misclassificationConfidence)}`}>
-                      Confidence: {misclassificationConfidence ?? 'unknown'}
+                      Triage confidence: {misclassificationConfidence ?? 'unknown'}
                     </Badge>
                   </div>
                   {misclassificationRationale && (
                     <p className="text-sm text-foreground">{misclassificationRationale}</p>
+                  )}
+                  {misclassificationEvidenceQuote && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Key evidence:</span>{' '}
+                      {misclassificationEvidenceQuote}
+                    </p>
+                  )}
+                  {misclassificationConfigFixability && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Config fixability:</span>{' '}
+                      {misclassificationConfigFixability.replace(/_/g, ' ')}
+                    </p>
                   )}
                   {misclassificationEvidence && misclassificationEvidence.length > 0 && (
                     <ul className="space-y-1">
@@ -432,6 +452,18 @@ export function ScoreResultComponent({
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {misclassificationMechanicalSubtype && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Mechanical subtype:</span>{' '}
+                      {misclassificationMechanicalSubtype.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {misclassificationMechanicalDetails && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Mechanical details:</span>{' '}
+                      {misclassificationMechanicalDetails}
+                    </p>
                   )}
                 </div>
               </div>

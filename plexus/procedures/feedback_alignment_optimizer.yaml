@@ -137,9 +137,13 @@ agents:
       What are the false positive and false negative patterns?
 
       ## Proposed Change
-      Describe the exact change to make to the score YAML configuration.
-      Be specific: which section, which text, what it should become.
-      Do NOT include the actual YAML — the code editor will implement the change.
+      Describe the EXACT change to make to the score YAML. Be very specific with line-by-line guidance
+      for the code editor. Format your change description like this:
+
+      "In section [name], find the text: [old_text_here] and replace it with: [new_text_here]"
+
+      Include the EXACT text to find (copy from score YAML if possible) and the EXACT replacement text.
+      The code editor will use your old_text and new_text verbatim with str_replace_editor.
 
       ## Rationale
       Why should this change improve alignment? What is the expected mechanism?
@@ -155,24 +159,30 @@ agents:
 
   code_editor:
     system_prompt: |
-      You are a precise YAML configuration editor. You make targeted edits to score
-      configuration files using the str_replace_editor tool.
+      You are a precise YAML configuration editor. You MUST make the exact edit requested.
+      Your job is NOT to evaluate whether the change is good—just implement it exactly as specified
+      by the previous analyst's "Proposed Change" section.
+
+      CRITICAL: Every time you are given an edit request, you MUST call str_replace_editor to make
+      that change. Do not skip, defer, or decline to edit. The analyst has already evaluated that
+      this change will improve alignment, so your job is to implement it reliably.
 
       Workflow:
-      1. Call str_replace_editor(command="view", path="score_config.yaml") to read the file
-      2. Make ONE focused edit: str_replace_editor(command="str_replace", path="score_config.yaml",
-         old_str="<exact text to replace>", new_str="<replacement text>")
-      3. The tool shows validation feedback after each edit
-      4. If validation passes, call submit_score_code() to finalize the change
-      5. If validation fails, fix the issue with another str_replace before submitting
+      1. Call str_replace_editor(command="view", path="score_config.yaml") to see the current file
+      2. Find the text section described in the "Proposed Change" section you were given
+      3. Call str_replace_editor(command="str_replace", ...) with old_str and new_str EXACTLY as specified
+      4. If validation fails, adjust and retry (but you MUST complete the edit)
+      5. Call submit_score_code() to finalize
+      6. Call done()
 
       Rules:
-      - Make minimal targeted changes — do NOT rewrite the whole file
+      - You WILL edit the file—do not view and return without editing
       - Copy old_str exactly from the view output (including all whitespace and indentation)
-      - Do NOT call submit_score_code() if YAML validation reported errors
-      - Call done() after submit_score_code() returns success=true
+      - Do NOT call submit_score_code() if YAML validation reported errors—fix and retry instead
+      - You MUST call done() after submit_score_code() returns success=true
+      - If you receive a "Proposed Change" description, implement it exactly as specified
 
-    initial_message: "Ready to edit score configuration."
+    initial_message: "Ready to edit score configuration. Awaiting proposed changes from analyzer."
 
     tools:
       - str_replace_editor
@@ -455,6 +465,9 @@ code: |
       end
     end
 
+    -- Initialize new_version_id for this iteration (will be populated by edit)
+    local new_version_id = nil
+
     -- Prepare analysis context for agent
     local analysis_context = {
       iteration = iteration,
@@ -544,18 +557,31 @@ code: |
       level = "info"
     })
 
+    -- Dispatch code editor agent with the full hypothesis
     code_editor.clear_history()
-    local editor_prompt = "Edit score_config.yaml to implement this improvement:\n\n" ..
-      hypothesis_text ..
-      "\n\nWhen your edit is complete and YAML validation passes, call submit_score_code() then done()."
 
-    local editor_done = wait_for_agent_done(code_editor, 15, editor_prompt)
+    -- Build a very explicit instruction with the hypothesis
+    local editor_prompt = (
+      "CRITICAL: The following change MUST be implemented exactly as specified.\n" ..
+      "Do NOT skip, defer, or decline to edit. Follow ALL steps:\n\n" ..
+      hypothesis_text ..
+      "\n\n" ..
+      "EXECUTION STEPS (required):\n" ..
+      "1. Call str_replace_editor(command='view', path='score_config.yaml') to see the file\n" ..
+      "2. Locate the text described in 'Proposed Change' section above\n" ..
+      "3. Call str_replace_editor(command='str_replace', path='score_config.yaml', old_str='EXACT_OLD_TEXT', new_str='NEW_TEXT')\n" ..
+      "4. When YAML validation shows no errors, call submit_score_code()\n" ..
+      "5. Call done()\n\n" ..
+      "You will NOT evaluate whether this is good. You WILL make this edit."
+    )
+
+    local editor_done = wait_for_agent_done(code_editor, 20, editor_prompt)
 
     if not editor_done then
       return {
         success = false,
         status = "error",
-        message = "Code editor timed out at iteration " .. iteration
+        message = "Code editor did not complete at iteration " .. iteration
       }
     end
 
@@ -565,11 +591,10 @@ code: |
       return {
         success = false,
         status = "error",
-        message = "Code editor did not create a score version at iteration " .. iteration ..
-          ". The agent must call submit_score_code() before done()."
+        message = "Code editor did not create a score version at iteration " .. iteration
       }
     end
-    local new_version_id = version_result.version_id
+    new_version_id = version_result.version_id
     Log.info("Score version created: " .. new_version_id)
 
     -- Run evaluation with updated score version

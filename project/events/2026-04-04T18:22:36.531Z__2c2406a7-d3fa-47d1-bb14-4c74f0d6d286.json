@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2c2406a7-d3fa-47d1-bb14-4c74f0d6d286",
+  "issue_id": "plx-e7329ba2-5000-4576-8fd0-854b05b7d5ac",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T18:22:36.531Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+    "priority": 1,
+    "status": "open",
+    "title": "Restore semantic-memory RCA UI as primary and layer misclassification overlays"
+  }
+}

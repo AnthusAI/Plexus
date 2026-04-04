@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, MessageSquareCode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -52,22 +53,18 @@ export interface Topic {
   days_inactive?: number;
 }
 
-type RcaDataByItemId = Record<string, {
-  detailed_cause?: string;
-  suggested_fix?: string;
-  misclassification_category?: string;
-  misclassification_confidence?: string;
-  misclassification_rationale?: string;
-  misclassification_evidence?: Array<{
-    source?: string;
-    quote_or_fact?: string;
-  }>;
-}>
-
 interface TopicItemProps {
   topic: Topic;
   isExpanded: boolean;
   onToggle: (topic: Topic) => void;
+  onViewItems?: (topic: Topic) => void;
+  onClearTopicFilter?: () => void;
+  isTopicFiltered?: boolean;
+  topicCategoryInfo?: {
+    primaryCategory?: string;
+    purity?: number;
+    categoryCounts?: Record<string, number>;
+  };
 }
 
 const getCategoryLabel = (category?: string | null): string => {
@@ -100,16 +97,26 @@ const getCategoryBadgeClass = (category?: string | null): string => {
   }
 }
 
-const getConfidenceBadgeClass = (confidence?: string | null): string => {
-  const value = (confidence ?? "").toLowerCase()
-  if (value === "high") return "bg-true/20 text-true"
-  if (value === "medium") return "bg-chart-3/20 text-chart-3"
-  if (value === "low") return "bg-false/20 text-false"
-  return "bg-muted text-muted-foreground"
+function getTopicItemIds(topic: Topic): string[] {
+  const exemplars = (topic.exemplars ?? []).filter(
+    (ex): ex is TopicExemplar => typeof ex !== "string"
+  );
+  return exemplars
+    .map((ex) => ex.item_id)
+    .filter((id): id is string => !!id);
 }
 
-function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
+function TopicItem({
+  topic,
+  isExpanded,
+  onToggle,
+  onViewItems,
+  onClearTopicFilter,
+  isTopicFiltered,
+  topicCategoryInfo,
+}: TopicItemProps) {
   const [showCode, setShowCode] = useState(false);
+  const topicItemIds = getTopicItemIds(topic);
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
@@ -156,6 +163,17 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
             >
               {topic.memory_tier}
             </Badge>
+            {topicCategoryInfo?.primaryCategory && (
+              <Badge
+                variant="secondary"
+                className={`border-0 ${getCategoryBadgeClass(topicCategoryInfo.primaryCategory)}`}
+              >
+                {getCategoryLabel(topicCategoryInfo.primaryCategory)}
+                {typeof topicCategoryInfo.purity === "number"
+                  ? ` (${Math.round(topicCategoryInfo.purity * 100)}%)`
+                  : ""}
+              </Badge>
+            )}
             <span>
               {topic.member_count} item{topic.member_count !== 1 ? "s" : ""}
             </span>
@@ -222,63 +240,31 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
                   <span className="text-foreground">{topic.keywords.join(", ")}</span>
                 </div>
               )}
-              {topic.exemplars && topic.exemplars.length > 0 && (
-                <div>
-                  <div className="font-medium text-muted-foreground mb-2">Misclassified items</div>
-                  <div className="space-y-2">
-                    {topic.exemplars
-                      .filter((ex): ex is TopicExemplar => typeof ex !== "string")
-                      .map((ex, index) => {
-                        const classification = ex.misclassification_classification
-                        return (
-                          <div key={ex.item_id ?? `topic-exemplar-${index}`} className="bg-card rounded-md p-2 space-y-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="text-xs text-muted-foreground">
-                                Item {ex.item_id ?? "Unavailable"}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Badge variant="secondary" className="border-0 bg-muted/50 text-foreground">
-                                  {ex.initial_answer_value ?? "?"} → {ex.final_answer_value ?? "?"}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="secondary" className={`border-0 ${getCategoryBadgeClass(classification?.primary_category)}`}>
-                                {getCategoryLabel(classification?.primary_category)}
-                              </Badge>
-                              <Badge variant="secondary" className={`border-0 ${getConfidenceBadgeClass(classification?.confidence)}`}>
-                                Confidence: {classification?.confidence ?? "unknown"}
-                              </Badge>
-                            </div>
-                            {classification?.rationale && (
-                              <p className="text-xs text-foreground">{classification.rationale}</p>
-                            )}
-                            {classification?.evidence_snippets && classification.evidence_snippets.length > 0 && (
-                              <ul className="space-y-1">
-                                {classification.evidence_snippets.map((snippet, snippetIndex) => (
-                                  <li key={`${ex.item_id ?? index}-evidence-${snippetIndex}`} className="text-xs text-muted-foreground">
-                                    <span className="font-medium text-foreground">
-                                      {snippet.source ?? "source"}:
-                                    </span>{" "}
-                                    {snippet.quote_or_fact ?? "No quote available."}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            {ex.detailed_cause && (
-                              <p className="text-xs text-muted-foreground">
-                                <span className="font-medium text-foreground">Detailed cause:</span> {ex.detailed_cause}
-                              </p>
-                            )}
-                            {ex.suggested_fix && (
-                              <p className="text-xs text-muted-foreground">
-                                <span className="font-medium text-foreground">Suggested fix:</span> {ex.suggested_fix}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      })}
-                  </div>
+              {(onViewItems && topicItemIds.length > 0) && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 text-xs border-0 shadow-none px-2",
+                      isTopicFiltered
+                        ? "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        : "bg-muted text-foreground hover:bg-muted/80"
+                    )}
+                    onClick={() => onViewItems(topic)}
+                  >
+                    View items ({topicItemIds.length})
+                  </Button>
+                  {isTopicFiltered && onClearTopicFilter && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={onClearTopicFilter}
+                    >
+                      Clear topic filter
+                    </Button>
+                  )}
                 </div>
               )}
             </>
@@ -292,19 +278,23 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
 export interface TopicListProps {
   topics: Topic[];
   label?: string;
+  topicCategoryInfoByKey?: Record<string, {
+    primaryCategory?: string;
+    purity?: number;
+    categoryCounts?: Record<string, number>;
+  }>;
   onTopicFilter?: (
     itemIds: string[] | null,
-    rcaDataByItemId: RcaDataByItemId,
     topicLabel?: string | null
   ) => void;
+  activeTopicLabel?: string | null;
 }
 
 /**
  * Renders a labeled list of topics with keywords, memory tiers, and expandable analysis.
- * When a topic is expanded, onTopicFilter is called with the topic's exemplar item IDs
- * so the parent can filter the score results list to show only that topic's items.
+ * Expanding a topic only expands details. Filtering to score results is an explicit action.
  */
-export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
+export function TopicList({ topics, label, topicCategoryInfoByKey, onTopicFilter, activeTopicLabel }: TopicListProps) {
   const [expandedKey, setExpandedKey] = useState<string | number | null>(null);
 
   if (!topics || topics.length === 0) return null;
@@ -321,33 +311,16 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
     const isCurrentlyExpanded = expandedKey === key;
     const next = isCurrentlyExpanded ? null : key;
     setExpandedKey(next);
+  };
 
-    if (onTopicFilter) {
-      if (next !== null) {
-        const exemplars = (topic.exemplars ?? []).filter(
-          (ex): ex is TopicExemplar => typeof ex !== "string"
-        );
-        const itemIds = exemplars
-          .map((ex) => ex.item_id)
-          .filter((id): id is string => !!id);
-        const rcaDataByItemId: RcaDataByItemId = {};
-        exemplars.forEach((ex) => {
-          if (ex.item_id) {
-            rcaDataByItemId[ex.item_id] = {
-              detailed_cause: ex.detailed_cause ?? undefined,
-              suggested_fix: ex.suggested_fix ?? undefined,
-              misclassification_category: ex.misclassification_classification?.primary_category ?? undefined,
-              misclassification_confidence: ex.misclassification_classification?.confidence ?? undefined,
-              misclassification_rationale: ex.misclassification_classification?.rationale ?? undefined,
-              misclassification_evidence: ex.misclassification_classification?.evidence_snippets ?? undefined,
-            };
-          }
-        });
-        onTopicFilter(itemIds, rcaDataByItemId, topic.label);
-      } else {
-        onTopicFilter(null, {}, null);
-      }
-    }
+  const handleViewItems = (topic: Topic) => {
+    if (!onTopicFilter) return;
+    onTopicFilter(getTopicItemIds(topic), topic.label);
+  };
+
+  const handleClearTopicFilter = () => {
+    if (!onTopicFilter) return;
+    onTopicFilter(null, null);
   };
 
   return (
@@ -364,6 +337,10 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
               topic={t}
               isExpanded={expandedKey === key}
               onToggle={handleToggle}
+              onViewItems={onTopicFilter ? handleViewItems : undefined}
+              onClearTopicFilter={onTopicFilter ? handleClearTopicFilter : undefined}
+              isTopicFiltered={Boolean(activeTopicLabel && activeTopicLabel === t.label)}
+              topicCategoryInfo={topicCategoryInfoByKey?.[String(key)]}
             />
           );
         })}

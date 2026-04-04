@@ -232,17 +232,46 @@ type OptimizationApplicability = {
 }
 
 type MisclassificationAnalysis = {
-  item_classifications?: Array<{
+  item_classifications_all?: Array<{
     topic_id?: number | string
     topic_label?: string
     feedback_item_id?: string
     item_id?: string
     timestamp?: string
+    predicted_value?: string
+    correct_value?: string
     primary_category?: MisclassificationCategory | string
     confidence?: string
-    rationale?: string
+    rationale_short?: string
+    rationale_full?: string
+    rationale_paragraph?: string
+    evidence_quote?: string
+    config_fixability?: string
     evidence_snippets?: Array<{ source?: string; quote_or_fact?: string }>
+    mechanical_subtype?: string | null
+    mechanical_details?: string | null
+    information_gap_subtype?: string | null
+    detailed_cause?: string
+    suggested_fix?: string
   }>
+  analysis_scope?: {
+    candidate_items_total?: number
+    classified_items_total?: number
+    texts_analyzed_total?: number
+    topics_found?: number
+    topic_assignment_scope?: string
+    topic_assignment_unavailable_count?: number
+  }
+  category_diagnostics?: {
+    information_gap?: {
+      item_count?: number
+      missing_or_degraded_primary_input_count?: number
+      missing_or_degraded_primary_input_share?: number
+      missing_required_context_count?: number
+      missing_required_context_share?: number
+      diagnostic_summary?: string
+    }
+  }
   category_totals?: Partial<Record<MisclassificationCategory, number>>
   category_summaries?: Partial<Record<MisclassificationCategory, MisclassificationCategorySummary>>
   mechanical_subtype_totals?: Record<string, number>
@@ -254,6 +283,7 @@ type MisclassificationAnalysis = {
     topic_primary_category?: string
     topic_category_purity?: number
     member_count?: number
+    category_counts?: Record<string, number>
   }>
   max_category_summary_items_used?: number
   overall_assessment?: {
@@ -830,16 +860,17 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(result.id)
   }
 
+  const selectFirstFilteredScoreResult = (itemIds: string[]) => {
+    const firstItemId = itemIds.find(Boolean)
+    if (!firstItemId) return
+    const matching = parsedScoreResults.find(result => result.itemId === firstItemId)
+    if (matching) {
+      onSelectScoreResult?.(matching.id)
+    }
+  }
+
   const handleTopicFilter = (
     itemIds: string[] | null,
-    rcaData: Record<string, {
-      detailed_cause?: string
-      suggested_fix?: string
-      misclassification_category?: string
-      misclassification_confidence?: string
-      misclassification_rationale?: string
-      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
-    }>,
     topicLabel?: string | null
   ) => {
     setSelectedCategoryKey(null)
@@ -848,8 +879,10 @@ const DetailContent = React.memo(({
     setCategoryMissingItemIdCount(0)
     setSelectedTopicItemIds(itemIds)
     setSelectedTopicLabel(itemIds ? (topicLabel ?? null) : null)
-    setRcaDataByItemId(rcaData ?? {})
-    if (itemIds) setSelectedPredictedActual({ predicted: null, actual: null })
+    if (itemIds && itemIds.length > 0) {
+      setSelectedPredictedActual({ predicted: null, actual: null })
+      selectFirstFilteredScoreResult(itemIds)
+    }
   }
 
   const handleCategoryFilter = (
@@ -862,14 +895,6 @@ const DetailContent = React.memo(({
     )
 
     const itemIds: string[] = []
-    const nextRcaDataByItemId: Record<string, {
-      detailed_cause?: string
-      suggested_fix?: string
-      misclassification_category?: string
-      misclassification_confidence?: string
-      misclassification_rationale?: string
-      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
-    }> = {}
     let missingCount = 0
 
     filteredClassifications.forEach(classification => {
@@ -879,12 +904,6 @@ const DetailContent = React.memo(({
       }
 
       itemIds.push(classification.item_id)
-      nextRcaDataByItemId[classification.item_id] = {
-        misclassification_category: classification.primary_category ?? undefined,
-        misclassification_confidence: classification.confidence ?? undefined,
-        misclassification_rationale: classification.rationale ?? undefined,
-        misclassification_evidence: classification.evidence_snippets ?? undefined,
-      }
     })
 
     setSelectedTopicItemIds(null)
@@ -893,8 +912,8 @@ const DetailContent = React.memo(({
     setSelectedCategoryLabel(categoryLabel)
     setSelectedCategoryItemIds(Array.from(new Set(itemIds)))
     setCategoryMissingItemIdCount(missingCount)
-    setRcaDataByItemId(nextRcaDataByItemId)
     setSelectedPredictedActual({ predicted: null, actual: null })
+    selectFirstFilteredScoreResult(itemIds)
   }
 
   const clearCategoryFilter = () => {
@@ -902,7 +921,6 @@ const DetailContent = React.memo(({
     setSelectedCategoryLabel(null)
     setSelectedCategoryItemIds(null)
     setCategoryMissingItemIdCount(0)
-    setRcaDataByItemId({})
   }
 
   const handleScoreResultClose = () => {
@@ -969,8 +987,8 @@ const DetailContent = React.memo(({
   const misclassificationAnalysis = rootCauseData?.misclassification_analysis as MisclassificationAnalysis | null
   const misclassificationCategoryBreakdown = useMemo(() => {
     const totals = misclassificationAnalysis?.category_totals ?? {}
-    const itemClassifications = Array.isArray(misclassificationAnalysis?.item_classifications)
-      ? misclassificationAnalysis.item_classifications
+    const itemClassifications = Array.isArray(misclassificationAnalysis?.item_classifications_all)
+      ? misclassificationAnalysis.item_classifications_all
       : []
     const rows = MISCLASSIFICATION_CATEGORY_CONFIG.map(config => {
       const rawCount = totals[config.key]
@@ -978,6 +996,42 @@ const DetailContent = React.memo(({
       return { ...config, count }
     })
     const totalItems = rows.reduce((sum, row) => sum + row.count, 0)
+    const informationGapItems = itemClassifications.filter(
+      classification => classification.primary_category === 'information_gap'
+    )
+    const missingOrDegradedPrimaryInputSignals = informationGapItems.filter(classification =>
+      (classification.evidence_snippets ?? []).some(snippet => {
+        const source = (snippet.source ?? '').toLowerCase()
+        if (source !== 'primary_input') return false
+        const text = (snippet.quote_or_fact ?? '').toLowerCase()
+        return (
+          text.includes('unavailable')
+          || text.includes('missing')
+          || text.includes('not available')
+          || text.includes('insufficient')
+          || text.includes('degraded')
+          || text.includes('redacted')
+        )
+      })
+    ).length
+    const missingRequiredContextSignals = informationGapItems.filter(
+      classification => classification.information_gap_subtype === 'missing_required_context'
+    ).length
+    const derivedInfoGapDiagnostics = {
+      item_count: informationGapItems.length,
+      missing_or_degraded_primary_input_count: missingOrDegradedPrimaryInputSignals,
+      missing_or_degraded_primary_input_share: informationGapItems.length > 0
+        ? missingOrDegradedPrimaryInputSignals / informationGapItems.length
+        : 0,
+      missing_required_context_count: missingRequiredContextSignals,
+      missing_required_context_share: informationGapItems.length > 0
+        ? missingRequiredContextSignals / informationGapItems.length
+        : 0,
+      diagnostic_summary: informationGapItems.length > 0
+        ? `${missingOrDegradedPrimaryInputSignals}/${informationGapItems.length} information-gap item(s) include missing/degraded primary-input evidence.`
+        : 'No information-gap items in this run.',
+    }
+
     return {
       rows,
       totalItems,
@@ -992,6 +1046,11 @@ const DetailContent = React.memo(({
       primaryNextAction: misclassificationAnalysis?.primary_next_action ?? null,
       optimizationApplicability: misclassificationAnalysis?.optimization_applicability ?? null,
       mechanicalSubtypeTotals: misclassificationAnalysis?.mechanical_subtype_totals ?? {},
+      categoryDiagnostics: {
+        information_gap:
+          misclassificationAnalysis?.category_diagnostics?.information_gap
+          ?? derivedInfoGapDiagnostics,
+      },
       maxCategorySummaryItemsUsed: misclassificationAnalysis?.max_category_summary_items_used,
       itemClassifications,
     }
@@ -1004,16 +1063,67 @@ const DetailContent = React.memo(({
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState<string | null>(null)
   const [selectedCategoryItemIds, setSelectedCategoryItemIds] = useState<string[] | null>(null)
   const [categoryMissingItemIdCount, setCategoryMissingItemIdCount] = useState(0)
-  const [rcaDataByItemId, setRcaDataByItemId] = useState<
+  const rcaDataByItemId = useMemo<
     Record<string, {
       detailed_cause?: string
       suggested_fix?: string
       misclassification_category?: string
       misclassification_confidence?: string
       misclassification_rationale?: string
+      misclassification_evidence_quote?: string
+      misclassification_config_fixability?: string
       misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
+      misclassification_mechanical_subtype?: string
+      misclassification_mechanical_details?: string
     }>
-  >({})
+  >(() => {
+    const map: Record<string, {
+      detailed_cause?: string
+      suggested_fix?: string
+      misclassification_category?: string
+      misclassification_confidence?: string
+      misclassification_rationale?: string
+      misclassification_evidence_quote?: string
+      misclassification_config_fixability?: string
+      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
+      misclassification_mechanical_subtype?: string
+      misclassification_mechanical_details?: string
+    }> = {}
+
+    ;(misclassificationCategoryBreakdown.itemClassifications ?? []).forEach(classification => {
+      if (!classification.item_id) return
+      map[classification.item_id] = {
+        misclassification_category: classification.primary_category ?? undefined,
+        misclassification_confidence: classification.confidence ?? undefined,
+        misclassification_rationale: (
+          classification.rationale_paragraph
+          ?? classification.rationale_full
+          ?? classification.rationale_short
+          ?? undefined
+        ),
+        misclassification_evidence_quote: classification.evidence_quote ?? undefined,
+        misclassification_config_fixability: classification.config_fixability ?? undefined,
+        misclassification_evidence: classification.evidence_snippets ?? undefined,
+        misclassification_mechanical_subtype: classification.mechanical_subtype ?? undefined,
+        misclassification_mechanical_details: classification.mechanical_details ?? undefined,
+        detailed_cause: classification.detailed_cause ?? undefined,
+        suggested_fix: classification.suggested_fix ?? undefined,
+      }
+    })
+
+    ;(rootCauseTopics ?? []).forEach((topic: any) => {
+      ;(topic.exemplars ?? []).forEach((exemplar: any) => {
+        const itemId = exemplar?.item_id
+        if (!itemId) return
+        map[itemId] = {
+          ...(map[itemId] ?? {}),
+          detailed_cause: exemplar?.detailed_cause ?? map[itemId]?.detailed_cause,
+          suggested_fix: exemplar?.suggested_fix ?? map[itemId]?.suggested_fix,
+        }
+      })
+    })
+    return map
+  }, [misclassificationCategoryBreakdown.itemClassifications, rootCauseTopics])
 
   const activeFilteredItemIds = selectedCategoryItemIds ?? selectedTopicItemIds
   const activeFilterChipLabel = selectedCategoryLabel
@@ -1025,6 +1135,28 @@ const DetailContent = React.memo(({
   const selectedItemRcaContext = selectedScoreResult?.itemId
     ? rcaDataByItemId[selectedScoreResult.itemId]
     : undefined
+  const topicCategoryInfoByKey = useMemo(() => {
+    const map: Record<string, { primaryCategory?: string; purity?: number; categoryCounts?: Record<string, number> }> = {}
+    ;(misclassificationCategoryBreakdown.topicCategoryBreakdown ?? []).forEach(topic => {
+      const primaryCategory = typeof topic.topic_primary_category === 'string'
+        ? topic.topic_primary_category
+        : undefined
+      const purity = typeof topic.topic_category_purity === 'number'
+        ? topic.topic_category_purity
+        : undefined
+      const categoryCounts =
+        topic.category_counts && typeof topic.category_counts === 'object'
+          ? (topic.category_counts as Record<string, number>)
+          : undefined
+      if (topic.topic_id !== undefined && topic.topic_id !== null) {
+        map[String(topic.topic_id)] = { primaryCategory, purity, categoryCounts }
+      }
+      if (topic.topic_label) {
+        map[String(topic.topic_label)] = { primaryCategory, purity, categoryCounts }
+      }
+    })
+    return map
+  }, [misclassificationCategoryBreakdown.topicCategoryBreakdown])
 
   return (
     <div
@@ -1067,7 +1199,11 @@ const DetailContent = React.memo(({
               misclassificationCategory={selectedItemRcaContext?.misclassification_category}
               misclassificationConfidence={selectedItemRcaContext?.misclassification_confidence}
               misclassificationRationale={selectedItemRcaContext?.misclassification_rationale}
+              misclassificationEvidenceQuote={selectedItemRcaContext?.misclassification_evidence_quote}
+              misclassificationConfigFixability={selectedItemRcaContext?.misclassification_config_fixability}
               misclassificationEvidence={selectedItemRcaContext?.misclassification_evidence}
+              misclassificationMechanicalSubtype={selectedItemRcaContext?.misclassification_mechanical_subtype}
+              misclassificationMechanicalDetails={selectedItemRcaContext?.misclassification_mechanical_details}
             />
           </div>
         )}
@@ -1257,6 +1393,27 @@ const DetailContent = React.memo(({
                             </div>
                           </div>
                         )}
+                        {misclassificationCategoryBreakdown.totalItems > 0 &&
+                          (
+                            misclassificationCategoryBreakdown.overall?.predominant_category === 'information_gap'
+                            || (
+                              (misclassificationCategoryBreakdown.rows.find(row => row.key === 'information_gap')?.count ?? 0)
+                              / Math.max(1, misclassificationCategoryBreakdown.totalItems)
+                            ) >= 0.5
+                          ) && (
+                            <Alert className="mb-3 py-2 px-3 border-chart-2/40 text-chart-2 [&>svg]:text-chart-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              <div className="min-w-0 text-xs">
+                                <AlertTitle className="mb-0.5 text-xs">Information-gap is dominating this run</AlertTitle>
+                                <AlertDescription className="text-xs text-foreground">
+                                  {misclassificationCategoryBreakdown.categoryDiagnostics?.information_gap?.diagnostic_summary}
+                                  {' '}({misclassificationCategoryBreakdown.categoryDiagnostics?.information_gap?.item_count ?? 0} item(s),{' '}
+                                  {(((misclassificationCategoryBreakdown.categoryDiagnostics?.information_gap?.missing_or_degraded_primary_input_share ?? 0) * 100)).toFixed(1)}% with missing/degraded primary-input evidence).
+                                  {' '}This can limit score-configuration-only optimization.
+                                </AlertDescription>
+                              </div>
+                            </Alert>
+                          )}
                         {misclassificationCategoryBreakdown.totalItems > 0 && (
                           <div className="mb-3">
                             <div className="flex items-center justify-between gap-2 mb-1">
@@ -1279,9 +1436,6 @@ const DetailContent = React.memo(({
                                 const summary = misclassificationCategoryBreakdown.categorySummaries?.[row.key]
                                 const summaryText = summary?.category_summary_text
                                 const patterns = Array.isArray(summary?.top_patterns) ? summary?.top_patterns : []
-                                const representativeEvidence = Array.isArray(summary?.representative_evidence)
-                                  ? summary?.representative_evidence
-                                  : []
                                 const itemCount = summary?.item_count ?? 0
                                 const categoryClassifications = (misclassificationCategoryBreakdown.itemClassifications ?? [])
                                   .filter(classification => classification.primary_category === row.key)
@@ -1307,40 +1461,20 @@ const DetailContent = React.memo(({
                                           .join(', ')}
                                       </div>
                                     )}
-                                    {representativeEvidence.length > 0 && (
-                                      <div className="space-y-1">
-                                        <div className="text-xs font-medium text-muted-foreground">
-                                          Representative evidence
-                                        </div>
-                                        {representativeEvidence.map((evidence, evidenceIndex) => {
-                                          const evidenceItemId = evidence.item_id || evidence.feedback_item_id || 'Unavailable'
-                                          return (
-                                            <div key={`${row.key}-evidence-${evidenceIndex}`} className="text-xs bg-background/70 rounded p-2">
-                                              <div className="text-muted-foreground">
-                                                Item <span className="font-mono text-foreground">{evidenceItemId}</span>
-                                                {evidence.source ? (
-                                                  <span className="ml-2">
-                                                    Source: <span className="text-foreground">{evidence.source}</span>
-                                                  </span>
-                                                ) : null}
-                                              </div>
-                                              <div className="text-foreground mt-0.5">
-                                                {evidence.quote_or_fact ?? 'No quote available.'}
-                                              </div>
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    )}
                                     {itemCount > 0 && (
                                       <div className="flex items-center justify-between gap-2">
                                         <Button
-                                          variant={selectedCategoryKey === row.key ? 'secondary' : 'outline'}
+                                          variant="ghost"
                                           size="sm"
-                                          className="h-7 text-xs"
+                                          className={cn(
+                                            'h-7 text-xs border-0 shadow-none px-2',
+                                            selectedCategoryKey === row.key
+                                              ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90'
+                                              : 'bg-muted text-foreground hover:bg-muted/80'
+                                          )}
                                           onClick={() => handleCategoryFilter(row.key, row.label)}
                                         >
-                                          View {itemCount} item{itemCount === 1 ? '' : 's'} in score results
+                                          View items ({itemCount})
                                         </Button>
                                         {selectedCategoryKey === row.key && categoryMissingItemIdCount > 0 && (
                                           <span className="text-[11px] text-muted-foreground">
@@ -1483,7 +1617,12 @@ const DetailContent = React.memo(({
                           </div>
                         )}
                         {rootCauseTopics && rootCauseTopics.length > 0 && (
-                          <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                          <TopicList
+                            topics={rootCauseTopics}
+                            topicCategoryInfoByKey={topicCategoryInfoByKey}
+                            onTopicFilter={handleTopicFilter}
+                            activeTopicLabel={selectedTopicLabel}
+                          />
                         )}
                       </>
                     )}
@@ -1546,7 +1685,11 @@ const DetailContent = React.memo(({
               misclassificationCategory={selectedItemRcaContext?.misclassification_category}
               misclassificationConfidence={selectedItemRcaContext?.misclassification_confidence}
               misclassificationRationale={selectedItemRcaContext?.misclassification_rationale}
+              misclassificationEvidenceQuote={selectedItemRcaContext?.misclassification_evidence_quote}
+              misclassificationConfigFixability={selectedItemRcaContext?.misclassification_config_fixability}
               misclassificationEvidence={selectedItemRcaContext?.misclassification_evidence}
+              misclassificationMechanicalSubtype={selectedItemRcaContext?.misclassification_mechanical_subtype}
+              misclassificationMechanicalDetails={selectedItemRcaContext?.misclassification_mechanical_details}
             />
           </div>
         )}
