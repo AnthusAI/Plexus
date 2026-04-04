@@ -1,10 +1,9 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, ChevronDown, ChevronRight, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
@@ -13,6 +12,7 @@ import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } fr
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
+import { TopicList } from '@/components/ui/topic-list'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -20,7 +20,6 @@ import { BaseTaskData } from '@/types/base'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 import isEqual from 'lodash/isEqual'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
-import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import Link from 'next/link'
@@ -263,45 +262,6 @@ type MisclassificationAnalysis = {
     score_fix_candidate_items?: number
   }
   evaluation_red_flags?: MisclassificationRedFlag[]
-  category_hierarchy?: Array<{
-    category_key?: MisclassificationCategory | string
-    category_label?: string
-    item_count?: number
-    share?: number
-    summary_text?: string
-    top_patterns?: Array<{ pattern?: string; count?: number }>
-    mechanical_subtype_totals?: Record<string, number>
-    topics?: Array<{
-      topic_id?: number | string
-      label?: string
-      member_count?: number
-      topic_category_purity?: number
-      category_counts?: Partial<Record<MisclassificationCategory, number>> | Record<string, number>
-      detailed_explanation?: string
-      improvement_suggestion?: string
-      score_fix_candidate_count?: number
-      examples?: Array<{
-        feedback_item_id?: string
-        item_id?: string
-        identifiers?: Array<{ name?: string; value?: string; url?: string }> | null
-        text?: string
-        timestamp?: string
-        initial_answer_value?: string | null
-        final_answer_value?: string | null
-        score_explanation?: string | null
-        detailed_cause?: string | null
-        suggested_fix?: string | null
-        mechanical_subtype?: string | null
-        mechanical_details?: string | null
-        misclassification_classification?: {
-          primary_category?: string
-          rationale?: string
-          confidence?: string
-          evidence_snippets?: Array<{ source?: string; quote_or_fact?: string }>
-        }
-      }>
-    }>
-  }>
 }
 
 const MISCLASSIFICATION_CATEGORY_CONFIG: Array<{
@@ -371,34 +331,6 @@ const getPrimaryNextActionLabel = (action?: string | null): string => {
       return 'Score-configuration optimization'
     default:
       return 'Unavailable'
-  }
-}
-
-const getMisclassificationCategoryBadgeClass = (category?: string | null): string => {
-  switch (category) {
-    case 'score_configuration_problem':
-      return 'bg-chart-1/20 text-chart-1'
-    case 'information_gap':
-      return 'bg-chart-2/20 text-chart-2'
-    case 'guideline_gap_requires_sme':
-      return 'bg-chart-3/20 text-chart-3'
-    case 'mechanical_malfunction':
-      return 'bg-chart-4/20 text-chart-4'
-    default:
-      return 'bg-muted/50 text-muted-foreground'
-  }
-}
-
-const getConfidenceBadgeClass = (confidence?: string | null): string => {
-  switch ((confidence || '').toLowerCase()) {
-    case 'high':
-      return 'bg-chart-1/20 text-chart-1'
-    case 'medium':
-      return 'bg-chart-3/20 text-chart-3'
-    case 'low':
-      return 'bg-chart-4/20 text-chart-4'
-    default:
-      return 'bg-muted/50 text-muted-foreground'
   }
 }
 
@@ -898,77 +830,37 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(result.id)
   }
 
-  const applyTopicFilterFromExamples = (
-    topicLabel: string,
-    examples: Array<{
-      item_id?: string
-      detailed_cause?: string | null
-      suggested_fix?: string | null
-      misclassification_classification?: {
-        primary_category?: string
-        confidence?: string
-        rationale?: string
-        evidence_snippets?: Array<{ source?: string; quote_or_fact?: string }>
-      }
-    }>
-  ) => {
-    const itemIds: string[] = []
-    const nextRcaDataByItemId: Record<string, {
+  const handleTopicFilter = (
+    itemIds: string[] | null,
+    rcaData: Record<string, {
       detailed_cause?: string
       suggested_fix?: string
       misclassification_category?: string
       misclassification_confidence?: string
       misclassification_rationale?: string
       misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
-    }> = {}
-    examples.forEach(example => {
-      if (!example.item_id) return
-      itemIds.push(example.item_id)
-      nextRcaDataByItemId[example.item_id] = {
-        detailed_cause: example.detailed_cause ?? undefined,
-        suggested_fix: example.suggested_fix ?? undefined,
-        misclassification_category: example.misclassification_classification?.primary_category ?? undefined,
-        misclassification_confidence: example.misclassification_classification?.confidence ?? undefined,
-        misclassification_rationale: example.misclassification_classification?.rationale ?? undefined,
-        misclassification_evidence: example.misclassification_classification?.evidence_snippets ?? undefined,
-      }
-    })
-
+    }>,
+    topicLabel?: string | null
+  ) => {
     setSelectedCategoryKey(null)
     setSelectedCategoryLabel(null)
     setSelectedCategoryItemIds(null)
     setCategoryMissingItemIdCount(0)
-    setSelectedTopicItemIds(Array.from(new Set(itemIds)))
-    setSelectedTopicLabel(topicLabel || null)
-    setRcaDataByItemId(nextRcaDataByItemId)
-    setSelectedPredictedActual({ predicted: null, actual: null })
-  }
-
-  const clearTopicFilter = () => {
-    setSelectedTopicItemIds(null)
-    setSelectedTopicLabel(null)
-    setRcaDataByItemId({})
-  }
-
-  const handleTopicFilterReset = () => {
-    clearTopicFilter()
+    setSelectedTopicItemIds(itemIds)
+    setSelectedTopicLabel(itemIds ? (topicLabel ?? null) : null)
+    setRcaDataByItemId(rcaData ?? {})
+    if (itemIds) setSelectedPredictedActual({ predicted: null, actual: null })
   }
 
   const handleCategoryFilter = (
     categoryKey: MisclassificationCategory,
-    categoryLabel: string,
-    examples: Array<{
-      item_id?: string
-      detailed_cause?: string | null
-      suggested_fix?: string | null
-      misclassification_classification?: {
-        primary_category?: string
-        confidence?: string
-        rationale?: string
-        evidence_snippets?: Array<{ source?: string; quote_or_fact?: string }>
-      }
-    }>
+    categoryLabel: string
   ) => {
+    const classifications = misclassificationCategoryBreakdown.itemClassifications ?? []
+    const filteredClassifications = classifications.filter(
+      classification => classification.primary_category === categoryKey
+    )
+
     const itemIds: string[] = []
     const nextRcaDataByItemId: Record<string, {
       detailed_cause?: string
@@ -980,20 +872,18 @@ const DetailContent = React.memo(({
     }> = {}
     let missingCount = 0
 
-    examples.forEach(example => {
-      if (!example.item_id) {
+    filteredClassifications.forEach(classification => {
+      if (!classification.item_id) {
         missingCount += 1
         return
       }
 
-      itemIds.push(example.item_id)
-      nextRcaDataByItemId[example.item_id] = {
-        detailed_cause: example.detailed_cause ?? undefined,
-        suggested_fix: example.suggested_fix ?? undefined,
-        misclassification_category: example.misclassification_classification?.primary_category ?? undefined,
-        misclassification_confidence: example.misclassification_classification?.confidence ?? undefined,
-        misclassification_rationale: example.misclassification_classification?.rationale ?? undefined,
-        misclassification_evidence: example.misclassification_classification?.evidence_snippets ?? undefined,
+      itemIds.push(classification.item_id)
+      nextRcaDataByItemId[classification.item_id] = {
+        misclassification_category: classification.primary_category ?? undefined,
+        misclassification_confidence: classification.confidence ?? undefined,
+        misclassification_rationale: classification.rationale ?? undefined,
+        misclassification_evidence: classification.evidence_snippets ?? undefined,
       }
     })
 
@@ -1075,6 +965,7 @@ const DetailContent = React.memo(({
     }
   }, [data.parameters])
 
+  const rootCauseTopics = rootCauseData?.topics ?? null
   const misclassificationAnalysis = rootCauseData?.misclassification_analysis as MisclassificationAnalysis | null
   const misclassificationCategoryBreakdown = useMemo(() => {
     const totals = misclassificationAnalysis?.category_totals ?? {}
@@ -1098,9 +989,6 @@ const DetailContent = React.memo(({
       topicCategoryBreakdown: Array.isArray(misclassificationAnalysis?.topic_category_breakdown)
         ? misclassificationAnalysis.topic_category_breakdown
         : [],
-      categoryHierarchy: Array.isArray(misclassificationAnalysis?.category_hierarchy)
-        ? misclassificationAnalysis.category_hierarchy
-        : [],
       primaryNextAction: misclassificationAnalysis?.primary_next_action ?? null,
       optimizationApplicability: misclassificationAnalysis?.optimization_applicability ?? null,
       mechanicalSubtypeTotals: misclassificationAnalysis?.mechanical_subtype_totals ?? {},
@@ -1116,7 +1004,6 @@ const DetailContent = React.memo(({
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState<string | null>(null)
   const [selectedCategoryItemIds, setSelectedCategoryItemIds] = useState<string[] | null>(null)
   const [categoryMissingItemIdCount, setCategoryMissingItemIdCount] = useState(0)
-  const [expandedTopicKeys, setExpandedTopicKeys] = useState<Record<string, boolean>>({})
   const [rcaDataByItemId, setRcaDataByItemId] = useState<
     Record<string, {
       detailed_cause?: string
@@ -1138,12 +1025,6 @@ const DetailContent = React.memo(({
   const selectedItemRcaContext = selectedScoreResult?.itemId
     ? rcaDataByItemId[selectedScoreResult.itemId]
     : undefined
-
-  const buildTopicKey = (
-    categoryKey: string,
-    topicId?: string | number | null,
-    topicLabel?: string | null
-  ) => `${categoryKey}:${String(topicId ?? topicLabel ?? 'topic')}`
 
   return (
     <div
@@ -1298,7 +1179,7 @@ const DetailContent = React.memo(({
 
                 {/* Score-Configuration RCA */}
                 {(rootCauseData && (
-                  (misclassificationCategoryBreakdown.categoryHierarchy?.length > 0) ||
+                  (rootCauseTopics && rootCauseTopics.length > 0) ||
                   misclassificationCategoryBreakdown.totalItems > 0 ||
                   misclassificationCategoryBreakdown.redFlags.length > 0
                 )) && (
@@ -1380,249 +1261,97 @@ const DetailContent = React.memo(({
                           <div className="mb-3">
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <div className="font-medium text-muted-foreground text-sm">
-                                Category triage hierarchy
+                                Category summaries
                               </div>
-                              <div className="flex items-center gap-1">
-                                {selectedCategoryKey && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-xs"
-                                    onClick={clearCategoryFilter}
-                                  >
-                                    Clear category filter
-                                  </Button>
-                                )}
-                                {selectedTopicLabel && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-xs"
-                                    onClick={handleTopicFilterReset}
-                                  >
-                                    Clear topic filter
-                                  </Button>
-                                )}
-                              </div>
+                              {selectedCategoryKey && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={clearCategoryFilter}
+                                >
+                                  Clear category filter
+                                </Button>
+                              )}
                             </div>
                             <div className="space-y-2 bg-card rounded-md p-2">
-                              {(misclassificationCategoryBreakdown.categoryHierarchy ?? []).length === 0 && (
-                                <div className="text-xs text-muted-foreground">
-                                  Unified category hierarchy data is unavailable for this evaluation.
-                                </div>
-                              )}
-                              {(misclassificationCategoryBreakdown.categoryHierarchy ?? []).map(categoryNode => {
-                                const categoryConfig = MISCLASSIFICATION_CATEGORY_CONFIG.find(
-                                  row => row.key === categoryNode.category_key
-                                )
-                                if (!categoryConfig) return null
-                                const categoryKey = categoryConfig.key
-                                const categoryLabel = categoryNode.category_label || categoryConfig.label
-                                const itemCount = categoryNode.item_count ?? 0
-                                const sharePct = Math.max(0, (categoryNode.share ?? 0) * 100)
-                                const topPatterns = Array.isArray(categoryNode.top_patterns) ? categoryNode.top_patterns : []
-                                const topics = Array.isArray(categoryNode.topics) ? categoryNode.topics : []
-                                const allExamples = topics.flatMap(topic => (Array.isArray(topic.examples) ? topic.examples : []))
-                                const itemsWithMissingId = allExamples.filter(example => !example?.item_id).length
-                                const helperCopy = categoryKey === 'mechanical_malfunction'
-                                  ? 'Inspect examples below for specifics on suspected mechanical failures.'
-                                  : categoryKey === 'information_gap'
-                                    ? 'Inspect examples below for specifics on missing or degraded information.'
-                                    : categoryKey === 'guideline_gap_requires_sme'
-                                      ? 'Inspect examples below for concrete guideline ambiguity cases.'
-                                      : 'Inspect examples below for concrete score-configuration failures.'
+                              {MISCLASSIFICATION_CATEGORY_CONFIG.map(row => {
+                                const summary = misclassificationCategoryBreakdown.categorySummaries?.[row.key]
+                                const summaryText = summary?.category_summary_text
+                                const patterns = Array.isArray(summary?.top_patterns) ? summary?.top_patterns : []
+                                const representativeEvidence = Array.isArray(summary?.representative_evidence)
+                                  ? summary?.representative_evidence
+                                  : []
+                                const itemCount = summary?.item_count ?? 0
+                                const categoryClassifications = (misclassificationCategoryBreakdown.itemClassifications ?? [])
+                                  .filter(classification => classification.primary_category === row.key)
+                                const itemsWithMissingId = categoryClassifications
+                                  .filter(classification => !classification.item_id)
+                                  .length
                                 return (
-                                  <div key={`category-hierarchy-${categoryKey}`} className="rounded-md bg-muted/40 p-2 space-y-2">
+                                  <div key={`category-summary-${row.key}`} className="rounded-md bg-muted/40 p-2 space-y-1.5">
                                     <div className="flex items-center justify-between gap-2 mb-1">
                                       <div className="flex items-center gap-1.5 min-w-0">
-                                        <span
-                                          className={cn(
-                                            'w-2 h-2 rounded-full shrink-0',
-                                            categoryConfig.colorClass
-                                          )}
-                                        />
-                                        <span className="text-xs font-medium text-foreground truncate">{categoryLabel}</span>
+                                        <span className={cn('w-2 h-2 rounded-full shrink-0', row.colorClass)} />
+                                        <span className="text-xs font-medium text-foreground truncate">{row.label}</span>
                                       </div>
-                                      <span className="text-xs text-muted-foreground shrink-0">
-                                        {itemCount} item(s) ({sharePct.toFixed(1)}%)
-                                      </span>
+                                      <span className="text-xs text-muted-foreground shrink-0">{itemCount} item(s)</span>
                                     </div>
                                     <div className="text-xs text-foreground">
-                                      {categoryNode.summary_text || 'No items in this category for this run.'}
+                                      {summaryText || 'No items in this category for this run.'}
                                     </div>
-                                    <div className="text-[11px] text-muted-foreground">
-                                      {helperCopy}
-                                    </div>
-                                    {topPatterns.length > 0 && (
+                                    {patterns.length > 0 && (
                                       <div className="mt-1 text-xs text-muted-foreground">
-                                        Top patterns: {topPatterns
+                                        Top patterns: {patterns
                                           .map(pattern => `${pattern.pattern ?? 'unknown'} (${pattern.count ?? 0})`)
                                           .join(', ')}
                                       </div>
                                     )}
-                                    {categoryKey === 'mechanical_malfunction' && Object.keys(categoryNode.mechanical_subtype_totals ?? {}).length > 0 && (
-                                      <div className="text-xs text-muted-foreground">
-                                        Mechanical subtypes:{' '}
-                                        {Object.entries(categoryNode.mechanical_subtype_totals ?? {})
-                                          .map(([subtype, total]) => `${subtype.replace(/_/g, ' ')} (${total})`)
-                                          .join(', ')}
+                                    {representativeEvidence.length > 0 && (
+                                      <div className="space-y-1">
+                                        <div className="text-xs font-medium text-muted-foreground">
+                                          Representative evidence
+                                        </div>
+                                        {representativeEvidence.map((evidence, evidenceIndex) => {
+                                          const evidenceItemId = evidence.item_id || evidence.feedback_item_id || 'Unavailable'
+                                          return (
+                                            <div key={`${row.key}-evidence-${evidenceIndex}`} className="text-xs bg-background/70 rounded p-2">
+                                              <div className="text-muted-foreground">
+                                                Item <span className="font-mono text-foreground">{evidenceItemId}</span>
+                                                {evidence.source ? (
+                                                  <span className="ml-2">
+                                                    Source: <span className="text-foreground">{evidence.source}</span>
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                              <div className="text-foreground mt-0.5">
+                                                {evidence.quote_or_fact ?? 'No quote available.'}
+                                              </div>
+                                            </div>
+                                          )
+                                        })}
                                       </div>
                                     )}
                                     {itemCount > 0 && (
                                       <div className="flex items-center justify-between gap-2">
                                         <Button
-                                          variant={selectedCategoryKey === categoryKey ? 'secondary' : 'outline'}
+                                          variant={selectedCategoryKey === row.key ? 'secondary' : 'outline'}
                                           size="sm"
                                           className="h-7 text-xs"
-                                          onClick={() => handleCategoryFilter(categoryKey, categoryLabel, allExamples)}
+                                          onClick={() => handleCategoryFilter(row.key, row.label)}
                                         >
                                           View {itemCount} item{itemCount === 1 ? '' : 's'} in score results
                                         </Button>
-                                        {selectedCategoryKey === categoryKey && categoryMissingItemIdCount > 0 && (
+                                        {selectedCategoryKey === row.key && categoryMissingItemIdCount > 0 && (
                                           <span className="text-[11px] text-muted-foreground">
                                             {categoryMissingItemIdCount} item(s) missing item_id not shown
                                           </span>
                                         )}
                                       </div>
                                     )}
-                                    {itemsWithMissingId > 0 && selectedCategoryKey !== categoryKey && (
+                                    {itemsWithMissingId > 0 && selectedCategoryKey !== row.key && (
                                       <div className="text-[11px] text-muted-foreground">
                                         {itemsWithMissingId} item(s) in this category are missing item_id and cannot appear in score results.
-                                      </div>
-                                    )}
-                                    {topics.length > 0 && (
-                                      <div className="space-y-1">
-                                        {topics.map((topic, topicIndex) => {
-                                          const topicKey = buildTopicKey(categoryKey, topic.topic_id, topic.label)
-                                          const isTopicExpanded = !!expandedTopicKeys[topicKey]
-                                          const topicExamples = Array.isArray(topic.examples) ? topic.examples : []
-                                          const topicMissingIds = topicExamples.filter(example => !example?.item_id).length
-                                          return (
-                                            <div key={`${topicKey}-${topicIndex}`} className="rounded-md bg-background/70 p-2">
-                                              <div className="flex items-center justify-between gap-2">
-                                                <button
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setExpandedTopicKeys(prev => ({
-                                                      ...prev,
-                                                      [topicKey]: !prev[topicKey],
-                                                    }))
-                                                  }
-                                                  className="flex items-center gap-1 text-left text-xs text-foreground hover:text-foreground/80"
-                                                >
-                                                  {isTopicExpanded ? (
-                                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                                  ) : (
-                                                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                                                  )}
-                                                  <span className="font-medium">
-                                                    {topic.label || 'Unlabeled topic'}
-                                                  </span>
-                                                  <span className="text-muted-foreground">
-                                                    ({topic.member_count ?? topicExamples.length} items, {((topic.topic_category_purity ?? 0) * 100).toFixed(0)}% purity)
-                                                  </span>
-                                                </button>
-                                                <Button
-                                                  variant={selectedTopicLabel === (topic.label || '') ? 'secondary' : 'outline'}
-                                                  size="sm"
-                                                  className="h-6 text-xs"
-                                                  onClick={() => applyTopicFilterFromExamples(topic.label || 'Topic', topicExamples)}
-                                                >
-                                                  View topic items
-                                                </Button>
-                                              </div>
-                                              {isTopicExpanded && (
-                                                <div className="mt-2 space-y-2">
-                                                  {topic.detailed_explanation && (
-                                                    <div className="text-xs text-foreground">
-                                                      <span className="font-medium">Analysis:</span>{' '}
-                                                      {topic.detailed_explanation}
-                                                    </div>
-                                                  )}
-                                                  {topic.improvement_suggestion && (
-                                                    <div className="text-xs text-muted-foreground">
-                                                      <span className="font-medium text-foreground">Suggested improvement:</span>{' '}
-                                                      {topic.improvement_suggestion}
-                                                    </div>
-                                                  )}
-                                                  {topicMissingIds > 0 && (
-                                                    <div className="text-[11px] text-muted-foreground">
-                                                      {topicMissingIds} item(s) in this topic are missing item_id and cannot appear in score results.
-                                                    </div>
-                                                  )}
-                                                  {topicExamples.map((example, exampleIndex) => {
-                                                    const classification = example.misclassification_classification
-                                                    const predictedLabel = String(example.initial_answer_value ?? '?')
-                                                    const actualLabel = String(example.final_answer_value ?? '?')
-                                                    const isCorrect = predictedLabel === actualLabel
-                                                    return (
-                                                      <div key={`${topicKey}-example-${example.item_id ?? exampleIndex}`} className="rounded-md bg-card p-2 space-y-1.5">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                          <div className="text-xs text-muted-foreground">
-                                                            Item {example.item_id || example.feedback_item_id || 'Unavailable'}
-                                                          </div>
-                                                          {example.timestamp ? (
-                                                            <Timestamp time={example.timestamp} variant="relative" className="text-xs text-muted-foreground" />
-                                                          ) : null}
-                                                        </div>
-                                                        <LabelBadgeComparison
-                                                          predictedLabel={predictedLabel}
-                                                          actualLabel={actualLabel}
-                                                          isCorrect={isCorrect}
-                                                          showStatus={false}
-                                                          className="text-xs"
-                                                        />
-                                                        <div className="flex flex-wrap items-center gap-1.5">
-                                                          <Badge variant="secondary" className={`border-0 ${getMisclassificationCategoryBadgeClass(classification?.primary_category)}`}>
-                                                            {getMisclassificationCategoryLabel(classification?.primary_category)}
-                                                          </Badge>
-                                                          <Badge variant="secondary" className={`border-0 ${getConfidenceBadgeClass(classification?.confidence)}`}>
-                                                            Triage confidence: {classification?.confidence ?? 'unknown'}
-                                                          </Badge>
-                                                          {classification?.primary_category === 'mechanical_malfunction' && example.mechanical_subtype && (
-                                                            <Badge variant="secondary" className="border-0 bg-chart-4/20 text-chart-4">
-                                                              Mechanical subtype: {example.mechanical_subtype.replace(/_/g, ' ')}
-                                                            </Badge>
-                                                          )}
-                                                        </div>
-                                                        {classification?.rationale && (
-                                                          <p className="text-xs text-foreground">{classification.rationale}</p>
-                                                        )}
-                                                        {Array.isArray(classification?.evidence_snippets) && classification.evidence_snippets.length > 0 && (
-                                                          <ul className="space-y-1">
-                                                            {classification.evidence_snippets.map((snippet, snippetIndex) => (
-                                                              <li key={`${topicKey}-example-${exampleIndex}-evidence-${snippetIndex}`} className="text-xs text-muted-foreground">
-                                                                <span className="font-medium text-foreground">
-                                                                  {snippet.source ?? 'source'}:
-                                                                </span>{' '}
-                                                                {snippet.quote_or_fact ?? 'No quote available.'}
-                                                              </li>
-                                                            ))}
-                                                          </ul>
-                                                        )}
-                                                        {example.mechanical_details && (
-                                                          <p className="text-xs text-muted-foreground">
-                                                            <span className="font-medium text-foreground">Mechanical details:</span> {example.mechanical_details}
-                                                          </p>
-                                                        )}
-                                                        {example.detailed_cause && (
-                                                          <p className="text-xs text-muted-foreground">
-                                                            <span className="font-medium text-foreground">Detailed cause:</span> {example.detailed_cause}
-                                                          </p>
-                                                        )}
-                                                        {example.suggested_fix && (
-                                                          <p className="text-xs text-muted-foreground">
-                                                            <span className="font-medium text-foreground">Suggested fix:</span> {example.suggested_fix}
-                                                          </p>
-                                                        )}
-                                                      </div>
-                                                    )
-                                                  })}
-                                                </div>
-                                              )}
-                                            </div>
-                                          )
-                                        })}
                                       </div>
                                     )}
                                   </div>
@@ -1631,6 +1360,23 @@ const DetailContent = React.memo(({
                               <div className="text-xs text-muted-foreground">
                                 Summary budget per category: {misclassificationCategoryBreakdown.maxCategorySummaryItemsUsed ?? 'N/A'}
                               </div>
+                            </div>
+                          </div>
+                        )}
+                        {Object.entries(misclassificationCategoryBreakdown.mechanicalSubtypeTotals ?? {}).some(([, value]) => (value ?? 0) > 0) && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Mechanical subtype breakdown
+                            </div>
+                            <div className="rounded-md bg-card p-2 space-y-1">
+                              {Object.entries(misclassificationCategoryBreakdown.mechanicalSubtypeTotals ?? {})
+                                .filter(([, value]) => (value ?? 0) > 0)
+                                .map(([subtype, value]) => (
+                                  <div key={`mechanical-subtype-${subtype}`} className="flex items-center justify-between text-xs">
+                                    <span className="text-foreground">{subtype.replace(/_/g, ' ')}</span>
+                                    <span className="text-muted-foreground">{value}</span>
+                                  </div>
+                                ))}
                             </div>
                           </div>
                         )}
@@ -1701,8 +1447,8 @@ const DetailContent = React.memo(({
                         )}
                         {rootCauseData?.overall_explanation && (
                           <div className="mb-3">
-                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause (secondary synthesis)</div>
-                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground rounded-md bg-background/40 p-2">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause</div>
+                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
                               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                                 p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
                                 strong: ({children}) => <strong className="font-semibold">{children}</strong>,
@@ -1714,7 +1460,7 @@ const DetailContent = React.memo(({
                         )}
                         {rootCauseData?.overall_improvement_suggestion && (
                           <div className="mb-3">
-                            <div className="font-medium text-muted-foreground text-sm mb-1">Score-configuration improvement (secondary synthesis)</div>
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Score-configuration improvement</div>
                             {misclassificationCategoryBreakdown.optimizationApplicability?.status &&
                               misclassificationCategoryBreakdown.optimizationApplicability.status !== 'applicable' && (
                                 <Alert className="mb-2 py-2 px-3">
@@ -1726,7 +1472,7 @@ const DetailContent = React.memo(({
                                   </div>
                                 </Alert>
                               )}
-                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground rounded-md bg-background/40 p-2">
+                            <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
                               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                                 p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
                                 strong: ({children}) => <strong className="font-semibold">{children}</strong>,
@@ -1735,6 +1481,9 @@ const DetailContent = React.memo(({
                               </ReactMarkdown>
                             </div>
                           </div>
+                        )}
+                        {rootCauseTopics && rootCauseTopics.length > 0 && (
+                          <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
                         )}
                       </>
                     )}
