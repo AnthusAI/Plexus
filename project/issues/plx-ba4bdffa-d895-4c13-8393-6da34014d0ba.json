@@ -3,7 +3,7 @@
   "title": "HITL approval not surfaced in dashboard for CLI-launched optimizer",
   "description": "",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,22 @@
       "author": "ryan",
       "text": "plexus score optimize uses TerminalHITLAdapter (scores.py ~1561-1566), which prompts Approve? [y/n]: at the terminal. The dashboard never shows a HITL panel for CLI-launched runs.\n\nDesired behavior: When the optimizer reaches the approval gate, a HITL pending panel should appear in the dashboard so the user can approve from there.\n\nImplementation path: Switch scores.py to use PlexusHITLAdapter (hitl.py) instead of TerminalHITLAdapter. This will cause the procedure to pause and write a PENDING_APPROVAL ChatMessage. The user then approves via the dashboard; plexus procedure resume or plexus procedure watch handles the response.\n\nNote: The TerminalHITLAdapter is intentionally injectable (options.pop('hitl_adapter', None) in procedure_executor.py:630) so the change is isolated to the score optimize command.",
       "created_at": "2026-04-03T12:45:17.976485Z"
+    },
+    {
+      "id": "3a4bbef5-ff3e-4748-8613-4a0e63060548",
+      "author": "ryan",
+      "text": "Starting implementation: switch CLI optimizer HITL path from terminal-only prompts to dashboard-compatible PlexusHITLAdapter so approval gates surface as pending dashboard interactions.",
+      "created_at": "2026-04-04T23:08:37.005424Z"
+    },
+    {
+      "id": "c186401b-0e11-4b15-b0e0-92ff9186e2ec",
+      "author": "ryan",
+      "text": "Implemented single-path HITL for CLI optimizer launchers: removed TerminalHITLAdapter injection from plexus/cli/score/scores.py and plexus/cli/procedure/procedures.py optimize commands. Both now rely on default PlexusHITLAdapter wiring in procedure_executor, so approval gates are surfaced via dashboard/chat instead of terminal prompts. Validation: python -m py_compile plexus/cli/score/scores.py plexus/cli/procedure/procedures.py; pytest -q plexus/cli/procedure/test_procedure_executor_compat.py -k dry_run (1 passed).",
+      "created_at": "2026-04-04T23:09:37.278645Z"
     }
   ],
   "created_at": "2026-04-03T12:45:03.183433Z",
-  "updated_at": "2026-04-03T12:45:17.976485Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T23:09:37.297065Z",
+  "closed_at": "2026-04-04T23:09:37.297065Z",
   "custom": {}
 }
