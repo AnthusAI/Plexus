@@ -621,7 +621,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                   <div className="flex items-center gap-1 text-sm">
                     <span className="text-muted-foreground">Dataset:</span>
                     <a
-                      href={`/datasets/${dataSet.id}`}
+                      href={`/lab/datasets/${dataSet.id}`}
                       className="text-foreground hover:text-primary hover:underline font-medium"
                       title={dataSet.description || `View dataset: ${dataSet.name || dataSet.id}`}
                     >

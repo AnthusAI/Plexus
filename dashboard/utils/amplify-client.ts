@@ -355,6 +355,7 @@ export const amplifyClient = {
       errorDetails?: any;
       scorecardId?: string;
       scoreId?: string;
+      scoreVersionId?: string;
       confusionMatrix?: any;
       scoreGoal?: string;
       datasetClassDistribution?: any;
@@ -652,6 +653,10 @@ export const amplifyClient = {
       description?: string
       file?: string
       attachedFiles?: string[]
+      isReferenceDataset?: boolean
+      provenance?: Record<string, any>
+      buildContext?: Record<string, any>
+      referenceAt?: string
       accountId: string
       scorecardId?: string
       scoreId?: string
@@ -667,6 +672,10 @@ export const amplifyClient = {
       description?: string
       file?: string
       attachedFiles?: string[]
+      isReferenceDataset?: boolean
+      provenance?: Record<string, any>
+      buildContext?: Record<string, any>
+      referenceAt?: string
       scorecardId?: string
       scoreId?: string
       scoreVersionId?: string
