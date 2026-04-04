@@ -229,6 +229,7 @@ def create_candidate_assessment_bundle(
     stage_runs: Dict[str, Any],
     decision: Dict[str, Any],
     malfunction_context: Optional[Dict[str, Any]] = None,
+    generalization_metrics: Optional[Dict[str, Any]] = None,
     protocol_defaults: Optional[Dict[str, Any]] = None,
     created_at: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -271,6 +272,9 @@ def create_candidate_assessment_bundle(
     normalized_protocol_defaults = protocol_defaults or {}
     if not isinstance(normalized_protocol_defaults, dict):
         raise ValueError("protocol_defaults must be a dictionary when provided.")
+    normalized_generalization_metrics = generalization_metrics or {}
+    if not isinstance(normalized_generalization_metrics, dict):
+        raise ValueError("generalization_metrics must be a dictionary when provided.")
 
     return {
         "schema_version": BUNDLE_SCHEMA_VERSION,
@@ -279,6 +283,7 @@ def create_candidate_assessment_bundle(
         "protocol_defaults": normalized_protocol_defaults,
         "stage_runs": normalized_stages,
         "malfunction_context": _normalize_malfunction_context(malfunction_context),
+        "generalization_metrics": normalized_generalization_metrics,
         "decision": normalized_decision,
     }
 
@@ -297,6 +302,7 @@ def build_candidate_assessment_compact_summary(
     stage_runs = bundle.get("stage_runs") or {}
     decision = bundle.get("decision") or {}
     malfunction_context = bundle.get("malfunction_context") or {}
+    generalization_metrics = bundle.get("generalization_metrics") or {}
 
     def _stage_ref(stage_key: str) -> Optional[Dict[str, Any]]:
         stage = stage_runs.get(stage_key) or {}
@@ -335,6 +341,11 @@ def build_candidate_assessment_compact_summary(
         "decision": decision.get("decision"),
         "decision_reason": decision.get("reason"),
         "decision_confidence": decision.get("confidence"),
+        "baseline_generalization_gap": generalization_metrics.get("baseline_generalization_gap"),
+        "candidate_generalization_gap": generalization_metrics.get("candidate_generalization_gap"),
+        "generalization_gap_delta": generalization_metrics.get("generalization_gap_delta"),
+        "random_delta_mean": generalization_metrics.get("random_delta_mean"),
+        "random_delta_stddev": generalization_metrics.get("random_delta_stddev"),
         "primary_next_action": (malfunction_context.get("primary_next_action") or {}).get("action")
         if isinstance(malfunction_context.get("primary_next_action"), dict)
         else None,
