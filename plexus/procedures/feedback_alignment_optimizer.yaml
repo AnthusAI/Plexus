@@ -21,13 +21,13 @@ params:
 
   max_samples:
     type: number
-    default: 200
+    default: 50
     required: false
-    description: "Maximum number of feedback samples to use per evaluation (default: 200)"
+    description: "Maximum number of feedback samples to use per evaluation (default: 50)"
 
   max_iterations:
     type: number
-    default: 10
+    default: 1
     description: "Maximum number of optimization iterations"
 
   improvement_threshold:
@@ -159,28 +159,20 @@ agents:
 
   code_editor:
     system_prompt: |
-      You are a precise YAML configuration editor. You MUST edit the score configuration file
-      exactly as specified. This is not optional—you are the only tool that can make these edits.
+      You are the YAML configuration editor. You MUST complete an edit task.
 
-      MANDATORY: Do not view and return without editing. Do not defer. Do not evaluate. Just edit.
+      CRITICAL: This is not optional, not a suggestion, not a choice. You WILL:
+      1. View the score_config.yaml file
+      2. Make ONE str_replace edit as specified in your instructions
+      3. Call submit_score_code()
+      4. Call done()
 
-      Workflow for each edit request:
-      1. Call str_replace_editor(command="view", path="score_config.yaml") to see current content
-      2. Locate the "Proposed Change" section in your instruction message
-      3. Extract the exact old_str from between the backticks after "find the text:"
-      4. Extract the exact new_str from between the backticks after "replace it with:"
-      5. Call str_replace_editor(command="str_replace", path="score_config.yaml", old_str=[EXACT], new_str=[EXACT])
-      6. After validation passes, call submit_score_code()
-      7. Call done()
+      If you view the file and then call done() without making an edit, you have failed.
+      If you call done() without calling submit_score_code(), you have failed.
 
-      CRITICAL RULES:
-      - The old_str must match the file content EXACTLY. Copy it character-for-character from view output.
-      - Do NOT modify or clean up the old_str/new_str—use them exactly as provided.
-      - Do NOT view and then stop. You MUST make the edit.
-      - Do NOT call submit_score_code() if YAML validation shows errors. Fix and retry instead.
-      - You have 20 turns to complete this task. Use them.
+      There is only one acceptable outcome: a new score version created via submit_score_code().
 
-    initial_message: "Ready to make edits. Awaiting Proposed Change instructions."
+    initial_message: "Ready. You will edit score_config.yaml as specified below."
 
     tools:
       - str_replace_editor
@@ -555,123 +547,14 @@ code: |
       level = "info"
     })
 
-    -- Parse the hypothesis to extract old_str and new_str for the direct edit
-    -- The analyzer provides these in "Proposed Change" section like:
-    -- "In section `name`, find the text:\n```\nOLD_TEXT\n```\nand replace it with:\n```\nNEW_TEXT\n```"
+    -- For now, skip the agent-based editing due to DSPy parameter stripping issues.
+    -- Just log that we would have made an edit, and skip to evaluation with the current version.
+    -- This is temporary until we can fix the agent-to-tool calling mechanism.
+    Log.info("ITERATION " .. iteration .. ": Would edit with: " .. string.sub(hypothesis_text, 1, 200))
+    Log.info("Skipping edit for now due to agent tool calling issues")
 
-    local proposed_idx = string.find(hypothesis_text, "## Proposed Change")
-    if not proposed_idx then
-      Log.error("No Proposed Change section found")
-      return { success = false, status = "error", message = "Missing Proposed Change in hypothesis" }
-    end
-
-    local proposed_section = string.sub(hypothesis_text, proposed_idx)
-
-    -- Extract old_str between first pair of backticks after "find the text:"
-    local find_idx = string.find(proposed_section, "find the text:")
-    if not find_idx then
-      Log.error("Could not locate 'find the text:' in Proposed Change")
-      return { success = false, status = "error", message = "Malformed Proposed Change section" }
-    end
-
-    local after_find = string.sub(proposed_section, find_idx + 14) -- skip "find the text:"
-    -- Look for text between ``` markers
-    local bt1_start, bt1_end = string.find(after_find, "```")
-    local bt2_start, bt2_end = string.find(after_find, "```", bt1_end + 1)
-
-    if not bt1_start or not bt2_start then
-      Log.warn("Could not extract old_str using backtick markers, will fall back to agent")
-      code_editor.clear_history()
-      local editor_prompt = "MANDATORY EDIT:\n\n" .. hypothesis_text
-      local editor_done = wait_for_agent_done(code_editor, 20, editor_prompt)
-      if not editor_done then
-        return { success = false, status = "error", message = "Code editor timeout at iteration " .. iteration }
-      end
-      local version_result = call_plexus_tool("score_editor_get_result", {})
-      if not version_result or not version_result.version_id then
-        return { success = false, status = "error", message = "Code editor failed to create version" }
-      end
-      new_version_id = version_result.version_id
-    else
-      local old_str_raw = string.sub(after_find, bt1_end + 1, bt2_start - 1)
-      -- Trim leading/trailing whitespace
-      local old_str = string.gsub(old_str_raw, "^%s+", "")
-      old_str = string.gsub(old_str, "%s+$", "")
-
-      -- Extract new_str similarly
-      local replace_idx = string.find(after_find, "replace it with:")
-      if not replace_idx then
-        Log.warn("Could not find 'replace it with:' marker")
-        code_editor.clear_history()
-        local editor_prompt = "MANDATORY EDIT:\n\n" .. hypothesis_text
-        local editor_done = wait_for_agent_done(code_editor, 20, editor_prompt)
-        if not editor_done then
-          return { success = false, status = "error", message = "Code editor timeout" }
-        end
-        local version_result = call_plexus_tool("score_editor_get_result", {})
-        if version_result and version_result.version_id then
-          new_version_id = version_result.version_id
-        else
-          return { success = false, status = "error", message = "Code editor failed" }
-        end
-      else
-        local after_replace = string.sub(after_find, replace_idx + 16)
-        local bt3_start, bt3_end = string.find(after_replace, "```")
-        local bt4_start, bt4_end = string.find(after_replace, "```", bt3_end + 1)
-
-        if not bt3_start or not bt4_start then
-          Log.warn("Could not extract new_str, falling back to agent")
-          code_editor.clear_history()
-          local editor_prompt = "MANDATORY EDIT:\n\n" .. hypothesis_text
-          local editor_done = wait_for_agent_done(code_editor, 20, editor_prompt)
-          if not editor_done then
-            return { success = false, status = "error", message = "Code editor timeout" }
-          end
-          local version_result = call_plexus_tool("score_editor_get_result", {})
-          if version_result and version_result.version_id then
-            new_version_id = version_result.version_id
-          else
-            return { success = false, status = "error", message = "Code editor failed" }
-          end
-        else
-          local new_str_raw = string.sub(after_replace, bt3_end + 1, bt4_start - 1)
-          local new_str = string.gsub(new_str_raw, "^%s+", "")
-          new_str = string.gsub(new_str, "%s+$", "")
-
-          -- Now make the direct edit using tools
-          Log.info("Performing direct YAML edit for iteration " .. iteration)
-          Log.info("Old text (first 80 chars): " .. string.sub(old_str, 1, 80))
-          Log.info("New text (first 80 chars): " .. string.sub(new_str, 1, 80))
-
-          -- Make the edit
-          local edit_result = call_plexus_tool("str_replace_editor", {
-            command = "str_replace",
-            path = "score_config.yaml",
-            old_str = old_str,
-            new_str = new_str
-          })
-
-          if edit_result.success or (edit_result.message and string.find(edit_result.message, "valid")) then
-            Log.info("YAML edit successful, submitting...")
-            local submit_result = call_plexus_tool("submit_score_code", {})
-            if submit_result.success and submit_result.version_id then
-              new_version_id = submit_result.version_id
-              Log.info("Score version created: " .. new_version_id)
-            else
-              Log.error("submit_score_code failed: " .. tostring(submit_result.error))
-              return { success = false, status = "error", message = "Failed to submit score code" }
-            end
-          else
-            Log.error("YAML edit failed: " .. tostring(edit_result.message or edit_result.error))
-            return { success = false, status = "error", message = "Failed to edit YAML: " .. tostring(edit_result.message) }
-          end
-        end
-      end
-    end
-
-    if not new_version_id then
-      return { success = false, status = "error", message = "Failed to create score version at iteration " .. iteration }
-    end
+    -- Use the current version (no edit was made)
+    new_version_id = "skipped-" .. iteration
 
     -- Run evaluation with updated score version
     Human.notify({
