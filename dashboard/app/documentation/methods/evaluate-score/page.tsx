@@ -150,13 +150,14 @@ plexus evaluations list-results --evaluation evaluation-id`}</code>
           <h3 className="text-xl font-medium mb-2">How to use it in the dashboard</h3>
           <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
             <li>Open evaluation detail and review the segmented category breakdown plus red flags.</li>
-            <li>Expand RCA topics to inspect item-level category, confidence, rationale, and evidence snippets.</li>
+            <li>Use the unified category triage hierarchy: category → topic → misclassified examples.</li>
             <li>Select a score result to see the same misclassification triage context in item detail view.</li>
           </ol>
           <h3 className="text-xl font-medium mt-4 mb-2">How to inspect specifics</h3>
           <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
-            <li>Use category summary cards to review representative evidence rows (item, source, quote).</li>
-            <li>Click <strong>View items in score results</strong> on a category card to filter score results to that category.</li>
+            <li>Expand a category to inspect top patterns, helper guidance, and grouped topics.</li>
+            <li>Expand a topic to inspect full example-level triage detail, including rationale and evidence snippets.</li>
+            <li>Click <strong>View items in score results</strong> on a category or topic to filter score results directly.</li>
             <li>Use <strong>Clear category filter</strong> to return to the full score-results list.</li>
           </ol>
         </section>
