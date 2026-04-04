@@ -148,3 +148,67 @@ def test_runner_requires_task_id_when_persisting():
         assert "task_id is required" in str(exc)
         return
     assert False, "Expected ValueError when persist_bundle=True without task_id."
+
+
+def test_runner_enforces_random_gate_minimum_sample_size():
+    def run_stage_pair(*, stage_key, sample_size, days):
+        return {
+            "baseline": _evaluation(f"{stage_key}-base", 0.58, sample_size=max(sample_size or 1, 1)),
+            "candidate": _evaluation(f"{stage_key}-cand", 0.60, sample_size=max(sample_size or 1, 1)),
+        }
+
+    try:
+        run_candidate_assessment_workflow(
+            identity=_identity(),
+            run_stage_pair=run_stage_pair,
+            deterministic_sample_size=100,
+            loop_sample_size=50,
+            gate_sample_size=199,
+            days=180,
+            persist_bundle=False,
+        )
+    except ValueError as exc:
+        assert "gate_sample_size must be >= 200" in str(exc)
+        return
+    assert False, "Expected ValueError when gate_sample_size < 200."
+
+
+def test_runner_applies_workflow_reroute_from_malfunction_context():
+    def run_stage_pair(*, stage_key, sample_size, days):
+        if stage_key == STAGE_DETERMINISTIC:
+            return {
+                "baseline": _evaluation("eval-ref-base", 0.58, sample_size=100),
+                "candidate": _evaluation("eval-ref-cand", 0.64, sample_size=100),
+            }
+        if stage_key == STAGE_RANDOM_LOOP:
+            return {
+                "baseline": _evaluation("eval-loop-base", 0.57, sample_size=50),
+                "candidate": _evaluation("eval-loop-cand", 0.56, sample_size=50),
+            }
+        if stage_key == STAGE_RANDOM_GATE:
+            return {
+                "baseline": _evaluation("eval-gate-base", 0.56, sample_size=200),
+                "candidate": _evaluation("eval-gate-cand", 0.55, sample_size=200),
+            }
+        raise AssertionError(f"Unexpected stage_key: {stage_key}")
+
+    result = run_candidate_assessment_workflow(
+        identity=_identity(),
+        run_stage_pair=run_stage_pair,
+        deterministic_sample_size=100,
+        loop_sample_size=50,
+        gate_sample_size=200,
+        days=180,
+        malfunction_context={
+            "category_shares": {
+                "mechanical_malfunction": 0.1,
+                "information_gap": 0.6,
+                "guideline_gap_requires_sme": 0.1,
+                "score_configuration_problem": 0.2,
+            }
+        },
+        persist_bundle=False,
+    )
+
+    assert result["workflow_decision"]["final_decision"] == "reroute"
+    assert result["workflow_decision"]["route_action"] == "data_remediation"
