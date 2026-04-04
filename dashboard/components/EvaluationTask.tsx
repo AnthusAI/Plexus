@@ -208,8 +208,43 @@ type MisclassificationRedFlag = {
   message?: string
 }
 
+type MisclassificationCategorySummary = {
+  category_summary_text?: string
+  top_patterns?: Array<{ pattern?: string; count?: number }>
+  representative_evidence?: Array<{
+    feedback_item_id?: string
+    item_id?: string
+    source?: string
+    quote_or_fact?: string
+  }>
+  item_count?: number
+}
+
+type MisclassificationPrimaryNextAction = {
+  action?: 'bug_investigation' | 'data_remediation' | 'sme_guideline_clarification' | 'score_configuration_optimization' | string
+  confidence?: 'high' | 'medium' | 'low' | string
+  reasons?: string[]
+}
+
+type OptimizationApplicability = {
+  status?: 'applicable' | 'limited' | 'blocked' | string
+  reason?: string
+}
+
 type MisclassificationAnalysis = {
   category_totals?: Partial<Record<MisclassificationCategory, number>>
+  category_summaries?: Partial<Record<MisclassificationCategory, MisclassificationCategorySummary>>
+  mechanical_subtype_totals?: Record<string, number>
+  primary_next_action?: MisclassificationPrimaryNextAction
+  optimization_applicability?: OptimizationApplicability
+  topic_category_breakdown?: Array<{
+    topic_id?: number | string
+    topic_label?: string
+    topic_primary_category?: string
+    topic_category_purity?: number
+    member_count?: number
+  }>
+  max_category_summary_items_used?: number
   overall_assessment?: {
     total_items?: number
     predominant_category?: MisclassificationCategory | string
@@ -270,6 +305,21 @@ const getMisclassificationAssessment = (category?: string | null): string => {
       return 'System malfunction investigation needed'
     default:
       return 'Insufficient evidence for a clear recommendation'
+  }
+}
+
+const getPrimaryNextActionLabel = (action?: string | null): string => {
+  switch (action) {
+    case 'bug_investigation':
+      return 'Bug investigation'
+    case 'data_remediation':
+      return 'Data remediation'
+    case 'sme_guideline_clarification':
+      return 'SME guideline clarification'
+    case 'score_configuration_optimization':
+      return 'Score-configuration optimization'
+    default:
+      return 'Unavailable'
   }
 }
 
@@ -862,6 +912,14 @@ const DetailContent = React.memo(({
         ? misclassificationAnalysis.evaluation_red_flags
         : [],
       overall: misclassificationAnalysis?.overall_assessment ?? null,
+      categorySummaries: misclassificationAnalysis?.category_summaries ?? {},
+      topicCategoryBreakdown: Array.isArray(misclassificationAnalysis?.topic_category_breakdown)
+        ? misclassificationAnalysis.topic_category_breakdown
+        : [],
+      primaryNextAction: misclassificationAnalysis?.primary_next_action ?? null,
+      optimizationApplicability: misclassificationAnalysis?.optimization_applicability ?? null,
+      mechanicalSubtypeTotals: misclassificationAnalysis?.mechanical_subtype_totals ?? {},
+      maxCategorySummaryItemsUsed: misclassificationAnalysis?.max_category_summary_items_used,
     }
   }, [misclassificationAnalysis])
 
@@ -1033,7 +1091,7 @@ const DetailContent = React.memo(({
                   </div>
                 )}
 
-                {/* Root Cause Analysis */}
+                {/* Score-Configuration RCA */}
                 {(rootCauseData && (
                   (rootCauseTopics && rootCauseTopics.length > 0) ||
                   misclassificationCategoryBreakdown.totalItems > 0 ||
@@ -1041,7 +1099,7 @@ const DetailContent = React.memo(({
                 )) && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-sm text-muted-foreground">Root cause analysis</h4>
+                      <h4 className="font-medium text-sm text-muted-foreground">Score-Configuration RCA</h4>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1113,6 +1171,62 @@ const DetailContent = React.memo(({
                             </div>
                           </div>
                         )}
+                        {misclassificationCategoryBreakdown.totalItems > 0 && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Category summaries
+                            </div>
+                            <div className="space-y-2 bg-card rounded-md p-2">
+                              {MISCLASSIFICATION_CATEGORY_CONFIG.map(row => {
+                                const summary = misclassificationCategoryBreakdown.categorySummaries?.[row.key]
+                                const summaryText = summary?.category_summary_text
+                                const patterns = Array.isArray(summary?.top_patterns) ? summary?.top_patterns : []
+                                const itemCount = summary?.item_count ?? 0
+                                return (
+                                  <div key={`category-summary-${row.key}`} className="rounded-md bg-muted/40 p-2">
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={cn('w-2 h-2 rounded-full shrink-0', row.colorClass)} />
+                                        <span className="text-xs font-medium text-foreground truncate">{row.label}</span>
+                                      </div>
+                                      <span className="text-xs text-muted-foreground shrink-0">{itemCount} item(s)</span>
+                                    </div>
+                                    <div className="text-xs text-foreground">
+                                      {summaryText || 'No items in this category for this run.'}
+                                    </div>
+                                    {patterns.length > 0 && (
+                                      <div className="mt-1 text-xs text-muted-foreground">
+                                        Top patterns: {patterns
+                                          .map(pattern => `${pattern.pattern ?? 'unknown'} (${pattern.count ?? 0})`)
+                                          .join(', ')}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                              <div className="text-xs text-muted-foreground">
+                                Summary budget per category: {misclassificationCategoryBreakdown.maxCategorySummaryItemsUsed ?? 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {Object.entries(misclassificationCategoryBreakdown.mechanicalSubtypeTotals ?? {}).some(([, value]) => (value ?? 0) > 0) && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Mechanical subtype breakdown
+                            </div>
+                            <div className="rounded-md bg-card p-2 space-y-1">
+                              {Object.entries(misclassificationCategoryBreakdown.mechanicalSubtypeTotals ?? {})
+                                .filter(([, value]) => (value ?? 0) > 0)
+                                .map(([subtype, value]) => (
+                                  <div key={`mechanical-subtype-${subtype}`} className="flex items-center justify-between text-xs">
+                                    <span className="text-foreground">{subtype.replace(/_/g, ' ')}</span>
+                                    <span className="text-muted-foreground">{value}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
                         {misclassificationCategoryBreakdown.redFlags.length > 0 && (
                           <div className="mb-3">
                             <div className="font-medium text-muted-foreground text-sm mb-1">
@@ -1149,6 +1263,35 @@ const DetailContent = React.memo(({
                             </div>
                           </div>
                         )}
+                        {misclassificationCategoryBreakdown.primaryNextAction && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Primary next action
+                            </div>
+                            <div className="rounded-md bg-card p-2 space-y-1">
+                              <div className="text-sm text-foreground">
+                                {getPrimaryNextActionLabel(
+                                  misclassificationCategoryBreakdown.primaryNextAction.action
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Confidence: {misclassificationCategoryBreakdown.primaryNextAction.confidence ?? 'N/A'}
+                              </div>
+                              {Array.isArray(misclassificationCategoryBreakdown.primaryNextAction.reasons) &&
+                                misclassificationCategoryBreakdown.primaryNextAction.reasons.length > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {misclassificationCategoryBreakdown.primaryNextAction.reasons.join(' ')}
+                                  </div>
+                                )}
+                              <div className="text-xs text-muted-foreground">
+                                Optimization applicability: {misclassificationCategoryBreakdown.optimizationApplicability?.status ?? 'N/A'}
+                                {misclassificationCategoryBreakdown.optimizationApplicability?.reason
+                                  ? ` - ${misclassificationCategoryBreakdown.optimizationApplicability.reason}`
+                                  : ''}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {rootCauseData?.overall_explanation && (
                           <div className="mb-3">
                             <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause</div>
@@ -1164,7 +1307,18 @@ const DetailContent = React.memo(({
                         )}
                         {rootCauseData?.overall_improvement_suggestion && (
                           <div className="mb-3">
-                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall improvement</div>
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Score-configuration improvement</div>
+                            {misclassificationCategoryBreakdown.optimizationApplicability?.status &&
+                              misclassificationCategoryBreakdown.optimizationApplicability.status !== 'applicable' && (
+                                <Alert className="mb-2 py-2 px-3">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <div className="text-xs text-foreground">
+                                    RCA recommendations are limited because optimization applicability is{' '}
+                                    <strong>{misclassificationCategoryBreakdown.optimizationApplicability.status}</strong>.
+                                    {' '}Follow primary next action first.
+                                  </div>
+                                </Alert>
+                              )}
                             <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
                               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                                 p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,

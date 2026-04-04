@@ -307,6 +307,7 @@ def register_evaluation_tools(mcp: FastMCP):
         days: int = 7,
         max_feedback_samples: Optional[int] = None,
         sample_seed: Optional[int] = None,
+        max_category_summary_items: int = 20,
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
@@ -329,6 +330,8 @@ def register_evaluation_tools(mcp: FastMCP):
         - max_feedback_samples: Optional cap for feedback evaluations. When provided, a random
                 subset up to this size is evaluated.
         - sample_seed: Optional random seed for reproducible feedback sampling.
+        - max_category_summary_items: Maximum misclassification items per category used in
+          aggregate RCA triage summaries (default: 20).
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
         - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if
                    provided, overrides the auto-fetched champion version.
@@ -371,12 +374,14 @@ def register_evaluation_tools(mcp: FastMCP):
 
         if max_feedback_samples is not None and max_feedback_samples <= 0:
             return "Error: max_feedback_samples must be a positive integer"
+        if max_category_summary_items <= 0:
+            return "Error: max_category_summary_items must be a positive integer"
 
         logger.info(
             "MCP Evaluation - Type: %s, Scorecard: %s, Score: %s, Days: %s, "
-            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s",
+            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s, MaxCategorySummaryItems: %s",
             evaluation_type, scorecard_name, score_name, days, yaml, n_samples,
-            max_feedback_samples, sample_seed
+            max_feedback_samples, sample_seed, max_category_summary_items
         )
 
         try:
@@ -439,6 +444,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     bl: Optional[str] = None,
                     max_fb_samples: Optional[int] = None,
                     seed: Optional[int] = None,
+                    max_category_items: int = 20,
                 ) -> subprocess.CompletedProcess:
                     """Run plexus evaluate feedback synchronously in a thread, blocking until complete."""
                     cmd = [plexus_bin, "evaluate", "feedback",
@@ -451,6 +457,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--max-samples", str(max_fb_samples)]
                     if seed is not None:
                         cmd += ["--sample-seed", str(seed)]
+                    cmd += ["--max-category-summary-items", str(max_category_items)]
                     return await asyncio.to_thread(
                         subprocess.run,
                         cmd,
@@ -506,6 +513,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     bl: Optional[str] = None,
                     max_fb_samples: Optional[int] = None,
                     seed: Optional[int] = None,
+                    max_category_items: int = 20,
                 ) -> None:
                     """Fire-and-forget: spawn plexus evaluate feedback as a detached background process."""
                     cmd = [plexus_bin, "evaluate", "feedback",
@@ -518,6 +526,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--max-samples", str(max_fb_samples)]
                     if seed is not None:
                         cmd += ["--sample-seed", str(seed)]
+                    cmd += ["--max-category-summary-items", str(max_category_items)]
                     subprocess.Popen(
                         cmd,
                         stdout=subprocess.DEVNULL,
@@ -554,6 +563,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             baseline,
                             max_feedback_samples,
                             sample_seed,
+                            max_category_summary_items,
                         )
                         await asyncio.sleep(3)
                         # Quick poll to get the evaluation ID
@@ -585,6 +595,7 @@ def register_evaluation_tools(mcp: FastMCP):
                                 "champion_version_id": resolved_version,
                                 "max_feedback_samples": max_feedback_samples,
                                 "sample_seed": sample_seed,
+                                "max_category_summary_items": max_category_summary_items,
                                 "message": "Evaluation running in background. Use plexus_evaluation_info to check status.",
                                 "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
                             })
@@ -608,6 +619,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             baseline,
                             max_feedback_samples,
                             sample_seed,
+                            max_category_summary_items,
                         )
                     )
                     eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=900.0)
@@ -632,6 +644,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             "score_version_id": eval_info.get('score_version_id'),
                             "max_feedback_samples": max_feedback_samples,
                             "sample_seed": sample_seed,
+                            "max_category_summary_items": max_category_summary_items,
                             "total_items": eval_info.get('total_items'),
                             "processed_items": eval_info.get('processed_items'),
                             "metrics": eval_info.get('metrics'),
@@ -681,6 +694,7 @@ def register_evaluation_tools(mcp: FastMCP):
                                 None,
                                 max_feedback_samples,
                                 sample_seed,
+                                max_category_summary_items,
                             )
                             dispatched.append({"score_name": sn, "status": "dispatched", "champion_version_id": cv})
                             logger.info(f"Dispatched feedback evaluation for '{sn}'")
@@ -694,6 +708,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         "days": days,
                         "max_feedback_samples": max_feedback_samples,
                         "sample_seed": sample_seed,
+                        "max_category_summary_items": max_category_summary_items,
                         "total_scores": len(sc_scores),
                         "dispatched": len([d for d in dispatched if d["status"] == "dispatched"]),
                         "scores": dispatched,
