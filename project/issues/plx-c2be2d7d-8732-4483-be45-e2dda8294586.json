@@ -3,7 +3,7 @@
   "title": "Migrate root Plexus Python packaging to Poetry",
   "description": "Migrate the root Plexus Python project from setuptools/pip requirements workflow to Poetry-managed dependencies so Snyk can reliably parse and scan dependency manifests/lockfile. Scope: root project only (pyproject.toml, lockfile, docs/scripts updates). Out of scope: nested lambda/dashboard dependency trees unless explicitly requested.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -62,10 +62,16 @@
       "author": "derek",
       "text": "Validated against latest available tactus (0.44.1): Tactus test failures persist. Root error remains ModuleNotFoundError: griffe during tactus runtime initialization path via pydantic_ai._griffe. Environment contains dist-info for griffe==2.0.0 but no importable griffe module package (only griffecli). Conclusion: upstream dependency break (griffe 2.x packaging/module layout) still unresolved for current tactus+pydantic-ai combination.",
       "created_at": "2026-03-18T22:44:43.511169077Z"
+    },
+    {
+      "id": "57164bc7-58be-4819-a102-5783aaca67fd",
+      "author": "ryan",
+      "text": "Poetry migration complete. pyproject.toml is fully configured with all dependencies, build-system, and scripts properly set up. Tactus blocker resolved with 0.45.2; CVE patches applied.",
+      "created_at": "2026-04-04T19:06:33.510566Z"
     }
   ],
   "created_at": "2026-03-18T22:19:32.654874209Z",
-  "updated_at": "2026-03-18T22:44:43.511169077Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:06:33.510566Z",
+  "closed_at": "2026-04-04T19:06:33.510566Z",
   "custom": {}
 }
