@@ -119,12 +119,12 @@ def register_evaluation_tools(mcp: FastMCP):
                     "baseline_evaluation_id": evaluation_info.get('baseline_evaluation_id'),
                 }
 
-                # Include root cause analysis if available in parameters
-                params = evaluation_info.get('parameters')
-                if params and isinstance(params, dict):
-                    root_cause = params.get('root_cause')
-                    if root_cause:
-                        payload['root_cause'] = root_cause
+                root_cause = evaluation_info.get('root_cause')
+                if root_cause:
+                    payload['root_cause'] = root_cause
+                misclassification_analysis = evaluation_info.get('misclassification_analysis')
+                if misclassification_analysis:
+                    payload['misclassification_analysis'] = misclassification_analysis
 
                 # Optionally include quadrant examples inline for consistency with feedback tools
                 if include_examples:
@@ -646,11 +646,12 @@ def register_evaluation_tools(mcp: FastMCP):
                             "updated_at": eval_info.get('updated_at'),
                             "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
                         }
-                        params = eval_info.get('parameters')
-                        if params and isinstance(params, dict):
-                            root_cause = params.get('root_cause')
-                            if root_cause:
-                                payload['root_cause'] = root_cause
+                        root_cause = eval_info.get('root_cause')
+                        if root_cause:
+                            payload['root_cause'] = root_cause
+                        misclassification_analysis = eval_info.get('misclassification_analysis')
+                        if misclassification_analysis:
+                            payload['misclassification_analysis'] = misclassification_analysis
                         return json.dumps(payload)
                     else:
                         return json.dumps({
@@ -780,6 +781,8 @@ def register_evaluation_tools(mcp: FastMCP):
                 'predictedClassDistribution': eval_info.get('predicted_class_distribution'),  # snake_case in source
                 'datasetClassDistribution': eval_info.get('dataset_class_distribution'),  # snake_case in source
                 'baselineEvaluationId': eval_info.get('baseline_evaluation_id'),
+                'root_cause': eval_info.get('root_cause'),
+                'misclassification_analysis': eval_info.get('misclassification_analysis'),
                 'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{eval_id}" if eval_id else None
             }
 

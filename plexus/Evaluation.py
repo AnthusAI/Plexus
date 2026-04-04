@@ -2672,10 +2672,18 @@ Total cost:       ${expenses['total_cost']:.6f}
                     parameters = evaluation.parameters
 
             baseline_evaluation_id = None
+            root_cause = None
+            misclassification_analysis = None
             if isinstance(parameters, dict):
                 metadata = parameters.get("metadata")
                 if isinstance(metadata, dict):
                     baseline_evaluation_id = metadata.get("baseline")
+                root_cause_candidate = parameters.get("root_cause")
+                if isinstance(root_cause_candidate, dict):
+                    root_cause = root_cause_candidate
+                    misclassification_candidate = root_cause_candidate.get("misclassification_analysis")
+                    if isinstance(misclassification_candidate, dict):
+                        misclassification_analysis = misclassification_candidate
             
             # Parse confusion matrix if available
             confusion_matrix = None
@@ -2725,6 +2733,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'metrics': metrics,
                 'parameters': parameters,
                 'baseline_evaluation_id': baseline_evaluation_id,
+                'root_cause': root_cause,
+                'misclassification_analysis': misclassification_analysis,
                 'confusion_matrix': confusion_matrix,
                 'predicted_class_distribution': predicted_class_distribution,
                 'dataset_class_distribution': dataset_class_distribution,

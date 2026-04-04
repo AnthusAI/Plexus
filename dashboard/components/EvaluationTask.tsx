@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
@@ -193,6 +194,83 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
   commandDisplay?: 'hide' | 'show' | 'full'
   onShare?: () => void
   onDelete?: (evaluationId: string) => void
+}
+
+type MisclassificationCategory =
+  | 'score_configuration_problem'
+  | 'information_gap'
+  | 'guideline_gap_requires_sme'
+  | 'mechanical_malfunction'
+
+type MisclassificationRedFlag = {
+  flag?: string
+  severity?: 'high' | 'medium' | 'low' | string
+  message?: string
+}
+
+type MisclassificationAnalysis = {
+  category_totals?: Partial<Record<MisclassificationCategory, number>>
+  overall_assessment?: {
+    total_items?: number
+    predominant_category?: MisclassificationCategory | string
+    score_fix_candidate_items?: number
+  }
+  evaluation_red_flags?: MisclassificationRedFlag[]
+}
+
+const MISCLASSIFICATION_CATEGORY_CONFIG: Array<{
+  key: MisclassificationCategory
+  label: string
+  shortLabel: string
+  colorClass: string
+}> = [
+  {
+    key: 'score_configuration_problem',
+    label: 'Score configuration',
+    shortLabel: 'Score',
+    colorClass: 'bg-chart-1',
+  },
+  {
+    key: 'information_gap',
+    label: 'Information gap',
+    shortLabel: 'Info',
+    colorClass: 'bg-chart-2',
+  },
+  {
+    key: 'guideline_gap_requires_sme',
+    label: 'SME guideline gap',
+    shortLabel: 'SME',
+    colorClass: 'bg-chart-3',
+  },
+  {
+    key: 'mechanical_malfunction',
+    label: 'Mechanical malfunction',
+    shortLabel: 'System',
+    colorClass: 'bg-chart-4',
+  },
+]
+
+const getMisclassificationCategoryLabel = (category?: string | null): string => {
+  if (!category) return 'Unavailable'
+  return (
+    MISCLASSIFICATION_CATEGORY_CONFIG.find(config => config.key === category)?.label ??
+    category.replace(/_/g, ' ')
+  )
+}
+
+const getMisclassificationAssessment = (category?: string | null): string => {
+  switch (category) {
+    case 'score_configuration_problem':
+      return 'Optimization likely to help'
+    case 'information_gap':
+      return 'Upstream data remediation likely needed'
+    case 'guideline_gap_requires_sme':
+      return 'SME guideline clarification likely needed'
+    case 'mechanical_malfunction':
+      return 'System malfunction investigation needed'
+    default:
+      return 'Insufficient evidence for a clear recommendation'
+  }
 }
 
 function formatDuration(seconds: number): string {
@@ -693,7 +771,14 @@ const DetailContent = React.memo(({
 
   const handleTopicFilter = (
     itemIds: string[] | null,
-    rcaData: Record<string, { detailed_cause?: string; suggested_fix?: string }>
+    rcaData: Record<string, {
+      detailed_cause?: string
+      suggested_fix?: string
+      misclassification_category?: string
+      misclassification_confidence?: string
+      misclassification_rationale?: string
+      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
+    }>
   ) => {
     setSelectedTopicItemIds(itemIds)
     setRcaDataByItemId(rcaData ?? {})
@@ -753,9 +838,7 @@ const DetailContent = React.memo(({
 
   const rootCauseData = useMemo(() => {
     try {
-      const params = typeof data.parameters === 'string'
-        ? JSON.parse(data.parameters)
-        : data.parameters
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
       return params?.root_cause ?? null
     } catch {
       return null
@@ -763,11 +846,36 @@ const DetailContent = React.memo(({
   }, [data.parameters])
 
   const rootCauseTopics = rootCauseData?.topics ?? null
+  const misclassificationAnalysis = rootCauseData?.misclassification_analysis as MisclassificationAnalysis | null
+  const misclassificationCategoryBreakdown = useMemo(() => {
+    const totals = misclassificationAnalysis?.category_totals ?? {}
+    const rows = MISCLASSIFICATION_CATEGORY_CONFIG.map(config => {
+      const rawCount = totals[config.key]
+      const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0
+      return { ...config, count }
+    })
+    const totalItems = rows.reduce((sum, row) => sum + row.count, 0)
+    return {
+      rows,
+      totalItems,
+      redFlags: Array.isArray(misclassificationAnalysis?.evaluation_red_flags)
+        ? misclassificationAnalysis.evaluation_red_flags
+        : [],
+      overall: misclassificationAnalysis?.overall_assessment ?? null,
+    }
+  }, [misclassificationAnalysis])
 
   const [showRootCauseCode, setShowRootCauseCode] = useState(false)
   const [selectedTopicItemIds, setSelectedTopicItemIds] = useState<string[] | null>(null)
   const [rcaDataByItemId, setRcaDataByItemId] = useState<
-    Record<string, { detailed_cause?: string; suggested_fix?: string }>
+    Record<string, {
+      detailed_cause?: string
+      suggested_fix?: string
+      misclassification_category?: string
+      misclassification_confidence?: string
+      misclassification_rationale?: string
+      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
+    }>
   >({})
 
   const selectedItemRcaContext = selectedScoreResult?.itemId
@@ -812,6 +920,10 @@ const DetailContent = React.memo(({
               onClose={handleScoreResultClose}
               rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
               rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+              misclassificationCategory={selectedItemRcaContext?.misclassification_category}
+              misclassificationConfidence={selectedItemRcaContext?.misclassification_confidence}
+              misclassificationRationale={selectedItemRcaContext?.misclassification_rationale}
+              misclassificationEvidence={selectedItemRcaContext?.misclassification_evidence}
             />
           </div>
         )}
@@ -922,7 +1034,11 @@ const DetailContent = React.memo(({
                 )}
 
                 {/* Root Cause Analysis */}
-                {rootCauseTopics && rootCauseTopics.length > 0 && (
+                {(rootCauseData && (
+                  (rootCauseTopics && rootCauseTopics.length > 0) ||
+                  misclassificationCategoryBreakdown.totalItems > 0 ||
+                  misclassificationCategoryBreakdown.redFlags.length > 0
+                )) && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium text-sm text-muted-foreground">Root cause analysis</h4>
@@ -942,6 +1058,97 @@ const DetailContent = React.memo(({
                       </pre>
                     ) : (
                       <>
+                        {misclassificationCategoryBreakdown.totalItems > 0 && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Misclassification categories
+                            </div>
+                            <div className="space-y-2 bg-card rounded-md p-2">
+                              <div className="h-7 rounded-md overflow-hidden bg-muted/70 flex">
+                                {misclassificationCategoryBreakdown.rows
+                                  .filter(row => row.count > 0)
+                                  .map(row => {
+                                    const percentage = misclassificationCategoryBreakdown.totalItems > 0
+                                      ? (row.count / misclassificationCategoryBreakdown.totalItems) * 100
+                                      : 0
+                                    const showLabel = percentage >= 15
+                                    return (
+                                      <div
+                                        key={row.key}
+                                        className={cn('h-full flex items-center justify-center text-xs text-foreground', row.colorClass)}
+                                        style={{ width: `${percentage}%` }}
+                                        title={`${row.label}: ${row.count} (${percentage.toFixed(1)}%)`}
+                                      >
+                                        {showLabel ? row.shortLabel : null}
+                                      </div>
+                                    )
+                                  })}
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+                                {misclassificationCategoryBreakdown.rows.map(row => {
+                                  const percentage = misclassificationCategoryBreakdown.totalItems > 0
+                                    ? (row.count / misclassificationCategoryBreakdown.totalItems) * 100
+                                    : 0
+                                  return (
+                                    <div key={`summary-${row.key}`} className="flex items-center justify-between gap-2 text-xs">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={cn('w-2 h-2 rounded-full shrink-0', row.colorClass)} />
+                                        <span className="truncate text-foreground">{row.label}</span>
+                                      </div>
+                                      <span className="text-muted-foreground shrink-0">
+                                        {row.count} ({percentage.toFixed(1)}%)
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Overall: {getMisclassificationAssessment(
+                                  misclassificationCategoryBreakdown.overall?.predominant_category
+                                )}{' '}
+                                ({getMisclassificationCategoryLabel(
+                                  misclassificationCategoryBreakdown.overall?.predominant_category
+                                )})
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {misclassificationCategoryBreakdown.redFlags.length > 0 && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Evaluation red flags
+                            </div>
+                            <div className="space-y-1">
+                              {misclassificationCategoryBreakdown.redFlags.map((flag, index) => {
+                                const severity = (flag.severity ?? 'low').toLowerCase()
+                                return (
+                                  <Alert
+                                    key={`${flag.flag ?? 'flag'}-${index}`}
+                                    variant={severity === 'high' ? 'destructive' : 'default'}
+                                    className={cn(
+                                      'py-2 px-3',
+                                      severity === 'medium' && 'border-chart-3/40 text-chart-3 [&>svg]:text-chart-3',
+                                      severity === 'low' && 'border-muted text-muted-foreground'
+                                    )}
+                                  >
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <div className="min-w-0">
+                                      <AlertTitle className="mb-0.5 text-xs">
+                                        <span className="uppercase tracking-wide">{severity}</span>
+                                        {flag.flag && (
+                                          <span className="ml-2 font-mono normal-case text-muted-foreground">{flag.flag}</span>
+                                        )}
+                                      </AlertTitle>
+                                      <AlertDescription className="text-xs text-foreground">
+                                        {flag.message ?? 'No details provided.'}
+                                      </AlertDescription>
+                                    </div>
+                                  </Alert>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
                         {rootCauseData?.overall_explanation && (
                           <div className="mb-3">
                             <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause</div>
@@ -968,7 +1175,9 @@ const DetailContent = React.memo(({
                             </div>
                           </div>
                         )}
-                        <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                        {rootCauseTopics && rootCauseTopics.length > 0 && (
+                          <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                        )}
                       </>
                     )}
                   </div>
@@ -1020,6 +1229,10 @@ const DetailContent = React.memo(({
               onClose={handleScoreResultClose}
               rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
               rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+              misclassificationCategory={selectedItemRcaContext?.misclassification_category}
+              misclassificationConfidence={selectedItemRcaContext?.misclassification_confidence}
+              misclassificationRationale={selectedItemRcaContext?.misclassification_rationale}
+              misclassificationEvidence={selectedItemRcaContext?.misclassification_evidence}
             />
           </div>
         )}

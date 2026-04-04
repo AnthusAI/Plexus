@@ -3,7 +3,7 @@
   "title": "Document misclassification classification and evaluation triage in the public web app",
   "description": "## Summary\nDocument the misclassification-classification feature in the public-facing web app documentation.\n\n## Deliverables\n- Document the four categories and what they mean operationally.\n- Document how operators should interpret the overall breakdown and evaluation-level red flags.\n- Document how this classification layer relates to optimization RCA and how it differs from the feedback contradictions report.\n- Ensure the documentation ships in the public web app documentation section.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -23,9 +23,28 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "07d49911-142b-46e3-9743-096287a7d66a",
+      "author": "ryan",
+      "text": "Starting docs update: add misclassification category taxonomy, evaluation red flags, and item-level drill-down guidance to public evaluation documentation.",
+      "created_at": "2026-04-04T14:53:26.367467Z"
+    },
+    {
+      "id": "e7da9c1c-9b4a-4ca6-94c1-8fc0b1bf33e8",
+      "author": "ryan",
+      "text": "Updated public docs for misclassification triage in evaluation workflows. Added taxonomy, red-flag definitions, and operator usage guidance to methods/evaluate-score and concepts/evaluations pages.",
+      "created_at": "2026-04-04T14:54:19.273303Z"
+    },
+    {
+      "id": "bc73ed4f-2e3d-46f5-ab50-5ad34d15dcf5",
+      "author": "ryan",
+      "text": "Validation: npm --prefix dashboard run build:fast passed after docs updates.",
+      "created_at": "2026-04-04T14:54:21.887642Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.932212Z",
-  "updated_at": "2026-04-02T13:21:09.932212Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:54:24.446195Z",
+  "closed_at": "2026-04-04T14:54:24.446195Z",
   "custom": {}
 }
