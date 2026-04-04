@@ -78,7 +78,6 @@ class Procedure(BaseModel):
     def fields(cls) -> str:
         return """
             id
-            name
             status
             featured
             code
