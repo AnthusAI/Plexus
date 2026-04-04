@@ -1025,17 +1025,27 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     def _lua_to_python(obj):
         """Recursively convert Lua tables to Python dicts/lists."""
-        if hasattr(obj, 'keys') and hasattr(obj, 'values') and not isinstance(obj, dict):
-            # Lua table acting as dict
-            return {_lua_to_python(k): _lua_to_python(v) for k, v in obj.items()}
-        elif isinstance(obj, dict):
-            return {k: _lua_to_python(v) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple)):
-            return [_lua_to_python(v) for v in obj]
-        else:
-            return obj
+        try:
+            if hasattr(obj, 'keys') and hasattr(obj, 'values') and not isinstance(obj, dict):
+                # Lua table acting as dict
+                return {_lua_to_python(k): _lua_to_python(v) for k, v in obj.items()}
+            elif isinstance(obj, dict):
+                return {k: _lua_to_python(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_lua_to_python(v) for v in obj]
+            elif isinstance(obj, tuple):
+                return [_lua_to_python(v) for v in obj]
+            elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+                return [_lua_to_python(v) for v in obj]
+            else:
+                return obj
+        except (TypeError, ValueError):
+            return str(obj)
 
-    exec_result_clean = json_mod.loads(json_mod.dumps(_lua_to_python(exec_result), default=str))
+    try:
+        exec_result_clean = json_mod.loads(json_mod.dumps(_lua_to_python(exec_result), default=str))
+    except (TypeError, ValueError):
+        exec_result_clean = exec_result
 
     # Parse result
     if output == 'json':
