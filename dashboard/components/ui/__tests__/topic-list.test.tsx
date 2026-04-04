@@ -54,7 +54,8 @@ describe('TopicList misclassification drill-down', () => {
           detailed_cause: 'The score over-indexes on free-service language.',
           suggested_fix: 'Add a safe-harbor when no payment obligation is described.',
         }),
-      })
+      }),
+      'False positive pattern'
     )
   })
 })
