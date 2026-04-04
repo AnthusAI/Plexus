@@ -994,7 +994,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Run the procedure
     console.print(f"[cyan]Running optimization procedure...[/cyan]")
-    console.print(f"[dim]You will be prompted to approve each iteration's proposed changes.[/dim]")
+    console.print(f"[dim]Approval gates are surfaced through Plexus HITL (dashboard/chat).[/dim]")
     console.print()
 
     # Get account ID for task tracking
@@ -1005,10 +1005,8 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     import asyncio
     from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
 
-    from plexus.cli.procedure.tactus_adapters.terminal_hitl import TerminalHITLAdapter
     options = {
         'context': params,
-        'hitl_adapter': TerminalHITLAdapter(auto_approve=dry_run),
     }
 
     exec_result = asyncio.run(run_experiment_with_task_tracking(
