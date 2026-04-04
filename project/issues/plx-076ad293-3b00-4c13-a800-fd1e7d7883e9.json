@@ -3,16 +3,29 @@
   "title": "Define candidate assessment bundle for score-version comparison",
   "description": "## Summary\nDefine one canonical candidate assessment bundle contract for score-version comparison.\n\n## Canonical bundle contents\n- identity: scorecard, score, baseline_version, candidate_version.\n- stage_runs: evaluation IDs, dataset IDs when used, sample protocol, status, timestamps.\n- metrics: AC1/accuracy/precision/recall and deltas.\n- malfunction context: category shares, red flags, primary_next_action.\n- decision: accept/reject/inconclusive with machine-readable reason.\n\n## Storage contract\n- Full bundle JSON persisted as attachment.\n- Compact summary fields persisted on task/evaluation-facing records for fast UI queries.\n- One-path persistence contract: no duplicate/fallback persistence paths.\n\n## Acceptance criteria\n- Bundle schema is deterministic and test-validated.\n- Decision output is reproducible from persisted bundle + referenced evaluations.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "aae7a63a-4091-4745-955c-f70fcd0d4697",
+      "author": "ryan",
+      "text": "Starting implementation slice: define canonical candidate assessment bundle JSON contract + attachment/summary persistence interface in shared CLI module, with deterministic schema tests before runner wiring.",
+      "created_at": "2026-04-04T22:43:07.001796Z"
+    },
+    {
+      "id": "ad71f518-3f8f-4054-a81b-cb6cb5003380",
+      "author": "ryan",
+      "text": "Implemented canonical candidate assessment bundle contract in shared CLI module: create_candidate_assessment_bundle(), compact summary builder, deterministic attachment key/payload builders, and accept-gate validation requiring random_gate sample_size>=200 with completed statuses. Added unit tests covering gate enforcement, bundle normalization, compact summary projection, and deterministic attachment output. Validation: pytest -q plexus/cli/shared/candidate_assessment_bundle_test.py plexus/cli/shared/evaluation_value_function_test.py plexus/cli/shared/optimization_acceptance_policy_test.py (12 passed).",
+      "created_at": "2026-04-04T22:46:22.225706Z"
+    }
+  ],
   "created_at": "2026-04-02T13:31:27.287027Z",
-  "updated_at": "2026-04-04T22:31:58.395398Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T22:46:25.075398Z",
+  "closed_at": "2026-04-04T22:46:25.075398Z",
   "custom": {}
 }
