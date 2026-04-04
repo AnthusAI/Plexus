@@ -559,10 +559,15 @@ def classify_misclassification_item(item_context: dict) -> dict:
 def build_misclassification_analysis_summary(
     topics: list,
     *,
+    item_classifications_all: List[Dict[str, Any]],
+    analysis_scope: Optional[Dict[str, Any]] = None,
     max_category_summary_items: int = 20,
 ) -> dict:
     """Build structured triage output including topic/category summaries and next-action guidance."""
     max_items_used = max(1, int(max_category_summary_items or 20))
+    if not isinstance(item_classifications_all, list):
+        raise ValueError("item_classifications_all must be a list.")
+
     item_classifications: List[Dict[str, Any]] = []
     category_totals = {category: 0 for category in MISCLASSIFICATION_CATEGORIES}
     mechanical_subtype_totals = {subtype: 0 for subtype in MECHANICAL_SUBTYPES}
@@ -574,48 +579,67 @@ def build_misclassification_analysis_summary(
     def _sorted_category_counts(category_counts: Dict[str, int]) -> Dict[str, int]:
         return {category: int(category_counts.get(category, 0)) for category in MISCLASSIFICATION_CATEGORIES}
 
+    for raw in item_classifications_all:
+        context = raw.get("misclassification_item_context") or {}
+        availability = context.get("source_availability", {})
+        row = {
+            "topic_id": raw.get("topic_id"),
+            "topic_label": raw.get("topic_label", ""),
+            "feedback_item_id": raw.get("feedback_item_id", ""),
+            "item_id": raw.get("item_id", ""),
+            "timestamp": raw.get("timestamp") or "",
+            "predicted_value": raw.get("predicted_value", ""),
+            "correct_value": raw.get("correct_value", ""),
+            "primary_category": raw.get("primary_category", ""),
+            "confidence": raw.get("confidence", ""),
+            "rationale_short": raw.get("rationale_short", ""),
+            "rationale_full": raw.get("rationale_full", ""),
+            "evidence_snippets": raw.get("evidence_snippets", []),
+            "mechanical_subtype": raw.get("mechanical_subtype"),
+            "mechanical_details": raw.get("mechanical_details"),
+        }
+        item_classifications.append(row)
+
+        category = row.get("primary_category")
+        if category in category_totals:
+            category_totals[category] += 1
+
+        if context and not availability.get("has_transcript_text"):
+            missing_transcript_count += 1
+
+        predicted_value = _normalize_label(row.get("predicted_value"))
+        if predicted_value:
+            predicted_values.append(predicted_value)
+
+        mechanical_subtype = row.get("mechanical_subtype")
+        if mechanical_subtype in mechanical_subtype_totals:
+            mechanical_subtype_totals[mechanical_subtype] += 1
+
+    item_classifications = sorted(
+        item_classifications,
+        key=lambda item: (
+            -_parse_iso_timestamp(item.get("timestamp", "")),
+            str(item.get("feedback_item_id") or item.get("item_id") or ""),
+        ),
+    )
+
+    topic_item_map: Dict[str, List[Dict[str, Any]]] = {}
+    for row in item_classifications:
+        topic_id = row.get("topic_id")
+        if topic_id is None:
+            continue
+        topic_item_map.setdefault(str(topic_id), []).append(row)
+
     for topic in topics or []:
         topic_id = topic.get("topic_id")
         topic_label = topic.get("label", "")
         topic_member_count = int(topic.get("member_count") or 0)
         topic_counts = {category: 0 for category in MISCLASSIFICATION_CATEGORIES}
-
-        for ex in topic.get("exemplars", []) or []:
-            classification = ex.get("misclassification_classification") or {}
-            context = ex.get("misclassification_item_context") or {}
-            identifiers = context.get("identifiers", {})
-            prediction = context.get("prediction", {})
-            availability = context.get("source_availability", {})
-
-            category = classification.get("primary_category")
-            if category in category_totals:
-                category_totals[category] += 1
+        assigned_rows = topic_item_map.get(str(topic_id), [])
+        for row in assigned_rows:
+            category = row.get("primary_category")
+            if category in topic_counts:
                 topic_counts[category] += 1
-
-            if not availability.get("has_transcript_text"):
-                missing_transcript_count += 1
-
-            predicted_value = _normalize_label(prediction.get("predicted_value"))
-            if predicted_value:
-                predicted_values.append(predicted_value)
-
-            mechanical_subtype = classification.get("mechanical_subtype")
-            if mechanical_subtype in mechanical_subtype_totals:
-                mechanical_subtype_totals[mechanical_subtype] += 1
-
-            item_classifications.append({
-                "topic_id": topic_id,
-                "topic_label": topic_label,
-                "feedback_item_id": identifiers.get("feedback_item_id", ""),
-                "item_id": identifiers.get("item_id", ""),
-                "timestamp": ex.get("timestamp") or "",
-                "primary_category": category or "",
-                "confidence": classification.get("confidence", ""),
-                "rationale": classification.get("rationale", ""),
-                "evidence_snippets": classification.get("evidence_snippets", []),
-                "mechanical_subtype": mechanical_subtype,
-                "mechanical_details": classification.get("mechanical_details"),
-            })
 
         topic_total = sum(topic_counts.values())
         if topic_total > 0:
@@ -627,6 +651,7 @@ def build_misclassification_analysis_summary(
         else:
             majority = ""
             purity = 0.0
+
         topic_category_breakdown.append({
             "topic_id": topic_id,
             "topic_label": topic_label,
@@ -728,7 +753,7 @@ def build_misclassification_analysis_summary(
             if category == "mechanical_malfunction":
                 key = _normalize_label(item.get("mechanical_subtype")) or "unknown_mechanical"
             else:
-                rationale = _normalize_label(item.get("rationale"))
+                rationale = _normalize_label(item.get("rationale_full") or item.get("rationale_short"))
                 key = rationale.split(".", 1)[0].strip().lower() if rationale else "unspecified_pattern"
             pattern_counter[key] += 1
         top = []
@@ -778,34 +803,23 @@ def build_misclassification_analysis_summary(
             ),
         ):
             topic_payload = topic_row.get("topic_payload") or {}
-            exemplars = topic_payload.get("exemplars") or []
-            topic_examples = []
-            for ex in exemplars:
+            exemplar_ids = []
+            for ex in topic_payload.get("exemplars", []) or []:
                 if not isinstance(ex, dict):
                     continue
-                classification = ex.get("misclassification_classification") or {}
-                topic_examples.append({
-                    "feedback_item_id": (
-                        ex.get("feedback_item_id")
-                        or (ex.get("misclassification_item_context") or {}).get("identifiers", {}).get("feedback_item_id")
-                        or ""
-                    ),
-                    "item_id": (
-                        ex.get("item_id")
-                        or (ex.get("misclassification_item_context") or {}).get("identifiers", {}).get("item_id")
-                        or ""
-                    ),
-                    "identifiers": ex.get("identifiers") or [],
-                    "text": ex.get("text", ""),
-                    "timestamp": ex.get("timestamp", ""),
-                    "initial_answer_value": ex.get("initial_answer_value"),
-                    "final_answer_value": ex.get("final_answer_value"),
-                    "score_explanation": ex.get("score_explanation"),
-                    "detailed_cause": ex.get("detailed_cause"),
-                    "suggested_fix": ex.get("suggested_fix"),
-                    "misclassification_classification": classification,
-                    "mechanical_subtype": classification.get("mechanical_subtype"),
-                    "mechanical_details": classification.get("mechanical_details"),
+                feedback_item_id = (
+                    ex.get("feedback_item_id")
+                    or (ex.get("misclassification_item_context") or {}).get("identifiers", {}).get("feedback_item_id")
+                    or ""
+                )
+                item_id = (
+                    ex.get("item_id")
+                    or (ex.get("misclassification_item_context") or {}).get("identifiers", {}).get("item_id")
+                    or ""
+                )
+                exemplar_ids.append({
+                    "feedback_item_id": feedback_item_id,
+                    "item_id": item_id,
                 })
 
             category_topics.append({
@@ -814,10 +828,8 @@ def build_misclassification_analysis_summary(
                 "member_count": topic_row.get("member_count", 0),
                 "topic_category_purity": topic_row.get("topic_category_purity", 0.0),
                 "category_counts": topic_row.get("category_counts", {}),
-                "detailed_explanation": topic_payload.get("detailed_explanation"),
-                "improvement_suggestion": topic_payload.get("improvement_suggestion"),
                 "score_fix_candidate_count": topic_payload.get("score_fix_candidate_count"),
-                "examples": topic_examples,
+                "example_item_ids": exemplar_ids,
             })
 
         category_hierarchy.append({
@@ -890,6 +902,21 @@ def build_misclassification_analysis_summary(
             key=lambda key: (category_totals[key], -MISCLASSIFICATION_CATEGORIES.index(key)),
         )
 
+    inferred_scope = {
+        "candidate_items_total": total_items,
+        "classified_items_total": total_items,
+        "texts_analyzed_total": total_items,
+        "topics_found": len(topics or []),
+        "topic_assignment_scope": "exemplar_only",
+        "topic_assignment_unavailable_count": len(
+            [item for item in item_classifications if item.get("topic_id") is None]
+        ),
+    }
+    if analysis_scope:
+        for key, value in analysis_scope.items():
+            if value is not None:
+                inferred_scope[key] = value
+
     return {
         "pipeline_stage_order": [
             "item_classification",
@@ -899,7 +926,8 @@ def build_misclassification_analysis_summary(
             "evaluation_red_flags",
             "final_recommendation",
         ],
-        "item_classifications": item_classifications,
+        "analysis_scope": inferred_scope,
+        "item_classifications_all": item_classifications,
         "topic_category_breakdown": topic_category_breakdown,
         "category_hierarchy": category_hierarchy,
         "category_totals": category_totals,

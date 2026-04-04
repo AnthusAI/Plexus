@@ -21,9 +21,9 @@ params:
 
   max_samples:
     type: number
-    default: null
+    default: 200
     required: false
-    description: "Maximum number of feedback samples to use per evaluation (null = all available)"
+    description: "Maximum number of feedback samples to use per evaluation (default: 200)"
 
   max_iterations:
     type: number
@@ -107,32 +107,42 @@ agents:
       - plexus_evaluation_info
       - plexus_predict
       - plexus_item_last
+      - score_editor_setup
+      - score_editor_get_result
 
   analyzer:
     system_prompt: |
-      You are an expert in analyzing Plexus score performance and proposing alignment improvements.
+      You are an expert in analyzing Plexus score performance and identifying alignment improvements.
 
       Your role:
       1. Analyze root-cause analysis (RCA) output from feedback evaluations
       2. Identify systematic error patterns (false positives, false negatives)
-      3. Propose specific, targeted changes to score YAML configuration
-      4. Formulate clear hypotheses about expected improvements
+      3. Identify one specific, targeted change to the score YAML configuration
+      4. Formulate a clear hypothesis about the expected improvement
 
       Analysis approach:
       - Focus on RCA topics/clusters showing highest error rates
-      - Look for missing criteria, threshold issues, or overly broad rules
-      - Propose minimal, focused changes (one concept per iteration)
-      - Consider both guidelines and code configuration
+      - Look for missing criteria, threshold issues, or overly broad/narrow rules
+      - Propose ONE minimal, focused change (one concept per iteration)
+      - Consider both the guidelines section and the classifier logic
 
-      When ready to propose changes, call the done() tool with JSON containing:
-      {
-        "hypothesis": "Brief description of expected improvement",
-        "changes": "Detailed description of what will change",
-        "new_code": "Complete updated YAML code",
-        "rationale": "Why this change should improve alignment"
-      }
+      When ready, call done() with your full analysis as the reason argument.
+      Write structured prose using Markdown headers — do NOT use JSON or YAML code blocks:
 
-      Always include the COMPLETE updated YAML in new_code, not just diffs.
+      ## Hypothesis
+      What specific improvement do you expect, and why?
+
+      ## Error Patterns
+      What does the evaluation data show? Which RCA topics have the highest error rates?
+      What are the false positive and false negative patterns?
+
+      ## Proposed Change
+      Describe the exact change to make to the score YAML configuration.
+      Be specific: which section, which text, what it should become.
+      Do NOT include the actual YAML — the code editor will implement the change.
+
+      ## Rationale
+      Why should this change improve alignment? What is the expected mechanism?
 
     initial_message: |
       Waiting for baseline metrics and RCA data to analyze.
@@ -143,30 +153,30 @@ agents:
       - plexus_score_pull
       - plexus_scorecard_info
 
-  validator:
+  code_editor:
     system_prompt: |
-      You are a score configuration validation expert.
+      You are a precise YAML configuration editor. You make targeted edits to score
+      configuration files using the str_replace_editor tool.
 
-      Your role:
-      1. Review proposed score configuration changes
-      2. Spot-check predictions to verify the change behaves as expected
-      3. Identify potential issues or unintended side effects
-      4. Approve or suggest refinements
+      Workflow:
+      1. Call str_replace_editor(command="view", path="score_config.yaml") to read the file
+      2. Make ONE focused edit: str_replace_editor(command="str_replace", path="score_config.yaml",
+         old_str="<exact text to replace>", new_str="<replacement text>")
+      3. The tool shows validation feedback after each edit
+      4. If validation passes, call submit_score_code() to finalize the change
+      5. If validation fails, fix the issue with another str_replace before submitting
 
-      Use plexus_predict to test the updated configuration on sample items.
+      Rules:
+      - Make minimal targeted changes — do NOT rewrite the whole file
+      - Copy old_str exactly from the view output (including all whitespace and indentation)
+      - Do NOT call submit_score_code() if YAML validation reported errors
+      - Call done() after submit_score_code() returns success=true
 
-      When ready, call done() with JSON:
-      {
-        "approved": true/false,
-        "feedback": "Comments on the proposed change"
-      }
-
-    initial_message: |
-      Waiting for proposed changes to validate.
+    initial_message: "Ready to edit score configuration."
 
     tools:
-      - plexus_predict
-      - plexus_item_last
+      - str_replace_editor
+      - submit_score_code
 
 stages:
   - setup
@@ -329,16 +339,19 @@ code: |
     level = "info"
   })
 
+  -- Progressive sample sizes: start small (50) and increase per iteration up to max_samples.
+  -- base_samples is also used for the baseline evaluation to keep startup fast.
+  local base_samples = math.min(50, params.max_samples or 200)
+  local sample_step = 50
+
   local baseline_eval_params = {
     scorecard_name = params.scorecard,
     score_name = params.score,
     evaluation_type = "feedback",
     days = params.days,
+    max_feedback_samples = base_samples,
     wait = true
   }
-  if params.max_samples then
-    baseline_eval_params.max_feedback_samples = params.max_samples
-  end
 
   local baseline_eval = call_plexus_tool("plexus_evaluation_run", baseline_eval_params)
 
@@ -402,6 +415,10 @@ code: |
     Log.info("Starting iteration " .. iteration .. " of " .. params.max_iterations)
     State.set("current_iteration", iteration)
 
+    -- Progressive sample count: 50, 100, 150, ... up to max_samples
+    local current_samples = math.min(base_samples + (iteration - 1) * sample_step, params.max_samples or 200)
+    Log.info("Using " .. current_samples .. " samples for iteration " .. iteration)
+
     -- Fetch current score configuration via pull (writes to local file)
     -- plexus_score_pull returns { success, codeFilePath, guidelinesFilePath, ... }
     local score_pull = call_plexus_tool("plexus_score_pull", {
@@ -452,8 +469,8 @@ code: |
     -- Agent analyzes RCA and proposes changes
     analyzer.clear_history()
 
-    local analysis_inject = "Analyze the RCA output and propose a targeted improvement for iteration " .. tostring(iteration) .. ".\n\n" ..
-      "Baseline metrics:\n" ..
+    local analysis_inject = "Analyze the RCA output and identify ONE targeted improvement for iteration " .. tostring(iteration) .. ".\n\n" ..
+      "Current metrics:\n" ..
       "- AC1 (Alignment): " .. string.format("%.3f", baseline_metrics.alignment) .. "\n" ..
       "- Accuracy: " .. string.format("%.3f", baseline_metrics.accuracy) .. "\n" ..
       "- Precision: " .. string.format("%.3f", baseline_metrics.precision) .. "\n" ..
@@ -461,8 +478,9 @@ code: |
       "Root Cause Analysis:\n" .. Json.encode(State.get("last_rca")) .. "\n\n" ..
       "Current Score Configuration:\n" .. current_code .. "\n\n" ..
       "Current Guidelines:\n" .. current_guidelines .. "\n\n" ..
-      "Propose ONE focused change that addresses the most impactful error pattern.\n" ..
-      "Call done() with your proposal JSON when ready."
+      "Write your analysis as structured prose (Markdown headers are fine). " ..
+      "Describe the change clearly so a code editor can implement it — do NOT include YAML code. " ..
+      "Call done(reason='<your analysis>') when ready."
 
     local analyzer_done = wait_for_agent_done(analyzer, 10, analysis_inject)
 
@@ -475,98 +493,88 @@ code: |
     end
 
     local done_call = Tool.last_call("done")
-    -- The done() tool encodes all kwargs into "reason" in its return value.
-    -- Decode: done_call.result is a JSON string like {"status":..., "reason": "{...}"}
-    local proposal = nil
+
+    -- Extract prose hypothesis from analyzer done() call.
+    -- The analyzer is instructed to pass plain prose (not JSON) as the reason argument.
+    local hypothesis_text = ""
     local ok_res, done_result = pcall(function() return safe_decode(done_call.result) end)
     if ok_res and done_result and has_text(done_result.reason) then
-      local ok_p, p = pcall(function() return Json.decode(done_result.reason) end)
-      if ok_p and type(p) == "table" then proposal = p end
+      hypothesis_text = done_result.reason
     end
-    -- Fallback: try args.reason (agent called done(reason=JSON_STRING))
-    if not proposal then
+    -- Fallback: args.reason
+    if not has_text(hypothesis_text) then
       local ok_r, reason_val = pcall(function() return done_call.args.reason end)
       if ok_r and has_text(reason_val) then
-        local ok_p, p = pcall(function() return Json.decode(reason_val) end)
-        if ok_p and type(p) == "table" then proposal = p end
-      end
-    end
-    -- Fallback: agent passed fields as direct kwargs (accessible via args table)
-    if not proposal then
-      local ok_h, hyp = pcall(function() return done_call.args.hypothesis end)
-      local ok_c, new_code = pcall(function() return done_call.args.new_code end)
-      if ok_h and has_text(hyp) and ok_c and has_text(new_code) then
-        local ok_ch, changes = pcall(function() return done_call.args.changes end)
-        local ok_rt, rationale = pcall(function() return done_call.args.rationale end)
-        proposal = {
-          hypothesis = hyp,
-          new_code = new_code,
-          changes = (ok_ch and changes) or "",
-          rationale = (ok_rt and rationale) or ""
-        }
+        hypothesis_text = reason_val
       end
     end
 
-    if not proposal or not has_text(proposal.hypothesis) or not has_text(proposal.new_code) then
+    if not has_text(hypothesis_text) then
       return {
         success = false,
         status = "error",
-        message = "Invalid proposal from analyzer at iteration " .. iteration
+        message = "Analyzer produced no hypothesis at iteration " .. iteration
       }
     end
 
-    Log.info("Hypothesis: " .. proposal.hypothesis)
+    Log.info("## Analyzer Hypothesis (iteration " .. iteration .. ")\n\n" .. hypothesis_text)
 
-    -- HITL gate: review proposed changes
-    if not params.dry_run then
-      local approval_context = {
-        iteration = iteration,
-        hypothesis = proposal.hypothesis,
-        changes = proposal.changes or "",
-        rationale = proposal.rationale or "",
-        current_metrics = baseline_metrics,
-        code_preview = string.sub(proposal.new_code, 1, 500) .. "..."
+    -- Set up score editor for the code_editor agent.
+    -- yaml_content is intentionally omitted — it is too large to pass through the orchestrator LLM.
+    -- The str_replace_editor tool auto-loads the current YAML on first view.
+    local setup_result = call_plexus_tool("score_editor_setup", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      iteration = iteration,
+      hypothesis = string.sub(hypothesis_text, 1, 200),
+      dry_run = params.dry_run or false
+    })
+
+    if not setup_result or not setup_result.success then
+      return {
+        success = false,
+        status = "error",
+        message = "Failed to set up score editor at iteration " .. iteration
       }
-
-      local approved = Human.approve({
-        message = "Iteration " .. iteration .. ": Review proposed changes\n\nHypothesis: " .. proposal.hypothesis,
-        context = approval_context,
-        timeout = 3600
-      })
-
-      if not approved then
-        Log.info("User rejected iteration " .. iteration)
-        stop_reason = "user_stopped"
-        break
-      end
-    else
-      Log.info("Dry run mode: skipping approval gate")
     end
 
-    -- Apply changes (create new score version)
-    local update_result = nil
-    if not params.dry_run then
-      update_result = call_plexus_tool("plexus_score_update", {
-        scorecard_identifier = params.scorecard,
-        score_identifier = params.score,
-        code = proposal.new_code,
-        version_note = "Iteration " .. iteration .. ": " .. proposal.hypothesis
-      })
-
-      if not update_result or not update_result.newVersionId then
-        return {
-          success = false,
-          status = "error",
-          message = "Failed to create score version at iteration " .. iteration
-        }
-      end
-
-      Log.info("Created score version: " .. update_result.newVersionId)
-    end
-
-    -- Run evaluation with fixed baseline
+    -- Dispatch code editor agent to make targeted YAML edits
     Human.notify({
-      message = "Running evaluation for iteration " .. iteration .. "...",
+      message = "Editing score configuration for iteration " .. iteration .. "...",
+      level = "info"
+    })
+
+    code_editor.clear_history()
+    local editor_prompt = "Edit score_config.yaml to implement this improvement:\n\n" ..
+      hypothesis_text ..
+      "\n\nWhen your edit is complete and YAML validation passes, call submit_score_code() then done()."
+
+    local editor_done = wait_for_agent_done(code_editor, 15, editor_prompt)
+
+    if not editor_done then
+      return {
+        success = false,
+        status = "error",
+        message = "Code editor timed out at iteration " .. iteration
+      }
+    end
+
+    -- Retrieve the score version ID created by submit_score_code
+    local version_result = call_plexus_tool("score_editor_get_result", {})
+    if not version_result or not version_result.version_id then
+      return {
+        success = false,
+        status = "error",
+        message = "Code editor did not create a score version at iteration " .. iteration ..
+          ". The agent must call submit_score_code() before done()."
+      }
+    end
+    local new_version_id = version_result.version_id
+    Log.info("Score version created: " .. new_version_id)
+
+    -- Run evaluation with updated score version
+    Human.notify({
+      message = "Running evaluation for iteration " .. iteration .. " (" .. current_samples .. " samples)...",
       level = "info"
     })
 
@@ -578,11 +586,9 @@ code: |
         evaluation_type = "feedback",
         days = params.days,
         baseline = baseline_evaluation_id,
+        max_feedback_samples = current_samples,
         wait = true
       }
-      if params.max_samples then
-        eval_params.max_feedback_samples = params.max_samples
-      end
 
       eval_result = call_plexus_tool("plexus_evaluation_run", eval_params)
 
@@ -617,13 +623,12 @@ code: |
     -- Store iteration log
     local iteration_log = {
       iteration = iteration,
-      score_version_id = update_result and update_result.newVersionId or "dry_run",
+      score_version_id = new_version_id,
       evaluation_id = eval_result.id or eval_result.evaluation_id,
-      hypothesis = proposal.hypothesis,
-      changes = proposal.changes or "",
-      rationale = proposal.rationale or "",
+      hypothesis = hypothesis_text,
       metrics = eval_metrics,
       deltas = deltas,
+      samples_used = current_samples,
       rca_summary = {
         topic_count = (eval_result.root_cause and eval_result.root_cause.topics and #eval_result.root_cause.topics) or 0
       }
@@ -633,34 +638,15 @@ code: |
     State.set("iterations", iterations)
     State.set("last_rca", eval_result.root_cause or {})
 
-    -- Decision logic
+    -- Decision logic: stop if below improvement threshold
     if deltas.alignment < params.improvement_threshold then
       Log.info(string.format(
-        "AC1 improvement (%.4f) below threshold (%.4f)",
+        "AC1 improvement (%.4f) below threshold (%.4f) — stopping optimization",
         deltas.alignment,
         params.improvement_threshold
       ))
-
-      if not params.dry_run then
-        local decision = Human.input({
-          message = string.format(
-            "Iteration %d: AC1 improvement is %.4f (below %.4f threshold). Continue?",
-            iteration,
-            deltas.alignment,
-            params.improvement_threshold
-          ),
-          options = {"continue", "stop"}
-        })
-
-        if decision == "stop" then
-          stop_reason = "improvement_plateau"
-          break
-        end
-      else
-        Log.info("Dry run: would ask user whether to continue")
-        stop_reason = "improvement_plateau"
-        break
-      end
+      stop_reason = "improvement_plateau"
+      break
     end
 
     if deltas.alignment < 0 then
@@ -707,30 +693,6 @@ code: |
     #iterations,
     total_improvement
   ))
-
-  -- HITL gate: promote champion? (only if not dry run and improvement > 0)
-  local promotion_approved = false
-  if not params.dry_run and total_improvement > 0 then
-    promotion_approved = Human.approve({
-      message = string.format(
-        "Optimization complete with AC1 improvement of %+.4f. Promote final version as champion?",
-        total_improvement
-      ),
-      context = {
-        total_iterations = #iterations,
-        total_improvement = total_improvement,
-        final_metrics = final_iter.metrics,
-        baseline_metrics = baseline_metrics,
-        stop_reason = stop_reason
-      }
-    })
-
-    if promotion_approved then
-      -- Note: Champion promotion would be done via plexus_score_metadata_update
-      -- Currently not implementing auto-promotion to avoid unintended changes
-      Log.info("Champion promotion approved (manual promotion required)")
-    end
-  end
 
   return {
     success = true,
