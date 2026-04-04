@@ -12,6 +12,7 @@ import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.exceptions import Timeout, RequestException
 import logging
+from plexus.utils.score_result_s3_utils import upload_evaluation_artifact_file
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -2950,6 +2951,179 @@ class FeedbackEvaluation(Evaluation):
         """A usable RCA payload is any non-empty object payload."""
         return isinstance(root_cause_payload, dict) and len(root_cause_payload) > 0
 
+    @staticmethod
+    def _compact_item_classification_for_parameters(item: dict) -> dict:
+        """Keep a compact, UI-usable subset of per-item triage fields."""
+        if not isinstance(item, dict):
+            return {}
+        keep_keys = (
+            "feedback_item_id",
+            "item_id",
+            "timestamp",
+            "predicted_value",
+            "correct_value",
+            "primary_category",
+            "confidence",
+            "rationale_short",
+            "rationale_full",
+            "rationale_paragraph",
+            "evidence_quote",
+            "config_fixability",
+            "evidence_snippets",
+            "mechanical_subtype",
+            "mechanical_details",
+            "information_gap_subtype",
+            "detailed_cause",
+            "suggested_fix",
+            "topic_id",
+            "topic_label",
+        )
+        compact = {}
+        for key in keep_keys:
+            if key in item:
+                compact[key] = item.get(key)
+        return compact
+
+    @staticmethod
+    def _compact_topic_exemplar_for_parameters(exemplar: dict) -> dict:
+        """Keep only fields needed for topic-level filtering and context display."""
+        if not isinstance(exemplar, dict):
+            return {}
+        keep_keys = (
+            "item_id",
+            "identifiers",
+            "initial_answer_value",
+            "final_answer_value",
+            "score_explanation",
+            "timestamp",
+            "above_fold",
+            "detailed_cause",
+            "suggested_fix",
+        )
+        compact = {}
+        for key in keep_keys:
+            if key in exemplar:
+                compact[key] = exemplar.get(key)
+        misclassification = exemplar.get("misclassification_classification")
+        if isinstance(misclassification, dict):
+            compact["misclassification_classification"] = {
+                "primary_category": misclassification.get("primary_category"),
+                "rationale": misclassification.get("rationale"),
+                "confidence": misclassification.get("confidence"),
+            }
+        return compact
+
+    @classmethod
+    def _compact_topic_for_parameters(cls, topic: dict) -> dict:
+        """Keep a compact topic payload, trimming heavy exemplar context."""
+        if not isinstance(topic, dict):
+            return {}
+        keep_keys = (
+            "topic_id",
+            "cluster_id",
+            "label",
+            "keywords",
+            "memory_weight",
+            "memory_tier",
+            "lifecycle_tier",
+            "cause",
+            "detailed_explanation",
+            "improvement_suggestion",
+            "is_new",
+            "is_trending",
+            "has_short_term_memory",
+            "has_medium_term_memory",
+            "has_long_term_memory",
+            "p95_distance",
+            "member_count",
+            "days_inactive",
+        )
+        compact = {}
+        for key in keep_keys:
+            if key in topic:
+                compact[key] = topic.get(key)
+
+        raw_exemplars = topic.get("exemplars")
+        if isinstance(raw_exemplars, list):
+            compact_exemplars = []
+            for exemplar in raw_exemplars:
+                if isinstance(exemplar, str):
+                    compact_exemplars.append(exemplar[:320])
+                elif isinstance(exemplar, dict):
+                    compact_exemplars.append(
+                        cls._compact_topic_exemplar_for_parameters(exemplar)
+                    )
+            compact["exemplars"] = compact_exemplars
+            compact["exemplars_total"] = len(raw_exemplars)
+        return compact
+
+    @classmethod
+    def _compact_root_cause_for_parameters(cls, root_cause_payload: dict, output_attachment: str) -> dict:
+        """Build compact RCA parameters payload with attachment pointer."""
+        if not isinstance(root_cause_payload, dict):
+            raise ValueError("root_cause_payload must be a dictionary")
+        if not output_attachment:
+            raise ValueError("output_attachment is required")
+
+        compact_payload = {}
+
+        # Keep top-level narrative fields that power the evaluation UI.
+        for key in (
+            "overall_explanation",
+            "overall_improvement_suggestion",
+            "misclassification_analysis",
+        ):
+            if key in root_cause_payload:
+                compact_payload[key] = root_cause_payload.get(key)
+
+        raw_topics = root_cause_payload.get("topics")
+        if isinstance(raw_topics, list):
+            compact_payload["topics"] = [
+                cls._compact_topic_for_parameters(topic)
+                for topic in raw_topics
+                if isinstance(topic, dict)
+            ]
+
+        # Compact full per-item table to essential fields to keep DB payload bounded.
+        misclassification_analysis = compact_payload.get("misclassification_analysis")
+        if isinstance(misclassification_analysis, dict):
+            compact_misclassification = dict(misclassification_analysis)
+            raw_rows = misclassification_analysis.get("item_classifications_all")
+            if isinstance(raw_rows, list):
+                compact_rows = [
+                    cls._compact_item_classification_for_parameters(row)
+                    for row in raw_rows
+                ]
+                compact_misclassification["item_classifications_all"] = compact_rows
+                compact_misclassification["item_classifications_total"] = len(raw_rows)
+            compact_misclassification["item_classifications_attachment"] = output_attachment
+            compact_payload["misclassification_analysis"] = compact_misclassification
+
+        compact_payload["output_compacted"] = True
+        compact_payload["output_attachment"] = output_attachment
+        compact_payload["output_compaction_version"] = "feedback_rca_v1"
+        return compact_payload
+
+    def _persist_root_cause_for_parameters(self, root_cause_payload: dict) -> dict:
+        """
+        Persist full RCA payload as an attachment and return compact parameters payload.
+
+        This is a strict, single path: if RCA exists, upload must succeed.
+        """
+        if not self._has_usable_root_cause(root_cause_payload):
+            return root_cause_payload
+        if not self.evaluation_id:
+            raise ValueError("evaluation_id is required to persist root-cause attachments")
+
+        output_attachment = upload_evaluation_artifact_file(
+            evaluation_id=self.evaluation_id,
+            artifact_data=root_cause_payload,
+            file_name="root_cause.full.json",
+        )
+        if not output_attachment:
+            raise RuntimeError("Failed to upload root-cause attachment for evaluation")
+        return self._compact_root_cause_for_parameters(root_cause_payload, output_attachment)
+
     @classmethod
     def root_cause_contract_outcome(cls, incorrect_items: int, root_cause_payload):
         """Shared RCA contract evaluation for all feedback-backed paths."""
@@ -3106,6 +3280,10 @@ class FeedbackEvaluation(Evaluation):
                 feedback_items,
                 max_category_summary_items=self.max_category_summary_items,
             )
+            persisted_root_cause = await asyncio.to_thread(
+                self._persist_root_cause_for_parameters,
+                root_cause_result,
+            )
 
             # Merge root-cause payload into existing parameters (preserving mode/score/days metadata)
             existing_params = evaluation_record.parameters
@@ -3116,10 +3294,10 @@ class FeedbackEvaluation(Evaluation):
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
             incorrect_items = int(overall_analysis.get("disagreements") or 0)
-            contract = self.root_cause_contract_outcome(incorrect_items, root_cause_result)
+            contract = self.root_cause_contract_outcome(incorrect_items, persisted_root_cause)
             parameters_dict = self.apply_root_cause_contract_to_parameters(
                 parameters_dict,
-                root_cause_result,
+                persisted_root_cause,
                 contract["root_cause_required"],
                 contract["has_usable_root_cause"],
             )

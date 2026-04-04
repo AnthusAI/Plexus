@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Continuing implementation: wiring attachment-backed RCA persistence in FeedbackEvaluation so full misclassification payload is uploaded to S3 and evaluation.parameters stores only compact summaries plus attachment pointer. Next: add upload helper + tests + runtime validation on 50-sample feedback evaluation.",
       "created_at": "2026-04-04T20:45:57.733653Z"
+    },
+    {
+      "id": "05c3e5ce-547e-49db-bb5e-fb83c0ac9eee",
+      "author": "ryan",
+      "text": "Runtime validation in progress: synchronous 50-sample feedback eval launched via CLI for scorecard 1039 / score 45425 with output redirected to /tmp/feedback_eval_45425.log. Awaiting completion to verify compact RCA pointer payload.",
+      "created_at": "2026-04-04T20:58:21.355074Z"
     }
   ],
   "created_at": "2026-04-04T20:43:47.930469Z",
-  "updated_at": "2026-04-04T20:45:57.733653Z",
+  "updated_at": "2026-04-04T20:58:21.355074Z",
   "closed_at": null,
   "custom": {}
 }

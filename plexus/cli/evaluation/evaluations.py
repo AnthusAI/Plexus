@@ -3931,6 +3931,7 @@ def feedback(
                     rca_outcome = asyncio.run(_run_rca())
                     incorrect_items = int(rca_outcome.get("incorrect_items") or 0)
                     root_cause_result = rca_outcome.get("root_cause")
+                    root_cause_result = fe._persist_root_cause_for_parameters(root_cause_result)
                     contract = FeedbackEvaluation.root_cause_contract_outcome(
                         incorrect_items,
                         root_cause_result,
