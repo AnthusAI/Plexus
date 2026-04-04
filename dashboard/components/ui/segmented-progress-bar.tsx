@@ -50,9 +50,17 @@ export function SegmentedProgressBar({
                          isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
                          "bg-progress-background";
 
-          // Add -selected suffix if selected
-          const segmentColor = isSelected && baseColor !== "bg-progress-background" ? 
-            `${baseColor}-selected` : baseColor;
+          // Map to selected variants using static strings so Tailwind includes them in the build
+          const SELECTED_VARIANTS: Record<string, string> = {
+            'bg-primary': 'bg-primary-selected',
+            'bg-secondary': 'bg-secondary-selected',
+            'bg-neutral': 'bg-neutral-selected',
+            'bg-true': 'bg-true-selected',
+            'bg-false': 'bg-false-selected',
+          }
+          const segmentColor = isSelected && baseColor !== "bg-progress-background"
+            ? (SELECTED_VARIANTS[baseColor] ?? baseColor)
+            : baseColor;
 
           return (
             <div

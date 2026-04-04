@@ -516,7 +516,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const stagesChanged = prevStages.length !== nextStages.length || 
     prevStages.some((stage: any, index: number) => {
       const nextStage: any = nextStages[index];
-      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
+      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status || stage.statusMessage !== nextStage.statusMessage;
     });
   
   if (stagesChanged) {
