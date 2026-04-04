@@ -3,7 +3,7 @@
   "title": "Investigate segfault in LangGraphScore pytest run on py311-dev",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -40,10 +40,16 @@
       "author": "derek.norrbom",
       "text": "Applied and pushed Plexus dependency fix on feature/poetry-conversion: commit a1d91d2f. Added explicit psycopg dependency with binary extra in pyproject.toml and regenerated poetry.lock (psycopg-binary now resolved). This moves implementation control to Plexus instead of CC.",
       "created_at": "2026-03-30T21:22:32.628962Z"
+    },
+    {
+      "id": "269fe835-cbd6-4f6f-b602-53abb6e17cfb",
+      "author": "ryan",
+      "text": "Confirmed complete.",
+      "created_at": "2026-04-04T19:08:36.945532Z"
     }
   ],
   "created_at": "2026-03-20T21:37:16.041952799Z",
-  "updated_at": "2026-03-30T21:22:32.628962Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:08:36.945532Z",
+  "closed_at": "2026-04-04T19:08:36.945532Z",
   "custom": {}
 }
