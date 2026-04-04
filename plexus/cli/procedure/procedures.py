@@ -1047,10 +1047,12 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         table.add_row("AC1 Improvement", f"{improvement:+.4f}")
 
         if iterations:
-            baseline = iterations[0]['metrics']
-            final = iterations[-1]['metrics']
-            table.add_row("Baseline AC1", f"{baseline['alignment']:.4f}")
-            table.add_row("Final AC1", f"{final['alignment']:.4f}")
+            baseline = iterations[0].get('metrics') if isinstance(iterations[0], dict) else None
+            final = iterations[-1].get('metrics') if isinstance(iterations[-1], dict) else None
+            if baseline and isinstance(baseline, dict):
+                table.add_row("Baseline AC1", f"{baseline.get('alignment', 0):.4f}")
+            if final and isinstance(final, dict):
+                table.add_row("Final AC1", f"{final.get('alignment', 0):.4f}")
 
         console.print(table)
 
@@ -1058,9 +1060,17 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
             console.print()
             console.print("[bold]Iteration Summary:[/bold]")
             for it in iterations:
-                delta = it['deltas']['alignment']
-                delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
-                console.print(f"  {it['iteration']}. {it['hypothesis'][:60]}... (AC1 {delta_str})")
+                if not isinstance(it, dict):
+                    continue
+                deltas = it.get('deltas')
+                if deltas and isinstance(deltas, dict):
+                    delta = deltas.get('alignment', 0)
+                    delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
+                else:
+                    delta_str = "N/A"
+                hypothesis = it.get('hypothesis', 'N/A') or 'N/A'
+                iteration_num = it.get('iteration', '?')
+                console.print(f"  {iteration_num}. {hypothesis[:60]}... (AC1 {delta_str})")
 
 
 @procedure.command()
