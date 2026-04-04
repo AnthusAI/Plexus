@@ -3,7 +3,7 @@
   "title": "Resolve PR #121 Code Quality warning in procedure-hitl metadata guard",
   "description": "Address GitHub Code Quality warning about metadata null comparison typing in dashboard/lib/procedure-hitl.ts on dev->main PR #121.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -31,10 +31,16 @@
       "author": "derek",
       "text": "Opened follow-up PR to dev: https://github.com/AnthusAI/Plexus/pull/128 from branch fix/pr121-hitl-metadata-guard. Includes commit d6582764 and targeted validation (6 passing tests in procedure-hitl test suite).",
       "created_at": "2026-03-18T16:53:32.273832055Z"
+    },
+    {
+      "id": "d5600845-389e-4553-ba79-d54fc626a77d",
+      "author": "ryan",
+      "text": "PR #121 code quality warning resolved in procedure-hitl; merged in PR #128.",
+      "created_at": "2026-04-04T19:01:13.186902Z"
     }
   ],
   "created_at": "2026-03-18T16:52:19.900663362Z",
-  "updated_at": "2026-03-18T16:53:32.273832055Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:01:13.186902Z",
+  "closed_at": "2026-04-04T19:01:13.186902Z",
   "custom": {}
 }

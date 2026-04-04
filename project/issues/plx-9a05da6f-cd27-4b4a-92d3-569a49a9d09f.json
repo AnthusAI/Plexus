@@ -3,7 +3,7 @@
   "title": "Resolve remaining GitHub Code Quality findings blocking PR #121",
   "description": "Address unresolved GitHub Code Quality review comments on PR #121 (dev->main) in a dedicated dev-based fix branch, run targeted tests, and push for re-review.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -49,10 +49,16 @@
       "author": "derek",
       "text": "Opened post-merge follow-up PR: https://github.com/AnthusAI/Plexus/pull/123 from branch fix/pr122-postmerge-guidelines-cache. Includes only commit 76143e5b (remove _VALIDATOR_MODULE global, use @lru_cache). Validation rerun: 7 passed.",
       "created_at": "2026-03-17T22:38:22.993015370Z"
+    },
+    {
+      "id": "b4b13f62-5dc9-4670-ab2f-0039d546c9e1",
+      "author": "ryan",
+      "text": "Remaining PR #121 code quality findings resolved and merged to main.",
+      "created_at": "2026-04-04T19:01:13.186902Z"
     }
   ],
   "created_at": "2026-03-17T21:16:13.177548103Z",
-  "updated_at": "2026-03-17T22:38:22.993015370Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:01:13.186902Z",
+  "closed_at": "2026-04-04T19:01:13.186902Z",
   "custom": {}
 }
