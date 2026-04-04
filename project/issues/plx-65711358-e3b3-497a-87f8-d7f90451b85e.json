@@ -3,16 +3,23 @@
   "title": "CMG EDU improvements",
   "description": "",
   "type": "epic",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f6460c67-97e9-461c-a822-ab7ac79a9836",
+      "author": "ryan",
+      "text": "Closing epic: CMG EDU optimization objective is complete. Follow-on process/workflow improvements move to plx-c2f8bb (Optimization Workflow, Generalization, and Decision Policy).",
+      "created_at": "2026-04-04T22:31:52.661881Z"
+    }
+  ],
   "created_at": "2026-04-02T03:18:39.213206Z",
-  "updated_at": "2026-04-02T03:18:45.672725Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T22:31:52.661881Z",
+  "closed_at": "2026-04-04T22:31:38.201874Z",
   "custom": {}
 }

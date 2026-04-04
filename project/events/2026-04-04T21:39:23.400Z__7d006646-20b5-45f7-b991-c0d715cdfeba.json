@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7d006646-20b5-45f7-b991-c0d715cdfeba",
+  "issue_id": "plx-dd29a4c1-2ce7-41f8-927c-79b9b151d078",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T21:39:23.400Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 1,
+    "status": "open",
+    "title": "Use LLM-extracted evidence flags from feedback comments for deterministic misclassification triage"
+  }
+}

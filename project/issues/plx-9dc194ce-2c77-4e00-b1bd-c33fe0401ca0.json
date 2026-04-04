@@ -3,16 +3,23 @@
   "title": "Add evaluation-level red-flag heuristics for pathological runs and mechanical failures",
   "description": "## Summary\nAdd evaluation-level heuristic flagging for broad mechanical or pathological problems that are not item-local.\n\n## Deliverables\n- Detect conditions such as all predictions collapsing to one class, score results containing execution errors, or similar evaluation-wide failure signals.\n- Define the evaluation-level flag payload and severity model.\n- Keep these flags separate from per-item classification results.\n\n## Notes\nThis task covers evaluation-wide red flags, not the per-item four-category classifier.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "022d9cf7-d040-4485-98ab-d1afd8bc3c10",
+      "author": "ryan",
+      "text": "Implemented evaluation-level red-flag heuristics in structured misclassification summary: prediction_mode_collapse, mechanical_failures_present, and low_transcript_coverage with severity + message payload.",
+      "created_at": "2026-04-04T14:33:47.255924Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.708189Z",
-  "updated_at": "2026-04-02T13:21:09.708189Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:33:47.265310Z",
+  "closed_at": "2026-04-04T14:33:47.265310Z",
   "custom": {}
 }

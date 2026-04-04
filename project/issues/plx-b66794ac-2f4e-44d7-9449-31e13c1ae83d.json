@@ -1,0 +1,18 @@
+{
+  "id": "plx-b66794ac-2f4e-44d7-9449-31e13c1ae83d",
+  "title": "UI hard cut to single score-result renderer",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8715381c-ace8-4ec3-aaec-8a6fa1a56240",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-04T19:06:52.143947Z",
+  "updated_at": "2026-04-04T19:18:22.909155Z",
+  "closed_at": "2026-04-04T19:18:22.909155Z",
+  "custom": {}
+}

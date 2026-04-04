@@ -89,4 +89,58 @@ describe('EvaluationTask memo behavior', () => {
     const listItems = screen.getAllByRole('listitem')
     expect(listItems).toHaveLength(3)
   })
+
+  test('DetailContent renders candidate assessment compact summary KPIs', () => {
+    const data = makeData({
+      status: 'COMPLETED',
+      task: {
+        status: 'COMPLETED',
+        stages: {
+          items: [
+            { id:'s1', name:'Setup', order:1, status:'COMPLETED' },
+            { id:'s2', name:'Processing', order:2, status:'COMPLETED', processedItems: 4, totalItems: 4 },
+          ]
+        },
+        metadata: {
+          candidate_assessment_compact_summary: {
+            schema_version: 'candidate_assessment_bundle.v1',
+            decision: 'accept',
+            decision_reason: 'meets_reference_and_generalization_policy',
+            decision_confidence: 'high',
+            primary_next_action: 'score_configuration_optimization',
+            baseline_generalization_gap: 0.055,
+            candidate_generalization_gap: 0.085,
+            generalization_gap_delta: 0.03,
+            random_delta_mean: -0.01,
+            random_delta_stddev: 0.02,
+            attachment_key: 'candidate-assessments/task-1/base__vs__cand.json',
+            stage_references: [
+              {
+                stage_key: 'deterministic_reference',
+                baseline_evaluation_id: 'eval-base',
+                candidate_evaluation_id: 'eval-cand',
+                baseline_status: 'COMPLETED',
+                candidate_status: 'COMPLETED',
+                delta_ac1: 0.02,
+                delta_value_score: 0.015,
+              },
+            ],
+          },
+        },
+      },
+    })
+
+    render(
+      <EvaluationTask
+        variant="detail"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+      />
+    )
+
+    expect(screen.getByText('Candidate assessment')).toBeInTheDocument()
+    expect(screen.getByText('Accept')).toBeInTheDocument()
+    expect(screen.getByText(/Deterministic reference/)).toBeInTheDocument()
+    expect(screen.getByText(/Gap delta:\s*\+0.030/)).toBeInTheDocument()
+    expect(screen.getByText(/Bundle attachment key:/)).toBeInTheDocument()
+  })
 })

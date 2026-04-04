@@ -3,16 +3,41 @@
   "title": "Feedback-backed evaluations can complete without usable RCA payload",
   "description": "## Summary\nFeedback-backed evaluations can currently be marked complete even when a usable RCA payload is absent or never persisted.\n\n## Symptom\nA feedback-backed evaluation may complete without usable `root_cause` output even when incorrect items exist.\n\n## Impact\nThis is a process-critical reliability defect because RCA is required to make evaluation results actionable in the optimization loop.",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
   "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "fcef927f-195b-425c-abfa-05ed944ce677",
+      "author": "ryan",
+      "text": "Starting implementation: enforce feedback-backed completion contract requiring persisted non-empty root_cause when incorrect items exist; RCA default-on in feedback paths; add regression tests.",
+      "created_at": "2026-04-02T13:45:35.998277Z"
+    },
+    {
+      "id": "9ea9c6c9-2493-452a-9069-665a887576c8",
+      "author": "ryan",
+      "text": "Implemented: feedback-backed runs now fail when incorrect items exist but no usable root_cause payload is persisted. Added regression tests in Evaluation_feedback_test for fail-on-missing-RCA and pass-when-no-incorrect-items.",
+      "created_at": "2026-04-02T13:49:35.147750Z"
+    },
+    {
+      "id": "0cd23334-a55e-4a63-b331-d3086d7308e2",
+      "author": "ryan",
+      "text": "Validation note: shell environment lacks pytest ( reports module not found). Performed syntax validation via  on all changed Python files.",
+      "created_at": "2026-04-02T13:49:39.440668Z"
+    },
+    {
+      "id": "c98f6241-24f1-4410-bb4e-f9c8f8539716",
+      "author": "ryan",
+      "text": "Validation note correction: pytest is not installed in this shell environment, so unit tests could not be executed here. Syntax validation completed with python3 -m py_compile for all changed Python files.",
+      "created_at": "2026-04-02T13:49:43.056345Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:33.241383Z",
-  "updated_at": "2026-04-02T12:49:33.241383Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T13:49:43.056345Z",
+  "closed_at": "2026-04-02T13:49:35.161816Z",
   "custom": {}
 }

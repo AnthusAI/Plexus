@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3284f3b5-8eac-45f7-8707-024d33a73223",
+  "issue_id": "plx-072c435e-59aa-4872-a3a6-3f5a911648d5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:33:51.403Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Add default-on balanced curation to score dataset-curate"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "574e203b-fdee-431f-8c72-cf42f6cca9c4",
+  "issue_id": "plx-260c7e4a-1560-4637-9a4c-35b6a67421a3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T13:29:01.918Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+    "priority": 1,
+    "status": "open",
+    "title": "Dataset filters: standard score/source version selectors with explicit modes"
+  }
+}

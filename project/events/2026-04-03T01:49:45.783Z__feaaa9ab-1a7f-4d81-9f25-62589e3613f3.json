@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "feaaa9ab-1a7f-4d81-9f25-62589e3613f3",
+  "issue_id": "plx-1ae74680-03a4-4d85-bef0-8e3f4d7bf291",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T01:49:45.783Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Report payload ordering contract for eligible associated items"
+  }
+}

@@ -3,7 +3,7 @@
   "title": "Compute and persist generalization-gap and stability metrics",
   "description": "## Summary\nCompute comparison metrics that quantify whether a score is generalizing beyond curated cases.\n\n## Deliverables\n- Compute the benchmark-versus-random generalization gap.\n- Compute stability/variance signals across random runs.\n- Define how these signals are stored and surfaced in workflow results.\n\n## Notes\nThese metrics should be interpretable by operators, not just raw math outputs.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -13,15 +13,24 @@
     {
       "target": "plx-e52e77",
       "type": "blocked-by"
-    },
-    {
-      "target": "plx-25e99b",
-      "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "7dab292f-1bef-4dcb-b2bb-b98becd598f7",
+      "author": "ryan",
+      "text": "Starting implementation: compute and persist generalization-gap and stability metrics from staged random runs and reference comparison, and surface them in compact summary payload for downstream UI/workflow use.",
+      "created_at": "2026-04-04T22:49:02.802208Z"
+    },
+    {
+      "id": "82be2380-0ad8-46c7-965d-bfdd2ecd8136",
+      "author": "ryan",
+      "text": "Implemented generalization-gap + stability metrics in shared workflow path: added compute_generalization_metrics() and wired into run_candidate_assessment_workflow() and bundle persistence surfaces. Bundle now carries generalization_metrics and compact summary includes baseline/candidate gaps, gap delta, and random-delta mean/stddev. Added unit tests for multi-random and single-random cases. Validation: pytest -q plexus/cli/shared/candidate_assessment_bundle_test.py plexus/cli/shared/candidate_assessment_runner_test.py plexus/cli/shared/workflow_decision_synthesis_test.py plexus/cli/shared/generalization_metrics_test.py plexus/cli/shared/evaluation_value_function_test.py plexus/cli/shared/optimization_acceptance_policy_test.py (21 passed).",
+      "created_at": "2026-04-04T22:50:15.238309Z"
+    }
+  ],
   "created_at": "2026-04-02T13:31:27.354801Z",
-  "updated_at": "2026-04-02T13:31:27.354801Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T22:50:15.249012Z",
+  "closed_at": "2026-04-04T22:50:15.249012Z",
   "custom": {}
 }

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "6114e7b2-3de6-43bc-894f-e1a073b8f305",
+  "issue_id": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T23:23:04.958Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Add gold-standard curation workflow for feedback-backed labels",
+        "to": "Add gold-standard curation workflow for feedback-backed labels for associated datasets"
+      }
+    }
+  }
+}

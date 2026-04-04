@@ -1,0 +1,34 @@
+{
+  "id": "plx-0feba79c-79c7-4970-bece-58cd5a687d7c",
+  "title": "Add aligned-report UI action to create reference dataset via background task",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-d660e1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-c44956",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "d762ab1f-8ff7-4a0e-8f7e-28463ec11c41",
+      "author": "ryan",
+      "text": "Completed: dashboard aligned-mode action added in FeedbackContradictions block plus API route /api/report-blocks/reference-dataset-from-feedback to launch task-backed dataset builds from report snapshot IDs.",
+      "created_at": "2026-04-02T19:14:35.650952Z"
+    }
+  ],
+  "created_at": "2026-04-02T18:56:22.377830Z",
+  "updated_at": "2026-04-02T19:14:35.650952Z",
+  "closed_at": "2026-04-02T19:14:35.635847Z",
+  "custom": {}
+}

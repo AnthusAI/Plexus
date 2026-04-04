@@ -178,6 +178,25 @@ export default function EvaluationsPage() {
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Misclassification Triage</h2>
+          <p className="text-muted-foreground mb-4">
+            Score-Configuration RCA includes a misclassification triage layer that classifies each incorrect
+            item into one operator-facing category: score configuration problem, information gap,
+            guideline gap requiring SME clarification, or mechanical malfunction.
+          </p>
+          <p className="text-muted-foreground mb-4">
+            Evaluation detail views also surface category summaries, mechanical subtype breakdown,
+            evaluation-level red flags, and one primary next action recommendation so you can quickly decide
+            whether to continue score optimization or route work to data remediation, SME clarification, or
+            system debugging.
+          </p>
+          <p className="text-muted-foreground">
+            Open a topic in the RCA section to drill into item-level category, rationale, confidence, and
+            evidence snippets, then select the corresponding score result for full item context.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Using Evaluations</h2>
           <p className="text-muted-foreground mb-4">
             Evaluations are essential tools for developing reliable scorecards. Use them to:

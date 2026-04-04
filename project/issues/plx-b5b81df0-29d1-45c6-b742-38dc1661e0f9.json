@@ -3,7 +3,7 @@
   "title": "Restore evaluation gauge before/delta subtitle in detail view",
   "description": "Evaluation detail gauges show before needles again but are missing the secondary numeric comparison subtitle. Restore canonical subtitle rendering in Gauge and enable only for EvaluationTask detail metrics with baseline.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -52,10 +52,16 @@
       "author": "ryan",
       "text": "Adjusted gauge comparison subtitle format per request: removed parentheses and delta symbol. New format is plain `before signed_delta` (example: `0.62 +0.14` or `84.0% -2.0%`).",
       "created_at": "2026-04-02T01:18:10.425292940Z"
+    },
+    {
+      "id": "a1d47cbc-bade-49a9-b819-5da5f2c70c30",
+      "author": "ryan",
+      "text": "Confirmed fixed. Evaluation gauge before/delta subtitle is restored in detail view.",
+      "created_at": "2026-04-04T18:53:34.237017Z"
     }
   ],
   "created_at": "2026-04-02T01:01:01.560752768Z",
-  "updated_at": "2026-04-02T01:18:10.425292940Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T18:53:34.237017Z",
+  "closed_at": "2026-04-04T18:53:34.237017Z",
   "custom": {}
 }

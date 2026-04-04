@@ -3,7 +3,7 @@
   "title": "Improve score 45425 feedback evaluation with 60d random-50 sampling",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -286,10 +286,16 @@
       "author": "ryan",
       "text": "Preparing finalization: committing pending Kanbus planning artifacts and merging feature/plx-3170f4-feedback-sampling into develop, then creating a new feature branch for the next initiative phase.",
       "created_at": "2026-04-02T13:36:49.038091Z"
+    },
+    {
+      "id": "6342bdc0-f58c-44ce-930d-d5562071a1c1",
+      "author": "ryan",
+      "text": "Finalized: committed remaining Kanbus planning artifacts, merged feature/plx-3170f4-feedback-sampling into develop, pushed develop, and created new branch feature/plx-f45a6b-data-flywheel-ops for the initiative continuation.",
+      "created_at": "2026-04-02T13:37:19.265185Z"
     }
   ],
   "created_at": "2026-04-02T03:18:45.677297Z",
-  "updated_at": "2026-04-02T13:36:49.038091Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T13:37:19.286500Z",
+  "closed_at": "2026-04-02T13:37:19.286500Z",
   "custom": {}
 }

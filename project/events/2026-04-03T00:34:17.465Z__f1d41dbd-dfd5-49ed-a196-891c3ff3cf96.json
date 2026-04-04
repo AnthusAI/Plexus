@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "f1d41dbd-dfd5-49ed-a196-891c3ff3cf96",
+  "issue_id": "plx-ea7193d9-7468-4c44-8f1c-1c1de0528077",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.465Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nRun end-to-end runtime validation on scorecard `1039` / score `45425`.\n\n## Purpose\nProve that balanced curation, persisted dataset stats, and score-page visibility work together.\n\n## Acceptance Criteria\n- Curated associated dataset is created with balancing metadata.\n- Score page shows dataset inventory and label distribution for the new dataset.\n- Evaluation run against associated dataset completes successfully.\n- Kanbus comment records commands, IDs, and observed outcomes."
+      }
+    }
+  }
+}

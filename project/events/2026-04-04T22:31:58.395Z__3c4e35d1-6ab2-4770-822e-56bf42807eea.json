@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "3c4e35d1-6ab2-4770-822e-56bf42807eea",
+  "issue_id": "plx-076ad293-3b00-4c13-a800-fd1e7d7883e9",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-04T22:31:58.395Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Summary\nDefine the candidate assessment bundle that combines all the evidence used to judge a score change.\n\n## Deliverables\n- Define the bundle contents, including deterministic results, random results, malfunction analysis, evaluation-level red flags, and comparison metadata.\n- Define how the bundle is compared across candidate versions.\n- Keep the bundle first-class rather than requiring manual comparison of separate evaluation records.",
+        "to": "## Summary\nDefine one canonical candidate assessment bundle contract for score-version comparison.\n\n## Canonical bundle contents\n- identity: scorecard, score, baseline_version, candidate_version.\n- stage_runs: evaluation IDs, dataset IDs when used, sample protocol, status, timestamps.\n- metrics: AC1/accuracy/precision/recall and deltas.\n- malfunction context: category shares, red flags, primary_next_action.\n- decision: accept/reject/inconclusive with machine-readable reason.\n\n## Storage contract\n- Full bundle JSON persisted as attachment.\n- Compact summary fields persisted on task/evaluation-facing records for fast UI queries.\n- One-path persistence contract: no duplicate/fallback persistence paths.\n\n## Acceptance criteria\n- Bundle schema is deterministic and test-validated.\n- Decision output is reproducible from persisted bundle + referenced evaluations."
+      }
+    }
+  }
+}
