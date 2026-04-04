@@ -37,6 +37,7 @@ def test_item_classifier_output_contract_shape():
         "rationale",
         "confidence",
         "evidence_snippets",
+        "evidence_flags",
         "rationale_paragraph",
         "evidence_quote",
         "config_fixability",
@@ -149,9 +150,23 @@ def _base_item_context():
     )
 
 
+def _base_evidence_flags(**overrides):
+    flags = {
+        "external_information_missing_or_degraded": False,
+        "guideline_or_policy_ambiguity": False,
+        "missing_required_context_due_system": False,
+        "runtime_or_parsing_failure": False,
+        "invalid_output_class_signal": False,
+        "best_evidence_source": "none",
+        "best_evidence_quote": "",
+    }
+    flags.update(overrides)
+    return flags
+
+
 def test_classifier_detects_score_configuration_problem_default():
     context = _base_item_context()
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "score_configuration_problem"
     assert result["mechanical_subtype"] is None
 
@@ -160,7 +175,10 @@ def test_classifier_detects_information_gap_from_feedback_signal():
     context = _base_item_context()
     context["feedback_context"]["edit_comment_excerpt"] = "Critical phrase not in transcript."
     context["label_provenance"]["feedback_context_present"] = True
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(
+        context,
+        _base_evidence_flags(external_information_missing_or_degraded=True),
+    )
     assert result["primary_category"] == "information_gap"
     assert result["information_gap_subtype"] in {"missing_primary_input", "degraded_primary_input"}
 
@@ -169,14 +187,17 @@ def test_classifier_detects_guideline_gap_from_ambiguity_signal():
     context = _base_item_context()
     context["feedback_context"]["edit_comment_excerpt"] = "Guideline is ambiguous here and needs SME clarification."
     context["label_provenance"]["feedback_context_present"] = True
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(
+        context,
+        _base_evidence_flags(guideline_or_policy_ambiguity=True),
+    )
     assert result["primary_category"] == "guideline_gap_requires_sme"
 
 
 def test_classifier_detects_mechanical_runtime_error_with_subtype():
     context = _base_item_context()
     context["prediction"]["score_explanation_excerpt"] = "Runtime error: timeout while running classifier."
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "runtime_error"
     assert "timeout" in (result["mechanical_details"] or "")
@@ -185,14 +206,14 @@ def test_classifier_detects_mechanical_runtime_error_with_subtype():
 def test_classifier_does_not_treat_failed_requirements_text_as_mechanical():
     context = _base_item_context()
     context["prediction"]["score_explanation_excerpt"] = "The customer failed requirements for eligibility."
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "score_configuration_problem"
 
 
 def test_classifier_detects_mechanical_parse_or_schema_error():
     context = _base_item_context()
     context["prediction"]["score_explanation_excerpt"] = "Parser error: schema validation failed to parse model output."
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "parse_or_schema_error"
 
@@ -200,7 +221,7 @@ def test_classifier_detects_mechanical_parse_or_schema_error():
 def test_classifier_detects_missing_labels_as_mechanical():
     context = _base_item_context()
     context["prediction"]["predicted_value"] = ""
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "missing_labels"
 
@@ -208,7 +229,7 @@ def test_classifier_detects_missing_labels_as_mechanical():
 def test_classifier_detects_missing_required_context_as_mechanical():
     context = _base_item_context()
     context["source_availability"]["missing_required_context_keys"] = ["customer_state"]
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "missing_required_context"
 
@@ -216,24 +237,65 @@ def test_classifier_detects_missing_required_context_as_mechanical():
 def test_classifier_detects_invalid_output_class_as_mechanical():
     context = _base_item_context()
     context["prediction"]["predicted_value"] = "Maybe"
-    result = classify_misclassification_item(context)
+    result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "invalid_output_class"
+
+
+def test_classifier_uses_llm_signal_for_information_gap():
+    context = _base_item_context()
+    result = classify_misclassification_item(
+        context,
+        _base_evidence_flags(
+            external_information_missing_or_degraded=True,
+            best_evidence_source="edit_comment",
+            best_evidence_quote="Reviewer says key words were audible in audio but missing in transcript.",
+        ),
+    )
+    assert result["primary_category"] == "information_gap"
+
+
+def test_classifier_uses_llm_signal_for_guideline_gap():
+    context = _base_item_context()
+    result = classify_misclassification_item(
+        context,
+        _base_evidence_flags(
+            guideline_or_policy_ambiguity=True,
+            best_evidence_source="edit_comment",
+            best_evidence_quote="Policy unclear for this edge case.",
+        ),
+    )
+    assert result["primary_category"] == "guideline_gap_requires_sme"
+
+
+def test_classifier_does_not_use_feedback_keywords_without_llm_flags():
+    info_context = _base_item_context()
+    info_context["feedback_context"]["edit_comment_excerpt"] = "Critical phrase not in transcript."
+    info_result = classify_misclassification_item(info_context, _base_evidence_flags())
+    assert info_result["primary_category"] == "score_configuration_problem"
+
+    guideline_context = _base_item_context()
+    guideline_context["feedback_context"]["edit_comment_excerpt"] = "Guideline is ambiguous and needs SME clarification."
+    guideline_result = classify_misclassification_item(guideline_context, _base_evidence_flags())
+    assert guideline_result["primary_category"] == "score_configuration_problem"
 
 
 def test_misclassification_analysis_summary_contains_v2_contract_fields():
     info_ctx = _base_item_context()
     info_ctx["feedback_context"]["edit_comment_excerpt"] = "Critical phrase not in transcript."
-    info_class = classify_misclassification_item(info_ctx)
+    info_class = classify_misclassification_item(
+        info_ctx,
+        _base_evidence_flags(external_information_missing_or_degraded=True),
+    )
 
     mech_ctx = _base_item_context()
     mech_ctx["prediction"]["score_explanation_excerpt"] = "Runtime error: timeout during scoring."
     mech_ctx["prediction"]["predicted_value"] = "No"
-    mech_class = classify_misclassification_item(mech_ctx)
+    mech_class = classify_misclassification_item(mech_ctx, _base_evidence_flags())
 
     score_ctx = _base_item_context()
     score_ctx["prediction"]["predicted_value"] = "No"
-    score_class = classify_misclassification_item(score_ctx)
+    score_class = classify_misclassification_item(score_ctx, _base_evidence_flags())
 
     topics = [{
         "topic_id": 1,
