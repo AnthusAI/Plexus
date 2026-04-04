@@ -759,6 +759,29 @@ class TestFeedbackEvaluation:
         monkeypatch.setattr(rm_mod, "bedrock_labeler", lambda: None)
         monkeypatch.setattr(rm_mod, "bedrock_causal", lambda: None)
         monkeypatch.setattr(rm_mod, "bedrock_synthesizer", lambda: None)
+        import plexus.rca_analysis as rca_mod
+        monkeypatch.setattr(
+            rca_mod,
+            "extract_misclassification_evidence_flags",
+            lambda *, item_context: {
+                "external_information_missing_or_degraded": False,
+                "guideline_or_policy_ambiguity": False,
+                "missing_required_context_due_system": False,
+                "runtime_or_parsing_failure": False,
+                "invalid_output_class_signal": False,
+                "best_evidence_source": "none",
+                "best_evidence_quote": "",
+            },
+        )
+        monkeypatch.setattr(
+            rca_mod,
+            "explain_misclassification_item_classification",
+            lambda **kwargs: {
+                "rationale_paragraph": "Score logic likely fix surface.",
+                "evidence_quote": "Explanation",
+                "config_fixability": "likely_fixable",
+            },
+        )
 
         result = await evaluation._run_root_cause_analysis(
             feedback_items,
