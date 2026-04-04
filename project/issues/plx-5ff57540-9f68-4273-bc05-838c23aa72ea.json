@@ -3,16 +3,29 @@
   "title": "Add small-set RCA path for fewer than 5 incorrect items",
   "description": "## Summary\nAdd a small-set RCA path for feedback-backed evaluations with fewer than five incorrect items.\n\n## Deliverables\n- Replace the current \"no topics / insufficient data\" outcome with direct LLM summarization over the small incorrect set.\n- Reuse the standard RCA analysis methods rather than inventing a separate ad hoc path.\n- Persist usable RCA output even when the incorrect set is small.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "14e21e7d-483e-4422-9ffe-a841a08920e2",
+      "author": "ryan",
+      "text": "Starting implementation: add small-set RCA summarization path for <5 incorrect items in FeedbackEvaluation._run_root_cause_analysis, returning usable root_cause payload instead of empty/no-topics.",
+      "created_at": "2026-04-02T14:34:24.351582Z"
+    },
+    {
+      "id": "ee95c362-e535-40f3-b52a-2e1681c26258",
+      "author": "ryan",
+      "text": "Implemented small-set RCA path: when incorrect candidate count is 1-4, FeedbackEvaluation now runs direct RCA summarization and persists a usable root_cause payload (single topic summary) instead of returning no-topics/insufficient-data. Added targeted tests in Evaluation_feedback_test.",
+      "created_at": "2026-04-02T14:35:35.425354Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:33.332627Z",
-  "updated_at": "2026-04-02T12:49:33.332627Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T14:35:35.444379Z",
+  "closed_at": "2026-04-02T14:35:35.444379Z",
   "custom": {}
 }

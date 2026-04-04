@@ -1,0 +1,31 @@
+{
+  "id": "plx-dd29a4c1-2ce7-41f8-927c-79b9b151d078",
+  "title": "Use LLM-extracted evidence flags from feedback comments for deterministic misclassification triage",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fd8e9af1-6b6b-4cee-a163-cd7725930bd7",
+      "author": "ryan",
+      "text": "Implementing now: add per-item LLM evidence-flag extraction (including feedback edit comment signals like transcript omissions/policy ambiguity), feed those flags into deterministic category assignment, persist flags in item_classifications_all, and validate with tests + 50-sample runtime eval.",
+      "created_at": "2026-04-04T21:39:25.616592Z"
+    },
+    {
+      "id": "e5f21324-f69d-4297-a2c8-9eae5e56f1e4",
+      "author": "ryan",
+      "text": "Implemented LLM evidence-flag extraction for misclassification triage and wired it into deterministic category assignment.\n\n### What changed\n- Added `extract_misclassification_evidence_flags(item_context=...)` in `plexus/rca_analysis.py`.\n  - Extracts explicit item-level flags from full context (including feedback edit comments):\n    - `external_information_missing_or_degraded`\n    - `guideline_or_policy_ambiguity`\n    - `missing_required_context_due_system`\n    - `runtime_or_parsing_failure`\n    - `invalid_output_class_signal`\n  - Also returns `best_evidence_source` and `best_evidence_quote`.\n- Updated `classify_misclassification_item(...)` to require evidence flags and combine them with strict structural signals in a deterministic decision path.\n  - Mechanical still takes precedence when system/pipeline/runtime/context-contract issues are present.\n  - Information-gap and guideline-gap can now be driven by edit-comment-derived LLM signals.\n- Persisted `triage_evidence_flags` in `item_classifications_all` rows for agent/operator visibility.\n- Updated summary aggregation diagnostics to account for `triage_evidence_flags` signals (not just primary-input availability heuristics).\n- Updated explainer prompt copy to avoid confusing \"deterministic classification\" phrasing; now uses \"assigned category decision\" wording.\n- Wired extraction in both RCA paths in `plexus/Evaluation.py`:\n  - full semantic RCA candidate pass\n  - small-set RCA path\n\n### Validation\n- Tests:\n  - `pytest -q plexus/rca_analysis_test.py plexus/Evaluation_feedback_test.py` => pass\n  - `pytest -q plexus/Evaluation_feedback_test.py plexus/rca_analysis_test.py MCP/shared/analysis_test.py` => pass\n- Runtime eval (50 samples): `c31ab1ed-4369-466c-8b73-58926096e946` completed.\n  - `item_classifications_all` rows: 17\n  - category counts: 16 `score_configuration_problem`, 1 `information_gap`\n  - true flag counts included `external_information_missing_or_degraded: 1`\n  - example item with that flag classified as `information_gap`.",
+      "created_at": "2026-04-04T21:53:08.391711Z"
+    }
+  ],
+  "created_at": "2026-04-04T21:39:23.399832Z",
+  "updated_at": "2026-04-04T21:53:08.408954Z",
+  "closed_at": "2026-04-04T21:53:08.408954Z",
+  "custom": {}
+}

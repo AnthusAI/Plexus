@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "99663a78-b8d5-4a3f-9d1d-80452e928e05",
+  "issue_id": "plx-e3b2c24a-c5b3-43ca-8e5e-0a98c4cab010",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:39:29.536Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix compact SpeakerN labels in RemoveSpeakerIdentifiersTranscriptFilter"
+  }
+}

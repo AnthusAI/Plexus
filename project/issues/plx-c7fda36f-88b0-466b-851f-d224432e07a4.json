@@ -3,7 +3,7 @@
   "title": "Persist structured misclassification-analysis payloads on evaluations",
   "description": "## Summary\nPersist the new misclassification-analysis results in a structured evaluation payload.\n\n## Deliverables\n- Define the stored payload shape for per-item classifications, category totals, overall assessment, and evaluation-level red flags.\n- Persist the payload on the evaluation record alongside existing analysis data.\n- Ensure downstream consumers can read the payload without scraping prose from RCA summaries.\n\n## Notes\nThis is the storage/interface task for the new feature.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -23,9 +23,16 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "e9f616c2-b383-4410-9ea1-2850a06b5d6c",
+      "author": "ryan",
+      "text": "Implemented persisted structured misclassification payload under RCA result as misclassification_analysis: item_classifications, category_totals, overall_assessment, evaluation_red_flags. Payload is persisted via existing root_cause parameters path for feedback-backed evaluations.",
+      "created_at": "2026-04-04T14:33:47.284400Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.742830Z",
-  "updated_at": "2026-04-02T13:21:09.742830Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:33:47.293578Z",
+  "closed_at": "2026-04-04T14:33:47.293578Z",
   "custom": {}
 }

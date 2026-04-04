@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f5b3bef3-987e-44f7-aa8c-37d0a4ed78d6",
+  "issue_id": "plx-91251406-d721-4470-be54-6bf80680e386",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T04:16:19.743Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Add json-only mode and quickstart docs for associated-dataset evaluations"
+  }
+}

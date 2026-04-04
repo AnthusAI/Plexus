@@ -3,7 +3,7 @@
   "title": "Implement AWS Backup plan coverage for Amplify Gen2 DynamoDB tables",
   "description": "Create and implement remediation branch/work for Prowler finding requiring DynamoDB tables to be governed by an AWS Backup plan in Amplify Gen2.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -38,10 +38,16 @@
       "author": "derek",
       "text": "Pushed branch and opened staging validation PR: https://github.com/AnthusAI/Plexus/pull/131. Commit: 44944131 (feat(amplify): add AWS Backup plan for Gen2 DynamoDB tables).",
       "created_at": "2026-03-18T18:22:52.011333710Z"
+    },
+    {
+      "id": "6d1902ef-2049-4473-a90d-6ca113d9c3e5",
+      "author": "ryan",
+      "text": "AWS Backup plan for Amplify Gen2 DynamoDB tables implemented and merged in PR #131 (March 18).",
+      "created_at": "2026-04-04T19:23:06.033334Z"
     }
   ],
   "created_at": "2026-03-18T18:18:34.909364373Z",
-  "updated_at": "2026-03-18T18:22:52.011333710Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:23:06.033334Z",
+  "closed_at": "2026-04-04T19:23:06.033334Z",
   "custom": {}
 }

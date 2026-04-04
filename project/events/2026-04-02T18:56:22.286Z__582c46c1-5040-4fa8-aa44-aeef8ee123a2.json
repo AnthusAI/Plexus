@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "582c46c1-5040-4fa8-aa44-aeef8ee123a2",
+  "issue_id": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:56:22.286Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+    "priority": 2,
+    "status": "open",
+    "title": "Vetted Feedback Curation and Reference Dataset Build"
+  }
+}

@@ -395,6 +395,168 @@ def test_create_dataset_rows_with_data():
         assert isinstance(ids, list)
 
 
+def test_reference_label_resolution_priority():
+    """Test deterministic label-source priority for reference dataset builds."""
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+
+        feedback_items = FeedbackItems(
+            scorecard='test_scorecard',
+            score='test_score',
+            days=14,
+            limit=100
+        )
+
+        # Vetted final feedback wins over other sources.
+        vetted_item = Mock()
+        vetted_item.finalAnswerValue = 'Yes'
+        vetted_item.initialAnswerValue = 'No'
+        vetted_item.item = None
+        vetted_item._raw_data = {'isVetted': True}
+        label, source = feedback_items._resolve_label_for_reference_dataset(vetted_item, "Test Score")
+        assert label == 'Yes'
+        assert source == FeedbackItems.LABEL_SOURCE_VETTED
+
+        # Regular final feedback is second priority.
+        regular_item = Mock()
+        regular_item.finalAnswerValue = 'No'
+        regular_item.initialAnswerValue = 'Yes'
+        regular_item.item = None
+        regular_item._raw_data = {}
+        label, source = feedback_items._resolve_label_for_reference_dataset(regular_item, "Test Score")
+        assert label == 'No'
+        assert source == FeedbackItems.LABEL_SOURCE_FINAL
+
+        # Third priority falls back to initial (score-result style) or imported label.
+        third_item = Mock()
+        third_item.finalAnswerValue = None
+        third_item.initialAnswerValue = 'Yes'
+        third_item.item = None
+        third_item._raw_data = {}
+        label, source = feedback_items._resolve_label_for_reference_dataset(third_item, "Test Score")
+        assert label == 'Yes'
+        assert source == FeedbackItems.LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED
+
+
+def test_reference_label_resolution_imported_and_unresolved():
+    """Test imported example label usage and unresolved outcomes."""
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+
+        feedback_items = FeedbackItems(
+            scorecard='test_scorecard',
+            score='test_score',
+            days=14,
+            limit=100
+        )
+
+        imported_item = Mock()
+        imported_item.finalAnswerValue = None
+        imported_item.initialAnswerValue = None
+        imported_item._raw_data = {}
+        imported_item.item = Mock()
+        imported_item.item.metadata = {'label': 'No'}
+        label, source = feedback_items._resolve_label_for_reference_dataset(imported_item, "Test Score")
+        assert label == 'No'
+        assert source == FeedbackItems.LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED
+
+        unresolved_item = Mock()
+        unresolved_item.finalAnswerValue = None
+        unresolved_item.initialAnswerValue = None
+        unresolved_item._raw_data = {}
+        unresolved_item.item = Mock()
+        unresolved_item.item.metadata = {}
+        label, source = feedback_items._resolve_label_for_reference_dataset(unresolved_item, "Test Score")
+        assert label is None
+        assert source == FeedbackItems.LABEL_SOURCE_UNRESOLVED
+
+
+def test_create_dataset_rows_skips_unresolved_labels_and_reports_ids():
+    """Test unresolved feedback items are skipped with deterministic skip reporting."""
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+
+        feedback_items = FeedbackItems(
+            scorecard='test_scorecard',
+            score='test_score',
+            days=14,
+            limit=100
+        )
+
+        resolvable_item_ref = Mock()
+        resolvable_item_ref.id = 'item-1'
+        resolvable_item_ref.text = 'Resolvable text'
+        resolvable_item_ref.externalId = 'ext-1'
+        resolvable_item_ref.createdAt = '2024-01-01T00:00:00Z'
+        resolvable_item_ref.updatedAt = '2024-01-01T00:00:00Z'
+        resolvable_item_ref.metadata = None
+        resolvable_item_ref.identifiers = None
+
+        resolvable_feedback = Mock()
+        resolvable_feedback.id = 'feedback-resolvable'
+        resolvable_feedback.itemId = 'item-1'
+        resolvable_feedback.item = resolvable_item_ref
+        resolvable_feedback.initialAnswerValue = 'No'
+        resolvable_feedback.finalAnswerValue = 'Yes'
+        resolvable_feedback.editCommentValue = 'resolved'
+        resolvable_feedback.initialCommentValue = 'initial'
+        resolvable_feedback.finalCommentValue = 'final'
+        resolvable_feedback.scorecardId = 'scorecard-123'
+        resolvable_feedback.scoreId = 'score-456'
+        resolvable_feedback.accountId = 'account-789'
+        resolvable_feedback.createdAt = '2024-01-01T00:00:00Z'
+        resolvable_feedback.updatedAt = '2024-01-01T00:00:00Z'
+        resolvable_feedback.editedAt = '2024-01-01T01:00:00Z'
+        resolvable_feedback.editorName = 'Editor'
+        resolvable_feedback.isAgreement = False
+        resolvable_feedback.cacheKey = 'cache-key-1'
+        resolvable_feedback._raw_data = {}
+
+        unresolved_item_ref = Mock()
+        unresolved_item_ref.id = 'item-2'
+        unresolved_item_ref.text = 'Unresolved text'
+        unresolved_item_ref.externalId = 'ext-2'
+        unresolved_item_ref.createdAt = '2024-01-01T00:00:00Z'
+        unresolved_item_ref.updatedAt = '2024-01-01T00:00:00Z'
+        unresolved_item_ref.metadata = {}
+        unresolved_item_ref.identifiers = None
+
+        unresolved_feedback = Mock()
+        unresolved_feedback.id = 'feedback-unresolved'
+        unresolved_feedback.itemId = 'item-2'
+        unresolved_feedback.item = unresolved_item_ref
+        unresolved_feedback.initialAnswerValue = None
+        unresolved_feedback.finalAnswerValue = None
+        unresolved_feedback.editCommentValue = ''
+        unresolved_feedback.initialCommentValue = ''
+        unresolved_feedback.finalCommentValue = ''
+        unresolved_feedback.scorecardId = 'scorecard-123'
+        unresolved_feedback.scoreId = 'score-456'
+        unresolved_feedback.accountId = 'account-789'
+        unresolved_feedback.createdAt = '2024-01-01T00:00:00Z'
+        unresolved_feedback.updatedAt = '2024-01-01T00:00:00Z'
+        unresolved_feedback.editedAt = '2024-01-01T01:00:00Z'
+        unresolved_feedback.editorName = 'Editor'
+        unresolved_feedback.isAgreement = False
+        unresolved_feedback.cacheKey = 'cache-key-2'
+        unresolved_feedback._raw_data = {}
+
+        df = feedback_items._create_dataset_rows([resolvable_feedback, unresolved_feedback], "Test Score")
+        assert len(df) == 1
+        assert df.iloc[0]['feedback_item_id'] == 'feedback-resolvable'
+        assert df.attrs["label_resolution_report"]["skipped_count"] == 1
+        assert df.attrs["label_resolution_report"]["skipped_feedback_item_ids"] == ['feedback-unresolved']
+
+
 def test_create_dataset_rows_comment_logic():
     """Test the comment logic in _create_dataset_rows."""
     

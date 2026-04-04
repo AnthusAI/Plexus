@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e2b95ec8-5ec6-4595-bd68-1655f411b1b9",
+  "issue_id": "plx-8a498d43-a08d-44c5-b1c4-12e7cad241c1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:56:22.360Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Add MCP tool wrapper for vetted-feedback reference dataset creation"
+  }
+}

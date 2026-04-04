@@ -1,0 +1,40 @@
+{
+  "id": "plx-ea7193d9-7468-4c44-8f1c-1c1de0528077",
+  "title": "Runtime validation for 1039/45425: balanced curation + score-page dataset visibility",
+  "description": "## Summary\nRun end-to-end runtime validation on scorecard `1039` / score `45425`.\n\n## Purpose\nProve that balanced curation, persisted dataset stats, and score-page visibility work together.\n\n## Acceptance Criteria\n- Curated associated dataset is created with balancing metadata.\n- Score page shows dataset inventory and label distribution for the new dataset.\n- Evaluation run against associated dataset completes successfully.\n- Kanbus comment records commands, IDs, and observed outcomes.",
+  "type": "sub-task",
+  "status": "blocked",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-9fc883",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-eca6cb",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "5bad8af1-04e4-431c-b2e5-d7d03a89bf75",
+      "author": "ryan",
+      "text": "Starting runtime validation on 1039/45425: balanced score dataset-curate then evaluate accuracy with --use-score-associated-dataset.",
+      "created_at": "2026-04-03T00:45:18.945408Z"
+    },
+    {
+      "id": "b071330d-cd70-4073-bb83-e7ed4b573bce",
+      "author": "ryan",
+      "text": "Runtime validation findings on 1039/45425: (1) Balanced curation currently fails fast with `No valid classes found in champion score YAML` for score id 1e6560e9-47fd-4846-89e1-4d8a2ccb5168, confirming class-contract prerequisite is still unmet for this score version. (2) Unbalanced control run succeeded: `plexus score dataset-curate --no-balance --max-items 20 --days 180` produced dataset_id `9caa61b7-aa4e-4cef-b60a-43b98d1b689b` with distributions included in output payload. (3) Associated-dataset accuracy run started but CLI emits extremely high-volume logs in this environment; process was terminated to avoid session overflow. Follow-up should use task/evaluation record polling path or log-redirection wrapper for runtime validation.",
+      "created_at": "2026-04-03T00:53:28.780969Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.750745Z",
+  "updated_at": "2026-04-03T00:53:28.805392Z",
+  "closed_at": null,
+  "custom": {}
+}

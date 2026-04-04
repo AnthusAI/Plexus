@@ -1,0 +1,31 @@
+{
+  "id": "plx-91251406-d721-4470-be54-6bf80680e386",
+  "title": "Add json-only mode and quickstart docs for associated-dataset evaluations",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b82606a9-0e31-422c-974d-5a31f1bbe982",
+      "author": "ryan",
+      "text": "Implementing smoother associated-dataset evaluation UX: add --json-only to evaluate accuracy and add quickstart docs with canonical two-step flow (curate dataset, run evaluate accuracy --use-score-associated-dataset).",
+      "created_at": "2026-04-03T04:16:22.712411Z"
+    },
+    {
+      "id": "2666da73-fee3-463a-a422-5fb2ba7e2b7d",
+      "author": "ryan",
+      "text": "Implemented smoothing updates: (1) evaluate accuracy now supports --json-only, emitting structured JSON for dry-run, validation failures, associated-dataset multi-run summaries, and standard single-run completion payload. (2) Added documentation quickstart sections in associated-datasets concept and evaluate-score method pages with canonical curate->evaluate flow and --json-only examples. Validation: py_compile evaluations.py; help output shows new option; runtime check confirmed JSON error payload for validation failure path.",
+      "created_at": "2026-04-03T04:19:26.765517Z"
+    }
+  ],
+  "created_at": "2026-04-03T04:16:19.741885Z",
+  "updated_at": "2026-04-03T04:19:26.765517Z",
+  "closed_at": "2026-04-03T04:19:26.764599Z",
+  "custom": {}
+}

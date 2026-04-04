@@ -3,16 +3,29 @@
   "title": "Standardize item-level context and provenance for misclassification classification",
   "description": "## Summary\nStandardize the evaluation item context and provenance needed to classify a misclassification correctly.\n\n## Deliverables\n- Define the canonical per-item context passed into classification, including transcript, prediction, label, score explanation, score configuration, score guidelines, scorecard guidance, feedback comments, and label provenance.\n- Ensure the payload can distinguish when feedback-derived context is present versus absent.\n- Define what metadata must be persisted so item-level classifications remain auditable after the run completes.\n\n## Notes\nThis task is about the data contract for classification, not the classifier logic itself.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "72a5a7c5-6569-43f7-a625-7d1c5abda522",
+      "author": "ryan",
+      "text": "Kickoff implementation: standardizing per-item misclassification context/provenance contract for evaluation RCA. Immediate focus is one canonical payload shape with explicit source availability markers so downstream classifier/persistence/UI tasks consume the same schema.",
+      "created_at": "2026-04-04T14:27:42.118823Z"
+    },
+    {
+      "id": "8c310fa3-16c2-47d9-a485-b559bfeeee97",
+      "author": "ryan",
+      "text": "Implemented canonical item-level misclassification context/provenance contract and wired it into RCA exemplar payloads (standard and small-set flows). Added locked label-provenance enum, explicit source-availability flags, and persisted-audit metadata requirements in rca_analysis contract. Each exemplar now carries misclassification_item_context with identifiers, prediction context, label provenance, feedback context excerpts, score context excerpts, transcript/metadata availability, and audit metadata. Validation: pytest -q plexus/rca_analysis_test.py plexus/Evaluation_feedback_test.py (21 passed).",
+      "created_at": "2026-04-04T14:30:22.802473Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.652428Z",
-  "updated_at": "2026-04-02T13:21:09.652428Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:30:26.020620Z",
+  "closed_at": "2026-04-04T14:30:26.020620Z",
   "custom": {}
 }
