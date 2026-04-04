@@ -317,6 +317,8 @@ def register_evaluation_tools(mcp: FastMCP):
         concurrency: int = 5,
         baseline: Optional[str] = None,
         wait: bool = True,
+        dataset_id: Optional[str] = None,
+        use_score_associated_dataset: bool = False,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
@@ -348,6 +350,10 @@ def register_evaluation_tools(mcp: FastMCP):
         - wait: For feedback evaluations — if True (default), block until evaluation + RCA complete
                 and return full results. If False, dispatch in background and return immediately
                 with the evaluation ID only.
+        - dataset_id: Optional dataset ID to use for accuracy evaluation. When provided, the
+                      evaluation uses this specific dataset instead of random sampling.
+        - use_score_associated_dataset: If True, use the latest associated dataset for the score
+                                        instead of random sampling (accuracy evaluation only).
 
         Returns:
         - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL.
@@ -747,6 +753,12 @@ def register_evaluation_tools(mcp: FastMCP):
 
                 if baseline:
                     args.extend(['--baseline', baseline])
+
+                if dataset_id:
+                    args.extend(['--dataset-id', dataset_id])
+
+                if use_score_associated_dataset:
+                    args.append('--use-score-associated-dataset')
 
                 # Run the CLI command in a thread pool to avoid event loop conflicts
                 def run_cli_command():

@@ -287,6 +287,170 @@ def register_dataset_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
+    async def plexus_dataset_build_from_feedback_window(
+        scorecard: str,
+        score: str,
+        max_items: int = 100,
+        days: Optional[int] = None,
+        balance: bool = True,
+    ) -> str:
+        """
+        Build a balanced associated dataset from recent qualifying feedback items.
+
+        Creates a deterministic dataset that can be used for reproducible evaluations.
+        Uses round-robin class balancing by default to ensure equal representation.
+
+        Parameters:
+        - scorecard: Scorecard identifier (id/key/name/external id)
+        - score: Score identifier (id/key/name/external id)
+        - max_items: Maximum items to include (default: 100). Use 200 for robust regression sets.
+        - days: Lookback window in days. If omitted, searches all available feedback history.
+        - balance: Apply class balancing via round-robin selection (default: True).
+                   Set to False to include more items when feedback is scarce.
+
+        Returns:
+        - JSON payload with dataset_id, rows_written, class_distribution_after,
+          balance_applied, qualifying_found, and other curation metadata.
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        try:
+            try:
+                from plexus.cli.dataset.datasets import create_client
+                from plexus.cli.dataset.curation import build_associated_dataset_from_feedback_window
+                from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+            except ImportError as exc:
+                return f"Error: Could not import required modules: {exc}"
+
+            client = create_client()
+
+            # Resolve scorecard and score to IDs
+            scorecard_id = resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                return f"Error: Could not resolve scorecard '{scorecard}'"
+            score_id = resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                return f"Error: Could not resolve score '{score}' in scorecard '{scorecard}'"
+
+            result = build_associated_dataset_from_feedback_window(
+                client=client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                max_items=max_items,
+                days=days,
+                balance=balance,
+            )
+            return json.dumps(result, default=str)
+        except Exception as exc:
+            logger.error("Error building dataset from feedback window: %s", exc, exc_info=True)
+            return f"Error: {str(exc)}"
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_dataset_build_from_feedback_window: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_dataset_check_associated(
+        scorecard: str,
+        score: str,
+    ) -> str:
+        """
+        Check whether a score has an existing associated dataset and return its metadata.
+
+        Use this to determine if a deterministic regression dataset already exists
+        before creating a new one.
+
+        Parameters:
+        - scorecard: Scorecard identifier (id/key/name/external id)
+        - score: Score identifier (id/key/name/external id)
+
+        Returns:
+        - JSON payload with has_dataset, dataset_id, dataset_name, created_at,
+          and row_count (if available from build context).
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        try:
+            try:
+                from plexus.cli.dataset.datasets import create_client
+                from plexus.cli.evaluation.evaluations import get_latest_associated_dataset_for_score
+                from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+            except ImportError as exc:
+                return f"Error: Could not import required modules: {exc}"
+
+            client = create_client()
+
+            # Resolve scorecard and score to IDs
+            scorecard_id = resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                return f"Error: Could not resolve scorecard '{scorecard}'"
+            score_id = resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                return f"Error: Could not resolve score '{score}' in scorecard '{scorecard}'"
+
+            try:
+                dataset = get_latest_associated_dataset_for_score(client, score_id)
+            except ValueError:
+                # No associated dataset found
+                return json.dumps({
+                    "has_dataset": False,
+                    "dataset_id": None,
+                    "dataset_name": None,
+                    "created_at": None,
+                    "row_count": None,
+                })
+
+            # Try to extract row_count from the DataSourceVersion's build context
+            row_count = None
+            if dataset.get("dataSourceVersionId"):
+                try:
+                    dsv_result = client.execute(
+                        """
+                        query GetDataSourceVersion($id: ID!) {
+                            getDataSourceVersion(id: $id) {
+                                id
+                                yamlConfiguration
+                            }
+                        }
+                        """,
+                        {"id": dataset["dataSourceVersionId"]}
+                    )
+                    dsv = dsv_result.get("getDataSourceVersion")
+                    if dsv and dsv.get("yamlConfiguration"):
+                        import yaml
+                        config = yaml.safe_load(dsv["yamlConfiguration"])
+                        if isinstance(config, dict):
+                            stats = config.get("dataset_stats", {})
+                            row_count = stats.get("row_count")
+                except Exception as e:
+                    logger.warning("Could not read dataset row_count from DataSourceVersion: %s", e)
+
+            return json.dumps({
+                "has_dataset": True,
+                "dataset_id": dataset.get("id"),
+                "dataset_name": dataset.get("name"),
+                "created_at": dataset.get("createdAt"),
+                "row_count": row_count,
+            }, default=str)
+        except Exception as exc:
+            logger.error("Error checking associated dataset: %s", exc, exc_info=True)
+            return f"Error: {str(exc)}"
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_dataset_check_associated: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
     async def plexus_dataset_associated_from_feedback(
         scorecard: str,
         score: str,

@@ -108,6 +108,8 @@ agents:
       - plexus_predict
       - plexus_item_last
       - submit_score_code
+      - plexus_dataset_check_associated
+      - plexus_dataset_build_from_feedback_window
 
   analyzer:
     system_prompt: |
@@ -342,6 +344,85 @@ code: |
 
   Log.info("Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id)
 
+  -- Dataset adequacy check: ensure sufficient feedback data and build a
+  -- deterministic regression dataset for reproducible evaluations.
+  -- The feedback evaluation uses sample_seed for deterministic sampling,
+  -- and the associated dataset serves as validation and for accuracy evals.
+  Log.info("Checking for existing associated regression dataset...")
+  local dataset_id = nil
+
+  local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
+    scorecard = params.scorecard,
+    score = params.score
+  })
+
+  if dataset_check and dataset_check.has_dataset and dataset_check.row_count and dataset_check.row_count >= 100 then
+    dataset_id = dataset_check.dataset_id
+    Log.info("Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)")
+  else
+    -- Need to create a dataset
+    if dataset_check and dataset_check.has_dataset then
+      Log.info("Existing dataset too small (" .. tostring(dataset_check.row_count) .. " rows), creating new one...")
+    else
+      Log.info("No associated dataset found, creating one...")
+    end
+
+    -- Tier 1: Try 200 balanced
+    Human.notify({
+      message = "Building balanced regression dataset (200 items)...",
+      level = "info"
+    })
+    local build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
+      scorecard = params.scorecard,
+      score = params.score,
+      max_items = 200,
+      days = params.days,
+      balance = true
+    })
+
+    if build_result and build_result.rows_written and build_result.rows_written >= 100 then
+      dataset_id = build_result.dataset_id
+      Log.info("Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)")
+    else
+      -- Tier 2: Try 200 unbalanced (relax balancing to get more items)
+      local rows_so_far = (build_result and build_result.rows_written) or 0
+      Log.info("Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...")
+
+      build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
+        scorecard = params.scorecard,
+        score = params.score,
+        max_items = 200,
+        days = params.days,
+        balance = false
+      })
+
+      if build_result and build_result.rows_written and build_result.rows_written >= 100 then
+        dataset_id = build_result.dataset_id
+        Log.info("Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)")
+      else
+        -- Abort: not enough feedback data
+        local final_rows = (build_result and build_result.rows_written) or 0
+        return {
+          success = false,
+          status = "error",
+          message = string.format(
+            "Insufficient feedback data to build a regression dataset. Only %d items available (minimum 100 required). " ..
+            "Collect more feedback for score '%s' before running the optimizer.",
+            final_rows, score_name
+          )
+        }
+      end
+    end
+  end
+
+  State.set("dataset_id", dataset_id)
+  Log.info("Using regression dataset: " .. dataset_id)
+
+  -- Use a fixed sample seed for deterministic feedback evaluation sampling.
+  -- Combined with a fixed time window, this ensures the same feedback items
+  -- are selected across baseline and all iteration evaluations.
+  local sample_seed = 42
+
   -- Run baseline feedback evaluation with RCA
   Stage.set("baseline")
   Human.notify({
@@ -360,6 +441,7 @@ code: |
     evaluation_type = "feedback",
     days = params.days,
     max_feedback_samples = base_samples,
+    sample_seed = sample_seed,
     wait = true
   }
 
@@ -670,6 +752,7 @@ code: |
         days = params.days,
         baseline = baseline_evaluation_id,
         max_feedback_samples = current_samples,
+        sample_seed = sample_seed,
         wait = true
       }
 
