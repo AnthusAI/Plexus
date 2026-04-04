@@ -1020,11 +1020,15 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print(f"[red]Error: {exec_result.get('error')}[/red]")
         return
 
+    # Convert Lua tables to native Python types for serialization
+    import json as json_mod
+    exec_result_clean = json_mod.loads(json_mod.dumps(exec_result, default=str))
+
     # Parse result
     if output == 'json':
-        console.print(JSON.from_data(exec_result))
+        console.print(JSON.from_data(exec_result_clean))
     elif output == 'yaml':
-        console.print(yaml.dump(exec_result, default_flow_style=False))
+        console.print(yaml.dump(exec_result_clean, default_flow_style=False))
     else:
         # Table format - show summary
         console.print()
@@ -1032,9 +1036,9 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print()
 
         # Extract key info from result
-        iterations = exec_result.get('result', {}).get('iterations', [])
-        improvement = exec_result.get('result', {}).get('improvement', 0)
-        status = exec_result.get('result', {}).get('status', 'unknown')
+        iterations = exec_result_clean.get('result', {}).get('iterations', [])
+        improvement = exec_result_clean.get('result', {}).get('improvement', 0)
+        status = exec_result_clean.get('result', {}).get('status', 'unknown')
 
         table = Table(title="Optimization Results")
         table.add_column("Metric", style="cyan")
