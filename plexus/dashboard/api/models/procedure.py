@@ -43,6 +43,8 @@ class Procedure(BaseModel):
         accountId: str,
         createdAt: datetime,
         updatedAt: datetime,
+        name: Optional[str] = None,
+        status: Optional[str] = None,
         rootNodeId: Optional[str] = None,
         code: Optional[str] = None,
         state: Optional[str] = None,
@@ -55,6 +57,8 @@ class Procedure(BaseModel):
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
+        self.name = name
+        self.status = status
         self.featured = featured
         self.code = code
         self.state = state
@@ -74,6 +78,8 @@ class Procedure(BaseModel):
     def fields(cls) -> str:
         return """
             id
+            name
+            status
             featured
             code
             parentProcedureId
@@ -94,6 +100,8 @@ class Procedure(BaseModel):
         
         return cls(
             id=data['id'],
+            name=data.get('name'),
+            status=data.get('status'),
             featured=data.get('featured', False),
             code=data.get('code'),
             state=data.get('state'),
