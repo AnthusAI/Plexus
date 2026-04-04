@@ -292,7 +292,11 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
 export interface TopicListProps {
   topics: Topic[];
   label?: string;
-  onTopicFilter?: (itemIds: string[] | null, rcaDataByItemId: RcaDataByItemId) => void;
+  onTopicFilter?: (
+    itemIds: string[] | null,
+    rcaDataByItemId: RcaDataByItemId,
+    topicLabel?: string | null
+  ) => void;
 }
 
 /**
@@ -339,9 +343,9 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
             };
           }
         });
-        onTopicFilter(itemIds, rcaDataByItemId);
+        onTopicFilter(itemIds, rcaDataByItemId, topic.label);
       } else {
-        onTopicFilter(null, {});
+        onTopicFilter(null, {}, null);
       }
     }
   };
