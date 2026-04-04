@@ -547,14 +547,87 @@ code: |
       level = "info"
     })
 
-    -- For now, skip the agent-based editing due to DSPy parameter stripping issues.
-    -- Just log that we would have made an edit, and skip to evaluation with the current version.
-    -- This is temporary until we can fix the agent-to-tool calling mechanism.
-    Log.info("ITERATION " .. iteration .. ": Would edit with: " .. string.sub(hypothesis_text, 1, 200))
-    Log.info("Skipping edit for now due to agent tool calling issues")
+    -- Extract old_str and new_str from hypothesis "Proposed Change" section
+    -- This uses Lua string manipulation to avoid agent tool calling issues
 
-    -- Use the current version (no edit was made)
-    new_version_id = "skipped-" .. iteration
+    local proposed_idx = string.find(hypothesis_text, "## Proposed Change")
+    if not proposed_idx then
+      Log.warn("No Proposed Change in hypothesis, skipping edit")
+      -- Can't edit without clear instructions; skip to evaluation with current version
+      new_version_id = "baseline-" .. iteration
+    else
+      local proposed_text = string.sub(hypothesis_text, proposed_idx)
+
+      -- Try to extract old_str and new_str from backtick-enclosed blocks
+      -- Pattern: "find the text:\n```\nTEXT\n```"
+      local find_idx = string.find(proposed_text, "find the text:")
+      local replace_idx = string.find(proposed_text, "replace it with:")
+
+      if find_idx and replace_idx then
+        -- Extract text after "find the text:" up to next "```"
+        local after_find = string.sub(proposed_text, find_idx + 14)
+        local bt1_s, bt1_e = string.find(after_find, "```")
+        if bt1_s then
+          local bt2_s, bt2_e = string.find(after_find, "```", bt1_e + 1)
+          if bt2_s then
+            local old_str_raw = string.sub(after_find, bt1_e + 1, bt2_s - 1)
+            -- Remove leading/trailing newlines and spaces but preserve internal formatting
+            local old_str = string.gsub(old_str_raw, "^[\r\n]+", "")
+            old_str = string.gsub(old_str, "[\r\n]+$", "")
+
+            -- Extract new_str similarly
+            local after_replace = string.sub(proposed_text, replace_idx + 16)
+            local bt3_s, bt3_e = string.find(after_replace, "```")
+            if bt3_s then
+              local bt4_s, bt4_e = string.find(after_replace, "```", bt3_e + 1)
+              if bt4_s then
+                local new_str_raw = string.sub(after_replace, bt3_e + 1, bt4_s - 1)
+                local new_str = string.gsub(new_str_raw, "^[\r\n]+", "")
+                new_str = string.gsub(new_str, "[\r\n]+$", "")
+
+                Log.info("Attempting direct file edit for iteration " .. iteration)
+                Log.info("Old text: " .. string.sub(old_str, 1, 60) .. "...")
+                Log.info("New text: " .. string.sub(new_str, 1, 60) .. "...")
+
+                -- Read current YAML file
+                local current_yaml = File.read(current_code_path)
+
+                -- Check if old_str exists (using plain string search, not pattern)
+                local old_start, old_end = string.find(current_yaml, old_str, 1, true)
+                if old_start then
+                  -- Perform simple string replacement
+                  local edited_yaml = string.sub(current_yaml, 1, old_start - 1) ..
+                                     new_str ..
+                                     string.sub(current_yaml, old_end + 1)
+
+                  -- Write back the edited YAML
+                  File.write(current_code_path, edited_yaml)
+                  Log.info("YAML file edited successfully")
+
+                  -- Now submit the code via the MCP tool
+                  local submit_result = call_plexus_tool("submit_score_code", {})
+                  if submit_result and submit_result.version_id then
+                    new_version_id = submit_result.version_id
+                    Log.info("Score version created: " .. new_version_id)
+                  else
+                    Log.error("submit_score_code failed: " .. tostring(submit_result.error or submit_result.message))
+                    new_version_id = nil
+                  end
+                else
+                  Log.error("old_str not found in current YAML")
+                  new_version_id = nil
+                end
+              end
+            end
+          end
+        end
+      end
+
+      if not new_version_id then
+        Log.warn("Could not complete direct file edit, using baseline version")
+        new_version_id = "baseline-" .. iteration
+      end
+    end
 
     -- Run evaluation with updated score version
     Human.notify({
