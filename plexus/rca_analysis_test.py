@@ -239,11 +239,82 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
         ],
     }]
 
-    summary = build_misclassification_analysis_summary(topics, max_category_summary_items=2)
+    item_classifications_all = [
+        {
+            "feedback_item_id": "fb-1",
+            "item_id": "item-1",
+            "timestamp": "2026-04-04T10:00:00Z",
+            "topic_id": 1,
+            "topic_label": "Test Topic",
+            "predicted_value": "No",
+            "correct_value": "Yes",
+            "primary_category": info_class["primary_category"],
+            "confidence": info_class["confidence"],
+            "rationale_short": "Critical phrase missing in transcript.",
+            "rationale_full": info_class["rationale"],
+            "evidence_snippets": info_class["evidence_snippets"],
+            "mechanical_subtype": info_class["mechanical_subtype"],
+            "mechanical_details": info_class["mechanical_details"],
+            "misclassification_item_context": info_ctx,
+            "misclassification_classification": info_class,
+        },
+        {
+            "feedback_item_id": "fb-2",
+            "item_id": "item-2",
+            "timestamp": "2026-04-04T11:00:00Z",
+            "topic_id": 1,
+            "topic_label": "Test Topic",
+            "predicted_value": "No",
+            "correct_value": "Yes",
+            "primary_category": mech_class["primary_category"],
+            "confidence": mech_class["confidence"],
+            "rationale_short": "Runtime error prevented valid prediction.",
+            "rationale_full": mech_class["rationale"],
+            "evidence_snippets": mech_class["evidence_snippets"],
+            "mechanical_subtype": mech_class["mechanical_subtype"],
+            "mechanical_details": mech_class["mechanical_details"],
+            "misclassification_item_context": mech_ctx,
+            "misclassification_classification": mech_class,
+        },
+        {
+            "feedback_item_id": "fb-3",
+            "item_id": "item-3",
+            "timestamp": "2026-04-04T12:00:00Z",
+            "topic_id": 1,
+            "topic_label": "Test Topic",
+            "predicted_value": "No",
+            "correct_value": "Yes",
+            "primary_category": score_class["primary_category"],
+            "confidence": score_class["confidence"],
+            "rationale_short": "Prompt/logic likely misaligned with rubric.",
+            "rationale_full": score_class["rationale"],
+            "evidence_snippets": score_class["evidence_snippets"],
+            "mechanical_subtype": score_class["mechanical_subtype"],
+            "mechanical_details": score_class["mechanical_details"],
+            "misclassification_item_context": score_ctx,
+            "misclassification_classification": score_class,
+        },
+    ]
+
+    summary = build_misclassification_analysis_summary(
+        topics,
+        item_classifications_all=item_classifications_all,
+        analysis_scope={
+            "candidate_items_total": 3,
+            "classified_items_total": 3,
+            "texts_analyzed_total": 3,
+            "topics_found": 1,
+            "topic_assignment_scope": "exemplar_only",
+            "topic_assignment_unavailable_count": 0,
+        },
+        max_category_summary_items=2,
+    )
     assert summary["overall_assessment"]["total_items"] == 3
     assert "topic_category_breakdown" in summary
     assert "category_hierarchy" in summary
     assert "category_summaries" in summary
+    assert "analysis_scope" in summary
+    assert "item_classifications_all" in summary
     assert "mechanical_subtype_totals" in summary
     assert "primary_next_action" in summary
     assert "optimization_applicability" in summary
@@ -260,6 +331,6 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
     if info_node["topics"]:
         topic = info_node["topics"][0]
         assert 0 <= topic["topic_category_purity"] <= 1
-        assert isinstance(topic["examples"], list)
+        assert isinstance(topic["example_item_ids"], list)
     mech_node = next(node for node in summary["category_hierarchy"] if node["category_key"] == "mechanical_malfunction")
     assert "mechanical_subtype_totals" in mech_node

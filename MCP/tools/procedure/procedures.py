@@ -436,10 +436,14 @@ def register_procedure_tools(mcp):
             
             client = PlexusDashboardClient()
             
-            # Query for chat sessions associated with this procedure
+            # Query for chat sessions associated with this procedure using GSI
             query = '''
-            query ListChatSessions($procedureId: String!, $limit: Int!) {
-                listChatSessions(filter: {procedureId: {eq: $procedureId}}, limit: $limit) {
+            query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                listChatSessionByProcedureIdAndCreatedAt(
+                    procedureId: $procedureId
+                    sortDirection: DESC
+                    limit: $limit
+                ) {
                     items {
                         id
                         status
@@ -457,24 +461,24 @@ def register_procedure_tools(mcp):
                 }
             }
             '''
-            
+
             result = client.execute(query, {
                 'procedureId': request.procedure_id,
                 'limit': request.limit
             })
-            
+
             if 'errors' in result:
                 return {
                     "success": False,
                     "error": f"GraphQL errors: {result['errors']}"
                 }
-                
+
             # Handle both wrapped and unwrapped GraphQL responses
             sessions = []
             if 'data' in result:
-                sessions = result['data'].get('listChatSessions', {}).get('items', [])
-            elif 'listChatSessions' in result:
-                sessions = result['listChatSessions'].get('items', [])
+                sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+            elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
             
             # Process sessions to include message counts and types
             processed_sessions = []
@@ -573,10 +577,14 @@ def register_procedure_tools(mcp):
                 
                 sessions = [session]
             else:
-                # Query for all sessions in the procedure
+                # Query for all sessions in the procedure using GSI (not filter scan)
                 query = '''
-                query ListChatSessions($procedureId: String!, $limit: Int!) {
-                    listChatSessions(filter: {procedureId: {eq: $procedureId}}, limit: $limit) {
+                query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                    listChatSessionByProcedureIdAndCreatedAt(
+                        procedureId: $procedureId
+                        sortDirection: DESC
+                        limit: $limit
+                    ) {
                         items {
                             id
                             status
@@ -599,24 +607,24 @@ def register_procedure_tools(mcp):
                     }
                 }
                 '''
-                
+
                 result = client.execute(query, {
                     'procedureId': request.procedure_id,
                     'limit': request.limit
                 })
-                
+
                 if 'errors' in result:
                     return {
                         "success": False,
                         "error": f"GraphQL errors: {result['errors']}"
                     }
-                
+
                 # Handle both wrapped and unwrapped GraphQL responses
                 sessions = []
                 if 'data' in result:
-                    sessions = result['data'].get('listChatSessions', {}).get('items', [])
-                elif 'listChatSessions' in result:
-                    sessions = result['listChatSessions'].get('items', [])
+                    sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+                elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                    sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
             
             # Process sessions and messages
             processed_sessions = []

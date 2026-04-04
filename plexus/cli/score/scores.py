@@ -1444,7 +1444,7 @@ def invoke_with_retry(llm, messages):
 @click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
 @click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
 @click.option('--days', '-d', default=90, help='Feedback window in days (default: 90)')
-@click.option('--max-samples', type=int, default=None, help='Maximum feedback samples per evaluation (default: all available)')
+@click.option('--max-samples', type=int, default=200, help='Maximum feedback samples per evaluation (default: 200)')
 @click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
 @click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
@@ -1504,12 +1504,11 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         "scorecard": scorecard,
         "score": score,
         "days": days,
+        "max_samples": max_samples,
         "max_iterations": max_iterations,
         "improvement_threshold": improvement_threshold,
         "dry_run": dry_run
     }
-    if max_samples is not None:
-        params["max_samples"] = max_samples
 
     # Load YAML
     try:
