@@ -42,6 +42,7 @@ class ScoreEditorToolset:
         self._hypothesis: str = ""
         self._dry_run: bool = False
         self._last_version_id: Optional[str] = None
+        self._code_file_path: Optional[str] = None
 
     # ------------------------------------------------------------------
     # MCP tools (called from Lua via call_plexus_tool)
@@ -52,12 +53,13 @@ class ScoreEditorToolset:
         Set up the score editor for a new iteration.
 
         NOTE: yaml_content is NOT accepted here — it is too large to pass through
-        the orchestrator LLM. Instead, content is auto-loaded on the first
-        str_replace_editor(command="view") call via the MCP client.
+        the orchestrator LLM. Content is eagerly loaded via plexus_score_pull so
+        that _code_file_path is set (needed for Lua direct-edit + submit path).
         """
-        self._content = ""       # will be loaded lazily on first view
+        self._content = ""
         self._original = ""
         self._history = []
+        self._code_file_path = None
         # Only overwrite scorecard/score if the caller provides non-empty values.
         # When the orchestrator LLM calls setup({}) (args stripped by DSPy), we
         # preserve the values pre-populated by procedure_executor from context.
@@ -71,18 +73,30 @@ class ScoreEditorToolset:
         self._hypothesis = str(arguments.get("hypothesis", "") or "")
         self._dry_run = bool(arguments.get("dry_run", False))
         self._last_version_id = None
+
+        # Accept code_file_path from Lua (may be stripped by DSPy, so also try eager load)
+        code_file_path = arguments.get("code_file_path", "")
+        if code_file_path:
+            self._code_file_path = code_file_path
+
+        # Eagerly load content so _code_file_path and _original are set
+        # for the Lua direct-edit + submit path.
+        load_error = self._load_content_from_api()
+        if load_error:
+            logger.warning("ScoreEditorToolset: eager load failed: %s", load_error)
+
         logger.info(
-            "ScoreEditorToolset: initialized for iteration %d, score=%s, dry_run=%s",
-            self._iteration, self._score, self._dry_run,
+            "ScoreEditorToolset: initialized for iteration %d, score=%s, dry_run=%s, file=%s",
+            self._iteration, self._score, self._dry_run, self._code_file_path,
         )
         return {
             "success": True,
             "message": (
                 f"Score editor ready for iteration {self._iteration}. "
-                f"Call str_replace_editor(command=\"view\", path=\"{VIRTUAL_PATH}\") "
-                f"to load and view the current score configuration."
+                f"Code file: {self._code_file_path or 'not loaded yet'}."
             ),
             "path": VIRTUAL_PATH,
+            "code_file_path": self._code_file_path,
         }
 
     def get_result(self, arguments: dict) -> dict:
@@ -194,21 +208,59 @@ class ScoreEditorToolset:
         """
         Validate and submit the current virtual file as a new score version.
 
-        - Errors if the file is unchanged from the original.
-        - Errors if YAML syntax validation fails.
-        - In dry_run mode, records a fake version ID without calling the API.
-        - On success, stores the new version ID for Lua to retrieve via score_editor_get_result.
+        Supports two edit paths:
+        1. In-memory edits via str_replace_editor (code_editor agent)
+        2. On-disk edits via Lua File.write() (direct Lua editing)
+
+        If in-memory content is unchanged but _code_file_path exists, reads the
+        edited file from disk. This supports the Lua direct-edit path where edits
+        bypass the in-memory virtual file.
         """
         version_note = arguments.get("version_note") or None
 
-        if self._content == self._original:
+        # If in-memory content is unchanged (or empty), try reading from disk file
+        # (supports Lua direct file editing path where edits bypass the virtual file)
+        if not self._content or self._content == self._original:
+            import os
+            # Check well-known exchange path first (Lua writes edited YAML here)
+            exchange_path = "/tmp/plexus_score_edit_exchange.yaml"
+            paths_to_try = [exchange_path]
+            if self._code_file_path:
+                paths_to_try.append(self._code_file_path)
+
+            for path in paths_to_try:
+                if os.path.exists(path):
+                    try:
+                        with open(path, "r") as f:
+                            disk_content = f.read()
+                        if disk_content and (not self._original or disk_content != self._original):
+                            logger.info(
+                                "ScoreEditorToolset: loading edited content from disk: %s (%d chars)",
+                                path, len(disk_content),
+                            )
+                            self._content = disk_content
+                            break
+                    except Exception as exc:
+                        logger.warning("Failed to read disk file %s: %s", path, exc)
+
+        if not self._content:
             return {
                 "success": False,
                 "error": (
-                    "Score code is unchanged from the original. "
-                    "Make edits using str_replace_editor before calling submit_score_code."
+                    "No score code available. Either make edits using str_replace_editor "
+                    "or write edited YAML to /tmp/plexus_score_edit_exchange.yaml before calling submit_score_code."
                 ),
             }
+
+        # Fix common YAML issues before validation
+        # externalId must be a string, not an integer
+        import re
+        self._content = re.sub(
+            r'^(externalId:\s*)(\d+)\s*$',
+            r'\1"\2"',
+            self._content,
+            flags=re.MULTILINE,
+        )
 
         # Validate YAML syntax
         errors = self._get_validation_errors()
@@ -338,6 +390,7 @@ class ScoreEditorToolset:
             self._content = code
             self._original = code
             self._history = []
+            self._code_file_path = code_file_path
             logger.info(
                 "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
                 len(code), self._scorecard, self._score, code_file_path,

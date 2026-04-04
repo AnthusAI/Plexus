@@ -107,8 +107,7 @@ agents:
       - plexus_evaluation_info
       - plexus_predict
       - plexus_item_last
-      - score_editor_setup
-      - score_editor_get_result
+      - submit_score_code
 
   analyzer:
     system_prompt: |
@@ -137,13 +136,24 @@ agents:
       What are the false positive and false negative patterns?
 
       ## Proposed Change
-      Describe the EXACT change to make to the score YAML. Be very specific with line-by-line guidance
-      for the code editor. Format your change description like this:
+      Describe the EXACT change to make to the score YAML. You MUST use the following format
+      with triple-backtick fenced code blocks. The automated parser depends on this exact format:
 
-      "In section [name], find the text: [old_text_here] and replace it with: [new_text_here]"
+      find the text:
+      ```
+      EXACT TEXT TO FIND (copy verbatim from the score YAML above)
+      ```
 
-      Include the EXACT text to find (copy from score YAML if possible) and the EXACT replacement text.
-      The code editor will use your old_text and new_text verbatim with str_replace_editor.
+      replace it with:
+      ```
+      EXACT REPLACEMENT TEXT
+      ```
+
+      CRITICAL FORMATTING RULES:
+      - Use triple backticks (```) with NO language hint (not ```yaml, not ```markdown)
+      - The text inside the backticks must match the score YAML EXACTLY (including whitespace)
+      - Do NOT use quotes around the text — use ONLY backtick fences
+      - Make ONE minimal, focused change
 
       ## Rationale
       Why should this change improve alignment? What is the expected mechanism?
@@ -458,6 +468,9 @@ code: |
     -- Initialize new_version_id for this iteration (will be populated by edit)
     local new_version_id = nil
 
+    -- Path to the pulled YAML file on disk (used for direct Lua file editing)
+    local current_code_path = score_pull.codeFilePath
+
     -- Prepare analysis context for agent
     local analysis_context = {
       iteration = iteration,
@@ -522,26 +535,8 @@ code: |
 
     Log.info("## Analyzer Hypothesis (iteration " .. iteration .. ")\n\n" .. hypothesis_text)
 
-    -- Set up score editor for the code_editor agent.
-    -- yaml_content is intentionally omitted — it is too large to pass through the orchestrator LLM.
-    -- The str_replace_editor tool auto-loads the current YAML on first view.
-    local setup_result = call_plexus_tool("score_editor_setup", {
-      scorecard_identifier = params.scorecard,
-      score_identifier = params.score,
-      iteration = iteration,
-      hypothesis = string.sub(hypothesis_text, 1, 200),
-      dry_run = params.dry_run or false
-    })
-
-    if not setup_result or not setup_result.success then
-      return {
-        success = false,
-        status = "error",
-        message = "Failed to set up score editor at iteration " .. iteration
-      }
-    end
-
-    -- Dispatch code editor agent to make targeted YAML edits
+    -- Apply the proposed YAML edit directly in Lua
+    -- (bypasses agent tool calling which has DSPy parameter stripping issues)
     Human.notify({
       message = "Editing score configuration for iteration " .. iteration .. "...",
       level = "info"
@@ -558,73 +553,104 @@ code: |
     else
       local proposed_text = string.sub(hypothesis_text, proposed_idx)
 
-      -- Try to extract old_str and new_str from backtick-enclosed blocks
-      -- Pattern: "find the text:\n```\nTEXT\n```"
+      -- Extract old_str and new_str from backtick-enclosed code blocks.
+      -- The analyzer formats: "find the text:\n```[lang]\nTEXT\n```"
+      -- and "replace it with:\n```[lang]\nTEXT\n```"
+      -- Language hints after ``` (e.g., ```yaml, ```markdown) are stripped.
       local find_idx = string.find(proposed_text, "find the text:")
+      -- Handle both "replace it with:" and "And replace it with:"
       local replace_idx = string.find(proposed_text, "replace it with:")
 
+      -- Helper: extract content between first pair of ``` fences after a position.
+      -- Handles ```lang\n...\n``` by skipping to the first newline after opening ```.
+      local function extract_fenced_block(text)
+        local bt1_s, bt1_e = string.find(text, "```")
+        if not bt1_s then return nil end
+        -- Skip optional language hint: find newline after opening ```
+        local nl_pos = string.find(text, "\n", bt1_e + 1)
+        if not nl_pos then return nil end
+        local content_start = nl_pos + 1
+        -- Find closing ```
+        local bt2_s = string.find(text, "\n```", content_start)
+        if not bt2_s then
+          bt2_s = string.find(text, "```", content_start)
+          if not bt2_s then return nil end
+        end
+        local raw = string.sub(text, content_start, bt2_s - 1)
+        -- Trim leading/trailing newlines but preserve internal formatting
+        raw = string.gsub(raw, "^[\r\n]+", "")
+        raw = string.gsub(raw, "[\r\n]+$", "")
+        return raw
+      end
+
+      Log.info("Parser: find_idx=" .. tostring(find_idx) .. ", replace_idx=" .. tostring(replace_idx))
+
       if find_idx and replace_idx then
-        -- Extract text after "find the text:" up to next "```"
         local after_find = string.sub(proposed_text, find_idx + 14)
-        local bt1_s, bt1_e = string.find(after_find, "```")
-        if bt1_s then
-          local bt2_s, bt2_e = string.find(after_find, "```", bt1_e + 1)
-          if bt2_s then
-            local old_str_raw = string.sub(after_find, bt1_e + 1, bt2_s - 1)
-            -- Remove leading/trailing newlines and spaces but preserve internal formatting
-            local old_str = string.gsub(old_str_raw, "^[\r\n]+", "")
-            old_str = string.gsub(old_str, "[\r\n]+$", "")
+        local old_str = extract_fenced_block(after_find)
 
-            -- Extract new_str similarly
-            local after_replace = string.sub(proposed_text, replace_idx + 16)
-            local bt3_s, bt3_e = string.find(after_replace, "```")
-            if bt3_s then
-              local bt4_s, bt4_e = string.find(after_replace, "```", bt3_e + 1)
-              if bt4_s then
-                local new_str_raw = string.sub(after_replace, bt3_e + 1, bt4_s - 1)
-                local new_str = string.gsub(new_str_raw, "^[\r\n]+", "")
-                new_str = string.gsub(new_str, "[\r\n]+$", "")
+        local after_replace = string.sub(proposed_text, replace_idx + 16)
+        local new_str = extract_fenced_block(after_replace)
 
-                Log.info("Attempting direct file edit for iteration " .. iteration)
-                Log.info("Old text: " .. string.sub(old_str, 1, 60) .. "...")
-                Log.info("New text: " .. string.sub(new_str, 1, 60) .. "...")
+        Log.info("Parser: old_str=" .. tostring(old_str ~= nil) .. ", new_str=" .. tostring(new_str ~= nil))
+        if old_str then
+          Log.info("Parser old_str preview: " .. string.sub(old_str, 1, 80))
+        end
+        if new_str then
+          Log.info("Parser new_str preview: " .. string.sub(new_str, 1, 80))
+        end
 
-                -- Read current YAML file
-                local current_yaml = File.read(current_code_path)
+        if old_str and new_str then
+          Log.info("Attempting direct file edit for iteration " .. iteration)
+          Log.info("Old text: " .. string.sub(old_str, 1, 60) .. "...")
+          Log.info("New text: " .. string.sub(new_str, 1, 60) .. "...")
 
-                -- Check if old_str exists (using plain string search, not pattern)
-                local old_start, old_end = string.find(current_yaml, old_str, 1, true)
-                if old_start then
-                  -- Perform simple string replacement
-                  local edited_yaml = string.sub(current_yaml, 1, old_start - 1) ..
-                                     new_str ..
-                                     string.sub(current_yaml, old_end + 1)
+          -- Read current YAML file
+          local current_yaml = File.read(current_code_path)
 
-                  -- Write back the edited YAML
-                  File.write(current_code_path, edited_yaml)
-                  Log.info("YAML file edited successfully")
+          -- Check if old_str exists (using plain string search, not pattern)
+          local old_start, old_end = string.find(current_yaml, old_str, 1, true)
+          if old_start then
+            -- Perform simple string replacement
+            local edited_yaml = string.sub(current_yaml, 1, old_start - 1) ..
+                               new_str ..
+                               string.sub(current_yaml, old_end + 1)
 
-                  -- Now submit the code via the MCP tool
-                  local submit_result = call_plexus_tool("submit_score_code", {})
-                  if submit_result and submit_result.version_id then
-                    new_version_id = submit_result.version_id
-                    Log.info("Score version created: " .. new_version_id)
-                  else
-                    Log.error("submit_score_code failed: " .. tostring(submit_result.error or submit_result.message))
-                    new_version_id = nil
-                  end
-                else
-                  Log.error("old_str not found in current YAML")
-                  new_version_id = nil
-                end
-              end
+            -- Write back the edited YAML to disk
+            File.write(current_code_path, edited_yaml)
+            Log.info("YAML file edited successfully on disk")
+
+            -- Also write to the well-known exchange path so submit_score_code can find it
+            -- (the Lua pull path and ScoreEditorToolset pull path may differ)
+            local exchange_path = "/tmp/plexus_score_edit_exchange.yaml"
+            File.write(exchange_path, edited_yaml)
+
+            -- Submit via ScoreEditorToolset which reads from the exchange file
+            -- (submit_score_code takes no required args, so DSPy parameter
+            -- stripping is not an issue)
+            local submit_result = call_plexus_tool("submit_score_code", {})
+            if submit_result and submit_result.version_id then
+              new_version_id = submit_result.version_id
+              Log.info("Score version created: " .. new_version_id)
+            else
+              Log.error("submit_score_code failed: " .. tostring(submit_result and (submit_result.error or submit_result.message) or "unknown error"))
+              new_version_id = nil
             end
+          else
+            Log.error("old_str not found in current YAML")
+            new_version_id = nil
           end
         end
       end
 
       if not new_version_id then
-        Log.warn("Could not complete direct file edit, using baseline version")
+        Log.warn("Could not complete direct file edit, falling back to baseline version")
+        if not find_idx then
+          Log.warn("Parser: 'find the text:' not found in proposed change")
+        end
+        if not replace_idx then
+          Log.warn("Parser: 'replace it with:' not found in proposed change")
+        end
         new_version_id = "baseline-" .. iteration
       end
     end
