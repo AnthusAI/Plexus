@@ -1022,7 +1022,20 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Convert Lua tables to native Python types for serialization
     import json as json_mod
-    exec_result_clean = json_mod.loads(json_mod.dumps(exec_result, default=str))
+
+    def _lua_to_python(obj):
+        """Recursively convert Lua tables to Python dicts/lists."""
+        if hasattr(obj, 'keys') and hasattr(obj, 'values') and not isinstance(obj, dict):
+            # Lua table acting as dict
+            return {_lua_to_python(k): _lua_to_python(v) for k, v in obj.items()}
+        elif isinstance(obj, dict):
+            return {k: _lua_to_python(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [_lua_to_python(v) for v in obj]
+        else:
+            return obj
+
+    exec_result_clean = json_mod.loads(json_mod.dumps(_lua_to_python(exec_result), default=str))
 
     # Parse result
     if output == 'json':
