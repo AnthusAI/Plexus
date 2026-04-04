@@ -3,7 +3,7 @@
   "title": "RCA category summary drill-down with evidence and score-results filtering",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Implemented category-summary drill-down in EvaluationTask: representative evidence rows per category, View-items category filter into score results via selectedItemIds, topic/category mutual exclusivity, clear-category-filter control, active filter status chip, and missing-item-id notes. Updated TopicList callback to include topic label for topic filter chip. Added docs section for inspecting specifics and added tests: topic-list callback signature + new EvaluationTask category-filter test. Targeted tests passed: topic-list, EvaluationTask.category-filter, EvaluationTask.memo.",
       "created_at": "2026-04-04T17:18:00.536885Z"
+    },
+    {
+      "id": "c01cbfff-445d-432f-9784-d1dc9a9b7b40",
+      "author": "ryan",
+      "text": "Completed in commit 21e2db286. Added category-summary representative evidence + View-items filtering into score results, topic/category mutual exclusivity with active filter chip, docs update for drill-down usage, and targeted tests passing.",
+      "created_at": "2026-04-04T17:18:28.625050Z"
     }
   ],
   "created_at": "2026-04-04T17:13:09.072857Z",
-  "updated_at": "2026-04-04T17:18:00.536885Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T17:18:28.625050Z",
+  "closed_at": "2026-04-04T17:18:26.643713Z",
   "custom": {}
 }
