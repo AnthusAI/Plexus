@@ -3,7 +3,7 @@
   "title": "Unify RCA into category-first hierarchy with topic/example drill-down",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Implemented unified RCA hierarchy. Backend now emits misclassification_analysis.category_hierarchy with category->topic->example structure (majority topic category assignment + purity + mechanical subtype totals). EvaluationTask now renders one category-first triage tree and removes duplicate standalone TopicList hierarchy from evaluation detail. Added category/topic score-result filters (mutually exclusive), triage confidence labeling, and standardized predicted->actual display via LabelBadgeComparison. Updated evaluate-score docs and expanded tests for hierarchy/filter behavior.",
       "created_at": "2026-04-04T17:51:08.693387Z"
+    },
+    {
+      "id": "8ff1609a-de99-457d-8a7b-c907f633b962",
+      "author": "ryan",
+      "text": "Completed in commit adcce2431. Validation run: pytest -q plexus/rca_analysis_test.py (15 passed); dashboard tests: EvaluationTask.category-filter, EvaluationTask.memo, topic-list all passed; npm --prefix dashboard run build:fast succeeded.",
+      "created_at": "2026-04-04T17:51:22.667379Z"
     }
   ],
   "created_at": "2026-04-04T17:45:58.474288Z",
-  "updated_at": "2026-04-04T17:51:08.693387Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T17:51:22.667379Z",
+  "closed_at": "2026-04-04T17:51:22.646328Z",
   "custom": {}
 }
