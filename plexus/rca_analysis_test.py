@@ -242,6 +242,7 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
     summary = build_misclassification_analysis_summary(topics, max_category_summary_items=2)
     assert summary["overall_assessment"]["total_items"] == 3
     assert "topic_category_breakdown" in summary
+    assert "category_hierarchy" in summary
     assert "category_summaries" in summary
     assert "mechanical_subtype_totals" in summary
     assert "primary_next_action" in summary
@@ -250,4 +251,15 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
     assert set(summary["category_summaries"].keys()) == set(MISCLASSIFICATION_CATEGORIES)
     assert summary["topic_category_breakdown"][0]["topic_primary_category"] in MISCLASSIFICATION_CATEGORIES
     assert 0 <= summary["topic_category_breakdown"][0]["topic_category_purity"] <= 1
-
+    hierarchy_categories = [node["category_key"] for node in summary["category_hierarchy"]]
+    assert hierarchy_categories == list(MISCLASSIFICATION_CATEGORIES)
+    info_node = next(node for node in summary["category_hierarchy"] if node["category_key"] == "information_gap")
+    assert info_node["item_count"] == 1
+    assert 0 <= info_node["share"] <= 1
+    assert isinstance(info_node["topics"], list)
+    if info_node["topics"]:
+        topic = info_node["topics"][0]
+        assert 0 <= topic["topic_category_purity"] <= 1
+        assert isinstance(topic["examples"], list)
+    mech_node = next(node for node in summary["category_hierarchy"] if node["category_key"] == "mechanical_malfunction")
+    assert "mechanical_subtype_totals" in mech_node

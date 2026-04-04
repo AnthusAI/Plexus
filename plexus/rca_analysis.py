@@ -49,6 +49,13 @@ PRIMARY_NEXT_ACTIONS = (
     "score_configuration_optimization",
 )
 
+MISCLASSIFICATION_CATEGORY_LABELS = {
+    "score_configuration_problem": "Score configuration",
+    "information_gap": "Information gap",
+    "guideline_gap_requires_sme": "SME guideline gap",
+    "mechanical_malfunction": "Mechanical malfunction",
+}
+
 
 def _excerpt(text: str, max_chars: int = 500) -> str:
     if not text:
@@ -562,6 +569,7 @@ def build_misclassification_analysis_summary(
     predicted_values: List[str] = []
     missing_transcript_count = 0
     topic_category_breakdown: List[Dict[str, Any]] = []
+    topic_hierarchy_rows: List[Dict[str, Any]] = []
 
     def _sorted_category_counts(category_counts: Dict[str, int]) -> Dict[str, int]:
         return {category: int(category_counts.get(category, 0)) for category in MISCLASSIFICATION_CATEGORIES}
@@ -626,6 +634,15 @@ def build_misclassification_analysis_summary(
             "category_counts": _sorted_category_counts(topic_counts),
             "topic_primary_category": majority,
             "topic_category_purity": round(purity, 4),
+        })
+        topic_hierarchy_rows.append({
+            "topic_id": topic_id,
+            "topic_label": topic_label,
+            "member_count": topic_member_count or topic_total,
+            "category_counts": _sorted_category_counts(topic_counts),
+            "topic_primary_category": majority,
+            "topic_category_purity": round(purity, 4),
+            "topic_payload": topic,
         })
 
     total_items = len(item_classifications)
@@ -720,6 +737,7 @@ def build_misclassification_analysis_summary(
         return top
 
     category_summaries = {}
+    category_hierarchy = []
     for category in MISCLASSIFICATION_CATEGORIES:
         items_in_category = _sort_items_for_summary(
             [item for item in item_classifications if item.get("primary_category") == category]
@@ -750,6 +768,78 @@ def build_misclassification_analysis_summary(
             "representative_evidence": representative_evidence,
             "item_count": item_count,
         }
+
+        category_topics = []
+        for topic_row in sorted(
+            [row for row in topic_hierarchy_rows if row.get("topic_primary_category") == category],
+            key=lambda row: (
+                -(row.get("member_count") or 0),
+                str(row.get("topic_label") or ""),
+            ),
+        ):
+            topic_payload = topic_row.get("topic_payload") or {}
+            exemplars = topic_payload.get("exemplars") or []
+            topic_examples = []
+            for ex in exemplars:
+                if not isinstance(ex, dict):
+                    continue
+                classification = ex.get("misclassification_classification") or {}
+                topic_examples.append({
+                    "feedback_item_id": (
+                        ex.get("feedback_item_id")
+                        or (ex.get("misclassification_item_context") or {}).get("identifiers", {}).get("feedback_item_id")
+                        or ""
+                    ),
+                    "item_id": (
+                        ex.get("item_id")
+                        or (ex.get("misclassification_item_context") or {}).get("identifiers", {}).get("item_id")
+                        or ""
+                    ),
+                    "identifiers": ex.get("identifiers") or [],
+                    "text": ex.get("text", ""),
+                    "timestamp": ex.get("timestamp", ""),
+                    "initial_answer_value": ex.get("initial_answer_value"),
+                    "final_answer_value": ex.get("final_answer_value"),
+                    "score_explanation": ex.get("score_explanation"),
+                    "detailed_cause": ex.get("detailed_cause"),
+                    "suggested_fix": ex.get("suggested_fix"),
+                    "misclassification_classification": classification,
+                    "mechanical_subtype": classification.get("mechanical_subtype"),
+                    "mechanical_details": classification.get("mechanical_details"),
+                })
+
+            category_topics.append({
+                "topic_id": topic_row.get("topic_id"),
+                "label": topic_row.get("topic_label", ""),
+                "member_count": topic_row.get("member_count", 0),
+                "topic_category_purity": topic_row.get("topic_category_purity", 0.0),
+                "category_counts": topic_row.get("category_counts", {}),
+                "detailed_explanation": topic_payload.get("detailed_explanation"),
+                "improvement_suggestion": topic_payload.get("improvement_suggestion"),
+                "score_fix_candidate_count": topic_payload.get("score_fix_candidate_count"),
+                "examples": topic_examples,
+            })
+
+        category_hierarchy.append({
+            "category_key": category,
+            "category_label": MISCLASSIFICATION_CATEGORY_LABELS.get(
+                category, category.replace("_", " ")
+            ),
+            "item_count": item_count,
+            "share": round(category_shares.get(category, 0.0), 4),
+            "summary_text": summary_text,
+            "top_patterns": top_patterns,
+            "mechanical_subtype_totals": (
+                {
+                    subtype: int(mechanical_subtype_totals.get(subtype, 0))
+                    for subtype in MECHANICAL_SUBTYPES
+                    if mechanical_subtype_totals.get(subtype, 0) > 0
+                }
+                if category == "mechanical_malfunction"
+                else {}
+            ),
+            "topics": category_topics,
+        })
 
     high_severity_mechanical_flag = any(
         flag.get("severity") == "high"
@@ -811,6 +901,7 @@ def build_misclassification_analysis_summary(
         ],
         "item_classifications": item_classifications,
         "topic_category_breakdown": topic_category_breakdown,
+        "category_hierarchy": category_hierarchy,
         "category_totals": category_totals,
         "category_shares": {k: round(v, 4) for k, v in category_shares.items()},
         "category_summaries": category_summaries,

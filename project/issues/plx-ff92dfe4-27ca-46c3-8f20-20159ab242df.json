@@ -1,0 +1,31 @@
+{
+  "id": "plx-ff92dfe4-27ca-46c3-8f20-20159ab242df",
+  "title": "Unify RCA into category-first hierarchy with topic/example drill-down",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dbc14a34-c610-41f1-bdaf-4a6619bb29dc",
+      "author": "ryan",
+      "text": "Kickoff: implementing unified RCA hierarchy payload + dashboard category-first tree; removing duplicate topic hierarchy, preserving segmented breakdown and secondary global narrative, and adding targeted backend/frontend tests.",
+      "created_at": "2026-04-04T17:46:01.230102Z"
+    },
+    {
+      "id": "b4586566-51b7-4b4d-a355-a71e1a58abbc",
+      "author": "ryan",
+      "text": "Implemented unified RCA hierarchy. Backend now emits misclassification_analysis.category_hierarchy with category->topic->example structure (majority topic category assignment + purity + mechanical subtype totals). EvaluationTask now renders one category-first triage tree and removes duplicate standalone TopicList hierarchy from evaluation detail. Added category/topic score-result filters (mutually exclusive), triage confidence labeling, and standardized predicted->actual display via LabelBadgeComparison. Updated evaluate-score docs and expanded tests for hierarchy/filter behavior.",
+      "created_at": "2026-04-04T17:51:08.693387Z"
+    }
+  ],
+  "created_at": "2026-04-04T17:45:58.474288Z",
+  "updated_at": "2026-04-04T17:51:08.693387Z",
+  "closed_at": null,
+  "custom": {}
+}
