@@ -111,6 +111,7 @@ def test_compact_summary_contains_stage_refs_and_attachment():
     assert summary["attachment_key"].endswith(".json")
     assert len(summary["stage_references"]) == 3
     assert summary["stage_references"][0]["stage_key"] == STAGE_DETERMINISTIC
+    assert summary["baseline_generalization_gap"] is None
 
 
 def test_attachment_key_and_payload_are_deterministic():

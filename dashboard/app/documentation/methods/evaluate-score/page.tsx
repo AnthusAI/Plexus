@@ -286,6 +286,50 @@ plexus evaluate accuracy \\
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Optimization Workflow Runbook (50/200 Cadence)</h2>
+          <p className="text-muted-foreground mb-4">
+            Standard optimization workflow uses a fast random loop and a hard confirmation gate:
+            <strong> n=50 </strong> for iteration speed, then <strong> n=200 </strong> before final accept decisions.
+          </p>
+          <pre className="bg-muted p-4 rounded-lg overflow-x-auto mb-4">
+            <code>{`# Stage A: deterministic associated-dataset check
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --number-of-samples 200
+
+# Stage B: fast random loop
+plexus evaluate feedback \\
+  --scorecard 1039 \\
+  --score 45425 \\
+  --days 180 \\
+  --max-samples 50
+
+# Stage C: hard random gate before accept
+plexus evaluate feedback \\
+  --scorecard 1039 \\
+  --score 45425 \\
+  --days 180 \\
+  --max-samples 200`}</code>
+          </pre>
+          <p className="text-muted-foreground mb-3">
+            Workflow assessments are recorded as canonical bundles (<code>candidate_assessment_bundle.v1</code>)
+            with:
+          </p>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-3">
+            <li>Identity (scorecard, score, baseline version, candidate version)</li>
+            <li>Stage runs (evaluation IDs, sample protocol, status, deltas)</li>
+            <li>Malfunction context (category shares, red flags, primary next action)</li>
+            <li>Generalization metrics (gap and stability signals)</li>
+            <li>Decision outputs (policy decision + workflow routing decision)</li>
+          </ul>
+          <p className="text-muted-foreground">
+            Full bundle payload is persisted as an attachment; compact summary fields are persisted for fast dashboard queries.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
           <p className="text-muted-foreground">
             Detailed documentation about evaluations is currently being developed. Check back soon for:

@@ -17,6 +17,8 @@ from plexus.cli.shared.optimization_acceptance_policy import (
     AcceptancePolicyConfig,
     assess_candidate,
 )
+from plexus.cli.shared.generalization_metrics import compute_generalization_metrics
+from plexus.cli.shared.workflow_decision_synthesis import synthesize_workflow_decision
 
 DEFAULT_WORKFLOW_DAYS = 180
 DEFAULT_LOOP_SAMPLE_SIZE = 50
@@ -123,6 +125,24 @@ def run_candidate_assessment_workflow(
         candidate_random_eval=random_gate_stage["candidate"],
         config=policy_config,
     )
+    workflow_decision = synthesize_workflow_decision(
+        policy_decision=policy_decision,
+        malfunction_context=malfunction_context or {},
+    )
+    generalization_metrics = compute_generalization_metrics({
+        STAGE_DETERMINISTIC: {
+            "baseline": deterministic_stage["baseline"],
+            "candidate": deterministic_stage["candidate"],
+        },
+        STAGE_RANDOM_LOOP: {
+            "baseline": random_loop_stage["baseline"],
+            "candidate": random_loop_stage["candidate"],
+        },
+        STAGE_RANDOM_GATE: {
+            "baseline": random_gate_stage["baseline"],
+            "candidate": random_gate_stage["candidate"],
+        },
+    })
 
     bundle = create_candidate_assessment_bundle(
         identity=identity,
@@ -158,6 +178,7 @@ def run_candidate_assessment_workflow(
             "confidence": "high" if policy_decision.get("decision") != "inconclusive" else "medium",
         },
         malfunction_context=malfunction_context or {},
+        generalization_metrics=generalization_metrics,
         protocol_defaults={
             "days": days,
             "loop_sample_size": loop_sample_size,
@@ -205,5 +226,7 @@ def run_candidate_assessment_workflow(
         "bundle": bundle,
         "compact_summary": compact_summary,
         "policy_decision": policy_decision,
+        "workflow_decision": workflow_decision,
+        "generalization_metrics": generalization_metrics,
         "attachment_key": attachment_key,
     }

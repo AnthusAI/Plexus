@@ -147,6 +147,23 @@ plexus evaluate accuracy \\
       </section>
 
       <section className="space-y-3">
+        <h2 className="text-2xl font-semibold">How Associated Datasets Fit Optimization Workflow</h2>
+        <p className="text-muted-foreground">
+          Associated datasets are the deterministic stage in the optimization workflow and should be paired with
+          random-sample checks to measure generalization.
+        </p>
+        <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+          <li><strong>Stage A</strong>: deterministic associated-dataset evaluation (reference signal).</li>
+          <li><strong>Stage B</strong>: random <code>n=50</code> evaluation for fast iteration feedback.</li>
+          <li><strong>Stage C</strong>: random <code>n=200</code> hard gate before final accept.</li>
+        </ul>
+        <p className="text-muted-foreground">
+          Workflow outputs persist a canonical assessment bundle with stage IDs, deltas, malfunction routing context,
+          and generalization-gap/stability metrics.
+        </p>
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-2xl font-semibold">Data Routes</h2>
         <p className="text-muted-foreground">
           Sources and datasets are exposed as separate routes for clarity.

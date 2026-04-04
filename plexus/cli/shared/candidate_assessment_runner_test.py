@@ -76,6 +76,13 @@ def test_runner_executes_stages_in_order_and_returns_bundle():
     ]
     assert result["bundle"]["stage_runs"][STAGE_RANDOM_GATE]["protocol"]["sample_size"] == 200
     assert result["compact_summary"]["decision"] in {"accept", "reject", "inconclusive"}
+    assert result["generalization_metrics"]["random_stage_count"] == 2
+    assert result["workflow_decision"]["route_action"] in {
+        "score_configuration_optimization",
+        "bug_investigation",
+        "data_remediation",
+        "sme_guideline_clarification",
+    }
     assert result["attachment_key"] is None
 
 
