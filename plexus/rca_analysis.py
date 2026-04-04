@@ -36,10 +36,28 @@ MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES = (
 
 MECHANICAL_SUBTYPES = (
     "missing_labels",
+    "missing_required_context",
     "runtime_error",
     "parse_or_schema_error",
     "invalid_output_class",
     "unknown_mechanical",
+)
+
+PRIMARY_INPUT_MODALITIES = (
+    "text",
+    "audio",
+    "image",
+    "video",
+    "structured",
+    "mixed",
+    "unknown",
+)
+
+CONFIG_FIXABILITY_OPTIONS = (
+    "likely_fixable",
+    "blocked_by_input",
+    "blocked_by_mechanical",
+    "needs_sme_clarification",
 )
 
 PRIMARY_NEXT_ACTIONS = (
@@ -196,7 +214,8 @@ def get_misclassification_item_scope_evidence_contract() -> dict:
             "final_comment",
             "guidelines_text",
             "score_yaml_configuration",
-            "transcript_text",
+            "primary_input_text",
+            "primary_input_modality",
             "metadata_snapshot",
         ],
         "cannot_infer_at_item_scope": [
@@ -216,6 +235,9 @@ def get_misclassification_classifier_output_contract() -> dict:
             "rationale",
             "confidence",
             "evidence_snippets",
+            "rationale_paragraph",
+            "evidence_quote",
+            "config_fixability",
         ],
         "conditional_fields": [
             "mechanical_subtype",
@@ -244,7 +266,7 @@ def get_misclassification_classifier_output_contract() -> dict:
                         "score_explanation",
                         "guidelines",
                         "score_yaml",
-                        "transcript",
+                        "primary_input",
                         "metadata",
                     ],
                 },
@@ -258,6 +280,45 @@ def get_misclassification_classifier_output_contract() -> dict:
                 "type": "string_or_null",
                 "max_chars": 200,
                 "presence_rule": "required when primary_category=mechanical_malfunction",
+            },
+            "rationale_paragraph": {
+                "type": "string",
+                "max_sentences": 5,
+                "description": "Short explanatory paragraph grounded in item evidence.",
+            },
+            "evidence_quote": {
+                "type": "string",
+                "max_chars": 260,
+                "description": "Single strongest quote/fact supporting the category decision.",
+            },
+            "config_fixability": {
+                "type": "enum",
+                "allowed_values": list(CONFIG_FIXABILITY_OPTIONS),
+            },
+        },
+    }
+
+
+def get_misclassification_explainer_output_contract() -> dict:
+    """Return contract for per-item triage explainer output."""
+    return {
+        "required_fields": [
+            "rationale_paragraph",
+            "evidence_quote",
+            "config_fixability",
+        ],
+        "field_contracts": {
+            "rationale_paragraph": {
+                "type": "string",
+                "max_sentences": 5,
+            },
+            "evidence_quote": {
+                "type": "string",
+                "max_chars": 260,
+            },
+            "config_fixability": {
+                "type": "enum",
+                "allowed_values": list(CONFIG_FIXABILITY_OPTIONS),
             },
         },
     }
@@ -289,6 +350,7 @@ def get_misclassification_item_context_contract() -> dict:
             "identifiers.score_version_id",
             "label_provenance.source",
             "source_availability",
+            "item_context.primary_input_modality",
             "score_context.resolved_final_classes",
             "score_context.class_resolution_source",
         ],
@@ -311,11 +373,14 @@ def build_misclassification_item_context(
     score_guidelines_text: str,
     score_yaml_configuration: str,
     scorecard_guidance_text: str,
-    transcript_text: str,
+    primary_input_text: str,
+    primary_input_modality: str,
     metadata_snapshot: str,
     label_provenance_source: str,
     resolved_final_classes: Optional[List[str]] = None,
     class_resolution_source: str = "",
+    primary_input_fetch_error: bool = False,
+    missing_required_context_keys: Optional[List[str]] = None,
 ) -> dict:
     """Build standardized item context/provenance payload for misclassification analysis."""
     if label_provenance_source not in MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES:
@@ -330,6 +395,14 @@ def build_misclassification_item_context(
     feedback_context_present = bool(
         edit_comment_excerpt or initial_comment_excerpt or final_comment_excerpt
     )
+    normalized_modality = _normalize_label(primary_input_modality).lower() or "unknown"
+    if normalized_modality not in PRIMARY_INPUT_MODALITIES:
+        normalized_modality = "unknown"
+    normalized_missing_context_keys = [
+        _normalize_label(value)
+        for value in (missing_required_context_keys or [])
+        if _normalize_label(value)
+    ]
 
     return {
         "identifiers": {
@@ -365,7 +438,8 @@ def build_misclassification_item_context(
             "class_resolution_source": _normalize_label(class_resolution_source),
         },
         "item_context": {
-            "transcript_excerpt": _excerpt(transcript_text, 700),
+            "primary_input_excerpt": _excerpt(primary_input_text, 700),
+            "primary_input_modality": normalized_modality,
             "metadata_snapshot_excerpt": _excerpt(metadata_snapshot, 700),
         },
         "source_availability": {
@@ -374,8 +448,10 @@ def build_misclassification_item_context(
             "has_score_guidelines": bool(score_guidelines_text),
             "has_score_yaml_configuration": bool(score_yaml_configuration),
             "has_scorecard_guidance": bool(scorecard_guidance_text),
-            "has_transcript_text": bool(transcript_text),
+            "has_primary_input": bool(primary_input_text),
             "has_metadata_snapshot": bool(metadata_snapshot),
+            "primary_input_fetch_error": bool(primary_input_fetch_error),
+            "missing_required_context_keys": normalized_missing_context_keys,
         },
         "audit_metadata": {
             "persisted_fields": get_misclassification_item_context_contract()[
@@ -397,7 +473,20 @@ def classify_misclassification_item(item_context: dict) -> dict:
     score_explanation = (prediction.get("score_explanation_excerpt") or "").strip()
     edit_comment = (feedback_context.get("edit_comment_excerpt") or "").strip()
     final_comment = (feedback_context.get("final_comment_excerpt") or "").strip()
-    transcript_excerpt = (item_context.get("item_context", {}).get("transcript_excerpt") or "").strip()
+    primary_input_excerpt = (
+        item_context.get("item_context", {}).get("primary_input_excerpt") or ""
+    ).strip()
+    primary_input_modality = (
+        item_context.get("item_context", {}).get("primary_input_modality") or "unknown"
+    ).strip()
+    missing_required_context_keys = [
+        _normalize_label(value)
+        for value in (availability.get("missing_required_context_keys") or [])
+        if _normalize_label(value)
+    ]
+    has_primary_input = bool(availability.get("has_primary_input"))
+    has_metadata_snapshot = bool(availability.get("has_metadata_snapshot"))
+    primary_input_fetch_error = bool(availability.get("primary_input_fetch_error"))
 
     searchable_feedback = f"{edit_comment}\n{final_comment}".lower()
     searchable_explanation = score_explanation.lower()
@@ -468,19 +557,75 @@ def classify_misclassification_item(item_context: dict) -> dict:
             mechanical_subtype = "runtime_error"
             mechanical_details = f"marker={runtime_marker}"
             _add_evidence("score_explanation", score_explanation)
-        elif valid_class_set and predicted_value not in valid_class_set:
-            mechanical_subtype = "invalid_output_class"
-            mechanical_details = (
-                f"predicted_value='{predicted_value}' not_in_resolved_valid_classes={sorted(valid_class_set)}"
+        else:
+            missing_context_markers = (
+                "missing metadata",
+                "metadata missing",
+                "required metadata",
+                "context key missing",
+                "failed to fetch",
+                "no input payload",
+                "input unavailable",
             )
-            _add_evidence("score_explanation", score_explanation or predicted_value)
-            _add_evidence("score_yaml", f"Resolved valid classes: {sorted(valid_class_set)}")
+            missing_context_marker = next(
+                (
+                    marker
+                    for marker in missing_context_markers
+                    if marker in searchable_explanation or marker in searchable_feedback
+                ),
+                None,
+            )
+            if (
+                missing_required_context_keys
+                or primary_input_fetch_error
+                or (
+                    missing_context_marker
+                    and (
+                        not has_primary_input
+                        or not has_metadata_snapshot
+                        or "metadata" in missing_context_marker
+                        or "context" in missing_context_marker
+                    )
+                )
+            ):
+                mechanical_subtype = "missing_required_context"
+                context_bits = []
+                if missing_required_context_keys:
+                    context_bits.append(
+                        f"missing_required_context_keys={','.join(missing_required_context_keys)}"
+                    )
+                if primary_input_fetch_error:
+                    context_bits.append("primary_input_fetch_error=true")
+                if missing_context_marker:
+                    context_bits.append(f"marker={missing_context_marker}")
+                mechanical_details = "; ".join(context_bits) or "missing_required_context_detected"
+                if missing_context_marker:
+                    _add_evidence("score_explanation", score_explanation)
+                if missing_required_context_keys:
+                    _add_evidence(
+                        "metadata",
+                        f"Missing required context keys: {', '.join(missing_required_context_keys)}",
+                    )
+                if not has_primary_input:
+                    _add_evidence(
+                        "primary_input",
+                        "Primary input artifact unavailable while score required context.",
+                    )
+            elif valid_class_set and predicted_value not in valid_class_set:
+                mechanical_subtype = "invalid_output_class"
+                mechanical_details = (
+                    f"predicted_value='{predicted_value}' not_in_resolved_valid_classes={sorted(valid_class_set)}"
+                )
+                _add_evidence("score_explanation", score_explanation or predicted_value)
+                _add_evidence("score_yaml", f"Resolved valid classes: {sorted(valid_class_set)}")
 
     if mechanical_subtype:
         if mechanical_subtype == "parse_or_schema_error":
             rationale = "Parser/schema failure indicators are present in score execution output."
         elif mechanical_subtype == "invalid_output_class":
             rationale = "Predicted output class is outside the resolved final label set."
+        elif mechanical_subtype == "missing_required_context":
+            rationale = "Required model input/context was unavailable due pipeline or contract issues."
         else:
             rationale = "Execution-level failure indicators are present in the score output path."
         return {
@@ -489,34 +634,53 @@ def classify_misclassification_item(item_context: dict) -> dict:
             "confidence": "high",
             "mechanical_subtype": mechanical_subtype,
             "mechanical_details": mechanical_details or "mechanical_failure_detected",
+            "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "score_explanation", "quote_or_fact": "Execution failure indicators found."}],
         }
 
-    # Information gap: transcript/metadata insufficiency for correct determination.
+    # Information gap: externally missing/degraded source evidence for correct determination.
+    information_gap_markers = (
+        "transcript",
+        "inaudible",
+        "cannot hear",
+        "could not hear",
+        "redacted",
+        "missing audio",
+        "not in transcript",
+        "crosstalk",
+        "cross talk",
+        "overlap speech",
+        "speaker mismatch",
+        "corrupted",
+        "truncated",
+        "insufficient context",
+        "missing context",
+        "source degraded",
+    )
+    has_information_gap_signal = any(
+        marker in searchable_feedback
+        for marker in information_gap_markers
+    )
     if (
-        not availability.get("has_transcript_text")
-        or any(
-            marker in searchable_feedback
-            for marker in (
-                "transcript",
-                "inaudible",
-                "cannot hear",
-                "could not hear",
-                "redacted",
-                "missing audio",
-                "not in transcript",
-            )
-        )
+        not has_primary_input
+        or has_information_gap_signal
     ):
         _add_evidence("edit_comment", edit_comment or final_comment)
-        _add_evidence("transcript", transcript_excerpt or "Transcript context unavailable.")
+        _add_evidence(
+            "primary_input",
+            primary_input_excerpt
+            or f"Primary input artifact unavailable (modality={primary_input_modality or 'unknown'}).",
+        )
         return {
             "primary_category": "information_gap",
             "rationale": "Available evidence indicates missing or degraded source information for reliable classification.",
             "confidence": "medium",
             "mechanical_subtype": None,
             "mechanical_details": None,
-            "evidence_snippets": evidence or [{"source": "transcript", "quote_or_fact": "Transcript context unavailable or insufficient."}],
+            "evidence_snippets": evidence or [{"source": "primary_input", "quote_or_fact": "Primary input context unavailable or insufficient."}],
+            "information_gap_subtype": (
+                "missing_primary_input" if not has_primary_input else "degraded_primary_input"
+            ),
         }
 
     # Guideline gap: comments point to ambiguity/policy decision rather than execution.
@@ -540,6 +704,7 @@ def classify_misclassification_item(item_context: dict) -> dict:
             "confidence": "medium",
             "mechanical_subtype": None,
             "mechanical_details": None,
+            "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "guidelines", "quote_or_fact": "Guidelines unavailable or ambiguous for this case."}],
         }
 
@@ -552,7 +717,80 @@ def classify_misclassification_item(item_context: dict) -> dict:
         "confidence": "medium",
         "mechanical_subtype": None,
         "mechanical_details": None,
+        "information_gap_subtype": None,
         "evidence_snippets": evidence or [{"source": "score_yaml", "quote_or_fact": "Score configuration is the primary fix surface for this item."}],
+    }
+
+
+def explain_misclassification_item_classification(
+    *,
+    item_context: Dict[str, Any],
+    classification: Dict[str, Any],
+) -> Dict[str, str]:
+    """
+    Generate a short, operator-focused explanation for a deterministic misclassification category.
+    Raises ValueError when the LLM output is invalid.
+    """
+    import boto3
+
+    system = (
+        "You explain deterministic misclassification triage decisions for AI evaluations. "
+        "Use neutral, modality-agnostic language. Call transcripts are only one possible example."
+    )
+    prompt = (
+        "You are given normalized item context and a deterministic category decision.\n"
+        "Return exactly three lines in this exact format:\n"
+        "RATIONALE_PARAGRAPH: <short paragraph, 2-4 sentences>\n"
+        "EVIDENCE_QUOTE: <one concrete quote/fact>\n"
+        "CONFIG_FIXABILITY: <one of "
+        f"{', '.join(CONFIG_FIXABILITY_OPTIONS)}>\n\n"
+        "Rules:\n"
+        "- Do not change the category decision.\n"
+        "- If failure is execution/system/context contract related, use blocked_by_mechanical.\n"
+        "- If source evidence is genuinely insufficient/degraded, use blocked_by_input.\n"
+        "- If policy ambiguity dominates, use needs_sme_clarification.\n"
+        "- If score logic/prompt adjustment is the likely fix, use likely_fixable.\n\n"
+        f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n\n"
+        f"Deterministic classification JSON:\n{json.dumps(classification, ensure_ascii=True)}\n"
+    )
+    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 320,
+        "system": system,
+        "messages": [{"role": "user", "content": prompt}],
+    })
+    response = client.invoke_model(
+        modelId="anthropic.claude-3-haiku-20240307-v1:0",
+        body=body,
+        contentType="application/json",
+        accept="application/json",
+    )
+    raw_text = json.loads(response["body"].read())["content"][0]["text"].strip()
+    line_map = {}
+    for line in str(raw_text or "").splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        line_map[_normalize_label(key).upper()] = _normalize_label(value)
+
+    rationale_paragraph = line_map.get("RATIONALE_PARAGRAPH", "")
+    evidence_quote = line_map.get("EVIDENCE_QUOTE", "")
+    config_fixability = line_map.get("CONFIG_FIXABILITY", "")
+
+    if not rationale_paragraph:
+        raise ValueError(f"Triage explainer output missing RATIONALE_PARAGRAPH: {raw_text}")
+    if not evidence_quote:
+        raise ValueError(f"Triage explainer output missing EVIDENCE_QUOTE: {raw_text}")
+    if config_fixability not in CONFIG_FIXABILITY_OPTIONS:
+        raise ValueError(
+            f"Triage explainer output has invalid config_fixability '{config_fixability}'. "
+            f"Allowed: {CONFIG_FIXABILITY_OPTIONS}. Raw output: {raw_text}"
+        )
+    return {
+        "rationale_paragraph": _excerpt(rationale_paragraph, 320),
+        "evidence_quote": _excerpt(evidence_quote, 180),
+        "config_fixability": config_fixability,
     }
 
 
@@ -572,7 +810,8 @@ def build_misclassification_analysis_summary(
     category_totals = {category: 0 for category in MISCLASSIFICATION_CATEGORIES}
     mechanical_subtype_totals = {subtype: 0 for subtype in MECHANICAL_SUBTYPES}
     predicted_values: List[str] = []
-    missing_transcript_count = 0
+    missing_primary_input_count = 0
+    missing_required_context_count = 0
     topic_category_breakdown: List[Dict[str, Any]] = []
     topic_hierarchy_rows: List[Dict[str, Any]] = []
 
@@ -597,6 +836,14 @@ def build_misclassification_analysis_summary(
             "evidence_snippets": raw.get("evidence_snippets", []),
             "mechanical_subtype": raw.get("mechanical_subtype"),
             "mechanical_details": raw.get("mechanical_details"),
+            "information_gap_subtype": raw.get("information_gap_subtype"),
+            "rationale_paragraph": raw.get("rationale_paragraph", ""),
+            "evidence_quote": raw.get("evidence_quote", ""),
+            "config_fixability": raw.get("config_fixability", ""),
+            "has_primary_input": bool(availability.get("has_primary_input")),
+            "missing_required_context": bool(availability.get("missing_required_context_keys")),
+            "detailed_cause": raw.get("detailed_cause"),
+            "suggested_fix": raw.get("suggested_fix"),
         }
         item_classifications.append(row)
 
@@ -604,8 +851,10 @@ def build_misclassification_analysis_summary(
         if category in category_totals:
             category_totals[category] += 1
 
-        if context and not availability.get("has_transcript_text"):
-            missing_transcript_count += 1
+        if context and not availability.get("has_primary_input"):
+            missing_primary_input_count += 1
+        if context and (availability.get("missing_required_context_keys") or []):
+            missing_required_context_count += 1
 
         predicted_value = _normalize_label(row.get("predicted_value"))
         if predicted_value:
@@ -709,11 +958,11 @@ def build_misclassification_analysis_summary(
             ),
         })
 
-    if total_items > 0 and (missing_transcript_count / total_items) >= 0.5:
+    if total_items > 0 and (missing_primary_input_count / total_items) >= 0.5:
         red_flags.append({
-            "flag": "low_transcript_coverage",
+            "flag": "low_primary_input_coverage",
             "severity": "medium",
-            "message": "At least half of analyzed items were missing transcript context.",
+            "message": "At least half of analyzed items were missing primary input context.",
         })
 
     def _sort_items_for_summary(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -763,6 +1012,7 @@ def build_misclassification_analysis_summary(
 
     category_summaries = {}
     category_hierarchy = []
+    category_diagnostics: Dict[str, Dict[str, Any]] = {}
     for category in MISCLASSIFICATION_CATEGORIES:
         items_in_category = _sort_items_for_summary(
             [item for item in item_classifications if item.get("primary_category") == category]
@@ -853,6 +1103,51 @@ def build_misclassification_analysis_summary(
             "topics": category_topics,
         })
 
+        if category == "information_gap":
+            missing_or_degraded_signals = 0
+            missing_required_context_signals = 0
+            for item in items_in_category:
+                if item.get("missing_required_context"):
+                    missing_required_context_signals += 1
+                snippets = item.get("evidence_snippets") or []
+                has_missing_signal = any(
+                    _normalize_label((snippet or {}).get("source")).lower() == "primary_input"
+                    and any(
+                        marker in _normalize_label((snippet or {}).get("quote_or_fact")).lower()
+                        for marker in (
+                            "unavailable",
+                            "missing",
+                            "not available",
+                            "insufficient",
+                            "degraded",
+                            "redacted",
+                        )
+                    )
+                    for snippet in snippets
+                ) or not bool(item.get("has_primary_input"))
+                if has_missing_signal:
+                    missing_or_degraded_signals += 1
+            missing_or_degraded_share = (
+                missing_or_degraded_signals / item_count if item_count else 0.0
+            )
+            missing_required_context_share = (
+                missing_required_context_signals / item_count if item_count else 0.0
+            )
+            category_diagnostics["information_gap"] = {
+                "item_count": item_count,
+                "missing_or_degraded_primary_input_count": missing_or_degraded_signals,
+                "missing_or_degraded_primary_input_share": round(missing_or_degraded_share, 4),
+                "missing_required_context_count": missing_required_context_signals,
+                "missing_required_context_share": round(missing_required_context_share, 4),
+                "diagnostic_summary": (
+                    f"{missing_or_degraded_signals}/{item_count} information-gap item(s) include "
+                    "missing/degraded primary-input evidence; "
+                    f"{missing_required_context_signals}/{item_count} include missing required context signals."
+                    if item_count
+                    else "No information-gap items in this run."
+                ),
+            }
+
     high_severity_mechanical_flag = any(
         flag.get("severity") == "high"
         and flag.get("flag") in {"mechanical_failures_present", "invalid_output_class_present"}
@@ -932,6 +1227,7 @@ def build_misclassification_analysis_summary(
         "category_hierarchy": category_hierarchy,
         "category_totals": category_totals,
         "category_shares": {k: round(v, 4) for k, v in category_shares.items()},
+        "category_diagnostics": category_diagnostics,
         "category_summaries": category_summaries,
         "mechanical_subtype_totals": mechanical_subtype_totals,
         "primary_next_action": {
@@ -959,12 +1255,13 @@ def build_misclassification_classification_contract() -> dict:
         "excluded_analyses": list(MISCLASSIFICATION_EXCLUDED_ANALYSES),
         "item_scope_evidence": get_misclassification_item_scope_evidence_contract(),
         "item_classifier_output": get_misclassification_classifier_output_contract(),
+        "item_explainer_output": get_misclassification_explainer_output_contract(),
         "item_context_contract": get_misclassification_item_context_contract(),
     }
 
 
 def analyze_score_result(
-    transcript: str,
+    primary_input: str,
     predicted: str,
     correct: str,
     explanation: str,
@@ -981,7 +1278,7 @@ def analyze_score_result(
       - suggested_fix: one concrete score code change to prevent this error
 
     Args:
-        transcript: Call transcript text
+        primary_input: Primary input artifact text/context excerpt
         predicted: The AI's predicted value
         correct: The correct/human-labeled value
         explanation: The AI's reasoning for its prediction
@@ -993,7 +1290,7 @@ def analyze_score_result(
     import boto3
 
     system = (
-        "You are an expert quality analyst reviewing AI scoring errors on customer calls."
+        "You are an expert quality analyst reviewing AI scoring errors across domains and modalities."
     )
 
     turn1_prompt = (
@@ -1010,10 +1307,12 @@ def analyze_score_result(
     if score_yaml_code:
         turn1_prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
     turn1_prompt += (
-        f"Call transcript:\n{transcript[:6000]}\n\n"
+        "Primary input artifact (for example: transcript text, document text, extracted OCR, or "
+        "serialized structured input):\n"
+        f"{primary_input[:6000]}\n\n"
         "Write a single concise paragraph (2-4 sentences) explaining specifically why "
-        "the AI prediction was wrong. Focus on what was said or not said in the "
-        "transcript that makes the correct answer clear."
+        "the AI prediction was wrong. Focus on what evidence was present, absent, or degraded "
+        "in the provided input artifact and why the correct label follows."
     )
 
     try:

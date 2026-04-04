@@ -1,4 +1,5 @@
 from plexus.rca_analysis import (
+    CONFIG_FIXABILITY_OPTIONS,
     MECHANICAL_SUBTYPES,
     MISCLASSIFICATION_CATEGORIES,
     MISCLASSIFICATION_EXCLUDED_ANALYSES,
@@ -36,12 +37,18 @@ def test_item_classifier_output_contract_shape():
         "rationale",
         "confidence",
         "evidence_snippets",
+        "rationale_paragraph",
+        "evidence_quote",
+        "config_fixability",
     ]
     assert output["field_contracts"]["primary_category"]["allowed_values"] == list(
         MISCLASSIFICATION_CATEGORIES
     )
     assert output["field_contracts"]["mechanical_subtype"]["allowed_values"] == list(
         MECHANICAL_SUBTYPES
+    )
+    assert output["field_contracts"]["config_fixability"]["allowed_values"] == list(
+        CONFIG_FIXABILITY_OPTIONS
     )
 
 
@@ -72,7 +79,8 @@ def test_build_misclassification_item_context_includes_availability_flags():
         score_guidelines_text="Guidelines text",
         score_yaml_configuration="name: Score",
         scorecard_guidance_text="Scorecard guidance",
-        transcript_text="Transcript text",
+        primary_input_text="Transcript text",
+        primary_input_modality="text",
         metadata_snapshot='{"call_type":"inbound"}',
         label_provenance_source="feedback_final_answer_value",
         resolved_final_classes=["Yes", "No"],
@@ -83,7 +91,7 @@ def test_build_misclassification_item_context_includes_availability_flags():
     assert context["prediction"]["predicted_value"] == "No"
     assert context["label_provenance"]["source"] == "feedback_final_answer_value"
     assert context["label_provenance"]["feedback_context_present"] is True
-    assert context["source_availability"]["has_transcript_text"] is True
+    assert context["source_availability"]["has_primary_input"] is True
     assert context["source_availability"]["has_metadata_snapshot"] is True
     assert context["score_context"]["resolved_final_classes"] == ["Yes", "No"]
     assert context["score_context"]["class_resolution_source"] == "graph[-1].LogicalClassifier.code"
@@ -106,7 +114,8 @@ def test_build_misclassification_item_context_rejects_unknown_provenance_source(
             score_guidelines_text="",
             score_yaml_configuration="",
             scorecard_guidance_text="",
-            transcript_text="",
+            primary_input_text="",
+            primary_input_modality="unknown",
             metadata_snapshot="",
             label_provenance_source="not_allowed",
         )
@@ -131,7 +140,8 @@ def _base_item_context():
         score_guidelines_text="Guidelines text",
         score_yaml_configuration="name: Score",
         scorecard_guidance_text="Scorecard guidance",
-        transcript_text="Transcript available",
+        primary_input_text="Transcript available",
+        primary_input_modality="text",
         metadata_snapshot='{"call_type":"inbound"}',
         label_provenance_source="feedback_final_answer_value",
         resolved_final_classes=["Yes", "No"],
@@ -152,6 +162,7 @@ def test_classifier_detects_information_gap_from_feedback_signal():
     context["label_provenance"]["feedback_context_present"] = True
     result = classify_misclassification_item(context)
     assert result["primary_category"] == "information_gap"
+    assert result["information_gap_subtype"] in {"missing_primary_input", "degraded_primary_input"}
 
 
 def test_classifier_detects_guideline_gap_from_ambiguity_signal():
@@ -192,6 +203,14 @@ def test_classifier_detects_missing_labels_as_mechanical():
     result = classify_misclassification_item(context)
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "missing_labels"
+
+
+def test_classifier_detects_missing_required_context_as_mechanical():
+    context = _base_item_context()
+    context["source_availability"]["missing_required_context_keys"] = ["customer_state"]
+    result = classify_misclassification_item(context)
+    assert result["primary_category"] == "mechanical_malfunction"
+    assert result["mechanical_subtype"] == "missing_required_context"
 
 
 def test_classifier_detects_invalid_output_class_as_mechanical():
@@ -255,6 +274,10 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
             "evidence_snippets": info_class["evidence_snippets"],
             "mechanical_subtype": info_class["mechanical_subtype"],
             "mechanical_details": info_class["mechanical_details"],
+            "information_gap_subtype": info_class.get("information_gap_subtype"),
+            "rationale_paragraph": "Input evidence was insufficient for a reliable label decision.",
+            "evidence_quote": "Critical phrase not in transcript.",
+            "config_fixability": "blocked_by_input",
             "misclassification_item_context": info_ctx,
             "misclassification_classification": info_class,
         },
@@ -273,6 +296,10 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
             "evidence_snippets": mech_class["evidence_snippets"],
             "mechanical_subtype": mech_class["mechanical_subtype"],
             "mechanical_details": mech_class["mechanical_details"],
+            "information_gap_subtype": mech_class.get("information_gap_subtype"),
+            "rationale_paragraph": "Runtime timeout prevented a valid prediction.",
+            "evidence_quote": "Runtime error: timeout during scoring.",
+            "config_fixability": "blocked_by_mechanical",
             "misclassification_item_context": mech_ctx,
             "misclassification_classification": mech_class,
         },
@@ -291,6 +318,10 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
             "evidence_snippets": score_class["evidence_snippets"],
             "mechanical_subtype": score_class["mechanical_subtype"],
             "mechanical_details": score_class["mechanical_details"],
+            "information_gap_subtype": score_class.get("information_gap_subtype"),
+            "rationale_paragraph": "Score logic can be tuned to align with the rubric.",
+            "evidence_quote": "Model reasoning here",
+            "config_fixability": "likely_fixable",
             "misclassification_item_context": score_ctx,
             "misclassification_classification": score_class,
         },
@@ -313,6 +344,7 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
     assert "topic_category_breakdown" in summary
     assert "category_hierarchy" in summary
     assert "category_summaries" in summary
+    assert "category_diagnostics" in summary
     assert "analysis_scope" in summary
     assert "item_classifications_all" in summary
     assert "mechanical_subtype_totals" in summary
@@ -327,6 +359,12 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
     info_node = next(node for node in summary["category_hierarchy"] if node["category_key"] == "information_gap")
     assert info_node["item_count"] == 1
     assert 0 <= info_node["share"] <= 1
+    assert "information_gap" in summary["category_diagnostics"]
+    info_diag = summary["category_diagnostics"]["information_gap"]
+    assert "missing_or_degraded_primary_input_count" in info_diag
+    assert "missing_or_degraded_primary_input_share" in info_diag
+    assert "missing_required_context_count" in info_diag
+    assert "missing_required_context_share" in info_diag
     assert isinstance(info_node["topics"], list)
     if info_node["topics"]:
         topic = info_node["topics"][0]
