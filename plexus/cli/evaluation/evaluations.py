@@ -3399,6 +3399,7 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
 @click.option('--max-samples', default=None, type=int, help='Optional maximum number of feedback items/samples to evaluate.')
 @click.option('--sample-seed', default=None, type=int, help='Optional random seed used when sampling feedback items.')
+@click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20).')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
@@ -3409,6 +3410,7 @@ def feedback(
     version: Optional[str],
     max_samples: Optional[int],
     sample_seed: Optional[int],
+    max_category_summary_items: int,
     baseline: Optional[str],
     use_yaml: bool,
     task_id: Optional[str]
@@ -3456,9 +3458,13 @@ def feedback(
         console.print(f"Max Samples: {max_samples}")
     if sample_seed is not None:
         console.print(f"Sample Seed: {sample_seed}")
+    console.print(f"Max Category Summary Items: {max_category_summary_items}")
 
     if max_samples is not None and max_samples <= 0:
         console.print("[bold red]Error: --max-samples must be a positive integer[/bold red]")
+        return
+    if max_category_summary_items <= 0:
+        console.print("[bold red]Error: --max-category-summary-items must be a positive integer[/bold red]")
         return
 
     try:
@@ -3708,6 +3714,7 @@ def feedback(
                         "version": version,
                         "max_samples": max_samples,
                         "sample_seed": sample_seed,
+                        "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
                         "metadata": {
                             "baseline": baseline
@@ -3780,6 +3787,7 @@ def feedback(
                         api_client=client,
                         max_samples=max_samples,
                         sample_seed=sample_seed,
+                        max_category_summary_items=max_category_summary_items,
                     )
 
                     async def _run_rca():
@@ -3912,6 +3920,7 @@ def feedback(
                             feedback_items, score_result_map, original_explanations,
                             max_report_exemplars=20,
                             max_summarization_exemplars=6,
+                            max_category_summary_items=max_category_summary_items,
                             tracker=tracker,
                         )
                         return {
@@ -4010,6 +4019,7 @@ def feedback(
                 "score": score,
                 "max_samples": max_samples,
                 "sample_seed": sample_seed,
+                "max_category_summary_items": max_category_summary_items,
                 "metadata": {
                     "baseline": baseline
                 } if baseline else {}
@@ -4036,6 +4046,7 @@ def feedback(
             api_client=client,  # Pass as keyword arg for FeedbackEvaluation
             max_samples=max_samples,
             sample_seed=sample_seed,
+            max_category_summary_items=max_category_summary_items,
         )
         
         # Run the evaluation
@@ -4347,6 +4358,7 @@ def await_run_single_feedback_evaluation(
     task_id: Optional[str] = None,
     max_samples: Optional[int] = 200,
     sample_seed: Optional[int] = None,
+    max_category_summary_items: int = 20,
 ):
     """
     Helper function to run a single feedback evaluation.
@@ -4366,6 +4378,7 @@ def await_run_single_feedback_evaluation(
         task_id: Optional task ID for progress tracking
         max_samples: Optional maximum feedback items to process
         sample_seed: Optional random seed used when sampling feedback items
+        max_category_summary_items: Maximum misclassification items per category summary
         
     Returns:
         Evaluation record if successful, None otherwise
@@ -4423,6 +4436,7 @@ def await_run_single_feedback_evaluation(
                 "score": score_name,
                 "max_samples": max_samples,
                 "sample_seed": sample_seed,
+                "max_category_summary_items": max_category_summary_items,
             }),
             "taskId": task_id
         }
@@ -4444,6 +4458,7 @@ def await_run_single_feedback_evaluation(
             api_client=client,
             max_samples=max_samples,
             sample_seed=sample_seed,
+            max_category_summary_items=max_category_summary_items,
         )
         
         # Run the evaluation with tracker

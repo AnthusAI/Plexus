@@ -359,7 +359,7 @@ export function ScoreResultComponent({
               <div>
                 <div className="flex items-center mb-1">
                   <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Root cause analysis</p>
+                  <p className="text-sm text-muted-foreground">Score-Configuration RCA</p>
                 </div>
                 <div className="bg-background rounded-md p-3">
                   <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
