@@ -3,7 +3,7 @@
   "title": "Add baseline option to evaluate accuracy",
   "description": "",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Implementing native --baseline for evaluate accuracy (no post-hoc evaluation record edits). Scope: CLI option, parameter persistence as metadata.baseline on created evaluation records, pass-through for associated-dataset multi-run path, and JSON payload exposure.",
       "created_at": "2026-04-03T04:53:25.046680Z"
+    },
+    {
+      "id": "d82699f6-b66d-49a5-a9f6-8e1fab6cd844",
+      "author": "ryan",
+      "text": "Baseline option for evaluate accuracy implemented.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-04-03T04:53:18.441413Z",
-  "updated_at": "2026-04-03T04:53:25.046680Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

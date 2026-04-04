@@ -3,7 +3,7 @@
   "title": "Evaluation Provenance and Data Dashboard Flexibility",
   "description": "",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Design pivot per operator constraint: no Evaluation schema migration. Provenance link implementation now uses scoreVersionId field plus parameters.dataset_id (single path) for dataset linkage. Removed schema/query additions for Evaluation.dataSetId.",
       "created_at": "2026-04-03T06:03:30.947416Z"
+    },
+    {
+      "id": "736d5657-abcb-4434-81cd-cc361850b071",
+      "author": "ryan",
+      "text": "Evaluation provenance tracking and data dashboard flexibility implemented.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-04-03T05:47:30.642183Z",
-  "updated_at": "2026-04-03T06:03:30.947416Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

@@ -3,7 +3,7 @@
   "title": "Add requirements sync workflow and fix semantic-release package versioning",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -106,10 +106,16 @@
       "author": "derek.norrbom",
       "text": "Implemented CodeQL fix for workflow_run untrusted checkout: release job now requires workflow_run.event==push, head_branch==main, head_repository==current repo, and checkout uses trusted ref refs/heads/main instead of workflow_run.head_sha.",
       "created_at": "2026-03-12T20:13:08.750117Z"
+    },
+    {
+      "id": "2a71f09a-ba0b-433d-a751-38b9728cad20",
+      "author": "ryan",
+      "text": "Requirements sync workflow and semantic-release versioning implemented.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-11T17:17:47.271266Z",
-  "updated_at": "2026-03-12T20:13:08.750117Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

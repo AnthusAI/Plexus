@@ -3,7 +3,7 @@
   "title": "Fix Procedure conversation history loading in dashboard",
   "description": "## Intent\nRestore conversation history visibility for procedure runs in dashboard conversation viewer when generated model helpers are missing from the Amplify client.\n\n## Scope\n- Harden  query path with GraphQL fallback for chat sessions/messages by .\n- Guard subscription setup when model  helpers are unavailable.\n- Preserve existing rendering/filtering behavior.\n\n## Definition of Done\n- Opening a procedure run no longer throws on undefined  / .\n- Existing history loads via fallback and renders in UI.\n- No regression for environments where generated model helpers exist.\n- Tests added/updated for fallback behavior where practical.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -70,10 +70,16 @@
       "author": "ryan",
       "text": "Additional fixes completed after trace wiring: fixed MCP tool schema export in EmbeddedMCPServer so ProcedureMCPClient.list_tools returns real parameter schemas (previously properties were empty, causing Tactus adapter to build empty arg models and drop tool args). Added schema extraction from function signatures in mcp_transport and added a regression test that verifies plexus_guidelines_validate exposes guidelines_markdown in its input schema.\n\nAlso removed executor-level DSPy monkey patch fallback and moved invocation-shape handling into Tactus DSPyAgentHandle._execute_tool with deterministic call attempts. Verified adapter model now includes guidelines_markdown and tool calls pass args through to MCP.",
       "created_at": "2026-03-14T13:42:50.040403Z"
+    },
+    {
+      "id": "906cbb1f-8cf0-4ce6-916e-a909931a6720",
+      "author": "ryan",
+      "text": "Procedure conversation history loading fixed in dashboard.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-14T05:34:09.415994Z",
-  "updated_at": "2026-03-14T13:42:50.040403Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

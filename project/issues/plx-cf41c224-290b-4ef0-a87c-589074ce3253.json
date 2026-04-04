@@ -3,7 +3,7 @@
   "title": "Feedback Evaluation Reliability and RCA Contract",
   "description": "## Summary\nMake feedback-backed evaluations operationally reliable, with root-cause analysis treated as required process output rather than best-effort optional output.\n\n## Scope\n- RCA reliability is a separate workstream from deterministic dataset design.\n- The goal is a single correct RCA path for feedback-backed evaluations.\n- Successful completion should mean metrics and RCA are both present when RCA is enabled.\n\n## Key assumptions\n- RCA reliability is a dependency for high-trust optimization workflows.\n- Missing RCA with incorrect items is a process-critical defect.\n- Evaluation orchestration should treat the evaluation record as source of truth, not local CLI exit.\n\n## Notes\nCreate the child bug/tasks in this epic exactly as planned so operational reliability work stays visible and auditable.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "ryan",
       "text": "Progress context: RCA contract now enforced + unified across feedback-backed paths, and small-set (<5) RCA summarization implemented to avoid empty/no-topics outcomes. For cold restarts, use plx-9aa370 runbook note for canonical evaluation execution + verification path.",
       "created_at": "2026-04-02T14:36:54.691426Z"
+    },
+    {
+      "id": "4c3dc13d-5b96-477f-a8d9-19e944cc1eb5",
+      "author": "ryan",
+      "text": "Feedback Evaluation Reliability and RCA Contract enforced.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-04-02T12:48:45.177043Z",
-  "updated_at": "2026-04-04T16:33:21.639857Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

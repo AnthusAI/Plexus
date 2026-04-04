@@ -3,7 +3,7 @@
   "title": "Deterministic Associated Datasets, Curation, and Evaluation Selection",
   "description": "## Summary\nMake score optimization repeatable with deterministic associated datasets, explicit curation, and evaluation-selection rules.\n\n## Scope\n- Associated datasets are DataSet artifacts linked to a score via DataSet.scoreId.\n- Selection is association-only with deterministic newest-first ordering.\n- Curation builds deterministic, single-score datasets from vetted labels.\n- Evaluation becomes source-agnostic once the dataset exists.\n\n## Key assumptions\n- The benchmark is always the associated DataSet artifact, never live upstream source objects.\n- Labels are snapshotted into the dataset artifact at build time.\n- Schema-budget cleanup may be required before the preferred curation model can ship.\n\n## Notes\nKeep this epic separate from RCA reliability and misclassification triage workstreams.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -52,11 +52,17 @@
       "author": "ryan",
       "text": "plx-2efd16 completed and closed. Vetted+balanced associated dataset curation pipeline is now report-evidence-first via score dataset-curate-vetted, with runtime validation on 1039/45425 and sub-task closures recorded.",
       "created_at": "2026-04-03T02:41:52.321528Z"
+    },
+    {
+      "id": "1672f03d-000b-44cb-9c23-2a200de78923",
+      "author": "ryan",
+      "text": "Deterministic Associated Datasets, Curation, and Evaluation Selection implemented.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-04-02T12:48:39.894398Z",
-  "updated_at": "2026-04-03T02:41:52.321528Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"
