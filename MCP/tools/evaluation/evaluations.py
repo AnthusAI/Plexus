@@ -1223,9 +1223,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 "feedback_final_value": feedback_final,
             }
 
-            # 6. Run LLM inference if we have a transcript
+            # 6. Run LLM inference if we have primary input context
             if not transcript:
-                result["detailed_cause"] = "(no transcript available for LLM analysis)"
+                result["detailed_cause"] = "(no primary input available for LLM analysis)"
                 result["suggested_fix"] = ""
                 return _json.dumps(result, indent=2, default=str)
 
@@ -1239,7 +1239,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     predicted_value=predicted_value,
                 )
                 detailed_cause, suggested_fix = analyze_score_result(
-                    transcript=transcript,
+                    primary_input=transcript,
                     predicted=predicted_value,
                     correct=correct_label,
                     explanation=score_explanation,

@@ -14,13 +14,13 @@ const makeTask = () => {
       category_totals: {
         information_gap: 1,
       },
-      item_classifications: [
+      item_classifications_all: [
         {
           item_id: 'item-1',
           feedback_item_id: 'fb-1',
           primary_category: 'information_gap',
           confidence: 'medium',
-          rationale: 'Transcript missed key phrase.',
+          rationale_full: 'Transcript missed key phrase.',
           evidence_snippets: [
             {
               source: 'edit_comment',
@@ -92,19 +92,17 @@ const makeTask = () => {
 }
 
 describe('EvaluationTask category summary drill-down', () => {
-  test('shows representative evidence and applies category filter to score results', () => {
-    render(<EvaluationTask variant="detail" task={makeTask()} />)
+  test('applies category filter and auto-selects first matching score result', () => {
+    const onSelectScoreResult = jest.fn()
+    render(<EvaluationTask variant="detail" task={makeTask()} onSelectScoreResult={onSelectScoreResult} />)
 
-    expect(screen.getByText('Representative evidence')).toBeInTheDocument()
-    expect(screen.getByText(/Could hear it in audio, but transcript dropped it/i)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /View 1 item in score results/i }))
+    fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
 
     expect(screen.getByText('Filtered by category: Information gap')).toBeInTheDocument()
     expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["item-1"]')
+    expect(onSelectScoreResult).toHaveBeenCalledWith('sr-1')
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
     expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('null')
   })
 })
-

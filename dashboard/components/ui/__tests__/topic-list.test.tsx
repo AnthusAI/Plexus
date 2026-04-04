@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { TopicList } from '@/components/ui/topic-list'
 
 describe('TopicList misclassification drill-down', () => {
-  test('renders item-level triage details and forwards metadata through onTopicFilter', () => {
+  test('expands without filtering, then filters only via explicit action button', () => {
     const onTopicFilter = jest.fn()
     const topics = [
       {
@@ -39,23 +39,10 @@ describe('TopicList misclassification drill-down', () => {
     render(<TopicList topics={topics} onTopicFilter={onTopicFilter} />)
 
     fireEvent.click(screen.getByRole('button', { name: /false positive pattern/i }))
+    expect(onTopicFilter).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /View items \(1\)/i })).toBeInTheDocument()
 
-    expect(screen.getByText('Misclassified items')).toBeInTheDocument()
-    expect(screen.getByText('Score configuration')).toBeInTheDocument()
-    expect(screen.getByText(/Prompt over-triggered on free-service language/i)).toBeInTheDocument()
-
-    expect(onTopicFilter).toHaveBeenCalledWith(
-      ['item-1'],
-      expect.objectContaining({
-        'item-1': expect.objectContaining({
-          misclassification_category: 'score_configuration_problem',
-          misclassification_confidence: 'high',
-          misclassification_rationale: 'Prompt over-triggered on free-service language.',
-          detailed_cause: 'The score over-indexes on free-service language.',
-          suggested_fix: 'Add a safe-harbor when no payment obligation is described.',
-        }),
-      }),
-      'False positive pattern'
-    )
+    fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
+    expect(onTopicFilter).toHaveBeenCalledWith(['item-1'], 'False positive pattern')
   })
 })

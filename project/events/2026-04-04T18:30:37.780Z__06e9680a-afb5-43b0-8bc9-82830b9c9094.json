@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "06e9680a-afb5-43b0-8bc9-82830b9c9094",
+  "issue_id": "plx-ad68bf59-6250-44a5-af12-559072f1c414",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T18:30:37.780Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-e7329ba2-5000-4576-8fd0-854b05b7d5ac",
+    "priority": 1,
+    "status": "open",
+    "title": "Full-scope per-item misclassification classification before semantic clustering"
+  }
+}

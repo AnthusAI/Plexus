@@ -1,0 +1,31 @@
+{
+  "id": "plx-08313833-2e6a-4a44-b627-f4cae0ecac21",
+  "title": "Offload detailed RCA item context to attachments and persist compact pointers in evaluation parameters",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3ec604db-953f-4738-b25a-f8e08914aa72",
+      "author": "ryan",
+      "text": "Implementing storage split: write detailed per-item RCA context as attachment artifact, keep compact item fields + attachment pointer(s) in evaluation.parameters, and validate with a 50-sample feedback run on 1039/45425.",
+      "created_at": "2026-04-04T20:43:51.795665Z"
+    },
+    {
+      "id": "1fa17f00-f412-40fa-b92e-26f67dc813a7",
+      "author": "ryan",
+      "text": "Continuing implementation: wiring attachment-backed RCA persistence in FeedbackEvaluation so full misclassification payload is uploaded to S3 and evaluation.parameters stores only compact summaries plus attachment pointer. Next: add upload helper + tests + runtime validation on 50-sample feedback evaluation.",
+      "created_at": "2026-04-04T20:45:57.733653Z"
+    }
+  ],
+  "created_at": "2026-04-04T20:43:47.930469Z",
+  "updated_at": "2026-04-04T20:45:57.733653Z",
+  "closed_at": null,
+  "custom": {}
+}

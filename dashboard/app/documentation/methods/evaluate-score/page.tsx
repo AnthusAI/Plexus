@@ -137,7 +137,7 @@ plexus evaluations list-results --evaluation evaluation-id`}</code>
           <h3 className="text-xl font-medium mb-2">Per-item categories</h3>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
             <li><strong>score_configuration_problem</strong>: likely fixable in score YAML/prompt logic.</li>
-            <li><strong>information_gap</strong>: transcript/metadata evidence is insufficient or missing.</li>
+            <li><strong>information_gap</strong>: primary input/context evidence is insufficient or degraded.</li>
             <li><strong>guideline_gap_requires_sme</strong>: rubric ambiguity that needs SME clarification.</li>
             <li><strong>mechanical_malfunction</strong>: execution/system failure patterns.</li>
           </ul>
@@ -145,7 +145,7 @@ plexus evaluations list-results --evaluation evaluation-id`}</code>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
             <li><strong>prediction_mode_collapse</strong>: misclassifications all predicted as one class.</li>
             <li><strong>mechanical_failures_present</strong>: one or more items classified as mechanical malfunction.</li>
-            <li><strong>low_transcript_coverage</strong>: at least half of analyzed items lacked transcript context.</li>
+            <li><strong>low_primary_input_coverage</strong>: at least half of analyzed items lacked primary-input context.</li>
           </ul>
           <h3 className="text-xl font-medium mb-2">How to use it in the dashboard</h3>
           <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
@@ -153,6 +153,14 @@ plexus evaluations list-results --evaluation evaluation-id`}</code>
             <li>Expand RCA topics to inspect item-level category, confidence, rationale, and evidence snippets.</li>
             <li>Select a score result to see the same misclassification triage context in item detail view.</li>
           </ol>
+          <h3 className="text-xl font-medium mt-4 mb-2">Agent-facing payload contract</h3>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+            <li><code>misclassification_analysis.item_classifications_all</code> is the authoritative per-item triage table for coding agents.</li>
+            <li><code>misclassification_analysis.analysis_scope</code> explicitly reports coverage and assignment scope.</li>
+            <li><code>analysis_scope.topic_assignment_scope</code> is currently <code>exemplar_only</code>; topic IDs are only guaranteed for exemplars exposed by semantic memory.</li>
+            <li><code>misclassification_analysis.category_diagnostics.information_gap</code> explains missing/degraded primary-input and missing-required-context signals when information-gap dominates.</li>
+            <li>Use <code>item_classifications_all</code> for optimization decisions and next-action logic; use topics for semantic drill-down and narrative context.</li>
+          </ul>
           <h3 className="text-xl font-medium mt-4 mb-2">How to inspect specifics</h3>
           <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
             <li>Use category summary cards to review representative evidence rows (item, source, quote).</li>

@@ -120,7 +120,7 @@ class TestAnalyzeScoreResult:
 
         with patch("boto3.client", return_value=mock_client):
             cause, fix = analyze_score_result(
-                transcript="Agent: SelectRx is a free service for you.",
+                primary_input="Agent: SelectRx is a free service for you.",
                 predicted="No",
                 correct="Yes",
                 explanation="Flagged as Ambiguous Cost Language",
@@ -143,7 +143,7 @@ class TestAnalyzeScoreResult:
 
         with patch("boto3.client", side_effect=Exception("Bedrock unavailable")):
             cause, fix = analyze_score_result(
-                transcript="Some transcript",
+                primary_input="Some input artifact",
                 predicted="No",
                 correct="Yes",
                 explanation="Some explanation",
@@ -174,7 +174,7 @@ class TestAnalyzeScoreResult:
 
         with patch("boto3.client", return_value=mock_client):
             analyze_score_result(
-                transcript="Some transcript",
+                primary_input="Some input artifact",
                 predicted="No",
                 correct="Yes",
                 explanation="Some explanation",
