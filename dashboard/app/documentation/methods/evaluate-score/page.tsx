@@ -128,6 +128,34 @@ plexus evaluations list-results --evaluation evaluation-id`}</code>
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Misclassification Triage Layer</h2>
+          <p className="text-muted-foreground mb-4">
+            Feedback-backed evaluations include a misclassification triage layer so operators can
+            quickly decide whether to optimize score logic, escalate guideline questions, fix upstream
+            data quality, or investigate system issues.
+          </p>
+          <h3 className="text-xl font-medium mb-2">Per-item categories</h3>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
+            <li><strong>score_configuration_problem</strong>: likely fixable in score YAML/prompt logic.</li>
+            <li><strong>information_gap</strong>: transcript/metadata evidence is insufficient or missing.</li>
+            <li><strong>guideline_gap_requires_sme</strong>: rubric ambiguity that needs SME clarification.</li>
+            <li><strong>mechanical_malfunction</strong>: execution/system failure patterns.</li>
+          </ul>
+          <h3 className="text-xl font-medium mb-2">Evaluation-level red flags</h3>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
+            <li><strong>prediction_mode_collapse</strong>: misclassifications all predicted as one class.</li>
+            <li><strong>mechanical_failures_present</strong>: one or more items classified as mechanical malfunction.</li>
+            <li><strong>low_transcript_coverage</strong>: at least half of analyzed items lacked transcript context.</li>
+          </ul>
+          <h3 className="text-xl font-medium mb-2">How to use it in the dashboard</h3>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>Open evaluation detail and review the segmented category breakdown plus red flags.</li>
+            <li>Expand RCA topics to inspect item-level category, confidence, rationale, and evidence snippets.</li>
+            <li>Select a score result to see the same misclassification triage context in item detail view.</li>
+          </ol>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Batch Evaluations</h2>
           <p className="text-muted-foreground mb-4">
             You can evaluate multiple sources at once using batch processing:

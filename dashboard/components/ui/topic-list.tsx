@@ -19,6 +19,15 @@ export interface TopicExemplar {
   timestamp?: string | null;
   detailed_cause?: string | null;
   suggested_fix?: string | null;
+  misclassification_classification?: {
+    primary_category?: string;
+    rationale?: string;
+    confidence?: string;
+    evidence_snippets?: Array<{
+      source?: string;
+      quote_or_fact?: string;
+    }>;
+  };
 }
 
 export interface Topic {
@@ -43,12 +52,60 @@ export interface Topic {
   days_inactive?: number;
 }
 
-type RcaDataByItemId = Record<string, { detailed_cause?: string; suggested_fix?: string }>
+type RcaDataByItemId = Record<string, {
+  detailed_cause?: string;
+  suggested_fix?: string;
+  misclassification_category?: string;
+  misclassification_confidence?: string;
+  misclassification_rationale?: string;
+  misclassification_evidence?: Array<{
+    source?: string;
+    quote_or_fact?: string;
+  }>;
+}>
 
 interface TopicItemProps {
   topic: Topic;
   isExpanded: boolean;
   onToggle: (topic: Topic) => void;
+}
+
+const getCategoryLabel = (category?: string | null): string => {
+  switch (category) {
+    case "score_configuration_problem":
+      return "Score configuration"
+    case "information_gap":
+      return "Information gap"
+    case "guideline_gap_requires_sme":
+      return "SME guideline gap"
+    case "mechanical_malfunction":
+      return "Mechanical malfunction"
+    default:
+      return category ? category.replace(/_/g, " ") : "Unclassified"
+  }
+}
+
+const getCategoryBadgeClass = (category?: string | null): string => {
+  switch (category) {
+    case "score_configuration_problem":
+      return "bg-chart-1/20 text-chart-1"
+    case "information_gap":
+      return "bg-chart-2/20 text-chart-2"
+    case "guideline_gap_requires_sme":
+      return "bg-chart-3/20 text-chart-3"
+    case "mechanical_malfunction":
+      return "bg-chart-4/20 text-chart-4"
+    default:
+      return "bg-muted text-muted-foreground"
+  }
+}
+
+const getConfidenceBadgeClass = (confidence?: string | null): string => {
+  const value = (confidence ?? "").toLowerCase()
+  if (value === "high") return "bg-true/20 text-true"
+  if (value === "medium") return "bg-chart-3/20 text-chart-3"
+  if (value === "low") return "bg-false/20 text-false"
+  return "bg-muted text-muted-foreground"
 }
 
 function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
@@ -165,6 +222,65 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
                   <span className="text-foreground">{topic.keywords.join(", ")}</span>
                 </div>
               )}
+              {topic.exemplars && topic.exemplars.length > 0 && (
+                <div>
+                  <div className="font-medium text-muted-foreground mb-2">Misclassified items</div>
+                  <div className="space-y-2">
+                    {topic.exemplars
+                      .filter((ex): ex is TopicExemplar => typeof ex !== "string")
+                      .map((ex, index) => {
+                        const classification = ex.misclassification_classification
+                        return (
+                          <div key={ex.item_id ?? `topic-exemplar-${index}`} className="bg-card rounded-md p-2 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-xs text-muted-foreground">
+                                Item {ex.item_id ?? "Unavailable"}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="secondary" className="border-0 bg-muted/50 text-foreground">
+                                  {ex.initial_answer_value ?? "?"} → {ex.final_answer_value ?? "?"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="secondary" className={`border-0 ${getCategoryBadgeClass(classification?.primary_category)}`}>
+                                {getCategoryLabel(classification?.primary_category)}
+                              </Badge>
+                              <Badge variant="secondary" className={`border-0 ${getConfidenceBadgeClass(classification?.confidence)}`}>
+                                Confidence: {classification?.confidence ?? "unknown"}
+                              </Badge>
+                            </div>
+                            {classification?.rationale && (
+                              <p className="text-xs text-foreground">{classification.rationale}</p>
+                            )}
+                            {classification?.evidence_snippets && classification.evidence_snippets.length > 0 && (
+                              <ul className="space-y-1">
+                                {classification.evidence_snippets.map((snippet, snippetIndex) => (
+                                  <li key={`${ex.item_id ?? index}-evidence-${snippetIndex}`} className="text-xs text-muted-foreground">
+                                    <span className="font-medium text-foreground">
+                                      {snippet.source ?? "source"}:
+                                    </span>{" "}
+                                    {snippet.quote_or_fact ?? "No quote available."}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {ex.detailed_cause && (
+                              <p className="text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground">Detailed cause:</span> {ex.detailed_cause}
+                              </p>
+                            )}
+                            {ex.suggested_fix && (
+                              <p className="text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground">Suggested fix:</span> {ex.suggested_fix}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -216,6 +332,10 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
             rcaDataByItemId[ex.item_id] = {
               detailed_cause: ex.detailed_cause ?? undefined,
               suggested_fix: ex.suggested_fix ?? undefined,
+              misclassification_category: ex.misclassification_classification?.primary_category ?? undefined,
+              misclassification_confidence: ex.misclassification_classification?.confidence ?? undefined,
+              misclassification_rationale: ex.misclassification_classification?.rationale ?? undefined,
+              misclassification_evidence: ex.misclassification_classification?.evidence_snippets ?? undefined,
             };
           }
         });
