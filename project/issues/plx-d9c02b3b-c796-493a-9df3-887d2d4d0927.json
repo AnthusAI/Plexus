@@ -3,7 +3,7 @@
   "title": "Implement dependency constraint hardening in pyproject.toml and requirements.txt",
   "description": "Apply upstream dependency constraint updates in Plexus to reduce resolver search space while keeping intended functionality; verify with fresh Python 3.11 pip dry-run.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "derek.norrbom",
       "text": "Corrective git-flow action completed: changes moved to feature/deps-resolver-hardening-review (PR #132), and develop restored via revert commit 0320b49b. User can now review/test safely on feature branch before merge.",
       "created_at": "2026-03-26T19:49:43.992783Z"
+    },
+    {
+      "id": "4c922234-b844-429e-b312-227370a21bd2",
+      "author": "ryan",
+      "text": "Dependency constraint hardening in pyproject.toml and requirements.txt complete.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-26T19:43:34.692538Z",
-  "updated_at": "2026-03-26T19:49:43.992783Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }
