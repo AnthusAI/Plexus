@@ -563,12 +563,14 @@ async def _execute_tactus(
                 if parsed_source.get('class') == 'Tactus' and context:
                     lua_source = parsed_source.get('code') or parsed_source.get('procedure')
                     if isinstance(lua_source, str):
-                        # Build params table from context dict
+                        # Build params table from context dict, applying YAML defaults for missing params
                         params_dict = {}
                         params_schema = parsed_source.get('params', {})
-                        for param_name in params_schema.keys():
+                        for param_name, param_def in params_schema.items():
                             if param_name in context:
                                 params_dict[param_name] = context[param_name]
+                            elif isinstance(param_def, dict) and param_def.get('default') is not None:
+                                params_dict[param_name] = param_def['default']
 
                         if params_dict:
                             # Inject params initialization at the start of Lua code
@@ -704,6 +706,29 @@ async def _execute_tactus(
                 mcp_client_for_bridge = ProcedureMCPClient(mcp_server.transport)
             except Exception:
                 mcp_client_for_bridge = None
+
+        # Register score editor tools on transport BEFORE load_tools() so they appear
+        # in the bridged toolset registry alongside the Plexus MCP tools.
+        if mcp_server and hasattr(mcp_server, "transport") and getattr(mcp_server.transport, "connected", False):
+            try:
+                from .tactus_adapters.score_editor_toolset import ScoreEditorToolset
+                score_editor_instance = ScoreEditorToolset.register_on_transport(
+                    mcp_server.transport, mcp_client=mcp_client_for_bridge
+                )
+                # Pre-populate scorecard/score from execution context so the toolset
+                # can auto-load YAML even when the orchestrator LLM strips args from
+                # score_editor_setup (DSPy tool conversion drops all args).
+                if isinstance(context, dict):
+                    if context.get("scorecard"):
+                        score_editor_instance._scorecard = str(context["scorecard"])
+                    if context.get("score"):
+                        score_editor_instance._score = str(context["score"])
+                    logger.info(
+                        "ScoreEditorToolset pre-populated from context: scorecard=%s score=%s",
+                        score_editor_instance._scorecard, score_editor_instance._score,
+                    )
+            except Exception as exc:
+                logger.warning("Could not register ScoreEditorToolset: %s", exc)
 
         if mcp_client_for_bridge:
             try:

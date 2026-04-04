@@ -3542,8 +3542,67 @@ class FeedbackEvaluation(Evaluation):
                     tracker=tracker,
                 )
 
+            # Fetch score context once so item-level misclassification classification can be
+            # included in pre-clustering text and reused for post-cluster synthesis.
+            score_guidelines = ""
+            score_yaml_code = ""
+            resolved_final_classes = []
+            class_resolution_source = ""
+            scorecard_guidance_text = ""
+            dashboard_client = getattr(self, "dashboard_client", None)
+            if dashboard_client and getattr(self, 'score_id', None):
+                try:
+                    score_version_id_for_context = getattr(self, "score_version_id", None)
+                    if not score_version_id_for_context:
+                        _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
+                        _sr = dashboard_client.execute(_sq, {'id': self.score_id})
+                        score_version_id_for_context = (_sr.get('getScore') or {}).get('championVersionId')
+                    if score_version_id_for_context:
+                        _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
+                        _vr = dashboard_client.execute(_vq, {'id': score_version_id_for_context})
+                        _vd = _vr.get('getScoreVersion') or {}
+                        score_guidelines = _vd.get('guidelines') or ''
+                        score_yaml_code = _vd.get('configuration') or ''
+                        if score_yaml_code:
+                            class_details = resolve_final_output_classes_from_yaml_text(score_yaml_code)
+                            resolved_final_classes = class_details.get("classes", [])
+                            class_resolution_source = class_details.get("source", "")
+                        self.logger.info(
+                            f"Fetched score context: guidelines={len(score_guidelines)} chars, "
+                            f"code={len(score_yaml_code)} chars, "
+                            f"resolved_final_classes={resolved_final_classes}"
+                        )
+                except Exception as exc:
+                    self.logger.debug("Failed to fetch score context: %s", exc)
+            scorecard_obj = getattr(self, "scorecard", None)
+            if isinstance(scorecard_obj, dict):
+                scorecard_guidance_text = (
+                    scorecard_obj.get("guidelines")
+                    or scorecard_obj.get("description")
+                    or ""
+                )
+            elif scorecard_obj is not None:
+                scorecard_guidance_text = (
+                    getattr(scorecard_obj, "guidelines", "")
+                    or getattr(scorecard_obj, "description", "")
+                    or ""
+                )
+
             now = datetime.now(_tz.utc)
+            def _parse_ts_for_sort(value: str) -> float:
+                text = str(value or "").strip()
+                if not text:
+                    return 0.0
+                try:
+                    if text.endswith("Z"):
+                        text = text[:-1] + "+00:00"
+                    return datetime.fromisoformat(text).timestamp()
+                except Exception:
+                    return 0.0
+
             texts = []
+            canonical_item_classifications = []
+            canonical_item_by_feedback_id = {}
             for fi in candidate_items:
                 ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
                 ts_str = (
@@ -3595,6 +3654,80 @@ class FeedbackEvaluation(Evaluation):
                     if fi.finalAnswerValue:
                         metadata["final_answer_value"] = fi.finalAnswerValue
                     text = fi.editCommentValue
+
+                misclassification_item_context = build_misclassification_item_context(
+                    feedback_item_id=fi.id,
+                    item_id=fi.itemId or "",
+                    score_id=getattr(self, "score_id", "") or "",
+                    scorecard_id=getattr(self, "scorecard_id", "") or "",
+                    score_version_id=getattr(self, "score_version_id", "") or "",
+                    predicted_value=metadata.get("initial_answer_value", "") or "",
+                    correct_value=metadata.get("final_answer_value", "") or "",
+                    score_explanation=metadata.get("score_explanation", "") or "",
+                    edit_comment=metadata.get("edit_comment", ""),
+                    initial_comment=metadata.get("initial_comment", ""),
+                    final_comment=metadata.get("final_comment", ""),
+                    score_guidelines_text=score_guidelines,
+                    score_yaml_configuration=score_yaml_code,
+                    scorecard_guidance_text=scorecard_guidance_text,
+                    transcript_text="",
+                    metadata_snapshot="",
+                    label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
+                    resolved_final_classes=resolved_final_classes,
+                    class_resolution_source=class_resolution_source,
+                )
+                misclassification_classification = classify_misclassification_item(
+                    misclassification_item_context
+                )
+                primary_category = (
+                    misclassification_classification.get("primary_category")
+                    or "score_configuration_problem"
+                )
+                confidence = misclassification_classification.get("confidence") or "unknown"
+                mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
+                rationale = (misclassification_classification.get("rationale") or "").strip()
+                rationale_single_line = " ".join(rationale.split())
+                rationale_words = rationale_single_line.split() if rationale_single_line else []
+                rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
+                if len(rationale_words) > 12:
+                    rationale_excerpt += "..."
+                rationale_excerpt = rationale_excerpt.replace(";", ",").replace("]", ")")
+
+                metadata["pre_cluster_misclassification_category"] = primary_category
+                metadata["pre_cluster_misclassification_confidence"] = confidence
+                metadata["pre_cluster_mechanical_subtype"] = mechanical_subtype
+                metadata["pre_cluster_misclassification_rationale_short"] = rationale_excerpt
+
+                canonical_row = {
+                    "feedback_item_id": fi.id,
+                    "item_id": fi.itemId or "",
+                    "timestamp": ts_str,
+                    "topic_id": None,
+                    "topic_label": "",
+                    "predicted_value": metadata.get("initial_answer_value", "") or "",
+                    "correct_value": metadata.get("final_answer_value", "") or "",
+                    "primary_category": primary_category,
+                    "confidence": confidence,
+                    "rationale_short": rationale_excerpt,
+                    "rationale_full": rationale,
+                    "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
+                    "mechanical_subtype": (
+                        mechanical_subtype if mechanical_subtype != "none" else None
+                    ),
+                    "mechanical_details": misclassification_classification.get("mechanical_details"),
+                    "misclassification_item_context": misclassification_item_context,
+                    "misclassification_classification": misclassification_classification,
+                }
+                canonical_item_classifications.append(canonical_row)
+                canonical_item_by_feedback_id[fi.id] = canonical_row
+
+                text = (
+                    f"[misclassification_category={primary_category};"
+                    f"confidence={confidence};"
+                    f"mechanical_subtype={mechanical_subtype};"
+                    f"triage_rationale={rationale_excerpt}]\n"
+                    f"{rationale_excerpt}\n{text}"
+                )
 
                 texts.append(TimestampedText(
                     id=fi.id,
@@ -3700,50 +3833,6 @@ class FeedbackEvaluation(Evaluation):
                     topic_label=topic_label,
                     score_guidelines=score_guidelines,
                     score_yaml_code=score_yaml_code,
-                )
-
-            # --- Fetch score context for synthesis (once for all topics) ---
-            score_guidelines = ""
-            score_yaml_code = ""
-            resolved_final_classes = []
-            class_resolution_source = ""
-            scorecard_guidance_text = ""
-            if dashboard_client and getattr(self, 'score_id', None):
-                try:
-                    score_version_id_for_context = getattr(self, "score_version_id", None)
-                    if not score_version_id_for_context:
-                        _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
-                        _sr = dashboard_client.execute(_sq, {'id': self.score_id})
-                        score_version_id_for_context = (_sr.get('getScore') or {}).get('championVersionId')
-                    if score_version_id_for_context:
-                        _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
-                        _vr = dashboard_client.execute(_vq, {'id': score_version_id_for_context})
-                        _vd = _vr.get('getScoreVersion') or {}
-                        score_guidelines = _vd.get('guidelines') or ''
-                        score_yaml_code = _vd.get('configuration') or ''
-                        if score_yaml_code:
-                            class_details = resolve_final_output_classes_from_yaml_text(score_yaml_code)
-                            resolved_final_classes = class_details.get("classes", [])
-                            class_resolution_source = class_details.get("source", "")
-                        self.logger.info(
-                            f"Fetched score context: guidelines={len(score_guidelines)} chars, "
-                            f"code={len(score_yaml_code)} chars, "
-                            f"resolved_final_classes={resolved_final_classes}"
-                        )
-                except Exception as exc:
-                    self.logger.debug("Failed to fetch score context: %s", exc)
-            scorecard_obj = getattr(self, "scorecard", None)
-            if isinstance(scorecard_obj, dict):
-                scorecard_guidance_text = (
-                    scorecard_obj.get("guidelines")
-                    or scorecard_obj.get("description")
-                    or ""
-                )
-            elif scorecard_obj is not None:
-                scorecard_guidance_text = (
-                    getattr(scorecard_obj, "guidelines", "")
-                    or getattr(scorecard_obj, "description", "")
-                    or ""
                 )
 
             _SONNET_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"
@@ -3939,11 +4028,14 @@ class FeedbackEvaluation(Evaluation):
                 async def _analyze_exemplar(idx: int, ex) -> dict:
                     above_fold = idx < max_summarization_exemplars
                     item_id = ex.metadata.get("item_id")
+                    feedback_item_id = ex.metadata.get("feedback_item_id", "")
+                    canonical_row = canonical_item_by_feedback_id.get(feedback_item_id, {})
+                    if not canonical_row:
+                        raise RuntimeError(
+                            f"Missing canonical misclassification row for feedback item {feedback_item_id}"
+                        )
                     transcript_record = transcript_cache.get(item_id) if item_id else None
                     transcript = transcript_record.get("text") if transcript_record else ""
-                    metadata_snapshot = (
-                        transcript_record.get("metadata_snapshot") if transcript_record else ""
-                    )
 
                     detailed_cause = ""
                     suggested_fix = ""
@@ -3956,36 +4048,19 @@ class FeedbackEvaluation(Evaluation):
                             explanation, tr.label, score_guidelines, score_yaml_code
                         )
 
+                    if canonical_row:
+                        canonical_row["topic_id"] = tr.topic_id
+                        canonical_row["topic_label"] = tr.label
                     score_explanation = ex.metadata.get("score_explanation", "")
-                    misclassification_item_context = build_misclassification_item_context(
-                        feedback_item_id=ex.metadata.get("feedback_item_id", ""),
-                        item_id=item_id or "",
-                        score_id=getattr(self, "score_id", "") or "",
-                        scorecard_id=getattr(self, "scorecard_id", "") or "",
-                        score_version_id=getattr(self, "score_version_id", "") or "",
-                        predicted_value=ex.metadata.get("initial_answer_value", "") or "",
-                        correct_value=ex.metadata.get("final_answer_value", "") or "",
-                        score_explanation=score_explanation,
-                        edit_comment=ex.metadata.get("edit_comment", ""),
-                        initial_comment=ex.metadata.get("initial_comment", ""),
-                        final_comment=ex.metadata.get("final_comment", ""),
-                        score_guidelines_text=score_guidelines,
-                        score_yaml_configuration=score_yaml_code,
-                        scorecard_guidance_text=scorecard_guidance_text,
-                        transcript_text=transcript,
-                        metadata_snapshot=metadata_snapshot,
-                        label_provenance_source=(
-                            ex.metadata.get("label_provenance_source")
-                            or "feedback_final_answer_value"
-                        ),
-                        resolved_final_classes=resolved_final_classes,
-                        class_resolution_source=class_resolution_source,
+                    misclassification_item_context = canonical_row.get(
+                        "misclassification_item_context", {}
                     )
-                    misclassification_classification = classify_misclassification_item(
-                        misclassification_item_context
+                    misclassification_classification = canonical_row.get(
+                        "misclassification_classification", {}
                     )
                     return {
                         "text": ex.text,
+                        "feedback_item_id": feedback_item_id,
                         "item_id": item_id,
                         "initial_answer_value": ex.metadata.get("initial_answer_value"),
                         "final_answer_value": ex.metadata.get("final_answer_value"),
@@ -4067,8 +4142,27 @@ class FeedbackEvaluation(Evaluation):
                 overall_explanation, overall_improvement_suggestion = await asyncio.to_thread(
                     _top_level_synthesis, topics, score_guidelines, score_yaml_code
                 )
+            item_classifications_all = sorted(
+                canonical_item_classifications,
+                key=lambda item: (
+                    -_parse_ts_for_sort(item.get("timestamp", "")),
+                    str(item.get("feedback_item_id") or item.get("item_id") or ""),
+                ),
+            )
+            topic_assignment_unavailable_count = len(
+                [item for item in item_classifications_all if item.get("topic_id") is None]
+            )
             misclassification_analysis = build_misclassification_analysis_summary(
                 topics,
+                item_classifications_all=item_classifications_all,
+                analysis_scope={
+                    "candidate_items_total": len(candidate_items),
+                    "classified_items_total": len(item_classifications_all),
+                    "texts_analyzed_total": len(texts),
+                    "topics_found": len(topics),
+                    "topic_assignment_scope": "exemplar_only",
+                    "topic_assignment_unavailable_count": topic_assignment_unavailable_count,
+                },
                 max_category_summary_items=max_category_summary_items,
             )
 
@@ -4365,8 +4459,42 @@ class FeedbackEvaluation(Evaluation):
             "improvement_suggestion": improvement_suggestion,
             "score_fix_candidate_count": len(score_fix_exemplars),
         }
+        item_classifications_all = []
+        for ex in exemplars:
+            classification = ex.get("misclassification_classification") or {}
+            item_classifications_all.append({
+                "feedback_item_id": ex.get("feedback_item_id", ""),
+                "item_id": ex.get("item_id", ""),
+                "timestamp": ex.get("timestamp", ""),
+                "topic_id": 0,
+                "topic_label": "Small-set RCA Summary",
+                "predicted_value": ex.get("initial_answer_value", "") or "",
+                "correct_value": ex.get("final_answer_value", "") or "",
+                "primary_category": classification.get("primary_category", ""),
+                "confidence": classification.get("confidence", ""),
+                "rationale_short": (
+                    " ".join(
+                        str(classification.get("rationale", "") or "").strip().split()[:12]
+                    )
+                ),
+                "rationale_full": classification.get("rationale", "") or "",
+                "evidence_snippets": classification.get("evidence_snippets", []),
+                "mechanical_subtype": classification.get("mechanical_subtype"),
+                "mechanical_details": classification.get("mechanical_details"),
+                "misclassification_item_context": ex.get("misclassification_item_context") or {},
+                "misclassification_classification": classification,
+            })
         misclassification_analysis = build_misclassification_analysis_summary(
             [topic],
+            item_classifications_all=item_classifications_all,
+            analysis_scope={
+                "candidate_items_total": len(candidate_items),
+                "classified_items_total": len(item_classifications_all),
+                "texts_analyzed_total": len(exemplars),
+                "topics_found": 1,
+                "topic_assignment_scope": "exemplar_only",
+                "topic_assignment_unavailable_count": 0,
+            },
             max_category_summary_items=max_category_summary_items,
         )
         return {
