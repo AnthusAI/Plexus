@@ -3,7 +3,7 @@
   "title": "Misclassification Classification and Evaluation Triage",
   "description": "## Summary\nAdd a first-class misclassification-classification layer to evaluation analysis so incorrect items are classified by what kind of problem they represent, rather than assuming every error is fixable by score optimization.\n\n## Scope\n- Each misclassified item is classified into exactly one of four operator-facing categories: `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, or `mechanical_malfunction`.\n- Evaluations also gain evaluation-level red flags for cross-item mechanical/pathological patterns that are not item-local, such as all predictions collapsing to one class or score results containing execution errors.\n- The dashboard evaluation view gains a visual breakdown of the misclassification categories plus item-level drill-down.\n- This work remains distinct from deterministic reference datasets and distinct from RCA reliability/contract work.\n\n## Key assumptions\n- Feedback contradictions remain a separate report/workstream and are not folded into the per-item four-category classifier.\n- The new classification layer becomes part of the broader RCA pipeline, not an unrelated side feature.\n- Public-facing web app documentation is required as part of this feature.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-04-02T13:20:13.840883Z",
-  "updated_at": "2026-04-02T13:23:11.710036Z",
+  "updated_at": "2026-04-04T14:27:42.110336Z",
   "closed_at": null,
   "custom": {}
 }
