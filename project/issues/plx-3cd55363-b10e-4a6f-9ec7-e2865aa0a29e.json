@@ -3,7 +3,7 @@
   "title": "Agent speech never collapsed in conversation viewer",
   "description": "",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "conversation-viewer.tsx ~line 2417 applies CollapsibleText with maxLines={10} to ALL non-tool messages, including what agents say. For a 6,767-char hypothesis streamed by the analyzer agent, this shows only the first 10 lines.\n\nRule: agent speech (ASSISTANT role + MESSAGE messageType) must never be collapsed. Only tool call parameters and tool call results may be collapsed.\n\nFix: In the else-branch at ~line 2415-2419, check if message is agent speech before applying maxLines. In message-utils.tsx CollapsibleText, guard shouldTruncate so maxLines=undefined means never collapse.\n\nFiles: dashboard/components/ui/conversation-viewer.tsx ~2417, dashboard/components/ui/message-utils.tsx ~37.",
       "created_at": "2026-04-03T12:44:44.855771Z"
+    },
+    {
+      "id": "449edea3-437c-4ee6-b40c-1941aaa4a1a6",
+      "author": "ryan",
+      "text": "Fixed in commits 0e7434247 and 9e768f108. Agent speech messages no longer collapsed.",
+      "created_at": "2026-04-04T19:22:44.285656Z"
     }
   ],
   "created_at": "2026-04-03T12:44:33.650811Z",
-  "updated_at": "2026-04-03T12:44:44.855771Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:22:44.285656Z",
+  "closed_at": "2026-04-04T19:22:44.285656Z",
   "custom": {}
 }
