@@ -3,7 +3,7 @@
   "title": "Fix dashboard startup failure: missing @tailwindcss/postcss and Jersey 20 font override",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "ryan",
       "text": "Preparing commit to develop with dashboard startup/build fix (Tailwind/PostCSS/oxide compatibility + Jersey_20 fallback guard), then pushing to trigger CI.",
       "created_at": "2026-04-02T00:34:21.690091660Z"
+    },
+    {
+      "id": "498b7876-443d-4ed8-8fa5-b8a7236dce98",
+      "author": "ryan",
+      "text": "Confirmed fixed. Dashboard startup issue with missing @tailwindcss/postcss and Jersey 20 font override was resolved.",
+      "created_at": "2026-04-04T18:53:34.181158Z"
     }
   ],
   "created_at": "2026-04-02T00:16:12.093703452Z",
-  "updated_at": "2026-04-02T00:34:21.690091660Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T18:53:34.181158Z",
+  "closed_at": "2026-04-04T18:53:34.181158Z",
   "custom": {}
 }
