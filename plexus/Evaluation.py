@@ -2901,6 +2901,7 @@ class FeedbackEvaluation(Evaluation):
         api_client=None,
         max_samples: Optional[int] = None,
         sample_seed: Optional[int] = None,
+        max_category_summary_items: int = 20,
         **kwargs
     ):
         """
@@ -2916,6 +2917,7 @@ class FeedbackEvaluation(Evaluation):
             api_client: Optional API client (if not provided, will be created from kwargs)
             max_samples: Optional maximum number of feedback items to process (default: None = all)
             sample_seed: Optional random seed used when sampling feedback items
+            max_category_summary_items: Maximum items per category summary during RCA (default: 20)
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
@@ -2923,6 +2925,7 @@ class FeedbackEvaluation(Evaluation):
         self.api_client = api_client
         self.max_samples = max_samples
         self.sample_seed = sample_seed
+        self.max_category_summary_items = max(1, int(max_category_summary_items or 20))
         
         # Call parent init (which expects scorecard_name and scorecard at minimum)
         # For FeedbackEvaluation, we don't need a full scorecard object
@@ -3099,7 +3102,10 @@ class FeedbackEvaluation(Evaluation):
             )
 
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
-            root_cause_result = await self._run_root_cause_analysis(feedback_items)
+            root_cause_result = await self._run_root_cause_analysis(
+                feedback_items,
+                max_category_summary_items=self.max_category_summary_items,
+            )
 
             # Merge root-cause payload into existing parameters (preserving mode/score/days metadata)
             existing_params = evaluation_record.parameters
@@ -3461,7 +3467,16 @@ class FeedbackEvaluation(Evaluation):
         if failed_count > 0:
             self.logger.warning(f"{failed_count} ScoreResult records failed to create")
 
-    async def _run_root_cause_analysis(self, feedback_items, score_result_map: dict = None, original_explanations: dict = None, max_report_exemplars: int = 20, max_summarization_exemplars: int = 6, tracker=None) -> list:
+    async def _run_root_cause_analysis(
+        self,
+        feedback_items,
+        score_result_map: dict = None,
+        original_explanations: dict = None,
+        max_report_exemplars: int = 20,
+        max_summarization_exemplars: int = 6,
+        max_category_summary_items: int = 20,
+        tracker=None,
+    ) -> list:
         """Run topic clustering + LLM root-cause analysis on feedback edit comments.
 
         Uses biblicus ReinforcementMemory directly for topic clustering, LLM labels,
@@ -3492,6 +3507,7 @@ class FeedbackEvaluation(Evaluation):
                 build_misclassification_analysis_summary,
                 build_misclassification_item_context,
                 classify_misclassification_item,
+                resolve_final_output_classes_from_yaml_text,
             )
 
             def _update_status(msg: str):
@@ -3522,6 +3538,7 @@ class FeedbackEvaluation(Evaluation):
                     original_explanations=original_explanations or {},
                     max_report_exemplars=max_report_exemplars,
                     max_summarization_exemplars=max_summarization_exemplars,
+                    max_category_summary_items=max_category_summary_items,
                     tracker=tracker,
                 )
 
@@ -3688,21 +3705,30 @@ class FeedbackEvaluation(Evaluation):
             # --- Fetch score context for synthesis (once for all topics) ---
             score_guidelines = ""
             score_yaml_code = ""
+            resolved_final_classes = []
+            class_resolution_source = ""
             scorecard_guidance_text = ""
             if dashboard_client and getattr(self, 'score_id', None):
                 try:
-                    _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
-                    _sr = dashboard_client.execute(_sq, {'id': self.score_id})
-                    _champ_id = (_sr.get('getScore') or {}).get('championVersionId')
-                    if _champ_id:
+                    score_version_id_for_context = getattr(self, "score_version_id", None)
+                    if not score_version_id_for_context:
+                        _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
+                        _sr = dashboard_client.execute(_sq, {'id': self.score_id})
+                        score_version_id_for_context = (_sr.get('getScore') or {}).get('championVersionId')
+                    if score_version_id_for_context:
                         _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
-                        _vr = dashboard_client.execute(_vq, {'id': _champ_id})
+                        _vr = dashboard_client.execute(_vq, {'id': score_version_id_for_context})
                         _vd = _vr.get('getScoreVersion') or {}
                         score_guidelines = _vd.get('guidelines') or ''
                         score_yaml_code = _vd.get('configuration') or ''
+                        if score_yaml_code:
+                            class_details = resolve_final_output_classes_from_yaml_text(score_yaml_code)
+                            resolved_final_classes = class_details.get("classes", [])
+                            class_resolution_source = class_details.get("source", "")
                         self.logger.info(
                             f"Fetched score context: guidelines={len(score_guidelines)} chars, "
-                            f"code={len(score_yaml_code)} chars"
+                            f"code={len(score_yaml_code)} chars, "
+                            f"resolved_final_classes={resolved_final_classes}"
                         )
                 except Exception as exc:
                     self.logger.debug("Failed to fetch score context: %s", exc)
@@ -3952,6 +3978,8 @@ class FeedbackEvaluation(Evaluation):
                             ex.metadata.get("label_provenance_source")
                             or "feedback_final_answer_value"
                         ),
+                        resolved_final_classes=resolved_final_classes,
+                        class_resolution_source=class_resolution_source,
                     )
                     misclassification_classification = classify_misclassification_item(
                         misclassification_item_context
@@ -4039,7 +4067,10 @@ class FeedbackEvaluation(Evaluation):
                 overall_explanation, overall_improvement_suggestion = await asyncio.to_thread(
                     _top_level_synthesis, topics, score_guidelines, score_yaml_code
                 )
-            misclassification_analysis = build_misclassification_analysis_summary(topics)
+            misclassification_analysis = build_misclassification_analysis_summary(
+                topics,
+                max_category_summary_items=max_category_summary_items,
+            )
 
             return {
                 "topics": topics,
@@ -4062,6 +4093,7 @@ class FeedbackEvaluation(Evaluation):
         original_explanations: dict,
         max_report_exemplars: int = 20,
         max_summarization_exemplars: int = 6,
+        max_category_summary_items: int = 20,
         tracker=None,
     ) -> dict:
         """Run RCA summarization for small incorrect sets (<5 items)."""
@@ -4072,6 +4104,7 @@ class FeedbackEvaluation(Evaluation):
             build_misclassification_analysis_summary,
             build_misclassification_item_context,
             classify_misclassification_item,
+            resolve_final_output_classes_from_yaml_text,
         )
 
         def _update_status(msg: str):
@@ -4093,6 +4126,10 @@ class FeedbackEvaluation(Evaluation):
             return text
 
         now_iso = datetime.now(_tz.utc).isoformat()
+        score_guidelines = ""
+        score_yaml_code = ""
+        resolved_final_classes = []
+        class_resolution_source = ""
         scorecard_guidance_text = ""
         scorecard_obj = getattr(self, "scorecard", None)
         if isinstance(scorecard_obj, dict):
@@ -4107,6 +4144,27 @@ class FeedbackEvaluation(Evaluation):
                 or getattr(scorecard_obj, "description", "")
                 or ""
             )
+
+        dashboard_client = getattr(self, "dashboard_client", None)
+        if dashboard_client and getattr(self, "score_id", None):
+            try:
+                score_version_id_for_context = getattr(self, "score_version_id", None)
+                if not score_version_id_for_context:
+                    _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
+                    _sr = dashboard_client.execute(_sq, {"id": self.score_id})
+                    score_version_id_for_context = (_sr.get("getScore") or {}).get("championVersionId")
+                if score_version_id_for_context:
+                    _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
+                    _vr = dashboard_client.execute(_vq, {"id": score_version_id_for_context})
+                    _vd = _vr.get("getScoreVersion") or {}
+                    score_guidelines = _vd.get("guidelines") or ""
+                    score_yaml_code = _vd.get("configuration") or ""
+                    if score_yaml_code:
+                        class_details = resolve_final_output_classes_from_yaml_text(score_yaml_code)
+                        resolved_final_classes = class_details.get("classes", [])
+                        class_resolution_source = class_details.get("source", "")
+            except Exception as exc:
+                self.logger.debug("Failed to fetch small-set score context: %s", exc)
         exemplars = []
         for fi in candidate_items[:max_report_exemplars]:
             sr = score_result_map.get(fi.id, {}) if score_result_map is not None else {}
@@ -4136,7 +4194,6 @@ class FeedbackEvaluation(Evaluation):
         _update_status(f"Running small-set RCA on {len(exemplars)} item(s)...")
 
         transcript_cache = {}
-        dashboard_client = getattr(self, "dashboard_client", None)
         if dashboard_client:
             from plexus.dashboard.api.models.item import Item as DashboardItem
 
@@ -4182,8 +4239,8 @@ class FeedbackEvaluation(Evaluation):
                 correct=ex.get("final_answer_value", ""),
                 explanation=ex.get("score_explanation", ""),
                 topic_label="Small-set RCA Summary",
-                score_guidelines="",
-                score_yaml_code="",
+                score_guidelines=score_guidelines,
+                score_yaml_code=score_yaml_code,
             )
             if detailed_cause:
                 ex["detailed_cause"] = detailed_cause
@@ -4207,14 +4264,16 @@ class FeedbackEvaluation(Evaluation):
                 edit_comment=ex.get("edit_comment", "") or "",
                 initial_comment=ex.get("initial_comment", "") or "",
                 final_comment=ex.get("final_comment", "") or "",
-                score_guidelines_text="",
-                score_yaml_configuration="",
+                score_guidelines_text=score_guidelines,
+                score_yaml_configuration=score_yaml_code,
                 scorecard_guidance_text=scorecard_guidance_text,
                 transcript_text=transcript_text,
                 metadata_snapshot=metadata_snapshot,
                 label_provenance_source=(
                     ex.get("label_provenance_source") or "feedback_final_answer_value"
                 ),
+                resolved_final_classes=resolved_final_classes,
+                class_resolution_source=class_resolution_source,
             )
             ex["misclassification_classification"] = classify_misclassification_item(
                 ex["misclassification_item_context"]
@@ -4306,7 +4365,10 @@ class FeedbackEvaluation(Evaluation):
             "improvement_suggestion": improvement_suggestion,
             "score_fix_candidate_count": len(score_fix_exemplars),
         }
-        misclassification_analysis = build_misclassification_analysis_summary([topic])
+        misclassification_analysis = build_misclassification_analysis_summary(
+            [topic],
+            max_category_summary_items=max_category_summary_items,
+        )
         return {
             "topics": [topic],
             "overall_explanation": detailed_explanation,
