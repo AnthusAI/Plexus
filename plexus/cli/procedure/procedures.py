@@ -468,9 +468,10 @@ def pull(procedure_id: str, output: Optional[str]):
 @click.option('--dry-run', is_flag=True, help='Perform a dry run without actual execution')
 @click.option('--restart-from-root-node', is_flag=True, help='Delete all non-root graph nodes and restart from scratch')
 @click.option('--openai-api-key', help='OpenAI API key for AI-powered experiments (or set OPENAI_API_KEY env var)')
+@click.option('--set', '-s', 'set_params', multiple=True, help='Set procedure parameter as key=value (e.g., --set scorecard="AW - Confirmation")')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
 def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: Optional[int], timeout: Optional[int],
-        async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], output: str):
+        async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], set_params: tuple, output: str):
     """Run a procedure - either by ID or directly from a YAML file.
 
     You can run a procedure in two ways:
@@ -491,6 +492,9 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         plexus procedure run abc123def456 --max-iterations 50 --timeout 300
         plexus procedure run abc123def456 --async-mode -o json
         plexus procedure run abc123def456 --restart-from-root-node
+
+        # Pass parameters to a procedure
+        plexus procedure run -y optimizer.yaml -s scorecard="My Scorecard" -s score="My Score" -s max_samples=100
     """
     # Validate arguments
     if not procedure_id and not yaml_file:
@@ -581,6 +585,30 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     # Add AI options
     if openai_api_key:
         options['openai_api_key'] = openai_api_key
+
+    # Parse --set key=value params into context dict
+    if set_params:
+        param_context = {}
+        for param in set_params:
+            if '=' not in param:
+                console.print(f"[red]Error: --set value must be key=value, got: {param}[/red]")
+                return
+            key, value = param.split('=', 1)
+            # Try to parse numeric/boolean values
+            if value.lower() == 'true':
+                value = True
+            elif value.lower() == 'false':
+                value = False
+            else:
+                try:
+                    value = int(value)
+                except ValueError:
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        pass  # Keep as string
+            param_context[key.strip()] = value
+        options['context'] = param_context
     
     # Get account ID for task tracking
     from plexus.cli.report.utils import resolve_account_id_for_command
