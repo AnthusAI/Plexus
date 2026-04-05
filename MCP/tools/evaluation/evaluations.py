@@ -628,7 +628,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             max_category_summary_items,
                         )
                     )
-                    eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=900.0)
+                    eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=1800.0)
                     await run_task  # ensure subprocess is fully done
 
                     if eval_info:
