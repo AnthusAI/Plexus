@@ -3,7 +3,7 @@
   "title": "Document feedback evaluation RCA, reliability expectations, and operator workflow in the public web app",
   "description": "## Summary\nDocument the feedback evaluation RCA and reliability features in the public-facing documentation pages of the web app so operators understand the evaluation contract and how to use the analysis output.\n\n## Deliverables\n- Document the feedback evaluation lifecycle, including waiting semantics, completion expectations, and RCA availability requirements.\n- Document what RCA output means, how operators should interpret it, and what the expected next actions are.\n- Document reliability-related behaviors such as required RCA, small-set RCA behavior, and evaluation-runner/orchestrator expectations.\n- Ensure the documentation lives in the public-facing documentation section of the dashboard/web app rather than only in issue comments or internal implementation notes.\n\n## Notes\nThis task should be kept aligned with future malfunction-analysis / triage work so the operator-facing docs stay coherent as evaluation analysis evolves.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -23,9 +23,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "1d27fc97-f05f-48b7-949d-83bd97292857",
+      "author": "ryan",
+      "text": "Starting docs pass for new feedback runner/orchestrator reliability workflow and RCA expectations, including command usage and source-of-truth semantics.",
+      "created_at": "2026-04-05T12:41:39.992150Z"
+    },
+    {
+      "id": "5b6078e7-c59a-404a-a84a-6c647b506499",
+      "author": "ryan",
+      "text": "Completed public docs updates for feedback-evaluation RCA reliability workflow.\n\nUpdated pages:\n- /documentation/methods/evaluate-score\n  - Optimization runbook now uses `plexus evaluate feedback-runner` for 50/200 cadence stages.\n  - Added operator notes: evaluation record is source of truth; runner captures evaluation ID by task ID; optional standardized Kanbus summary via --kanbus-issue-id.\n- /documentation/concepts/evaluations\n  - Added Reliable Feedback Runner section with command example and expected summary output semantics.\n\nValidation:\n- Python changes compiled (`python -m py_compile`) and new runner tests pass.\n- Dashboard production build currently blocked by pre-existing repo issue in lint stage: `ESLint: Cannot set properties of undefined (setting defaultMeta)`.\n- Existing `npm --prefix dashboard run build:fast` script also fails pre-existing due unsupported `next build --webpack` flag in this Next.js version.\n\nDocs content is complete; build blockers are external to these doc edits.",
+      "created_at": "2026-04-05T12:43:19.247764Z"
+    }
+  ],
   "created_at": "2026-04-02T13:03:44.927734Z",
-  "updated_at": "2026-04-02T13:03:44.927734Z",
-  "closed_at": null,
+  "updated_at": "2026-04-05T12:43:19.259355Z",
+  "closed_at": "2026-04-05T12:43:19.259355Z",
   "custom": {}
 }

@@ -197,6 +197,29 @@ export default function EvaluationsPage() {
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Reliable Feedback Runner</h2>
+          <p className="text-muted-foreground mb-4">
+            For feedback optimization loops, use <code>plexus evaluate feedback-runner</code> instead of
+            calling <code>plexus evaluate feedback</code> directly. The runner captures evaluation ID by
+            runner task ID, waits for terminal backend status, and summarizes final metrics + RCA from the
+            evaluation record.
+          </p>
+          <pre className="bg-muted p-4 rounded-lg overflow-x-auto mb-4">
+            <code>{`plexus evaluate feedback-runner \\
+  --scorecard 1039 \\
+  --score 45425 \\
+  --days 180 \\
+  --max-samples 50 \\
+  --kanbus-issue-id plx-9aa370`}</code>
+          </pre>
+          <p className="text-muted-foreground">
+            When <code>--kanbus-issue-id</code> is provided, the runner writes a standardized run summary
+            comment with evaluation ID, processed/total counts, AC1/accuracy/precision/recall, RCA presence,
+            and next-action context.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Using Evaluations</h2>
           <p className="text-muted-foreground mb-4">
             Evaluations are essential tools for developing reliable scorecards. Use them to:

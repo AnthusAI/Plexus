@@ -62,6 +62,11 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared.CommandProgress import CommandProgress
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageConfig
 from plexus.cli.shared.stage_configurations import get_evaluation_stage_configs
+from plexus.cli.shared.feedback_evaluation_runner import (
+    FeedbackRunnerRequest,
+    format_feedback_run_kanbus_comment,
+    run_feedback_evaluation_orchestrated,
+)
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -4102,6 +4107,95 @@ def feedback(
         logging.error(f"Error during feedback evaluation: {e}", exc_info=True)
         console.print(f"[bold red]Error: {str(e)}[/bold red]")
         raise
+
+
+@evaluate.command(name="feedback-runner")
+@click.option('--scorecard', 'scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID)')
+@click.option('--days', default=180, type=int, help='Number of days to look back for feedback items (default: 180)')
+@click.option('--version', default=None, type=str, help='Optional score version ID override')
+@click.option('--max-samples', default=None, type=int, help='Optional maximum number of feedback items/samples to evaluate')
+@click.option('--sample-seed', default=None, type=int, help='Optional random seed used when sampling feedback items')
+@click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20)')
+@click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison')
+@click.option('--task-id', default=None, type=str, help='Optional explicit task ID used to correlate the run to an evaluation record')
+@click.option('--kanbus-issue-id', default=None, type=str, help='Optional Kanbus issue ID to receive standardized run summary comment')
+@click.option('--creation-timeout-seconds', default=180, type=int, help='Timeout waiting for evaluation record creation (default: 180)')
+@click.option('--completion-timeout-seconds', default=7200, type=int, help='Timeout waiting for terminal evaluation status (default: 7200)')
+@click.option('--poll-interval-seconds', default=5, type=int, help='Polling interval while waiting on evaluation status (default: 5)')
+@click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
+def feedback_runner(
+    scorecard: str,
+    score: str,
+    days: int,
+    version: Optional[str],
+    max_samples: Optional[int],
+    sample_seed: Optional[int],
+    max_category_summary_items: int,
+    baseline: Optional[str],
+    task_id: Optional[str],
+    kanbus_issue_id: Optional[str],
+    creation_timeout_seconds: int,
+    completion_timeout_seconds: int,
+    poll_interval_seconds: int,
+    use_yaml: bool,
+):
+    """
+    Run feedback evaluation with orchestrated lifecycle tracking.
+
+    This runner starts `evaluate feedback`, captures the evaluation ID from the backend record,
+    waits on backend status to terminal completion, then emits a standardized summary.
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.report.utils import resolve_account_id_for_command
+
+    if days <= 0:
+        raise click.ClickException("--days must be a positive integer.")
+    if max_samples is not None and max_samples <= 0:
+        raise click.ClickException("--max-samples must be a positive integer when provided.")
+    if max_category_summary_items <= 0:
+        raise click.ClickException("--max-category-summary-items must be a positive integer.")
+    if creation_timeout_seconds <= 0 or completion_timeout_seconds <= 0 or poll_interval_seconds <= 0:
+        raise click.ClickException("Timeout and polling options must be positive integers.")
+
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, None)
+    if not account_id:
+        raise click.ClickException("Could not resolve account ID.")
+
+    request = FeedbackRunnerRequest(
+        scorecard=scorecard,
+        score=score,
+        days=days,
+        version=version,
+        baseline=baseline,
+        max_samples=max_samples,
+        sample_seed=sample_seed,
+        max_category_summary_items=max_category_summary_items,
+        task_id=task_id,
+        use_yaml=use_yaml,
+    )
+    summary = run_feedback_evaluation_orchestrated(
+        request=request,
+        client=client,
+        account_id=account_id,
+        creation_timeout_seconds=creation_timeout_seconds,
+        completion_timeout_seconds=completion_timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        kanbus_issue_id=kanbus_issue_id,
+    )
+
+    console.print("[bold green]Feedback runner completed[/bold green]")
+    console.print(f"Evaluation ID: {summary['evaluation_id']}")
+    console.print(f"Status: {summary['status']}")
+    console.print(f"Dashboard URL: {summary['dashboard_url']}")
+    if kanbus_issue_id:
+        console.print(f"Kanbus comment posted to {kanbus_issue_id}")
+
+    click.echo(json.dumps({
+        "summary": summary,
+        "kanbus_comment": format_feedback_run_kanbus_comment(summary),
+    }))
 
 
 @evaluate.command()

@@ -442,75 +442,6 @@ def register_evaluation_tools(mcp: FastMCP):
                                 scores.append(_score)
                     return scores
 
-                async def _run_feedback_sync(
-                    sc: str,
-                    sco: str,
-                    d: int,
-                    ver: Optional[str],
-                    bl: Optional[str] = None,
-                    max_fb_samples: Optional[int] = None,
-                    seed: Optional[int] = None,
-                    max_category_items: int = 20,
-                ) -> subprocess.CompletedProcess:
-                    """Run plexus evaluate feedback synchronously in a thread, blocking until complete."""
-                    cmd = [plexus_bin, "evaluate", "feedback",
-                           "--scorecard", sc, "--score", sco, "--days", str(d)]
-                    if ver:
-                        cmd += ["--version", ver]
-                    if bl:
-                        cmd += ["--baseline", bl]
-                    if max_fb_samples is not None:
-                        cmd += ["--max-samples", str(max_fb_samples)]
-                    if seed is not None:
-                        cmd += ["--sample-seed", str(seed)]
-                    cmd += ["--max-category-summary-items", str(max_category_items)]
-                    return await asyncio.to_thread(
-                        subprocess.run,
-                        cmd,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-
-                async def _wait_for_completed_evaluation(spawn_time: float, timeout: float = 900.0) -> Optional[Dict[str, Any]]:
-                    """Poll the API until a new evaluation created after spawn_time reaches COMPLETED status."""
-                    import datetime as _dt
-                    deadline = _time.monotonic() + timeout
-                    evaluation_id = None
-                    while _time.monotonic() < deadline:
-                        await asyncio.sleep(5)
-                        try:
-                            eval_info = Evaluation.get_latest_evaluation(evaluation_type="feedback")
-                            if not eval_info:
-                                continue
-                            # Only consider evaluations created after our spawn time
-                            created_at_str = eval_info.get("created_at") or eval_info.get("createdAt") or ""
-                            if created_at_str:
-                                try:
-                                    created_ts = _dt.datetime.fromisoformat(
-                                        created_at_str.replace("Z", "+00:00")
-                                    ).timestamp()
-                                    if created_ts < spawn_time - 5:
-                                        continue
-                                except Exception:
-                                    pass
-                            eid = eval_info.get("id")
-                            if not eid:
-                                continue
-                            evaluation_id = eid
-                            status = eval_info.get("status", "")
-                            if status == "COMPLETED":
-                                return eval_info
-                            # Keep waiting if still running
-                        except Exception as poll_err:
-                            logger.debug("Error polling for evaluation: %s", poll_err)
-                    # Timed out — return whatever we have
-                    if evaluation_id:
-                        try:
-                            return Evaluation.get_evaluation_info(evaluation_id)
-                        except Exception:
-                            pass
-                    return None
-
                 def _spawn_feedback(
                     sc: str,
                     sco: str,
@@ -520,6 +451,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     max_fb_samples: Optional[int] = None,
                     seed: Optional[int] = None,
                     max_category_items: int = 20,
+                    runner_task_id: Optional[str] = None,
                 ) -> None:
                     """Fire-and-forget: spawn plexus evaluate feedback as a detached background process."""
                     cmd = [plexus_bin, "evaluate", "feedback",
@@ -533,12 +465,30 @@ def register_evaluation_tools(mcp: FastMCP):
                     if seed is not None:
                         cmd += ["--sample-seed", str(seed)]
                     cmd += ["--max-category-summary-items", str(max_category_items)]
+                    if runner_task_id:
+                        cmd += ["--task-id", runner_task_id]
                     subprocess.Popen(
                         cmd,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                         start_new_session=True,
                     )
+
+                from plexus.cli.shared.client_utils import create_client
+                from plexus.cli.report.utils import resolve_account_id_for_command
+                from plexus.cli.shared.feedback_evaluation_runner import (
+                    FeedbackRunnerRequest,
+                    run_feedback_evaluation_orchestrated,
+                    wait_for_feedback_evaluation_id,
+                )
+                import uuid as _uuid
+
+                _runner_client = create_client()
+                _runner_account_id = resolve_account_id_for_command(_runner_client, None)
+                if not _runner_account_id:
+                    return json.dumps({
+                        "error": "Could not resolve account ID for feedback evaluation runner.",
+                    })
 
                 if score_name:
                     # Single score: resolve champion version first.
@@ -560,7 +510,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     if not wait:
                         # Background mode: fire-and-forget, return as soon as evaluation record appears.
                         logger.info(f"Spawning feedback evaluation for '{score_name}' (background)")
-                        spawn_time = _time.time()
+                        runner_task_id = f"mcp-feedback-{_uuid.uuid4()}"
                         _spawn_feedback(
                             scorecard_name,
                             score_name,
@@ -570,31 +520,24 @@ def register_evaluation_tools(mcp: FastMCP):
                             max_feedback_samples,
                             sample_seed,
                             max_category_summary_items,
+                            runner_task_id,
                         )
-                        await asyncio.sleep(3)
-                        # Quick poll to get the evaluation ID
-                        import datetime as _dt
-                        deadline = _time.monotonic() + 25
-                        evaluation_id = None
-                        while _time.monotonic() < deadline:
-                            await asyncio.sleep(2)
-                            try:
-                                ei = Evaluation.get_latest_evaluation(evaluation_type="feedback")
-                                if ei:
-                                    ca = (ei.get("created_at") or ei.get("createdAt") or "").replace("Z", "+00:00")
-                                    if ca:
-                                        try:
-                                            if _dt.datetime.fromisoformat(ca).timestamp() >= spawn_time - 5:
-                                                evaluation_id = ei.get("id")
-                                                break
-                                        except Exception:
-                                            pass
-                            except Exception:
-                                pass
+                        try:
+                            evaluation_id = await asyncio.to_thread(
+                                wait_for_feedback_evaluation_id,
+                                client=_runner_client,
+                                account_id=_runner_account_id,
+                                task_id=runner_task_id,
+                                timeout_seconds=60,
+                                poll_interval_seconds=2,
+                            )
+                        except Exception:
+                            evaluation_id = None
                         if evaluation_id:
                             return json.dumps({
                                 "status": "dispatched",
                                 "evaluation_id": evaluation_id,
+                                "task_id": runner_task_id,
                                 "scorecard": scorecard_name,
                                 "score": score_name,
                                 "days": days,
@@ -609,76 +552,68 @@ def register_evaluation_tools(mcp: FastMCP):
                             return json.dumps({
                                 "status": "dispatched",
                                 "evaluation_id": None,
+                                "task_id": runner_task_id,
                                 "message": "Evaluation dispatched. Use plexus_evaluation_info(use_latest=True) in ~30s.",
                             })
 
-                    # Synchronous mode (default): run CLI in thread, poll until COMPLETED + RCA done.
+                    # Synchronous mode (default): run orchestration and wait for terminal backend status.
                     logger.info(f"Running feedback evaluation for '{score_name}' (synchronous, waiting for completion + RCA)...")
-                    spawn_time = _time.time()
-
-                    run_task = asyncio.create_task(
-                        _run_feedback_sync(
-                            scorecard_name,
-                            score_name,
-                            days,
-                            resolved_version,
-                            baseline,
-                            max_feedback_samples,
-                            sample_seed,
-                            max_category_summary_items,
-                        )
+                    run_summary = await asyncio.to_thread(
+                        run_feedback_evaluation_orchestrated,
+                        request=FeedbackRunnerRequest(
+                            scorecard=scorecard_name,
+                            score=score_name,
+                            days=days,
+                            version=resolved_version,
+                            baseline=baseline,
+                            max_samples=max_feedback_samples,
+                            sample_seed=sample_seed,
+                            max_category_summary_items=max_category_summary_items,
+                            task_id=f"mcp-feedback-{_uuid.uuid4()}",
+                            use_yaml=yaml,
+                        ),
+                        client=_runner_client,
+                        account_id=_runner_account_id,
+                        creation_timeout_seconds=300,
+                        completion_timeout_seconds=1800,
+                        poll_interval_seconds=5,
                     )
-                    eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=1800.0)
-                    await run_task  # ensure subprocess is fully done
+                    evaluation_id = run_summary.get("evaluation_id")
+                    eval_info = Evaluation.get_evaluation_info(evaluation_id)
+                    logger.info(f"Evaluation completed: {evaluation_id}")
 
-                    if eval_info:
-                        evaluation_id = eval_info.get("id")
-                        if evaluation_id:
-                            try:
-                                # Re-fetch after CLI exits so payload includes final RCA/status.
-                                eval_info = Evaluation.get_evaluation_info(evaluation_id)
-                            except Exception as refresh_err:
-                                logger.debug("Could not refresh completed evaluation %s: %s", evaluation_id, refresh_err)
-                        logger.info(f"Evaluation completed: {evaluation_id}")
-
-                        payload: Dict[str, Any] = {
-                            "id": eval_info['id'],
-                            "type": eval_info.get('type', 'feedback'),
-                            "status": eval_info.get('status', 'COMPLETED'),
-                            "scorecard": eval_info.get('scorecard_name') or scorecard_name,
-                            "score": eval_info.get('score_name') or score_name,
-                            "score_version_id": eval_info.get('score_version_id'),
-                            "max_feedback_samples": max_feedback_samples,
-                            "sample_seed": sample_seed,
-                            "max_category_summary_items": max_category_summary_items,
-                            "total_items": eval_info.get('total_items'),
-                            "processed_items": eval_info.get('processed_items'),
-                            "metrics": eval_info.get('metrics'),
-                            "accuracy": eval_info.get('accuracy'),
-                            "confusionMatrix": eval_info.get('confusion_matrix'),
-                            "predictedClassDistribution": eval_info.get('predicted_class_distribution'),
-                            "datasetClassDistribution": eval_info.get('dataset_class_distribution'),
-                            "baselineEvaluationId": eval_info.get('baseline_evaluation_id'),
-                            "cost": eval_info.get('cost'),
-                            "started_at": eval_info.get('started_at'),
-                            "created_at": eval_info.get('created_at'),
-                            "updated_at": eval_info.get('updated_at'),
-                            "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
-                        }
-                        root_cause = eval_info.get('root_cause')
-                        if root_cause:
-                            payload['root_cause'] = root_cause
-                        misclassification_analysis = eval_info.get('misclassification_analysis')
-                        if misclassification_analysis:
-                            payload['misclassification_analysis'] = misclassification_analysis
-                        return json.dumps(payload)
-                    else:
-                        return json.dumps({
-                            "status": "timeout",
-                            "scorecard": scorecard_name,
-                            "score": score_name,
-                            "message": "Evaluation timed out waiting for completion.",
-                        })
+                    payload: Dict[str, Any] = {
+                        "id": eval_info['id'],
+                        "type": eval_info.get('type', 'feedback'),
+                        "status": eval_info.get('status', 'COMPLETED'),
+                        "scorecard": eval_info.get('scorecard_name') or scorecard_name,
+                        "score": eval_info.get('score_name') or score_name,
+                        "score_version_id": eval_info.get('score_version_id'),
+                        "task_id": run_summary.get("task_id"),
+                        "max_feedback_samples": max_feedback_samples,
+                        "sample_seed": sample_seed,
+                        "max_category_summary_items": max_category_summary_items,
+                        "total_items": eval_info.get('total_items'),
+                        "processed_items": eval_info.get('processed_items'),
+                        "metrics": eval_info.get('metrics'),
+                        "accuracy": eval_info.get('accuracy'),
+                        "confusionMatrix": eval_info.get('confusion_matrix'),
+                        "predictedClassDistribution": eval_info.get('predicted_class_distribution'),
+                        "datasetClassDistribution": eval_info.get('dataset_class_distribution'),
+                        "baselineEvaluationId": eval_info.get('baseline_evaluation_id'),
+                        "cost": eval_info.get('cost'),
+                        "started_at": eval_info.get('started_at'),
+                        "created_at": eval_info.get('created_at'),
+                        "updated_at": eval_info.get('updated_at'),
+                        "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
+                    }
+                    root_cause = eval_info.get('root_cause')
+                    if root_cause:
+                        payload['root_cause'] = root_cause
+                    misclassification_analysis = eval_info.get('misclassification_analysis')
+                    if misclassification_analysis:
+                        payload['misclassification_analysis'] = misclassification_analysis
+                    return json.dumps(payload)
 
                 else:
                     # Bulk mode: always fire-and-forget (multiple scores, can't wait on all).
