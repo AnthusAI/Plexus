@@ -306,7 +306,7 @@ code: |
 
   -- Phase A: Setup & Baseline
   Stage.set("setup")
-  Log.info("Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score)
+  Human.notify({message = "Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score, level = "info"})
 
   -- Validate scorecard exists
   -- plexus_scorecard_info returns the scorecard dict directly (no wrapper):
@@ -342,13 +342,13 @@ code: |
   local score_id = score_info.scoreId
   local score_name = score_info.scoreName or score_info.scoreKey
 
-  Log.info("Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id)
+  Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
   -- Dataset adequacy check: ensure sufficient feedback data and build a
   -- deterministic regression dataset for reproducible evaluations.
   -- The feedback evaluation uses sample_seed for deterministic sampling,
   -- and the associated dataset serves as validation and for accuracy evals.
-  Log.info("Checking for existing associated regression dataset...")
+  Human.notify({message = "Checking for existing associated regression dataset...", level = "info"})
   local dataset_id = nil
 
   local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
@@ -358,13 +358,13 @@ code: |
 
   if dataset_check and dataset_check.has_dataset and dataset_check.row_count and dataset_check.row_count >= 100 then
     dataset_id = dataset_check.dataset_id
-    Log.info("Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)")
+    Human.notify({message = "Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)", level = "info"})
   else
     -- Need to create a dataset
     if dataset_check and dataset_check.has_dataset then
-      Log.info("Existing dataset too small (" .. tostring(dataset_check.row_count) .. " rows), creating new one...")
+      Human.notify({message = "Existing dataset too small (" .. tostring(dataset_check.row_count) .. " rows), creating new one...", level = "info"})
     else
-      Log.info("No associated dataset found, creating one...")
+      Human.notify({message = "No associated dataset found, creating one...", level = "info"})
     end
 
     -- Tier 1: Try 200 balanced
@@ -382,11 +382,11 @@ code: |
 
     if build_result and build_result.rows_written and build_result.rows_written >= 100 then
       dataset_id = build_result.dataset_id
-      Log.info("Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)")
+      Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
     else
       -- Tier 2: Try 200 unbalanced (relax balancing to get more items)
       local rows_so_far = (build_result and build_result.rows_written) or 0
-      Log.info("Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...")
+      Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
 
       build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
         scorecard = params.scorecard,
@@ -398,7 +398,7 @@ code: |
 
       if build_result and build_result.rows_written and build_result.rows_written >= 100 then
         dataset_id = build_result.dataset_id
-        Log.info("Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)")
+        Human.notify({message = "Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
       else
         -- Abort: not enough feedback data
         local final_rows = (build_result and build_result.rows_written) or 0
@@ -416,7 +416,7 @@ code: |
   end
 
   State.set("dataset_id", dataset_id)
-  Log.info("Using regression dataset: " .. dataset_id)
+  Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
 
   -- Use a fixed sample seed for deterministic feedback evaluation sampling.
   -- Combined with a fixed time window, this ensures the same feedback items
@@ -465,13 +465,13 @@ code: |
   State.set("score_id", score_id)
   State.set("iterations", {})
 
-  Log.info(string.format(
+  Human.notify({message = string.format(
     "Baseline evaluation complete: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
     baseline_metrics.alignment,
     baseline_metrics.accuracy,
     baseline_metrics.precision,
     baseline_metrics.recall
-  ))
+  ), level = "info"})
 
   -- Extract RCA data
   local baseline_rca = baseline_eval.root_cause or {}
@@ -484,7 +484,7 @@ code: |
     local reason = baseline_metrics.alignment >= 0.99 and
       string.format("Baseline alignment is already %.1f%% — nothing to optimize.", baseline_metrics.alignment * 100) or
       "No RCA data available — cannot identify improvement opportunities."
-    Log.info(reason)
+    Human.notify({message = reason, level = "info"})
     return {
       success = true,
       status = "converged",
@@ -504,12 +504,12 @@ code: |
   local iterations = {}
 
   for iteration = 1, params.max_iterations do
-    Log.info("Starting iteration " .. iteration .. " of " .. params.max_iterations)
+    Human.notify({message = "Starting iteration " .. iteration .. " of " .. params.max_iterations, level = "info"})
     State.set("current_iteration", iteration)
 
     -- Progressive sample count: 50, 100, 150, ... up to max_samples
     local current_samples = math.min(base_samples + (iteration - 1) * sample_step, params.max_samples or 200)
-    Log.info("Using " .. current_samples .. " samples for iteration " .. iteration)
+    Human.notify({message = "Using " .. current_samples .. " samples for iteration " .. iteration, level = "info"})
 
     -- Fetch current score configuration via pull (writes to local file)
     -- plexus_score_pull returns { success, codeFilePath, guidelinesFilePath, ... }
@@ -621,7 +621,10 @@ code: |
     hypothesis_text = string.gsub(hypothesis_text, "\\n", "\n")
     hypothesis_text = string.gsub(hypothesis_text, "\\t", "\t")
 
-    Log.info("## Analyzer Hypothesis (iteration " .. iteration .. ")\n\n" .. hypothesis_text)
+    Human.notify({
+      message = "Hypothesis text length: " .. string.len(hypothesis_text) .. " chars, first 200: " .. string.sub(hypothesis_text, 1, 200),
+      level = "info"
+    })
 
     -- Apply the proposed YAML edit directly in Lua
     -- (bypasses agent tool calling which has DSPy parameter stripping issues)
@@ -635,7 +638,14 @@ code: |
 
     local proposed_idx = string.find(hypothesis_text, "## Proposed Change")
     if not proposed_idx then
-      Log.warn("No Proposed Change in hypothesis, skipping edit")
+      -- Try alternate patterns
+      proposed_idx = string.find(hypothesis_text, "Proposed Change")
+    end
+    if not proposed_idx then
+      Human.notify({
+        message = "WARNING: No 'Proposed Change' found in hypothesis. Contains '##': " .. tostring(string.find(hypothesis_text, "##") ~= nil) .. ", contains 'Proposed': " .. tostring(string.find(hypothesis_text, "Proposed") ~= nil),
+        level = "warning"
+      })
       -- Can't edit without clear instructions; skip to evaluation with current version
       new_version_id = "baseline-" .. iteration
     else
@@ -645,9 +655,11 @@ code: |
       -- The analyzer formats: "find the text:\n```[lang]\nTEXT\n```"
       -- and "replace it with:\n```[lang]\nTEXT\n```"
       -- Language hints after ``` (e.g., ```yaml, ```markdown) are stripped.
-      local find_idx = string.find(proposed_text, "find the text:")
+      -- Case-insensitive search for "find the text:" and "replace it with:"
+      local proposed_lower = string.lower(proposed_text)
+      local find_idx = string.find(proposed_lower, "find the text:")
       -- Handle both "replace it with:" and "And replace it with:"
-      local replace_idx = string.find(proposed_text, "replace it with:")
+      local replace_idx = string.find(proposed_lower, "replace it with:")
 
       -- Helper: extract content between first pair of ``` fences after a position.
       -- Handles ```lang\n...\n``` by skipping to the first newline after opening ```.
@@ -671,7 +683,10 @@ code: |
         return raw
       end
 
-      Log.info("Parser: find_idx=" .. tostring(find_idx) .. ", replace_idx=" .. tostring(replace_idx))
+      Human.notify({
+        message = "Parser: find_idx=" .. tostring(find_idx) .. ", replace_idx=" .. tostring(replace_idx),
+        level = "info"
+      })
 
       if find_idx and replace_idx then
         local after_find = string.sub(proposed_text, find_idx + 14)
@@ -680,18 +695,19 @@ code: |
         local after_replace = string.sub(proposed_text, replace_idx + 16)
         local new_str = extract_fenced_block(after_replace)
 
-        Log.info("Parser: old_str=" .. tostring(old_str ~= nil) .. ", new_str=" .. tostring(new_str ~= nil))
+        Human.notify({
+          message = "Parser: old_str=" .. tostring(old_str ~= nil) .. ", new_str=" .. tostring(new_str ~= nil),
+          level = "info"
+        })
         if old_str then
-          Log.info("Parser old_str preview: " .. string.sub(old_str, 1, 80))
+          Human.notify({message = "old_str preview: " .. string.sub(old_str, 1, 120), level = "info"})
         end
         if new_str then
-          Log.info("Parser new_str preview: " .. string.sub(new_str, 1, 80))
+          Human.notify({message = "new_str preview: " .. string.sub(new_str, 1, 120), level = "info"})
         end
 
         if old_str and new_str then
-          Log.info("Attempting direct file edit for iteration " .. iteration)
-          Log.info("Old text: " .. string.sub(old_str, 1, 60) .. "...")
-          Log.info("New text: " .. string.sub(new_str, 1, 60) .. "...")
+          Human.notify({message = "Attempting direct file edit for iteration " .. iteration, level = "info"})
 
           -- Read current YAML file
           local current_yaml = File.read(current_code_path)
@@ -706,7 +722,7 @@ code: |
 
             -- Write back the edited YAML to disk
             File.write(current_code_path, edited_yaml)
-            Log.info("YAML file edited successfully on disk")
+            Human.notify({message = "YAML file edited successfully on disk", level = "info"})
 
             -- Also write to the well-known exchange path so submit_score_code can find it
             -- (the Lua pull path and ScoreEditorToolset pull path may differ)
@@ -719,25 +735,25 @@ code: |
             local submit_result = call_plexus_tool("submit_score_code", {})
             if submit_result and submit_result.version_id then
               new_version_id = submit_result.version_id
-              Log.info("Score version created: " .. new_version_id)
+              Human.notify({message = "Score version created: " .. new_version_id, level = "info"})
             else
-              Log.error("submit_score_code failed: " .. tostring(submit_result and (submit_result.error or submit_result.message) or "unknown error"))
+              Human.notify({message = "submit_score_code failed: " .. tostring(submit_result and (submit_result.error or submit_result.message) or "unknown error"), level = "warning"})
               new_version_id = nil
             end
           else
-            Log.error("old_str not found in current YAML")
+            Human.notify({message = "old_str not found in current YAML file", level = "warning"})
             new_version_id = nil
           end
         end
       end
 
       if not new_version_id then
-        Log.warn("Could not complete direct file edit, falling back to baseline version")
+        Human.notify({message = "Could not complete direct file edit, falling back to baseline version", level = "warning"})
         if not find_idx then
-          Log.warn("Parser: 'find the text:' not found in proposed change")
+          Human.notify({message = "Parser: 'find the text:' not found in proposed change", level = "warning"})
         end
         if not replace_idx then
-          Log.warn("Parser: 'replace it with:' not found in proposed change")
+          Human.notify({message = "Parser: 'replace it with:' not found in proposed change", level = "warning"})
         end
         new_version_id = "baseline-" .. iteration
       end
@@ -783,14 +799,14 @@ code: |
     local eval_metrics = extract_metrics(eval_result)
     local deltas = calculate_deltas(eval_metrics, baseline_metrics)
 
-    Log.info(string.format(
-      "Iteration %d results: AC1=%.3f (Δ%+.3f), Accuracy=%.3f (Δ%+.3f)",
+    Human.notify({message = string.format(
+      "Iteration %d results: AC1=%.3f (delta %+.3f), Accuracy=%.3f (delta %+.3f)",
       iteration,
       eval_metrics.alignment,
       deltas.alignment,
       eval_metrics.accuracy,
       deltas.accuracy
-    ))
+    ), level = "info"})
 
     -- Store iteration log
     local iteration_log = {
@@ -812,17 +828,17 @@ code: |
 
     -- Decision logic: stop if below improvement threshold
     if deltas.alignment < params.improvement_threshold then
-      Log.info(string.format(
-        "AC1 improvement (%.4f) below threshold (%.4f) — stopping optimization",
+      Human.notify({message = string.format(
+        "AC1 improvement (%.4f) below threshold (%.4f) -- stopping optimization",
         deltas.alignment,
         params.improvement_threshold
-      ))
+      ), level = "info"})
       stop_reason = "improvement_plateau"
       break
     end
 
     if deltas.alignment < 0 then
-      Log.warn(string.format("AC1 regressed by %.4f", math.abs(deltas.alignment)))
+      Human.notify({message = string.format("AC1 regressed by %.4f", math.abs(deltas.alignment)), level = "warning"})
     end
 
     -- Check for stop request
@@ -860,11 +876,11 @@ code: |
   local final_iter = iterations[#iterations]
   local total_improvement = final_iter.metrics.alignment - baseline_metrics.alignment
 
-  Log.info(string.format(
+  Human.notify({message = string.format(
     "Optimization complete: %d iterations, total AC1 improvement: %+.4f",
     #iterations,
     total_improvement
-  ))
+  ), level = "info"})
 
   return {
     success = true,
