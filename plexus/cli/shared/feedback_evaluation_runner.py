@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Sequence
 
 from plexus.Evaluation import Evaluation
+from plexus.utils.feedback_selection import normalize_feedback_sampling_mode
 
 
 TERMINAL_EVALUATION_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED", "ERROR"})
@@ -22,10 +23,11 @@ SCAFFOLD_SOURCE_DESCRIPTION = "Generated directly from vetted feedback item IDs.
 class FeedbackRunnerRequest:
     scorecard: str
     score: str
-    days: int
+    days: Optional[int] = None
     version: Optional[str] = None
     baseline: Optional[str] = None
-    max_samples: Optional[int] = None
+    max_items: int = 200
+    sampling_mode: str = "newest"
     sample_seed: Optional[int] = None
     max_category_summary_items: int = 20
     task_id: Optional[str] = None
@@ -46,21 +48,23 @@ def build_feedback_command(
         request.scorecard,
         "--score",
         request.score,
-        "--days",
-        str(request.days),
         "--task-id",
         resolved_task_id,
+        "--max-items",
+        str(request.max_items),
+        "--sampling-mode",
+        request.sampling_mode,
         "--max-category-summary-items",
         str(request.max_category_summary_items),
     ]
+    if request.days is not None:
+        cmd.extend(["--days", str(request.days)])
     if request.use_yaml:
         cmd.append("--yaml")
     if request.version:
         cmd.extend(["--version", request.version])
     if request.baseline:
         cmd.extend(["--baseline", request.baseline])
-    if request.max_samples is not None:
-        cmd.extend(["--max-samples", str(request.max_samples)])
     if request.sample_seed is not None:
         cmd.extend(["--sample-seed", str(request.sample_seed)])
     return cmd
@@ -222,6 +226,20 @@ def build_feedback_run_summary(
     else:
         primary_next_action_value = primary_next_action
 
+    total_items = evaluation_info.get("total_items")
+    shortfall_count = None
+    try:
+        if total_items is not None:
+            shortfall_count = max(0, int(request.max_items) - int(total_items))
+    except (TypeError, ValueError):
+        shortfall_count = None
+
+    warnings = []
+    if shortfall_count is not None and shortfall_count > 0:
+        warnings.append(
+            f"Requested {request.max_items} item(s), but only {total_items} available; proceeded with available items."
+        )
+
     summary = {
         "evaluation_id": evaluation_id,
         "status": evaluation_info.get("status"),
@@ -231,11 +249,14 @@ def build_feedback_run_summary(
         "task_id": resolved_task_id,
         "baseline_evaluation_id": evaluation_info.get("baseline_evaluation_id"),
         "window_days": request.days,
-        "max_samples": request.max_samples,
+        "max_items": request.max_items,
+        "sampling_mode": request.sampling_mode,
         "sample_seed": request.sample_seed,
         "max_category_summary_items": request.max_category_summary_items,
         "processed_items": evaluation_info.get("processed_items"),
         "total_items": evaluation_info.get("total_items"),
+        "selection_shortfall_count": shortfall_count,
+        "warnings": warnings,
         "metrics": {
             "ac1": _metric_value(metrics, "Alignment"),
             "accuracy": _metric_value(metrics, "Accuracy"),
@@ -267,9 +288,11 @@ def format_feedback_run_kanbus_comment(summary: Dict[str, Any]) -> str:
         f"- `score_version_id`: `{summary.get('score_version_id') or 'unset'}`",
         f"- `task_id`: `{summary.get('task_id')}`",
         f"- `window_days`: `{summary.get('window_days')}`",
-        f"- `max_samples`: `{summary.get('max_samples')}`",
+        f"- `max_items`: `{summary.get('max_items')}`",
+        f"- `sampling_mode`: `{summary.get('sampling_mode')}`",
         f"- `sample_seed`: `{summary.get('sample_seed')}`",
         f"- `processed/total`: `{summary.get('processed_items')}` / `{summary.get('total_items')}`",
+        f"- `selection_shortfall_count`: `{summary.get('selection_shortfall_count')}`",
         f"- `AC1`: `{metrics.get('ac1')}`",
         f"- `Accuracy`: `{metrics.get('accuracy')}`",
         f"- `Precision`: `{metrics.get('precision')}`",
@@ -280,6 +303,8 @@ def format_feedback_run_kanbus_comment(summary: Dict[str, Any]) -> str:
         f"- `Optimization applicability`: `{root_cause.get('optimization_applicability')}`",
         f"- Dashboard: {summary.get('dashboard_url')}",
     ]
+    for warning in summary.get("warnings") or []:
+        lines.append(f"- `warning`: {warning}")
     return "\n".join(lines)
 
 
@@ -302,18 +327,34 @@ def run_feedback_evaluation_orchestrated(
     poll_interval_seconds: int = 5,
     kanbus_issue_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if request.days <= 0:
-        raise ValueError("days must be > 0.")
-    if request.max_samples is not None and request.max_samples <= 0:
-        raise ValueError("max_samples must be > 0 when provided.")
+    if request.days is not None and request.days <= 0:
+        raise ValueError("days must be > 0 when provided.")
+    if request.max_items <= 0:
+        raise ValueError("max_items must be > 0.")
+    request_sampling_mode = normalize_feedback_sampling_mode(request.sampling_mode)
+    if request_sampling_mode != "random" and request.sample_seed is not None:
+        raise ValueError("sample_seed is only valid when sampling_mode is 'random'.")
     if request.max_category_summary_items <= 0:
         raise ValueError("max_category_summary_items must be > 0.")
 
     resolved_plexus_bin = plexus_bin or os.environ.get("PLEXUS_BIN") or "plexus"
     resolved_task_id = request.task_id or f"feedback-runner-{uuid.uuid4()}"
+    normalized_request = FeedbackRunnerRequest(
+        scorecard=request.scorecard,
+        score=request.score,
+        days=request.days,
+        version=request.version,
+        baseline=request.baseline,
+        max_items=request.max_items,
+        sampling_mode=request_sampling_mode,
+        sample_seed=request.sample_seed,
+        max_category_summary_items=request.max_category_summary_items,
+        task_id=request.task_id,
+        use_yaml=request.use_yaml,
+    )
     command = build_feedback_command(
         plexus_bin=resolved_plexus_bin,
-        request=request,
+        request=normalized_request,
         resolved_task_id=resolved_task_id,
     )
 
@@ -326,27 +367,45 @@ def run_feedback_evaluation_orchestrated(
             stderr=stderr_log,
         )
         try:
-            evaluation_id = wait_for_feedback_evaluation_id(
-                client=client,
-                account_id=account_id,
-                task_id=resolved_task_id,
-                timeout_seconds=creation_timeout_seconds,
-                poll_interval_seconds=max(1, poll_interval_seconds),
-                process=process,
-            )
+            try:
+                evaluation_id = wait_for_feedback_evaluation_id(
+                    client=client,
+                    account_id=account_id,
+                    task_id=resolved_task_id,
+                    timeout_seconds=creation_timeout_seconds,
+                    poll_interval_seconds=max(1, poll_interval_seconds),
+                    process=process,
+                )
+            except RuntimeError:
+                # Capture stderr from the crashed subprocess for diagnostics
+                stderr_log.seek(0)
+                tail = stderr_log.read().decode("utf-8", errors="replace")[-3000:]
+                stdout_log.seek(0)
+                stdout_tail = stdout_log.read().decode("utf-8", errors="replace")[-3000:]
+                raise RuntimeError(
+                    f"Feedback evaluation process exited before evaluation record creation "
+                    f"(exit={process.poll()}).\n"
+                    f"Command: {' '.join(command)}\n"
+                    f"STDERR tail:\n{tail}\n"
+                    f"STDOUT tail:\n{stdout_tail}"
+                )
             evaluation_info = wait_for_feedback_evaluation_terminal_status(
                 evaluation_id=evaluation_id,
                 timeout_seconds=completion_timeout_seconds,
                 poll_interval_seconds=max(1, poll_interval_seconds),
             )
+            _killed_for_timeout = False
             try:
                 process.wait(timeout=60)
-            except subprocess.TimeoutExpired as exc:
+            except subprocess.TimeoutExpired:
                 process.kill()
-                raise RuntimeError(
-                    f"Feedback evaluation process did not exit after evaluation completion for {evaluation_id}."
-                ) from exc
-            if process.returncode not in (0, None):
+                _killed_for_timeout = True
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    f"Feedback evaluation process did not exit after evaluation completion for {evaluation_id}. "
+                    "Killed subprocess — evaluation data is already persisted."
+                )
+            if not _killed_for_timeout and process.returncode not in (0, None):
                 stderr_log.seek(0)
                 tail = stderr_log.read().decode("utf-8", errors="replace")[-3000:]
                 raise RuntimeError(
@@ -359,7 +418,7 @@ def run_feedback_evaluation_orchestrated(
             raise
 
     summary = build_feedback_run_summary(
-        request=request,
+        request=normalized_request,
         evaluation_id=evaluation_id,
         evaluation_info=evaluation_info,
         resolved_task_id=resolved_task_id,
@@ -372,4 +431,3 @@ def run_feedback_evaluation_orchestrated(
         )
 
     return summary
-
