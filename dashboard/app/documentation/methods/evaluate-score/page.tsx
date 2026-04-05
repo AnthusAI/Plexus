@@ -300,19 +300,30 @@ plexus evaluate accuracy \\
   --number-of-samples 200
 
 # Stage B: fast random loop
-plexus evaluate feedback \\
+plexus evaluate feedback-runner \\
   --scorecard 1039 \\
   --score 45425 \\
   --days 180 \\
-  --max-samples 50
+  --max-samples 50 \\
+  --kanbus-issue-id plx-9aa370
 
 # Stage C: hard random gate before accept
-plexus evaluate feedback \\
+plexus evaluate feedback-runner \\
   --scorecard 1039 \\
   --score 45425 \\
   --days 180 \\
-  --max-samples 200`}</code>
+  --max-samples 200 \\
+  --kanbus-issue-id plx-9aa370`}</code>
           </pre>
+          <p className="text-muted-foreground mb-3">
+            Use <code>feedback-runner</code> for optimization loops. It captures evaluation ID by runner task ID,
+            waits on backend evaluation status, and writes a standardized run summary comment to Kanbus when
+            <code> --kanbus-issue-id</code> is provided.
+          </p>
+          <p className="text-muted-foreground mb-3">
+            This avoids trusting local process exit and treats the evaluation record as the source of truth
+            for completion, metrics, and RCA availability.
+          </p>
           <p className="text-muted-foreground mb-3">
             Workflow assessments are recorded as canonical bundles (<code>candidate_assessment_bundle.v1</code>)
             with:
