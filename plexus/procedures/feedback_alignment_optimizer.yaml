@@ -603,7 +603,9 @@ code: |
     if not has_text(hypothesis_text) then
       local ok_r, reason_val = pcall(function() return done_call.args.reason end)
       if ok_r and has_text(reason_val) then
-        hypothesis_text = reason_val
+        -- Also normalize escaped newlines in fallback path
+        hypothesis_text = string.gsub(reason_val, "\\n", "\n")
+        hypothesis_text = string.gsub(hypothesis_text, "\\t", "\t")
       end
     end
 
@@ -614,6 +616,10 @@ code: |
         message = "Analyzer produced no hypothesis at iteration " .. iteration
       }
     end
+
+    -- Normalize escaped newlines: JSON double-encoding can leave literal \n in text
+    hypothesis_text = string.gsub(hypothesis_text, "\\n", "\n")
+    hypothesis_text = string.gsub(hypothesis_text, "\\t", "\t")
 
     Log.info("## Analyzer Hypothesis (iteration " .. iteration .. ")\n\n" .. hypothesis_text)
 
