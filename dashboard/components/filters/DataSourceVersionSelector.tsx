@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { graphqlRequest, handleGraphQLErrors } from "@/utils/amplify-client"
+import { graphqlRequest, handleGraphQLErrors, type GraphQLResponse } from "@/utils/amplify-client"
 
 interface DataSourceVersionOption {
   id: string
@@ -23,6 +23,17 @@ interface DataSourceVersionSelectorProps {
   onChange: (value: string | null) => void
   placeholder?: string
   includeAllOption?: boolean
+}
+
+type ListDataSourceVersionByDataSourceIdAndCreatedAtData = {
+  listDataSourceVersionByDataSourceIdAndCreatedAt: {
+    items?: Array<{
+      id?: string | null
+      createdAt?: string | null
+      note?: string | null
+    } | null> | null
+    nextToken?: string | null
+  } | null
 }
 
 export default function DataSourceVersionSelector({
@@ -48,7 +59,7 @@ export default function DataSourceVersionSelector({
         const all: DataSourceVersionOption[] = []
         let nextToken: string | null | undefined = null
         do {
-          const response = await graphqlRequest<any>(
+          const response: GraphQLResponse<ListDataSourceVersionByDataSourceIdAndCreatedAtData> = await graphqlRequest(
             `
               query ListDataSourceVersionByDataSourceIdAndCreatedAt(
                 $dataSourceId: String!
@@ -79,11 +90,13 @@ export default function DataSourceVersionSelector({
             }
           )
           handleGraphQLErrors(response)
-          const result = response.data?.listDataSourceVersionByDataSourceIdAndCreatedAt
-          const items = (result?.items || []) as any[]
+          const result = response.data.listDataSourceVersionByDataSourceIdAndCreatedAt
+          const items = Array.isArray(result?.items) ? result.items : []
           all.push(
             ...items
-              .filter((item) => item?.id && item?.createdAt)
+              .filter((item): item is { id: string; createdAt: string; note?: string | null } => (
+                !!item && !!item.id && !!item.createdAt
+              ))
               .map((item) => ({
                 id: item.id,
                 createdAt: item.createdAt,
