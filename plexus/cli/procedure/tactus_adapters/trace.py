@@ -48,7 +48,9 @@ class PlexusTraceSink:
         self._active_stream_persist_gap_max_ms: Dict[str, float] = {}
         self._active_stream_last_persisted_at_iso: Dict[str, str] = {}
         self._recent_finalized_streams: Dict[str, tuple[str, float]] = {}
-        self._console_dispatch_metadata: Optional[Dict[str, Any]] = None
+        self._pending_tool_call_ids: Dict[str, list] = {}  # tool_name -> FIFO queue of message IDs
+        self._in_progress_tool_calls: Dict[str, list] = {}  # tool_name -> FIFO queue of in-progress message IDs
+        self._console_dispatch_metadata: Any = None  # None=not fetched, False=fetched but empty, dict=cached
         self._backend_execution_started_at: str = datetime.now(timezone.utc).isoformat()
         self._backend_runtime_execute_started_at: Optional[str] = None
         self._session_context: Optional[Dict[str, Any]] = None
@@ -82,19 +84,23 @@ class PlexusTraceSink:
             return None
 
     def _get_console_dispatch_metadata(self) -> Optional[Dict[str, Any]]:
-        if isinstance(self._console_dispatch_metadata, dict):
-            return self._console_dispatch_metadata
+        if self._console_dispatch_metadata is not None:
+            return self._console_dispatch_metadata if isinstance(self._console_dispatch_metadata, dict) else None
         getter = getattr(self.chat_recorder, "get_latest_console_chat_metadata", None)
         if not callable(getter):
+            self._console_dispatch_metadata = False  # sentinel to avoid re-fetching
             return None
         if inspect.iscoroutinefunction(getter):
+            self._console_dispatch_metadata = False
             return None
         metadata = getter()
         if inspect.isawaitable(metadata):
+            self._console_dispatch_metadata = False
             return None
         if isinstance(metadata, dict):
             self._console_dispatch_metadata = metadata
             return metadata
+        self._console_dispatch_metadata = False  # cache negative result
         return None
 
     def _mark_persisted_update(self, agent_name: str, persisted_at_iso: str) -> None:
@@ -163,9 +169,14 @@ class PlexusTraceSink:
         recorder_session_id = getattr(self.chat_recorder, "session_id", None)
         if isinstance(recorder_session_id, str) and recorder_session_id:
             self.session_id = recorder_session_id
+            # Eagerly cache console dispatch metadata to avoid 10s delay on first stream chunk
+            self._get_console_dispatch_metadata()
             return True
 
         self.session_id = await self.chat_recorder.start_session(self._session_context)
+        if self.session_id:
+            # Eagerly cache console dispatch metadata to avoid 10s delay on first stream chunk
+            self._get_console_dispatch_metadata()
         return bool(self.session_id)
 
     async def _record_stream_chunk(self, event: Any) -> Optional[str]:
@@ -199,15 +210,6 @@ class PlexusTraceSink:
                 )
             self._active_stream_prev_chunk_received_epoch_ms[agent_name] = received_epoch_ms
 
-        metadata = {
-            "streaming": {
-                "state": "streaming",
-                "agent_name": agent_name,
-                "last_chunk_at": timestamp,
-                "timings": self._build_stream_timing_metadata(agent_name),
-            }
-        }
-
         message_id = self._active_stream_message_ids.get(agent_name)
         if message_id:
             last_persisted_text = self._active_stream_last_persisted_texts.get(agent_name, "")
@@ -223,6 +225,16 @@ class PlexusTraceSink:
             if not should_persist:
                 self._active_stream_texts[agent_name] = accumulated_text
                 return message_id
+
+            # Build metadata only when we're about to persist (avoids expensive timing calls on every chunk)
+            metadata = {
+                "streaming": {
+                    "state": "streaming",
+                    "agent_name": agent_name,
+                    "last_chunk_at": timestamp,
+                    "timings": self._build_stream_timing_metadata(agent_name),
+                }
+            }
 
             updated = await self.chat_recorder.update_message(
                 message_id=message_id,
@@ -240,6 +252,15 @@ class PlexusTraceSink:
                 self._active_stream_first_chunk_persisted_at[agent_name] = persisted_at_iso
             self._mark_persisted_update(agent_name, persisted_at_iso)
         else:
+            # Build metadata for the CREATE (first chunk)
+            metadata = {
+                "streaming": {
+                    "state": "streaming",
+                    "agent_name": agent_name,
+                    "last_chunk_at": timestamp,
+                    "timings": self._build_stream_timing_metadata(agent_name),
+                }
+            }
             message_id = await self.chat_recorder.record_message(
                 role="ASSISTANT",
                 content=accumulated_text,
@@ -315,6 +336,27 @@ class PlexusTraceSink:
         if event_type in {"log", "cost", "execution_summary"}:
             return None
 
+        # ToolCallStartedEvent: tool is about to run — write a pending TOOL_CALL record
+        # with just the parameters so the UI shows an in-progress component immediately.
+        if event_type == "tool_call_started":
+            tool_name = _event_field(event, "tool_name")
+            tool_parameters = _event_field(event, "tool_args")
+            pending_id = await self.chat_recorder.record_message(
+                role="ASSISTANT",
+                content=f"Tool call: {tool_name}",
+                message_type="TOOL_CALL",
+                tool_name=tool_name,
+                tool_parameters=tool_parameters,
+                tool_response=None,
+                human_interaction="INTERNAL",
+            )
+            if pending_id and tool_name:
+                key = str(tool_name)
+                if key not in self._in_progress_tool_calls:
+                    self._in_progress_tool_calls[key] = []
+                self._in_progress_tool_calls[key].append(pending_id)
+            return pending_id
+
         if event_type == "agent_stream_chunk":
             return await self._record_stream_chunk(event)
 
@@ -375,17 +417,76 @@ class PlexusTraceSink:
         human_interaction = _event_field(event, "human_interaction", "classification", default="INTERNAL")
         if hasattr(human_interaction, "value"):
             human_interaction = human_interaction.value
+        hi_str = str(human_interaction or "INTERNAL")
 
-        return await self.chat_recorder.record_message(
+        tool_name = _event_field(event, "tool_name")
+
+        # Tactus emits a single ToolCallEvent (event_type="tool_call") that carries
+        # BOTH tool_args (parameters) and tool_result (response).
+        # If a ToolCallStartedEvent was already written (in-progress record), update it
+        # with the result rather than creating a duplicate record.
+        if event_kind == "TOOL_CALL":
+            tool_parameters = _event_field(event, "tool_parameters", "tool_args")
+            tool_result = _event_field(event, "tool_response", "tool_result")
+
+            # Check if we have an in-progress record to update
+            in_progress_id = None
+            if tool_name:
+                queue = self._in_progress_tool_calls.get(str(tool_name))
+                if queue:
+                    in_progress_id = queue.pop(0)
+
+            if in_progress_id:
+                # Update the existing in-progress record with the result
+                await self.chat_recorder.update_message(
+                    message_id=in_progress_id,
+                    tool_response=tool_result,
+                )
+                return in_progress_id
+            else:
+                # No in-progress record (e.g., replayed or short-lived tool) — create new
+                call_id = await self.chat_recorder.record_message(
+                    role=role,
+                    content=content_text,
+                    message_type="TOOL_CALL",
+                    tool_name=tool_name,
+                    tool_parameters=tool_parameters,
+                    tool_response=tool_result,
+                    human_interaction=hi_str,
+                    metadata=_event_field(event, "metadata"),
+                )
+                return call_id
+
+        # For explicit TOOL_RESPONSE events (non-Tactus paths), link via parentMessageId.
+        # If there is no pending TOOL_CALL waiting for a response, the TOOL_CALL event
+        # already carried the result and was stored as a complete record — skip this
+        # redundant TOOL_RESPONSE to avoid duplicating the tool call component.
+        parent_message_id: Optional[str] = None
+        if event_kind == "TOOL_RESPONSE" and tool_name:
+            queue = self._pending_tool_call_ids.get(str(tool_name))
+            if not queue:
+                return None
+            parent_message_id = queue.pop(0)
+
+        message_id = await self.chat_recorder.record_message(
             role=role,
             content=content_text,
             message_type=message_type,
-            tool_name=_event_field(event, "tool_name"),
+            tool_name=tool_name,
             tool_parameters=_event_field(event, "tool_parameters", "tool_args"),
             tool_response=_event_field(event, "tool_response", "tool_result"),
-            human_interaction=str(human_interaction or "INTERNAL"),
+            parent_message_id=parent_message_id,
+            human_interaction=hi_str,
             metadata=_event_field(event, "metadata"),
         )
+
+        if event_kind == "TOOL_CALL" and message_id and tool_name:
+            key = str(tool_name)
+            if key not in self._pending_tool_call_ids:
+                self._pending_tool_call_ids[key] = []
+            self._pending_tool_call_ids[key].append(message_id)
+
+        return message_id
 
     async def flush(self) -> None:
         if not self._active_stream_message_ids:

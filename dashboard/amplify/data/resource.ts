@@ -847,6 +847,10 @@ const schema = a.schema({
             description: a.string(),
             file: a.string(), // S3 path to the generated dataset file
             attachedFiles: a.string().array(),
+            isReferenceDataset: a.boolean(), // Marks dataset as an explicit reference dataset artifact
+            provenance: a.json(), // Snapshot of label/source provenance used to build this dataset
+            buildContext: a.json(), // Build metadata (time window, filters, task/evaluation ids, policy versions, etc.)
+            referenceAt: a.datetime(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string(),
