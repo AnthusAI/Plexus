@@ -1,11 +1,13 @@
 import click
 import os
 import json
+import io
 import rich
 import tempfile
 import urllib3.exceptions
 import requests
 import sys
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from pathlib import Path
 from ruamel.yaml import YAML
 from rich.table import Table
@@ -25,6 +27,12 @@ import requests
 from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
+from plexus.cli.dataset.curation import (
+    build_associated_dataset_from_feedback_window,
+    build_associated_dataset_from_vetted_report,
+    resolve_score_valid_classes_from_score_yaml,
+)
+from plexus.cli.dataset.datasets import build_associated_dataset_from_feedback_ids
 from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_scorecard_identifier,
     memoized_resolve_score_identifier,
@@ -53,6 +61,33 @@ def create_client() -> PlexusDashboardClient:
 def generate_key(name: str) -> str:
     """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""
     return name.lower().replace(' ', '-')
+
+
+def _run_dataset_curation_preflight(
+    *,
+    client: PlexusDashboardClient,
+    score_id: str,
+    enable_balance: bool,
+    score_version_id: Optional[str],
+) -> None:
+    if not os.getenv("AMPLIFY_STORAGE_DATASETS_BUCKET_NAME"):
+        raise click.ClickException(
+            "Dataset curation requires AMPLIFY_STORAGE_DATASETS_BUCKET_NAME in the environment."
+        )
+    if not enable_balance:
+        return
+    try:
+        resolve_score_valid_classes_from_score_yaml(
+            client=client,
+            score_id=score_id,
+            score_version_id=score_version_id,
+        )
+    except Exception as exc:
+        score_version_hint = score_version_id or "champion"
+        raise click.ClickException(
+            "Dataset curation preflight failed: final output classes could not be resolved "
+            f"for score {score_id} (version source: {score_version_hint}). {exc}"
+        ) from exc
 
 @scores.command()
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
@@ -221,6 +256,197 @@ def list(scorecard: str, limit: int):
 
 # Add an alias for the list command to the score group
 score.add_command(list)
+
+
+@score.command(name="dataset-curate")
+@click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
+@click.option('--score', required=True, help='Score to curate associated dataset for (accepts ID, name, key, or external ID)')
+@click.option('--max-items', default=100, type=int, show_default=True, help='Maximum number of qualifying feedback items to include.')
+@click.option('--days', default=None, type=int, help='Optional lookback window in days. Omit to scan all available history.')
+@click.option('--no-balance', is_flag=True, default=False, help='Disable class balancing during curation.')
+@click.option(
+    '--score-version-id',
+    default=None,
+    type=str,
+    help='Optional score version ID to use as the class source for balancing. Defaults to champion when omitted.',
+)
+@click.option(
+    '--feedback-item-ids',
+    default=None,
+    type=str,
+    help='Comma-separated explicit vetted feedback item IDs to include.',
+)
+@click.option(
+    '--source-report-block-id',
+    default=None,
+    type=str,
+    help='Optional report block ID to record as the source of explicit vetted IDs.',
+)
+@click.option(
+    '--eligibility-rule',
+    default="explicit vetted feedback labels",
+    type=str,
+    show_default=True,
+    help='Eligibility rule label recorded for explicit vetted-ID dataset builds.',
+)
+@click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
+@click.option('--json-only', is_flag=True, default=False, help='Emit only final JSON payload (suppress runtime logs).')
+def dataset_curate(
+    scorecard: str,
+    score: str,
+    max_items: int,
+    days: Optional[int],
+    no_balance: bool,
+    score_version_id: Optional[str],
+    feedback_item_ids: Optional[str],
+    source_report_block_id: Optional[str],
+    eligibility_rule: str,
+    task_id: Optional[str],
+    json_only: bool,
+):
+    """Build an associated dataset by scanning feedback backward from now until max qualifying labels are found."""
+    if max_items <= 0:
+        raise click.ClickException("--max-items must be greater than 0.")
+    if days is not None and days <= 0:
+        raise click.ClickException("--days must be greater than 0 when provided.")
+    normalized_feedback_item_ids: list[str] = []
+    if feedback_item_ids:
+        normalized_feedback_item_ids = [token.strip() for token in feedback_item_ids.split(",") if token.strip()]
+    if normalized_feedback_item_ids and days is not None:
+        raise click.ClickException("--days cannot be combined with --feedback-item-ids.")
+    if normalized_feedback_item_ids and score_version_id:
+        raise click.ClickException("--score-version-id cannot be combined with --feedback-item-ids.")
+    if (source_report_block_id or eligibility_rule != "explicit vetted feedback labels") and not normalized_feedback_item_ids:
+        raise click.ClickException(
+            "--source-report-block-id and --eligibility-rule require --feedback-item-ids."
+        )
+
+    try:
+        capture = io.StringIO()
+        stream_context = (
+            redirect_stdout(capture) if json_only else nullcontext()
+        )
+        err_context = (
+            redirect_stderr(capture) if json_only else nullcontext()
+        )
+        with stream_context, err_context:
+            client = create_client()
+            if normalized_feedback_item_ids:
+                _run_dataset_curation_preflight(
+                    client=client,
+                    score_id="explicit-feedback-item-ids",
+                    enable_balance=False,
+                    score_version_id=None,
+                )
+                result = build_associated_dataset_from_feedback_ids(
+                    client=client,
+                    scorecard_identifier=scorecard,
+                    score_identifier=score,
+                    feedback_item_ids=normalized_feedback_item_ids,
+                    source_report_block_id=source_report_block_id or "score.dataset-curate",
+                    eligibility_rule=eligibility_rule,
+                    task_id=task_id,
+                )
+            else:
+                scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+                if not scorecard_id:
+                    raise click.ClickException(f"Scorecard not found: {scorecard}")
+
+                score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+                if not score_id:
+                    raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
+
+                _run_dataset_curation_preflight(
+                    client=client,
+                    score_id=score_id,
+                    enable_balance=not no_balance,
+                    score_version_id=score_version_id,
+                )
+                result = build_associated_dataset_from_feedback_window(
+                    client=client,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    max_items=max_items,
+                    days=days,
+                    balance=not no_balance,
+                    class_source_score_version_id=score_version_id,
+                    task_id=task_id,
+                )
+        click.echo(json.dumps(result))
+    except Exception as exc:
+        if json_only:
+            click.echo(json.dumps({"error": str(exc)}))
+            raise SystemExit(1)
+        raise click.ClickException(str(exc))
+
+
+@score.command(name="dataset-curate-vetted")
+@click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
+@click.option('--score', required=True, help='Score to curate associated dataset for (accepts ID, name, key, or external ID)')
+@click.option('--max-items', default=100, type=int, show_default=True, help='Maximum number of vetted feedback items to include.')
+@click.option('--days', default=180, type=int, show_default=True, help='Lookback window in days for aligned-vetting report evidence.')
+@click.option(
+    '--score-version-id',
+    default=None,
+    type=str,
+    help='Optional score version ID to use as the class source for balancing. Defaults to champion when omitted.',
+)
+@click.option('--task-id', default=None, type=str, help='Optional Task ID for dashboard task-backed execution.')
+@click.option('--json-only', is_flag=True, default=False, help='Emit only final JSON payload (suppress runtime logs).')
+def dataset_curate_vetted(
+    scorecard: str,
+    score: str,
+    max_items: int,
+    days: int,
+    score_version_id: Optional[str],
+    task_id: Optional[str],
+    json_only: bool,
+):
+    """Run aligned vetting report, then build a balanced associated dataset from vetted feedback."""
+    if max_items <= 0:
+        raise click.ClickException("--max-items must be greater than 0.")
+    if days <= 0:
+        raise click.ClickException("--days must be greater than 0.")
+
+    try:
+        capture = io.StringIO()
+        stream_context = (
+            redirect_stdout(capture) if json_only else nullcontext()
+        )
+        err_context = (
+            redirect_stderr(capture) if json_only else nullcontext()
+        )
+        with stream_context, err_context:
+            client = create_client()
+            scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                raise click.ClickException(f"Scorecard not found: {scorecard}")
+
+            score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                raise click.ClickException(f"Score not found in scorecard {scorecard}: {score}")
+
+            _run_dataset_curation_preflight(
+                client=client,
+                score_id=score_id,
+                enable_balance=True,
+                score_version_id=score_version_id,
+            )
+            result = build_associated_dataset_from_vetted_report(
+                client=client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                max_items=max_items,
+                days=days,
+                class_source_score_version_id=score_version_id,
+                task_id=task_id,
+            )
+        click.echo(json.dumps(result))
+    except Exception as exc:
+        if json_only:
+            click.echo(json.dumps({"error": str(exc)}))
+            raise SystemExit(1)
+        raise click.ClickException(str(exc))
 
 @score.command()
 @click.option('--id', required=True, help='Score ID to list versions for')
@@ -1214,3 +1440,189 @@ def invoke_with_retry(llm, messages):
 
 # Note: The chat command has been moved to ScoreChatCommands.py
 # and is now available as "plexus score-chat repl"
+@score.command()
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--days', '-d', default=90, help='Feedback window in days (default: 90)')
+@click.option('--max-samples', type=int, default=200, help='Maximum feedback samples per evaluation (default: 200)')
+@click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
+@click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
+@click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, output: str):
+    """Run feedback alignment optimization with RCA for a score.
+
+    This command runs the iterative optimization loop:
+    1. Run baseline feedback evaluation with RCA
+    2. Analyze RCA and propose targeted improvements
+    3. Create new score version and evaluate
+    4. Compare metrics against baseline
+    5. Repeat until convergence or max iterations
+
+    Examples:
+        # Basic optimization
+        plexus score optimize -s customer-service -c empathy
+
+        # With custom parameters
+        plexus score optimize -s sales -c dnc-check --days 60 --max-iterations 5
+
+        # Dry run (no changes)
+        plexus score optimize -s test-sc -c test-score --dry-run
+
+        # Conservative threshold (only continue if ≥5% improvement)
+        plexus score optimize -s compliance -c safety --improvement-threshold 0.05
+    """
+    from plexus.cli.procedure.service import ProcedureService
+    from plexus.cli.shared.client_utils import create_client
+    from rich.json import JSON
+    from rich.table import Table
+    
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    # Find the feedback alignment optimizer YAML
+    yaml_path = Path(__file__).parent.parent.parent / "procedures" / "feedback_alignment_optimizer.yaml"
+
+    if not yaml_path.exists():
+        console.print(f"[red]Error: Could not find feedback_alignment_optimizer.yaml at {yaml_path}[/red]")
+        console.print("[yellow]Hint: This command requires the procedure YAML to be in plexus/procedures/[/yellow]")
+        return
+
+    console.print(f"[cyan]Starting feedback alignment optimization...[/cyan]")
+    console.print(f"  Scorecard: {scorecard}")
+    console.print(f"  Score: {score}")
+    console.print(f"  Feedback window: {days} days")
+    console.print(f"  Max iterations: {max_iterations}")
+    console.print(f"  Improvement threshold: {improvement_threshold:.2%}")
+    console.print(f"  Dry run: {'Yes' if dry_run else 'No'}")
+    console.print()
+
+    # Build params JSON
+    params = {
+        "scorecard": scorecard,
+        "score": score,
+        "days": days,
+        "max_samples": max_samples,
+        "max_iterations": max_iterations,
+        "improvement_threshold": improvement_threshold,
+        "dry_run": dry_run
+    }
+
+    # Load YAML
+    try:
+        with open(yaml_path, 'r') as f:
+            yaml_config = f.read()
+    except Exception as e:
+        console.print(f"[red]Error reading procedure YAML: {str(e)}[/red]")
+        return
+
+    # Create procedure
+    service = ProcedureService(client)
+    account = os.environ.get('PLEXUS_ACCOUNT_KEY')
+    if not account:
+        console.print("[red]Error: PLEXUS_ACCOUNT_KEY environment variable must be set[/red]")
+        return
+
+    from plexus.cli.procedure.state_machine_stages import get_alignment_optimizer_stage_configs
+    console.print("Creating optimization procedure...")
+    result = service.create_procedure(
+        account_identifier=account,
+        scorecard_identifier=None,
+        score_identifier=None,
+        yaml_config=yaml_config,
+        featured=False,
+        create_root_node=False,
+        stage_configs=get_alignment_optimizer_stage_configs(),
+    )
+
+    if not result.success:
+        console.print(f"[red]Error creating procedure: {result.message}[/red]")
+        return
+
+    procedure_id = result.procedure.id
+    console.print(f"[green]✓ Created procedure {procedure_id}[/green]")
+    console.print()
+
+    # Run the procedure
+    console.print(f"[cyan]Running optimization procedure...[/cyan]")
+    console.print(f"[dim]Approval gates are surfaced through Plexus HITL (dashboard/chat).[/dim]")
+    console.print()
+
+    # Get account ID for task tracking
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    account_id = resolve_account_id_for_command(client, None)
+
+    # Run with task tracking
+    import asyncio
+    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+
+    options = {
+        'context': params,
+    }
+
+    exec_result = asyncio.run(run_experiment_with_task_tracking(
+        procedure_id=procedure_id,
+        client=client,
+        account_id=account_id,
+        **options
+    ))
+
+    if exec_result.get('status') == 'error':
+        console.print(f"[red]Error: {exec_result.get('error')}[/red]")
+        return
+
+    # Parse result
+    if output == 'json':
+        console.print(JSON.from_data(exec_result))
+    elif output == 'yaml':
+        from ruamel.yaml import YAML
+        yaml_dumper = YAML()
+        yaml_dumper.dump(exec_result, sys.stdout)
+    else:
+        # Table format - show summary
+        console.print()
+        console.print("[green]✓ Optimization complete[/green]")
+        console.print()
+
+        # Extract key info from result — procedure returns fields at the top level
+        iterations = exec_result.get('iterations') or []
+        if not hasattr(iterations, '__iter__') or hasattr(iterations, 'items'):
+            iterations = []
+        improvement = exec_result.get('improvement') or 0
+        status = exec_result.get('status', 'unknown')
+
+        table = Table(title="Optimization Results")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="white")
+
+        table.add_row("Status", status)
+        table.add_row("Total Iterations", str(len(iterations)))
+        if isinstance(improvement, (int, float)):
+            table.add_row("AC1 Improvement", f"{improvement:+.4f}")
+
+        if iterations:
+            baseline = iterations[0].get('metrics') or {}
+            final = iterations[-1].get('metrics') or {}
+            if baseline.get('alignment') is not None:
+                table.add_row("Baseline AC1", f"{baseline['alignment']:.4f}")
+            if final.get('alignment') is not None:
+                table.add_row("Final AC1", f"{final['alignment']:.4f}")
+
+        console.print(table)
+
+        if not iterations and status == 'converged':
+            console.print()
+            console.print(f"[yellow]{exec_result.get('message', 'No changes needed.')}[/yellow]")
+
+        if iterations:
+            console.print()
+            console.print("[bold]Iteration Summary:[/bold]")
+            for it in iterations:
+                if not isinstance(it, dict):
+                    continue
+                delta = (it.get('deltas') or {}).get('alignment', 0) or 0
+                delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
+                hypothesis = str(it.get('hypothesis') or '')[:60]
+                console.print(f"  {it.get('iteration', '?')}. {hypothesis}... (AC1 {delta_str})")

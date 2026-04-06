@@ -16,6 +16,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
+import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -24,6 +25,54 @@ type ProcedureWithTask = Procedure & {
 }
 
 const client = generateClient<Schema>()
+
+const SUBSCRIBE_ON_CREATE_PROCEDURE = `
+  subscription OnCreateProcedure {
+    onCreateProcedure {
+      id
+      featured
+      code
+      rootNodeId
+      createdAt
+      updatedAt
+      accountId
+      scorecardId
+      scorecard {
+        id
+        name
+      }
+      scoreId
+      score {
+        id
+        name
+      }
+    }
+  }
+`
+
+const SUBSCRIBE_ON_UPDATE_PROCEDURE = `
+  subscription OnUpdateProcedure {
+    onUpdateProcedure {
+      id
+      featured
+      code
+      rootNodeId
+      createdAt
+      updatedAt
+      accountId
+      scorecardId
+      scorecard {
+        id
+        name
+      }
+      scoreId
+      score {
+        id
+        name
+      }
+    }
+  }
+`
 
 interface ProceduresDashboardProps {
   initialSelectedProcedureId?: string | null
@@ -376,6 +425,56 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     };
   }, []); // Empty dependency array since we want this to run once
 
+  // Realtime subscriptions for procedure create/update events
+  useEffect(() => {
+    if (!selectedAccount?.id) return;
+    const accountId = selectedAccount.id;
+    const subscriptionHandlers: { unsubscribe: () => void }[] = [];
+
+    try {
+      const createSub = (client.graphql({
+        query: SUBSCRIBE_ON_CREATE_PROCEDURE
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onCreateProcedure: any } }) => {
+          const procedure = data?.onCreateProcedure;
+          if (!procedure || procedure.accountId !== accountId) return;
+          setProcedures(prev => {
+            if (prev.some(p => p.id === procedure.id)) return prev;
+            return [{ ...procedure, task: null }, ...prev];
+          });
+        },
+        error: (error: Error) => console.error('Error in create procedure subscription:', error)
+      });
+      subscriptionHandlers.push(createSub);
+    } catch (error) {
+      console.error('Failed to set up create procedure subscription:', error);
+    }
+
+    try {
+      const updateSub = (client.graphql({
+        query: SUBSCRIBE_ON_UPDATE_PROCEDURE
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onUpdateProcedure: any } }) => {
+          const updated = data?.onUpdateProcedure;
+          if (!updated || updated.accountId !== accountId) return;
+          setProcedures(prev =>
+            prev.map(p => p.id === updated.id ? { ...p, ...updated } : p)
+          );
+        },
+        error: (error: Error) => console.error('Error in update procedure subscription:', error)
+      });
+      subscriptionHandlers.push(updateSub);
+    } catch (error) {
+      console.error('Failed to set up update procedure subscription:', error);
+    }
+
+    return () => {
+      subscriptionHandlers.forEach(sub => {
+        try { sub.unsubscribe(); } catch {}
+      });
+    };
+  }, [selectedAccount?.id]);
+
   const handleEditProcedure = useCallback((procedureId: string) => {
     console.log('Edit procedure:', procedureId)
     setIsEditMode(true)
@@ -547,9 +646,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       if (parameters && template.code) {
         // Parse the YAML to find the parameters section
-        const yaml = require('yaml')
         try {
-          const parsed = yaml.parse(template.code)
+          const parsed = parseYaml(template.code) as any
           
           // If there's a parameters section, add values to it
           if (parsed.parameters && Array.isArray(parsed.parameters)) {
@@ -569,7 +667,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           }
           
           // Convert back to YAML
-          processedCode = yaml.stringify(parsed)
+          processedCode = stringifyYaml(parsed)
         } catch (yamlError) {
           console.warn('Could not parse template YAML, using original:', yamlError)
         }
@@ -850,42 +948,39 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       {/* Procedures Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* ProceduresGauges at the top - only show when not in mobile selected procedure view */}
-        {!(selectedProcedureId && isNarrowViewport) && (
-          <div className="pb-3">
-            <ProceduresGauges />
-          </div>
-        )}
-        
         <AnimatePresence mode="popLayout">
-          <motion.div 
+          <motion.div
             key="procedures-layout"
             className="flex flex-1 min-h-0"
             layout
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ 
-              type: "spring", 
-              stiffness: 300, 
+            transition={{
+              type: "spring",
+              stiffness: 300,
               damping: 30,
               opacity: { duration: 0.2 }
             }}
           >
             {/* Left panel - grid content */}
-            <motion.div 
+            <motion.div
               className={`${selectedProcedureId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
               style={selectedProcedureId && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
               layout
-              transition={{ 
-                type: "spring", 
-                stiffness: 300, 
-                damping: 30 
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 30
               }}
             >
               <div className="@container space-y-3 overflow-visible">
+                {/* ProceduresGauges at the top - only show when not in mobile selected procedure view */}
+                {!(selectedProcedureId && isNarrowViewport) && (
+                  <ProceduresGauges />
+                )}
                 {procedures.length === 0 && isLoading ? (
                   <div className="animate-pulse space-y-4">
                     <div className="h-32 bg-gray-200 rounded"></div>

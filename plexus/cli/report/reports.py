@@ -52,6 +52,7 @@ from plexus.cli.report.utils import (
 )
 
 from .config_commands import config as config_group
+from .action_items import action_items_command
 from .report_commands import (
     run as run_command,
     list_reports as list_reports_command,
@@ -76,3 +77,4 @@ report.add_command(show_report_command, name="show")
 report.add_command(show_last_command, name="last")
 report.add_command(delete_command, name="delete")
 report.add_command(purge_command, name="purge")
+report.add_command(action_items_command, name="action-items")

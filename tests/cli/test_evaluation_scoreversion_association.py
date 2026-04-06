@@ -220,14 +220,14 @@ class TestVersionResolutionScenarios:
 
 
 class TestAlignmentFormatting:
-    def test_alignment_mapping_to_legacy_percentage_range(self):
-        assert Evaluation._format_alignment_metric_value(-1.0) == 0.0
-        assert Evaluation._format_alignment_metric_value(0.0) == 50.0
-        assert Evaluation._format_alignment_metric_value(1.0) == 100.0
+    def test_alignment_returns_native_ac1_range(self):
+        assert Evaluation._format_alignment_metric_value(-1.0) == -1.0
+        assert Evaluation._format_alignment_metric_value(0.0) == 0.0
+        assert Evaluation._format_alignment_metric_value(1.0) == 1.0
 
-    def test_alignment_mapping_clamps_out_of_range_inputs(self):
-        assert Evaluation._format_alignment_metric_value(-2.0) == 0.0
-        assert Evaluation._format_alignment_metric_value(2.0) == 100.0
+    def test_alignment_passthrough_for_out_of_range_inputs(self):
+        assert Evaluation._format_alignment_metric_value(-2.0) == -2.0
+        assert Evaluation._format_alignment_metric_value(2.0) == 2.0
 
     def test_specific_version_overrides_champion(self):
         """Test that specific version overrides champion version."""

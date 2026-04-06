@@ -67,7 +67,7 @@ export function EditableHeader({
   }
 
   // Determine which heading element to render based on level prop
-  const HeaderTag = level as keyof JSX.IntrinsicElements
+  const HeaderTag = level as React.ElementType
 
   return (
     <div 

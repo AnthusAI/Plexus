@@ -195,7 +195,8 @@ async def fetch_feedback_items_for_score(
     scorecard_id: str,
     score_id: str,
     start_date: datetime,
-    end_date: datetime
+    end_date: datetime,
+    max_items: Optional[int] = None,
 ) -> List[FeedbackItem]:
     """
     Fetches FeedbackItem records for a specific score on a scorecard within a date range.
@@ -209,6 +210,7 @@ async def fetch_feedback_items_for_score(
         score_id: The ID of the score
         start_date: Start date for filtering (UTC aware)
         end_date: End date for filtering (UTC aware)
+        max_items: Optional cap on number of newest feedback items to fetch
         
     Returns:
         List of FeedbackItem objects
@@ -250,12 +252,21 @@ async def fetch_feedback_items_for_score(
                     editedAt
                     editorName
                     isAgreement
+                    isInvalid
                     createdAt
                     updatedAt
                     item {
                         id
                         identifiers
                         externalId
+                        itemIdentifiers {
+                            items {
+                                name
+                                value
+                                url
+                                position
+                            }
+                        }
                     }
                 }
                 nextToken
@@ -305,6 +316,14 @@ async def fetch_feedback_items_for_score(
                     # Convert to FeedbackItem objects
                     items = [FeedbackItem.from_dict(item_dict, client=api_client) for item_dict in item_dicts]
                     all_items_for_score.extend(items)
+
+                    if max_items is not None and max_items > 0 and len(all_items_for_score) >= max_items:
+                        all_items_for_score = all_items_for_score[:max_items]
+                        logger.debug(
+                            "Reached max_items=%s while fetching feedback items; stopping pagination.",
+                            max_items,
+                        )
+                        break
                     
                     logger.debug(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
                     
