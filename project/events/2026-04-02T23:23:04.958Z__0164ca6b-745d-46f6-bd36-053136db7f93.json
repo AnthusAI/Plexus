@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "0164ca6b-745d-46f6-bd36-053136db7f93",
+  "issue_id": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-02T23:23:04.958Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Deterministic Reference Datasets, Curation, and Evaluation Selection",
+        "to": "Deterministic Associated Datasets, Curation, and Evaluation Selection"
+      }
+    }
+  }
+}

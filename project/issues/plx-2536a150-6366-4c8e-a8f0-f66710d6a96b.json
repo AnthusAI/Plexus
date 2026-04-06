@@ -1,0 +1,31 @@
+{
+  "id": "plx-2536a150-6366-4c8e-a8f0-f66710d6a96b",
+  "title": "Fix RemoveSpeakerIdentifiersTranscriptFilter for generic labels like User123",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "481b5143-deba-4607-ac5c-1e3ba3d47387",
+      "author": "derek",
+      "text": "Started reproduction for integration failure in test_remove_speaker_identifiers_various_formats. Will inspect expected patterns and update filter regex accordingly, then rerun targeted tests.",
+      "created_at": "2026-04-02T18:42:01.793283450Z"
+    },
+    {
+      "id": "a49b1a72-788e-4844-a8e8-08fe83944731",
+      "author": "derek",
+      "text": "Extended RemoveSpeakerIdentifiersTranscriptFilter to also remove generic speaker labels like 'User123:' at turn boundaries (start/newline/after period+space), while preserving the existing explicit speaker-label handling. Added unit test coverage for User123 format. Validation: .                                                                        [100%]\n=============================== warnings summary ===============================\nplexus/scores/AgenticValidator.py:627\n  /home/derek/projects/Plexus/plexus/scores/AgenticValidator.py:627: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('metadata', pre=True, each_item=True)\n\nplexus/scores/nodes/BeforeAfterSlicer.py:35\n  /home/derek/projects/Plexus/plexus/scores/nodes/BeforeAfterSlicer.py:35: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class SlicingOutputParser(BaseOutputParser[dict]):\n\n../../miniconda3/envs/py311/lib/python3.11/site-packages/pydantic/_internal/_config.py:383\n  /home/derek/miniconda3/envs/py311/lib/python3.11/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:\n  * 'underscore_attrs_are_private' has been removed\n    warnings.warn(message, UserWarning)\n\nplexus/scores/nodes/Extractor.py:70\n  /home/derek/projects/Plexus/plexus/scores/nodes/Extractor.py:70: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\nplexus/scores/nodes/ContextExtractor.py:51\n  /home/derek/projects/Plexus/plexus/scores/nodes/ContextExtractor.py:51: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 21 deselected, 5 warnings in 7.78s => 1 passed; .....                                                                    [100%]\n=============================== warnings summary ===============================\nplexus/scores/AgenticValidator.py:627\n  /home/derek/projects/Plexus/plexus/scores/AgenticValidator.py:627: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('metadata', pre=True, each_item=True)\n\nplexus/scores/nodes/BeforeAfterSlicer.py:35\n  /home/derek/projects/Plexus/plexus/scores/nodes/BeforeAfterSlicer.py:35: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class SlicingOutputParser(BaseOutputParser[dict]):\n\n../../miniconda3/envs/py311/lib/python3.11/site-packages/pydantic/_internal/_config.py:383\n  /home/derek/miniconda3/envs/py311/lib/python3.11/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:\n  * 'underscore_attrs_are_private' has been removed\n    warnings.warn(message, UserWarning)\n\nplexus/scores/nodes/Extractor.py:70\n  /home/derek/projects/Plexus/plexus/scores/nodes/Extractor.py:70: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\nplexus/scores/nodes/ContextExtractor.py:51\n  /home/derek/projects/Plexus/plexus/scores/nodes/ContextExtractor.py:51: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n5 passed, 5 warnings in 7.81s => 5 passed.",
+      "created_at": "2026-04-02T18:43:00.790695248Z"
+    }
+  ],
+  "created_at": "2026-04-02T18:42:00.113435813Z",
+  "updated_at": "2026-04-02T18:43:00.801378172Z",
+  "closed_at": "2026-04-02T18:43:00.801378172Z",
+  "custom": {}
+}

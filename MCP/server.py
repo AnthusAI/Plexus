@@ -14,6 +14,7 @@ from tools.util.think import register_think_tool
 from tools.util.docs import register_docs_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
+from tools.evaluation.evaluation_comparison import register_evaluation_comparison_tools
 from tools.score.scores import register_score_tools
 from tools.procedure.procedures import register_procedure_tools
 from tools.procedure.procedure_nodes import register_procedure_node_tools
@@ -22,6 +23,7 @@ from tools.feedback.feedback import register_feedback_tools
 from tools.task.tasks import register_task_tools
 from tools.item.items import register_item_tools
 from tools.prediction.predictions import register_prediction_tools
+from tools.dataset.datasets import register_dataset_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -110,6 +112,7 @@ def register_all_tools():
     
     # Register evaluation tools
     register_evaluation_tools(mcp)
+    register_evaluation_comparison_tools(mcp)
     logger.info("Registered evaluation tools")
     
     # Register procedure tools
@@ -139,6 +142,10 @@ def register_all_tools():
     # Register prediction tools
     register_prediction_tools(mcp)
     logger.info("Registered prediction tools")
+
+    # Register dataset tools
+    register_dataset_tools(mcp)
+    logger.info("Registered dataset tools")
 
     logger.info("All MCP tools registered successfully")
 

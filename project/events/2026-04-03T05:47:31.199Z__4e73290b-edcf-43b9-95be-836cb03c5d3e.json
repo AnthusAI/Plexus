@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4e73290b-edcf-43b9-95be-836cb03c5d3e",
+  "issue_id": "plx-d4d408e0-6dca-4017-8680-ebb490c129f7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.199Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 1,
+    "status": "open",
+    "title": "Decouple dataset UI from source context"
+  }
+}

@@ -3,7 +3,7 @@
   "title": "Support multiple deterministic dataset roles per score",
   "description": "## Summary\nExtend deterministic dataset planning so a score can use more than one fixed dataset role in the optimization process.\n\n## Deliverables\n- Define how a score can distinguish a small fixed regression set from a larger fixed benchmark set.\n- Resolve whether these roles are separate score-owned dataset pointers, a role-tagged association model, or an equivalent explicit design.\n- Ensure the design supports staged optimization workflows without overloading one dataset to serve incompatible purposes.\n\n## Dependency note\nThis work extends the score-owned reference dataset assignment and should stay aligned with dataset provenance decisions.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,9 +19,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "55972487-32f7-4794-944e-4a9b024c09eb",
+      "author": "ryan",
+      "text": "Starting implementation with explicit score-owned role pointers: keep referenceDataSetId as active pointer and add dedicated deterministic role pointers for regression and benchmark datasets (referenceRegressionDataSetId, referenceBenchmarkDataSetId).",
+      "created_at": "2026-04-02T14:57:34.828433Z"
+    },
+    {
+      "id": "34e53bc8-79db-4b6c-b080-bd44009db7cb",
+      "author": "ryan",
+      "text": "Implemented explicit multi-role deterministic dataset support on Score.\n\nDesign choice delivered:\n- Separate score-owned dataset pointers (no association model):\n  - referenceRegressionDataSetId\n  - referenceBenchmarkDataSetId\n- Existing referenceDataSetId remains available as the active/general pointer.\n\nImplementation:\n- Schema: added role pointers + belongsTo relations on Score in dashboard/amplify/data/resource.ts.\n- Dashboard client: extended Score create/update types and update mutation selection in dashboard/utils/amplify-client.ts.\n- Python API model: added both fields in plexus/dashboard/api/models/score.py.\n- MCP surfaces: added both fields to score info responses in MCP/tools/score/scores.py and MCP/tools/score/management.py.\n\nValidation: python -m py_compile passed for modified Python modules.",
+      "created_at": "2026-04-02T14:58:13.599162Z"
+    }
+  ],
   "created_at": "2026-04-02T13:31:04.400375Z",
-  "updated_at": "2026-04-02T13:31:04.400375Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T14:58:15.365152Z",
+  "closed_at": "2026-04-02T14:58:15.365152Z",
   "custom": {}
 }

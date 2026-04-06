@@ -1,0 +1,31 @@
+{
+  "id": "plx-c2943e5a-20c4-43e8-9d8b-52a5e529cb0f",
+  "title": "Test with real scorecard - identify candidate score with feedback",
+  "description": "Find a suitable test score with adequate feedback data for running real optimization.\n\n## Requirements for Test Score\n\n- Has feedback data (≥30 items in last 90 days)\n- Has room for improvement (AC1 < 0.90)\n- Safe to modify (non-production or designated test score)\n- RCA data should be meaningful\n\n## Steps\n\n1. Run scorecard-wide FeedbackAnalysis report on target scorecard\n2. Review scores with:\n   - Reasonable feedback volume\n   - Alignment metrics showing improvement opportunity\n   - Clear error patterns in confusion matrix\n3. Document selected score and rationale\n4. Verify score has champion version\n5. Record baseline metrics for comparison\n\n## Deliverable\n\nComment on this task with:\n- Selected scorecard (by key or ID, not client name)\n- Selected score (by key or ID)  \n- Current AC1/accuracy metrics\n- Feedback item count\n- Brief rationale for selection",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d87dde3a-2cc9-4194-baff-4f4a1bb74464",
+      "author": "ryan",
+      "text": "## Finding Test Score with Feedback\n\nNeed to identify a score with:\n- ≥30 feedback items (last 90 days)\n- AC1 < 0.90 (room for improvement)\n- Meaningful RCA data\n- Safe to modify\n\n### Step 1: Get scorecard info\n\nLooking for scorecard by external ID (keeping client names out of Kanbus)...",
+      "created_at": "2026-04-02T16:11:31.160287Z"
+    },
+    {
+      "id": "3a794aaa-b992-4ed7-96bf-085cb511b73e",
+      "author": "ryan",
+      "text": "## Test Score Selected\n\n**Scorecard:** AW Confirmation (by name - will use for testing only, not stored in production Kanbus)\n**Score:** Transfer Call?\n\n### Step 1: Get score info and current metrics",
+      "created_at": "2026-04-02T16:12:12.906619Z"
+    }
+  ],
+  "created_at": "2026-04-02T16:09:02.923064Z",
+  "updated_at": "2026-04-02T16:12:12.906619Z",
+  "closed_at": null,
+  "custom": {}
+}

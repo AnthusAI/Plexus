@@ -629,6 +629,29 @@ When enabled:
 - Works best with fine-tuned models
 - Only supported with OpenAI models
 
+## Result Validation
+
+Add optional validation rules under score `parameters.validation` to enforce output contracts:
+
+```yaml
+parameters:
+  validation:
+    value:
+      valid_classes: ["Yes", "No", "NQ - Pricing", "NQ - Technical"]
+      patterns: ["^(Yes|No)$", "^NQ - (?!Other$).*"]
+    explanation:
+      minimum_length: 10
+      maximum_length: 200
+      patterns: [".*evidence.*", ".*found.*"]
+```
+
+Rules are evaluated automatically after each `predict()` call when validation is configured:
+- `valid_classes`: value must be one of the listed classes
+- `patterns`: value must match at least one regex pattern
+- `minimum_length` / `maximum_length`: string length bounds
+
+If any configured rule fails, the score raises a validation error and the invalid output is rejected.
+
 ## Best Practices
 
 1. **Node Independence**: Each node must be self-contained with all necessary information in its prompts - nodes only know what you explicitly pass to them via outputs from previous nodes

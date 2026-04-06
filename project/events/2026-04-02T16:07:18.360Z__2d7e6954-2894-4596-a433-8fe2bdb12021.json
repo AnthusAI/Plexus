@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2d7e6954-2894-4596-a433-8fe2bdb12021",
+  "issue_id": "plx-f5ba02c3-5c26-49d6-a9e1-b5ee3efcba8d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:07:18.360Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a score optimizer\nI want to run iterative improvement cycles with human approval\nSo that I can progressively improve alignment while maintaining control\n\n## Acceptance Criteria\n\n- Analyzer agent reviews RCA and proposes changes\n- HITL approval gate blocks before applying changes\n- New score version created with change hypothesis\n- Evaluation runs with fixed baseline comparison\n- Metric deltas calculated correctly\n- Iteration continues until stop criteria met\n\n## Gherkin Specification\n\n```gherkin\nFeature: Iterative Optimization with Human-in-the-Loop\n  As a score optimizer\n  I want to iteratively improve a score with human oversight\n  So that I can achieve better alignment safely\n\nScenario: Single optimization iteration with approval\n  Given a baseline evaluation exists for score \"empathy\"\n  And the baseline AC1 is 0.75\n  When the analyzer agent reviews the RCA output\n  Then a hypothesis and proposed YAML changes are generated\n  And a HITL approval gate prompts for review with:\n    | Field      | Present |\n    | Hypothesis | Yes     |\n    | Changes    | Yes     |\n    | Rationale  | Yes     |\n  When I approve the proposed changes\n  Then a new score version is created with the hypothesis in version_note\n  And a feedback evaluation runs with baseline comparison\n  And metric deltas are calculated:\n    | Metric    | Calculated |\n    | AC1 delta | Yes        |\n    | Accuracy delta | Yes   |\n  And the iteration log records all details\n\nScenario: User rejects proposed changes\n  Given a baseline evaluation exists\n  And the analyzer proposes changes\n  When the HITL approval gate appears\n  And I reject the proposed changes\n  Then no score version is created\n  And the procedure stops gracefully\n  And the status is set to \"user_stopped\"\n\nScenario: Multiple iterations until convergence\n  Given a baseline evaluation with AC1=0.75\n  And max_iterations is set to 5\n  And improvement_threshold is 0.02\n  When iteration 1 improves AC1 to 0.78 (delta=+0.03)\n  And iteration 2 improves AC1 to 0.80 (delta=+0.02)\n  And iteration 3 improves AC1 to 0.805 (delta=+0.005)\n  Then a HITL gate asks whether to continue (below threshold)\n  When I choose to stop\n  Then the procedure completes with status=\"improvement_plateau\"\n  And 3 iterations are logged\n\nScenario: Fixed baseline tracking\n  Given a baseline evaluation ID \"eval-baseline-123\"\n  When multiple iterations run\n  Then all evaluations use baseline=\"eval-baseline-123\"\n  And all deltas are calculated against the original baseline metrics\n  And not against the previous iteration metrics\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Iterative optimization loop with HITL gates"
+  }
+}

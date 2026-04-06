@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2bc300b7-1e2b-4722-b9a8-63c0fe1390c8",
+  "issue_id": "plx-c4495668-05d2-4aaa-9ca4-b605687f7834",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:56:22.343Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Add CLI command to build reference dataset from vetted feedback item IDs"
+  }
+}

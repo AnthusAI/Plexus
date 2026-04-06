@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dc5f5184-0864-4ac1-a212-95bbd0da7011",
+  "issue_id": "plx-9805a8ed-dcab-4e84-918c-a9630878b05e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.504Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 1,
+    "status": "open",
+    "title": "Runtime validation on 1039/45425 for provenance links"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-2afb7c26-d8d8-4886-8dbd-1c5461562e3e",
+  "title": "Add preflight checks and json-only output for score dataset curation CLI",
+  "description": "",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9d746207-2bdf-443f-8eae-e6bcde5e468b",
+      "author": "ryan",
+      "text": "Implemented preflight+json-only for score dataset curation commands. Added shared preflight gate in scores CLI: requires AMPLIFY_STORAGE_DATASETS_BUCKET_NAME and resolves final output classes before balanced curation (dataset-curate balance path and dataset-curate-vetted). Added --json-only flag to dataset-curate and dataset-curate-vetted; command body logs are suppressed and final payload stays JSON. On failures with --json-only, CLI now emits {\"error\": \"...\"} and exits non-zero. Tests: pytest -q plexus/cli/score/scores_dataset_curate_test.py (11 passed), pytest -q plexus/cli/dataset/curation_test.py (17 passed), py_compile scores.py.",
+      "created_at": "2026-04-03T04:12:33.726798Z"
+    }
+  ],
+  "created_at": "2026-04-03T04:09:12.715293Z",
+  "updated_at": "2026-04-03T04:12:33.726798Z",
+  "closed_at": null,
+  "custom": {}
+}

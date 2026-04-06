@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c7cb3c52-88d2-46e5-8a20-f4b72906d4ed",
+  "issue_id": "plx-a93f0991-977d-4c83-b6a4-9251f30d080a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T18:30:37.847Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-e7329ba2-5000-4576-8fd0-854b05b7d5ac",
+    "priority": 2,
+    "status": "open",
+    "title": "Docs: semantic RCA scope + exemplar-only topic assignment clarity"
+  }
+}

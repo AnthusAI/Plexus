@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "55dd3aa5-ea1b-4ac0-af69-63694f859f33",
+  "issue_id": "plx-734a0671-ac54-416f-a96d-0f941b86b5cc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T22:31:45.840Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nDocument the optimization workflow runner and candidate assessment bundle so operators and future agents can execute and interpret the process consistently.\n\n## Deliverables\n- Public docs for staged workflow (deterministic check, random n=50 loop, random n=200 hard gate).\n- Operator runbook for running, monitoring, and validating bundle-backed assessments.\n- Guidance for interpreting decision outputs (accept/reject/inconclusive) and malfunction-routing recommendations.\n- Clear references to bundle attachment contract and compact summary fields.\n",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 2,
+    "status": "open",
+    "title": "Document optimization workflow runner + assessment bundle interpretation (public docs + operator runbook)"
+  }
+}

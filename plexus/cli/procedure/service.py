@@ -169,7 +169,8 @@ class ProcedureService:
         initial_value: Optional[Dict[str, Any]] = None,
         create_root_node: bool = True,
         template_id: Optional[str] = None,
-        score_version_id: Optional[str] = None
+        score_version_id: Optional[str] = None,
+        stage_configs: Optional[Dict[str, Any]] = None,
     ) -> ProcedureCreationResult:
         """Create a new procedure with optional root node and initial version.
 
@@ -289,7 +290,8 @@ class ProcedureService:
                 procedure_id=procedure.id,
                 account_id=account_id,
                 scorecard_id=scorecard_id,
-                score_id=score_id
+                score_id=score_id,
+                stage_configs=stage_configs,
             )
             if task:
                 logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
@@ -1037,6 +1039,11 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                         console_session_history = options.get('console_session_history')
                         if isinstance(console_session_history, list) and console_session_history:
                             context['console_session_history'] = console_session_history
+
+                        # Merge user-provided context (from CLI) into procedure context
+                        user_context = options.pop('context', None)
+                        if isinstance(user_context, dict):
+                            context.update(user_context)
 
                         from .procedure_executor import execute_procedure
                         from .mcp_transport import create_procedure_mcp_server
@@ -3831,7 +3838,8 @@ Format your response as a clear, structured summary that will guide the next rou
         procedure_id: str,
         account_id: str,
         scorecard_id: Optional[str] = None,
-        score_id: Optional[str] = None
+        score_id: Optional[str] = None,
+        stage_configs: Optional[Dict[str, Any]] = None,
     ) -> Optional['Task']:
         """
         Get or create a Task with stages based on the procedure's state machine.
@@ -3901,8 +3909,9 @@ Format your response as a clear, structured summary that will guide the next rou
             # No existing task found, create a new one
             logger.info(f"No existing Task found, creating new Task for procedure {procedure_id}")
 
-            # Get stages from state machine
-            stage_configs = get_stages_from_state_machine()
+            # Get stages from state machine (or use caller-provided configs)
+            if stage_configs is None:
+                stage_configs = get_stages_from_state_machine()
 
             # Build metadata
             metadata = {

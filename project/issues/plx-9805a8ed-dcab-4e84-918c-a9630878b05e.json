@@ -1,0 +1,90 @@
+{
+  "id": "plx-9805a8ed-dcab-4e84-918c-a9630878b05e",
+  "title": "Runtime validation on 1039/45425 for provenance links",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-d4d408",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-5eb1dd",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-492ddf",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-71dcbc",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-3adb77",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-f95e98",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-516a4e",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "1ac1bf44-9a19-4bf5-a773-c48017aa466a",
+      "author": "ryan",
+      "text": "Runtime validation pending. Blocked on operator confirmation to run live verification now that schema-less provenance path is in place.",
+      "created_at": "2026-04-03T06:03:40.727717Z"
+    },
+    {
+      "id": "8a66e684-bcbb-4a48-b2e4-c26332c95891",
+      "author": "ryan",
+      "text": "Blocking issue: dashboard runtime TypeError in Next dev (webpack factory undefined / cannot read properties of undefined reading call). Investigating as regression from recent /lab/data and evaluation provenance changes; fixing before continuing runtime validation.",
+      "created_at": "2026-04-03T06:10:29.403581Z"
+    },
+    {
+      "id": "d9ecbe60-107c-4efc-9f00-3ef19859dc48",
+      "author": "ryan",
+      "text": "Diagnosed runtime crash cause: concurrent Next dev processes writing to dashboard/.next produced webpack cache corruption (incorrect header check) and missing vendor chunks (react-day-picker.js), which surfaced as TypeError reading 'call'. Mitigation confirmed: single Next dev process + clean .next cache restores /lab/reports and /lab/evaluations.",
+      "created_at": "2026-04-03T06:14:41.564823Z"
+    },
+    {
+      "id": "fff23c29-973f-4c52-a415-30320769f64b",
+      "author": "ryan",
+      "text": "Applying route clarity change: use /lab/data/sources and /lab/datasets as canonical dataset/source dashboards. Updating navigation and internal links accordingly, and removing active /lab/data/datasets usage.",
+      "created_at": "2026-04-03T06:15:57.446786Z"
+    },
+    {
+      "id": "cd91430b-95cd-4da0-87b5-f951dd339747",
+      "author": "ryan",
+      "text": "Implemented route clarity cutover: canonical sources route is /lab/data/sources and canonical datasets routes are /lab/datasets and /lab/datasets/:id. Removed tabbed /lab/data page and /lab/data/datasets/:id route, updated navigation + report/evaluation dataset links + docs. Verified with dashboard build:fast (success).",
+      "created_at": "2026-04-03T06:19:17.058534Z"
+    },
+    {
+      "id": "4e0a7ff9-a5e2-4bf0-9006-abfbbf553024",
+      "author": "ryan",
+      "text": "Runtime validation executed with live runs against score 45425 on scorecard 1039 using associated dataset path. Required env for dataset-backed eval: AMPLIFY_STORAGE_DATASETS_BUCKET_NAME=amplify-d1cegb1ft4iove-ma-datasourcesbucketa1d38c0-vqhrgycupls2 (without it, setup fails before dataset load). Completed evaluations: c0803390-30c5-4d81-953e-ff254162df1f and ff262d63-6e4d-48b2-a66b-cc72f5d02d36. Verified via dashboard API query that both records persist scoreVersionId and parameters.dataset_id=1364adc8-302f-43a3-8673-f2b424cc1398; second run persisted baseline metadata pointing to c080... . Blocker discovered: explicit --version 59964640-6d7e-4ba3-83ed-84c385706fa1 logged No configuration found for version and then proceeded with champion version db3df9e6-2f78-4f0a-9876-48bd16515cdd instead of hard failure. This prevents true champion-vs-non-champion validation and violates one-path/no-fallback intent.",
+      "created_at": "2026-04-03T13:50:42.842448Z"
+    },
+    {
+      "id": "49264333-8f95-49f0-bf2d-3d8e37e910ed",
+      "author": "ryan",
+      "text": "Re-validation after plx-516a4e fix: invalid explicit version now hard-fails (no silent champion continuation). Completed champion/non-champion provenance validation with real existing non-champion version: baseline eval c0803390-30c5-4d81-953e-ff254162df1f (scoreVersionId db3df9e6-2f78-4f0a-9876-48bd16515cdd), candidate eval f5c06117-8e33-4b83-968c-a2b755e65b63 (scoreVersionId e74601f9-e280-41b0-88b6-bafce78739a3, baseline metadata c080..., dataset_id 1364adc8-302f-43a3-8673-f2b424cc1398). Provenance fields now confirmed for link rendering path.",
+      "created_at": "2026-04-03T13:59:50.369512Z"
+    }
+  ],
+  "created_at": "2026-04-03T05:47:31.504659Z",
+  "updated_at": "2026-04-03T13:59:50.383889Z",
+  "closed_at": "2026-04-03T13:59:50.383889Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d4992628-af86-4b54-bbfa-1393d59f7cf0",
+  "issue_id": "plx-1973d99a-e701-4fd1-8093-aa274c120d93",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T01:49:45.841Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 2,
+    "status": "open",
+    "title": "Docs update for dataset-curate-vetted report-evidence workflow"
+  }
+}
