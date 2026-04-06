@@ -92,38 +92,57 @@ outputs:
 agents:
   code_editor:
     system_prompt: |
-      You are a score configuration editor. Your only job is to improve a Plexus score's
-      YAML configuration based on evaluation data showing where it makes errors.
+      You are a score configuration editor. Your only job is to propose ONE focused edit
+      to a Plexus score's YAML configuration based on evaluation data showing where it
+      makes errors.
 
-      You will receive in your initial message:
-      - Score and scorecard identifiers (needed if you want to pull a specific version)
-      - Optimization history: all prior attempts with version IDs, metrics, and accept/reject status
-      - Current score configuration (already in score_config.yaml — this is the last accepted version)
-      - Latest evaluation results: both feedback alignment and accuracy metrics with root cause analysis
+      You will receive:
+      - The current score configuration (full YAML content)
+      - Evaluation results with root cause analysis showing misclassification patterns
+      - Optimization history of prior iterations
 
-      Your steps:
-      1. Review the optimization history and evaluation data
-      2. Decide: build on the current file, OR pull a specific prior version as your starting point
-         - To start from a different version: plexus_score_pull(scorecard_identifier="...", score_identifier="...", version_id="<id from history>")
-      3. Read score_config.yaml using str_replace_editor (command: view)
-      4. Make ONE focused edit using str_replace_editor (command: str_replace)
-      5. Call submit_score_code() to validate and save your change
-      6. Call done(reason="<what you changed and why>")
+      IMPORTANT: You must respond in a SINGLE turn with EXACTLY two tool calls:
+      1. str_replace_editor(command="str_replace", find="<exact text to find>", replace="<replacement text>")
+      2. done(reason="<what you changed and why>")
+
+      The find/replace strings must EXACTLY match text in the score configuration.
+      The system will apply your edit and submit it — you do NOT need to call submit_score_code.
 
       If the evaluation data shows no viable improvement path:
         done(reason="cannot_improve: <explanation>")
 
       Rules:
-      - Make exactly ONE change — do not make multiple edits in a single turn
-      - YAML indentation must be correct — a validation error means the version was NOT saved
-      - Do not call done() without calling submit_score_code() first (unless signaling cannot_improve)
+      - Make exactly ONE change per iteration
+      - The find text must be an exact substring of the current configuration
+      - YAML indentation must be correct in the replacement text
+      - Focus on the most impactful misclassification pattern from the RCA
 
     initial_message: "Ready."
 
     tools:
       - str_replace_editor
-      - plexus_score_pull
-      - submit_score_code
+      - done
+
+  reviewer:
+    system_prompt: |
+      You are a score optimization reviewer. You will be shown the results of an edit
+      made to a score configuration in the previous step. Your job is to decide whether
+      to keep or revert that change.
+
+      Review the eval results carefully:
+      - Did the change improve feedback alignment (AC1)?
+      - Did accuracy hold up (not regress significantly)?
+      - Does the direction seem promising to continue?
+
+      Call done(decision="keep") if the change looks good or neutral and worth keeping.
+      Call done(decision="revert") if the change made things worse or is clearly wrong.
+
+      Note: Metric guardrails still apply — even if you say "keep", a severe accuracy
+      regression will be overridden. Your judgment is most valuable for borderline cases.
+
+    initial_message: "Ready to review."
+
+    tools:
       - done
 
 stages:
@@ -343,6 +362,47 @@ code: |
     return table.concat(parts, "\n")
   end
 
+  -- Build the review context message shown to the reviewer agent after evals
+  local function build_review_context(opts)
+    local parts = {}
+
+    table.insert(parts, "=== EVALUATION RESULTS FOR YOUR CHANGE ===")
+    table.insert(parts, "")
+    table.insert(parts, string.format("Iteration %d change:", opts.iteration))
+    table.insert(parts, string.format('  "%s"', opts.done_reason or "(no reason given)"))
+    table.insert(parts, string.format("  New version: %s", tostring(opts.new_version_id)))
+    table.insert(parts, string.format("  Prior version (reverts to): %s", tostring(opts.prior_version_id)))
+    table.insert(parts, "")
+
+    table.insert(parts, "Feedback alignment (vs baseline):")
+    if opts.fb_metrics then
+      table.insert(parts, string.format("  AC1: %.3f → %.3f (delta %+.3f)",
+        opts.baseline_fb_ac1, opts.fb_metrics.alignment,
+        opts.fb_metrics.alignment - opts.baseline_fb_ac1))
+      table.insert(parts, string.format("  Accuracy: %.3f, Precision: %.3f, Recall: %.3f",
+        opts.fb_metrics.accuracy, opts.fb_metrics.precision, opts.fb_metrics.recall))
+    else
+      table.insert(parts, "  (not available)")
+    end
+    table.insert(parts, "")
+
+    table.insert(parts, "Accuracy on regression dataset (vs baseline):")
+    if opts.acc_metrics then
+      table.insert(parts, string.format("  AC1: %.3f → %.3f (delta %+.3f)",
+        opts.baseline_acc_ac1, opts.acc_metrics.alignment,
+        opts.acc_metrics.alignment - opts.baseline_acc_ac1))
+    else
+      table.insert(parts, "  (not available)")
+    end
+    table.insert(parts, "")
+
+    table.insert(parts, "=== YOUR DECISION ===")
+    table.insert(parts, 'Call done(decision="keep") to accept this change and continue optimization from it.')
+    table.insert(parts, 'Call done(decision="revert") to discard this change and revert to the prior version.')
+
+    return table.concat(parts, "\n")
+  end
+
   -- Phase A: Setup & Baseline
   Stage.set("setup")
   Human.notify({message = "Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score, level = "info"})
@@ -540,7 +600,7 @@ code: |
     score_name = params.score,
     evaluation_type = "feedback",
     days = params.days,
-    max_feedback_items = 200,
+    max_feedback_items = params.max_samples or 50,
     sampling_mode = "newest",
     wait = true
   })
@@ -667,15 +727,55 @@ code: |
       iteration = iteration
     })
 
-    -- Invoke coding agent — it reads score_config.yaml, edits, submits, calls done
+    -- Invoke coding agent (single-turn) — agent proposes edit, Lua applies it.
+    -- Multi-turn agent execution crashes in the Tactus sandbox (TaskGroup error),
+    -- so we call the agent ONCE and intercept the tool call for Lua execution.
+    Tool.reset()
     code_editor.clear_history()
     Human.notify({message = "Invoking coding agent for iteration " .. iteration .. "...", level = "info"})
 
-    -- Run agent turns until done() is called
+    -- Single agent turn: code_editor produces str_replace_editor + done tool calls
     code_editor({message = inject})
-    for turn = 1, 20 do
-      if Tool.called("done") then break end
-      code_editor()
+
+    -- Extract the str_replace_editor tool call and apply it in Lua
+    local str_replace_call = Tool.last_call("str_replace_editor")
+    local edit_applied = false
+    local new_version_id = nil
+
+    if str_replace_call and str_replace_call.args then
+      local args = str_replace_call.args
+      -- Normalize escaped newlines in old_str/new_str strings
+      local find_str = args.old_str or ""
+      local replace_str = args.new_str or ""
+      find_str = string.gsub(find_str, "\\n", "\n")
+      replace_str = string.gsub(replace_str, "\\n", "\n")
+
+      if has_text(find_str) then
+        local code_path = score_pull.codeFilePath
+        local current_yaml = File.read(code_path)
+        local old_start, old_end = string.find(current_yaml, find_str, 1, true)
+        if old_start then
+          local edited_yaml = string.sub(current_yaml, 1, old_start - 1) ..
+                             replace_str ..
+                             string.sub(current_yaml, old_end + 1)
+          File.write(code_path, edited_yaml)
+          -- Also write to exchange path for submit_score_code
+          File.write("/tmp/plexus_score_edit_exchange.yaml", edited_yaml)
+          Human.notify({message = "Applied edit: '" .. string.sub(find_str, 1, 60) .. "' → '" .. string.sub(replace_str, 1, 60) .. "'", level = "info"})
+
+          -- Submit via submit_score_code tool
+          local submit_result = call_plexus_tool("submit_score_code", {})
+          if submit_result and submit_result.version_id then
+            new_version_id = submit_result.version_id
+            edit_applied = true
+            Human.notify({message = "Score version created: " .. new_version_id, level = "info"})
+          else
+            Human.notify({message = "submit_score_code failed: " .. tostring(submit_result and (submit_result.error or submit_result.message) or "unknown"), level = "warning"})
+          end
+        else
+          Human.notify({message = "Edit find text not found in score YAML: '" .. string.sub(find_str, 1, 80) .. "'", level = "warning"})
+        end
+      end
     end
 
     -- Extract agent's done reason
@@ -710,14 +810,17 @@ code: |
       break
     end
 
-    -- Check if agent submitted a new version
-    local new_version_id = nil
-    local submit_called = Tool.called("submit_score_code")
-    if submit_called then
-      local submit_call = Tool.last_call("submit_score_code")
-      if submit_call then
-        local submit_result = safe_decode(submit_call.result)
-        new_version_id = submit_result and submit_result.version_id
+    -- Check if edit was applied (either via Lua interception above or agent tool call)
+    if not edit_applied and not new_version_id then
+      -- Fallback: check if agent managed to call submit_score_code directly
+      local submit_called = Tool.called("submit_score_code")
+      if submit_called then
+        local submit_call = Tool.last_call("submit_score_code")
+        if submit_call then
+          local submit_result = safe_decode(submit_call.result)
+          new_version_id = submit_result and submit_result.version_id
+          if new_version_id then edit_applied = true end
+        end
       end
     end
 
@@ -785,7 +888,7 @@ code: |
         score_name = params.score,
         evaluation_type = "feedback",
         days = params.days,
-        max_feedback_items = 200,
+        max_feedback_items = params.max_samples or 50,
         sampling_mode = "newest",
         baseline = feedback_baseline_id,
         wait = true
@@ -801,25 +904,61 @@ code: |
         iteration, iter_fb_metrics.alignment, fb_deltas.alignment
       ), level = "info"})
 
-      -- Decision logic
+      -- Phase 2: Review — let agent see eval results and decide keep/revert
+      Tool.reset()
+      reviewer.clear_history()
+      local review_msg = build_review_context({
+        iteration = iteration,
+        done_reason = done_reason,
+        new_version_id = new_version_id,
+        prior_version_id = last_accepted_version_id,
+        fb_metrics = iter_fb_metrics,
+        acc_metrics = iter_accuracy_ok and iter_acc_metrics or nil,
+        baseline_fb_ac1 = feedback_baseline_metrics.alignment,
+        baseline_acc_ac1 = accuracy_baseline_metrics and accuracy_baseline_metrics.alignment or 0
+      })
+      Human.notify({message = "Invoking reviewer agent for iteration " .. iteration .. "...", level = "info"})
+      reviewer({message = review_msg})
+
+      -- Extract agent's decision from done() call (use pcall for sandbox-proxied args)
+      local review_done = Tool.last_call("done")
+      local agent_decision = "keep"  -- default to keep if reviewer didn't signal revert
+      if review_done and review_done.args then
+        local ok_d, decision_field = pcall(function() return review_done.args.decision or "" end)
+        local ok_r, reason_field = pcall(function() return review_done.args.reason or "" end)
+        local ok_s, success_field = pcall(function() return review_done.args.success end)
+        decision_field = ok_d and decision_field or ""
+        reason_field = ok_r and reason_field or ""
+        -- Check for "revert" in decision or reason fields, OR success=false meaning rejection
+        local combined = string.lower(tostring(decision_field) .. " " .. tostring(reason_field))
+        if string.find(combined, "revert") then
+          agent_decision = "revert"
+        elseif ok_s and success_field == false then
+          -- Agent signaled success=false, treat as revert
+          agent_decision = "revert"
+        end
+      end
+
+      -- Decision logic: agent decides, with metric guardrails
       local regression_threshold = -0.02
       local acc_regressed = accuracy_available and iter_accuracy_ok and (acc_deltas.alignment < regression_threshold)
-      local fb_improved = fb_deltas.alignment >= 0
-      local accept = fb_improved and not acc_regressed
+      local accept = false
 
-      if accept then
-        Human.notify({message = "Iteration " .. iteration .. " ACCEPTED", level = "info"})
-        last_accepted_version_id = new_version_id
-      elseif acc_regressed then
+      if agent_decision == "revert" then
         Human.notify({message = string.format(
-          "Iteration %d REJECTED: accuracy regressed by %.4f",
+          "Iteration %d REJECTED: reviewer agent chose to revert",
+          iteration
+        ), level = "info"})
+      elseif acc_regressed then
+        -- Metric guardrail overrides agent's keep decision
+        Human.notify({message = string.format(
+          "Iteration %d REJECTED: accuracy regressed by %.4f (guardrail override)",
           iteration, math.abs(acc_deltas.alignment)
         ), level = "warning"})
       else
-        Human.notify({message = string.format(
-          "Iteration %d REJECTED: feedback did not improve (delta %.4f)",
-          iteration, fb_deltas.alignment
-        ), level = "warning"})
+        accept = true
+        Human.notify({message = "Iteration " .. iteration .. " ACCEPTED", level = "info"})
+        last_accepted_version_id = new_version_id
       end
 
       -- Store iteration log
