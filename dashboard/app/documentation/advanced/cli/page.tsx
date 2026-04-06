@@ -166,9 +166,6 @@ plexus scores list --scorecard example1
 # Pull scorecard configuration to YAML
 plexus scorecards pull --scorecard example1 --output ./my-scorecards
 
-# Push scorecard configuration from YAML
-plexus scorecards push --scorecard example1 --file ./my-scorecard.yaml --note "Updated configuration"
-
 # Delete a scorecard
 plexus scorecards delete --scorecard example1`}</code>
             </div>
