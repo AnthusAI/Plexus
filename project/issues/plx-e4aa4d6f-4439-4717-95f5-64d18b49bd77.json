@@ -1,0 +1,53 @@
+{
+  "id": "plx-e4aa4d6f-4439-4717-95f5-64d18b49bd77",
+  "title": "Implement AWS Backup plan coverage for Amplify Gen2 DynamoDB tables",
+  "description": "Create and implement remediation branch/work for Prowler finding requiring DynamoDB tables to be governed by an AWS Backup plan in Amplify Gen2.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [
+    "security",
+    "prowler",
+    "backup"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "97e7d2c2-d2e8-485b-aa56-0627a27c3d2f",
+      "author": "derek",
+      "text": "Started implementation: adding AWS Backup plan + selection for all Amplify Gen2 DynamoDB data tables in dashboard/amplify/backend.ts, then validating via Amplify TypeScript compile.",
+      "created_at": "2026-03-18T18:20:05.808166735Z"
+    },
+    {
+      "id": "d9fbf96e-a0b5-45b9-b04d-341085b34dc8",
+      "author": "derek",
+      "text": "Implemented AWS Backup remediation in dashboard/amplify/backend.ts: added DynamoDbBackupStack with BackupVault + BackupPlan, daily scheduled backup rule, 35-day retention, and selection over all backend.data.resources.tables via BackupResource.fromDynamoDbTable. Also normalized environment names for resource naming safety. Validation passed: npx tsc -p amplify/tsconfig.json --noEmit --pretty false.",
+      "created_at": "2026-03-18T18:20:48.993386400Z"
+    },
+    {
+      "id": "a1800a98-4a8d-42dd-ab0b-c620a9fa7e6e",
+      "author": "derek",
+      "text": "Committed remediation code for AWS Backup plan coverage on Amplify Gen2 DynamoDB tables with semantic-release style commit message. Next: push branch and open PR targeting staging for validation.",
+      "created_at": "2026-03-18T18:22:36.668591945Z"
+    },
+    {
+      "id": "9361e3ed-6e5a-4f1e-8518-0d972bb93622",
+      "author": "derek",
+      "text": "Pushed branch and opened staging validation PR: https://github.com/AnthusAI/Plexus/pull/131. Commit: 44944131 (feat(amplify): add AWS Backup plan for Gen2 DynamoDB tables).",
+      "created_at": "2026-03-18T18:22:52.011333710Z"
+    },
+    {
+      "id": "6d1902ef-2049-4473-a90d-6ca113d9c3e5",
+      "author": "ryan",
+      "text": "AWS Backup plan for Amplify Gen2 DynamoDB tables implemented and merged in PR #131 (March 18).",
+      "created_at": "2026-04-04T19:23:06.033334Z"
+    }
+  ],
+  "created_at": "2026-03-18T18:18:34.909364373Z",
+  "updated_at": "2026-04-04T19:23:06.033334Z",
+  "closed_at": "2026-04-04T19:23:06.033334Z",
+  "custom": {}
+}

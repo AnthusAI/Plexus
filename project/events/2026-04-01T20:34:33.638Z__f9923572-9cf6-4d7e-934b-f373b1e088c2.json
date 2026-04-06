@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f9923572-9cf6-4d7e-934b-f373b1e088c2",
+  "issue_id": "plx-309bf096-09f9-4687-9d6d-a2cb1d9af628",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T20:34:33.638Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create SKILL.md, references, and agents/openai.yaml for iterative score improvement workflows.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-22790e84-5971-4c2d-b13d-d300af929b4d",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement plexus-scorecard-improver skill in skills/"
+  }
+}

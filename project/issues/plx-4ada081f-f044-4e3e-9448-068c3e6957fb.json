@@ -1,0 +1,25 @@
+{
+  "id": "plx-4ada081f-f044-4e3e-9448-068c3e6957fb",
+  "title": "CLI orchestration command: score dataset-curate-vetted",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b1e840cc-6f97-4546-b88d-32ad02bb9830",
+      "author": "ryan",
+      "text": "Implemented canonical CLI orchestration command 'plexus score dataset-curate-vetted' with fixed report-evidence flow and JSON output containing report_id/report_block_id/dataset_id plus balancing diagnostics and vetted_pool_limit.",
+      "created_at": "2026-04-03T02:32:58.626909Z"
+    }
+  ],
+  "created_at": "2026-04-03T01:49:45.737133Z",
+  "updated_at": "2026-04-03T02:33:06.610809Z",
+  "closed_at": "2026-04-03T02:33:06.610809Z",
+  "custom": {}
+}

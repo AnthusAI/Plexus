@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "14f424be-5ab9-4d7a-b8f4-039468aab6b5",
+  "issue_id": "plx-3170f49d-ae28-40e6-9915-cd8fbce8c6d8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T03:18:45.677Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-65711358-e3b3-497a-87f8-d7f90451b85e",
+    "priority": 1,
+    "status": "open",
+    "title": "Improve score 45425 feedback evaluation with 60d random-50 sampling"
+  }
+}

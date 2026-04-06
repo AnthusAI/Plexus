@@ -1,0 +1,43 @@
+{
+  "id": "plx-defa9655-425a-4e6c-97b5-ad1c2a7774ea",
+  "title": "Fix dashboard startup failure: missing @tailwindcss/postcss and Jersey 20 font override",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-309bf096-09f9-4687-9d6d-a2cb1d9af628",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8e1a3b86-1a12-411f-ac56-45b05036d510",
+      "author": "ryan",
+      "text": "Installed dashboard dependencies to restore missing @tailwindcss/postcss and patched Jersey_20 font config in app/layout.tsx with adjustFontFallback:false to avoid font override failure. Running build verification.",
+      "created_at": "2026-04-02T00:17:52.555964408Z"
+    },
+    {
+      "id": "534626bd-2338-423e-9f84-1c0f7638da3e",
+      "author": "ryan",
+      "text": "Resolved dashboard startup/build blockers. Changes: set Jersey_20 adjustFontFallback:false in app/layout.tsx; pinned Tailwind toolchain to 4.0.0-compatible set on Node 18 (@tailwindcss/postcss/tailwindcss + oxide-linux-x64-gnu, with @tailwindcss/node and @tailwindcss/oxide overrides); pinned nanoid to ^3.3.8 to avoid PostCSS CJS/ESM break. Verification: node can require @tailwindcss/postcss and npm run build:fast now succeeds.",
+      "created_at": "2026-04-02T00:34:05.485814832Z"
+    },
+    {
+      "id": "e72503a9-6f1c-4541-9fd3-7f3a73f7df88",
+      "author": "ryan",
+      "text": "Preparing commit to develop with dashboard startup/build fix (Tailwind/PostCSS/oxide compatibility + Jersey_20 fallback guard), then pushing to trigger CI.",
+      "created_at": "2026-04-02T00:34:21.690091660Z"
+    },
+    {
+      "id": "498b7876-443d-4ed8-8fa5-b8a7236dce98",
+      "author": "ryan",
+      "text": "Confirmed fixed. Dashboard startup issue with missing @tailwindcss/postcss and Jersey 20 font override was resolved.",
+      "created_at": "2026-04-04T18:53:34.181158Z"
+    }
+  ],
+  "created_at": "2026-04-02T00:16:12.093703452Z",
+  "updated_at": "2026-04-04T18:53:34.181158Z",
+  "closed_at": "2026-04-04T18:53:34.181158Z",
+  "custom": {}
+}

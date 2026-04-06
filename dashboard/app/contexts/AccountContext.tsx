@@ -1,15 +1,13 @@
 "use client"
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { generateClient } from "aws-amplify/api"
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import type { Schema } from "@/amplify/data/resource"
 import type { AccountSettings } from "@/types/account-config"
 import { isValidAccountSettings } from "@/types/account-config"
 import { listFromModel } from "@/utils/amplify-helpers"
+import { getClient } from "@/utils/amplify-client"
 import { menuItems } from "@/components/dashboard-layout"
-
-const client = generateClient<Schema>()
 
 type Account = Schema['Account']['type']
 
@@ -51,6 +49,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const refreshAccount = async () => {
     if (!selectedAccount) return
     try {
+      const client = getClient()
       const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
         client.models.Account
       )
@@ -71,6 +70,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoadingAccounts(true)
     try {
+      const client = getClient()
       const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
         client.models.Account
       )
@@ -131,6 +131,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
       setIsLoadingAccounts(true)
       try {
+        const client = getClient()
         const { data: accountsData } = await listFromModel<Schema['Account']['type']>(
           client.models.Account
         )

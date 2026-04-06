@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ddec1f64-44a9-4c88-a338-d93a82d50479",
+  "issue_id": "plx-e52e7786-873d-486e-9fc9-5e9fc1820383",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.242Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nDefine the staged optimization protocol that combines fixed deterministic checks and random generalization checks.\n\n## Deliverables\n- Specify the role of the small fixed regression set versus the larger fixed benchmark set.\n- Define when deterministic checks run, when random checks run, and when stronger multi-random confirmation is required.\n- Define how sample size, time range, and random-run count are chosen for the workflow.\n\n## Notes\nThis task defines the operational protocol; it should stay aligned with the fixed-dataset role model.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 1,
+    "status": "open",
+    "title": "Define staged optimization protocol for regression, benchmark, and random evaluations"
+  }
+}

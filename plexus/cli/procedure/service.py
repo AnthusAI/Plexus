@@ -32,6 +32,7 @@ from plexus.dashboard.api.models.task import Task
 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.scorecard.scorecards import resolve_account_identifier
 from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
+from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id, get_builtin_procedure_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,8 @@ class ProcedureService:
         initial_value: Optional[Dict[str, Any]] = None,
         create_root_node: bool = True,
         template_id: Optional[str] = None,
-        score_version_id: Optional[str] = None
+        score_version_id: Optional[str] = None,
+        stage_configs: Optional[Dict[str, Any]] = None,
     ) -> ProcedureCreationResult:
         """Create a new procedure with optional root node and initial version.
 
@@ -288,7 +290,8 @@ class ProcedureService:
                 procedure_id=procedure.id,
                 account_id=account_id,
                 scorecard_id=scorecard_id,
-                score_id=score_id
+                score_id=score_id,
+                stage_configs=stage_configs,
             )
             if task:
                 logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
@@ -515,6 +518,11 @@ class ProcedureService:
         Returns:
             YAML configuration string, or None if not found
         """
+        builtin_yaml = get_builtin_procedure_yaml(procedure_id)
+        if builtin_yaml:
+            logger.info(f"Using built-in YAML configuration for {procedure_id}")
+            return builtin_yaml
+
         try:
             procedure = Procedure.get_by_id(procedure_id, self.client)
             if not procedure:
@@ -548,6 +556,10 @@ class ProcedureService:
         except Exception as e:
             logger.error(f"Error getting procedure YAML: {str(e)}")
             return None
+
+    def get_experiment_yaml(self, procedure_id: str) -> Optional[str]:
+        """Backward-compatible alias for callers still using older naming."""
+        return self.get_procedure_yaml(procedure_id)
 
     def test_procedure_specs(
         self,
@@ -966,20 +978,25 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                 'status': 'error',
                 'error': error_msg
             }
-        
+
         try:
-            # Get procedure details to validate it exists
-            procedure_info = self.get_procedure_info(procedure_id)
-            if not procedure_info:
-                error_msg = f"Procedure not found: {procedure_id}"
-                logger.error(error_msg)
-                return {
-                    'procedure_id': procedure_id,
-                    'status': 'error',
-                    'error': error_msg
-                }
-            
-            logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
+            built_in_procedure = is_builtin_procedure_id(procedure_id)
+            procedure_info = None
+            if built_in_procedure:
+                logger.info(f"Running built-in procedure: {procedure_id}")
+            else:
+                # Get procedure details to validate it exists
+                procedure_info = self.get_procedure_info(procedure_id)
+                if not procedure_info:
+                    error_msg = f"Procedure not found: {procedure_id}"
+                    logger.error(error_msg)
+                    return {
+                        'procedure_id': procedure_id,
+                        'status': 'error',
+                        'error': error_msg
+                    }
+
+                logger.info(f"Found experiment: {procedure_id} (Scorecard: {procedure_info.scorecard_name})")
 
             # Check if this is a Tactus procedure and route accordingly
             yaml_config = self.get_procedure_yaml(procedure_id)
@@ -992,14 +1009,41 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                     if procedure_class == 'Tactus':
                         logger.info(f"Routing procedure {procedure_id} to Tactus runtime")
 
+                        account_id = options.get('account_id')
+                        if not account_id:
+                            try:
+                                account_id = self.client._resolve_account_id()
+                            except Exception:
+                                account_id = None
+
+                        scorecard_id = procedure_info.procedure.scorecardId if procedure_info else None
+                        score_id = procedure_info.procedure.scoreId if procedure_info else None
+
                         # Build context with procedure info
                         context = {
                             'procedure_id': procedure_id,
-                            'scorecard_name': procedure_info.scorecard_name,
-                            'score_name': procedure_info.score_name,
-                            'scorecard_id': procedure_info.procedure.scorecardId,
-                            'score_id': procedure_info.procedure.scoreId,
+                            'scorecard_name': procedure_info.scorecard_name if procedure_info else None,
+                            'score_name': procedure_info.score_name if procedure_info else None,
+                            'scorecard_id': scorecard_id,
+                            'score_id': score_id,
                         }
+                        if account_id:
+                            context['account_id'] = account_id
+
+                        # Console chat runs can provide explicit trigger text/history
+                        # captured at dispatch time; pass these through directly so
+                        # detached worker execution preserves continuity.
+                        console_user_message = options.get('console_user_message')
+                        if isinstance(console_user_message, str) and console_user_message.strip():
+                            context['console_user_message'] = console_user_message.strip()
+                        console_session_history = options.get('console_session_history')
+                        if isinstance(console_session_history, list) and console_session_history:
+                            context['console_session_history'] = console_session_history
+
+                        # Merge user-provided context (from CLI) into procedure context
+                        user_context = options.pop('context', None)
+                        if isinstance(user_context, dict):
+                            context.update(user_context)
 
                         from .procedure_executor import execute_procedure
                         from .mcp_transport import create_procedure_mcp_server
@@ -1028,6 +1072,13 @@ You can query the current guidelines using the `plexus_score_info` tool with the
 
                 except Exception as e:
                     logger.warning(f"Error checking procedure class: {e}, falling back to SOP Agent")
+
+            if built_in_procedure:
+                return {
+                    'procedure_id': procedure_id,
+                    'status': 'error',
+                    'error': f"Built-in procedure {procedure_id} must define class: Tactus."
+                }
 
             # Continue with existing SOP Agent logic for non-Tactus procedures
             # Handle restart from root node option
@@ -3787,7 +3838,8 @@ Format your response as a clear, structured summary that will guide the next rou
         procedure_id: str,
         account_id: str,
         scorecard_id: Optional[str] = None,
-        score_id: Optional[str] = None
+        score_id: Optional[str] = None,
+        stage_configs: Optional[Dict[str, Any]] = None,
     ) -> Optional['Task']:
         """
         Get or create a Task with stages based on the procedure's state machine.
@@ -3857,8 +3909,9 @@ Format your response as a clear, structured summary that will guide the next rou
             # No existing task found, create a new one
             logger.info(f"No existing Task found, creating new Task for procedure {procedure_id}")
 
-            # Get stages from state machine
-            stage_configs = get_stages_from_state_machine()
+            # Get stages from state machine (or use caller-provided configs)
+            if stage_configs is None:
+                stage_configs = get_stages_from_state_machine()
 
             # Build metadata
             metadata = {

@@ -117,8 +117,9 @@ class _BaseAPIClient:
             raise ValueError("Missing required API URL or API key")
 
         # Check environment variable for schema introspection setting
-        # Default to True for backward compatibility, but allow disabling for Lambda/packaging scenarios
-        fetch_schema_str = os.getenv('PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT', 'true').lower()
+        # Default to False — introspection adds 500ms-2s per execute() call (full schema fetch).
+        # Enable only for development/debugging via PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT=true.
+        fetch_schema_str = os.getenv('PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT', 'false').lower()
         self._fetch_schema = fetch_schema_str in ('true', '1', 'yes')
 
         # Set up GQL client with API key authentication

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b88b4f82-4174-47fd-a29d-711ed5ab0f1a",
+  "issue_id": "plx-492ddf81-56f9-4c3d-9864-c4cdded9b113",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.337Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 1,
+    "status": "open",
+    "title": "Add canonical dataset detail route and links"
+  }
+}

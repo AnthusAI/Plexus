@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a05105d3-0be6-4eab-9e2e-73f664612f84",
+  "issue_id": "plx-13af958a-24af-4011-8e48-466f7f3a15be",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.483Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAdd test coverage for the staged optimization workflow, candidate assessment bundle, and KPI calculations.\n\n## Deliverables\n- Cover protocol execution order and gating behavior.\n- Cover bundle shape and comparison behavior.\n- Cover generalization-gap and stability calculations.\n- Cover dashboard rendering and workflow decision output where applicable.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 2,
+    "status": "open",
+    "title": "Add tests for staged optimization workflow, bundle comparison, and KPI calculations"
+  }
+}

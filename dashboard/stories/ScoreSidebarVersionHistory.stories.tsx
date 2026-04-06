@@ -4,7 +4,7 @@ import { action } from '@storybook/addon-actions'
 import { Crown, Expand, X } from 'lucide-react'
 import { ScoreSidebarVersionHistory } from '../components/ui/score-sidebar-version-history'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
-import { stringify as stringifyYaml } from 'yaml'
+import { dump as stringifyYaml } from 'js-yaml'
 
 // Helper to get a date from X minutes ago
 const getTimeAgo = (minutes: number) => {

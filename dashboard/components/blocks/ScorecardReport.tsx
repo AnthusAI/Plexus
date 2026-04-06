@@ -117,10 +117,10 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
               .sort((a, b) => {
                 // Sort by accuracy if available, otherwise sorting can be customized
                 // Now access accuracy via a.scoreData.accuracy
-                if (a.scoreData.accuracy === undefined && b.scoreData.accuracy !== undefined) return 1;
-                if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy === undefined) return -1;
-                if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy !== undefined) {
-                  return b.scoreData.accuracy - a.scoreData.accuracy;
+                if (a.scoreData.accuracy == null && b.scoreData.accuracy != null) return 1;
+                if (a.scoreData.accuracy != null && b.scoreData.accuracy == null) return -1;
+                if (a.scoreData.accuracy != null && b.scoreData.accuracy != null) {
+                  return a.scoreData.accuracy - b.scoreData.accuracy;
                 }
                 return 0;
               })
@@ -227,7 +227,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
         </div>
       )}
 
-      {!hasData && scoreData.scores && scoreData.scores.length === 0 && (
+      {!hasData && scoreData.scores && scoreData.scores.length === 0 && !children && (
         <div className="py-8 text-center text-muted-foreground">
           <p>No scorecard data available for analysis within the selected parameters.</p>
           <p className="text-sm mt-1">Check that scorecard items exist for the specified parameters.</p>

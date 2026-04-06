@@ -1,0 +1,31 @@
+{
+  "id": "plx-d442234c-021f-4a8b-9024-14529e9102f9",
+  "title": "Document feedback evaluation RCA, reliability expectations, and operator workflow in the public web app",
+  "description": "## Summary\nDocument the feedback evaluation RCA and reliability features in the public-facing documentation pages of the web app so operators understand the evaluation contract and how to use the analysis output.\n\n## Deliverables\n- Document the feedback evaluation lifecycle, including waiting semantics, completion expectations, and RCA availability requirements.\n- Document what RCA output means, how operators should interpret it, and what the expected next actions are.\n- Document reliability-related behaviors such as required RCA, small-set RCA behavior, and evaluation-runner/orchestrator expectations.\n- Ensure the documentation lives in the public-facing documentation section of the dashboard/web app rather than only in issue comments or internal implementation notes.\n\n## Notes\nThis task should be kept aligned with future malfunction-analysis / triage work so the operator-facing docs stay coherent as evaluation analysis evolves.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-88badc",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-5ff575",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-9aa370",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-02T13:03:44.927734Z",
+  "updated_at": "2026-04-02T13:03:44.927734Z",
+  "closed_at": null,
+  "custom": {}
+}

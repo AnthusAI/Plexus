@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "40028581-9ebb-493a-833b-68aee54adfe1",
+  "issue_id": "plx-3855e0ec-2ba6-417e-a89f-23967cedb144",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T14:39:38.107Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Continue iterative feedback evaluations for score 45425 / scorecard 1039 using 180-day window and capped random samples (200). Use baseline evaluation version 59964640-6d7e-4ba3-83ed-84c385706fa1 for comparisons. No champion promotion allowed. Record each iteration with evaluation ID, AC1, accuracy, RCA presence, and config changes.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-65711358-e3b3-497a-87f8-d7f90451b85e",
+    "priority": 1,
+    "status": "open",
+    "title": "Resume score 45425 optimization loop (180d, random-200)"
+  }
+}

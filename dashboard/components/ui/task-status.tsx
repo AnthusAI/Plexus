@@ -216,18 +216,22 @@ export const TaskStatus = React.memo(({
     // If we have an explicit currentStageName, use it
     if (currentStageName) return currentStageName;
 
-    // If task is completed or failed, use completion
-    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
-
-    // Find the first RUNNING stage from the stage configs
+    // Check stage-level status first — it's more granular than task-level status.
+    // A RUNNING stage takes priority even if the task-level status says COMPLETED,
+    // which can happen due to real-time data races during stage transitions.
     const runningStage = stageConfigs.find(s => s.status === 'RUNNING');
     if (runningStage) return runningStage.name;
 
-    // If no running stage, find the first PENDING stage
-    const pendingStage = stageConfigs.find(s => s.status === 'PENDING');
+    // Only fall back to task-level status when no stage is actively running
+    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
+
+    // If no running stage, find the first PENDING stage (sorted by order)
+    const pendingStage = [...stageConfigs].sort((a, b) => a.order - b.order).find(s => s.status === 'PENDING');
     if (pendingStage) return pendingStage.name;
 
-    // Default to empty string if no stages found
+    // All stages are COMPLETED but task status hasn't caught up yet — show completion
+    if (stageConfigs.length > 0 && stageConfigs.every(s => s.status === 'COMPLETED')) return 'completion';
+
     return '';
   }, [currentStageName, status, stageConfigs]);
 
@@ -254,10 +258,12 @@ export const TaskStatus = React.memo(({
         };
       });
 
-    // Completion segment should only become active after last stage completes
+    // Completion segment becomes active when task is COMPLETED, or when all stages
+    // are COMPLETED (which may precede the task-level status update by a moment).
     const hasStages = orderedStages.length > 0;
     const lastStageCompleted = hasStages && orderedStages[orderedStages.length - 1].status === 'COMPLETED';
-    const completionActive = status === 'COMPLETED' && lastStageCompleted;
+    const allStagesCompleted = hasStages && orderedStages.every(s => s.status === 'COMPLETED');
+    const completionActive = (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
       label: 'Complete',

@@ -1,0 +1,46 @@
+{
+  "id": "plx-eca6cbd3-4db9-4226-b105-f468cedfb9ab",
+  "title": "Document balanced associated-dataset curation and score-page dataset visibility",
+  "description": "## Summary\nDocument balanced associated-dataset curation and score-page dataset visibility.\n\n## Purpose\nEnsure operators can discover and correctly use defaults, controls, and expected outputs.\n\n## Acceptance Criteria\n- Public docs use associated-dataset terminology only.\n- Docs cover balancing default behavior and `--no-balance` opt-out.\n- Docs cover score-page associated-dataset panel and its data semantics.\n- Examples are updated and render correctly in the public web app docs.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-072c43",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-9fc883",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "d98c4a52-b6a4-4a81-97ea-86899688c701",
+      "author": "ryan",
+      "text": "Starting docs update for balanced associated-dataset curation and score-page dataset visibility.",
+      "created_at": "2026-04-03T00:44:34.106633Z"
+    },
+    {
+      "id": "83a76517-7d5e-443f-9e27-e0118e96b6ce",
+      "author": "ryan",
+      "text": "Updated public docs for associated dataset balancing + score-page visibility. Changes: concepts/associated-datasets now documents default-on balancing, --no-balance usage, and score-page Associated Datasets panel semantics (row count + label distribution + legacy stats-unavailable state). methods/evaluate-score now includes --no-balance command example and references the new score-page panel for quick dataset quality inspection.",
+      "created_at": "2026-04-03T00:45:01.675639Z"
+    },
+    {
+      "id": "1c774bc8-0426-4a9f-a114-94b6e5b925ff",
+      "author": "ryan",
+      "text": "Completed in branch.",
+      "created_at": "2026-04-03T00:45:01.717382Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.659349Z",
+  "updated_at": "2026-04-03T00:45:01.717382Z",
+  "closed_at": "2026-04-03T00:45:01.701018Z",
+  "custom": {}
+}

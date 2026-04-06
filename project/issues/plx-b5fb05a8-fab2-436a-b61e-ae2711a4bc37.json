@@ -1,0 +1,37 @@
+{
+  "id": "plx-b5fb05a8-fab2-436a-b61e-ae2711a4bc37",
+  "title": "Reduce evaluation startup overhead from repeated CloudWatch/logging init",
+  "description": "## Goal\nReduce startup latency in CLI evaluations by removing redundant logging/cloudwatch initialization and avoid Watchtower empty-message warnings.\n\n## Scope\n- Identify repeated CloudWatch handler setup in evaluation startup path\n- Add safeguards to avoid redundant initialization\n- Eliminate empty log messages that trigger Watchtower warnings\n- Validate with targeted checks/tests\n\n## Definition of Done\n- Startup path avoids unnecessary CloudWatch reinit\n- Watchtower empty-message warning source removed\n- Targeted validation recorded",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4b0cf194-08ee-4e93-b798-6dc37960011e",
+      "author": "derek",
+      "text": "Started implementation. Investigating repeated setup paths in CustomLogging.set_log_group/setup_logging and Cloudwatch client initialization, plus empty log messages that trigger WatchtowerWarning.",
+      "created_at": "2026-03-27T22:54:35.839766745Z"
+    },
+    {
+      "id": "3704a768-6673-41b4-87b6-906f05556598",
+      "author": "derek",
+      "text": "Implemented startup/logging optimizations:\n1) CloudWatchLogger now reuses a shared boto3 CloudWatch client across instances (cache keyed by runtime credential mode + region), preventing repeated client initialization during evaluation startup.\n2) CustomLogging.set_log_group now no-ops when requested log group is already active, avoiding unnecessary handler rebuilds.\n3) Removed empty logging.info(\"\") calls in CLI evaluation path, which were producing WatchtowerWarning: Received empty message.\n\nValidation:\n- python -m py_compile plexus/CustomLogging.py plexus/plexus_logging/Cloudwatch.py plexus/cli/evaluation/evaluations.py\n- /home/derek/miniconda3/envs/py311-dev/bin/pytest -q plexus/plexus_logging/Cloudwatch_test.py (4 passed)\n- /home/derek/miniconda3/envs/py311-dev/bin/pytest -q plexus/tests/test_evaluation_commands.py (12 passed)",
+      "created_at": "2026-03-27T22:56:01.272231790Z"
+    },
+    {
+      "id": "360756f1-092d-4e99-91b9-e075cef82b98",
+      "author": "derek",
+      "text": "Landed on branch fix/evaluations-speed in commit ffed369f. Includes shared CloudWatch client reuse, set_log_group no-op when unchanged, and removal of empty evaluation log messages that triggered Watchtower empty-message warnings.",
+      "created_at": "2026-03-27T22:59:48.727422883Z"
+    }
+  ],
+  "created_at": "2026-03-27T22:54:32.938610347Z",
+  "updated_at": "2026-03-27T22:59:48.738013722Z",
+  "closed_at": "2026-03-27T22:59:48.738013722Z",
+  "custom": {}
+}

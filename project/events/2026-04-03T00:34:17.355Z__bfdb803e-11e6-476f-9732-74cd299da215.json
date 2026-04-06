@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "bfdb803e-11e6-476f-9732-74cd299da215",
+  "issue_id": "plx-072c435e-59aa-4872-a3a6-3f5a911648d5",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.355Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nAdd default-on balanced curation to `plexus score dataset-curate`.\n\n## Purpose\nReduce class-skew in associated datasets while preserving practical dataset size.\n\n## Acceptance Criteria\n- `--max-items` is the final output cap.\n- Balancing is enabled by default.\n- `--no-balance` explicitly disables balancing.\n- Selection/output are deterministic.\n- Command output includes before/after class distribution summary fields."
+      }
+    }
+  }
+}

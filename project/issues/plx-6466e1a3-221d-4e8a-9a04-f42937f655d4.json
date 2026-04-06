@@ -1,0 +1,31 @@
+{
+  "id": "plx-6466e1a3-221d-4e8a-9a04-f42937f655d4",
+  "title": "Audit existing examples schema and behavior for reuse as curated source pool",
+  "description": "## Summary\nInspect `ScorecardExampleItem`, current dashboard flows, and ownership semantics to define how existing examples can serve as the curated source pool.\n\n## Deliverables\n- Document the current scorecard-vs-score ownership behavior.\n- Resolve the ambiguity in how examples are currently used.\n- Produce the exact contract for examples as a curated source pool for deterministic reference datasets.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b0745456-7a5f-4273-a29a-aa36c28f48d7",
+      "author": "ryan",
+      "text": "Starting audit: mapping ScorecardExampleItem schema, ownership semantics, and dashboard usage; target output is an explicit contract for examples-as-curated-source-pool and resolution of scorecard-vs-score ambiguity.",
+      "created_at": "2026-04-02T14:52:13.512984Z"
+    },
+    {
+      "id": "bea1ddd7-787f-4dd0-9329-6e0240f858cc",
+      "author": "ryan",
+      "text": "## Audit Result: ScorecardExampleItem contract and usage\n\n### Source-of-truth model contract\n- Curated pool storage is `ScorecardExampleItem` in GraphQL schema (`dashboard/amplify/data/resource.ts`).\n- Record shape: `scorecardId`, `itemId`, `addedAt`, `addedBy`, `notes`, plus `belongsTo(scorecard)` and `belongsTo(item)`.\n- Scope is **scorecard-owned**, not score-owned. There is no `scoreId` on `ScorecardExampleItem`.\n- Access patterns implemented: by `scorecardId`, by `itemId`, by `scorecardId+addedAt`.\n\n### Runtime/UI contract in current code\n- Dashboard and scorecard detail flows create/delete associations via `amplifyClient.ScorecardExampleItem` wrapper (`dashboard/utils/amplify-client.ts`).\n- UI-facing `scorecard.examples` is derived/presented as string refs (`item:<itemId>`), not canonical storage.\n- Canonical write path for curated item membership is create/delete in `ScorecardExampleItem`; UI array is a display/edit mirror.\n\n### Ownership semantics\n- Owner = scorecard context (`scorecardId`) under account scoping inherited from linked scorecard/item records.\n- Item can be reused across scorecards by multiple association rows.\n- `addedBy`/`notes` fields exist in schema but are not currently populated by active dashboard flows.\n\n### Scorecard-vs-score ambiguity resolution\n- Ambiguity observed: component naming uses `score` variable for scorecard objects in `ScorecardComponent`.\n- Actual behavior is unambiguous at data layer: examples are scorecard-level curated pool entries.\n- Therefore the explicit contract is: **examples are maintained at scorecard level, then consumed downstream for score-specific dataset builds by filtering/selection logic in later pipeline stages.**\n\n### Operational notes for follow-on implementation\n- Because table uniqueness is not enforced on (`scorecardId`,`itemId`) at schema level, duplicate prevention is currently app-side check; keep this risk visible for follow-on hardening.\n- If association deletion fails, UI may still remove the local list entry; canonical source remains `ScorecardExampleItem`.\n\nThis satisfies the task deliverable: explicit contract for examples as curated source pool and resolution of scorecard-vs-score semantics.",
+      "created_at": "2026-04-02T14:52:59.566050Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:32.931279Z",
+  "updated_at": "2026-04-02T14:53:04.518255Z",
+  "closed_at": "2026-04-02T14:53:04.518255Z",
+  "custom": {}
+}

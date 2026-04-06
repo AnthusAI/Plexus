@@ -1,0 +1,25 @@
+{
+  "id": "plx-7691e014-78c5-459a-b408-e632e0820729",
+  "title": "Console Thinking shimmer + Tool component rendering",
+  "description": "Implement Console chat UX improvements: show AI Elements Shimmer 'Thinking' placeholder after successful send/dispatch until first assistant chunk arrives; render TOOL_CALL and TOOL_RESPONSE with AI Elements Tool component as separate timeline events; keep HITL/session/streaming behavior unchanged; add tests for shimmer lifecycle and tool rendering.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dce082d6-3e68-445f-8ac5-4d8c1dbb7bca",
+      "author": "ryan",
+      "text": "Implemented on feature/analysis-console-shell: added AI Elements Shimmer + Tool components, wired ConversationViewer pending-assistant state for pre-stream 'Thinking' placeholder, switched tool messages to Tool component rendering as separate TOOL_CALL/TOOL_RESPONSE events, and updated unit tests for shimmer lifecycle + tool rendering. Verified with Jest: conversation-viewer streaming/session-routing + console-dashboard tests all passing.",
+      "created_at": "2026-03-29T18:58:05.946214Z"
+    }
+  ],
+  "created_at": "2026-03-29T18:50:33.743419Z",
+  "updated_at": "2026-03-29T18:58:11.790859Z",
+  "closed_at": null,
+  "custom": {}
+}

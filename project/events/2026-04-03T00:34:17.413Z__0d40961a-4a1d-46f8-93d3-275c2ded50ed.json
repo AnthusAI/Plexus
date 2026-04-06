@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "0d40961a-4a1d-46f8-93d3-275c2ded50ed",
+  "issue_id": "plx-9fc88385-c7d5-47c7-b7e3-a19d225d5b14",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.413Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nAdd a score-page \"Associated Datasets\" panel with label distribution visibility.\n\n## Purpose\nGive operators immediate insight into dataset inventory, size, and class balance for a score.\n\n## Acceptance Criteria\n- Panel lists datasets associated by `scoreId` in newest-first order.\n- Each dataset shows item count and label-distribution visualization.\n- Legacy datasets with missing stats show a clear \"stats unavailable\" state.\n- UI behavior and labels use associated-dataset terminology."
+      }
+    }
+  }
+}

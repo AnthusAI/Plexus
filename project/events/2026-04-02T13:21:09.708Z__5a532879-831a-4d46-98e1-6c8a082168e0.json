@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5a532879-831a-4d46-98e1-6c8a082168e0",
+  "issue_id": "plx-9dc194ce-2c77-4e00-b1bd-c33fe0401ca0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:21:09.708Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAdd evaluation-level heuristic flagging for broad mechanical or pathological problems that are not item-local.\n\n## Deliverables\n- Detect conditions such as all predictions collapsing to one class, score results containing execution errors, or similar evaluation-wide failure signals.\n- Define the evaluation-level flag payload and severity model.\n- Keep these flags separate from per-item classification results.\n\n## Notes\nThis task covers evaluation-wide red flags, not the per-item four-category classifier.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+    "priority": 1,
+    "status": "open",
+    "title": "Add evaluation-level red-flag heuristics for pathological runs and mechanical failures"
+  }
+}

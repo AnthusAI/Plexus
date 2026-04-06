@@ -1,0 +1,48 @@
+{
+  "id": "plx-13af958a-24af-4011-8e48-466f7f3a15be",
+  "title": "Add tests for staged optimization workflow, bundle comparison, and KPI calculations",
+  "description": "## Summary\nAdd test coverage for the staged optimization workflow, candidate assessment bundle, and KPI calculations.\n\n## Deliverables\n- Cover protocol execution order and gating behavior.\n- Cover bundle shape and comparison behavior.\n- Cover generalization-gap and stability calculations.\n- Cover dashboard rendering and workflow decision output where applicable.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-22533f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-cface0",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-3e14e5",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-eb6f72",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "f95c6c68-bff0-498e-b042-c01346b362f0",
+      "author": "ryan",
+      "text": "Starting implementation: expand staged optimization test coverage for workflow protocol gating, bundle comparison invariants, and KPI/generalization metric calculations to lock contract behavior.",
+      "created_at": "2026-04-04T23:07:07.599456Z"
+    },
+    {
+      "id": "ffcb7825-303d-4c02-bd3f-049824f8967e",
+      "author": "ryan",
+      "text": "Implemented and validated expanded tests: (1) candidate_assessment_runner enforces random_gate sample_size>=200; (2) runner workflow_decision reroutes on malfunction context (information_gap dominance); (3) EvaluationTask detail renders candidate assessment compact summary KPIs/stage evidence from task.metadata.candidate_assessment_compact_summary. Validation runs: pytest -q plexus/cli/shared/candidate_assessment_runner_test.py plexus/cli/shared/candidate_assessment_bundle_test.py plexus/cli/shared/generalization_metrics_test.py plexus/cli/shared/workflow_decision_synthesis_test.py (15 passed); npm --prefix dashboard test -- EvaluationTask.memo.test.tsx --runInBand (3 passed).",
+      "created_at": "2026-04-04T23:07:53.600053Z"
+    }
+  ],
+  "created_at": "2026-04-02T13:31:27.483322Z",
+  "updated_at": "2026-04-04T23:07:53.614359Z",
+  "closed_at": "2026-04-04T23:07:53.614359Z",
+  "custom": {}
+}

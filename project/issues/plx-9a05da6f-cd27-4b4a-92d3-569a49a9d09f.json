@@ -1,0 +1,64 @@
+{
+  "id": "plx-9a05da6f-cd27-4b4a-92d3-569a49a9d09f",
+  "title": "Resolve remaining GitHub Code Quality findings blocking PR #121",
+  "description": "Address unresolved GitHub Code Quality review comments on PR #121 (dev->main) in a dedicated dev-based fix branch, run targeted tests, and push for re-review.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [
+    "code-quality",
+    "dev"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7ae65aa3-512d-4554-bf54-f502098ab93c",
+      "author": "derek",
+      "text": "Implemented remaining Code Quality fixes from PR #121: (1) made guidelines validator module cache read explicit in MCP/tools/score/guidelines.py, (2) replaced unnecessary lambdas in plexus/cli/procedure/test_procedure_test_specs_cli.py with direct Mock / local helper function patches. Validation passed: pytest -q MCP/tools/score/guidelines_test.py plexus/cli/procedure/test_procedure_test_specs_cli.py (7 passed).",
+      "created_at": "2026-03-17T21:16:54.134720462Z"
+    },
+    {
+      "id": "22268a0d-4adb-4e38-8604-c656ba3d1d7c",
+      "author": "derek",
+      "text": "Opened follow-up PR to dev: https://github.com/AnthusAI/Plexus/pull/122 (branch fix/pr121-code-quality-followups). Posted cross-reference comment on PR #121 so reviewers can track that the remaining findings are being addressed via #122.",
+      "created_at": "2026-03-17T21:17:28.551576341Z"
+    },
+    {
+      "id": "2ceb893c-3d89-476d-aa4a-34fe021a6088",
+      "author": "derek",
+      "text": "Detected additional Code Quality note still flagging _VALIDATOR_MODULE. Applying a stronger fix: remove global cache variable and use function-level cache decorator for _load_guidelines_validator, then rerun targeted tests and update PR #122.",
+      "created_at": "2026-03-17T22:36:38.462046251Z"
+    },
+    {
+      "id": "a26cea2a-4a9c-4286-9ef5-d3209d5f7239",
+      "author": "derek",
+      "text": "Addressed additional lingering Code Quality finding in MCP/tools/score/guidelines.py by replacing global module cache variable with @lru_cache(maxsize=1) on _load_guidelines_validator. Retested: pytest -q MCP/tools/score/guidelines_test.py plexus/cli/procedure/test_procedure_test_specs_cli.py (7 passed).",
+      "created_at": "2026-03-17T22:36:58.485412033Z"
+    },
+    {
+      "id": "2a4dbc77-99ae-4f71-9619-7f65eb3f6d47",
+      "author": "derek",
+      "text": "Confirmed: PR #122 merged at commit 44bc763b before follow-up commit f06d6531; therefore the global-cache removal fix is not in dev. Creating a new one-commit follow-up PR into dev.",
+      "created_at": "2026-03-17T22:38:02.621663323Z"
+    },
+    {
+      "id": "f2d9d3e4-eb18-4adc-a839-0ebf18519dd6",
+      "author": "derek",
+      "text": "Opened post-merge follow-up PR: https://github.com/AnthusAI/Plexus/pull/123 from branch fix/pr122-postmerge-guidelines-cache. Includes only commit 76143e5b (remove _VALIDATOR_MODULE global, use @lru_cache). Validation rerun: 7 passed.",
+      "created_at": "2026-03-17T22:38:22.993015370Z"
+    },
+    {
+      "id": "b4b13f62-5dc9-4670-ab2f-0039d546c9e1",
+      "author": "ryan",
+      "text": "Remaining PR #121 code quality findings resolved and merged to main.",
+      "created_at": "2026-04-04T19:01:13.186902Z"
+    }
+  ],
+  "created_at": "2026-03-17T21:16:13.177548103Z",
+  "updated_at": "2026-04-04T19:01:13.186902Z",
+  "closed_at": "2026-04-04T19:01:13.186902Z",
+  "custom": {}
+}

@@ -1,0 +1,66 @@
+{
+  "id": "plx-a78f021b-dd89-426b-a583-266ef8f7b383",
+  "title": "Document deterministic reference datasets and evaluation-selection workflow in the public web app",
+  "description": "## Summary\nDocument the deterministic reference dataset, curation, value-function, and evaluation-selection features in the public-facing documentation pages of the web app.\n\n## Deliverables\n- Add end-user/operator documentation for deterministic reference datasets, including what they are, how they are assigned to a score, and why they are used.\n- Document curation inputs, label provenance concepts, and the deterministic label-resolution policy at the product level.\n- Document how deterministic reference datasets fit into evaluation runs, regression testing, value-function comparisons, and optimization acceptance decisions.\n- Ensure the documentation lives in the public-facing documentation section of the dashboard/web app rather than only in code comments or internal notes.\n\n## Notes\nThis task should land with the feature work so new capabilities ship with usable public documentation.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-25e99b",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-612be1",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-7fcaff",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-21138f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "118f3d65-1da4-417e-962d-9bbf885bebea",
+      "author": "ryan",
+      "text": "Starting docs implementation for deterministic reference datasets + evaluation-selection workflow, including dataset build flags and reference-dataset evaluation usage.",
+      "created_at": "2026-04-02T15:44:36.024219Z"
+    },
+    {
+      "id": "f88d08e5-e6da-4092-a93c-d04fee752f33",
+      "author": "ryan",
+      "text": "Moved to blocked due to unresolved dependencies (plx-7fcaff, plx-21138f).",
+      "created_at": "2026-04-02T15:44:47.008455Z"
+    },
+    {
+      "id": "f52705b2-4512-4a17-9c76-0e79832d62b3",
+      "author": "ryan",
+      "text": "Implemented public docs for deterministic reference dataset workflow.\n\nNew documentation page:\n- /documentation/concepts/reference-datasets\n- file: dashboard/app/documentation/concepts/reference-datasets/page.tsx\n\nNavigation updates:\n- Added sidebar entry under Concepts: Reference Datasets\n  - file: dashboard/app/documentation/components/documentation-layout.tsx\n- Added Concepts landing card linking to Reference Datasets\n  - file: dashboard/app/documentation/concepts/page.tsx\n\nMethod guide update:\n- Added deterministic build + evaluate CLI workflow section to Evaluate a Score docs\n  - file: dashboard/app/documentation/methods/evaluate-score/page.tsx\n\nDocumented operator commands include:\n- dataset load with --reference-frozen / --reference-role / --assign-reference-pointer / --deterministic-order\n- evaluate accuracy with --reference-dataset-role\n\nThis publishes the new deterministic features in the public-facing dashboard documentation.",
+      "created_at": "2026-04-02T15:47:44.513132Z"
+    },
+    {
+      "id": "66625875-d32f-4cf4-82e0-18b5ff5cfb05",
+      "author": "ryan",
+      "text": "Checkpoint update:\n- Public docs page added for deterministic reference datasets:\n  dashboard/app/documentation/concepts/reference-datasets/page.tsx\n- Docs navigation and concepts landing updated to expose the new page.\n- Evaluate Score docs updated with deterministic build/evaluate workflow and reference-dataset flags.\n\nValidation run completed:\n- pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py (3 passed)\n- pytest -q plexus/cli/shared/evaluation_value_function_test.py (4 passed)\n- pytest -q plexus/cli/shared/optimization_acceptance_policy_test.py (4 passed)\n- pytest -q plexus/data/test_feedback_items.py -k \"reference_label_resolution or skips_unresolved or create_dataset_rows_with_data\" (4 passed)\n- pytest -q plexus/cli/dataset/datasets_test.py -k \"load_command_success or builtin_reference_cache_class_resolution or load_command_applies_item_pipeline_to_text\" (3 passed)\n\nTask status remains in_progress until final commit/merge.\n",
+      "created_at": "2026-04-02T15:49:24.161864Z"
+    },
+    {
+      "id": "f5c7e902-6123-4639-a39b-e1916b280b51",
+      "author": "ryan",
+      "text": "Closing: public docs now reflect associated-dataset workflow, including score dataset-curate command and associated-dataset evaluation flow in concepts and evaluate-score docs.",
+      "created_at": "2026-04-02T23:18:31.401618Z"
+    }
+  ],
+  "created_at": "2026-04-02T13:03:44.927848Z",
+  "updated_at": "2026-04-02T23:18:44.608605Z",
+  "closed_at": "2026-04-02T23:18:44.608605Z",
+  "custom": {}
+}

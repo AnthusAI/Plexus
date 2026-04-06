@@ -123,6 +123,54 @@ def upload_score_result_trace_file(score_result_id, trace_data, file_name="trace
             logger.info(f"Removing temp file {temp_file_path}")
             os.remove(temp_file_path)
 
+def upload_evaluation_artifact_file(evaluation_id, artifact_data, file_name="root_cause.full.json"):
+    """
+    Upload an evaluation artifact JSON file to the score-result attachments bucket.
+
+    Args:
+        evaluation_id: ID of the evaluation this artifact belongs to
+        artifact_data: Dictionary or JSON-serializable payload to upload
+        file_name: Artifact file name (default: "root_cause.full.json")
+
+    Returns:
+        S3 object key for the uploaded artifact.
+    """
+    bucket_name = get_bucket_name()
+    if not bucket_name:
+        raise ValueError("S3 bucket name is missing")
+    if not evaluation_id:
+        raise ValueError("evaluation_id is required")
+    if artifact_data is None:
+        raise ValueError("artifact_data is required")
+
+    s3_client = boto3.client('s3')
+    s3_key = f"evaluations/{evaluation_id}/{file_name}"
+
+    try:
+        if isinstance(artifact_data, str):
+            json_content = artifact_data
+        else:
+            json_content = json.dumps(artifact_data, separators=(",", ":"), ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"artifact_data is not JSON serializable: {e}") from e
+
+    with tempfile.NamedTemporaryFile(mode='w+', suffix=f"_{file_name}", delete=False, encoding='utf-8') as temp_file:
+        temp_file_path = temp_file.name
+        temp_file.write(json_content)
+
+    try:
+        s3_client.upload_file(
+            Filename=temp_file_path,
+            Bucket=bucket_name,
+            Key=s3_key,
+            ExtraArgs={'ContentType': 'application/json'}
+        )
+        logger.info(f"Uploaded evaluation artifact to s3://{bucket_name}/{s3_key}")
+        return s3_key
+    finally:
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
 def download_score_result_trace_file(s3_path, local_path=None):
     """
     Download a trace file from S3.
@@ -232,7 +280,8 @@ def check_s3_bucket_access(bucket_name=None):
             logger.info(f"Successfully uploaded test file: {test_key}")
             
             # Try to download it
-            download_path = tempfile.mktemp()
+            download_fd, download_path = tempfile.mkstemp()
+            os.close(download_fd)
             s3_client.download_file(
                 Bucket=bucket_name,
                 Key=test_key,

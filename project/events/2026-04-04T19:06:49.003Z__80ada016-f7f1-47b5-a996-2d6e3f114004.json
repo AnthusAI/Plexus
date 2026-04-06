@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "80ada016-f7f1-47b5-a996-2d6e3f114004",
+  "issue_id": "plx-8715381c-ace8-4ec3-aaec-8a6fa1a56240",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T19:06:49.003Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+    "priority": 1,
+    "status": "open",
+    "title": "Canonical score-result RCA UX + information-gap explainability"
+  }
+}

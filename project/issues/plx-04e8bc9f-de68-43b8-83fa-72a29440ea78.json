@@ -1,0 +1,43 @@
+{
+  "id": "plx-04e8bc9f-de68-43b8-83fa-72a29440ea78",
+  "title": "CLI accuracy evaluations process samples sequentially instead of concurrently",
+  "description": "## Problem\nRunning `plexus` CLI accuracy evaluations appears to process items serially. Throughput is much lower than expected and logs show one item entering score processing every ~2 seconds instead of concurrent scheduling.\n\n## Expected\nSamples should be evaluated in parallel up to configured concurrency limits.\n\n## Reproduction\nRun CLI evaluation with ~20 labeled samples and inspect timestamps around `Resolved Item` and `Starting workflow execution` log lines.\n\n## Definition of Done\n- Identify where sequential behavior is introduced in evaluation pipeline\n- Update implementation so item-level work is scheduled concurrently\n- Verify with a local run or targeted test/log evidence\n- Document behavior and any concurrency limits",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1ddd5384-838e-49a2-a529-6cff04d38e37",
+      "author": "derek",
+      "text": "Started investigation. Initial symptom: item-level scoring appears to be serialized in CLI accuracy evaluation; tracing code path in plexus/cli/evaluation/evaluations.py and evaluation runtime to confirm where work scheduling happens.",
+      "created_at": "2026-03-27T22:22:36.149095487Z"
+    },
+    {
+      "id": "1de66e68-faad-4c12-bcb1-5323e00b3fe3",
+      "author": "derek",
+      "text": "Root cause identified in AccuracyEvaluation.score_text: synchronous Item.get_by_id and Item.find_by_identifier calls happened before the first await, which blocks the event loop and serializes task startup. Patched both calls to run via await asyncio.to_thread(...) so lookup latency does not block other evaluation tasks. Validation: python -m py_compile plexus/Evaluation.py passes.",
+      "created_at": "2026-03-27T22:23:20.635259303Z"
+    },
+    {
+      "id": "d34920d5-475c-4968-9cd9-ab100a8fed8c",
+      "author": "derek",
+      "text": "Landed on branch fix/evaluations-speed in commit 948f4080. Change: moved blocking item fetches (Item.get_by_id and Item.find_by_identifier) onto asyncio.to_thread inside AccuracyEvaluation.score_text to restore true concurrent scheduling across samples. User confirmed significant runtime improvement (>2x faster).",
+      "created_at": "2026-03-27T22:42:06.562477029Z"
+    },
+    {
+      "id": "cc81522d-c419-472c-85bc-4db121963262",
+      "author": "derek",
+      "text": "Closure note: completed and landed in commit 948f4080 on fix/evaluations-speed; module compile check passed; user confirmed major runtime improvement.",
+      "created_at": "2026-03-27T22:42:10.155769066Z"
+    }
+  ],
+  "created_at": "2026-03-27T22:22:30.562052057Z",
+  "updated_at": "2026-03-27T22:42:10.155769066Z",
+  "closed_at": "2026-03-27T22:42:10.144219222Z",
+  "custom": {}
+}

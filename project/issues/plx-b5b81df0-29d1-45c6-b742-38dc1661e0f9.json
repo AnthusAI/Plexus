@@ -1,0 +1,67 @@
+{
+  "id": "plx-b5b81df0-29d1-45c6-b742-38dc1661e0f9",
+  "title": "Restore evaluation gauge before/delta subtitle in detail view",
+  "description": "Evaluation detail gauges show before needles again but are missing the secondary numeric comparison subtitle. Restore canonical subtitle rendering in Gauge and enable only for EvaluationTask detail metrics with baseline.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-309bf096-09f9-4687-9d6d-a2cb1d9af628",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6c6ffd40-21a7-4487-854e-2364cb20a120",
+      "author": "ryan",
+      "text": "Starting implementation now. Scope: Gauge opt-in comparison subtitle (before + delta), propagate through MetricsGauges, enable only for EvaluationTask detail metrics with baseline.",
+      "created_at": "2026-04-02T01:01:04.911296837Z"
+    },
+    {
+      "id": "e1cbbe6a-9378-4355-851d-01b96ac3d088",
+      "author": "ryan",
+      "text": "Implemented code changes: (1) Gauge now supports opt-in  and renders  subtitle when + exist, (2) MetricsGauges passes  and  through to Gauge, (3) EvaluationTask detail metrics enable comparison label only when baseline metric exists. No fallback path to BeforeAfterGauges added.",
+      "created_at": "2026-04-02T01:01:33.760898842Z"
+    },
+    {
+      "id": "4acc3558-f14a-42a8-b9fb-d14a82d0da84",
+      "author": "ryan",
+      "text": "Implemented code changes: Gauge now has an opt-in comparison subtitle (before plus signed delta) shown only when both beforeValue and value exist. MetricsGauges now forwards beforeValue and showComparisonLabel into Gauge. EvaluationTask now enables showComparisonLabel only for detail metrics when a baseline metric exists. No fallback to BeforeAfterGauges was added.",
+      "created_at": "2026-04-02T01:01:37.595234077Z"
+    },
+    {
+      "id": "56cc0734-e616-45ef-bf8d-e5bda5953c12",
+      "author": "ryan",
+      "text": "Applied follow-up fix for missing baseline rendering: EvaluationTask now parses parameters.metadata when it is either an object or a JSON string, and baseline metric matching now normalizes metric names (trim/lowercase) to avoid name-format mismatches that prevented beforeValue from being set.",
+      "created_at": "2026-04-02T01:10:42.747578914Z"
+    },
+    {
+      "id": "76726636-4fc9-461b-a9b1-a91517c4173e",
+      "author": "ryan",
+      "text": "Applied targeted recovery fix after regression report: baseline ID parsing in EvaluationTask now handles multi-encoded JSON in parameters/metadata (parseJsonDeep), and baseline metrics parsing now accepts either array or object metric payloads. This is intended to restore beforeValue resolution and bring back before needles + comparison subtitle rendering.",
+      "created_at": "2026-04-02T01:12:25.568000886Z"
+    },
+    {
+      "id": "37f7b191-b416-443a-aaa7-a123f0475d04",
+      "author": "ryan",
+      "text": "Running verification feedback evaluation synchronously with explicit baseline to prove baseline feature path: scorecard=1039 score=45427 days=30 version=b77666bf-2d90-4522-8796-1d27fe8317f6 baseline=8d0ebde8-9601-4746-9341-96cb1a879bb5.",
+      "created_at": "2026-04-02T01:15:27.154189965Z"
+    },
+    {
+      "id": "c79f86b0-09a0-452e-9c4d-e11e7dd602e8",
+      "author": "ryan",
+      "text": "Adjusted gauge comparison subtitle format per request: removed parentheses and delta symbol. New format is plain `before signed_delta` (example: `0.62 +0.14` or `84.0% -2.0%`).",
+      "created_at": "2026-04-02T01:18:10.425292940Z"
+    },
+    {
+      "id": "a1d47cbc-bade-49a9-b819-5da5f2c70c30",
+      "author": "ryan",
+      "text": "Confirmed fixed. Evaluation gauge before/delta subtitle is restored in detail view.",
+      "created_at": "2026-04-04T18:53:34.237017Z"
+    }
+  ],
+  "created_at": "2026-04-02T01:01:01.560752768Z",
+  "updated_at": "2026-04-04T18:53:34.237017Z",
+  "closed_at": "2026-04-04T18:53:34.237017Z",
+  "custom": {}
+}

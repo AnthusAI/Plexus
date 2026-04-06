@@ -1,0 +1,36 @@
+{
+  "id": "plx-21138f7a-19cc-46b0-8645-b5599104eedd",
+  "title": "Define acceptance policy for optimization loops",
+  "description": "## Summary\nDefine the accept/reject policy for score-optimization loops so \"did the needle move?\" becomes an explicit, auditable rule.\n\n## Deliverables\n- Specify how deterministic reference runs and random-sample runs combine into one decision.\n- Define clear acceptance/rejection criteria for iterative score changes.\n- Keep the policy stable and reviewable across optimization cycles.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-7fcaff",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "b2875428-f31e-498c-809b-cd6ed13af133",
+      "author": "ryan",
+      "text": "Starting implementation: codify optimization acceptance decision function combining deterministic reference evidence + random-sample generalization evidence, with explicit accept/reject/inconclusive outputs and rationale.",
+      "created_at": "2026-04-02T15:45:55.937308Z"
+    },
+    {
+      "id": "ac39c344-48bd-499a-b790-c598017bfbb2",
+      "author": "ryan",
+      "text": "Implemented explicit optimization-loop acceptance policy.\n\nAdded module:\n- plexus/cli/shared/optimization_acceptance_policy.py\n\nPolicy behavior:\n- Combines deterministic reference evaluation evidence and random-sample generalization evidence.\n- Uses value(E) from evaluation_value_function as quantitative basis.\n- Decision outputs are explicit and auditable:\n  - accept\n  - reject (insufficient_reference_improvement)\n  - reject (generalization_regression)\n  - inconclusive (insufficient_evidence)\n- Configurable thresholds:\n  - minimum required reference improvement\n  - maximum allowed random/generalization drop\n\nTests:\n- plexus/cli/shared/optimization_acceptance_policy_test.py\n- pytest result: 4 passed.",
+      "created_at": "2026-04-02T15:46:23.794960Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:33.212086Z",
+  "updated_at": "2026-04-02T15:46:25.560566Z",
+  "closed_at": "2026-04-02T15:46:25.560566Z",
+  "custom": {}
+}

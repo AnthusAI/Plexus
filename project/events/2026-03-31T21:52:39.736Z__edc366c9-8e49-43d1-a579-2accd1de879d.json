@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "edc366c9-8e49-43d1-a579-2accd1de879d",
+  "issue_id": "plx-f965fdd7-6fdd-4c4f-8b8d-eb0bc06db982",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-31T21:52:39.736Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Replace BackupVault import-by-name with BackupVault creation in dashboard/amplify/backend.ts so new accounts/environments can bootstrap without precreating a vault. User will manually delete existing staging vault before deploy.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-89448256-e87b-43f2-a401-1ffb29feb499",
+    "priority": 1,
+    "status": "open",
+    "title": "Reinstate stack-managed backup vault creation for Amplify backup stack"
+  }
+}

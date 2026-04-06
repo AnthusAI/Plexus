@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "64c0c678-e6b7-4b3f-a323-930bd9da1631",
+  "issue_id": "plx-9c3e0242-306e-49eb-ae8b-647d5545b36a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:07:33.447Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a Plexus user\nI want to run optimization from the CLI with any identifier type\nSo that I can use names, keys, IDs, or external IDs interchangeably\n\n## Acceptance Criteria\n\n- CLI command: plexus procedure optimize\n- Accepts scorecard and score parameters\n- Resolves identifiers flexibly (name/key/ID/externalID)\n- Supports configuration parameters (days, max_iterations, etc.)\n- Provides clear output formats (table/JSON/YAML)\n\n## Gherkin Specification\n\n```gherkin\nFeature: CLI Command with Flexible Identifier Resolution\n  As a Plexus user\n  I want to optimize scores from the command line\n  So that I can easily run optimizations without complex setup\n\nScenario: Run optimization with score names\n  Given I have a scorecard named \"Customer Service\"\n  And it has a score named \"Empathy Check\"\n  When I run: plexus procedure optimize -s \"Customer Service\" -c \"Empathy Check\"\n  Then the scorecard identifier resolves to its ID\n  And the score identifier resolves to its ID\n  And the optimization runs successfully\n\nScenario: Run optimization with keys\n  Given I have a scorecard with key \"customer-service\"\n  And it has a score with key \"empathy-check\"\n  When I run: plexus procedure optimize -s customer-service -c empathy-check\n  Then the identifiers resolve correctly\n  And the optimization runs successfully\n\nScenario: Run optimization with IDs\n  Given I have a scorecard with ID \"sc-abc123\"\n  And it has a score with ID \"score-def456\"\n  When I run: plexus procedure optimize -s sc-abc123 -c score-def456\n  Then the identifiers resolve directly (no lookup needed)\n  And the optimization runs successfully\n\nScenario: Run optimization with external IDs\n  Given I have a scorecard with externalId \"EXTERNAL-CS-001\"\n  And it has a score with externalId \"EMP-SCORE-42\"\n  When I run: plexus procedure optimize -s EXTERNAL-CS-001 -c EMP-SCORE-42\n  Then the identifiers resolve via external ID lookup\n  And the optimization runs successfully\n\nScenario: Configure optimization parameters\n  Given a valid scorecard and score\n  When I run: plexus procedure optimize -s test-sc -c test-score --days 60 --max-iterations 3 --improvement-threshold 0.05\n  Then the optimizer uses a 60-day feedback window\n  And runs maximum 3 iterations\n  And requires 0.05 minimum AC1 improvement to continue\n\nScenario: Dry run mode\n  Given a valid scorecard and score\n  When I run: plexus procedure optimize -s test-sc -c test-score --dry-run\n  Then the baseline evaluation runs\n  And the analyzer proposes changes\n  But no score versions are created\n  And no HITL gates appear\n\nScenario: Output format options\n  Given a completed optimization\n  When I run with --output json\n  Then the results are formatted as JSON\n  When I run with --output yaml\n  Then the results are formatted as YAML\n  When I run with --output table\n  Then the results are formatted as a readable table\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "CLI command with flexible identifier resolution"
+  }
+}

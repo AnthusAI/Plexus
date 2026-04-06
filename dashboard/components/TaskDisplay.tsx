@@ -55,6 +55,8 @@ interface TaskDisplayProps {
     scorecardId?: string | null | undefined
     scoreId?: string | null | undefined
     scoreVersionId?: string | null | undefined
+    dataSetId?: string | null | undefined
+    parameters?: string | null
   }
   reportData?: {
     id: string
@@ -291,6 +293,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         scorecardId: evaluationData.scorecardId,
         scoreId: evaluationData.scoreId,
         scoreVersionId: evaluationData.scoreVersionId,
+        dataSetId: evaluationData.dataSetId,
         data: {
           id: displayId,
           title: displayTitle,
@@ -353,6 +356,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ?
             JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
           isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
+          parameters: evaluationData.parameters ?? null,
            scoreResults: transformedScoreResults as any,
           task: processedTask ? { 
               id: processedTask.id,
@@ -512,7 +516,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const stagesChanged = prevStages.length !== nextStages.length || 
     prevStages.some((stage: any, index: number) => {
       const nextStage: any = nextStages[index];
-      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
+      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status || stage.statusMessage !== nextStage.statusMessage;
     });
   
   if (stagesChanged) {

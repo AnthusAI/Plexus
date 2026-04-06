@@ -1,0 +1,35 @@
+{
+  "id": "plx-47c29ac0-8862-49f7-b0ed-cd07f4149bf7",
+  "title": "Add tests for misclassification classification, evaluation flags, and dashboard rendering",
+  "description": "## Summary\nAdd test coverage for the misclassification-classification pipeline, payload contract, heuristics, and dashboard behavior.\n\n## Deliverables\n- Cover category assignment contract and payload shape.\n- Cover evaluation-level flag heuristics.\n- Cover dashboard rendering of breakdowns, alerts, and item-level drill-down.\n- Ensure the classification layer does not regress existing RCA behavior.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-c7fda3",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-eab094",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-5e5ccf",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-c1d62f",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-02T13:21:09.890961Z",
+  "updated_at": "2026-04-04T14:53:17.401137Z",
+  "closed_at": "2026-04-04T14:53:17.401137Z",
+  "custom": {}
+}

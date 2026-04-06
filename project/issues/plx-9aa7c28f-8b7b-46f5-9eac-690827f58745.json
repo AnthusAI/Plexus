@@ -3,7 +3,7 @@
   "title": "Fix binary guidelines required sections missing 'Conditions for No'",
   "description": "## Problem\n`get_required_sections` for binary classifier guidelines omits `Conditions for No`, which causes validation mismatches for correct Yes/No guidelines.\n\n## Expected Behavior\nBinary required sections include both `Definition of No` and `Conditions for No`.\n\n## Acceptance Criteria\n- `get_required_sections` for binary returns `Conditions for No`.\n- Validation output reports missing sections correctly for binary docs.\n- Automated tests cover this requirement.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Implemented fix and regression coverage.\n\n- Updated `get_required_sections` for binary classifiers to require `Conditions for No`.\n- Added test assertion that valid binary guidelines no longer classify `Conditions for No` as unknown.\n- Added regression test: missing only `Conditions for No` now yields `is_valid=false` with that section in `missing_sections`.\n- Verification: `pytest -q MCP/tools/score/guidelines_test.py` -> 4 passed.",
       "created_at": "2026-03-10T00:54:27.031491436Z"
+    },
+    {
+      "id": "653c60eb-32a7-46e1-9f13-2fb368df071f",
+      "author": "ryan",
+      "text": "Binary guidelines now require Conditions for No section; tests updated.",
+      "created_at": "2026-04-04T19:01:13.186902Z"
     }
   ],
   "created_at": "2026-03-10T00:53:39.338663941Z",
-  "updated_at": "2026-03-10T00:54:27.031491436Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:01:13.186902Z",
+  "closed_at": "2026-04-04T19:01:13.186902Z",
   "custom": {}
 }

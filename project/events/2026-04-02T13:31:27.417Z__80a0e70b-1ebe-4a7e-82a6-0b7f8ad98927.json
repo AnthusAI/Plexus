@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "80a0e70b-1ebe-4a7e-82a6-0b7f8ad98927",
+  "issue_id": "plx-eb6f7289-24a7-414c-9893-fe15b5895994",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:27.417Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAdd dashboard surfaces for optimization workflow results so operators can understand candidate assessments and KPI trends.\n\n## Deliverables\n- Surface the candidate assessment bundle in the dashboard.\n- Show deterministic-versus-random evidence and generalization-gap metrics clearly.\n- Show the workflow decision and the evidence that drove it.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "priority": 2,
+    "status": "open",
+    "title": "Add dashboard surfaces for candidate assessment bundles and workflow KPIs"
+  }
+}

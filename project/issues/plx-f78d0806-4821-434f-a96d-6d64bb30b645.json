@@ -1,0 +1,31 @@
+{
+  "id": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "title": "Misclassification Classification and Evaluation Triage",
+  "description": "## Summary\nAdd a first-class misclassification-classification layer to evaluation analysis so incorrect items are classified by what kind of problem they represent, rather than assuming every error is fixable by score optimization.\n\n## Scope\n- Each misclassified item is classified into exactly one of four operator-facing categories: `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, or `mechanical_malfunction`.\n- Evaluations also gain evaluation-level red flags for cross-item mechanical/pathological patterns that are not item-local, such as all predictions collapsing to one class or score results containing execution errors.\n- The dashboard evaluation view gains a visual breakdown of the misclassification categories plus item-level drill-down.\n- This work remains distinct from deterministic reference datasets and distinct from RCA reliability/contract work.\n\n## Key assumptions\n- Feedback contradictions remain a separate report/workstream and are not folded into the per-item four-category classifier.\n- The new classification layer becomes part of the broader RCA pipeline, not an unrelated side feature.\n- Public-facing web app documentation is required as part of this feature.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "702d3b09-6153-459e-b4f5-f5a268e5e69e",
+      "author": "ryan",
+      "text": "## Design boundaries\n\nThis feature is a first-class evaluation-analysis layer, not just an extension of optimization RCA.\n\n### Core decisions\n- Per-item classification is forced into exactly four operator-facing categories:\n  - `score_configuration_problem`\n  - `information_gap`\n  - `guideline_gap_requires_sme`\n  - `mechanical_malfunction`\n- Evaluation-level red flags are a separate layer for non-item-local problems such as class collapse or execution-error patterns.\n- The dashboard should show both:\n  - an overall breakdown visualization for the evaluation\n  - item-level classification details on individual misclassifications\n- Feedback contradictions / label inconsistency remain a separate report/workstream and are not folded into this classifier.\n\n### Intended operator outcome\nThe feature should help operators decide whether an evaluation suggests:\n- score optimization work\n- upstream data/transcript remediation\n- SME/rubric clarification\n- mechanical/system bug investigation",
+      "created_at": "2026-04-02T13:21:26.658198Z"
+    },
+    {
+      "id": "760a9d27-8d98-47f6-91fb-1c99f824f0f4",
+      "author": "ryan",
+      "text": "Epic implementation complete: backend classification taxonomy + summary flags + recommendation gating, first-class misclassification payload exposure in evaluation info, evaluation detail segmented breakdown + red-flag alerts + item-level drill-down, and public docs updates. Validation executed across pytest + dashboard build + dashboard UI tests.",
+      "created_at": "2026-04-04T14:54:32.075476Z"
+    }
+  ],
+  "created_at": "2026-04-02T13:20:13.840883Z",
+  "updated_at": "2026-04-04T14:54:32.089201Z",
+  "closed_at": "2026-04-04T14:54:32.089201Z",
+  "custom": {}
+}

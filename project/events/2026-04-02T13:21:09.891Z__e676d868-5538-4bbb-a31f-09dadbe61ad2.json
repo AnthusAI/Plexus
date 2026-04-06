@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e676d868-5538-4bbb-a31f-09dadbe61ad2",
+  "issue_id": "plx-47c29ac0-8862-49f7-b0ed-cd07f4149bf7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:21:09.891Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAdd test coverage for the misclassification-classification pipeline, payload contract, heuristics, and dashboard behavior.\n\n## Deliverables\n- Cover category assignment contract and payload shape.\n- Cover evaluation-level flag heuristics.\n- Cover dashboard rendering of breakdowns, alerts, and item-level drill-down.\n- Ensure the classification layer does not regress existing RCA behavior.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+    "priority": 2,
+    "status": "open",
+    "title": "Add tests for misclassification classification, evaluation flags, and dashboard rendering"
+  }
+}

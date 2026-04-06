@@ -1,0 +1,31 @@
+{
+  "id": "plx-88badc12-6a79-4978-b527-62c07b931d54",
+  "title": "Change evaluation completion contract so feedback-backed runs are not complete until RCA is persisted",
+  "description": "## Summary\nChange the evaluation completion contract so feedback-backed runs are not considered successfully complete until RCA is persisted.\n\n## Deliverables\n- `COMPLETED` means metrics and RCA are both present when RCA is enabled.\n- If incorrect items exist and RCA cannot be persisted, the run is not considered successful.\n- Completion semantics align with RCA as required process output.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "99de22ae-444d-4b67-94c7-c68f18acaf15",
+      "author": "ryan",
+      "text": "Implementing completion semantics update in evaluation flows and tool-facing behavior so COMPLETED requires usable RCA payload when RCA is enabled and incorrect items exist.",
+      "created_at": "2026-04-02T13:45:35.998195Z"
+    },
+    {
+      "id": "728fcf0b-e6a4-456e-aaf2-b537f7a9d8f6",
+      "author": "ryan",
+      "text": "Implemented completion contract: feedback-backed completion now requires persisted usable RCA when incorrect items exist; otherwise evaluation status is set FAILED with explicit errorMessage. In accuracy-with-feedback path, status is held RUNNING until RCA contract check completes.",
+      "created_at": "2026-04-02T13:49:35.147606Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:33.300807Z",
+  "updated_at": "2026-04-02T13:49:35.162013Z",
+  "closed_at": "2026-04-02T13:49:35.162013Z",
+  "custom": {}
+}

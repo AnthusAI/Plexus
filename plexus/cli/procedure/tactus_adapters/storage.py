@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 
 from tactus.protocols.models import ProcedureMetadata, CheckpointEntry
+from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class PlexusStorageAdapter:
         """
         self.client = client
         self.procedure_id = procedure_id
+        self._is_builtin = is_builtin_procedure_id(procedure_id)
         self._metadata_cache: Optional[ProcedureMetadata] = None
         logger.info(f"PlexusStorageAdapter initialized for procedure {procedure_id}")
 
@@ -54,6 +56,12 @@ class PlexusStorageAdapter:
         if self._metadata_cache and self._metadata_cache.procedure_id == procedure_id:
             logger.debug(f"Returning cached metadata for {procedure_id}")
             return self._metadata_cache
+
+        if self._is_builtin:
+            metadata = ProcedureMetadata(procedure_id=procedure_id)
+            self._metadata_cache = metadata
+            logger.debug("Using in-memory metadata for built-in procedure %s", procedure_id)
+            return metadata
 
         # Query GraphQL for procedure metadata
         query = """
@@ -105,7 +113,7 @@ class PlexusStorageAdapter:
                 replay_index=raw_metadata.get('replay_index', 0),  # Default to 0 if not set
                 state=raw_metadata.get('state', {}),
                 lua_state=raw_metadata.get('lua_state', {}),
-                status=procedure_data.get('status', 'RUNNING'),
+                status=procedure_data.get('status') or 'RUNNING',
                 waiting_on_message_id=procedure_data.get('waitingOnMessageId')
             )
 
@@ -161,6 +169,11 @@ class PlexusStorageAdapter:
         """
 
         try:
+            if self._is_builtin:
+                self._metadata_cache = metadata
+                logger.debug("Saved in-memory metadata for built-in procedure %s", metadata.procedure_id)
+                return
+
             self.client.execute(mutation, {
                 'id': metadata.procedure_id,
                 'metadata': json.dumps(metadata_json)
@@ -203,6 +216,14 @@ class PlexusStorageAdapter:
         """
 
         try:
+            if self._is_builtin:
+                if self._metadata_cache is None:
+                    self._metadata_cache = ProcedureMetadata(procedure_id=procedure_id)
+                self._metadata_cache.status = status
+                self._metadata_cache.waiting_on_message_id = waiting_on_message_id
+                logger.debug("Updated in-memory status for built-in procedure %s -> %s", procedure_id, status)
+                return
+
             self.client.execute(mutation, {
                 'id': procedure_id,
                 'status': status,

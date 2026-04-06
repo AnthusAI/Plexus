@@ -74,7 +74,9 @@ def test_persist_output_artifact_always_attaches_when_enabled(monkeypatch):
         log_prefix="[test]",
     )
 
-    assert output_json == json.dumps({"status": "ok"})
+    parsed = json.loads(output_json)
+    assert parsed["output_compacted"] is True
+    assert parsed["output_attachment"] == "reportblocks/rb-1/output-rb-1.json"
     assert attached == ["reportblocks/rb-1/output-rb-1.json"]
     assert output_path == "reportblocks/rb-1/output-rb-1.json"
     upload_mock.assert_called_once()
@@ -93,7 +95,9 @@ def test_persist_output_artifact_handles_dict_payload(monkeypatch):
         log_prefix="[test]",
     )
 
-    assert json.loads(output_json)["summary"] == "dict payload"
+    parsed = json.loads(output_json)
+    assert parsed["output_compacted"] is True
+    assert parsed["output_attachment"] == "reportblocks/rb-dict/output-rb-dict.json"
     assert attached == ["reportblocks/rb-dict/output-rb-dict.json"]
     assert output_path == "reportblocks/rb-dict/output-rb-dict.json"
     upload_mock.assert_called_once()

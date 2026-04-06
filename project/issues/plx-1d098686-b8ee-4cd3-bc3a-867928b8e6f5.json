@@ -1,0 +1,25 @@
+{
+  "id": "plx-1d098686-b8ee-4cd3-bc3a-867928b8e6f5",
+  "title": "Vetted+balanced associated dataset builder path",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b471faab-21dc-4ed1-baf1-63ed04c80d66",
+      "author": "ryan",
+      "text": "Implemented vetted+balanced associated dataset builder path from ordered vetted report items with strict fail-fast overlap contract and persisted diagnostics in dataset_stats/CLI JSON (class source, overlap, before/after distribution, vetted counts).",
+      "created_at": "2026-04-03T02:33:06.588570Z"
+    }
+  ],
+  "created_at": "2026-04-03T01:49:45.801797Z",
+  "updated_at": "2026-04-03T02:33:10.569151Z",
+  "closed_at": "2026-04-03T02:33:10.569151Z",
+  "custom": {}
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-1045e8ca-2ac8-4cef-aecd-e45dc318b535",
+  "title": "Mark Ollama topic test as integration to avoid hanging default pytest runs",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b09eb15b-17b5-440e-a145-67e592b2587a",
+      "author": "derek",
+      "text": "Investigating CI parity for full pytest runs. Comparing local env/bootstrap with .github/workflows/ci.yaml and reproducing invoke ci under py311-dev to isolate environment drift without changing test behavior.",
+      "created_at": "2026-03-20T21:18:51.089107929Z"
+    },
+    {
+      "id": "31498382-dcf1-4ccf-8851-106b836e2e36",
+      "author": "derek",
+      "text": "Found root cause for local pytest stall: host had Ollama daemon running (listening on 127.0.0.1:11434) which caused ollama_test to execute a real long-running model call. Stopped service (); port now closed.",
+      "created_at": "2026-03-20T21:25:41.943834703Z"
+    }
+  ],
+  "created_at": "2026-03-20T21:17:29.753829812Z",
+  "updated_at": "2026-03-20T21:25:41.943834703Z",
+  "closed_at": null,
+  "custom": {}
+}

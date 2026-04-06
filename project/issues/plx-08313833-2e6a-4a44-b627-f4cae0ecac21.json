@@ -1,0 +1,43 @@
+{
+  "id": "plx-08313833-2e6a-4a44-b627-f4cae0ecac21",
+  "title": "Offload detailed RCA item context to attachments and persist compact pointers in evaluation parameters",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3ec604db-953f-4738-b25a-f8e08914aa72",
+      "author": "ryan",
+      "text": "Implementing storage split: write detailed per-item RCA context as attachment artifact, keep compact item fields + attachment pointer(s) in evaluation.parameters, and validate with a 50-sample feedback run on 1039/45425.",
+      "created_at": "2026-04-04T20:43:51.795665Z"
+    },
+    {
+      "id": "1fa17f00-f412-40fa-b92e-26f67dc813a7",
+      "author": "ryan",
+      "text": "Continuing implementation: wiring attachment-backed RCA persistence in FeedbackEvaluation so full misclassification payload is uploaded to S3 and evaluation.parameters stores only compact summaries plus attachment pointer. Next: add upload helper + tests + runtime validation on 50-sample feedback evaluation.",
+      "created_at": "2026-04-04T20:45:57.733653Z"
+    },
+    {
+      "id": "05c3e5ce-547e-49db-bb5e-fb83c0ac9eee",
+      "author": "ryan",
+      "text": "Runtime validation in progress: synchronous 50-sample feedback eval launched via CLI for scorecard 1039 / score 45425 with output redirected to /tmp/feedback_eval_45425.log. Awaiting completion to verify compact RCA pointer payload.",
+      "created_at": "2026-04-04T20:58:21.355074Z"
+    },
+    {
+      "id": "4739882d-eb1d-44a2-ad30-b012d18fbe30",
+      "author": "ryan",
+      "text": "Implemented and validated attachment-backed RCA persistence.\n\n### Changes shipped\n- Added `upload_evaluation_artifact_file(...)` in `plexus/utils/score_result_s3_utils.py` (S3 path: `evaluations/<evaluation_id>/root_cause.full.json`).\n- Added canonical FeedbackEvaluation persistence path:\n  - `_persist_root_cause_for_parameters(...)` uploads full RCA artifact (required; failures fail evaluation).\n  - `_compact_root_cause_for_parameters(...)` stores compact RCA in `evaluation.parameters.root_cause` with:\n    - `output_compacted=true`\n    - `output_attachment=<s3_key>`\n    - `output_compaction_version=feedback_rca_v1`\n  - Compaction now trims heavy topic exemplar context and keeps only UI-required exemplar fields.\n  - `misclassification_analysis.item_classifications_attachment` points to same artifact and `item_classifications_total` is persisted.\n- Wired same persistence method into CLI feedback RCA completion path (`plexus/cli/evaluation/evaluations.py`) so DB writes are one-path and consistent.\n- Added tests in `plexus/Evaluation_feedback_test.py` for:\n  - successful attachment persistence + compact pointer contract\n  - hard failure when attachment upload fails.\n\n### Validation\n- Test suite: `pytest -q plexus/Evaluation_feedback_test.py plexus/rca_analysis_test.py MCP/shared/analysis_test.py` => 46 passed.\n- Runtime eval (50 samples): `b4292cb9-5bb7-4488-a003-f5a90b6eef01` completed.\n  - `parameters.root_cause.output_compacted=true`\n  - `parameters.root_cause.output_attachment=evaluations/b4292cb9-5bb7-4488-a003-f5a90b6eef01/root_cause.full.json`\n  - compact parameters payload size ~107 KB.\n  - full artifact download verified and contains complete RCA payload.\n\n### Environment note\n- Added `AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME` to root `.env` using bucket from `dashboard/amplify_outputs.json` to avoid stale default-bucket failures in local runs.",
+      "created_at": "2026-04-04T21:15:22.654912Z"
+    }
+  ],
+  "created_at": "2026-04-04T20:43:47.930469Z",
+  "updated_at": "2026-04-04T21:15:25.745122Z",
+  "closed_at": "2026-04-04T21:15:25.745122Z",
+  "custom": {}
+}

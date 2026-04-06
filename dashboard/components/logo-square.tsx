@@ -42,6 +42,11 @@ const interpolateColor = (color1: string, color2: string, factor: number): strin
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };
 
+const seededOffset = (index: number, seed: number, range: number): number => {
+  const x = Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453;
+  return (x - Math.floor(x)) * range - range / 2;
+};
+
 interface SquareLogoProps {
   variant: LogoVariant;
   className?: string;
@@ -66,44 +71,44 @@ const SquareLogo = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState('16px');
   const [isClient, setIsClient] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     setIsClient(true);
+    const halfCycle = cycleDuration * 0.5;
+    const additionalOffset = 30000;
+    setStartTime(Date.now() - (halfCycle + additionalOffset));
   }, []);
 
   const cycleDuration = 80000;
 
-  const [startTime] = useState(() => {
-    const halfCycle = cycleDuration * 0.5;
-    const additionalOffset = 30000;
-    return Date.now() - (halfCycle + additionalOffset);
-  });
-
-  const [jitterValues] = useState(() => 
-    Array(rows * columns).fill(0).map(() => ({ value: Math.random() * 0.1 - 0.05, target: Math.random() * 0.1 - 0.05 }))
+  const jitterValues = useMemo(
+    () => Array(rows * columns).fill(0).map((_, index) => ({ value: seededOffset(index, 1, 0.1), target: seededOffset(index, 2, 0.1) })),
+    [rows, columns]
   );
 
-  const randomOffsets = useMemo(() => 
-    Array(rows * columns).fill(0).map(() => Math.random() * 0.2 - 0.1),
-  [rows, columns]);
+  const randomOffsets = useMemo(
+    () => Array(rows * columns).fill(0).map((_, index) => seededOffset(index, 3, 0.2)),
+    [rows, columns]
+  );
 
   // Compute current and next colors for each cell
-  const [colorStates, setColorStates] = useState(() => 
+  const [colorStates, setColorStates] = useState(() =>
     Array(rows * columns).fill(0).map((_, index) => {
       const row = Math.floor(index / columns);
       const col = index % columns;
       const baseProgress = (10 - (row + col)) / 10;
-      const currentProgress = (baseProgress + ((Date.now() - startTime) / cycleDuration)) % 1;
+      const currentProgress = (baseProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1;
       const nextProgress = (currentProgress + (250 / cycleDuration)) % 1;
       return {
-        current: getColorAtPosition((currentProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1),
-        next: getColorAtPosition((nextProgress + randomOffsets[index] + jitterValues[index].value + 1) % 1)
+        current: getColorAtPosition(currentProgress),
+        next: getColorAtPosition(nextProgress)
       };
     })
   );
 
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || startTime === null) return;
 
     const updateColors = () => {
       setColorStates(prev => 
@@ -121,6 +126,7 @@ const SquareLogo = ({
       );
     };
 
+    updateColors();
     const interval = setInterval(updateColors, 250);
     return () => clearInterval(interval);
   }, [isClient, columns, startTime, cycleDuration, randomOffsets, jitterValues]);
@@ -226,7 +232,7 @@ const SquareLogo = ({
             <span
               key={letter}
               style={{
-                fontFamily: "'Jersey 20', sans-serif",
+                fontFamily: "var(--font-jersey-20), sans-serif",
                 fontSize: fontSize,
                 fontWeight: 400,
                 color: 'var(--muted)',
@@ -243,7 +249,7 @@ const SquareLogo = ({
         ) : (
           <span
             style={{
-              fontFamily: "'Jersey 20', sans-serif",
+              fontFamily: "var(--font-jersey-20), sans-serif",
               fontSize: fontSize,
               fontWeight: 400,
               color: 'var(--muted)',

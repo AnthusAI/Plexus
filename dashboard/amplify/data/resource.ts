@@ -57,6 +57,9 @@ type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name
 const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
+const startConsoleRunHandler = defineFunction({
+    entry: './resolvers/startConsoleRun.ts'
+});
 
 const schema = a.schema({
     Account: a
@@ -586,6 +589,28 @@ const schema = a.schema({
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
 
+    StartConsoleRunResponse: a.customType({
+        runId: a.string().required(),
+        taskId: a.string().required(),
+        accepted: a.boolean().required(),
+        queuedAt: a.datetime().required(),
+    }),
+
+    startConsoleRun: a
+        .mutation()
+        .arguments({
+            sessionId: a.string().required(),
+            procedureId: a.string().required(),
+            triggerMessageId: a.string().required(),
+            clientInstrumentation: a.json(),
+        })
+        .returns(a.ref('StartConsoleRunResponse'))
+        .authorization(allow => [
+            allow.publicApiKey(),
+            allow.authenticated(),
+        ])
+        .handler(a.handler.function(startConsoleRunHandler)),
+
     ReportConfiguration: a
         .model({
             name: a.string().required(),
@@ -679,6 +704,7 @@ const schema = a.schema({
             editedAt: a.datetime(),
             editorName: a.string(),
             isAgreement: a.boolean(),
+            isInvalid: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             scoreResults: a.hasMany('ScoreResult', 'feedbackItemId'),
@@ -821,6 +847,10 @@ const schema = a.schema({
             description: a.string(),
             file: a.string(), // S3 path to the generated dataset file
             attachedFiles: a.string().array(),
+            isReferenceDataset: a.boolean(), // Marks dataset as an explicit reference dataset artifact
+            provenance: a.json(), // Snapshot of label/source provenance used to build this dataset
+            buildContext: a.json(), // Build metadata (time window, filters, task/evaluation ids, policy versions, etc.)
+            referenceAt: a.datetime(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string(),

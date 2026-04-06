@@ -682,6 +682,7 @@ export function observeRecentEvaluations(
               id
               name
             }
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -731,6 +732,7 @@ export function observeRecentEvaluations(
               id
               name
             }
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -1062,6 +1064,7 @@ export type Evaluation = {
   scorecardId?: string | null;
   scoreId?: string | null;
   scoreVersionId?: string | null;
+  parameters?: string | null;
 };
 
 // Add type definitions for subscription events

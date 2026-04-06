@@ -1,0 +1,25 @@
+{
+  "id": "plx-52e63c7d-35bb-4680-8e56-621b7c516f10",
+  "title": "Remove FeedbackContradictions dataset-create UI and API route",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bf6411e7-6c3c-4893-8a66-19a6f601b31f",
+      "author": "ryan",
+      "text": "Removed block-level dataset creation action from FeedbackContradictions UI and removed API route /api/report-blocks/associated-dataset-from-feedback. Block now stays read-only evidence UX.",
+      "created_at": "2026-04-03T02:33:06.589041Z"
+    }
+  ],
+  "created_at": "2026-04-03T01:49:45.821769Z",
+  "updated_at": "2026-04-03T02:33:10.588608Z",
+  "closed_at": "2026-04-03T02:33:10.588608Z",
+  "custom": {}
+}

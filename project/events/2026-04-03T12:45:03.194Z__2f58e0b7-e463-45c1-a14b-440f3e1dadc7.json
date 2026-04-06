@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2f58e0b7-e463-45c1-a14b-440f3e1dadc7",
+  "issue_id": "plx-ba4bdffa-d895-4c13-8393-6da34014d0ba",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T12:45:03.194Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "HITL approval not surfaced in dashboard for CLI-launched optimizer",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "labels": []
+  }
+}

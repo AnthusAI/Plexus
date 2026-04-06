@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "366f74f2-335d-4f0e-b861-66482ef5514e",
+  "issue_id": "plx-a018d682-3d93-4431-b292-2643675fdefe",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T23:56:17.158Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Capture the requested feedback evaluation metrics\nScenario: Run the synchronous evaluation for scorecard 1039\n  Given the evaluation parameters (scorecard=1039, score=45427, version=b77666bf-2d90-4522-8796-1d27fe8317f6, days=30)\n  When the Plexus evaluation CLI completes in synchronous mode with logs saved\n  Then I have a concise JSON summary containing evaluation_id, metrics, root cause data, and baseline metadata",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+    "priority": 2,
+    "status": "open",
+    "title": "Document scorecard 1039 evaluation"
+  }
+}

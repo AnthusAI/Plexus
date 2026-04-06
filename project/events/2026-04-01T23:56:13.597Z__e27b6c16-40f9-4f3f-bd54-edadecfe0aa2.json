@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e27b6c16-40f9-4f3f-bd54-edadecfe0aa2",
+  "issue_id": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T23:56:13.597Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Launch the requested feedback evaluation (scorecard=1039, score=45427, version=b77666bf-2d90-4522-8796-1d27fe8317f6) and summarize metrics.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+    "priority": 2,
+    "status": "open",
+    "title": "Run scorecard 1039 eval"
+  }
+}

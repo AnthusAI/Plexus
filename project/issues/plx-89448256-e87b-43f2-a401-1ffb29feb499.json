@@ -1,0 +1,25 @@
+{
+  "id": "plx-89448256-e87b-43f2-a401-1ffb29feb499",
+  "title": "Investigate Amplify staging backup vault AlreadyExists failure",
+  "description": "Root-cause investigation for staging deployment failure where CloudFormation attempted to create an AWS Backup Vault that already exists.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9cb8653c-85ae-4872-8a9e-d944eb843afd",
+      "author": "ryan",
+      "text": "Amplify staging backup vault AlreadyExists failure investigated and resolved.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
+    }
+  ],
+  "created_at": "2026-03-31T21:44:01.065511Z",
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
+  "custom": {}
+}
