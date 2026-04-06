@@ -28,6 +28,10 @@ from sklearn.metrics import confusion_matrix
 
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
+from plexus.utils.feedback_selection import (
+    normalize_feedback_sampling_mode,
+    select_feedback_items,
+)
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
@@ -1207,11 +1211,10 @@ class Evaluation:
                 generate_calibration_report
             )
 
-            logging.info(f"About to check confidence detection on {len(self.all_results)} results")
-            print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+            logging.debug(f"About to check confidence detection on {len(self.all_results)} results")
             confidence_detected = detect_confidence_feature_enabled(self.all_results)
             logging.info(f"Confidence detection result: {confidence_detected}")
-            print(f"DEBUG: Confidence detection result: {confidence_detected}")
+            logging.debug(f"Confidence detection result: {confidence_detected}")
 
             if confidence_detected:
                 logging.info("Confidence feature detected - computing isotonic regression calibration")
@@ -1310,12 +1313,6 @@ class Evaluation:
                         self.processed_items_by_score[score_name] = processed_counter
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
-                        # Advance to Processing stage on first item completed
-                        if processed_counter == 1 and tracker and not getattr(self, '_processing_stage_started', False):
-                            self._processing_stage_started = True
-                            tracker.advance_stage()
-                            self.logging.info("==== STAGE: Processing ====")
-
                         # Update tracker with actual count of processed items
                         if tracker and tracker.current_stage:
                             tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
@@ -2021,8 +2018,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                 # but keep legacy support for nested row['columns']['metadata'].
                 metadata_string = row.get('metadata', columns.get('metadata', {}))
 
-                # Get feedback_item_id from the dataset if available
-                feedback_item_id = row.get('feedback_item_id', None)
+                # Get feedback_item_id from dataset row (prefer top-level, then legacy columns field)
+                feedback_item_id = row.get('feedback_item_id')
+                if not feedback_item_id and isinstance(columns, dict):
+                    feedback_item_id = columns.get('feedback_item_id')
 
                 # Fetch Item object if item_id is available (needed for input sources)
                 item = None
@@ -2033,6 +2032,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     item_client = self.dashboard_client
 
                 item_id = row.get('item_id')
+                if not item_id and isinstance(columns, dict):
+                    item_id = columns.get('item_id')
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
@@ -2893,14 +2894,15 @@ class FeedbackEvaluation(Evaluation):
     def __init__(
         self,
         *,
-        days: int = 7,
+        days: Optional[int] = None,
         scorecard_id: Optional[str] = None,
         score_id: Optional[str] = None,
         evaluation_id: Optional[str] = None,
         account_id: Optional[str] = None,
         task_id: Optional[str] = None,
         api_client=None,
-        max_samples: Optional[int] = None,
+        max_items: Optional[int] = 200,
+        sampling_mode: str = "newest",
         sample_seed: Optional[int] = None,
         max_category_summary_items: int = 20,
         **kwargs
@@ -2909,22 +2911,24 @@ class FeedbackEvaluation(Evaluation):
         Initialize a FeedbackEvaluation.
         
         Args:
-            days: Number of days to look back for feedback items (default: 7)
+            days: Number of days to look back for feedback items (default: None = all-time)
             scorecard_id: ID of the scorecard to evaluate
             score_id: Optional ID of specific score to evaluate (if None, evaluates all scores)
             evaluation_id: ID of the evaluation record
             account_id: Account ID
             task_id: Optional task ID for progress tracking
             api_client: Optional API client (if not provided, will be created from kwargs)
-            max_samples: Optional maximum number of feedback items to process (default: None = all)
-            sample_seed: Optional random seed used when sampling feedback items
+            max_items: Optional maximum number of feedback items to process (default: 200)
+            sampling_mode: Feedback item selection mode: newest or random (default: newest)
+            sample_seed: Optional random seed used when sampling feedback items in random mode
             max_category_summary_items: Maximum items per category summary during RCA (default: 20)
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
         # Remove it from kwargs since parent Evaluation doesn't accept it
         self.api_client = api_client
-        self.max_samples = max_samples
+        self.max_items = max_items
+        self.sampling_mode = normalize_feedback_sampling_mode(sampling_mode)
         self.sample_seed = sample_seed
         self.max_category_summary_items = max(1, int(max_category_summary_items or 20))
         
@@ -2938,7 +2942,9 @@ class FeedbackEvaluation(Evaluation):
         elif hasattr(self, 'dashboard_client'):
             self.api_client = self.dashboard_client
         
-        self.days = days
+        if days is not None and int(days) <= 0:
+            raise ValueError("days must be a positive integer when provided.")
+        self.days = int(days) if days is not None else None
         self.scorecard_id = scorecard_id
         self.score_id = score_id
         self.evaluation_id = evaluation_id
@@ -3190,7 +3196,10 @@ class FeedbackEvaluation(Evaluation):
             
             # Calculate date range
             end_date = datetime.now(timezone.utc)
-            start_date = end_date - timedelta(days=self.days)
+            if self.days is None:
+                start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
+            else:
+                start_date = end_date - timedelta(days=self.days)
             
             # Validate scorecard exists
             scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
@@ -3212,16 +3221,34 @@ class FeedbackEvaluation(Evaluation):
             )
             
             self.logger.info(f"Fetched {len(feedback_items)} feedback items")
-            
-            # Apply max_samples limit if specified
-            if self.max_samples and len(feedback_items) > self.max_samples:
-                import random
-                self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
-                if self.sample_seed is not None:
-                    rng = random.Random(self.sample_seed)
-                    feedback_items = rng.sample(feedback_items, self.max_samples)
-                else:
-                    feedback_items = random.sample(feedback_items, self.max_samples)
+
+            feedback_items, selection_metadata = select_feedback_items(
+                feedback_items,
+                max_items=self.max_items,
+                sampling_mode=self.sampling_mode,
+                sample_seed=self.sample_seed,
+            )
+            self.logger.info(
+                "Selected %s feedback items from %s candidates "
+                "(sampling_mode=%s, max_items=%s, sample_seed=%s)",
+                len(feedback_items),
+                selection_metadata.get("candidate_pool_count"),
+                selection_metadata.get("sampling_mode"),
+                selection_metadata.get("requested_max_items"),
+                selection_metadata.get("sample_seed"),
+            )
+            if int(selection_metadata.get("shortfall_count") or 0) > 0:
+                self.logger.warning(
+                    "Feedback selection shortfall: requested=%s available_selected=%s shortfall=%s",
+                    selection_metadata.get("requested_max_items"),
+                    selection_metadata.get("selected_count"),
+                    selection_metadata.get("shortfall_count"),
+                )
+            if not feedback_items:
+                raise ValueError(
+                    "No feedback items matched selection criteria "
+                    f"(days={self.days}, sampling_mode={self.sampling_mode}, max_items={self.max_items})."
+                )
             
             # Perform analysis on the feedback items
             overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
@@ -3277,10 +3304,14 @@ class FeedbackEvaluation(Evaluation):
             )
 
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
-            root_cause_result = await self._run_root_cause_analysis(
-                feedback_items,
-                max_category_summary_items=self.max_category_summary_items,
-            )
+            try:
+                root_cause_result = await self._run_root_cause_analysis(
+                    feedback_items,
+                    max_category_summary_items=self.max_category_summary_items,
+                )
+            except Exception as _rca_exc:
+                self.logger.warning(f"Root-cause analysis failed (non-fatal): {_rca_exc}")
+                root_cause_result = []
             persisted_root_cause = await asyncio.to_thread(
                 self._persist_root_cause_for_parameters,
                 root_cause_result,
@@ -3294,6 +3325,7 @@ class FeedbackEvaluation(Evaluation):
                 except Exception:
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
+            parameters_dict.update(selection_metadata)
             incorrect_items = int(overall_analysis.get("disagreements") or 0)
             contract = self.root_cause_contract_outcome(incorrect_items, persisted_root_cause)
             parameters_dict = self.apply_root_cause_contract_to_parameters(
@@ -3344,7 +3376,8 @@ class FeedbackEvaluation(Evaluation):
                 "status": "success",
                 "evaluation_id": self.evaluation_id,
                 "metrics": metrics_dict,
-                "analysis": overall_analysis
+                "analysis": overall_analysis,
+                "selection": selection_metadata,
             }
             
         except Exception as e:
@@ -5221,11 +5254,10 @@ class AccuracyEvaluation(Evaluation):
                         generate_calibration_report
                     )
 
-                    logging.info(f"About to check confidence detection on {len(self.all_results)} results")
-                    print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+                    logging.debug(f"About to check confidence detection on {len(self.all_results)} results")
                     confidence_detected = detect_confidence_feature_enabled(self.all_results)
                     logging.info(f"Confidence detection result: {confidence_detected}")
-                    print(f"DEBUG: Confidence detection result: {confidence_detected}")
+                    logging.debug(f"Confidence detection result: {confidence_detected}")
 
                     if confidence_detected:
                         logging.info("Confidence feature detected - computing two-stage calibration (temperature scaling + isotonic regression)")
@@ -5273,8 +5305,8 @@ class AccuracyEvaluation(Evaluation):
 
                                     logging.info(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
                                     logging.info(f"Temperature scaling: T={optimal_temperature:.4f}")
-                                    print(f"DEBUG: Two-stage reliability diagram saved to: {reliability_plot_path}")
-                                    print(f"DEBUG: Temperature scaling: T={optimal_temperature:.4f}")
+                                    logging.debug(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    logging.debug(f"Temperature scaling: T={optimal_temperature:.4f}")
 
                                     # Save calibration metrics to JSON file
                                     calibration_metrics_path = f"{report_folder_path}/calibration_metrics_{timestamp}.json"
@@ -5284,19 +5316,19 @@ class AccuracyEvaluation(Evaluation):
 
                                 except Exception as viz_error:
                                     logging.error(f"Error generating two-stage reliability diagram: {viz_error}")
-                                    print(f"DEBUG: Error generating two-stage reliability diagram: {viz_error}")
+                                    logging.debug(f"Error generating two-stage reliability diagram: {viz_error}")
                             else:
                                 logging.warning("Could not compute two-stage calibration model (isotonic regression failed)")
                         else:
                             logging.info(f"Insufficient confidence data for calibration analysis: {len(confidence_scores)} samples (need >= 10)")
-                            print(f"DEBUG: Insufficient confidence data: {len(confidence_scores)} samples")
+                            logging.debug(f"Insufficient confidence data: {len(confidence_scores)} samples")
                     else:
                         logging.info("No confidence features detected - skipping calibration analysis")
-                        print(f"DEBUG: No confidence features detected")
+                        logging.debug("No confidence features detected")
 
                 except Exception as calib_error:
                     logging.error(f"Error in confidence calibration analysis: {calib_error}")
-                    print(f"DEBUG: Error in calibration analysis: {calib_error}")
+                    logging.debug(f"Error in calibration analysis: {calib_error}")
 
             return metrics
         except Exception as e:
