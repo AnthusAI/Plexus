@@ -350,6 +350,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
               ? 'Vector Topic Memory'
               : blockData.type === 'ActionItems'
               ? 'Action Items'
+              : blockData.type === 'FeedbackAlignmentTimeline'
+              ? 'Feedback Alignment Timeline'
               : blockData.name ?? undefined;
         const blockProps = {
           id: blockData.id,
@@ -392,7 +394,13 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         );
       } else {
         // No matching block - show placeholder
-        const blockLabel = blockClass === 'VectorTopicMemory' ? 'Vector Topic Memory' : blockClass === 'FeedbackAnalysis' ? 'Feedback Analysis' : blockClass || 'Report block';
+        const blockLabel = blockClass === 'VectorTopicMemory'
+          ? 'Vector Topic Memory'
+          : blockClass === 'FeedbackAnalysis'
+          ? 'Feedback Analysis'
+          : blockClass === 'FeedbackAlignmentTimeline'
+          ? 'Feedback Alignment Timeline'
+          : blockClass || 'Report block';
         return (
           <div className="my-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-4">
             <p className="text-sm text-muted-foreground">
