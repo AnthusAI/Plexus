@@ -7,7 +7,9 @@ any namespacing.
 """
 
 import pytest
-from jinja2 import Template, Environment, StrictUndefined
+from jinja2 import StrictUndefined
+
+from plexus.utils.text_template import render_text_template
 
 
 def render_report_content(content: str, parameters: dict) -> str:
@@ -24,10 +26,7 @@ def render_report_content(content: str, parameters: dict) -> str:
     Raises:
         jinja2.UndefinedError: If a template references an undefined parameter
     """
-    # Use StrictUndefined to catch missing parameters
-    env = Environment(undefined=StrictUndefined)
-    template = env.from_string(content)
-    return template.render(**parameters)
+    return render_text_template(content, parameters, undefined=StrictUndefined)
 
 
 class TestParameterRendering:
@@ -347,4 +346,3 @@ Content here...
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
-

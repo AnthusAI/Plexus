@@ -1,8 +1,47 @@
 #!/bin/bash
-cd /home/ec2-user/projects/Plexus
+set -euo pipefail
 
-echo "Installing package..."
-/home/ec2-user/miniconda3/bin/conda run -n py311 pip install --upgrade-strategy only-if-needed .
+APP_DIR="/home/ec2-user/projects/Plexus"
+CONDA_BIN="/home/ec2-user/miniconda3/bin/conda"
+CONDA_ENV="py311"
+
+cd "$APP_DIR"
+
+echo "Installing Poetry (if needed) and syncing runtime dependencies from poetry.lock..."
+"$CONDA_BIN" run -n "$CONDA_ENV" bash -lc '
+set -euo pipefail
+
+if [ ! -f pyproject.toml ] || [ ! -f poetry.lock ]; then
+    echo "Missing pyproject.toml and/or poetry.lock in deployment directory" >&2
+    exit 1
+fi
+
+python -m pip install --upgrade "pip<25"
+python -m pip install --upgrade "poetry>=1.8,<2.0"
+python -m poetry --version
+
+# Install into the conda environment (no nested virtualenv).
+# Do not use --sync here: Poetry is installed in this same env for bootstrap,
+# and --sync can remove Poetry itself mid-run.
+export PIP_DEFAULT_TIMEOUT=120
+export POETRY_REQUESTS_TIMEOUT=120
+python -m poetry config virtualenvs.create false --local || true
+python -m poetry config installer.max-workers 4 --local || true
+
+for attempt in 1 2 3; do
+    echo "Poetry install attempt ${attempt}/3..."
+    if python -m poetry install --only main --no-interaction --no-ansi; then
+        break
+    fi
+
+    if [ "$attempt" -eq 3 ]; then
+        echo "Poetry install failed after 3 attempts." >&2
+        exit 1
+    fi
+
+    sleep $((attempt * 15))
+done
+'
 
 # Only restart services if they exist
 if sudo systemctl list-unit-files | grep -q plexus-command-worker; then

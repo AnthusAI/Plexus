@@ -77,6 +77,7 @@ export type TaskData = {
   updatedAt?: string
   scorecardId?: string
   scoreId?: string
+  dataSetId?: string
   scorecard?: LazyLoader<{
     id: string
     name: string
@@ -103,6 +104,7 @@ export type TaskData = {
     errorDetails?: any
     confusionMatrix?: any
     scoreGoal?: string
+    dataSetId?: string
     datasetClassDistribution?: any
     isDatasetClassDistributionBalanced?: boolean
     predictedClassDistribution?: any

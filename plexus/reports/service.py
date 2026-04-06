@@ -94,7 +94,6 @@ def _compact_output_json_for_storage(
     """
     compact_payload: Dict[str, Any] = {
         "status": "ok",
-        "summary": "Large output moved to attached file due storage limits.",
         "output_compacted": True,
         "preview": _safe_output_preview(output_payload),
     }
@@ -132,11 +131,9 @@ def _persist_output_artifact_and_compact_if_needed(
         if output_path not in existing_details_files_list:
             existing_details_files_list.append(output_path)
 
-    if len(normalized_output) > MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS:
-        logger.warning(
-            f"{log_prefix} ReportBlock {report_block_id} output length {len(normalized_output)} exceeds "
-            f"inline limit {MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS}. Compacting inline payload."
-        )
+    if should_attach and output_path:
+        # Always compact inline payload when output is attached — one consistent path
+        # for the frontend regardless of output size.
         return (
             _compact_output_json_for_storage(normalized_output, output_path),
             existing_details_files_list,
@@ -237,7 +234,8 @@ class ReportBlockExtractor(mistune.BaseRenderer):
             attrs_str = lang_info[len("block"):].strip()
             attrs = {}
             # Regex: find key= followed by either "quoted value" or unquoted_value
-            pattern = re.compile(r'(\\w+)\\s*=\\s*(?:"([^"]*)"|(\\S+))')
+            pattern = re.compile(r'(\w+)\s*=\s*(?:"([^"]*)"|(\S+))')
+            pattern = re.compile(r'(\w+)\s*=\s*(?:"([^"]*)"|(\S+))')  # group 2=quoted, group 3=unquoted
             for match in pattern.finditer(attrs_str):
                 key = match.group(1)
                 # Value can be in group 2 (quoted) or group 3 (unquoted)

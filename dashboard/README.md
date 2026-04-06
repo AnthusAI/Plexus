@@ -1,6 +1,6 @@
 # Plexus Dashboard
 
-This is a Next.js/Shadcn dashboard built on Amplify Gen2 for Plexus, with a Python API client code and a CLI tool. This dashboard is part of the [Plexus AI Agent Operating System](../README.md), providing a visual interface for managing scorecards and monitoring classification performance.
+This is a Next.js/Shadcn dashboard built on Amplify Gen2 for Plexus, with a Python API client code and a CLI tool. This dashboard is part of the [Plexus AI Agent Incubator](../README.md), providing a visual interface for managing scorecards and monitoring classification performance.
 
 ## Overview
 
@@ -38,6 +38,7 @@ For local procedure runs from the dashboard UI, `npm run dev` now starts both:
 - Local task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
 
 `PLEXUS_ACCOUNT_KEY` is required for this local auto-dispatch flow.
+Console chat now targets the built-in procedure key `builtin:console/chat` backed by source-controlled Tactus code under `plexus/procedures/console/`.
 
 ## Usage
 

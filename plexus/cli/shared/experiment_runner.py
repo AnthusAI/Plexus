@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 import socket
+import os
 from typing import Optional, Tuple, Dict, Any
 import logging
 import json
@@ -11,6 +12,7 @@ from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedure
 from plexus.dashboard.api.models.task import Task
+from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
 
@@ -127,24 +129,79 @@ def create_tracker_and_experiment_task(
     if score_name:
         metadata["score"] = score_name
     
-    # Find or create task for this procedure
-    existing_task_id = _find_existing_task_for_procedure(procedure_id, account_id, client)
+    # If this run was launched by CommandDispatch, bind tracking to that claimed task.
+    dispatch_task_id = (os.getenv("PLEXUS_DISPATCH_TASK_ID") or "").strip()
+    task: Optional[Task] = None
+    tracker = None  # ProcedureService manages TaskStages directly via state machine
+    if dispatch_task_id:
+        try:
+            candidate_task = Task.get_by_id(dispatch_task_id, client)
+            if not candidate_task:
+                logger.warning(
+                    "PLEXUS_DISPATCH_TASK_ID=%s was provided but no task was found; falling back to procedure task lookup.",
+                    dispatch_task_id,
+                )
+            elif candidate_task.accountId != account_id:
+                logger.warning(
+                    "PLEXUS_DISPATCH_TASK_ID=%s belongs to a different account (%s != %s); falling back.",
+                    dispatch_task_id,
+                    candidate_task.accountId,
+                    account_id,
+                )
+            else:
+                command_text = str(candidate_task.command or "")
+                target_text = str(candidate_task.target or "")
+                if procedure_id in command_text or procedure_id in target_text:
+                    task = candidate_task
+                    logger.info(
+                        "Using dispatch-claimed Task %s for procedure %s from PLEXUS_DISPATCH_TASK_ID",
+                        dispatch_task_id,
+                        procedure_id,
+                    )
+                else:
+                    logger.warning(
+                        "PLEXUS_DISPATCH_TASK_ID=%s does not reference procedure %s; falling back.",
+                        dispatch_task_id,
+                        procedure_id,
+                    )
+        except Exception as e:
+            logger.warning(
+                "Could not load task from PLEXUS_DISPATCH_TASK_ID=%s (%s); falling back to procedure task lookup.",
+                dispatch_task_id,
+                e,
+            )
 
-    if existing_task_id:
-        logger.info(f"Reusing existing Task {existing_task_id} for procedure {procedure_id}")
-        # Get the existing task directly - DON'T use TaskProgressTracker since
-        # ProcedureService manages TaskStages directly via state machine
-        task = Task.get_by_id(existing_task_id, client)
-        tracker = None  # No tracker needed - state machine handles it
-    else:
-        # This should never happen - ProcedureService.create_procedure() always creates a Task
-        logger.error(f"No Task found for procedure {procedure_id}. This indicates the procedure was created incorrectly.")
-        logger.error(f"Procedures should always have a Task created by ProcedureService.create_procedure()")
-        raise RuntimeError(
-            f"No Task found for procedure {procedure_id}. "
-            f"The procedure may have been created incorrectly or the Task was deleted. "
-            f"Please recreate the procedure."
-        )
+    # Fallback to the existing procedure-level task model.
+    if not task:
+        existing_task_id = _find_existing_task_for_procedure(procedure_id, account_id, client)
+        if existing_task_id:
+            logger.info(f"Reusing existing Task {existing_task_id} for procedure {procedure_id}")
+            task = Task.get_by_id(existing_task_id, client)
+        else:
+            if is_builtin_procedure_id(procedure_id):
+                now_iso = datetime.now(timezone.utc).isoformat()
+                logger.info("No existing task found for built-in procedure %s; creating one.", procedure_id)
+                task = Task.create(
+                    client=client,
+                    accountId=account_id,
+                    type="Procedure Run",
+                    status="PENDING",
+                    dispatchStatus="PENDING",
+                    target=f"procedure/run/{procedure_id}",
+                    command=f"procedure run {procedure_id}",
+                    metadata=json.dumps(metadata),
+                    createdAt=now_iso,
+                    updatedAt=now_iso,
+                )
+            else:
+                # This should never happen - ProcedureService.create_procedure() always creates a Task
+                logger.error(f"No Task found for procedure {procedure_id}. This indicates the procedure was created incorrectly.")
+                logger.error(f"Procedures should always have a Task created by ProcedureService.create_procedure()")
+                raise RuntimeError(
+                    f"No Task found for procedure {procedure_id}. "
+                    f"The procedure may have been created incorrectly or the Task was deleted. "
+                    f"Please recreate the procedure."
+                )
 
     # Claim task like CLI (set worker and RUNNING)
     if task:
@@ -257,9 +314,14 @@ async def run_experiment_with_task_tracking(
         # Import and run the actual procedure using ProcedureService
         from plexus.cli.procedure.service import ProcedureService
         service = ProcedureService(client)
-        
+
         # Run the procedure (this is the actual hypothesis generation work)
-        experiment_result = await service.run_experiment(procedure_id, **experiment_options)
+        run_options = dict(experiment_options)
+        run_options.setdefault("account_id", account_id)
+        # Pass the task ID so the executor can update stage status in real-time
+        if task and task.id:
+            run_options.setdefault("_task_id_for_stage_tracking", task.id)
+        experiment_result = await service.run_experiment(procedure_id, **run_options)
         
         # Complete Hypothesis stage and advance to Evaluation
         if tracker:
@@ -306,20 +368,21 @@ async def run_experiment_with_task_tracking(
                 update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
             tracker.task.update(**update_data)
 
-        # Keep procedure status consistent with the actual run outcome.
-        try:
-            status_mutation = """
-            mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
-                updateProcedure(input: $input) {
-                    id
-                    status
-                    updatedAt
+        # Keep procedure status consistent with the actual run outcome for DB-backed procedures.
+        if not is_builtin_procedure_id(procedure_id):
+            try:
+                status_mutation = """
+                mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
+                    updateProcedure(input: $input) {
+                        id
+                        status
+                        updatedAt
+                    }
                 }
-            }
-            """
-            client.execute(status_mutation, {"input": {"id": procedure_id, "status": mapped_procedure_status}})
-        except Exception as e:
-            logger.warning(f"Failed to update procedure status for {procedure_id}: {e}")
+                """
+                client.execute(status_mutation, {"input": {"id": procedure_id, "status": mapped_procedure_status}})
+            except Exception as e:
+                logger.warning(f"Failed to update procedure status for {procedure_id}: {e}")
         
         # Update result with experiment outcome
         result.update(experiment_result)

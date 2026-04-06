@@ -12,6 +12,7 @@ import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.exceptions import Timeout, RequestException
 import logging
+from plexus.utils.score_result_s3_utils import upload_evaluation_artifact_file
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -238,13 +239,11 @@ class Evaluation:
     @staticmethod
     def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
         """
-        Convert native Gwet's AC1 [-1, 1] into legacy-compatible percentage [0, 100].
+        Return Gwet's AC1 value as-is in its native [-1, 1] range.
         """
         if alignment_value is None:
             return 0.0
-        # Clamp to valid AC1 range before mapping to avoid drift from floating point noise.
-        clamped = max(-1.0, min(1.0, float(alignment_value)))
-        return ((clamped + 1.0) / 2.0) * 100.0
+        return float(alignment_value)
 
 
     def __enter__(self):
@@ -1311,6 +1310,12 @@ class Evaluation:
                         self.processed_items_by_score[score_name] = processed_counter
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
+                        # Advance to Processing stage on first item completed
+                        if processed_counter == 1 and tracker and not getattr(self, '_processing_stage_started', False):
+                            self._processing_stage_started = True
+                            tracker.advance_stage()
+                            self.logging.info("==== STAGE: Processing ====")
+
                         # Update tracker with actual count of processed items
                         if tracker and tracker.current_stage:
                             tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
@@ -1520,11 +1525,19 @@ class Evaluation:
         
         # Build update input with only valid fields for UpdateEvaluationInput
         # Only include the fields that are allowed by the schema
+        # For completed evaluations, totalItems = processedItems (composite scores
+        # multiply processed_items by sub-score count, so we match them at completion).
+        # During the run, use number_of_texts_to_sample as the estimate.
+        if status == "COMPLETED":
+            total_for_update = self.processed_items
+        else:
+            total_for_update = getattr(self, 'number_of_texts_to_sample', 0)
         update_input = {
             "id": self.experiment_id,
             "status": status,
             "accuracy": metrics["accuracy"] * 100,
-            "processedItems": self.processed_items  # Add processed items count for progress tracking
+            "totalItems": total_for_update,
+            "processedItems": self.processed_items
         }
         
         # Add score ID and version ID if available
@@ -2002,9 +2015,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 text = row['text']
                 content_id = row.get('content_id', '')
                 session_id = row.get('Session ID', content_id)
-                columns = row.get('columns', {})
-                form_id = columns.get('form_id', '')
-                metadata_string = columns.get('metadata', {})
+                columns = row.get('columns', {}) if isinstance(row.get('columns', {}), dict) else {}
+                form_id = row.get('form_id', columns.get('form_id', ''))
+                # Prefer top-level metadata from dataframe rows (e.g., FeedbackItems),
+                # but keep legacy support for nested row['columns']['metadata'].
+                metadata_string = row.get('metadata', columns.get('metadata', {}))
 
                 # Get feedback_item_id from the dataset if available
                 feedback_item_id = row.get('feedback_item_id', None)
@@ -2021,7 +2036,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
-                        item = Item.get_by_id(item_id, item_client) if item_client else None
+                        item = await asyncio.to_thread(Item.get_by_id, item_id, item_client) if item_client else None
                         if not item_client:
                             logging.warning(f"No dashboard client available to fetch Item {item_id}")
                         elif not item:
@@ -2037,7 +2052,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     if content_id and account_id:
                         try:
                             from plexus.dashboard.api.models.item import Item
-                            item = Item.find_by_identifier(
+                            item = await asyncio.to_thread(
+                                Item.find_by_identifier,
                                 client=item_client,
                                 account_id=account_id,
                                 identifier_key="reportId",
@@ -2094,11 +2110,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                                 # Skip visualization if score instance not found
                                 pass
                 
-                scorecard_results = await self.scorecard.score_entire_text(
-                    text=text,
-                    metadata=metadata,
-                    subset_of_score_names=score_names_to_process,
-                    item=item
+                per_item_timeout_seconds = float(os.getenv("PLEXUS_EVALUATION_ITEM_TIMEOUT_SECONDS", "180"))
+                scorecard_results = await asyncio.wait_for(
+                    self.scorecard.score_entire_text(
+                        text=text,
+                        metadata=metadata,
+                        subset_of_score_names=score_names_to_process,
+                        item=item
+                    ),
+                    timeout=per_item_timeout_seconds,
                 )
 
                 # Create a new dictionary for filtered results
@@ -2283,7 +2303,7 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                 return result # Return the processed result dict
 
-            except (Timeout, RequestException) as e:
+            except (Timeout, RequestException, asyncio.TimeoutError) as e:
                 if attempt == max_attempts - 1:  # Last attempt
                     logging.error(f"Max attempts reached for content_id {row.get('content_id')}. Error: {e}")
                     # Return an error result instead of raising
@@ -2337,8 +2357,9 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
             
-            # Extract feedback_item_id if available
-            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            # Extract feedback_item_id if available (prefer the passed-in value over metadata)
+            if feedback_item_id is None and score_result.metadata:
+                feedback_item_id = score_result.metadata.get('feedback_item_id')
             
             # Ensure we have valid metadata
             metadata_dict = {
@@ -2650,6 +2671,20 @@ Total cost:       ${expenses['total_cost']:.6f}
                 except (json.JSONDecodeError, TypeError) as e:
                     logging.warning(f"Could not parse parameters: {e}")
                     parameters = evaluation.parameters
+
+            baseline_evaluation_id = None
+            root_cause = None
+            misclassification_analysis = None
+            if isinstance(parameters, dict):
+                metadata = parameters.get("metadata")
+                if isinstance(metadata, dict):
+                    baseline_evaluation_id = metadata.get("baseline")
+                root_cause_candidate = parameters.get("root_cause")
+                if isinstance(root_cause_candidate, dict):
+                    root_cause = root_cause_candidate
+                    misclassification_candidate = root_cause_candidate.get("misclassification_analysis")
+                    if isinstance(misclassification_candidate, dict):
+                        misclassification_analysis = misclassification_candidate
             
             # Parse confusion matrix if available
             confusion_matrix = None
@@ -2698,6 +2733,9 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'accuracy': evaluation.accuracy,
                 'metrics': metrics,
                 'parameters': parameters,
+                'baseline_evaluation_id': baseline_evaluation_id,
+                'root_cause': root_cause,
+                'misclassification_analysis': misclassification_analysis,
                 'confusion_matrix': confusion_matrix,
                 'predicted_class_distribution': predicted_class_distribution,
                 'dataset_class_distribution': dataset_class_distribution,
@@ -2863,6 +2901,8 @@ class FeedbackEvaluation(Evaluation):
         task_id: Optional[str] = None,
         api_client=None,
         max_samples: Optional[int] = None,
+        sample_seed: Optional[int] = None,
+        max_category_summary_items: int = 20,
         **kwargs
     ):
         """
@@ -2877,12 +2917,16 @@ class FeedbackEvaluation(Evaluation):
             task_id: Optional task ID for progress tracking
             api_client: Optional API client (if not provided, will be created from kwargs)
             max_samples: Optional maximum number of feedback items to process (default: None = all)
+            sample_seed: Optional random seed used when sampling feedback items
+            max_category_summary_items: Maximum items per category summary during RCA (default: 20)
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
         # Remove it from kwargs since parent Evaluation doesn't accept it
         self.api_client = api_client
         self.max_samples = max_samples
+        self.sample_seed = sample_seed
+        self.max_category_summary_items = max(1, int(max_category_summary_items or 20))
         
         # Call parent init (which expects scorecard_name and scorecard at minimum)
         # For FeedbackEvaluation, we don't need a full scorecard object
@@ -2901,6 +2945,216 @@ class FeedbackEvaluation(Evaluation):
         self.account_id = account_id
         self.task_id = task_id
         self.logger = logging.getLogger('plexus/evaluation')
+
+    @staticmethod
+    def _has_usable_root_cause(root_cause_payload) -> bool:
+        """A usable RCA payload is any non-empty object payload."""
+        return isinstance(root_cause_payload, dict) and len(root_cause_payload) > 0
+
+    @staticmethod
+    def _compact_item_classification_for_parameters(item: dict) -> dict:
+        """Keep a compact, UI-usable subset of per-item triage fields."""
+        if not isinstance(item, dict):
+            return {}
+        keep_keys = (
+            "feedback_item_id",
+            "item_id",
+            "timestamp",
+            "predicted_value",
+            "correct_value",
+            "primary_category",
+            "confidence",
+            "rationale_short",
+            "rationale_full",
+            "rationale_paragraph",
+            "evidence_quote",
+            "config_fixability",
+            "evidence_snippets",
+            "mechanical_subtype",
+            "mechanical_details",
+            "information_gap_subtype",
+            "triage_evidence_flags",
+            "detailed_cause",
+            "suggested_fix",
+            "topic_id",
+            "topic_label",
+        )
+        compact = {}
+        for key in keep_keys:
+            if key in item:
+                compact[key] = item.get(key)
+        return compact
+
+    @staticmethod
+    def _compact_topic_exemplar_for_parameters(exemplar: dict) -> dict:
+        """Keep only fields needed for topic-level filtering and context display."""
+        if not isinstance(exemplar, dict):
+            return {}
+        keep_keys = (
+            "item_id",
+            "identifiers",
+            "initial_answer_value",
+            "final_answer_value",
+            "score_explanation",
+            "timestamp",
+            "above_fold",
+            "detailed_cause",
+            "suggested_fix",
+        )
+        compact = {}
+        for key in keep_keys:
+            if key in exemplar:
+                compact[key] = exemplar.get(key)
+        misclassification = exemplar.get("misclassification_classification")
+        if isinstance(misclassification, dict):
+            compact["misclassification_classification"] = {
+                "primary_category": misclassification.get("primary_category"),
+                "rationale": misclassification.get("rationale"),
+                "confidence": misclassification.get("confidence"),
+            }
+        return compact
+
+    @classmethod
+    def _compact_topic_for_parameters(cls, topic: dict) -> dict:
+        """Keep a compact topic payload, trimming heavy exemplar context."""
+        if not isinstance(topic, dict):
+            return {}
+        keep_keys = (
+            "topic_id",
+            "cluster_id",
+            "label",
+            "keywords",
+            "memory_weight",
+            "memory_tier",
+            "lifecycle_tier",
+            "cause",
+            "detailed_explanation",
+            "improvement_suggestion",
+            "is_new",
+            "is_trending",
+            "has_short_term_memory",
+            "has_medium_term_memory",
+            "has_long_term_memory",
+            "p95_distance",
+            "member_count",
+            "days_inactive",
+        )
+        compact = {}
+        for key in keep_keys:
+            if key in topic:
+                compact[key] = topic.get(key)
+
+        raw_exemplars = topic.get("exemplars")
+        if isinstance(raw_exemplars, list):
+            compact_exemplars = []
+            for exemplar in raw_exemplars:
+                if isinstance(exemplar, str):
+                    compact_exemplars.append(exemplar[:320])
+                elif isinstance(exemplar, dict):
+                    compact_exemplars.append(
+                        cls._compact_topic_exemplar_for_parameters(exemplar)
+                    )
+            compact["exemplars"] = compact_exemplars
+            compact["exemplars_total"] = len(raw_exemplars)
+        return compact
+
+    @classmethod
+    def _compact_root_cause_for_parameters(cls, root_cause_payload: dict, output_attachment: str) -> dict:
+        """Build compact RCA parameters payload with attachment pointer."""
+        if not isinstance(root_cause_payload, dict):
+            raise ValueError("root_cause_payload must be a dictionary")
+        if not output_attachment:
+            raise ValueError("output_attachment is required")
+
+        compact_payload = {}
+
+        # Keep top-level narrative fields that power the evaluation UI.
+        for key in (
+            "overall_explanation",
+            "overall_improvement_suggestion",
+            "misclassification_analysis",
+        ):
+            if key in root_cause_payload:
+                compact_payload[key] = root_cause_payload.get(key)
+
+        raw_topics = root_cause_payload.get("topics")
+        if isinstance(raw_topics, list):
+            compact_payload["topics"] = [
+                cls._compact_topic_for_parameters(topic)
+                for topic in raw_topics
+                if isinstance(topic, dict)
+            ]
+
+        # Compact full per-item table to essential fields to keep DB payload bounded.
+        misclassification_analysis = compact_payload.get("misclassification_analysis")
+        if isinstance(misclassification_analysis, dict):
+            compact_misclassification = dict(misclassification_analysis)
+            raw_rows = misclassification_analysis.get("item_classifications_all")
+            if isinstance(raw_rows, list):
+                compact_rows = [
+                    cls._compact_item_classification_for_parameters(row)
+                    for row in raw_rows
+                ]
+                compact_misclassification["item_classifications_all"] = compact_rows
+                compact_misclassification["item_classifications_total"] = len(raw_rows)
+            compact_misclassification["item_classifications_attachment"] = output_attachment
+            compact_payload["misclassification_analysis"] = compact_misclassification
+
+        compact_payload["output_compacted"] = True
+        compact_payload["output_attachment"] = output_attachment
+        compact_payload["output_compaction_version"] = "feedback_rca_v1"
+        return compact_payload
+
+    def _persist_root_cause_for_parameters(self, root_cause_payload: dict) -> dict:
+        """
+        Persist full RCA payload as an attachment and return compact parameters payload.
+
+        This is a strict, single path: if RCA exists, upload must succeed.
+        """
+        if not self._has_usable_root_cause(root_cause_payload):
+            return root_cause_payload
+        if not self.evaluation_id:
+            raise ValueError("evaluation_id is required to persist root-cause attachments")
+
+        output_attachment = upload_evaluation_artifact_file(
+            evaluation_id=self.evaluation_id,
+            artifact_data=root_cause_payload,
+            file_name="root_cause.full.json",
+        )
+        if not output_attachment:
+            raise RuntimeError("Failed to upload root-cause attachment for evaluation")
+        return self._compact_root_cause_for_parameters(root_cause_payload, output_attachment)
+
+    @classmethod
+    def root_cause_contract_outcome(cls, incorrect_items: int, root_cause_payload):
+        """Shared RCA contract evaluation for all feedback-backed paths."""
+        root_cause_required = incorrect_items > 0
+        has_usable_root_cause = cls._has_usable_root_cause(root_cause_payload)
+        error_message = None
+        if root_cause_required and not has_usable_root_cause:
+            error_message = (
+                f"Feedback-backed evaluation has {incorrect_items} incorrect item(s), "
+                "but no usable RCA payload was persisted."
+            )
+        return {
+            "root_cause_required": root_cause_required,
+            "has_usable_root_cause": has_usable_root_cause,
+            "error_message": error_message,
+        }
+
+    @staticmethod
+    def apply_root_cause_contract_to_parameters(
+        existing_parameters,
+        root_cause_payload,
+        root_cause_required: bool,
+        has_usable_root_cause: bool,
+    ) -> dict:
+        """Shared parameter shaping for feedback-backed RCA contract."""
+        params = dict(existing_parameters) if existing_parameters else {}
+        params["root_cause_required"] = root_cause_required
+        if has_usable_root_cause:
+            params["root_cause"] = root_cause_payload
+        return params
     
     async def run(self, tracker=None):
         """
@@ -2963,7 +3217,11 @@ class FeedbackEvaluation(Evaluation):
             if self.max_samples and len(feedback_items) > self.max_samples:
                 import random
                 self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
-                feedback_items = random.sample(feedback_items, self.max_samples)
+                if self.sample_seed is not None:
+                    rng = random.Random(self.sample_seed)
+                    feedback_items = rng.sample(feedback_items, self.max_samples)
+                else:
+                    feedback_items = random.sample(feedback_items, self.max_samples)
             
             # Perform analysis on the feedback items
             overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
@@ -3017,19 +3275,65 @@ class FeedbackEvaluation(Evaluation):
                 score_id=self.score_id,
                 account_id=self.account_id
             )
-            
+
+            # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
+            root_cause_result = await self._run_root_cause_analysis(
+                feedback_items,
+                max_category_summary_items=self.max_category_summary_items,
+            )
+            persisted_root_cause = await asyncio.to_thread(
+                self._persist_root_cause_for_parameters,
+                root_cause_result,
+            )
+
+            # Merge root-cause payload into existing parameters (preserving mode/score/days metadata)
+            existing_params = evaluation_record.parameters
+            if isinstance(existing_params, str):
+                try:
+                    existing_params = json.loads(existing_params)
+                except Exception:
+                    existing_params = {}
+            parameters_dict = dict(existing_params) if existing_params else {}
+            incorrect_items = int(overall_analysis.get("disagreements") or 0)
+            contract = self.root_cause_contract_outcome(incorrect_items, persisted_root_cause)
+            parameters_dict = self.apply_root_cause_contract_to_parameters(
+                parameters_dict,
+                persisted_root_cause,
+                contract["root_cause_required"],
+                contract["has_usable_root_cause"],
+            )
+
+            if contract["error_message"]:
+                failure_kwargs = dict(
+                    status="FAILED",
+                    errorMessage=contract["error_message"],
+                    accuracy=accuracy if accuracy is not None else 0.0,
+                    metrics=json.dumps(metrics_for_api),
+                    confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
+                    totalItems=overall_analysis.get("total_items"),
+                    processedItems=overall_analysis.get("total_items"),
+                    datasetClassDistribution=json.dumps(overall_analysis.get("class_distribution")),
+                    predictedClassDistribution=json.dumps(overall_analysis.get("predicted_class_distribution")),
+                    parameters=json.dumps(parameters_dict),
+                )
+                evaluation_record.update(**failure_kwargs)
+                raise RuntimeError(contract["error_message"])
+
             # Update evaluation record with results
             # Ensure accuracy is never None (GraphQL schema requires Float!)
-            evaluation_record.update(
+            update_kwargs = dict(
                 status="COMPLETED",
                 accuracy=accuracy if accuracy is not None else 0.0,
-                metrics=__import__('json').dumps(metrics_for_api),  # Store as array for frontend
-                confusionMatrix=__import__('json').dumps(overall_analysis.get("confusion_matrix")),
+                metrics=json.dumps(metrics_for_api),  # Store as array for frontend
+                confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
                 totalItems=overall_analysis.get("total_items"),
                 processedItems=overall_analysis.get("total_items"),
-                datasetClassDistribution=__import__('json').dumps(overall_analysis.get("class_distribution")),
-                predictedClassDistribution=__import__('json').dumps(overall_analysis.get("predicted_class_distribution")),
+                datasetClassDistribution=json.dumps(overall_analysis.get("class_distribution")),
+                predictedClassDistribution=json.dumps(overall_analysis.get("predicted_class_distribution")),
             )
+            if parameters_dict:
+                update_kwargs["parameters"] = json.dumps(parameters_dict)
+            evaluation_record.update(**update_kwargs)
             
             # Format log message with safe handling of None values
             ac1_str = f"{ac1:.3f}" if ac1 is not None else "N/A"
@@ -3110,6 +3414,7 @@ class FeedbackEvaluation(Evaluation):
                     cacheKey
                     initialAnswerValue
                     finalAnswerValue
+                    editCommentValue
                     isAgreement
                     editedAt
                     createdAt
@@ -3337,13 +3642,1182 @@ class FeedbackEvaluation(Evaluation):
                     failed_count += 1
         
         self.logger.info(f"Created {created_count} ScoreResult records, {failed_count} failed")
-        
+
         if failed_count > 0:
             self.logger.warning(f"{failed_count} ScoreResult records failed to create")
 
+    async def _run_root_cause_analysis(
+        self,
+        feedback_items,
+        score_result_map: dict = None,
+        original_explanations: dict = None,
+        max_report_exemplars: int = 20,
+        max_summarization_exemplars: int = 6,
+        max_category_summary_items: int = 20,
+        tracker=None,
+    ) -> list:
+        """Run topic clustering + LLM root-cause analysis on feedback edit comments.
+
+        Uses biblicus ReinforcementMemory directly for topic clustering, LLM labels,
+        per-exemplar causal inference, and topic-level cause synthesis.
+
+        Args:
+            feedback_items: List of FeedbackItem objects to analyze.
+            score_result_map: Optional dict mapping feedback_item_id → {'value': predicted,
+                'human_label': correct} for the current evaluation run. When provided, all
+                items in the map are included (not just those with edit comments), and the
+                text passed to clustering includes prediction-context so the LLM understands
+                what went wrong even when the reviewer comment describes the original error.
+
+        Returns a list of topic dicts matching the TopicList dashboard component interface,
+        or an empty list if there is not enough data or analysis fails (non-fatal).
+        """
+        try:
+            import tempfile
+            from datetime import datetime, timezone as _tz
+            from biblicus.analysis.reinforcement_memory import (
+                ReinforcementMemory, LocalVectorStore,
+                sentence_transformer_embedder,
+                bedrock_labeler, bedrock_causal, bedrock_synthesizer,
+                TimestampedText,
+            )
+            from plexus.rca_analysis import (
+                build_misclassification_classification_contract,
+                build_misclassification_analysis_summary,
+                build_misclassification_item_context,
+                classify_misclassification_item,
+                extract_misclassification_evidence_flags,
+                explain_misclassification_item_classification,
+                resolve_final_output_classes_from_yaml_text,
+            )
+
+            def _update_status(msg: str):
+                """Update tracker status message if tracker is available."""
+                if tracker and hasattr(tracker, 'current_stage') and tracker.current_stage:
+                    tracker.current_stage.status_message = msg
+
+            # When score_result_map is provided, include all items in the map (the caller
+            # has already filtered to incorrect predictions).  Without it, fall back to the
+            # legacy behaviour of using items that have an edit comment.
+            if score_result_map is not None:
+                candidate_items = [fi for fi in feedback_items if fi.id in score_result_map]
+            else:
+                candidate_items = [fi for fi in feedback_items if fi.editCommentValue]
+
+            if len(candidate_items) == 0:
+                self.logger.info("Root-cause analysis skipped: no incorrect items available")
+                return {}
+
+            if len(candidate_items) < 5:
+                self.logger.info(
+                    f"Using small-set RCA summarization for {len(candidate_items)} "
+                    "incorrect item(s)"
+                )
+                return await self._run_small_set_root_cause_analysis(
+                    candidate_items=candidate_items,
+                    score_result_map=score_result_map,
+                    original_explanations=original_explanations or {},
+                    max_report_exemplars=max_report_exemplars,
+                    max_summarization_exemplars=max_summarization_exemplars,
+                    max_category_summary_items=max_category_summary_items,
+                    tracker=tracker,
+                )
+
+            # Fetch score context once so item-level misclassification classification can be
+            # included in pre-clustering text and reused for post-cluster synthesis.
+            score_guidelines = ""
+            score_yaml_code = ""
+            resolved_final_classes = []
+            class_resolution_source = ""
+            scorecard_guidance_text = ""
+            dashboard_client = getattr(self, "dashboard_client", None)
+            if dashboard_client and getattr(self, 'score_id', None):
+                try:
+                    score_version_id_for_context = getattr(self, "score_version_id", None)
+                    if not score_version_id_for_context:
+                        _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
+                        _sr = dashboard_client.execute(_sq, {'id': self.score_id})
+                        score_version_id_for_context = (_sr.get('getScore') or {}).get('championVersionId')
+                    if score_version_id_for_context:
+                        _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
+                        _vr = dashboard_client.execute(_vq, {'id': score_version_id_for_context})
+                        _vd = _vr.get('getScoreVersion') or {}
+                        score_guidelines = _vd.get('guidelines') or ''
+                        score_yaml_code = _vd.get('configuration') or ''
+                        if score_yaml_code:
+                            class_details = resolve_final_output_classes_from_yaml_text(score_yaml_code)
+                            resolved_final_classes = class_details.get("classes", [])
+                            class_resolution_source = class_details.get("source", "")
+                        self.logger.info(
+                            f"Fetched score context: guidelines={len(score_guidelines)} chars, "
+                            f"code={len(score_yaml_code)} chars, "
+                            f"resolved_final_classes={resolved_final_classes}"
+                        )
+                except Exception as exc:
+                    self.logger.debug("Failed to fetch score context: %s", exc)
+            scorecard_obj = getattr(self, "scorecard", None)
+            if isinstance(scorecard_obj, dict):
+                scorecard_guidance_text = (
+                    scorecard_obj.get("guidelines")
+                    or scorecard_obj.get("description")
+                    or ""
+                )
+            elif scorecard_obj is not None:
+                scorecard_guidance_text = (
+                    getattr(scorecard_obj, "guidelines", "")
+                    or getattr(scorecard_obj, "description", "")
+                    or ""
+                )
+
+            now = datetime.now(_tz.utc)
+            def _parse_ts_for_sort(value: str) -> float:
+                text = str(value or "").strip()
+                if not text:
+                    return 0.0
+                try:
+                    if text.endswith("Z"):
+                        text = text[:-1] + "+00:00"
+                    return datetime.fromisoformat(text).timestamp()
+                except Exception:
+                    return 0.0
+
+            texts = []
+            canonical_item_classifications = []
+            canonical_item_by_feedback_id = {}
+            item_context_cache = {}
+            if dashboard_client:
+                from plexus.dashboard.api.models.item import Item as DashboardItem
+
+                all_item_ids = sorted({fi.itemId for fi in candidate_items if getattr(fi, "itemId", None)})
+
+                async def _fetch_item_context(item_id: str):
+                    try:
+                        item = await asyncio.to_thread(
+                            DashboardItem.get_by_id, item_id, dashboard_client
+                        )
+                        if not item:
+                            return item_id, {
+                                "primary_input": "",
+                                "metadata_snapshot": "",
+                                "primary_input_modality": "unknown",
+                                "primary_input_fetch_error": True,
+                            }
+                        raw_metadata = getattr(item, "metadata", None)
+                        metadata_snapshot = ""
+                        if raw_metadata:
+                            if isinstance(raw_metadata, str):
+                                metadata_snapshot = raw_metadata
+                            else:
+                                try:
+                                    metadata_snapshot = json.dumps(raw_metadata)
+                                except TypeError:
+                                    metadata_snapshot = str(raw_metadata)
+                        primary_input = item.text or ""
+                        if primary_input:
+                            primary_input_modality = "text"
+                        elif metadata_snapshot:
+                            primary_input_modality = "structured"
+                        else:
+                            primary_input_modality = "unknown"
+                        return item_id, {
+                            "primary_input": primary_input,
+                            "metadata_snapshot": metadata_snapshot,
+                            "primary_input_modality": primary_input_modality,
+                            "primary_input_fetch_error": False,
+                        }
+                    except Exception as exc:
+                        self.logger.debug("Item context fetch failed for %s: %s", item_id, exc)
+                        return item_id, {
+                            "primary_input": "",
+                            "metadata_snapshot": "",
+                            "primary_input_modality": "unknown",
+                            "primary_input_fetch_error": True,
+                        }
+
+                if all_item_ids:
+                    _update_status(f"Hydrating item context for {len(all_item_ids)} candidate item(s)...")
+                    fetched_context = await asyncio.gather(*[_fetch_item_context(iid) for iid in all_item_ids])
+                    item_context_cache = {iid: payload for iid, payload in fetched_context}
+
+            for fi in candidate_items:
+                ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
+                ts_str = (
+                    (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
+                    if ts else now.isoformat()
+                )
+                metadata = {
+                    "feedback_item_id": fi.id,
+                    "edit_comment": getattr(fi, "editCommentValue", "") or "",
+                    "initial_comment": getattr(fi, "initialCommentValue", "") or "",
+                    "final_comment": getattr(fi, "finalCommentValue", "") or "",
+                    "label_provenance_source": "feedback_final_answer_value",
+                }
+                if fi.itemId:
+                    metadata["item_id"] = fi.itemId
+
+                # Build the text that will be clustered and analysed.
+                # Goal: text explaining WHY the ground-truth label is correct —
+                # not what our model said (which describes the wrong reasoning).
+                #
+                # Source depends on whether the reviewer agreed or disagreed:
+                #   Agreed   → original production explanation describes the correct answer
+                #   Disagreed → edit comment explains why the reviewer changed the label
+                if score_result_map is not None:
+                    sr = score_result_map.get(fi.id, {})
+                    new_pred = (sr.get('value') or '')
+                    correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
+                    our_explanation = sr.get('explanation', '')
+                    orig_explanation = (original_explanations or {}).get(fi.id, '')
+                    reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
+
+                    if reviewer_agreed:
+                        # Original was correct; original explanation says why
+                        text = orig_explanation or fi.editCommentValue or our_explanation
+                    else:
+                        # Reviewer corrected original; edit comment explains the correction
+                        text = fi.editCommentValue or orig_explanation or our_explanation
+
+                    if not text:
+                        text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+
+                    metadata["initial_answer_value"] = new_pred
+                    metadata["final_answer_value"] = correct_label
+                    if our_explanation:
+                        metadata["score_explanation"] = our_explanation
+                else:
+                    if fi.initialAnswerValue:
+                        metadata["initial_answer_value"] = fi.initialAnswerValue
+                    if fi.finalAnswerValue:
+                        metadata["final_answer_value"] = fi.finalAnswerValue
+                    text = fi.editCommentValue
+
+                item_context_record = item_context_cache.get(fi.itemId or "", {})
+                primary_input_text = item_context_record.get("primary_input", "")
+                metadata_snapshot = item_context_record.get("metadata_snapshot", "")
+                primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
+                primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
+                misclassification_item_context = build_misclassification_item_context(
+                    feedback_item_id=fi.id,
+                    item_id=fi.itemId or "",
+                    score_id=getattr(self, "score_id", "") or "",
+                    scorecard_id=getattr(self, "scorecard_id", "") or "",
+                    score_version_id=getattr(self, "score_version_id", "") or "",
+                    predicted_value=metadata.get("initial_answer_value", "") or "",
+                    correct_value=metadata.get("final_answer_value", "") or "",
+                    score_explanation=metadata.get("score_explanation", "") or "",
+                    edit_comment=metadata.get("edit_comment", ""),
+                    initial_comment=metadata.get("initial_comment", ""),
+                    final_comment=metadata.get("final_comment", ""),
+                    score_guidelines_text=score_guidelines,
+                    score_yaml_configuration=score_yaml_code,
+                    scorecard_guidance_text=scorecard_guidance_text,
+                    primary_input_text=primary_input_text,
+                    primary_input_modality=primary_input_modality,
+                    metadata_snapshot=metadata_snapshot,
+                    label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
+                    resolved_final_classes=resolved_final_classes,
+                    class_resolution_source=class_resolution_source,
+                    primary_input_fetch_error=primary_input_fetch_error,
+                )
+                misclassification_evidence_flags = await asyncio.to_thread(
+                    extract_misclassification_evidence_flags,
+                    item_context=misclassification_item_context,
+                )
+                misclassification_classification = classify_misclassification_item(
+                    misclassification_item_context,
+                    misclassification_evidence_flags,
+                )
+                triage_explainer = await asyncio.to_thread(
+                    explain_misclassification_item_classification,
+                    item_context=misclassification_item_context,
+                    classification=misclassification_classification,
+                )
+                misclassification_classification["rationale_paragraph"] = triage_explainer.get(
+                    "rationale_paragraph", ""
+                )
+                misclassification_classification["evidence_quote"] = triage_explainer.get(
+                    "evidence_quote", ""
+                )
+                misclassification_classification["config_fixability"] = triage_explainer.get(
+                    "config_fixability", ""
+                )
+                primary_category = (
+                    misclassification_classification.get("primary_category")
+                    or "score_configuration_problem"
+                )
+                confidence = misclassification_classification.get("confidence") or "unknown"
+                mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
+                rationale = (
+                    triage_explainer.get("rationale_paragraph")
+                    or misclassification_classification.get("rationale")
+                    or ""
+                ).strip()
+                rationale_single_line = " ".join(rationale.split())
+                rationale_words = rationale_single_line.split() if rationale_single_line else []
+                rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
+                if len(rationale_words) > 12:
+                    rationale_excerpt += "..."
+                rationale_excerpt = rationale_excerpt.replace(";", ",").replace("]", ")")
+
+                metadata["pre_cluster_misclassification_category"] = primary_category
+                metadata["pre_cluster_misclassification_confidence"] = confidence
+                metadata["pre_cluster_mechanical_subtype"] = mechanical_subtype
+                metadata["pre_cluster_misclassification_rationale_short"] = rationale_excerpt
+
+                canonical_row = {
+                    "feedback_item_id": fi.id,
+                    "item_id": fi.itemId or "",
+                    "timestamp": ts_str,
+                    "topic_id": None,
+                    "topic_label": "",
+                    "predicted_value": metadata.get("initial_answer_value", "") or "",
+                    "correct_value": metadata.get("final_answer_value", "") or "",
+                    "primary_category": primary_category,
+                    "confidence": confidence,
+                    "rationale_short": rationale_excerpt,
+                    "rationale_full": rationale,
+                    "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
+                    "evidence_quote": triage_explainer.get("evidence_quote", ""),
+                    "config_fixability": triage_explainer.get("config_fixability", ""),
+                    "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
+                    "mechanical_subtype": (
+                        mechanical_subtype if mechanical_subtype != "none" else None
+                    ),
+                    "mechanical_details": misclassification_classification.get("mechanical_details"),
+                    "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
+                    "triage_evidence_flags": misclassification_classification.get("evidence_flags"),
+                    "misclassification_item_context": misclassification_item_context,
+                    "misclassification_classification": misclassification_classification,
+                }
+                canonical_item_classifications.append(canonical_row)
+                canonical_item_by_feedback_id[fi.id] = canonical_row
+
+                text = (
+                    f"[misclassification_category={primary_category};"
+                    f"confidence={confidence};"
+                    f"mechanical_subtype={mechanical_subtype};"
+                    f"triage_rationale={rationale_excerpt}]\n"
+                    f"{rationale_excerpt}\n{text}"
+                )
+
+                texts.append(TimestampedText(
+                    id=fi.id,
+                    group_id=self.score_id,
+                    timestamp=ts_str,
+                    text=text,
+                    metadata=metadata,
+                ))
+
+            embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
+            # Warm up the model before analysis to avoid meta-tensor race conditions
+            await asyncio.to_thread(embed_fn, ["warmup"])
+
+            _update_status(f"Clustering {len(candidate_items)} items into topics...")
+            self.logger.info(
+                f"Running root-cause analysis on {len(candidate_items)} "
+                f"incorrectly-predicted feedback items"
+            )
+
+            def _run_analysis():
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    rm = ReinforcementMemory(
+                        data_dir=tmpdir,
+                        vector_store=LocalVectorStore(store_dir=tmpdir),
+                        embed=embed_fn,
+                        label=bedrock_labeler(),
+                        infer_cause=bedrock_causal(),
+                        synthesize_cause=bedrock_synthesizer(),
+                        min_topic_size=3,
+                        max_exemplars=max_report_exemplars,
+                    )
+                    rm.ingest(texts)
+                    return rm.analyze(self.score_id, min_topic_size=3)
+
+            result = await asyncio.to_thread(_run_analysis)
+            self.logger.info(f"Root-cause analysis produced {len(result.topics)} topic(s)")
+            _update_status(f"Found {len(result.topics)} topic(s), fetching transcripts...")
+
+            # Reuse preloaded item context for topic-level detailed RCA on above-fold exemplars.
+            transcript_cache: dict = {}
+            above_fold_item_ids = set()
+            for tr in result.topics:
+                for idx, ex in enumerate(tr.exemplars or []):
+                    if idx < max_summarization_exemplars and ex.metadata.get("item_id"):
+                        above_fold_item_ids.add(ex.metadata["item_id"])
+            transcript_cache = {
+                iid: {
+                    "text": (item_context_cache.get(iid) or {}).get("primary_input", ""),
+                    "metadata_snapshot": (item_context_cache.get(iid) or {}).get("metadata_snapshot", ""),
+                }
+                for iid in above_fold_item_ids
+                if iid in item_context_cache
+            }
+            self.logger.info(
+                "Loaded primary input context for %s/%s above-fold exemplar items",
+                len(transcript_cache),
+                len(above_fold_item_ids),
+            )
+            _update_status(f"Analyzing {len(transcript_cache)} exemplar input artifact(s)...")
+
+            def _detailed_analysis(primary_input: str, predicted: str, correct: str,
+                                   explanation: str, topic_label: str,
+                                   score_guidelines: str = "", score_yaml_code: str = "") -> tuple:
+                """Run a two-turn Bedrock Haiku conversation per exemplar.
+
+                Delegates to plexus.rca_analysis.analyze_score_result() for DRY reuse
+                with the plexus_score_result_investigate MCP tool.
+
+                Returns (detailed_cause, suggested_fix):
+                  - detailed_cause: why the AI prediction was wrong (2-4 sentences)
+                  - suggested_fix: one concrete score code change to prevent this error
+                """
+                from plexus.rca_analysis import analyze_score_result
+                return analyze_score_result(
+                    primary_input=primary_input,
+                    predicted=predicted,
+                    correct=correct,
+                    explanation=explanation,
+                    topic_label=topic_label,
+                    score_guidelines=score_guidelines,
+                    score_yaml_code=score_yaml_code,
+                )
+
+            _SONNET_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+
+            def _bedrock_converse(system: str, messages: list, max_tokens: int = 1000) -> str:
+                """Run a Bedrock Claude conversation and return the assistant response."""
+                import json as _json
+                import boto3 as _boto3
+                try:
+                    brt = _boto3.client("bedrock-runtime", region_name="us-east-1")
+                    body = _json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": max_tokens,
+                        "system": system,
+                        "messages": messages,
+                    })
+                    resp = brt.invoke_model(
+                        modelId=_SONNET_MODEL,
+                        body=body,
+                        contentType="application/json",
+                        accept="application/json",
+                    )
+                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+                except Exception as exc:
+                    self.logger.debug("Bedrock converse call failed: %s", exc)
+                    return ""
+
+            def _multi_turn_synthesis(
+                exemplar_dicts: list,
+                score_fix_exemplars: list,
+                score_guidelines: str,
+                score_yaml_code: str,
+            ) -> tuple:
+                """Run multi-turn conversation to produce detailed explanation + improvement suggestion."""
+                system = (
+                    "You are an expert QA analyst reviewing patterns in AI scoring errors "
+                    "across domains and input modalities. Be specific and concrete."
+                )
+
+                # Build context for turn 1
+                deep_parts = []
+                for ex in exemplar_dicts:
+                    if ex.get("detailed_cause"):
+                        deep_parts.append(f"- Analysis: {ex['detailed_cause']}")
+                    if ex.get("suggested_fix"):
+                        deep_parts.append(f"  Suggested fix: {ex['suggested_fix']}")
+                meta_parts = []
+                for ex in exemplar_dicts:
+                    pred = ex.get("initial_answer_value", "")
+                    correct = ex.get("final_answer_value", "")
+                    text = ex.get("text", "")[:200]
+                    if pred or correct:
+                        meta_parts.append(f"- Predicted '{pred}' → correct '{correct}': {text}")
+
+                turn1_prompt = "I have a cluster of AI scoring errors from a quality evaluation.\n\n"
+                if score_guidelines:
+                    turn1_prompt += f"Score guidelines:\n{score_guidelines[:3000]}\n\n"
+                if score_yaml_code:
+                    turn1_prompt += f"Score configuration:\n```yaml\n{score_yaml_code[:6000]}\n```\n\n"
+                if deep_parts:
+                    turn1_prompt += "Detailed analysis of individual errors:\n" + "\n".join(deep_parts) + "\n\n"
+                if meta_parts:
+                    turn1_prompt += f"All {len(exemplar_dicts)} items in this cluster:\n" + "\n".join(meta_parts) + "\n\n"
+                turn1_prompt += (
+                    "Explain in 2-3 paragraphs what patterns of errors exist in this cluster. "
+                    "Be specific about the directionality of errors (what was predicted vs what "
+                    "the correct answer should be), what the primary input evidence contained, and why "
+                    "the AI classifier got these wrong."
+                )
+
+                messages = [{"role": "user", "content": turn1_prompt}]
+                detailed_explanation = _bedrock_converse(system, messages, max_tokens=800)
+
+                # Turn 2: improvement suggestion (same conversation)
+                improvement_suggestion = ""
+                if detailed_explanation:
+                    if score_fix_exemplars:
+                        score_fix_parts = []
+                        for ex in score_fix_exemplars:
+                            pred = ex.get("initial_answer_value", "")
+                            correct = ex.get("final_answer_value", "")
+                            text = ex.get("text", "")[:200]
+                            score_fix_parts.append(
+                                f"- Predicted '{pred}' → correct '{correct}': {text}"
+                            )
+                        messages.append({"role": "assistant", "content": detailed_explanation})
+                        turn2_prompt = (
+                            "Use ONLY items classified as score_configuration_problem to suggest "
+                            "specific improvements to the score configuration that would reduce "
+                            "these misclassifications. Ignore information gaps, guideline gaps, "
+                            "and mechanical malfunctions for this recommendation.\n\n"
+                            f"score_configuration_problem items:\n{chr(10).join(score_fix_parts)}"
+                        )
+                        messages.append({"role": "user", "content": turn2_prompt})
+                        improvement_suggestion = _bedrock_converse(system, messages, max_tokens=600)
+                    else:
+                        improvement_suggestion = (
+                            "No score_configuration_problem items in this topic; "
+                            "score-configuration change recommendation deferred."
+                        )
+
+                return detailed_explanation, improvement_suggestion
+
+            def _generate_title(detailed_explanation: str, existing_titles: list,
+                                score_guidelines: str = "") -> str:
+                """Generate a concise, distinct topic title based on the detailed explanation."""
+                system = (
+                    "You generate concise topic titles — 3 to 8 words, title case. "
+                    "No preamble, no punctuation, no quotes. Just the title."
+                )
+                prompt = ""
+                if score_guidelines:
+                    prompt += f"Score guidelines (for context):\n{score_guidelines[:1000]}\n\n"
+                prompt += f"Error pattern summary:\n{detailed_explanation[:1500]}\n\n"
+                if existing_titles:
+                    prompt += "Existing titles (do NOT reuse or closely repeat these):\n"
+                    prompt += "\n".join(f"- {t}" for t in existing_titles) + "\n\n"
+                prompt += "Generate a concise, descriptive 3-8 word title for this error category:"
+                messages = [{"role": "user", "content": prompt}]
+                return _bedrock_converse(system, messages, max_tokens=30)
+
+            def _top_level_synthesis(topics: list, score_guidelines: str = "",
+                                     score_yaml_code: str = "") -> tuple:
+                """Synthesize all per-topic analyses into an overall root cause summary and improvement suggestion."""
+                topic_parts = []
+                for t in topics:
+                    header_parts = [f"**{t.get('label', 'Unknown')}** ({t.get('member_count', 0)} item(s)"]
+                    if t.get('days_inactive') is not None:
+                        header_parts.append(f", {t['days_inactive']}d inactive")
+                    if t.get('is_new'):
+                        header_parts.append(", new")
+                    if t.get('is_trending'):
+                        header_parts.append(", trending")
+                    header_parts.append(f", {t.get('memory_tier', 'unknown')} memory)")
+                    header = "".join(header_parts)
+                    explanation = t.get("detailed_explanation", "").strip()
+                    suggestion = t.get("improvement_suggestion", "").strip()
+                    topic_parts.append(
+                        f"{header}\nAnalysis: {explanation}\nSuggested fix: {suggestion}"
+                    )
+                topics_text = "\n\n".join(topic_parts)
+
+                system = (
+                    "You are an expert QA analyst reviewing patterns in AI scoring errors "
+                    "across domains and input modalities. Be specific and concrete."
+                )
+                prompt1 = ""
+                if score_guidelines:
+                    prompt1 += f"Score guidelines:\n{score_guidelines[:2000]}\n\n"
+                if score_yaml_code:
+                    prompt1 += f"Score configuration:\n```yaml\n{score_yaml_code[:4000]}\n```\n\n"
+                prompt1 += (
+                    f"Below are root-cause analysis results for {len(topics)} identified "
+                    f"error pattern(s), each with item counts and temporal context:\n\n"
+                    f"{topics_text}\n\n"
+                    "Write a 2-3 sentence executive summary of the overall root causes of "
+                    "misclassification across all topics. Prioritize by frequency and recency. "
+                    "Be specific and concrete."
+                )
+                messages = [{"role": "user", "content": prompt1}]
+                overall_explanation = _bedrock_converse(system, messages, max_tokens=300)
+
+                if not overall_explanation:
+                    return "", ""
+
+                score_fix_topics = [
+                    t for t in topics if int(t.get("score_fix_candidate_count") or 0) > 0
+                ]
+                if not score_fix_topics:
+                    overall_suggestion = (
+                        "No score_configuration_problem items were identified across topics; "
+                        "overall score-configuration recommendation deferred."
+                    )
+                else:
+                    messages.append({"role": "assistant", "content": overall_explanation})
+                    messages.append({"role": "user", "content": (
+                        "Based only on topics that include score_configuration_problem items, "
+                        "write a 2-3 sentence overall recommendation for the most impactful "
+                        "score-configuration changes. Ignore information gaps, guideline gaps, "
+                        "and mechanical malfunctions."
+                    )})
+                    overall_suggestion = _bedrock_converse(system, messages, max_tokens=300)
+
+                return overall_explanation, overall_suggestion
+
+            # Convert TopicResult dataclasses → dicts matching the Topic interface
+            # in dashboard/components/ui/topic-list.tsx
+            # Topics and their exemplars are processed in parallel for speed.
+            num_topics = len(result.topics)
+
+            async def _process_topic(topic_idx: int, tr) -> dict:
+                """Process a single topic: analyze all exemplars in parallel, then synthesize."""
+                async def _analyze_exemplar(idx: int, ex) -> dict:
+                    above_fold = idx < max_summarization_exemplars
+                    item_id = ex.metadata.get("item_id")
+                    feedback_item_id = ex.metadata.get("feedback_item_id", "")
+                    canonical_row = canonical_item_by_feedback_id.get(feedback_item_id, {})
+                    if not canonical_row:
+                        raise RuntimeError(
+                            f"Missing canonical misclassification row for feedback item {feedback_item_id}"
+                        )
+                    transcript_record = transcript_cache.get(item_id) if item_id else None
+                    transcript = transcript_record.get("text") if transcript_record else ""
+
+                    detailed_cause = ""
+                    suggested_fix = ""
+                    if above_fold and transcript:
+                        predicted = ex.metadata.get("initial_answer_value", "")
+                        correct = ex.metadata.get("final_answer_value", "")
+                        explanation = ex.metadata.get("score_explanation", "")
+                        detailed_cause, suggested_fix = await asyncio.to_thread(
+                            _detailed_analysis, transcript, predicted, correct,
+                            explanation, tr.label, score_guidelines, score_yaml_code
+                        )
+
+                    if canonical_row:
+                        canonical_row["topic_id"] = tr.topic_id
+                        canonical_row["topic_label"] = tr.label
+                        if detailed_cause:
+                            canonical_row["detailed_cause"] = detailed_cause
+                        if suggested_fix:
+                            canonical_row["suggested_fix"] = suggested_fix
+                    score_explanation = ex.metadata.get("score_explanation", "")
+                    misclassification_item_context = canonical_row.get(
+                        "misclassification_item_context", {}
+                    )
+                    misclassification_classification = canonical_row.get(
+                        "misclassification_classification", {}
+                    )
+                    return {
+                        "text": ex.text,
+                        "feedback_item_id": feedback_item_id,
+                        "item_id": item_id,
+                        "initial_answer_value": ex.metadata.get("initial_answer_value"),
+                        "final_answer_value": ex.metadata.get("final_answer_value"),
+                        "timestamp": ex.timestamp,
+                        "above_fold": above_fold,
+                        "misclassification_item_context": misclassification_item_context,
+                        "misclassification_classification": misclassification_classification,
+                        **({"score_explanation": score_explanation} if score_explanation else {}),
+                        **({"detailed_cause": detailed_cause} if detailed_cause else {}),
+                        **({"suggested_fix": suggested_fix} if suggested_fix else {}),
+                    }
+
+                # Analyze all exemplars in this topic in parallel
+                exemplar_dicts = list(await asyncio.gather(
+                    *[_analyze_exemplar(idx, ex) for idx, ex in enumerate(tr.exemplars or [])]
+                ))
+                score_fix_exemplars = [
+                    ex for ex in exemplar_dicts
+                    if (
+                        (ex.get("misclassification_classification") or {}).get("primary_category")
+                        == "score_configuration_problem"
+                    )
+                ]
+
+                # Multi-turn synthesis: detailed explanation + improvement suggestion
+                detailed_explanation, improvement_suggestion = await asyncio.to_thread(
+                    _multi_turn_synthesis,
+                    exemplar_dicts,
+                    score_fix_exemplars,
+                    score_guidelines,
+                    score_yaml_code,
+                )
+
+                return {
+                    "topic_id": tr.topic_id,
+                    "label": tr.label,
+                    "keywords": tr.keywords,
+                    "exemplars": exemplar_dicts,
+                    "member_count": tr.member_count,
+                    "memory_weight": tr.memory_weight,
+                    "memory_tier": tr.memory_tier,
+                    "lifecycle_tier": tr.lifecycle_tier,
+                    "is_new": tr.is_new,
+                    "is_trending": tr.is_trending,
+                    "days_inactive": tr.days_inactive,
+                    "cause": tr.root_cause,
+                    "detailed_explanation": detailed_explanation,
+                    "improvement_suggestion": improvement_suggestion,
+                    "score_fix_candidate_count": len(score_fix_exemplars),
+                }
+
+            _update_status(f"Analyzing {num_topics} topic(s) in parallel...")
+            topics = list(await asyncio.gather(
+                *[_process_topic(i, tr) for i, tr in enumerate(result.topics)]
+            ))
+
+            # Post-loop: generate distinct topic titles informed by the detailed explanations.
+            # Must remain sequential to avoid duplicate titles (each call knows prior titles).
+            _update_status("Generating topic titles...")
+            existing_titles = []
+            for topic in topics:
+                if topic.get("detailed_explanation"):
+                    new_title = await asyncio.to_thread(
+                        _generate_title, topic["detailed_explanation"], existing_titles,
+                        score_guidelines
+                    )
+                    if new_title:
+                        topic["label"] = new_title
+                        existing_titles.append(new_title)
+                    else:
+                        existing_titles.append(topic["label"])
+                else:
+                    existing_titles.append(topic["label"])
+
+            overall_explanation = ""
+            overall_improvement_suggestion = ""
+            if len(topics) > 1:
+                _update_status("Synthesizing overall root cause summary...")
+                overall_explanation, overall_improvement_suggestion = await asyncio.to_thread(
+                    _top_level_synthesis, topics, score_guidelines, score_yaml_code
+                )
+            item_classifications_all = sorted(
+                canonical_item_classifications,
+                key=lambda item: (
+                    -_parse_ts_for_sort(item.get("timestamp", "")),
+                    str(item.get("feedback_item_id") or item.get("item_id") or ""),
+                ),
+            )
+            topic_assignment_unavailable_count = len(
+                [item for item in item_classifications_all if item.get("topic_id") is None]
+            )
+            misclassification_analysis = build_misclassification_analysis_summary(
+                topics,
+                item_classifications_all=item_classifications_all,
+                analysis_scope={
+                    "candidate_items_total": len(candidate_items),
+                    "classified_items_total": len(item_classifications_all),
+                    "texts_analyzed_total": len(texts),
+                    "topics_found": len(topics),
+                    "topic_assignment_scope": "exemplar_only",
+                    "topic_assignment_unavailable_count": topic_assignment_unavailable_count,
+                },
+                max_category_summary_items=max_category_summary_items,
+            )
+
+            return {
+                "topics": topics,
+                "overall_explanation": overall_explanation,
+                "overall_improvement_suggestion": overall_improvement_suggestion,
+                "misclassification_classification_contract": build_misclassification_classification_contract(),
+                "misclassification_analysis": misclassification_analysis,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Root-cause analysis failed: {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            raise RuntimeError(f"Root-cause analysis failed: {e}") from e
+
+    async def _run_small_set_root_cause_analysis(
+        self,
+        candidate_items,
+        score_result_map: dict,
+        original_explanations: dict,
+        max_report_exemplars: int = 20,
+        max_summarization_exemplars: int = 6,
+        max_category_summary_items: int = 20,
+        tracker=None,
+    ) -> dict:
+        """Run RCA summarization for small incorrect sets (<5 items)."""
+        from datetime import datetime, timezone as _tz
+        from plexus.rca_analysis import (
+            analyze_score_result,
+            build_misclassification_classification_contract,
+            build_misclassification_analysis_summary,
+            build_misclassification_item_context,
+            classify_misclassification_item,
+            extract_misclassification_evidence_flags,
+            explain_misclassification_item_classification,
+            resolve_final_output_classes_from_yaml_text,
+        )
+
+        def _update_status(msg: str):
+            if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
+                tracker.current_stage.status_message = msg
+
+        def _build_item_text(fi, sr: dict) -> str:
+            new_pred = (sr.get("value") or "")
+            correct_label = (sr.get("human_label") or fi.finalAnswerValue or "")
+            our_explanation = sr.get("explanation", "")
+            orig_explanation = (original_explanations or {}).get(fi.id, "")
+            reviewer_agreed = (fi.initialAnswerValue or "") == (fi.finalAnswerValue or "")
+            if reviewer_agreed:
+                text = orig_explanation or fi.editCommentValue or our_explanation
+            else:
+                text = fi.editCommentValue or orig_explanation or our_explanation
+            if not text:
+                text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+            return text
+
+        now_iso = datetime.now(_tz.utc).isoformat()
+        score_guidelines = ""
+        score_yaml_code = ""
+        resolved_final_classes = []
+        class_resolution_source = ""
+        scorecard_guidance_text = ""
+        scorecard_obj = getattr(self, "scorecard", None)
+        if isinstance(scorecard_obj, dict):
+            scorecard_guidance_text = (
+                scorecard_obj.get("guidelines")
+                or scorecard_obj.get("description")
+                or ""
+            )
+        elif scorecard_obj is not None:
+            scorecard_guidance_text = (
+                getattr(scorecard_obj, "guidelines", "")
+                or getattr(scorecard_obj, "description", "")
+                or ""
+            )
+
+        dashboard_client = getattr(self, "dashboard_client", None)
+        if dashboard_client and getattr(self, "score_id", None):
+            try:
+                score_version_id_for_context = getattr(self, "score_version_id", None)
+                if not score_version_id_for_context:
+                    _sq = """query($id: ID!) { getScore(id: $id) { championVersionId } }"""
+                    _sr = dashboard_client.execute(_sq, {"id": self.score_id})
+                    score_version_id_for_context = (_sr.get("getScore") or {}).get("championVersionId")
+                if score_version_id_for_context:
+                    _vq = """query($id: ID!) { getScoreVersion(id: $id) { configuration guidelines } }"""
+                    _vr = dashboard_client.execute(_vq, {"id": score_version_id_for_context})
+                    _vd = _vr.get("getScoreVersion") or {}
+                    score_guidelines = _vd.get("guidelines") or ""
+                    score_yaml_code = _vd.get("configuration") or ""
+                    if score_yaml_code:
+                        class_details = resolve_final_output_classes_from_yaml_text(score_yaml_code)
+                        resolved_final_classes = class_details.get("classes", [])
+                        class_resolution_source = class_details.get("source", "")
+            except Exception as exc:
+                self.logger.debug("Failed to fetch small-set score context: %s", exc)
+        exemplars = []
+        for fi in candidate_items[:max_report_exemplars]:
+            sr = score_result_map.get(fi.id, {}) if score_result_map is not None else {}
+            predicted = (sr.get("value") or fi.initialAnswerValue or "")
+            correct = (sr.get("human_label") or fi.finalAnswerValue or "")
+            score_explanation = sr.get("explanation", "")
+            ts = fi.editedAt or getattr(fi, "updatedAt", None) or getattr(fi, "createdAt", None)
+            ts_str = (
+                (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
+                if ts else now_iso
+            )
+            exemplars.append({
+                "text": _build_item_text(fi, sr),
+                "feedback_item_id": fi.id,
+                "item_id": fi.itemId,
+                "initial_answer_value": predicted,
+                "final_answer_value": correct,
+                "timestamp": ts_str,
+                "above_fold": len(exemplars) < max_summarization_exemplars,
+                "edit_comment": getattr(fi, "editCommentValue", "") or "",
+                "initial_comment": getattr(fi, "initialCommentValue", "") or "",
+                "final_comment": getattr(fi, "finalCommentValue", "") or "",
+                "label_provenance_source": "feedback_final_answer_value",
+                **({"score_explanation": score_explanation} if score_explanation else {}),
+            })
+
+        _update_status(f"Running small-set RCA on {len(exemplars)} item(s)...")
+
+        item_context_cache = {}
+        if dashboard_client:
+            from plexus.dashboard.api.models.item import Item as DashboardItem
+
+            item_ids = [ex.get("item_id") for ex in exemplars if ex.get("item_id")]
+
+            async def _fetch_item_context(item_id: str):
+                try:
+                    item = await asyncio.to_thread(
+                        DashboardItem.get_by_id, item_id, dashboard_client
+                    )
+                    if not item:
+                        return item_id, {
+                            "primary_input": "",
+                            "metadata_snapshot": "",
+                            "primary_input_modality": "unknown",
+                            "primary_input_fetch_error": True,
+                        }
+                    raw_metadata = getattr(item, "metadata", None)
+                    metadata_snapshot = ""
+                    if raw_metadata:
+                        if isinstance(raw_metadata, str):
+                            metadata_snapshot = raw_metadata
+                        else:
+                            try:
+                                metadata_snapshot = json.dumps(raw_metadata)
+                            except TypeError:
+                                metadata_snapshot = str(raw_metadata)
+                    primary_input = item.text or ""
+                    if primary_input:
+                        modality = "text"
+                    elif metadata_snapshot:
+                        modality = "structured"
+                    else:
+                        modality = "unknown"
+                    return item_id, {
+                        "primary_input": primary_input,
+                        "metadata_snapshot": metadata_snapshot,
+                        "primary_input_modality": modality,
+                        "primary_input_fetch_error": False,
+                    }
+                except Exception as exc:
+                    self.logger.debug("Item context fetch failed for %s: %s", item_id, exc)
+                    return item_id, {
+                        "primary_input": "",
+                        "metadata_snapshot": "",
+                        "primary_input_modality": "unknown",
+                        "primary_input_fetch_error": True,
+                    }
+
+            fetched = await asyncio.gather(*[_fetch_item_context(iid) for iid in item_ids])
+            item_context_cache = {iid: payload for iid, payload in fetched}
+
+        for ex in exemplars[:max_summarization_exemplars]:
+            item_context_record = item_context_cache.get(ex.get("item_id"))
+            primary_input = item_context_record.get("primary_input") if item_context_record else ""
+            if not primary_input:
+                continue
+            detailed_cause, suggested_fix = await asyncio.to_thread(
+                analyze_score_result,
+                primary_input=primary_input,
+                predicted=ex.get("initial_answer_value", ""),
+                correct=ex.get("final_answer_value", ""),
+                explanation=ex.get("score_explanation", ""),
+                topic_label="Small-set RCA Summary",
+                score_guidelines=score_guidelines,
+                score_yaml_code=score_yaml_code,
+            )
+            if detailed_cause:
+                ex["detailed_cause"] = detailed_cause
+            if suggested_fix:
+                ex["suggested_fix"] = suggested_fix
+        for ex in exemplars:
+            item_context_record = item_context_cache.get(ex.get("item_id"))
+            primary_input_text = (
+                item_context_record.get("primary_input") if item_context_record else ""
+            )
+            metadata_snapshot = (
+                item_context_record.get("metadata_snapshot") if item_context_record else ""
+            )
+            primary_input_modality = (
+                item_context_record.get("primary_input_modality") if item_context_record else "unknown"
+            )
+            primary_input_fetch_error = bool(
+                item_context_record.get("primary_input_fetch_error") if item_context_record else False
+            )
+            ex["misclassification_item_context"] = build_misclassification_item_context(
+                feedback_item_id=ex.get("feedback_item_id", ""),
+                item_id=ex.get("item_id", ""),
+                score_id=getattr(self, "score_id", "") or "",
+                scorecard_id=getattr(self, "scorecard_id", "") or "",
+                score_version_id=getattr(self, "score_version_id", "") or "",
+                predicted_value=ex.get("initial_answer_value", "") or "",
+                correct_value=ex.get("final_answer_value", "") or "",
+                score_explanation=ex.get("score_explanation", "") or "",
+                edit_comment=ex.get("edit_comment", "") or "",
+                initial_comment=ex.get("initial_comment", "") or "",
+                final_comment=ex.get("final_comment", "") or "",
+                score_guidelines_text=score_guidelines,
+                score_yaml_configuration=score_yaml_code,
+                scorecard_guidance_text=scorecard_guidance_text,
+                primary_input_text=primary_input_text,
+                primary_input_modality=primary_input_modality,
+                metadata_snapshot=metadata_snapshot,
+                label_provenance_source=(
+                    ex.get("label_provenance_source") or "feedback_final_answer_value"
+                ),
+                resolved_final_classes=resolved_final_classes,
+                class_resolution_source=class_resolution_source,
+                primary_input_fetch_error=primary_input_fetch_error,
+            )
+            misclassification_evidence_flags = await asyncio.to_thread(
+                extract_misclassification_evidence_flags,
+                item_context=ex["misclassification_item_context"],
+            )
+            classification = classify_misclassification_item(
+                ex["misclassification_item_context"],
+                misclassification_evidence_flags,
+            )
+            explainer = await asyncio.to_thread(
+                explain_misclassification_item_classification,
+                item_context=ex["misclassification_item_context"],
+                classification=classification,
+            )
+            classification["rationale_paragraph"] = explainer.get("rationale_paragraph", "")
+            classification["evidence_quote"] = explainer.get("evidence_quote", "")
+            classification["config_fixability"] = explainer.get("config_fixability", "")
+            ex["misclassification_classification"] = classification
+
+        def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:
+            import boto3 as _boto3
+            import json as _json
+
+            brt = _boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = _json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            resp = brt.invoke_model(
+                modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+        exemplar_text = "\n".join([
+            (
+                f"- Predicted '{ex.get('initial_answer_value')}' vs correct "
+                f"'{ex.get('final_answer_value')}': {ex.get('text', '')[:280]}"
+            )
+            for ex in exemplars
+        ])
+        system = (
+            "You are an expert QA analyst reviewing AI scoring failures. "
+            "Provide concrete, implementation-oriented analysis."
+        )
+        explanation_prompt = (
+            "Summarize root causes across this small set of misclassifications in 2-3 "
+            "sentences. Include concrete error direction patterns.\n\n"
+            f"{exemplar_text}"
+        )
+        score_fix_exemplars = [
+            ex for ex in exemplars
+            if (
+                (ex.get("misclassification_classification") or {}).get("primary_category")
+                == "score_configuration_problem"
+            )
+        ]
+        score_fix_text = "\n".join([
+            (
+                f"- Predicted '{ex.get('initial_answer_value')}' vs correct "
+                f"'{ex.get('final_answer_value')}': {ex.get('text', '')[:280]}"
+            )
+            for ex in score_fix_exemplars
+        ])
+
+        detailed_explanation = await asyncio.to_thread(
+            _bedrock_converse, system, explanation_prompt, 500
+        )
+        if score_fix_exemplars:
+            improvement_prompt = (
+                "Using ONLY items classified as score_configuration_problem, provide 2-3 "
+                "sentences with specific score-configuration changes that would reduce these "
+                "errors. Ignore information gaps, guideline gaps, and mechanical malfunctions.\n\n"
+                f"{score_fix_text}"
+            )
+            improvement_suggestion = await asyncio.to_thread(
+                _bedrock_converse, system, improvement_prompt, 500
+            )
+        else:
+            improvement_suggestion = (
+                "No score_configuration_problem items in this topic; "
+                "score-configuration change recommendation deferred."
+            )
+
+        topic = {
+            "topic_id": 0,
+            "label": "Small-set RCA Summary",
+            "keywords": [],
+            "exemplars": exemplars,
+            "member_count": len(exemplars),
+            "memory_weight": 1.0,
+            "memory_tier": "hot",
+            "lifecycle_tier": "new",
+            "is_new": True,
+            "is_trending": False,
+            "days_inactive": 0,
+            "cause": "Small incorrect-set analysis",
+            "detailed_explanation": detailed_explanation,
+            "improvement_suggestion": improvement_suggestion,
+            "score_fix_candidate_count": len(score_fix_exemplars),
+        }
+        item_classifications_all = []
+        for ex in exemplars:
+            classification = ex.get("misclassification_classification") or {}
+            item_classifications_all.append({
+                "feedback_item_id": ex.get("feedback_item_id", ""),
+                "item_id": ex.get("item_id", ""),
+                "timestamp": ex.get("timestamp", ""),
+                "topic_id": 0,
+                "topic_label": "Small-set RCA Summary",
+                "predicted_value": ex.get("initial_answer_value", "") or "",
+                "correct_value": ex.get("final_answer_value", "") or "",
+                "primary_category": classification.get("primary_category", ""),
+                "confidence": classification.get("confidence", ""),
+                "rationale_short": (
+                    " ".join(
+                        str(
+                            classification.get("rationale_paragraph")
+                            or classification.get("rationale", "")
+                            or ""
+                        ).strip().split()[:12]
+                    )
+                ),
+                "rationale_full": (
+                    classification.get("rationale_paragraph")
+                    or classification.get("rationale", "")
+                    or ""
+                ),
+                "rationale_paragraph": classification.get("rationale_paragraph", "") or "",
+                "evidence_quote": classification.get("evidence_quote", "") or "",
+                "config_fixability": classification.get("config_fixability", "") or "",
+                "evidence_snippets": classification.get("evidence_snippets", []),
+                "mechanical_subtype": classification.get("mechanical_subtype"),
+                "mechanical_details": classification.get("mechanical_details"),
+                "information_gap_subtype": classification.get("information_gap_subtype"),
+                "triage_evidence_flags": classification.get("evidence_flags"),
+                "detailed_cause": ex.get("detailed_cause"),
+                "suggested_fix": ex.get("suggested_fix"),
+                "misclassification_item_context": ex.get("misclassification_item_context") or {},
+                "misclassification_classification": classification,
+            })
+        misclassification_analysis = build_misclassification_analysis_summary(
+            [topic],
+            item_classifications_all=item_classifications_all,
+            analysis_scope={
+                "candidate_items_total": len(candidate_items),
+                "classified_items_total": len(item_classifications_all),
+                "texts_analyzed_total": len(exemplars),
+                "topics_found": 1,
+                "topic_assignment_scope": "exemplar_only",
+                "topic_assignment_unavailable_count": 0,
+            },
+            max_category_summary_items=max_category_summary_items,
+        )
+        return {
+            "topics": [topic],
+            "overall_explanation": detailed_explanation,
+            "overall_improvement_suggestion": improvement_suggestion,
+            "misclassification_classification_contract": build_misclassification_classification_contract(),
+            "misclassification_analysis": misclassification_analysis,
+        }
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
         # Store evaluation_id BEFORE calling super().__init__ so parent can use it
         self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
@@ -3362,10 +4836,11 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
-        
+
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
+        self.skip_local_reports = skip_local_reports
         # evaluation_id and account_id already set above
         # Don't overwrite scorecard_id here since it's already set
         self.results_queue = asyncio.Queue()
@@ -3584,10 +5059,10 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
-            # Advance to Finalizing stage after all processing is complete
+            # Advance to Analyzing stage after all processing is complete
             if tracker:
                 tracker.advance_stage()
-                self.logging.info("==== STAGE: Finalizing ====")
+                self.logging.info("==== STAGE: Analyzing ====")
 
             # Calculate metrics from results
             
@@ -3677,6 +5152,11 @@ class AccuracyEvaluation(Evaluation):
                         self.logging.info(f"Overall accuracy: {overall_accuracy}%")
                     else:
                         raise
+
+                # Skip local file generation when requested (e.g. feedback accuracy evaluations
+                # that already store all results in the API).
+                if self.skip_local_reports:
+                    return metrics
 
                 # Generate reports - determine the correct report folder
                 if self.subset_of_score_names and len(self.subset_of_score_names) == 1:

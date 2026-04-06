@@ -23,6 +23,7 @@ interface NodeMetricsGaugesProps {
 export default function NodeMetricsGauges({ node, parentNode }: NodeMetricsGaugesProps) {
   // Parse node metadata to extract evaluation_id
   let nodeMetadata: any = {}
+  let nodeMetadataParseFailed = false
   try {
     if (typeof node.metadata === 'string') {
       nodeMetadata = JSON.parse(node.metadata)
@@ -31,18 +32,13 @@ export default function NodeMetricsGauges({ node, parentNode }: NodeMetricsGauge
     }
   } catch (error) {
     console.error('Error parsing node metadata:', error)
-    return null
+    nodeMetadataParseFailed = true
   }
 
   const evaluationId = nodeMetadata.evaluation_id || nodeMetadata.evaluationId
 
-  // Don't render if no evaluation ID
-  if (!evaluationId) {
-    return null
-  }
-
   // Fetch evaluation metrics for current node
-  const { metrics: nodeMetrics, isLoading: nodeLoading, error: nodeError } = useEvaluationMetrics(evaluationId)
+  const { metrics: nodeMetrics, isLoading: nodeLoading, error: nodeError } = useEvaluationMetrics(evaluationId || null)
 
   // Parse parent metadata if parent node exists
   let parentEvaluationId: string | null = null
@@ -62,6 +58,10 @@ export default function NodeMetricsGauges({ node, parentNode }: NodeMetricsGauge
 
   // Fetch parent evaluation metrics if parent has evaluation
   const { metrics: parentMetrics, isLoading: parentLoading } = useEvaluationMetrics(parentEvaluationId)
+
+  if (nodeMetadataParseFailed || !evaluationId) {
+    return null
+  }
 
   // Show loading state
   if (nodeLoading || (parentNode && parentEvaluationId && parentLoading)) {

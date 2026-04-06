@@ -89,7 +89,6 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
                 logging.debug(f"Attempting to create CloudWatch handler:")
                 logging.debug(f"- Log Group: {log_group_name}")
                 logging.debug(f"- Stream Name: {log_stream_name}")
-                logging.debug(f"- AWS Region: {region}")
             
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
                 log_group_name=log_group_name,
@@ -155,6 +154,11 @@ def set_log_group(new_log_group_name):
     environment = os.getenv("environment")
     if environment:
         new_log_group_name = f"{new_log_group_name}/{environment}"
+
+    # Avoid expensive handler rebuild when already using this log group.
+    if new_log_group_name == current_log_group_name:
+        logging.debug(f"Log group already active, skipping reconfiguration: {new_log_group_name}")
+        return
     
     setup_logging(new_log_group_name)
     current_log_group_name = new_log_group_name

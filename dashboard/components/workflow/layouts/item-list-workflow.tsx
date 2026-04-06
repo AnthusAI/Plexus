@@ -386,7 +386,7 @@ const ItemListWorkflow = React.forwardRef<SVGGElement, ItemListWorkflowProps>(({
   const [cycleStartTime, setCycleStartTime] = useState(Date.now())
   const [isResetting, setIsResetting] = useState(false)
   const globalKeyCounterRef = useRef(0)
-  const timerRef = useRef<NodeJS.Timeout>()
+  const timerRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   // Add cleanup effect to detect and remove duplicate keys
   useEffect(() => {

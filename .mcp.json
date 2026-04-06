@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "Plexus": {
+      "command": "/Users/ryan/miniconda3/bin/python",
+      "args": [
+        "/Users/ryan/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py",
+        "--target-cwd", "/Users/ryan/Projects/Plexus",
+        "--transport", "stdio"
+      ]
+    }
+  }
+}

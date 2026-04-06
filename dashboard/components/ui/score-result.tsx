@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { X, Microscope, Scale, MessageSquareMore, MessageCircleMore, UnfoldVertical, Text, View, ChevronDown, ChevronUp, Ellipsis } from 'lucide-react'
+import { X, Microscope, Scale, MessageSquareMore, MessageCircleMore, UnfoldVertical, Text, View, ChevronDown, ChevronUp, Ellipsis, MessageSquareCode, Copy } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CardButton } from '@/components/CardButton'
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { Button } from '@/components/ui/button'
 import { ScoreResultTrace } from './score-result-trace'
+import { Timestamp } from './timestamp'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -22,6 +23,7 @@ export interface ScoreResultData {
     correct: boolean
     human_explanation?: string | null
     text?: string | null
+    [key: string]: any
   }
   trace?: any | null
   itemId: string | null
@@ -32,6 +34,12 @@ export interface ScoreResultData {
   }> | null
   feedbackItem?: {
     editCommentValue: string | null
+    initialAnswerValue?: string | null
+    initialCommentValue?: string | null
+    finalAnswerValue?: string | null
+    editorName?: string | null
+    editedAt?: string | null
+    createdAt?: string | null
   } | null
 }
 
@@ -42,19 +50,43 @@ export interface ScoreResultComponentProps {
   onSelect?: () => void
   onClose?: () => void
   navigationControls?: React.ReactNode
+  rcaDetailedCause?: string
+  rcaSuggestedFix?: string
+  misclassificationCategory?: string
+  misclassificationConfidence?: string
+  misclassificationRationale?: string
+  misclassificationEvidenceQuote?: string
+  misclassificationConfigFixability?: string
+  misclassificationEvidence?: Array<{
+    source?: string
+    quote_or_fact?: string
+  }>
+  misclassificationMechanicalSubtype?: string
+  misclassificationMechanicalDetails?: string
 }
 
 
 
-export function ScoreResultComponent({ 
+export function ScoreResultComponent({
   result,
   variant = 'list',
   isFocused = false,
   onSelect,
   onClose,
-  navigationControls
+  navigationControls,
+  rcaDetailedCause,
+  rcaSuggestedFix,
+  misclassificationCategory,
+  misclassificationConfidence,
+  misclassificationRationale,
+  misclassificationEvidenceQuote,
+  misclassificationConfigFixability,
+  misclassificationEvidence,
+  misclassificationMechanicalSubtype,
+  misclassificationMechanicalDetails,
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   
 
 
@@ -106,8 +138,24 @@ export function ScoreResultComponent({
                   isFocused={isFocused}
                 />
                 {result.explanation && (
-                  <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {result.explanation}
+                  <div className="text-sm text-muted-foreground mt-1 line-clamp-2 prose prose-sm max-w-none prose-p:text-muted-foreground prose-strong:text-foreground prose-em:text-muted-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <span>{children}</span>,
+                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        ul: ({ children }) => <span>{children}</span>,
+                        ol: ({ children }) => <span>{children}</span>,
+                        li: ({ children }) => <span>{children} </span>,
+                        h1: ({ children }) => <span className="font-semibold">{children}</span>,
+                        h2: ({ children }) => <span className="font-semibold">{children}</span>,
+                        h3: ({ children }) => <span className="font-semibold">{children}</span>,
+                        code: ({ children }) => <code className="bg-muted px-0.5 rounded text-xs font-mono">{children}</code>,
+                      }}
+                    >
+                      {result.explanation}
+                    </ReactMarkdown>
                   </div>
                 )}
               </div>
@@ -135,6 +183,15 @@ export function ScoreResultComponent({
         </div>
         <div className="flex items-center gap-2">
           {navigationControls}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => setShowCode(v => !v)}
+            title="Show code"
+          >
+            <MessageSquareCode className="w-3.5 h-3.5 text-muted-foreground" />
+          </Button>
           {onClose && <CardButton icon={X} onClick={onClose} />}
         </div>
       </div>
@@ -164,20 +221,6 @@ export function ScoreResultComponent({
                 isDetail={true}
               />
             </div>
-
-            {result.feedbackItem?.editCommentValue && (
-              <div>
-                <div className="flex items-center mb-1">
-                  <MessageCircleMore className="w-4 h-4 mr-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Feedback edit comment</p>
-                </div>
-                <div className="bg-background rounded-md p-3">
-                  <p className="text-sm whitespace-pre-wrap text-foreground">
-                    {result.feedbackItem.editCommentValue}
-                  </p>
-                </div>
-              </div>
-            )}
 
             {result.explanation && (
               <div>
@@ -211,6 +254,85 @@ export function ScoreResultComponent({
               </div>
             )}
 
+            {result.feedbackItem?.initialAnswerValue && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center">
+                    <Scale className="w-4 h-4 mr-1 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Original value</p>
+                  </div>
+                  {result.feedbackItem.createdAt && (
+                    <Timestamp time={result.feedbackItem.createdAt} variant="relative" className="text-xs text-muted-foreground" />
+                  )}
+                </div>
+                <Badge variant="secondary" className="text-sm px-2 py-0.5 rounded-md text-focus">
+                  {result.feedbackItem.initialAnswerValue}
+                </Badge>
+              </div>
+            )}
+
+            {result.feedbackItem?.initialCommentValue && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Original explanation</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                        pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                        h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                      }}
+                    >
+                      {result.feedbackItem.initialCommentValue}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {result.feedbackItem?.finalAnswerValue && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center">
+                    <Scale className="w-4 h-4 mr-1 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Feedback edit value</p>
+                  </div>
+                  {result.feedbackItem.editedAt && (
+                    <Timestamp time={result.feedbackItem.editedAt} variant="relative" className="text-xs text-muted-foreground" />
+                  )}
+                </div>
+                <Badge variant="secondary" className="text-sm px-2 py-0.5 rounded-md text-focus">
+                  {result.feedbackItem.finalAnswerValue}
+                </Badge>
+              </div>
+            )}
+
+            {result.feedbackItem?.editCommentValue && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageCircleMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Feedback edit comment</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <p className="text-sm whitespace-pre-wrap text-foreground">
+                    {result.feedbackItem.editCommentValue}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {!result.metadata.correct && result.metadata.human_explanation && (
               <div>
                 <div className="flex items-center mb-1">
@@ -237,6 +359,112 @@ export function ScoreResultComponent({
                   >
                     {result.metadata.human_explanation}
                   </ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {rcaDetailedCause && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Score-Configuration RCA</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      }}
+                    >
+                      {rcaDetailedCause}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {rcaSuggestedFix && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Suggested fix</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      }}
+                    >
+                      {rcaSuggestedFix}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(misclassificationCategory || misclassificationRationale || (misclassificationEvidence && misclassificationEvidence.length > 0) || misclassificationMechanicalSubtype || misclassificationMechanicalDetails) && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Misclassification triage</p>
+                </div>
+                <div className="bg-background rounded-md p-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className={`border-0 ${getCategoryBadgeClass(misclassificationCategory)}`}>
+                      {getCategoryLabel(misclassificationCategory)}
+                    </Badge>
+                    <Badge variant="secondary" className={`border-0 ${getConfidenceBadgeClass(misclassificationConfidence)}`}>
+                      Triage confidence: {misclassificationConfidence ?? 'unknown'}
+                    </Badge>
+                  </div>
+                  {misclassificationRationale && (
+                    <p className="text-sm text-foreground">{misclassificationRationale}</p>
+                  )}
+                  {misclassificationEvidenceQuote && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Key evidence:</span>{' '}
+                      {misclassificationEvidenceQuote}
+                    </p>
+                  )}
+                  {misclassificationConfigFixability && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Config fixability:</span>{' '}
+                      {misclassificationConfigFixability.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {misclassificationEvidence && misclassificationEvidence.length > 0 && (
+                    <ul className="space-y-1">
+                      {misclassificationEvidence.map((snippet, index) => (
+                        <li key={`misclassification-evidence-${index}`} className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{snippet.source ?? 'source'}:</span>{' '}
+                          {snippet.quote_or_fact ?? 'No evidence text provided.'}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {misclassificationMechanicalSubtype && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Mechanical subtype:</span>{' '}
+                      {misclassificationMechanicalSubtype.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {misclassificationMechanicalDetails && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Mechanical details:</span>{' '}
+                      {misclassificationMechanicalDetails}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -324,9 +552,71 @@ export function ScoreResultComponent({
                 <ScoreResultTrace trace={result.trace} />
               </div>
             )}
+
+            {/* Code representation */}
+            {showCode && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">JSON</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(JSON.stringify(result, null, 2))
+                      } catch {}
+                    }}
+                  >
+                    <Copy className="w-3 h-3 mr-1" />
+                    <span className="text-xs">Copy</span>
+                  </Button>
+                </div>
+                <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </div>
   )
 } 
+  const getCategoryLabel = (category?: string) => {
+    switch (category) {
+      case 'score_configuration_problem':
+        return 'Score configuration'
+      case 'information_gap':
+        return 'Information gap'
+      case 'guideline_gap_requires_sme':
+        return 'SME guideline gap'
+      case 'mechanical_malfunction':
+        return 'Mechanical malfunction'
+      default:
+        return category ? category.replace(/_/g, ' ') : 'Unclassified'
+    }
+  }
+
+  const getCategoryBadgeClass = (category?: string) => {
+    switch (category) {
+      case 'score_configuration_problem':
+        return 'bg-chart-1/20 text-chart-1'
+      case 'information_gap':
+        return 'bg-chart-2/20 text-chart-2'
+      case 'guideline_gap_requires_sme':
+        return 'bg-chart-3/20 text-chart-3'
+      case 'mechanical_malfunction':
+        return 'bg-chart-4/20 text-chart-4'
+      default:
+        return 'bg-muted text-muted-foreground'
+    }
+  }
+
+  const getConfidenceBadgeClass = (confidence?: string) => {
+    const value = (confidence ?? '').toLowerCase()
+    if (value === 'high') return 'bg-true/20 text-true'
+    if (value === 'medium') return 'bg-chart-3/20 text-chart-3'
+    if (value === 'low') return 'bg-false/20 text-false'
+    return 'bg-muted text-muted-foreground'
+  }

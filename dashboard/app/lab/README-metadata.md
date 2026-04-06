@@ -9,7 +9,7 @@ By default, all pages in the Plexus dashboard use the global metadata defined in
 ```typescript
 export const metadata: Metadata = {
   title: "Plexus - No-Code AI Agents at Scale",
-  description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+  description: "Run AI agents over your data with no code. Plexus is a powerful platform for building agent-based AI workflows that analyze streams of content and take action.",
   // ...
 }
 ```
@@ -66,6 +66,7 @@ The following lab routes have customized metadata:
 - `/lab/scorecards/` - "Scorecards" - "The configurations and past versions for all scorecards and scores."
 - `/lab/tasks/` - "Tasks" - "Processing tasks and job status."
 - `/lab/datasets/` - "Datasets" - "Manage and explore your datasets for AI evaluation."
+- `/lab/data/sources/` - "Sources" - "Manage and explore data sources and source-scoped datasets."
 
 ### Evaluation Routes
 - `/lab/evaluations/[id]` - "Evaluation Results" - "Metrics and score results for one score evaluation."

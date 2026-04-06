@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Plexus is an AI Agent Operating System** designed for analyzing content streams, orchestrating complex workflows, and taking action at scale.
+**Plexus is an AI agent incubator and MLOps platform**, designed to help teams evaluate, deploy, and continuously improve AI agents. It acts as a testing ground where you can use human feedback to refine how your AI behaves, ensuring your agents get smarter and more reliable over time.
 
 It transforms the chaotic process of managing hundreds of AI prompts and classifiers into a structured, engineering-grade discipline. By combining a robust backend, a real-time dashboard, and deep integration with AI agents, Plexus enables teams to build, deploy, and improve AI solutions without managing low-level infrastructure.
 
@@ -94,7 +94,7 @@ Plexus is built on a modern, scalable stack:
 
 2. **Install Python dependencies:**
    ```bash
-   pip install -e .
+   poetry install --with dev
    ```
 
 3. **Set up configuration:**
@@ -158,6 +158,13 @@ Plexus is designed to be operated *by* AI agents as much as by humans. The `/MCP
 - **Python**: We use `pytest` for testing.
   ```bash
   pytest
+  ```
+- **Shared staging instances**: keep runtime and developer environments separate.
+  The deployed services use `py311`; do not run developer installs in that env.
+  Create/use a dedicated dev env:
+  ```bash
+  ./scripts/setup_py311_dev_env.sh
+  /home/ec2-user/miniconda3/bin/conda run -n py311-dev pytest
   ```
 - **TypeScript**: We use `Jest` for frontend testing.
   ```bash

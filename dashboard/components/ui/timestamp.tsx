@@ -216,22 +216,16 @@ export function Timestamp({
 }: TimestampProps) {
   const [displayContent, setDisplayContent] = useState<React.ReactNode>('')
   const [showAbsolute, setShowAbsolute] = useState(false)
-  const timeDate = typeof time === 'string' ? new Date(time) : time
-
-  // Skeleton mode rendering
-  if (skeletonMode) {
-    return (
-      <div className={cn(
-        "flex items-start gap-1 text-sm text-muted-foreground min-w-0", 
-        className
-      )}>
-        {showIcon && <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />}
-        <div className="h-3 w-16 bg-muted rounded animate-pulse" />
-      </div>
-    )
-  }
+  const timeDate = React.useMemo(
+    () => (typeof time === 'string' ? new Date(time) : time),
+    [time]
+  )
 
   useEffect(() => {
+    if (skeletonMode) {
+      return
+    }
+
     const updateTime = () => {
       if (variant === 'elapsed') {
         const endTime = completionTime 
@@ -260,7 +254,20 @@ export function Timestamp({
       const interval = setInterval(updateTime, 1000)
       return () => clearInterval(interval)
     }
-  }, [time, completionTime, variant, showAbsolute])
+  }, [time, completionTime, variant, showAbsolute, timeDate, skeletonMode])
+
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    return (
+      <div className={cn(
+        "flex items-start gap-1 text-sm text-muted-foreground min-w-0", 
+        className
+      )}>
+        {showIcon && <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />}
+        <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+      </div>
+    )
+  }
 
   const handleClick = () => {
     if (variant === 'relative') {

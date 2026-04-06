@@ -10,9 +10,13 @@ export type { ReportBlockProps, BlockComponent } from './ReportBlock';
 export { default as ScoreInfo } from './ScoreInfo';
 export { default as TextBlock } from './TextBlock';
 export { default as FeedbackAnalysis } from './FeedbackAnalysis';
+export { default as ExplanationAnalysis } from './ExplanationAnalysis';
 export { default as ScorecardReport } from './ScorecardReport';
+export { default as ActionItems } from './ActionItems';
 export { BlockRenderer } from './BlockRegistry';
 export type { BlockRendererProps } from './BlockRegistry';
 export { getBlock, hasBlock, getRegisteredBlockTypes } from './BlockRegistry';
+
+export { default as FeedbackContradictions } from './FeedbackContradictions';
 
 // DO NOT REGISTER BLOCKS HERE - See registrySetup.ts 

@@ -218,7 +218,7 @@ function getProgressPercentage(job: BatchJobWithCount): number {
 
 type BatchStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING'
 
-function getStatusIcon(status: string): JSX.Element {
+function getStatusIcon(status: string): React.JSX.Element {
   const normalizedStatus = (status?.toUpperCase() || 'PENDING') as BatchStatus;
   switch (normalizedStatus) {
     case 'RUNNING':
@@ -471,8 +471,8 @@ export default function BatchesDashboard({
   })
 
   // Define handleDragMove and handleDragEnd with useCallback but without dependencies first
-  const handleDragMoveRef = useRef<(e: MouseEvent) => void>()
-  const handleDragEndRef = useRef<() => void>()
+  const handleDragMoveRef = useRef<((e: MouseEvent) => void) | undefined>(undefined)
+  const handleDragEndRef = useRef<(() => void) | undefined>(undefined)
 
   // Set up the actual functions
   useEffect(() => {

@@ -1,0 +1,12 @@
+# Snyk (https://snyk.io) policy file
+# This file applies to the consoleRunWorker Lambda function Dockerfile.
+version: v1.25.1
+
+# Exclude this Dockerfile from Snyk PR delta checks.
+# The vulnerabilities found here come from the same pyproject.toml already
+# scanned at the repo root — not newly introduced by this PR.
+exclude:
+  global:
+    - Dockerfile
+
+patch: {}

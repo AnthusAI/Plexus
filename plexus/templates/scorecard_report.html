@@ -299,9 +299,14 @@
                             <div class="label {{ 'correct' if result.metadata['correct'] else 'incorrect' }}">{{ 'YES' if result.metadata['correct'] else 'NO' }}</div>
                             {% endif %}
                         </div>
-                        <div><b>Explanation:</b> 
+                        <div><b>Explanation:</b>
                             <div>{{ result.explanation|replace("\n", "<br/>") }}</div>
                         </div>
+                        {% if result.metadata and result.metadata.get('edit_comment') %}
+                        <div><b>Edit Comment:</b>
+                            <div>{{ result.metadata['edit_comment']|replace("\n", "<br/>") }}</div>
+                        </div>
+                        {% endif %}
                         {% if result.quote|trim %}
                         <div><b>Quote:</b> <i>"{{ result.quote }}"</i></div>
                         {% endif %}
@@ -356,6 +361,17 @@
                         <div class="collapsible_content">
                             <br/>
                             {{ result.metadata['text']|replace("\n", "<br/>")|default("No text available", true) }}
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <b>Code:</b>
+                    <div class="collapsible_section">
+                        <label for="collapsible">Click to expand</label>
+                        <input type="checkbox" class="collapsible_toggle">
+                        <div class="collapsible_content">
+                            <br/>
+                            <pre class="inconsolata" style="white-space: pre-wrap; font-size: 0.85em; overflow-x: auto;">{{ {'value': result.value, 'explanation': result.explanation, 'metadata': result.metadata} | tojson(indent=2) }}</pre>
                         </div>
                     </div>
                 </div>

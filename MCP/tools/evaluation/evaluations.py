@@ -116,7 +116,15 @@ def register_evaluation_tools(mcp: FastMCP):
                     "started_at": evaluation_info['started_at'],
                     "created_at": evaluation_info['created_at'],
                     "updated_at": evaluation_info['updated_at'],
+                    "baseline_evaluation_id": evaluation_info.get('baseline_evaluation_id'),
                 }
+
+                root_cause = evaluation_info.get('root_cause')
+                if root_cause:
+                    payload['root_cause'] = root_cause
+                misclassification_analysis = evaluation_info.get('misclassification_analysis')
+                if misclassification_analysis:
+                    payload['misclassification_analysis'] = misclassification_analysis
 
                 # Optionally include quadrant examples inline for consistency with feedback tools
                 if include_examples:
@@ -297,40 +305,67 @@ def register_evaluation_tools(mcp: FastMCP):
         evaluation_type: str = "accuracy",
         n_samples: int = 10,
         days: int = 7,
+        max_feedback_samples: Optional[int] = None,
+        sample_seed: Optional[int] = None,
+        max_category_summary_items: int = 20,
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
         fresh: bool = False,
         reload: bool = False,
         allow_no_labels: bool = False,
+        concurrency: int = 5,
+        baseline: Optional[str] = None,
+        wait: bool = True,
+        dataset_id: Optional[str] = None,
+        use_score_associated_dataset: bool = False,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
-        
+
         Parameters:
         - scorecard_name: Name of the scorecard to evaluate (required)
-        - score_name: Name of specific score to evaluate (REQUIRED for feedback evaluations, optional for accuracy)
+        - score_name: Name of specific score to evaluate (optional for feedback; if omitted, runs all scores in the scorecard)
         - evaluation_type: Type of evaluation - "accuracy" (default) or "feedback"
         - n_samples: Number of samples for accuracy evaluation (default: 10)
-        - days: Number of days to look back for feedback evaluation (default: 7)
+        - days: Number of days to look back for feedback evaluation (default: 7). Use 30-60 days for more data.
+        - max_feedback_samples: Optional cap for feedback evaluations. When provided, a random
+                subset up to this size is evaluated.
+        - sample_seed: Optional random seed for reproducible feedback sampling.
+        - max_category_summary_items: Maximum misclassification items per category used in
+          aggregate RCA triage summaries (default: 20).
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
-        - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if provided, runs accuracy eval with FeedbackItems dataset
+        - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if
+                   provided, overrides the auto-fetched champion version.
         - latest: Use latest score version for accuracy evaluation (default: False)
         - fresh: Pull fresh, non-cached data from the data lake (default: False)
         - reload: Reload existing dataset by refreshing values for current records only (default: False)
         - allow_no_labels: Allow evaluation without ground truth labels (default: False)
                           When True, creates score results and predicted class distribution
                           but skips accuracy metrics
-        
+        - concurrency: Max parallel evaluations when running bulk (all-scores) feedback mode (default: 5)
+        - baseline: Evaluation ID to use as baseline for comparison (optional). When provided,
+                    the new evaluation record stores this ID so the dashboard can display
+                    before-and-after gauges showing the change from the baseline metrics.
+        - wait: For feedback evaluations — if True (default), block until evaluation + RCA complete
+                and return full results. If False, dispatch in background and return immediately
+                with the evaluation ID only.
+        - dataset_id: Optional dataset ID to use for accuracy evaluation. When provided, the
+                      evaluation uses this specific dataset instead of random sampling.
+        - use_score_associated_dataset: If True, use the latest associated dataset for the score
+                                        instead of random sampling (accuracy evaluation only).
+
         Returns:
-        - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL
-        
-        NOTE: Feedback evaluations MUST specify a score_name because evaluation records
-        are associated with a single score, not an entire scorecard.
-        
-        FEEDBACK EVALUATION MODES:
-        - Without version: Analyzes feedback edits to measure agreement (fast, no predictions)
-        - With version: Runs predictions using specified version against feedback as ground truth (slower, tests version)
+        - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL.
+          For bulk feedback mode (no score_name), returns aggregate results for all scores.
+
+        FEEDBACK EVALUATION BEHAVIOR:
+        - Runs Mode 2 (accuracy evaluation using feedback items as ground truth) by default.
+        - Automatically fetches the score's current champion version ID to use as the predictor.
+        - The champion version's code is run against all feedback items in the time window,
+          and predictions are compared to human-corrected labels to compute accuracy metrics.
+        - If score_name is omitted, runs for ALL scores in the scorecard concurrently.
+        - Supply version= explicitly to override the champion version (e.g. to test a specific version).
         """
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
@@ -338,16 +373,22 @@ def register_evaluation_tools(mcp: FastMCP):
         # Validate evaluation type
         if evaluation_type not in ["accuracy", "feedback"]:
             return f"Error: evaluation_type must be 'accuracy' or 'feedback', got '{evaluation_type}'"
-        
-        # Validate that feedback evaluations have a score_name
-        if evaluation_type == "feedback" and not score_name:
-            return "Error: score_name is required for feedback evaluations. Feedback evaluations must be run on a single score."
 
         # Validate mutually exclusive version options (same as CLI)
         if version and latest:
             return "Error: Cannot use both version and latest options. Choose one."
 
-        logger.info(f"MCP Evaluation - Type: {evaluation_type}, Scorecard: {scorecard_name}, Score: {score_name}, Days: {days}, YAML: {yaml}, Samples: {n_samples}")
+        if max_feedback_samples is not None and max_feedback_samples <= 0:
+            return "Error: max_feedback_samples must be a positive integer"
+        if max_category_summary_items <= 0:
+            return "Error: max_category_summary_items must be a positive integer"
+
+        logger.info(
+            "MCP Evaluation - Type: %s, Scorecard: %s, Score: %s, Days: %s, "
+            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s, MaxCategorySummaryItems: %s",
+            evaluation_type, scorecard_name, score_name, days, yaml, n_samples,
+            max_feedback_samples, sample_seed, max_category_summary_items
+        )
 
         try:
             import json
@@ -358,23 +399,328 @@ def register_evaluation_tools(mcp: FastMCP):
             from plexus.Evaluation import Evaluation
 
             if evaluation_type == "feedback":
-                # Build CLI arguments for feedback evaluation
-                args = [
-                    '--scorecard', scorecard_name,
-                    '--days', str(days)
-                ]
+                import subprocess
+                import shutil
+                import time as _time
+
+                plexus_bin = shutil.which("plexus") or "/home/ryan/miniconda3/envs/py311/bin/plexus"
+
+                # Helper: fetch all scores for the scorecard with their champion version IDs
+                async def _fetch_scorecard_scores() -> List[Dict[str, Any]]:
+                    from plexus.cli.shared.client_utils import create_client
+                    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+                    _client = create_client()
+                    sc_id = resolve_scorecard_identifier(_client, scorecard_name)
+                    if not sc_id:
+                        return []
+                    _query = f"""
+                    query GetScorecardForFeedback {{
+                        getScorecard(id: "{sc_id}") {{
+                            sections {{
+                                items {{
+                                    scores {{
+                                        items {{
+                                            id
+                                            name
+                                            key
+                                            externalId
+                                            championVersionId
+                                            isDisabled
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                    """
+                    _result = _client.execute(_query)
+                    sc_data = (_result.get('getScorecard') or {})
+                    scores = []
+                    for _section in sc_data.get('sections', {}).get('items', []):
+                        for _score in _section.get('scores', {}).get('items', []):
+                            if _score.get('championVersionId'):
+                                scores.append(_score)
+                    return scores
+
+                async def _run_feedback_sync(
+                    sc: str,
+                    sco: str,
+                    d: int,
+                    ver: Optional[str],
+                    bl: Optional[str] = None,
+                    max_fb_samples: Optional[int] = None,
+                    seed: Optional[int] = None,
+                    max_category_items: int = 20,
+                ) -> subprocess.CompletedProcess:
+                    """Run plexus evaluate feedback synchronously in a thread, blocking until complete."""
+                    cmd = [plexus_bin, "evaluate", "feedback",
+                           "--scorecard", sc, "--score", sco, "--days", str(d)]
+                    if ver:
+                        cmd += ["--version", ver]
+                    if bl:
+                        cmd += ["--baseline", bl]
+                    if max_fb_samples is not None:
+                        cmd += ["--max-samples", str(max_fb_samples)]
+                    if seed is not None:
+                        cmd += ["--sample-seed", str(seed)]
+                    cmd += ["--max-category-summary-items", str(max_category_items)]
+                    return await asyncio.to_thread(
+                        subprocess.run,
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+
+                async def _wait_for_completed_evaluation(spawn_time: float, timeout: float = 900.0) -> Optional[Dict[str, Any]]:
+                    """Poll the API until a new evaluation created after spawn_time reaches COMPLETED status."""
+                    import datetime as _dt
+                    deadline = _time.monotonic() + timeout
+                    evaluation_id = None
+                    while _time.monotonic() < deadline:
+                        await asyncio.sleep(5)
+                        try:
+                            eval_info = Evaluation.get_latest_evaluation(evaluation_type="feedback")
+                            if not eval_info:
+                                continue
+                            # Only consider evaluations created after our spawn time
+                            created_at_str = eval_info.get("created_at") or eval_info.get("createdAt") or ""
+                            if created_at_str:
+                                try:
+                                    created_ts = _dt.datetime.fromisoformat(
+                                        created_at_str.replace("Z", "+00:00")
+                                    ).timestamp()
+                                    if created_ts < spawn_time - 5:
+                                        continue
+                                except Exception:
+                                    pass
+                            eid = eval_info.get("id")
+                            if not eid:
+                                continue
+                            evaluation_id = eid
+                            status = eval_info.get("status", "")
+                            if status == "COMPLETED":
+                                return eval_info
+                            # Keep waiting if still running
+                        except Exception as poll_err:
+                            logger.debug("Error polling for evaluation: %s", poll_err)
+                    # Timed out — return whatever we have
+                    if evaluation_id:
+                        try:
+                            return Evaluation.get_evaluation_info(evaluation_id)
+                        except Exception:
+                            pass
+                    return None
+
+                def _spawn_feedback(
+                    sc: str,
+                    sco: str,
+                    d: int,
+                    ver: Optional[str],
+                    bl: Optional[str] = None,
+                    max_fb_samples: Optional[int] = None,
+                    seed: Optional[int] = None,
+                    max_category_items: int = 20,
+                ) -> None:
+                    """Fire-and-forget: spawn plexus evaluate feedback as a detached background process."""
+                    cmd = [plexus_bin, "evaluate", "feedback",
+                           "--scorecard", sc, "--score", sco, "--days", str(d)]
+                    if ver:
+                        cmd += ["--version", ver]
+                    if bl:
+                        cmd += ["--baseline", bl]
+                    if max_fb_samples is not None:
+                        cmd += ["--max-samples", str(max_fb_samples)]
+                    if seed is not None:
+                        cmd += ["--sample-seed", str(seed)]
+                    cmd += ["--max-category-summary-items", str(max_category_items)]
+                    subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
 
                 if score_name:
-                    args.extend(['--score', score_name])
-                
-                # Add version parameter if provided (enables accuracy eval with FeedbackItems dataset)
-                if version:
-                    args.extend(['--version', version])
+                    # Single score: resolve champion version first.
+                    resolved_version = version
+                    if not resolved_version:
+                        sc_scores = await _fetch_scorecard_scores()
+                        for sc_score in sc_scores:
+                            if (sc_score.get('name', '').lower() == score_name.lower() or
+                                    sc_score.get('key') == score_name or
+                                    sc_score.get('externalId') == score_name or
+                                    sc_score.get('id') == score_name):
+                                resolved_version = sc_score.get('championVersionId')
+                                break
+                        if resolved_version:
+                            logger.info(f"Auto-fetched champion version {resolved_version} for '{score_name}'")
+                        else:
+                            logger.warning(f"No champion version for '{score_name}', proceeding without --version")
 
-                # Run the CLI command in a thread pool to avoid event loop conflicts
-                def run_cli_command():
-                    runner = CliRunner()
-                    return runner.invoke(feedback, args, catch_exceptions=False, standalone_mode=False)
+                    if not wait:
+                        # Background mode: fire-and-forget, return as soon as evaluation record appears.
+                        logger.info(f"Spawning feedback evaluation for '{score_name}' (background)")
+                        spawn_time = _time.time()
+                        _spawn_feedback(
+                            scorecard_name,
+                            score_name,
+                            days,
+                            resolved_version,
+                            baseline,
+                            max_feedback_samples,
+                            sample_seed,
+                            max_category_summary_items,
+                        )
+                        await asyncio.sleep(3)
+                        # Quick poll to get the evaluation ID
+                        import datetime as _dt
+                        deadline = _time.monotonic() + 25
+                        evaluation_id = None
+                        while _time.monotonic() < deadline:
+                            await asyncio.sleep(2)
+                            try:
+                                ei = Evaluation.get_latest_evaluation(evaluation_type="feedback")
+                                if ei:
+                                    ca = (ei.get("created_at") or ei.get("createdAt") or "").replace("Z", "+00:00")
+                                    if ca:
+                                        try:
+                                            if _dt.datetime.fromisoformat(ca).timestamp() >= spawn_time - 5:
+                                                evaluation_id = ei.get("id")
+                                                break
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                pass
+                        if evaluation_id:
+                            return json.dumps({
+                                "status": "dispatched",
+                                "evaluation_id": evaluation_id,
+                                "scorecard": scorecard_name,
+                                "score": score_name,
+                                "days": days,
+                                "champion_version_id": resolved_version,
+                                "max_feedback_samples": max_feedback_samples,
+                                "sample_seed": sample_seed,
+                                "max_category_summary_items": max_category_summary_items,
+                                "message": "Evaluation running in background. Use plexus_evaluation_info to check status.",
+                                "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
+                            })
+                        else:
+                            return json.dumps({
+                                "status": "dispatched",
+                                "evaluation_id": None,
+                                "message": "Evaluation dispatched. Use plexus_evaluation_info(use_latest=True) in ~30s.",
+                            })
+
+                    # Synchronous mode (default): run CLI in thread, poll until COMPLETED + RCA done.
+                    logger.info(f"Running feedback evaluation for '{score_name}' (synchronous, waiting for completion + RCA)...")
+                    spawn_time = _time.time()
+
+                    run_task = asyncio.create_task(
+                        _run_feedback_sync(
+                            scorecard_name,
+                            score_name,
+                            days,
+                            resolved_version,
+                            baseline,
+                            max_feedback_samples,
+                            sample_seed,
+                            max_category_summary_items,
+                        )
+                    )
+                    eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=900.0)
+                    await run_task  # ensure subprocess is fully done
+
+                    if eval_info:
+                        evaluation_id = eval_info.get("id")
+                        if evaluation_id:
+                            try:
+                                # Re-fetch after CLI exits so payload includes final RCA/status.
+                                eval_info = Evaluation.get_evaluation_info(evaluation_id)
+                            except Exception as refresh_err:
+                                logger.debug("Could not refresh completed evaluation %s: %s", evaluation_id, refresh_err)
+                        logger.info(f"Evaluation completed: {evaluation_id}")
+
+                        payload: Dict[str, Any] = {
+                            "id": eval_info['id'],
+                            "type": eval_info.get('type', 'feedback'),
+                            "status": eval_info.get('status', 'COMPLETED'),
+                            "scorecard": eval_info.get('scorecard_name') or scorecard_name,
+                            "score": eval_info.get('score_name') or score_name,
+                            "score_version_id": eval_info.get('score_version_id'),
+                            "max_feedback_samples": max_feedback_samples,
+                            "sample_seed": sample_seed,
+                            "max_category_summary_items": max_category_summary_items,
+                            "total_items": eval_info.get('total_items'),
+                            "processed_items": eval_info.get('processed_items'),
+                            "metrics": eval_info.get('metrics'),
+                            "accuracy": eval_info.get('accuracy'),
+                            "confusionMatrix": eval_info.get('confusion_matrix'),
+                            "predictedClassDistribution": eval_info.get('predicted_class_distribution'),
+                            "datasetClassDistribution": eval_info.get('dataset_class_distribution'),
+                            "baselineEvaluationId": eval_info.get('baseline_evaluation_id'),
+                            "cost": eval_info.get('cost'),
+                            "started_at": eval_info.get('started_at'),
+                            "created_at": eval_info.get('created_at'),
+                            "updated_at": eval_info.get('updated_at'),
+                            "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
+                        }
+                        root_cause = eval_info.get('root_cause')
+                        if root_cause:
+                            payload['root_cause'] = root_cause
+                        misclassification_analysis = eval_info.get('misclassification_analysis')
+                        if misclassification_analysis:
+                            payload['misclassification_analysis'] = misclassification_analysis
+                        return json.dumps(payload)
+                    else:
+                        return json.dumps({
+                            "status": "timeout",
+                            "scorecard": scorecard_name,
+                            "score": score_name,
+                            "message": "Evaluation timed out waiting for completion.",
+                        })
+
+                else:
+                    # Bulk mode: always fire-and-forget (multiple scores, can't wait on all).
+                    logger.info(f"Bulk feedback evaluation (background) for '{scorecard_name}'")
+                    sc_scores = await _fetch_scorecard_scores()
+                    if not sc_scores:
+                        return json.dumps({"error": f"No scores with champion versions found in scorecard '{scorecard_name}'"})
+
+                    dispatched = []
+                    for sc_score in sc_scores:
+                        sn = sc_score['name']
+                        cv = sc_score['championVersionId']
+                        try:
+                            _spawn_feedback(
+                                scorecard_name,
+                                sn,
+                                days,
+                                cv,
+                                None,
+                                max_feedback_samples,
+                                sample_seed,
+                                max_category_summary_items,
+                            )
+                            dispatched.append({"score_name": sn, "status": "dispatched", "champion_version_id": cv})
+                            logger.info(f"Dispatched feedback evaluation for '{sn}'")
+                        except Exception as exc:
+                            dispatched.append({"score_name": sn, "status": "error", "error": str(exc)})
+
+                    return json.dumps({
+                        "mode": "bulk_feedback_evaluation",
+                        "status": "dispatched",
+                        "scorecard": scorecard_name,
+                        "days": days,
+                        "max_feedback_samples": max_feedback_samples,
+                        "sample_seed": sample_seed,
+                        "max_category_summary_items": max_category_summary_items,
+                        "total_scores": len(sc_scores),
+                        "dispatched": len([d for d in dispatched if d["status"] == "dispatched"]),
+                        "scores": dispatched,
+                        "message": "All evaluations are running in the background. Use plexus_evaluation_info to check status of individual evaluations.",
+                        "dashboard_url": "https://lab.callcriteria.com/lab/evaluations",
+                    })
 
             else:  # accuracy evaluation
                 # Build CLI arguments for accuracy evaluation
@@ -404,6 +750,15 @@ def register_evaluation_tools(mcp: FastMCP):
 
                 if allow_no_labels:
                     args.append('--allow-no-labels')
+
+                if baseline:
+                    args.extend(['--baseline', baseline])
+
+                if dataset_id:
+                    args.extend(['--dataset-id', dataset_id])
+
+                if use_score_associated_dataset:
+                    args.append('--use-score-associated-dataset')
 
                 # Run the CLI command in a thread pool to avoid event loop conflicts
                 def run_cli_command():
@@ -452,6 +807,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 'confusionMatrix': eval_info.get('confusion_matrix'),  # snake_case in source
                 'predictedClassDistribution': eval_info.get('predicted_class_distribution'),  # snake_case in source
                 'datasetClassDistribution': eval_info.get('dataset_class_distribution'),  # snake_case in source
+                'baselineEvaluationId': eval_info.get('baseline_evaluation_id'),
+                'root_cause': eval_info.get('root_cause'),
+                'misclassification_analysis': eval_info.get('misclassification_analysis'),
                 'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{eval_id}" if eval_id else None
             }
 
@@ -710,3 +1068,209 @@ def register_evaluation_tools(mcp: FastMCP):
             logger.error(f"Error in plexus_evaluation_score_result_find: {e}", exc_info=True)
             import json
             return json.dumps({"error": f"Failed to find evaluation results: {str(e)}"})
+
+    @mcp.tool()
+    async def plexus_score_result_investigate(
+        score_result_id: str,
+        topic_context: str = ""
+    ) -> str:
+        """
+        Investigate a single score result by running LLM inference to determine why the
+        prediction was wrong and suggest a concrete fix.
+
+        This tool fetches the score result, its feedback item (with reviewer edit comment),
+        the item transcript, and the score's YAML configuration, then uses an LLM to analyze
+        the misclassification and suggest a specific code change.
+
+        Use this after plexus_evaluation_score_result_find to dig deeper into specific
+        misclassifications, especially items not covered by the default top-6 RCA exemplars.
+
+        Parameters:
+        - score_result_id: The ID of the score result to investigate
+        - topic_context: Optional topic/cluster label for additional context (e.g., "Copay Guarantee false alarms")
+        """
+        import json as _json
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+
+            # 1. Fetch the score result
+            sr_query = """
+            query GetScoreResult($id: ID!) {
+                getScoreResult(id: $id) {
+                    id
+                    value
+                    explanation
+                    itemId
+                    feedbackItemId
+                    scoreId
+                    metadata
+                }
+            }
+            """
+            sr_resp = client.execute(sr_query, {"id": score_result_id})
+            sr = sr_resp.get('getScoreResult')
+            if not sr:
+                return _json.dumps({"error": f"Score result '{score_result_id}' not found"})
+
+            predicted_value = sr.get('value', '')
+            score_explanation = sr.get('explanation', '')
+            item_id = sr.get('itemId')
+            feedback_item_id = sr.get('feedbackItemId')
+            score_id = sr.get('scoreId')
+
+            # Parse metadata for human_label if available
+            human_label = None
+            md = sr.get('metadata')
+            if md:
+                try:
+                    if isinstance(md, str):
+                        md = _json.loads(md)
+                    if isinstance(md, dict):
+                        res_md = md.get('results') or {}
+                        if isinstance(res_md, dict) and res_md:
+                            key0 = next(iter(res_md))
+                            inner = res_md.get(key0) or {}
+                            inner_md = inner.get('metadata') or {}
+                            human_label = (inner_md.get('human_label') or '').strip()
+                except Exception:
+                    pass
+
+            # 2. Fetch the feedback item (edit comment + original/corrected values)
+            feedback_comment = ""
+            feedback_initial = ""
+            feedback_final = ""
+            if feedback_item_id:
+                try:
+                    fi_query = """
+                    query GetFeedbackItem($id: ID!) {
+                        getFeedbackItem(id: $id) {
+                            id
+                            initialAnswerValue
+                            finalAnswerValue
+                            editCommentValue
+                            isAgreement
+                        }
+                    }
+                    """
+                    fi_resp = client.execute(fi_query, {"id": feedback_item_id})
+                    fi = fi_resp.get('getFeedbackItem') or {}
+                    feedback_comment = fi.get('editCommentValue') or ''
+                    feedback_initial = fi.get('initialAnswerValue') or ''
+                    feedback_final = fi.get('finalAnswerValue') or ''
+                    if not human_label:
+                        human_label = feedback_final
+                except Exception as e:
+                    logger.warning(f"Could not fetch feedback item {feedback_item_id}: {e}")
+
+            # 3. Fetch the item transcript
+            transcript = ""
+            item_identifiers = []
+            if item_id:
+                try:
+                    item_query = """
+                    query GetItem($id: ID!) {
+                        getItem(id: $id) {
+                            id
+                            text
+                            identifiers
+                        }
+                    }
+                    """
+                    item_resp = client.execute(item_query, {"id": item_id})
+                    item_data = item_resp.get('getItem') or {}
+                    transcript = item_data.get('text') or ''
+                    identifiers_raw = item_data.get('identifiers')
+                    if identifiers_raw:
+                        if isinstance(identifiers_raw, str):
+                            identifiers_raw = _json.loads(identifiers_raw)
+                        item_identifiers = identifiers_raw or []
+                except Exception as e:
+                    logger.warning(f"Could not fetch item {item_id}: {e}")
+
+            # 4. Fetch score configuration (YAML + guidelines)
+            score_yaml_code = ""
+            score_guidelines = ""
+            if score_id:
+                try:
+                    score_query = f"""
+                    {{
+                        getScore(id: "{score_id}") {{
+                            championVersionId
+                        }}
+                    }}
+                    """
+                    score_resp = client.execute(score_query)
+                    score_data = score_resp.get('getScore') or {}
+                    champion_id = score_data.get('championVersionId')
+                    if champion_id:
+                        version_query = f"""
+                        {{
+                            getScoreVersion(id: "{champion_id}") {{
+                                configuration
+                                guidelines
+                            }}
+                        }}
+                        """
+                        ver_resp = client.execute(version_query)
+                        ver_data = ver_resp.get('getScoreVersion') or {}
+                        score_yaml_code = ver_data.get('configuration') or ''
+                        score_guidelines = ver_data.get('guidelines') or ''
+                except Exception as e:
+                    logger.warning(f"Could not fetch score config for {score_id}: {e}")
+
+            correct_label = human_label or feedback_final or ''
+
+            # 5. Build context summary for the response (always returned)
+            result = {
+                "score_result_id": score_result_id,
+                "item_id": item_id,
+                "identifiers": item_identifiers,
+                "predicted_value": predicted_value,
+                "actual_value": correct_label,
+                "score_explanation": score_explanation,
+                "feedback_comment": feedback_comment,
+                "feedback_initial_value": feedback_initial,
+                "feedback_final_value": feedback_final,
+            }
+
+            # 6. Run LLM inference if we have primary input context
+            if not transcript:
+                result["detailed_cause"] = "(no primary input available for LLM analysis)"
+                result["suggested_fix"] = ""
+                return _json.dumps(result, indent=2, default=str)
+
+            try:
+                from plexus.rca_analysis import analyze_score_result, build_feedback_context
+
+                feedback_ctx = build_feedback_context(
+                    feedback_comment=feedback_comment,
+                    feedback_initial=feedback_initial,
+                    feedback_final=feedback_final,
+                    predicted_value=predicted_value,
+                )
+                detailed_cause, suggested_fix = analyze_score_result(
+                    primary_input=transcript,
+                    predicted=predicted_value,
+                    correct=correct_label,
+                    explanation=score_explanation,
+                    topic_label=topic_context or "Score result investigation",
+                    score_guidelines=score_guidelines,
+                    score_yaml_code=score_yaml_code,
+                    feedback_context=feedback_ctx,
+                )
+
+                result["detailed_cause"] = detailed_cause or "(analysis returned empty)"
+                result["suggested_fix"] = suggested_fix
+
+            except Exception as e:
+                logger.warning(f"LLM inference failed for score result {score_result_id}: {e}")
+                result["detailed_cause"] = f"(LLM inference failed: {str(e)})"
+                result["suggested_fix"] = ""
+
+            return _json.dumps(result, indent=2, default=str)
+
+        except Exception as e:
+            logger.error(f"Error in plexus_score_result_investigate: {e}", exc_info=True)
+            return _json.dumps({"error": f"Failed to investigate score result: {str(e)}"})
