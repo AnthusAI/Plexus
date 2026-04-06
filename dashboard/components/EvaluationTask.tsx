@@ -12,7 +12,7 @@ import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } fr
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
-import { TopicList } from '@/components/ui/topic-list'
+import { TopicList, type Topic } from '@/components/ui/topic-list'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -321,6 +321,13 @@ type MisclassificationAnalysis = {
     score_fix_candidate_items?: number
   }
   evaluation_red_flags?: MisclassificationRedFlag[]
+}
+
+type RootCauseData = {
+  topics?: Topic[] | null
+  misclassification_analysis?: MisclassificationAnalysis | null
+  overall_explanation?: string | null
+  overall_improvement_suggestion?: string | null
 }
 
 const MISCLASSIFICATION_CATEGORY_CONFIG: Array<{
@@ -1043,14 +1050,15 @@ const DetailContent = React.memo(({
   const rootCauseData = useMemo(() => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
-      return params?.root_cause ?? null
+      const rootCause = params?.root_cause
+      return (rootCause && typeof rootCause === 'object') ? (rootCause as RootCauseData) : null
     } catch {
       return null
     }
   }, [data.parameters])
 
   const rootCauseTopics = rootCauseData?.topics ?? null
-  const misclassificationAnalysis = rootCauseData?.misclassification_analysis as MisclassificationAnalysis | null
+  const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
   const misclassificationCategoryBreakdown = useMemo(() => {
     const totals = misclassificationAnalysis?.category_totals ?? {}
     const itemClassifications = Array.isArray(misclassificationAnalysis?.item_classifications_all)
