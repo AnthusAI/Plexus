@@ -11,15 +11,15 @@
   "labels": [],
   "dependencies": [
     {
-      "target": "plx-88badc",
+      "target": "plx-88badc12-6a79-4978-b527-62c07b931d54",
       "type": "blocked-by"
     },
     {
-      "target": "plx-5ff575",
+      "target": "plx-5ff57540-9f68-4273-bc05-838c23aa72ea",
       "type": "blocked-by"
     },
     {
-      "target": "plx-9aa370",
+      "target": "plx-9aa37016-4764-4c62-8507-3b1ae33aaaf7",
       "type": "blocked-by"
     }
   ],
@@ -40,5 +40,8 @@
   "created_at": "2026-04-02T13:03:44.927734Z",
   "updated_at": "2026-04-05T12:43:19.259355Z",
   "closed_at": "2026-04-05T12:43:19.259355Z",
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }

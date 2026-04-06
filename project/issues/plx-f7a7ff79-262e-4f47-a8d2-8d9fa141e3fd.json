@@ -11,7 +11,7 @@
   "labels": [],
   "dependencies": [
     {
-      "target": "plx-ad68bf",
+      "target": "plx-ad68bf59-6250-44a5-af12-559072f1c414",
       "type": "blocked-by"
     }
   ],
@@ -19,5 +19,8 @@
   "created_at": "2026-04-04T18:30:37.829091Z",
   "updated_at": "2026-04-04T18:58:50.154142Z",
   "closed_at": "2026-04-04T18:58:50.154142Z",
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
