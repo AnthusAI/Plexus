@@ -7,10 +7,12 @@ import tempfile
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Sequence
 
 from plexus.Evaluation import Evaluation
+from plexus.dashboard.api.models.task import Task
+from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
 from plexus.utils.feedback_selection import normalize_feedback_sampling_mode
 
 
@@ -68,6 +70,60 @@ def build_feedback_command(
     if request.sample_seed is not None:
         cmd.extend(["--sample-seed", str(request.sample_seed)])
     return cmd
+
+
+def ensure_feedback_runner_task(
+    *,
+    client: Any,
+    account_id: str,
+    scorecard: str,
+    score: str,
+    version: Optional[str],
+    task_id: Optional[str],
+) -> str:
+    """Return a valid existing task ID, or create a new feedback task with stages."""
+    if task_id:
+        # One path: explicit task IDs must exist.
+        Task.get_by_id(task_id, client)
+        return task_id
+
+    task = Task.create(
+        client=client,
+        accountId=account_id,
+        type="Feedback Accuracy Evaluation",
+        target=f"evaluation/feedback/{scorecard}/{score}",
+        command=f"evaluate feedback --scorecard {scorecard} --score {score}" + (f" --version {version}" if version else ""),
+        status="RUNNING",
+        dispatchStatus="DISPATCHED",
+        description=f"Feedback accuracy evaluation for {scorecard} > {score}",
+        metadata=json.dumps(
+            {
+                "type": "Feedback Accuracy Evaluation",
+                "scorecard": scorecard,
+                "score": score,
+                "task_type": "Feedback Accuracy Evaluation",
+            }
+        ),
+        startedAt=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    )
+
+    stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+    for stage_name, stage_config in stage_configs.items():
+        task.create_stage(
+            name=stage_name,
+            order=stage_config.order,
+            status="PENDING" if stage_name != "Setup" else "RUNNING",
+            statusMessage=stage_config.status_message,
+            totalItems=stage_config.total_items,
+            processedItems=None,
+            startedAt=(
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                if stage_name == "Setup"
+                else None
+            ),
+        )
+
+    return task.id
 
 
 def _query_recent_feedback_evaluations(
@@ -338,7 +394,14 @@ def run_feedback_evaluation_orchestrated(
         raise ValueError("max_category_summary_items must be > 0.")
 
     resolved_plexus_bin = plexus_bin or os.environ.get("PLEXUS_BIN") or "plexus"
-    resolved_task_id = request.task_id or f"feedback-runner-{uuid.uuid4()}"
+    resolved_task_id = ensure_feedback_runner_task(
+        client=client,
+        account_id=account_id,
+        scorecard=request.scorecard,
+        score=request.score,
+        version=request.version,
+        task_id=request.task_id,
+    )
     normalized_request = FeedbackRunnerRequest(
         scorecard=request.scorecard,
         score=request.score,

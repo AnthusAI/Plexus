@@ -4385,12 +4385,21 @@ def feedback(
                 else:
                     console.print("[bold red]Warning: Scorecard object has no 'scores' attribute![/bold red]")
                 
-                # Create Task and TaskStages for progress tracking (if not passed in via --task-id)
-                tracker = None
-                if not task_id:
-                    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
+                # Create/attach TaskProgressTracker for stage updates.
+                from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
 
-                    stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                tracker = None
+                if task_id:
+                    existing_task = Task.get_by_id(task_id, client)
+                    tracker = TaskProgressTracker(
+                        total_items=0,
+                        stage_configs=stage_configs,
+                        task_object=existing_task,
+                        prevent_new_task=True,
+                        client=client,
+                    )
+                else:
                     tracker = TaskProgressTracker(
                         total_items=0,
                         stage_configs=stage_configs,
