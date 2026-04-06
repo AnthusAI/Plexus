@@ -1,0 +1,133 @@
+{
+  "id": "plx-9ae8ecd1-399a-4b79-ae96-090efcb4d52c",
+  "title": "Add RCA to dataset-backed accuracy evaluations",
+  "description": "Implement automatic RCA for evaluate accuracy when dataset-backed, reusing FeedbackEvaluation RCA pipeline, with partial-coverage metadata and dataset linkage propagation fixes.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6309784c-1010-4429-976b-375d3fe960d4",
+      "author": "ryan",
+      "text": "Starting implementation: (1) extract shared RCA orchestration used by feedback-with-version and dataset-backed accuracy, (2) auto-trigger RCA for dataset-backed accuracy, (3) propagate feedback_item_id/item_id through cloud dataset loading and score execution parsing, (4) add coverage metadata and UI note, (5) update docs/tests and run runtime validation.",
+      "created_at": "2026-04-05T13:29:29.487937Z"
+    },
+    {
+      "id": "dc528ae7-655a-4dc7-877a-0eb3bbec19b8",
+      "author": "ryan",
+      "text": "Implemented dataset-backed accuracy RCA integration via shared feedback RCA helper. Accuracy runs with --dataset-id or --use-score-associated-dataset now execute RCA before final completion update, persist root_cause contract + coverage fields (incorrect_items_total/with_link/without_link/analyzed + rca_coverage_status), and fail evaluation when linked incorrect items exist but RCA persistence is unusable. Added cloud dataset linkage propagation tests and score_text top-level linkage parsing test. Added UI coverage note in EvaluationTask and docs updates for dataset-backed accuracy RCA semantics. Targeted tests passed: evaluations_reference_dataset_test + test_evaluation_metrics linkage/RCA subset.",
+      "created_at": "2026-04-05T13:38:28.506570Z"
+    },
+    {
+      "id": "5f239608-4747-4391-90cb-b24e2473c105",
+      "author": "ryan",
+      "text": "Validation update: pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py plexus/test_evaluation_metrics.py => 29 passed. Added orchestration coverage tests (none/partial), cloud dataset linkage propagation test, and top-level linkage parsing test for score_text.",
+      "created_at": "2026-04-05T13:39:17.348800Z"
+    },
+    {
+      "id": "f733133a-065a-43d7-b267-fa39d619de46",
+      "author": "ryan",
+      "text": "Runtime validation attempt (dataset-backed accuracy on 1039/45425) reached evaluation setup and selected associated dataset, but failed before scoring due environment configuration: AMPLIFY_STORAGE_DATASETS_BUCKET_NAME not resolvable in this shell. Error: 'S3 bucket name not found. Cannot download file ... dataset.parquet'. RCA runtime path could not be validated end-to-end until dataset bucket env is available.",
+      "created_at": "2026-04-05T13:40:01.460941Z"
+    },
+    {
+      "id": "7042cde3-198f-4b6d-b234-24a9627c7ccf",
+      "author": "ryan",
+      "text": "Added MCP evaluation info payload passthrough for RCA coverage fields (incorrect_items_total, incorrect_items_with_feedback_link, incorrect_items_without_feedback_link, incorrect_items_analyzed_for_rca, rca_coverage_status, rca_warnings) when present in evaluation parameters.",
+      "created_at": "2026-04-05T13:40:27.391706Z"
+    },
+    {
+      "id": "74d4ef2f-0914-4fb3-a84d-32784c61caf3",
+      "author": "ryan",
+      "text": "Env fix applied for runtime validation: set AMPLIFY_STORAGE_DATASETS_BUCKET_NAME in .env from dashboard/amplify_outputs.json storage.bucket_name. Verified get_amplify_bucket() resolves this value and dataset-backed accuracy run completed setup/scoring without the previous missing-bucket error (evaluation e4fa37b1-545f-4dcd-8b86-1a5d0c0936d3).",
+      "created_at": "2026-04-05T13:44:08.114878Z"
+    },
+    {
+      "id": "cb88a548-0ea1-4f7e-9360-1d3f8502fdac",
+      "author": "ryan",
+      "text": "Runtime validation after env fix succeeded with real dataset-backed accuracy runs including RCA: baseline/champion eval 079b0075-224b-4696-a27c-c1a88938ba44 (scoreVersionId=db3df9e6-2f78-4f0a-9876-48bd16515cdd) and candidate/non-champion eval db8ed1cf-81dd-4a73-90e5-821abf95b1cb (scoreVersionId=e74601f9-e280-41b0-88b6-bafce78739a3, baseline metadata points to 079b0075-224b-4696-a27c-c1a88938ba44). Both completed with root_cause persisted, misclassification_analysis present, and coverage fields: rca_coverage_status=full, incorrect_items_total=3, incorrect_items_with_feedback_link=3, incorrect_items_without_feedback_link=0, incorrect_items_analyzed_for_rca=3.",
+      "created_at": "2026-04-05T13:56:52.099395Z"
+    },
+    {
+      "id": "fa982f58-e8ec-4e11-a77d-b2f6a35d090b",
+      "author": "ryan",
+      "text": "Resuming implementation: finish accuracy --json-only final-state payload cleanup and add regression tests for RCA coverage helper semantics; then run targeted pytest and report results.",
+      "created_at": "2026-04-05T14:04:54.855896Z"
+    },
+    {
+      "id": "c4364c7c-4dae-46bb-ac61-74b131698ad2",
+      "author": "ryan",
+      "text": "Completed hardening pass: accuracy command now uses json-only-safe output helper, suppresses rich console prints in dry-run and all-associated-datasets json-only paths, and final json payload is refreshed from persisted evaluation fields via _fetch_accuracy_evaluation_summary_for_json (status/accuracy/processed/total/scoreVersion/dataset/baseline/root-cause coverage metadata). Replaced duplicated RCA parameter merge blocks with shared _apply_feedback_rca_outcome_to_parameters helper in both dataset-backed accuracy and feedback-with-version paths. Added regression tests for helper semantics + summary extraction in evaluations_reference_dataset_test.py. Validation: pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py plexus/test_evaluation_metrics.py => 33 passed.",
+      "created_at": "2026-04-05T14:07:00.411565Z"
+    },
+    {
+      "id": "74d91cae-10e4-4afc-bdc5-7fcae39aa949",
+      "author": "ryan",
+      "text": "Verified json-only cleanliness at command boundary after logging-stream fix: {\"dry_run\": true, \"scorecard\": \"demo\", \"score\": \"demo\", \"version_source\": \"champion\", \"number_of_samples\": 1, \"baseline\": null} now emits only JSON on stdout; rich/log output is on stderr. stdout payload example: {\"dry_run\": true, \"scorecard\": \"demo\", ...}. Re-ran targeted tests after this change: 33 passed.",
+      "created_at": "2026-04-05T14:09:38.822490Z"
+    },
+    {
+      "id": "46495c19-3dd5-40d9-bd49-95a8f5cdbbcb",
+      "author": "ryan",
+      "text": "New blocker from optimization runner: associated dataset 2a8c2009-3c53-4eaf-8b06-9e15ebec4d54 reports rows but has no parquet/csv file pointers, causing dataset-backed accuracy eval load failure. Investigating builder->dataset persistence path and evaluator load expectations now; will patch one canonical path so associated datasets are always accuracy-readable.",
+      "created_at": "2026-04-05T14:09:44.287466Z"
+    },
+    {
+      "id": "5b772726-959d-4d79-a76b-3ff69c03ed5d",
+      "author": "ryan",
+      "text": "Addressed associated-dataset readability blocker reported by optimizer session. Added strict dataset file-pointer persistence contract in associated-dataset builders: helper _persist_dataset_file_reference updates DataSet.file and then verifies persisted getDataSet.file matches expected S3 key; builders now fail fast if pointer is missing/mismatched (no silent success). Wired this into build_associated_dataset_from_feedback_ids, build_associated_dataset_from_vetted_feedback_items, and build_associated_dataset_from_feedback_window. Added tests: datasets_test verifies verification failure path; curation/datasets tests updated for extra verification query. Validation: pytest -q plexus/cli/dataset/datasets_test.py plexus/cli/dataset/curation_test.py plexus/cli/evaluation/evaluations_reference_dataset_test.py => 39 passed. Also repaired broken dataset 2a8c2009-3c53-4eaf-8b06-9e15ebec4d54 by materializing/uploading parquet and persisting DataSet.file; loader check now succeeds for that dataset.",
+      "created_at": "2026-04-05T14:16:07.215656Z"
+    },
+    {
+      "id": "5fc40103-f378-4c91-b51d-fc77161033cd",
+      "author": "ryan",
+      "text": "Addressed associated-dataset readability blocker reported by optimizer session. Added strict dataset file-pointer persistence contract in associated-dataset builders: new helper  updates DataSet.file and then verifies persisted  matches expected S3 key; builders now fail fast if pointer is missing/mismatched (no silent success). Wired this into , , and . Added tests: datasets_test verifies verification failure path; curation/datasets tests updated for extra verification query. Validation: .......................................                                  [100%]\n=============================== warnings summary ===============================\n../../miniconda3/lib/python3.12/site-packages/sqlalchemy/sql/sqltypes.py:2030\n  /Users/ryan/miniconda3/lib/python3.12/site-packages/sqlalchemy/sql/sqltypes.py:2030: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).\n    epoch = dt.datetime.utcfromtimestamp(0)\n\nplexus/data/FeedbackItems.py:89\n  /Users/ryan/Projects/Plexus/plexus/data/FeedbackItems.py:89: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('days')\n\nplexus/data/FeedbackItems.py:95\n  /Users/ryan/Projects/Plexus/plexus/data/FeedbackItems.py:95: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('max_items')\n\nplexus/data/FeedbackItems.py:101\n  /Users/ryan/Projects/Plexus/plexus/data/FeedbackItems.py:101: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('sampling_mode')\n\nplexus/data/FeedbackItems.py:105\n  /Users/ryan/Projects/Plexus/plexus/data/FeedbackItems.py:105: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('sample_seed')\n\nplexus/data/FeedbackItems.py:112\n  /Users/ryan/Projects/Plexus/plexus/data/FeedbackItems.py:112: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('limit')\n\nplexus/data/FeedbackItems.py:118\n  /Users/ryan/Projects/Plexus/plexus/data/FeedbackItems.py:118: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('limit_per_cell')\n\nplexus/scores/AgenticValidator.py:627\n  /Users/ryan/Projects/Plexus/plexus/scores/AgenticValidator.py:627: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('metadata', pre=True, each_item=True)\n\nplexus/scores/nodes/BeforeAfterSlicer.py:35\n  /Users/ryan/Projects/Plexus/plexus/scores/nodes/BeforeAfterSlicer.py:35: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class SlicingOutputParser(BaseOutputParser[dict]):\n\n../../miniconda3/lib/python3.12/site-packages/pydantic/_internal/_config.py:383\n  /Users/ryan/miniconda3/lib/python3.12/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:\n  * 'underscore_attrs_are_private' has been removed\n    warnings.warn(message, UserWarning)\n\nplexus/scores/nodes/Extractor.py:70\n  /Users/ryan/Projects/Plexus/plexus/scores/nodes/Extractor.py:70: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\nplexus/scores/nodes/ContextExtractor.py:51\n  /Users/ryan/Projects/Plexus/plexus/scores/nodes/ContextExtractor.py:51: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\nplexus/cli/dataset/datasets_test.py::test_load_command_success\n  /Users/ryan/Projects/Plexus/plexus/cli/dataset/datasets.py:449: DeprecationWarning: There is no current event loop\n    loop = asyncio.get_event_loop()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n39 passed, 13 warnings in 11.92s => 39 passed. Also repaired broken dataset  by materializing/uploading parquet and persisting ; loader check now succeeds for that dataset.",
+      "created_at": "2026-04-05T14:16:09.845575Z"
+    },
+    {
+      "id": "ee786c29-e04a-4a6c-b522-1aa003c8a6ca",
+      "author": "ryan",
+      "text": "Starting reliability polish + BDD coverage expansion: add shared dataset materialization validator, enforce preflight in dataset-backed accuracy (CLI/MCP), expand scenario-style tests for build->check->evaluate flow, and update docs with materialization requirement and operator recipe.",
+      "created_at": "2026-04-05T14:17:44.844917Z"
+    },
+    {
+      "id": "889d40b5-1085-4b7c-8a86-cec385113a18",
+      "author": "ryan",
+      "text": "Implemented dataset/evaluation reliability polish for associated datasets: added shared materialization contract in plexus.cli.evaluation.evaluations (validate_dataset_materialization + assert_dataset_materialized_for_accuracy + stable machine-parseable failure message). Wired fail-fast preflight into CLI accuracy dataset-backed paths and all-associated-datasets loop. Updated MCP tools: plexus_dataset_check_associated now returns is_materialized/dataset_file/materialization_error; plexus_dataset_build_from_feedback_window now verifies materialization and returns dataset_file/is_materialized; plexus_evaluation_run now performs dataset-backed accuracy preflight and returns actionable failure payload (dataset_id, readiness_failure_reason, dataset_file, next_step_hint) before CLI dispatch. Added BDD story tests for build->check->evaluate, non-materialized rejection, and newest-associated non-materialized rejection, plus unit coverage for validator/message contract. Test runs: pytest -q MCP/tools/dataset/dataset_materialization_story_test.py MCP/tools/evaluation/evaluation_dataset_preflight_story_test.py plexus/cli/evaluation/evaluations_reference_dataset_test.py (23 passed); pytest -q MCP/tools/dataset/datasets_test.py MCP/tools/evaluation/evaluations_test.py plexus/cli/evaluation/evaluations_reference_dataset_test.py (58 passed).",
+      "created_at": "2026-04-05T14:22:32.714109Z"
+    },
+    {
+      "id": "68f7a247-7fc9-4195-87df-32cc0f4c723d",
+      "author": "ryan",
+      "text": "Runtime smoke test completed for new readiness contract. 1) MCP dataset check success: plexus_dataset_check_associated(scorecard=1039,score=45425) returned has_dataset=true, dataset_id=c10d4dd3-4a88-45c6-bb7f-c1332a739fb3, is_materialized=true, dataset_file=datasets/.../c10d4dd3-4a88-45c6-bb7f-c1332a739fb3/dataset.parquet. 2) CLI dataset-backed accuracy success: plexus evaluate accuracy --scorecard 1039 --score 45425 --use-score-associated-dataset --number-of-samples 5 --json-only completed evaluation_id=524773dd-3716-424e-af8b-295a73bde3b0 with RCA coverage status full. 3) MCP dataset-backed accuracy success: plexus_evaluation_run(... dataset_id=c10d4dd3-... n_samples=1) returned evaluation_id=47bdd9d2-53f4-46e9-aeaf-a3beb761adc7. 4) MCP preflight failure path verified with non-materialized dataset_id=8c50b13e-f19a-4190-80f2-539eb08e69b1 returning readiness_failure_reason=missing_file_pointer and rebuild hint.",
+      "created_at": "2026-04-05T14:30:46.422912Z"
+    },
+    {
+      "id": "20216cfc-2af6-403f-b90f-92b844f696ee",
+      "author": "ryan",
+      "text": "Cross-score creation/evaluation stress test findings (new dataset creation included): (1) Created new dataset for 1039/45425 with balance=false, max_items=200, days=3: dataset_id=27828f73-9b62-4c54-b0fd-032856729388, rows_written=68 (shortfall=132), distribution No=13/Yes=55. DataSet.file persisted and dataset-backed MCP accuracy eval succeeded (evaluation_id=864c3262-18bf-4cdb-bc7f-fb355cf9f36f). (2) balance=true for 1039/45425 fails hard due final-class resolver: 'No final output classes found in score YAML...' for both default champion version and explicit class_source_score_version_id=e74601f9-e280-41b0-88b6-bafce78739a3. (3) Prime EDU 3rd Party / Good Call (97/0): dataset-check reports has_dataset=false; dataset-curate balance true/false both fail with 'No qualifying feedback items found for dataset curation.' (4) MCP evaluation run with use_score_associated_dataset and yaml=false on 97/0 correctly returns actionable no-associated-dataset error. (5) Additional polish bug found: build_associated_dataset_from_feedback_window result payload currently omits dataset_file even when DataSet.file was persisted; MCP wrapper compensates using s3_key fallback but direct curation payload is missing field.",
+      "created_at": "2026-04-05T14:43:33.440838Z"
+    },
+    {
+      "id": "2eef1b81-4c5e-4d46-a8f4-8b0d28dbecf3",
+      "author": "ryan",
+      "text": "Investigating live stuck evaluation/task lifecycle bug: evaluations reaching processed=total can remain RUNNING and task remains PENDING. Implementing fix now in evaluation finalization/task status sync, then validating with targeted tests and live status checks.",
+      "created_at": "2026-04-05T22:44:07.100940Z"
+    },
+    {
+      "id": "d8f3995b-24af-4562-af34-12b74f4c371d",
+      "author": "ryan",
+      "text": "Implemented lifecycle fix for stuck completion states: (1) Task.update now mutates in-memory task instance so status transitions (e.g., PENDING->RUNNING->COMPLETED) are not lost when callers ignore return value; (2) accuracy evaluation finalization now calls tracker.complete_with_message(...) so task record is finalized, not just final stage. Validation: pytest task model/tracker/finalizing tests and reference-dataset evaluation tests pass. Also corrected stale live run: evaluation 1608d487-6f35-4149-ba63-fa5ad7292069 + task 8e5afdca-7264-4a5b-afde-7aa9bf193b3a now COMPLETED.",
+      "created_at": "2026-04-05T22:46:46.251732Z"
+    }
+  ],
+  "created_at": "2026-04-05T13:29:21.455163Z",
+  "updated_at": "2026-04-05T22:46:46.251732Z",
+  "closed_at": null,
+  "custom": {}
+}
