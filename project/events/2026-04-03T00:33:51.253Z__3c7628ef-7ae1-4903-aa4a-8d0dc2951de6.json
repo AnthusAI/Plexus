@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3c7628ef-7ae1-4903-aa4a-8d0dc2951de6",
+  "issue_id": "plx-01fa7055-82c6-4329-8f2d-c0b1e118c9fd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:33:51.253Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement canonical class-list resolver from champion score YAML"
+  }
+}

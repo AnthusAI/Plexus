@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d7013db7-1838-47fe-9ccc-6799938391da",
+  "issue_id": "plx-bc6a7330-43c1-40d9-9feb-7678cbc61cf2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:08:45.982Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Validate that all components are working before running on real data.\n\n## Test Checklist\n\n- [ ] YAML syntax validation passes\n- [ ] MCP tool `plexus_evaluation_compare` is registered\n- [ ] CLI command `plexus procedure optimize` exists and shows help\n- [ ] Identifier resolution works for name/key/ID/externalID\n- [ ] Procedure YAML loads without errors\n\n## Commands to Run\n\n```bash\n# 1. Validate YAML syntax\npython3 -c \"import yaml; yaml.safe_load(open('plexus/procedures/feedback_alignment_optimizer.yaml'))\"\n\n# 2. Check CLI help\nplexus procedure optimize --help\n\n# 3. Test identifier resolution (dry run, quick)\nplexus procedure optimize -s \"AW Confirmation\" -c <test-score> --days 7 --dry-run\n```\n\n## Success Criteria\n\nAll smoke tests pass without errors.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Run smoke tests and validate core functionality"
+  }
+}

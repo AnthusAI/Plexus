@@ -1,0 +1,109 @@
+{
+  "id": "plx-7812544e-e98b-4c6e-80e3-78141c9aca02",
+  "title": "Simplify reference dataset selection to one DataSet-owned path",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4f2e21fd-6e24-4ebe-adc2-20e607efe10b",
+      "author": "ryan",
+      "text": "Starting implementation of one-path reference dataset simplification.\n\nScope for this task:\n- Remove role-based score pointers and dataset role tagging from active code paths.\n- Make DataSet(scoreId + isReferenceFrozen + createdAt/id ordering) the only reference association model.\n- Replace evaluation selector --reference-dataset-role with --use-score-reference and --all-score-references.\n- Keep --dataset-id precedence over score-reference selection.\n- Update GraphQL schema/client models/MCP surfaces/docs/tests accordingly.\n\nArchitecture constraints:\n- No fallback logic.\n- No backward-compatibility shim paths.\n",
+      "created_at": "2026-04-02T16:02:47.840820Z"
+    },
+    {
+      "id": "7369ba3c-6d73-4e83-a352-e8a52739693e",
+      "author": "ryan",
+      "text": "Implementation update:\n- Removed role-based reference dataset selection and pointer assignment from active code paths.\n- Canonicalized reference lookup to DataSet-only association:\n  - scoreId match\n  - isReferenceFrozen = true\n  - newest-first ordering by createdAt then id\n\nShipped behavior changes:\n- evaluate accuracy:\n  - removed --reference-dataset-role\n  - added --use-score-reference (latest frozen dataset)\n  - added --all-score-references (runs one evaluation per frozen reference dataset)\n  - dataset-id remains explicit override\n- dataset load:\n  - kept --reference-frozen\n  - removed --reference-role\n  - removed --assign-reference-pointer\n\nSchema/model/API/docs cleanup:\n- Removed Score reference pointer fields from schema/model/client/MCP surfaces.\n- Removed DataSet referenceRole from schema/model/client.\n- Updated reference dataset docs and evaluate-score docs to the one-path workflow.\n\nValidation:\n- pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py => 4 passed\n- pytest -q plexus/cli/dataset/datasets_test.py -k \"load_command_success or builtin_reference_cache_class_resolution or load_command_applies_item_pipeline_to_text\" => 3 passed\n- python -m py_compile on modified evaluation/dataset/MCP/model modules => passed\n\nStatus: in_progress pending your review + commit/merge.\n",
+      "created_at": "2026-04-02T16:07:19.343243Z"
+    },
+    {
+      "id": "d09e6bca-f1a5-4db2-bd90-646cbadcd1f3",
+      "author": "ryan",
+      "text": "Starting hard-cut rename from frozen terminology to neutral reference-dataset terminology.\n\nImplementation intent:\n- isReferenceFrozen -> isReferenceDataset\n- frozenAt -> referenceAt\n- --reference-frozen -> --reference-dataset\n- keep --use-score-reference and --all-score-references\n- no compatibility aliases/fallbacks\n",
+      "created_at": "2026-04-02T18:13:12.525534Z"
+    },
+    {
+      "id": "ac5b976f-e244-45ed-9c5b-2924919ba084",
+      "author": "ryan",
+      "text": "Rename implementation complete (hard cutover):\n- DataSet marker/ts renamed:\n  - isReferenceFrozen -> isReferenceDataset\n  - frozenAt -> referenceAt\n- CLI renamed:\n  - --reference-frozen -> --reference-dataset\n- Evaluation resolver/UX text updated to reference-dataset terminology.\n- Docs updated to remove frozen concept wording and examples.\n- No aliases or compatibility fallbacks were added.\n\nValidation:\n- pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py => 4 passed\n- pytest -q plexus/cli/dataset/datasets_test.py -k \"load_command_success or builtin_reference_cache_class_resolution or load_command_applies_item_pipeline_to_text\" => 3 passed\n- py_compile passed for modified Python modules.\n- CLI option inspection confirms:\n  - dataset load has --reference-dataset and does not have --reference-frozen\n  - evaluate accuracy has --use-score-reference and --all-score-references\n\nNote:\n- Backend schema deployment is still required for runtime end-to-end selection via DataSet.isReferenceDataset in shared env.\n",
+      "created_at": "2026-04-02T18:15:10.530901Z"
+    },
+    {
+      "id": "8b8e970b-8ad9-40f5-a47e-fed33303a08d",
+      "author": "ryan",
+      "text": "Starting runtime validation: run aligned guideline-vetting report for score 45425 and extract eligible_reference_feedback_item_ids to verify we can generate a useful gold-standard candidate label list.",
+      "created_at": "2026-04-02T19:24:00.625208Z"
+    },
+    {
+      "id": "9c41cb3d-ffa5-48fb-bd48-ec48a644f31b",
+      "author": "ryan",
+      "text": "Runtime validation completed for scorecard 1039 / score 45425 using aligned guideline-vetting mode. Report snapshot manual-aligned-20260402T192914Z analyzed 45 items and produced 32 eligible_reference_feedback_item_ids under rule 'unanimous non-contradiction' (artifact: tmp/aligned_vetting_1039_45425_days2_20260402T193100Z.json). Follow-up test of dataset builder path (dataset reference-from-feedback) failed at backend GraphQL with: Cannot query field 'isReferenceDataset' on type 'DataSet' (also referenceAt missing in same query surface). This confirms candidate-label list generation works, but dataset creation is currently blocked by backend schema deployment mismatch.",
+      "created_at": "2026-04-02T19:33:10.690988Z"
+    },
+    {
+      "id": "552f9b09-0579-40ce-984c-24f6ddf0326d",
+      "author": "ryan",
+      "text": "Starting implementation: hard cutover to associated-dataset model. Selection will use only DataSet.scoreId association, marker fields (isReferenceDataset/referenceAt) removed from active selection paths, CLI flags renamed to associated-dataset terminology, and docs/tests updated accordingly. No fallback aliases.",
+      "created_at": "2026-04-02T19:43:29.564714Z"
+    },
+    {
+      "id": "ec732fa9-868d-4764-b9a9-353f6d730e82",
+      "author": "ryan",
+      "text": "Implemented associated-dataset hard cutover in active paths.\n\nShipped changes:\n- evaluate accuracy flags renamed to --use-score-associated-dataset and --all-score-associated-datasets.\n- Selection logic now uses only DataSet.scoreId association plus newest-first ordering by createdAt, tie-break id.\n- Removed marker-based selection from resolver/query path; isReferenceDataset and referenceAt are not queried or filtered.\n- dataset load removed --reference-dataset marker behavior; score association remains scoreId when source is score-linked.\n- Updated associated-dataset language in docs and aligned-report UI messaging.\n- Updated MCP dataset tool messaging to associated-dataset terminology.\n\nValidation:\n- pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py plexus/cli/dataset/datasets_test.py -k \"reference or associated or load_command_success or build_reference_dataset_from_feedback_ids\" => 8 passed.\n- python -m py_compile plexus/cli/evaluation/evaluations.py plexus/cli/dataset/datasets.py MCP/tools/dataset/datasets.py plexus/dashboard/api/models/data_set.py => passed.\n- CLI help checks: evaluate accuracy --help shows new associated-dataset flags; dataset load --help no longer exposes --reference-dataset.\n\nArchitecture note:\n- Active behavior is now one-path association-only selection; no fallback aliases were added.",
+      "created_at": "2026-04-02T19:49:46.192990Z"
+    },
+    {
+      "id": "14c0f085-4cf6-448f-80a8-f946428342cb",
+      "author": "ryan",
+      "text": "Live validation continued after commit push.\n\nRuntime checks executed:\n1) evaluate accuracy with --use-score-associated-dataset for scorecard 1039 / score 45425.\n   - Confirmed selector path logs: Using latest score-associated dataset.\n2) evaluate accuracy with --use-score-associated-dataset --all-score-associated-datasets.\n   - Confirmed aggregate runner path logs and summary table render.\n3) evaluate accuracy with both --dataset-id and --use-score-associated-dataset.\n   - Confirmed precedence logs: Using specific dataset ID.\n\nFollow-up fix applied:\n- Corrected GraphQL variable type in recent-evaluation lookup helper (createdAfter now String in query signature) to prevent type mismatch in all-associated-datasets path.\n\nCurrent runtime blocker for full success:\n- Dataset used for runtime checks has no file/attachedFiles payload in backend record, so evaluation fails at sample loading with No Parquet or CSV files found.\n- Selection behavior itself is validated; successful metric run still requires a valid dataset artifact file.",
+      "created_at": "2026-04-02T20:02:04.424524Z"
+    },
+    {
+      "id": "086b29f8-370d-4fab-89b0-046fb5e47f03",
+      "author": "ryan",
+      "text": "Runtime validation follow-up: fixed GraphQL query variable type mismatch in recent evaluation lookup by changing createdAfter variable type to String to match deployed schema. Re-ran associated dataset tests and latest/all selection flow now reaches evaluation summary path.",
+      "created_at": "2026-04-02T20:02:54.764434Z"
+    },
+    {
+      "id": "937b2a89-641d-43b2-91a0-b04c9554890e",
+      "author": "ryan",
+      "text": "End-to-end associated-dataset runtime validation completed successfully for score 45425 on scorecard 1039. Created file-backed associated dataset bb30680d-694d-41a1-b18c-6cbeed0d8cf1 (12 rows from labeled feedback items), then ran accuracy with --use-score-associated-dataset and completed evaluation 38040d31-a060-4fe7-b6b0-af904a0827af (status COMPLETED, processedItems 12/12, accuracy 66.6667, precision 100, recall 63.6364). Key runtime requirement discovered: AMPLIFY_STORAGE_DATASETS_BUCKET_NAME must be set for cloud dataset read/write in this shell; without it, setup fails with S3 bucket name not found.",
+      "created_at": "2026-04-02T20:18:00.002593Z"
+    },
+    {
+      "id": "2322fc37-4678-4f33-ace5-29b5a98768fb",
+      "author": "ryan",
+      "text": "Starting implementation for new canonical curation path: add plexus score dataset-curate with --max-items default 100 and optional --days, using newest-first feedback selection by editedAt and strict finalAnswerValue qualification; remove dataset reference-from-feedback from active CLI entrypoints to enforce one-path usage.",
+      "created_at": "2026-04-02T20:26:18.089005Z"
+    },
+    {
+      "id": "a5911eb8-882e-4dfb-841c-24e4a6239d23",
+      "author": "ryan",
+      "text": "Implemented canonical curation flow: added plexus score dataset-curate (scorecard, score, max-items default 100, optional days, optional task-id), backed by new dataset curation helper module with deterministic newest-first collection (editedAt DESC) and strict finalAnswerValue plus linked item qualification. Removed dataset reference-from-feedback from active dataset CLI commands. Updated docs and dashboard task launcher route to invoke score dataset-curate. Validation: pytest subset passed (11 tests), py_compile passed, CLI help shows score dataset-curate and dataset group no longer exposes reference-from-feedback.",
+      "created_at": "2026-04-02T20:30:12.317255Z"
+    },
+    {
+      "id": "21ec5f2f-627a-4040-b3e1-e4f025b0fccd",
+      "author": "ryan",
+      "text": "Runtime test completed for new command. Initial run of score dataset-curate failed due deployed CreateDataSetInput rejecting extra fields; fixed curation path to send only supported dataset fields. Retest succeeded: plexus score dataset-curate --scorecard 1039 --score 45425 --max-items 20 --days 180 created dataset 71289e19-e160-4e1e-89bd-8bd1cdd0f8df (20/20). Follow-up accuracy run succeeded against associated dataset selection: evaluation f437bce3-418a-4586-b391-42810d3f0575 COMPLETED, sample size 20, accuracy 45.0%.",
+      "created_at": "2026-04-02T20:40:30.920111Z"
+    },
+    {
+      "id": "74ccf537-ca3b-41e4-9730-34c029858553",
+      "author": "ryan",
+      "text": "Closing: canonical score dataset-curate path implemented, old dataset reference-from-feedback CLI entrypoint retired, docs updated, and live runtime test passed (dataset-curate + associated-dataset evaluation).",
+      "created_at": "2026-04-02T23:18:31.398767Z"
+    }
+  ],
+  "created_at": "2026-04-02T16:02:43.498942Z",
+  "updated_at": "2026-04-02T23:18:31.406213Z",
+  "closed_at": "2026-04-02T23:18:31.406213Z",
+  "custom": {}
+}

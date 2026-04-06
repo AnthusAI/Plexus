@@ -22,6 +22,7 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
       accountId
       scorecardId
       scoreId
+      scoreVersionId
       confusionMatrix
       scoreGoal
       datasetClassDistribution

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8b7407d6-07c2-423b-944d-b5d31917b354",
+  "issue_id": "plx-ec56fcd8-aa20-4be2-8e4a-3119d0ce2bcb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T17:13:09.073Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+    "priority": 1,
+    "status": "open",
+    "title": "RCA category summary drill-down with evidence and score-results filtering"
+  }
+}

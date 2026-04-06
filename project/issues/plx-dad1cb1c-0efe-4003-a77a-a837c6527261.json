@@ -1,0 +1,31 @@
+{
+  "id": "plx-dad1cb1c-0efe-4003-a77a-a837c6527261",
+  "title": "Auto-fulfill dataset-curate-vetted max-items via adaptive vetting pool",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d06390c5-8d98-4440-a5be-ecb5ab24560d",
+      "author": "ryan",
+      "text": "Implementing automatic max-fulfillment for score dataset-curate-vetted. Current behavior caps vetting pool to --max-items, which can underfill final dataset when unanimous eligibility rate is low. New behavior: adaptive pool expansion (newest-first, same eligibility rule) until requested max is met or expansion cap is reached; no new user-facing complexity required.",
+      "created_at": "2026-04-03T03:30:44.386037Z"
+    },
+    {
+      "id": "b2815683-556c-44e0-9a33-81836dada6dc",
+      "author": "ryan",
+      "text": "Implemented adaptive vetting-pool fulfillment for score dataset-curate-vetted. The workflow now retries aligned-vetting with increasing max_feedback_items (doubling each attempt) until it reaches requested --max-items eligible items, exhausts available items in window, or hits safety cap. Added CLI/output diagnostics: vetted_pool_attempts, vetted_pool_attempted_limits, vetted_pool_max_limit; report parsing now captures eligible_count and total_items_analyzed. Tests: pytest -q plexus/cli/dataset/curation_test.py (17 passed), pytest -q plexus/cli/score/scores_dataset_curate_test.py (10 passed).",
+      "created_at": "2026-04-03T03:32:25.957776Z"
+    }
+  ],
+  "created_at": "2026-04-03T03:30:37.383500Z",
+  "updated_at": "2026-04-03T03:32:25.957776Z",
+  "closed_at": "2026-04-03T03:32:25.957323Z",
+  "custom": {}
+}

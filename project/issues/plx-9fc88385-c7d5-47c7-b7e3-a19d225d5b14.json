@@ -1,0 +1,48 @@
+{
+  "id": "plx-9fc88385-c7d5-47c7-b7e3-a19d225d5b14",
+  "title": "Add score-page Associated Datasets panel with label distribution",
+  "description": "## Summary\nAdd a score-page \"Associated Datasets\" panel with label distribution visibility.\n\n## Purpose\nGive operators immediate insight into dataset inventory, size, and class balance for a score.\n\n## Acceptance Criteria\n- Panel lists datasets associated by `scoreId` in newest-first order.\n- Each dataset shows item count and label-distribution visualization.\n- Legacy datasets with missing stats show a clear \"stats unavailable\" state.\n- UI behavior and labels use associated-dataset terminology.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-9402ab",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "057ac071-c37c-414b-aaf2-6f49a1ee1b3a",
+      "author": "ryan",
+      "text": "Starting score-page Associated Datasets panel implementation. Plan: fetch DataSet records by scoreId, resolve dataset_stats from datasource-version YAML metadata, and render rows + distribution bars + legacy no-stats state.",
+      "created_at": "2026-04-03T00:43:17.329814Z"
+    },
+    {
+      "id": "bc40bb5f-761a-4f6d-8ece-ee5011b61904",
+      "author": "ryan",
+      "text": "Implemented score-page Associated Datasets panel in dashboard/components/ui/score-component.tsx. Behavior: fetches datasets by scoreId (newest-first), resolves persisted dataset_stats from datasource-version YAML metadata, shows per-dataset row count + label distribution segmented bar/legend, and renders explicit legacy state when stats are unavailable. Loading/error/empty states included. Validation notes: frontend lint attempt failed due existing local AJV/eslintrc runtime issue (`missingRefs` / `defaultMeta`) unrelated to this change path.",
+      "created_at": "2026-04-03T00:44:24.452473Z"
+    },
+    {
+      "id": "fb52dbaf-4ff7-4410-b0d4-852fdc946880",
+      "author": "ryan",
+      "text": "Completed in branch; awaiting manual UI review in running dashboard session.",
+      "created_at": "2026-04-03T00:44:24.505731Z"
+    },
+    {
+      "id": "0fcaede2-31fe-4398-b4cd-a0b971684a19",
+      "author": "ryan",
+      "text": "Post-implementation UI refinements applied per operator feedback: (1) removed border-heavy styling in Associated Datasets area/rows in favor of flat bg-card/bg-background regions, (2) panel now collapsed by default and shows only latest dataset until expanded, (3) dataset ID now uses standard IdentifierDisplay component, (4) removed per-dataset title line, (5) rows count + class distribution now aligned on bottom row (left/right) under distribution bar, and (6) score component container now supports vertical scrolling to avoid pushing main configuration content off-screen.",
+      "created_at": "2026-04-03T03:19:39.067082Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.611451Z",
+  "updated_at": "2026-04-03T03:19:39.067082Z",
+  "closed_at": "2026-04-03T00:44:24.479369Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "56f60532-c86f-49e6-aee0-f085eab68a88",
+  "issue_id": "plx-b7420ad2-b91c-430e-9959-6edd57d94450",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:07:01.445Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a score optimizer\nI want to run a baseline feedback evaluation with root-cause analysis\nSo that I can establish a starting point and understand current error patterns\n\n## Acceptance Criteria\n\n- Baseline evaluation runs successfully with feedback data\n- RCA output includes topic-clustered analysis of errors\n- Baseline metrics captured (AC1, Accuracy, Precision, Recall)\n- Evaluation ID stored for future comparisons\n\n## Gherkin Specification\n\n```gherkin\nFeature: Baseline Feedback Evaluation with RCA\n  As a score optimizer\n  I want to run a baseline feedback evaluation\n  So that I can establish starting metrics and error patterns\n\nScenario: Run baseline evaluation on score with feedback data\n  Given a scorecard \"customer-service\" with score \"empathy\"\n  And feedback data exists for the past 90 days\n  And the score has a champion version\n  When I run the feedback alignment optimizer\n  Then a feedback evaluation is created with evaluation_type=\"feedback\"\n  And the evaluation completes with status=\"COMPLETED\"\n  And baseline metrics are captured:\n    | Metric    | Present |\n    | AC1       | Yes     |\n    | Accuracy  | Yes     |\n    | Precision | Yes     |\n    | Recall    | Yes     |\n  And root-cause analysis output contains clustered topics\n  And the baseline evaluation ID is stored for future comparisons\n\nScenario: Handle insufficient feedback data gracefully\n  Given a scorecard \"test-scorecard\" with score \"new-score\"\n  And no feedback data exists for the past 90 days\n  When I run the feedback alignment optimizer\n  Then the procedure fails with a clear error message\n  And the error message indicates \"insufficient feedback data\"\n  And no evaluation record is created\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Run baseline feedback evaluation with RCA"
+  }
+}

@@ -604,6 +604,19 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
   const type = toToolType(toolName)
 
   if (message.messageType === 'TOOL_CALL') {
+    if (message.toolResponse !== undefined && message.toolResponse !== null) {
+      // Tool call has completed — show as a single completed component
+      const errorText = extractToolErrorText(message)
+      const output = message.toolResponse
+      return {
+        type,
+        toolName,
+        state: errorText ? 'output-error' : 'output-available',
+        input: message.toolParameters || {},
+        output,
+        errorText,
+      }
+    }
     return {
       type,
       toolName,
@@ -631,18 +644,18 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
 // Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
-  maxLines = 10, 
+  maxLines,
   className = "whitespace-pre-wrap break-words",
   enableMarkdown = true
-}: { 
-  content: string, 
+}: {
+  content: string,
   maxLines?: number,
   className?: string,
   enableMarkdown?: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lines = content.split('\n')
-  const shouldTruncate = lines.length > maxLines
+  const shouldTruncate = maxLines != null && lines.length > maxLines
   const displayContent = shouldTruncate && !isExpanded 
     ? lines.slice(0, maxLines).join('\n') + '...'
     : content
@@ -2372,11 +2385,7 @@ function ConversationViewer({
 
                           {toolViewModel ? (
                             <Tool
-                              defaultOpen={
-                                toolViewModel.state === 'output-available'
-                                || toolViewModel.state === 'output-error'
-                                || toolViewModel.state === 'output-denied'
-                              }
+                              defaultOpen={toolViewModel.state === 'output-error'}
                             >
                               <ToolHeader
                                 toolType={toolViewModel.type}
@@ -2384,10 +2393,10 @@ function ConversationViewer({
                                 toolName={toolViewModel.toolName}
                               />
                               <ToolContent>
-                                {message.messageType === 'TOOL_CALL' && (
+                                {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
                                   <ToolInput input={toolViewModel.input} />
                                 )}
-                                {message.messageType === 'TOOL_RESPONSE' && (
+                                {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
                                   <ToolOutput
                                     errorText={toolViewModel.errorText}
                                     output={
@@ -2405,7 +2414,7 @@ function ConversationViewer({
                             </Tool>
                           ) : (
                             <div className="text-sm">
-                              <CollapsibleText content={message.content} maxLines={10} />
+                              <CollapsibleText content={message.content} />
                             </div>
                           )}
 

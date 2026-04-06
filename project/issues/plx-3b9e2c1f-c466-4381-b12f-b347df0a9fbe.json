@@ -1,0 +1,25 @@
+{
+  "id": "plx-3b9e2c1f-c466-4381-b12f-b347df0a9fbe",
+  "title": "Auto-manage dedicated aligned-vetting ReportConfiguration",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6fb6c3bb-bee6-4d84-81fb-af1183cf9082",
+      "author": "ryan",
+      "text": "Implemented auto-managed report configuration for vetted curation and tightened operational runtime behavior: block config now includes max_feedback_items (sourced from CLI max-items) and fetch path now stops pagination at that cap (newest-first).",
+      "created_at": "2026-04-03T02:32:58.626759Z"
+    }
+  ],
+  "created_at": "2026-04-03T01:49:45.764148Z",
+  "updated_at": "2026-04-03T02:33:06.609145Z",
+  "closed_at": "2026-04-03T02:33:06.609145Z",
+  "custom": {}
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "7d0a5efc-57f9-447a-84b5-ad15d988dd57",
+  "issue_id": "plx-eca6cbd3-4db9-4226-b105-f468cedfb9ab",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.442Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nDocument balanced associated-dataset curation and score-page dataset visibility.\n\n## Purpose\nEnsure operators can discover and correctly use defaults, controls, and expected outputs.\n\n## Acceptance Criteria\n- Public docs use associated-dataset terminology only.\n- Docs cover balancing default behavior and `--no-balance` opt-out.\n- Docs cover score-page associated-dataset panel and its data semantics.\n- Examples are updated and render correctly in the public web app docs."
+      }
+    }
+  }
+}

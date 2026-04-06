@@ -1,0 +1,31 @@
+{
+  "id": "plx-f427e98b-9671-4a08-a423-3e81b3aec1e7",
+  "title": "ProcedureMetadata status validation error on load",
+  "description": "",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bd0a186e-9d80-4955-8d20-c4984dfdf515",
+      "author": "ryan",
+      "text": "Error: '1 validation error for ProcedureMetadata status Input should be a valid string' at storage.py:110 on every procedure load.\n\nRoot cause: storage.py:116 passes procedure_data.get('status', 'RUNNING') (raw string from GraphQL) to ProcedureMetadata which expects a typed enum for status. The Pydantic error message is misleading \u2014 it says 'valid string' but the field is actually an enum.\n\nFix: Coerce the string to the correct ProcedureStatus enum from tactus.protocols.models before passing to ProcedureMetadata constructor.\n\nFile: plexus/cli/procedure/tactus_adapters/storage.py ~line 116.",
+      "created_at": "2026-04-03T12:44:58.591158Z"
+    },
+    {
+      "id": "2b792510-3002-4cea-92fa-841f7bef0ad4",
+      "author": "ryan",
+      "text": "Investigation update: ProcedureMetadata.status is already typed as str (not an enum) in tactus/protocols/models.py:69. The storage adapter at storage.py:116 passes the raw GraphQL string directly. No coercion is needed and no actual validation error exists in the code.\n\nThis issue needs a real repro with an actual error traceback before proceeding. Closing as needs-repro.",
+      "created_at": "2026-04-03T13:25:01.619105Z"
+    }
+  ],
+  "created_at": "2026-04-03T12:44:49.866568Z",
+  "updated_at": "2026-04-03T13:25:01.619105Z",
+  "closed_at": null,
+  "custom": {}
+}

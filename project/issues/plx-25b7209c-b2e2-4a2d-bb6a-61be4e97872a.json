@@ -1,0 +1,18 @@
+{
+  "id": "plx-25b7209c-b2e2-4a2d-bb6a-61be4e97872a",
+  "title": "Show Activity action wiring from Actions menu",
+  "description": "Add non-dispatch UI action to open artifact pane in Activity mode while preserving chat/session panes.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-19T02:30:11.789095Z",
+  "updated_at": "2026-03-19T02:30:11.789095Z",
+  "closed_at": null,
+  "custom": {}
+}

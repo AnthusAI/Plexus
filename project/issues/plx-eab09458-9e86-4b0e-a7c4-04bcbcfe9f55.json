@@ -3,7 +3,7 @@
   "title": "Add evaluation-task visualization for misclassification category breakdown",
   "description": "## Summary\nAdd a new evaluation-task visualization that shows the breakdown of misclassification categories at a glance.\n\n## Deliverables\n- Add a segmented-bar style visualization in the evaluation task UI for the four-category breakdown.\n- Show counts/proportions for `score_configuration_problem`, `information_gap`, `guideline_gap_requires_sme`, and `mechanical_malfunction`.\n- Present an overall assessment for whether the evaluation suggests optimization, SME clarification, upstream data remediation, or bug investigation.\n\n## Reuse direction\nBuild on the existing segmented progress bar / task-stage visual language rather than inventing a wholly separate pattern.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,9 +15,28 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "7ba3f94d-cd30-41f4-a1a8-e9b512460ac3",
+      "author": "ryan",
+      "text": "Starting implementation of evaluation-task misclassification breakdown UI using persisted RCA payload (misclassification_analysis). Scope: segmented category bar + per-category counts + evaluation-level red flags in evaluation detail view.",
+      "created_at": "2026-04-04T14:45:03.595637Z"
+    },
+    {
+      "id": "fdecdb16-cf2b-4b51-9b18-a22d32e56532",
+      "author": "ryan",
+      "text": "Implemented evaluation-detail misclassification visualization in dashboard/components/EvaluationTask.tsx. Added RCA category segmented bar (score configuration, information gap, SME guideline gap, mechanical malfunction), per-category counts/percentages, overall assessment mapping by predominant category, and evaluation-level red flag rendering from parameters.root_cause.misclassification_analysis.evaluation_red_flags. Also switched RCA parameter parsing to parseJsonDeep for robust nested JSON parsing.",
+      "created_at": "2026-04-04T14:47:23.496690Z"
+    },
+    {
+      "id": "5680ad99-7860-4caf-8242-959c8f9f6754",
+      "author": "ryan",
+      "text": "Validation: npm --prefix dashboard run build:fast passed after changes. Build completed successfully; only expected local Amplify.configure warnings during static page generation.",
+      "created_at": "2026-04-04T14:47:23.499148Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.803202Z",
-  "updated_at": "2026-04-02T13:21:09.803202Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T14:47:26.143170Z",
+  "closed_at": "2026-04-04T14:47:26.143170Z",
   "custom": {}
 }

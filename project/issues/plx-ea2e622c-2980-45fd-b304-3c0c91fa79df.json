@@ -3,7 +3,7 @@
   "title": "Fix Sources dashboard undefined list model error",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -40,10 +40,16 @@
       "author": "ryan",
       "text": "Root-cause path verified. Regenerated dashboard/amplify_outputs.json from hosted backend (app d1cegb1ft4iove, branch main, profile capacity_anthus, region us-west-2) using Node 18.19.0. Confirmed model introspection now includes DataSource/DataSourceVersion/DataSet. Code path in dashboard/utils/amplify-client.ts remains ORM-only (no fallback branch). If UI still shows undefined list at runtime, the active dashboard process is running stale outputs/client state and must be restarted.",
       "created_at": "2026-03-14T15:10:29.839850Z"
+    },
+    {
+      "id": "bc1f3f79-7d99-48e1-93be-36a830a15512",
+      "author": "ryan",
+      "text": "Sources dashboard undefined list model error fixed.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-14T14:41:46.047572Z",
-  "updated_at": "2026-03-14T15:10:29.839850Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

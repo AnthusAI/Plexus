@@ -113,7 +113,7 @@ class PlexusStorageAdapter:
                 replay_index=raw_metadata.get('replay_index', 0),  # Default to 0 if not set
                 state=raw_metadata.get('state', {}),
                 lua_state=raw_metadata.get('lua_state', {}),
-                status=procedure_data.get('status', 'RUNNING'),
+                status=procedure_data.get('status') or 'RUNNING',
                 waiting_on_message_id=procedure_data.get('waitingOnMessageId')
             )
 

@@ -3,7 +3,7 @@
   "title": "CodeQL exclude config for node_modules scan noise",
   "description": "",
   "type": "chore",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -46,10 +46,16 @@
       "author": "derek",
       "text": "Implemented .codeql exclusion in both .github/codeql/codeql-config.yml (paths-ignore) and .gitignore to prevent scanning/noise from local CodeQL databases.",
       "created_at": "2026-03-04T21:23:23.159115186Z"
+    },
+    {
+      "id": "fb18529b-0c5a-4afc-82f5-adfc77966c50",
+      "author": "ryan",
+      "text": "CodeQL exclude config completed.",
+      "created_at": "2026-04-04T18:58:16.103809Z"
     }
   ],
   "created_at": "2026-03-04T21:13:51.589783386Z",
-  "updated_at": "2026-03-04T21:23:23.159115186Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T18:58:16.103809Z",
+  "closed_at": "2026-04-04T18:58:16.103809Z",
   "custom": {}
 }

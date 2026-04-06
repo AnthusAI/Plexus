@@ -3,16 +3,29 @@
   "title": "Add RCA validity tests and failure-mode coverage",
   "description": "## Summary\nAdd tests and failure-mode coverage for RCA validity in feedback-backed evaluations.\n\n## Deliverables\n- Cover zero incorrect items, small incorrect sets, clustered incorrect sets, persistence failures, and backend exceptions.\n- Ensure missing RCA with incorrect items is caught as a failure.\n- Make RCA validity part of normal evaluation test coverage.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "93da1400-e53f-4a93-826f-f540fe4f8add",
+      "author": "ryan",
+      "text": "Starting targeted RCA validity tests for small incorrect-set path and missing-data edge cases.",
+      "created_at": "2026-04-02T14:34:24.383046Z"
+    },
+    {
+      "id": "b1f352ca-9951-40cf-b643-a4d80e44af42",
+      "author": "ryan",
+      "text": "Added RCA validity tests for small incorrect-set handling: (1) delegates to small-set RCA path for <5 candidates, (2) returns empty payload when no candidates. Keeping task open for additional failure-mode scenarios beyond these new cases.",
+      "created_at": "2026-04-02T14:35:35.458777Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:33.406160Z",
-  "updated_at": "2026-04-02T12:49:33.406160Z",
+  "updated_at": "2026-04-02T14:35:35.458777Z",
   "closed_at": null,
   "custom": {}
 }

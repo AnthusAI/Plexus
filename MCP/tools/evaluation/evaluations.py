@@ -119,12 +119,12 @@ def register_evaluation_tools(mcp: FastMCP):
                     "baseline_evaluation_id": evaluation_info.get('baseline_evaluation_id'),
                 }
 
-                # Include root cause analysis if available in parameters
-                params = evaluation_info.get('parameters')
-                if params and isinstance(params, dict):
-                    root_cause = params.get('root_cause')
-                    if root_cause:
-                        payload['root_cause'] = root_cause
+                root_cause = evaluation_info.get('root_cause')
+                if root_cause:
+                    payload['root_cause'] = root_cause
+                misclassification_analysis = evaluation_info.get('misclassification_analysis')
+                if misclassification_analysis:
+                    payload['misclassification_analysis'] = misclassification_analysis
 
                 # Optionally include quadrant examples inline for consistency with feedback tools
                 if include_examples:
@@ -307,6 +307,7 @@ def register_evaluation_tools(mcp: FastMCP):
         days: int = 7,
         max_feedback_samples: Optional[int] = None,
         sample_seed: Optional[int] = None,
+        max_category_summary_items: int = 20,
         yaml: bool = True,
         version: Optional[str] = None,
         latest: bool = False,
@@ -316,6 +317,8 @@ def register_evaluation_tools(mcp: FastMCP):
         concurrency: int = 5,
         baseline: Optional[str] = None,
         wait: bool = True,
+        dataset_id: Optional[str] = None,
+        use_score_associated_dataset: bool = False,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
@@ -329,6 +332,8 @@ def register_evaluation_tools(mcp: FastMCP):
         - max_feedback_samples: Optional cap for feedback evaluations. When provided, a random
                 subset up to this size is evaluated.
         - sample_seed: Optional random seed for reproducible feedback sampling.
+        - max_category_summary_items: Maximum misclassification items per category used in
+          aggregate RCA triage summaries (default: 20).
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
         - version: Specific score version ID. For accuracy: version to evaluate. For feedback: if
                    provided, overrides the auto-fetched champion version.
@@ -345,6 +350,10 @@ def register_evaluation_tools(mcp: FastMCP):
         - wait: For feedback evaluations — if True (default), block until evaluation + RCA complete
                 and return full results. If False, dispatch in background and return immediately
                 with the evaluation ID only.
+        - dataset_id: Optional dataset ID to use for accuracy evaluation. When provided, the
+                      evaluation uses this specific dataset instead of random sampling.
+        - use_score_associated_dataset: If True, use the latest associated dataset for the score
+                                        instead of random sampling (accuracy evaluation only).
 
         Returns:
         - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL.
@@ -371,12 +380,14 @@ def register_evaluation_tools(mcp: FastMCP):
 
         if max_feedback_samples is not None and max_feedback_samples <= 0:
             return "Error: max_feedback_samples must be a positive integer"
+        if max_category_summary_items <= 0:
+            return "Error: max_category_summary_items must be a positive integer"
 
         logger.info(
             "MCP Evaluation - Type: %s, Scorecard: %s, Score: %s, Days: %s, "
-            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s",
+            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s, MaxCategorySummaryItems: %s",
             evaluation_type, scorecard_name, score_name, days, yaml, n_samples,
-            max_feedback_samples, sample_seed
+            max_feedback_samples, sample_seed, max_category_summary_items
         )
 
         try:
@@ -439,6 +450,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     bl: Optional[str] = None,
                     max_fb_samples: Optional[int] = None,
                     seed: Optional[int] = None,
+                    max_category_items: int = 20,
                 ) -> subprocess.CompletedProcess:
                     """Run plexus evaluate feedback synchronously in a thread, blocking until complete."""
                     cmd = [plexus_bin, "evaluate", "feedback",
@@ -451,6 +463,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--max-samples", str(max_fb_samples)]
                     if seed is not None:
                         cmd += ["--sample-seed", str(seed)]
+                    cmd += ["--max-category-summary-items", str(max_category_items)]
                     return await asyncio.to_thread(
                         subprocess.run,
                         cmd,
@@ -506,6 +519,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     bl: Optional[str] = None,
                     max_fb_samples: Optional[int] = None,
                     seed: Optional[int] = None,
+                    max_category_items: int = 20,
                 ) -> None:
                     """Fire-and-forget: spawn plexus evaluate feedback as a detached background process."""
                     cmd = [plexus_bin, "evaluate", "feedback",
@@ -518,6 +532,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--max-samples", str(max_fb_samples)]
                     if seed is not None:
                         cmd += ["--sample-seed", str(seed)]
+                    cmd += ["--max-category-summary-items", str(max_category_items)]
                     subprocess.Popen(
                         cmd,
                         stdout=subprocess.DEVNULL,
@@ -554,6 +569,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             baseline,
                             max_feedback_samples,
                             sample_seed,
+                            max_category_summary_items,
                         )
                         await asyncio.sleep(3)
                         # Quick poll to get the evaluation ID
@@ -585,6 +601,7 @@ def register_evaluation_tools(mcp: FastMCP):
                                 "champion_version_id": resolved_version,
                                 "max_feedback_samples": max_feedback_samples,
                                 "sample_seed": sample_seed,
+                                "max_category_summary_items": max_category_summary_items,
                                 "message": "Evaluation running in background. Use plexus_evaluation_info to check status.",
                                 "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
                             })
@@ -608,6 +625,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             baseline,
                             max_feedback_samples,
                             sample_seed,
+                            max_category_summary_items,
                         )
                     )
                     eval_info = await _wait_for_completed_evaluation(spawn_time, timeout=900.0)
@@ -615,6 +633,12 @@ def register_evaluation_tools(mcp: FastMCP):
 
                     if eval_info:
                         evaluation_id = eval_info.get("id")
+                        if evaluation_id:
+                            try:
+                                # Re-fetch after CLI exits so payload includes final RCA/status.
+                                eval_info = Evaluation.get_evaluation_info(evaluation_id)
+                            except Exception as refresh_err:
+                                logger.debug("Could not refresh completed evaluation %s: %s", evaluation_id, refresh_err)
                         logger.info(f"Evaluation completed: {evaluation_id}")
 
                         payload: Dict[str, Any] = {
@@ -626,6 +650,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             "score_version_id": eval_info.get('score_version_id'),
                             "max_feedback_samples": max_feedback_samples,
                             "sample_seed": sample_seed,
+                            "max_category_summary_items": max_category_summary_items,
                             "total_items": eval_info.get('total_items'),
                             "processed_items": eval_info.get('processed_items'),
                             "metrics": eval_info.get('metrics'),
@@ -640,11 +665,12 @@ def register_evaluation_tools(mcp: FastMCP):
                             "updated_at": eval_info.get('updated_at'),
                             "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
                         }
-                        params = eval_info.get('parameters')
-                        if params and isinstance(params, dict):
-                            root_cause = params.get('root_cause')
-                            if root_cause:
-                                payload['root_cause'] = root_cause
+                        root_cause = eval_info.get('root_cause')
+                        if root_cause:
+                            payload['root_cause'] = root_cause
+                        misclassification_analysis = eval_info.get('misclassification_analysis')
+                        if misclassification_analysis:
+                            payload['misclassification_analysis'] = misclassification_analysis
                         return json.dumps(payload)
                     else:
                         return json.dumps({
@@ -674,6 +700,7 @@ def register_evaluation_tools(mcp: FastMCP):
                                 None,
                                 max_feedback_samples,
                                 sample_seed,
+                                max_category_summary_items,
                             )
                             dispatched.append({"score_name": sn, "status": "dispatched", "champion_version_id": cv})
                             logger.info(f"Dispatched feedback evaluation for '{sn}'")
@@ -687,6 +714,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         "days": days,
                         "max_feedback_samples": max_feedback_samples,
                         "sample_seed": sample_seed,
+                        "max_category_summary_items": max_category_summary_items,
                         "total_scores": len(sc_scores),
                         "dispatched": len([d for d in dispatched if d["status"] == "dispatched"]),
                         "scores": dispatched,
@@ -725,6 +753,12 @@ def register_evaluation_tools(mcp: FastMCP):
 
                 if baseline:
                     args.extend(['--baseline', baseline])
+
+                if dataset_id:
+                    args.extend(['--dataset-id', dataset_id])
+
+                if use_score_associated_dataset:
+                    args.append('--use-score-associated-dataset')
 
                 # Run the CLI command in a thread pool to avoid event loop conflicts
                 def run_cli_command():
@@ -774,6 +808,8 @@ def register_evaluation_tools(mcp: FastMCP):
                 'predictedClassDistribution': eval_info.get('predicted_class_distribution'),  # snake_case in source
                 'datasetClassDistribution': eval_info.get('dataset_class_distribution'),  # snake_case in source
                 'baselineEvaluationId': eval_info.get('baseline_evaluation_id'),
+                'root_cause': eval_info.get('root_cause'),
+                'misclassification_analysis': eval_info.get('misclassification_analysis'),
                 'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{eval_id}" if eval_id else None
             }
 
@@ -1199,9 +1235,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 "feedback_final_value": feedback_final,
             }
 
-            # 6. Run LLM inference if we have a transcript
+            # 6. Run LLM inference if we have primary input context
             if not transcript:
-                result["detailed_cause"] = "(no transcript available for LLM analysis)"
+                result["detailed_cause"] = "(no primary input available for LLM analysis)"
                 result["suggested_fix"] = ""
                 return _json.dumps(result, indent=2, default=str)
 
@@ -1215,7 +1251,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     predicted_value=predicted_value,
                 )
                 detailed_cause, suggested_fix = analyze_score_result(
-                    transcript=transcript,
+                    primary_input=transcript,
                     predicted=predicted_value,
                     correct=correct_label,
                     explanation=score_explanation,

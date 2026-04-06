@@ -1,0 +1,31 @@
+{
+  "id": "plx-984f0ba0-da99-4e4d-8e1b-3c8149052cc2",
+  "title": "Polish RCA action button copy and flat styling",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "182fde09-ff1d-4aa7-9b4d-6101a3e1a83a",
+      "author": "ryan",
+      "text": "Implementing UI polish: shorten RCA action labels and switch to flat, borderless button styling for topic/category View-items actions.",
+      "created_at": "2026-04-04T19:24:58.493439Z"
+    },
+    {
+      "id": "cf11ede8-da0d-4307-bbe0-c92e63763540",
+      "author": "ryan",
+      "text": "Completed: shortened RCA action copy to 'View items (N)' and switched topic/category action buttons to flat, borderless styling (no outline/shadow). Updated related UI tests and verified with targeted Jest + dashboard build:fast.",
+      "created_at": "2026-04-04T19:26:08.947675Z"
+    }
+  ],
+  "created_at": "2026-04-04T19:24:55.155555Z",
+  "updated_at": "2026-04-04T19:26:08.959731Z",
+  "closed_at": "2026-04-04T19:26:08.959731Z",
+  "custom": {}
+}

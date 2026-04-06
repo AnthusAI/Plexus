@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "181c53aa-6d0a-4a52-b5ce-524cdc565532",
+  "issue_id": "plx-136d0833-249f-420a-9d6f-2cab0f2ec216",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T19:06:52.202Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-8715381c-ace8-4ec3-aaec-8a6fa1a56240",
+    "priority": 2,
+    "status": "open",
+    "title": "Docs: agent-facing RCA field authority"
+  }
+}

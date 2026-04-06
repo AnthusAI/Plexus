@@ -65,6 +65,33 @@ def get_stage_names_from_state_machine() -> List[str]:
     return [name for name, _ in sorted_stages]
 
 
+def get_alignment_optimizer_stage_configs() -> Dict[str, StageConfig]:
+    """
+    Get TaskStage configurations for the feedback alignment optimizer procedure.
+
+    These stages reflect the actual workflow of the optimizer:
+    baseline evaluation → RCA analysis → propose changes → human approval
+    → iteration evaluation → compare results.
+
+    Returns:
+        Dictionary mapping stage names to StageConfig objects
+    """
+    return {
+        "Setup": StageConfig(
+            order=1,
+            status_message="Loading score configuration and feedback data"
+        ),
+        "Baseline": StageConfig(
+            order=2,
+            status_message="Running baseline feedback evaluation with root cause analysis"
+        ),
+        "Iteration": StageConfig(
+            order=3,
+            status_message="Applying proposed changes and running iteration evaluation"
+        ),
+    }
+
+
 def parse_state_machine_from_yaml(yaml_code: str) -> Dict[str, StageConfig]:
     """
     Parse state machine configuration from YAML and return TaskStage configs.
