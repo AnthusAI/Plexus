@@ -595,13 +595,17 @@ def register_score_tools(mcp: FastMCP):
             if not pull_result["success"]:
                 return f"Error: {pull_result.get('message', 'Failed to pull code and guidelines')}"
             
+            # Return absolute paths so callers can read the files without
+            # path-traversal issues regardless of their working directory
+            code_path = pull_result["code_file_path"]
+            guide_path = pull_result["guidelines_file_path"]
             return {
                 "success": True,
                 "scoreId": score.id,
                 "scoreName": score.name,
                 "scorecardName": scorecard_name,
-                "codeFilePath": pull_result["code_file_path"],
-                "guidelinesFilePath": pull_result["guidelines_file_path"],
+                "codeFilePath": os.path.abspath(code_path) if code_path else None,
+                "guidelinesFilePath": os.path.abspath(guide_path) if guide_path else None,
                 "versionId": pull_result["version_id"],
                 "message": pull_result["message"],
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")

@@ -41,6 +41,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
+import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import MetricsSummary from '@/components/MetricsSummary'
 
 const client = generateClient();
@@ -115,6 +116,14 @@ interface GetScoreResponse {
   }
 }
 
+interface AssociatedDatasetView {
+  id: string
+  name?: string | null
+  createdAt: string
+  rowCount: number | null
+  labelDistribution: Record<string, number> | null
+}
+
 interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScoreData
   variant?: 'grid' | 'detail'
@@ -136,6 +145,17 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   initialSelectedVersionId?: string | null
   onVersionSelect?: (versionId: string) => void
 }
+
+const DATASET_DISTRIBUTION_COLORS = [
+  '#10b981',
+  '#3b82f6',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#14b8a6',
+  '#f97316',
+  '#ec4899',
+]
 
 interface DetailContentProps {
   score: ScoreData
@@ -216,6 +236,148 @@ async function fetchMostRecentEvaluation(scoreId: string) {
     console.error('Error fetching evaluation:', error)
     return null
   }
+}
+
+function extractDatasetStatsFromYaml(yamlConfiguration?: string | null): {
+  rowCount: number | null
+  labelDistribution: Record<string, number> | null
+} {
+  if (!yamlConfiguration) {
+    return { rowCount: null, labelDistribution: null }
+  }
+
+  try {
+    const parsed = _loadYaml(yamlConfiguration) as any
+    const stats = parsed?.dataset_stats
+    if (!stats || typeof stats !== 'object') {
+      return { rowCount: null, labelDistribution: null }
+    }
+
+    const parsedRowCount = Number(stats.row_count)
+    const rowCount = Number.isFinite(parsedRowCount) ? parsedRowCount : null
+
+    let labelDistribution: Record<string, number> | null = null
+    if (stats.label_distribution && typeof stats.label_distribution === 'object') {
+      const normalized: Record<string, number> = {}
+      Object.entries(stats.label_distribution).forEach(([label, count]) => {
+        const numericCount = Number(count)
+        if (label && Number.isFinite(numericCount) && numericCount >= 0) {
+          normalized[label] = numericCount
+        }
+      })
+      labelDistribution = Object.keys(normalized).length > 0 ? normalized : null
+    }
+
+    return { rowCount, labelDistribution }
+  } catch {
+    return { rowCount: null, labelDistribution: null }
+  }
+}
+
+async function fetchAssociatedDatasetsForScore(scoreId: string): Promise<AssociatedDatasetView[]> {
+  const datasets: Array<{
+    id: string
+    name?: string | null
+    createdAt: string
+    dataSourceVersionId?: string | null
+  }> = []
+
+  let nextToken: string | null = null
+  do {
+    const response = await client.graphql({
+      query: `
+        query ListDataSetByScoreIdAndCreatedAt(
+          $scoreId: String!
+          $sortDirection: ModelSortDirection
+          $limit: Int
+          $nextToken: String
+        ) {
+          listDataSetByScoreIdAndCreatedAt(
+            scoreId: $scoreId
+            sortDirection: $sortDirection
+            limit: $limit
+            nextToken: $nextToken
+          ) {
+            items {
+              id
+              name
+              createdAt
+              dataSourceVersionId
+            }
+            nextToken
+          }
+        }
+      `,
+      variables: {
+        scoreId,
+        sortDirection: 'DESC',
+        limit: 100,
+        nextToken,
+      },
+    }) as GraphQLResult<any>
+
+    const resultData = response.data?.listDataSetByScoreIdAndCreatedAt
+    const items = resultData?.items ?? []
+    for (const item of items) {
+      if (!item?.id || !item?.createdAt) continue
+      datasets.push({
+        id: item.id,
+        name: item.name ?? null,
+        createdAt: item.createdAt,
+        dataSourceVersionId: item.dataSourceVersionId ?? null,
+      })
+    }
+    nextToken = resultData?.nextToken ?? null
+  } while (nextToken)
+
+  const withStats = await Promise.all(
+    datasets.map(async (dataset) => {
+      if (!dataset.dataSourceVersionId) {
+        return {
+          id: dataset.id,
+          name: dataset.name,
+          createdAt: dataset.createdAt,
+          rowCount: null,
+          labelDistribution: null,
+        }
+      }
+
+      try {
+        const versionResponse = await client.graphql({
+          query: `
+            query GetDataSourceVersionForDatasetStats($id: ID!) {
+              getDataSourceVersion(id: $id) {
+                id
+                yamlConfiguration
+              }
+            }
+          `,
+          variables: { id: dataset.dataSourceVersionId },
+        }) as GraphQLResult<any>
+        const yamlConfiguration = versionResponse.data?.getDataSourceVersion?.yamlConfiguration
+        const stats = extractDatasetStatsFromYaml(yamlConfiguration)
+        return {
+          id: dataset.id,
+          name: dataset.name,
+          createdAt: dataset.createdAt,
+          rowCount: stats.rowCount,
+          labelDistribution: stats.labelDistribution,
+        }
+      } catch {
+        return {
+          id: dataset.id,
+          name: dataset.name,
+          createdAt: dataset.createdAt,
+          rowCount: null,
+          labelDistribution: null,
+        }
+      }
+    })
+  )
+
+  return withStats.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
 }
 
 // Helper function to transform evaluation metrics into summary data
@@ -823,6 +985,10 @@ const DetailContent = React.memo(({
   const [isGuidelinesInlineEdit, setIsGuidelinesInlineEdit] = React.useState(false)
   const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
   const [newVersionNote, setNewVersionNote] = React.useState('')
+  const [associatedDatasets, setAssociatedDatasets] = React.useState<AssociatedDatasetView[]>([])
+  const [isAssociatedDatasetsLoading, setIsAssociatedDatasetsLoading] = React.useState(false)
+  const [associatedDatasetsError, setAssociatedDatasetsError] = React.useState<string | null>(null)
+  const [isAssociatedDatasetsExpanded, setIsAssociatedDatasetsExpanded] = React.useState(false)
 
   // Sort versions by creation date (newest first)
   const sortedVersions = React.useMemo(() => {
@@ -856,9 +1022,38 @@ const DetailContent = React.memo(({
     onOpenGuidelinesEditor?.()
   }
 
+  useEffect(() => {
+    let isMounted = true
+    const loadAssociatedDatasets = async () => {
+      if (!score.id) return
+      setIsAssociatedDatasetsLoading(true)
+      setAssociatedDatasetsError(null)
+      try {
+        const datasets = await fetchAssociatedDatasetsForScore(score.id)
+        if (isMounted) {
+          setAssociatedDatasets(datasets)
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('Error loading associated datasets:', error)
+          setAssociatedDatasetsError('Failed to load associated datasets.')
+        }
+      } finally {
+        if (isMounted) {
+          setIsAssociatedDatasetsLoading(false)
+        }
+      }
+    }
+
+    loadAssociatedDatasets()
+    return () => {
+      isMounted = false
+    }
+  }, [score.id])
+
   return (
     <div className={cn(
-      "w-full h-full flex flex-col",
+      "w-full h-full flex flex-col overflow-y-auto",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Description Section - Above sidebar, not versioned */}
@@ -959,6 +1154,92 @@ const DetailContent = React.memo(({
               keyPlaceholder="score-key"
               externalIdPlaceholder="External ID"
             />
+
+            <div className="rounded-md bg-card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAssociatedDatasetsExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-sm font-medium hover:opacity-80 transition-opacity"
+                    aria-label={isAssociatedDatasetsExpanded ? 'Collapse associated datasets' : 'Expand associated datasets'}
+                  >
+                    {isAssociatedDatasetsExpanded
+                      ? <ChevronDown className="h-4 w-4" />
+                      : <ChevronRight className="h-4 w-4" />}
+                    Associated Datasets
+                  </button>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {isAssociatedDatasetsExpanded ? `${associatedDatasets.length} total` : 'Latest'}
+                </div>
+              </div>
+
+              {isAssociatedDatasetsLoading ? (
+                <div className="text-xs text-muted-foreground">Loading associated datasets...</div>
+              ) : associatedDatasetsError ? (
+                <div className="text-xs text-destructive">{associatedDatasetsError}</div>
+              ) : associatedDatasets.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No associated datasets found for this score.</div>
+              ) : (
+                <div className="space-y-3">
+                  {(isAssociatedDatasetsExpanded ? associatedDatasets : associatedDatasets.slice(0, 1)).map((dataset) => {
+                    const distributionEntries = dataset.labelDistribution
+                      ? Object.entries(dataset.labelDistribution)
+                          .sort(([a], [b]) => a.localeCompare(b))
+                      : []
+                    const totalLabels = distributionEntries.reduce((sum, [, count]) => sum + count, 0)
+                    const rowCount = dataset.rowCount ?? totalLabels
+                    const distributionText = distributionEntries.length > 0
+                      ? distributionEntries.map(([label, count]) => `${label}: ${count}`).join(' · ')
+                      : 'Label distribution unavailable'
+                    return (
+                      <div key={dataset.id} className="rounded-sm bg-background p-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 pr-2">
+                            <IdentifierDisplay
+                              identifiers={[{ name: 'Dataset ID', value: dataset.id }]}
+                            />
+                          </div>
+                          <div className="text-[11px] text-muted-foreground shrink-0">
+                            <Timestamp time={dataset.createdAt} variant="relative" className="text-[11px]" />
+                          </div>
+                        </div>
+
+                        {distributionEntries.length > 0 && totalLabels > 0 ? (
+                          <div className="mt-2">
+                            <div className="h-2 w-full rounded overflow-hidden bg-muted flex">
+                              {distributionEntries.map(([label, count], index) => {
+                                const widthPercent = (count / totalLabels) * 100
+                                return (
+                                  <div
+                                    key={`${dataset.id}-${label}`}
+                                    title={`${label}: ${count}`}
+                                    style={{
+                                      width: `${widthPercent}%`,
+                                      backgroundColor: DATASET_DISTRIBUTION_COLORS[index % DATASET_DISTRIBUTION_COLORS.length],
+                                    }}
+                                  />
+                                )
+                              })}
+                            </div>
+                            <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                              <div>Rows: {rowCount ?? 'stats unavailable'}</div>
+                              <div className="text-right">{distributionText}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <div>Rows: {rowCount ?? 'stats unavailable'}</div>
+                            <div className="text-right">Label distribution unavailable</div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

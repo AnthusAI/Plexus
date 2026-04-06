@@ -318,6 +318,9 @@ async def run_experiment_with_task_tracking(
         # Run the procedure (this is the actual hypothesis generation work)
         run_options = dict(experiment_options)
         run_options.setdefault("account_id", account_id)
+        # Pass the task ID so the executor can update stage status in real-time
+        if task and task.id:
+            run_options.setdefault("_task_id_for_stage_tracking", task.id)
         experiment_result = await service.run_experiment(procedure_id, **run_options)
         
         # Complete Hypothesis stage and advance to Evaluation

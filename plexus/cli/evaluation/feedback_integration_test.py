@@ -26,6 +26,7 @@ class TestFeedbackCommandIntegration:
         assert '--version' in result.output
         assert '--max-samples' in result.output
         assert '--sample-seed' in result.output
+        assert '--max-category-summary-items' in result.output
         assert 'WITHOUT --version' in result.output
         assert 'WITH --version' in result.output
     
@@ -71,7 +72,8 @@ class TestFeedbackCommandIntegration:
             '--days', '30',
             '--version', 'test_version_123',
             '--max-samples', '50',
-            '--sample-seed', '42'
+            '--sample-seed', '42',
+            '--max-category-summary-items', '25'
         ])
         assert result.exit_code != 2, f"Argument parsing failed: {result.output}"
     
@@ -207,6 +209,5 @@ class TestFeedbackCommandExamples:
             result = runner.invoke(feedback, example)
             # Should not be a Click parsing error (exit code 2)
             assert result.exit_code != 2, f"Example failed to parse: {example}\nOutput: {result.output}"
-
 
 
