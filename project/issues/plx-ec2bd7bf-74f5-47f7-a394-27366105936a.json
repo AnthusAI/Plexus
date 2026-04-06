@@ -1,0 +1,148 @@
+{
+  "id": "plx-ec2bd7bf-74f5-47f7-a394-27366105936a",
+  "title": "Tactus REPL procedure integration (HITL turn loop + message persistence bridge)",
+  "description": "Integrate built-in Tactus REPL procedure using standard HITL request/response loop and persisted chat sessions/messages.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5a82e046-ddcc-4108-a584-6b6ff81fda7d",
+      "author": "ryan",
+      "text": "Removing remaining NEXT_PUBLIC_CONSOLE_PROCEDURE_ID frontend dependency. Console will bind to built-in/default console procedure resolution path only; if unavailable, show explicit unconfigured state without env-var requirement.",
+      "created_at": "2026-03-29T13:36:51.601736Z"
+    },
+    {
+      "id": "8649ef52-46f8-4cc7-bc5f-6f772058ef12",
+      "author": "ryan",
+      "text": "Completed env-var cleanup for console procedure binding. Removed remaining NEXT_PUBLIC_CONSOLE_PROCEDURE_ID references from active scripts: scripts/console_chat_smoke.py now defaults strictly to builtin:console/chat; scripts/upsert_console_chat_procedure.py output now emits CONSOLE_PROCEDURE_ID instead of NEXT_PUBLIC_*. Verified with ripgrep over dashboard/scripts/plexus/docs/README (no remaining matches) and ran dashboard console test suite: npm test -- --runInBand components/__tests__/console-dashboard.test.tsx (pass 4/4).",
+      "created_at": "2026-03-29T13:38:46.149965Z"
+    },
+    {
+      "id": "c332d8eb-7727-490a-ab9f-b4178d4c3615",
+      "author": "ryan",
+      "text": "Investigating local npm run dev crash: web process is healthy, dispatcher exits on AppSync UnauthorizedException and concurrently -k terminates web. Implementing local-dev script hardening so web remains up even if dispatcher auth is unavailable; dispatcher remains optional for legacy local task execution.",
+      "created_at": "2026-03-29T14:06:34.689417Z"
+    },
+    {
+      "id": "bfe2648a-cc6a-4f2d-b316-c258561cd340",
+      "author": "ryan",
+      "text": "Implemented local dev resilience for Console/dashboard iteration: updated dashboard/package.json so npm run dev no longer uses concurrently -k (web keeps running even if dispatcher exits), switched dev:dispatcher shell from bash -lc to bash -c (avoids loading ~/.bash_profile), and set PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT=false for dispatcher startup. Verified behavior by running npm run dev: dispatcher still fails with AppSync UnauthorizedException for current local PLEXUS_API_* credentials, but Next web server remains healthy and serves HTTP 200 on localhost:3000.",
+      "created_at": "2026-03-29T14:07:27.353660Z"
+    },
+    {
+      "id": "3c4c6f63-da7c-4c47-8248-bc0d946b05cb",
+      "author": "ryan",
+      "text": "Resolved local dispatcher auth root cause for staging: prior PLEXUS_API_URL/API_KEY pair pointed to stale us-east-1 endpoint and returned 401 Unauthorized on direct GraphQL probe. Identified active staging AppSync API from Amplify branch metadata (app d1cegb1ft4iove, branch staging): https://nmd2toheufhbnbp5ibwfwaku7e.appsync-api.us-west-2.amazonaws.com/graphql. Created new staging API key (prefix da2-77b4, 30-day expiry) and updated local .env. Re-validated GraphQL account queries and dispatcher startup now reaches active loop (no UnauthorizedException).",
+      "created_at": "2026-03-29T14:39:28.605918Z"
+    },
+    {
+      "id": "7b70300c-e960-4db1-a071-1f6c3062dfaf",
+      "author": "ryan",
+      "text": "Addressing runtime error on /lab/console/[sessionId]: Next 15 requires async dynamic route params access. Updating page component to await params before reading sessionId, then validating with typecheck.",
+      "created_at": "2026-03-29T15:22:14.121142Z"
+    },
+    {
+      "id": "794e8c99-3749-498c-a671-63fd489f090b",
+      "author": "ryan",
+      "text": "Fixed Next 15 dynamic params usage for /lab/console/[sessionId]. Updated dashboard/app/lab/console/[sessionId]/page.tsx to async page signature with params as Promise and await before reading sessionId. Validation: cd dashboard && npm run typecheck passed.",
+      "created_at": "2026-03-29T15:22:54.029360Z"
+    },
+    {
+      "id": "7415405d-f9e1-4542-80e9-b98dc8249285",
+      "author": "ryan",
+      "text": "Investigating Console toast: 'Message saved, but run dispatch failed: Failed to send chat message'. Tracing ConversationViewer send flow and startConsoleRun mutation error handling to identify the exact failing step and apply a concrete fix.",
+      "created_at": "2026-03-29T15:35:47.935279Z"
+    },
+    {
+      "id": "7fe2e7a3-fa08-45a9-8604-5f38754ebca1",
+      "author": "ryan",
+      "text": "Patched Console send dispatch path to avoid opaque failures: startConsoleRun custom mutation now explicitly uses authMode='apiKey' in ConversationViewer, and error extraction now unwraps Amplify GraphQL error payloads (error.message / errors[0].message) instead of defaulting to generic 'Failed to send chat message'. Validation: next lint over components/ui/conversation-viewer.tsx completed with no errors (existing repo-wide warnings only).",
+      "created_at": "2026-03-29T15:42:27.126221Z"
+    },
+    {
+      "id": "bcf3d9bd-cd2d-4b88-b5b0-fc1c39be6073",
+      "author": "ryan",
+      "text": "Refining Console error UX: moving raw GraphQL dispatch errors out of toast text and into browser console logs. Toasts will be terse/user-facing; detailed resolver/schema failures (including FieldUndefined startConsoleRun) will be logged with context for debugging.",
+      "created_at": "2026-03-29T15:45:13.548482Z"
+    },
+    {
+      "id": "33a67ea7-6346-4ec7-ba95-2f9c27ecdea1",
+      "author": "ryan",
+      "text": "Updated Console send error UX per feedback: technical dispatch errors are now logged to browser console with context (sessionId/procedureId/raw error), while toast text is non-technical. Added specific user-facing mapping for schema-missing mutation case (FieldUndefined/startConsoleRun undefined) -> 'Run dispatch is not available in this environment.'",
+      "created_at": "2026-03-29T15:45:28.039720Z"
+    },
+    {
+      "id": "e37023bd-279b-40f8-bd59-7c81f24db2d5",
+      "author": "ryan",
+      "text": "Root-cause confirmed for FieldUndefined/startConsoleRun: browser Amplify client was configured from static dashboard/amplify_outputs.json (main API 7ub...), whose schema does not include startConsoleRun. Implemented local dev environment binding to staging API without manual file edits: (1) dashboard/package.json dev:web now loads ../.env/.env.local and exports NEXT_PUBLIC_PLEXUS_API_URL/KEY/REGION from PLEXUS_* values; (2) dashboard/app/client-layout.tsx now applies optional NEXT_PUBLIC_PLEXUS_API_* overrides on top of amplify_outputs.json before Amplify.configure, with validation and region inference from endpoint URL. This keeps one canonical dispatch path (startConsoleRun mutation) and fixes schema mismatch in local dev when using staging env values.",
+      "created_at": "2026-03-29T15:49:21.668144Z"
+    },
+    {
+      "id": "8fdfbc58-c368-4b08-9374-29cfa2db0290",
+      "author": "ryan",
+      "text": "Removed account-context hard gate from Console shell. dashboard/components/console-dashboard.tsx now always renders ConsoleChatElementsAdapter instead of showing 'Console unavailable' when selectedAccount is null. This restores session list visibility even when AccountContext is empty. Adapter accountId is now optional (dashboard/components/console/console-chat-elements-adapter.tsx), so default-account-only operations degrade gracefully. Updated console-dashboard tests to reflect the new behavior and verified: jest components/__tests__/console-dashboard.test.tsx passes (4/4).",
+      "created_at": "2026-03-29T16:18:22.318023Z"
+    },
+    {
+      "id": "d57a9ed1-34bf-42a2-9215-74c1755db998",
+      "author": "ryan",
+      "text": "Added Console account fallback resolution so new-session flow can work even when AccountContext has no selected account: console-dashboard now resolves accountId by NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY via listAccountByKey (authMode apiKey) and passes effective account id to ConversationViewer. Also updated dev:web script to export NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY from PLEXUS_ACCOUNT_KEY in local dev. Re-validated console-dashboard test suite (4/4 passing).",
+      "created_at": "2026-03-29T16:18:54.456656Z"
+    },
+    {
+      "id": "1c2f545d-5d9d-42e5-bd01-a825b49e3b9b",
+      "author": "ryan",
+      "text": "Investigating repeated 401 loop in Console viewer polling: conversation-viewer uses model index queries/subscriptions without explicit authMode, causing wrong-mode requests against staging AppSync and repeated retries. Implementing explicit authMode='apiKey' on Console chat model operations and adding polling guard for unauthorized loops.",
+      "created_at": "2026-03-29T16:28:44.969091Z"
+    },
+    {
+      "id": "39255d05-a39e-4d54-aebd-15ece3ac3cd8",
+      "author": "ryan",
+      "text": "Fixed repeated 401 loop source in Console viewer by making chat data-path auth explicit and consistent. In conversation-viewer, all Console chat model operations now pass API key auth options: ChatSession list/create, ChatMessage list/create, and ChatMessage/ChatSession subscriptions use API key options. Additionally, in client-layout override path (when NEXT_PUBLIC_PLEXUS_API_URL/API_KEY are used), data.default_authorization_type is now forced to API_KEY so generated model calls default correctly against staging endpoint/user pool mismatch scenarios. Validation: conversation-viewer session-routing + streaming-updates tests pass; lint on touched files runs with existing repo warnings only.",
+      "created_at": "2026-03-29T16:29:56.045196Z"
+    },
+    {
+      "id": "1e1891ff-ef5c-4497-89e9-1ec9154587e6",
+      "author": "ryan",
+      "text": "Investigating new local auth regression on /lab/console: repeated 401s from Amplify Data list/index/subscription calls despite staging URL. Next steps: verify effective runtime API URL+key resolution in client-layout, enforce deterministic env precedence for NEXT_PUBLIC_PLEXUS_* in dev:web, and harden client auth mode on scorecard/account data loaders to apiKey.",
+      "created_at": "2026-03-29T16:36:28.488944Z"
+    },
+    {
+      "id": "8f4c2c35-2f3f-4cc6-9527-faf598c5218d",
+      "author": "ryan",
+      "text": "Applied auth-regression fixes for local /lab/console 401 loop:\n- dev:web now deterministically exports NEXT_PUBLIC_PLEXUS_* from PLEXUS_* (no stale NEXT_PUBLIC precedence), and fails fast if required env vars are missing.\n- AccountContext and ScorecardContext now use lazy getClient() (removed module-scope generateClient instances) to avoid pre-configured stale clients.\n- listFromModel now injects authMode=apiKey by default when NEXT_PUBLIC_PLEXUS_API_KEY is present.\n- ConversationViewer index-list calls now include authMode=apiKey in first-arg options as well as request options.\n\nVerification:\n- Jest targeted suites pass: console-dashboard + conversation session-routing + streaming-updates.\n- dashboard typecheck passes (exit 0).\n- direct Amplify runtime probe against staging endpoint confirms model list/index calls succeed with apiKey auth.",
+      "created_at": "2026-03-29T16:46:39.841471Z"
+    },
+    {
+      "id": "3a1bdfb5-01e5-4f34-809d-42f928e25e4b",
+      "author": "ryan",
+      "text": "Debugging new regression: Console cannot create a new session (UI shows loading then returns to old list). Investigating createNewSession inputs (accountId/procedureId), mutation result handling, and post-create list refresh/filter logic that may be dropping newly created sessions.",
+      "created_at": "2026-03-29T17:05:23.534807Z"
+    },
+    {
+      "id": "cd06488c-3678-4120-ac37-4e390bf72e24",
+      "author": "ryan",
+      "text": "Implemented session-creation visibility fix in ConversationViewer:\n- Added selected-session fallback fetch (ChatSession.get) during initial session load and session refresh when the URL session id is missing from listChatSessionByProcedureIdAndCreatedAt results.\n- Added periodic session refresh polling (15s) so session list can recover when realtime session subscriptions fail or GSI propagation lags.\n- Prevented auto-select override of externally controlled route session during initial load.\n- Added regression test: creating a new session from the Session not found state triggers ChatSession.create and calls onSessionSelect with the new id.\n\nValidation:\n- components/ui/__tests__/conversation-viewer-session-routing.test.tsx PASS\n- components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx PASS\n- components/__tests__/console-dashboard.test.tsx PASS",
+      "created_at": "2026-03-29T17:15:12.887436Z"
+    },
+    {
+      "id": "1c4a504f-2fcf-4931-b610-154a2cde8b7c",
+      "author": "ryan",
+      "text": "Added explicit create-session failure logging in ConversationViewer (ConsoleChat session create failed) with accountId/procedureId/session context to speed diagnosis if create still fails in-browser.",
+      "created_at": "2026-03-29T17:15:41.910463Z"
+    }
+  ],
+  "created_at": "2026-03-19T02:30:11.789144Z",
+  "updated_at": "2026-03-29T17:15:44.689838Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
