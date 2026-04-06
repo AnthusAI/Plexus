@@ -119,6 +119,20 @@ def register_evaluation_tools(mcp: FastMCP):
                     "baseline_evaluation_id": evaluation_info.get('baseline_evaluation_id'),
                 }
 
+                parameters = evaluation_info.get("parameters")
+                if isinstance(parameters, dict):
+                    for coverage_key in [
+                        "incorrect_items_total",
+                        "incorrect_items_with_feedback_link",
+                        "incorrect_items_without_feedback_link",
+                        "incorrect_items_analyzed_for_rca",
+                        "rca_coverage_status",
+                    ]:
+                        if coverage_key in parameters:
+                            payload[coverage_key] = parameters.get(coverage_key)
+                    if "rca_warnings" in parameters:
+                        payload["rca_warnings"] = parameters.get("rca_warnings")
+
                 root_cause = evaluation_info.get('root_cause')
                 if root_cause:
                     payload['root_cause'] = root_cause
@@ -304,8 +318,9 @@ def register_evaluation_tools(mcp: FastMCP):
         score_name: str = "",
         evaluation_type: str = "accuracy",
         n_samples: int = 10,
-        days: int = 7,
-        max_feedback_samples: Optional[int] = None,
+        days: Optional[int] = None,
+        max_feedback_items: Optional[int] = 200,
+        sampling_mode: str = "newest",
         sample_seed: Optional[int] = None,
         max_category_summary_items: int = 20,
         yaml: bool = True,
@@ -328,10 +343,10 @@ def register_evaluation_tools(mcp: FastMCP):
         - score_name: Name of specific score to evaluate (optional for feedback; if omitted, runs all scores in the scorecard)
         - evaluation_type: Type of evaluation - "accuracy" (default) or "feedback"
         - n_samples: Number of samples for accuracy evaluation (default: 10)
-        - days: Number of days to look back for feedback evaluation (default: 7). Use 30-60 days for more data.
-        - max_feedback_samples: Optional cap for feedback evaluations. When provided, a random
-                subset up to this size is evaluated.
-        - sample_seed: Optional random seed for reproducible feedback sampling.
+        - days: Optional days lookback for feedback evaluation. Omit for all-time backfill.
+        - max_feedback_items: Maximum feedback items selected for feedback evaluation (default: 200).
+        - sampling_mode: Feedback sampling mode: "newest" (default) or "random".
+        - sample_seed: Optional random seed for reproducible feedback sampling in random mode.
         - max_category_summary_items: Maximum misclassification items per category used in
           aggregate RCA triage summaries (default: 20).
         - yaml: Load scorecard from YAML files for accuracy evaluation (default: True)
@@ -378,16 +393,23 @@ def register_evaluation_tools(mcp: FastMCP):
         if version and latest:
             return "Error: Cannot use both version and latest options. Choose one."
 
-        if max_feedback_samples is not None and max_feedback_samples <= 0:
-            return "Error: max_feedback_samples must be a positive integer"
+        normalized_sampling_mode = str(sampling_mode or "newest").strip().lower()
+        if normalized_sampling_mode not in {"newest", "random"}:
+            return "Error: sampling_mode must be either 'newest' or 'random'"
+        if days is not None and days <= 0:
+            return "Error: days must be a positive integer when provided"
+        if max_feedback_items is not None and max_feedback_items <= 0:
+            return "Error: max_feedback_items must be a positive integer"
+        if normalized_sampling_mode != "random" and sample_seed is not None:
+            return "Error: sample_seed is only valid when sampling_mode is 'random'"
         if max_category_summary_items <= 0:
             return "Error: max_category_summary_items must be a positive integer"
 
         logger.info(
             "MCP Evaluation - Type: %s, Scorecard: %s, Score: %s, Days: %s, "
-            "YAML: %s, Samples: %s, MaxFeedbackSamples: %s, SampleSeed: %s, MaxCategorySummaryItems: %s",
+            "YAML: %s, Samples: %s, MaxFeedbackItems: %s, SamplingMode: %s, SampleSeed: %s, MaxCategorySummaryItems: %s",
             evaluation_type, scorecard_name, score_name, days, yaml, n_samples,
-            max_feedback_samples, sample_seed, max_category_summary_items
+            max_feedback_items, normalized_sampling_mode, sample_seed, max_category_summary_items
         )
 
         try:
@@ -445,23 +467,27 @@ def register_evaluation_tools(mcp: FastMCP):
                 def _spawn_feedback(
                     sc: str,
                     sco: str,
-                    d: int,
+                    d: Optional[int],
                     ver: Optional[str],
                     bl: Optional[str] = None,
-                    max_fb_samples: Optional[int] = None,
+                    max_fb_items: Optional[int] = None,
+                    sampling: str = "newest",
                     seed: Optional[int] = None,
                     max_category_items: int = 20,
                     runner_task_id: Optional[str] = None,
                 ) -> None:
                     """Fire-and-forget: spawn plexus evaluate feedback as a detached background process."""
                     cmd = [plexus_bin, "evaluate", "feedback",
-                           "--scorecard", sc, "--score", sco, "--days", str(d)]
+                           "--scorecard", sc, "--score", sco]
+                    if d is not None:
+                        cmd += ["--days", str(d)]
                     if ver:
                         cmd += ["--version", ver]
                     if bl:
                         cmd += ["--baseline", bl]
-                    if max_fb_samples is not None:
-                        cmd += ["--max-samples", str(max_fb_samples)]
+                    if max_fb_items is not None:
+                        cmd += ["--max-items", str(max_fb_items)]
+                    cmd += ["--sampling-mode", sampling]
                     if seed is not None:
                         cmd += ["--sample-seed", str(seed)]
                     cmd += ["--max-category-summary-items", str(max_category_items)]
@@ -478,11 +504,10 @@ def register_evaluation_tools(mcp: FastMCP):
                 from plexus.cli.report.utils import resolve_account_id_for_command
                 from plexus.cli.shared.feedback_evaluation_runner import (
                     FeedbackRunnerRequest,
+                    ensure_feedback_runner_task,
                     run_feedback_evaluation_orchestrated,
                     wait_for_feedback_evaluation_id,
                 )
-                import uuid as _uuid
-
                 _runner_client = create_client()
                 _runner_account_id = resolve_account_id_for_command(_runner_client, None)
                 if not _runner_account_id:
@@ -510,14 +535,22 @@ def register_evaluation_tools(mcp: FastMCP):
                     if not wait:
                         # Background mode: fire-and-forget, return as soon as evaluation record appears.
                         logger.info(f"Spawning feedback evaluation for '{score_name}' (background)")
-                        runner_task_id = f"mcp-feedback-{_uuid.uuid4()}"
+                        runner_task_id = ensure_feedback_runner_task(
+                            client=_runner_client,
+                            account_id=_runner_account_id,
+                            scorecard=scorecard_name,
+                            score=score_name,
+                            version=resolved_version,
+                            task_id=None,
+                        )
                         _spawn_feedback(
                             scorecard_name,
                             score_name,
                             days,
                             resolved_version,
                             baseline,
-                            max_feedback_samples,
+                            max_feedback_items,
+                            normalized_sampling_mode,
                             sample_seed,
                             max_category_summary_items,
                             runner_task_id,
@@ -542,7 +575,8 @@ def register_evaluation_tools(mcp: FastMCP):
                                 "score": score_name,
                                 "days": days,
                                 "champion_version_id": resolved_version,
-                                "max_feedback_samples": max_feedback_samples,
+                                "max_feedback_items": max_feedback_items,
+                                "sampling_mode": normalized_sampling_mode,
                                 "sample_seed": sample_seed,
                                 "max_category_summary_items": max_category_summary_items,
                                 "message": "Evaluation running in background. Use plexus_evaluation_info to check status.",
@@ -566,10 +600,11 @@ def register_evaluation_tools(mcp: FastMCP):
                             days=days,
                             version=resolved_version,
                             baseline=baseline,
-                            max_samples=max_feedback_samples,
+                            max_items=max_feedback_items or 200,
+                            sampling_mode=normalized_sampling_mode,
                             sample_seed=sample_seed,
                             max_category_summary_items=max_category_summary_items,
-                            task_id=f"mcp-feedback-{_uuid.uuid4()}",
+                            task_id=None,
                             use_yaml=yaml,
                         ),
                         client=_runner_client,
@@ -590,7 +625,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         "score": eval_info.get('score_name') or score_name,
                         "score_version_id": eval_info.get('score_version_id'),
                         "task_id": run_summary.get("task_id"),
-                        "max_feedback_samples": max_feedback_samples,
+                        "max_feedback_items": max_feedback_items,
+                        "sampling_mode": normalized_sampling_mode,
                         "sample_seed": sample_seed,
                         "max_category_summary_items": max_category_summary_items,
                         "total_items": eval_info.get('total_items'),
@@ -633,7 +669,8 @@ def register_evaluation_tools(mcp: FastMCP):
                                 days,
                                 cv,
                                 None,
-                                max_feedback_samples,
+                                max_feedback_items,
+                                normalized_sampling_mode,
                                 sample_seed,
                                 max_category_summary_items,
                             )
@@ -647,7 +684,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         "status": "dispatched",
                         "scorecard": scorecard_name,
                         "days": days,
-                        "max_feedback_samples": max_feedback_samples,
+                        "max_feedback_items": max_feedback_items,
+                        "sampling_mode": normalized_sampling_mode,
                         "sample_seed": sample_seed,
                         "max_category_summary_items": max_category_summary_items,
                         "total_scores": len(sc_scores),
@@ -658,6 +696,54 @@ def register_evaluation_tools(mcp: FastMCP):
                     })
 
             else:  # accuracy evaluation
+                if dataset_id or use_score_associated_dataset:
+                    from plexus.cli.shared.client_utils import create_client
+                    from plexus.cli.evaluation.evaluations import (
+                        get_dataset_by_id,
+                        get_latest_associated_dataset_for_score,
+                        resolve_primary_score_id_for_accuracy,
+                        validate_dataset_materialization,
+                    )
+
+                    preflight_client = create_client()
+                    resolved_dataset = None
+                    if dataset_id:
+                        resolved_dataset = get_dataset_by_id(preflight_client, dataset_id)
+                    else:
+                        if not score_name:
+                            return json.dumps({
+                                "error": "--score is required when use_score_associated_dataset is true.",
+                                "dataset_id": None,
+                                "readiness_failure_reason": "score_required_for_associated_dataset",
+                                "next_step_hint": "Provide score_name and retry evaluation.",
+                            })
+                        primary_score_id = resolve_primary_score_id_for_accuracy(
+                            client=preflight_client,
+                            scorecard_identifier=scorecard_name,
+                            score_identifier=score_name,
+                            use_yaml=yaml,
+                            specific_version=version,
+                        )
+                        resolved_dataset = get_latest_associated_dataset_for_score(
+                            preflight_client,
+                            primary_score_id,
+                        )
+                        dataset_id = resolved_dataset.get("id")
+                        use_score_associated_dataset = False
+
+                    readiness = validate_dataset_materialization(resolved_dataset or {})
+                    if not readiness.get("is_materialized"):
+                        reason = readiness.get("materialization_error") or "unknown"
+                        return json.dumps({
+                            "error": "Dataset-backed accuracy preflight failed: dataset is not materialized.",
+                            "dataset_id": readiness.get("dataset_id"),
+                            "dataset_file": readiness.get("dataset_file"),
+                            "readiness_failure_reason": reason,
+                            "next_step_hint": (
+                                "Rebuild dataset or verify DataSet.file persisted to a parquet/csv object."
+                            ),
+                        })
+
                 # Build CLI arguments for accuracy evaluation
                 args = [
                     '--scorecard', scorecard_name,
