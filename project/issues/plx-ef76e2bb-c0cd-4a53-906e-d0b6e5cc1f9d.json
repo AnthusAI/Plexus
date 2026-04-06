@@ -1,0 +1,55 @@
+{
+  "id": "plx-ef76e2bb-c0cd-4a53-906e-d0b6e5cc1f9d",
+  "title": "Revise Feedback Loop Excalidraw into Data Flywheel master diagram",
+  "description": "Update documentation/diagrams/Feedback Loop.excalidraw to a single mixed eng/ops data flywheel with stage artifacts, two decision gates, and consistent visual language.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "75385c73-6985-4710-b84f-c7306edbf525",
+      "author": "ryan",
+      "text": "Decision log: Using Data Flywheel Operations terminology; preserving one-diagram deliverable; maintaining current diagram typography style while normalizing layout and color semantics (process, artifact, decision).",
+      "created_at": "2026-04-03T00:32:11.478438Z"
+    },
+    {
+      "id": "2e3eef4a-4242-4622-ab99-512c07b4e5be",
+      "author": "ryan",
+      "text": "Scope: Update documentation/diagrams/Feedback Loop.excalidraw into a single mixed eng/ops Data Flywheel master diagram. Include six stages, stage artifact callouts, and two explicit decision gates (quality threshold and promote/deploy).",
+      "created_at": "2026-04-03T00:32:11.558416Z"
+    },
+    {
+      "id": "6581df61-92d4-4b84-9d86-ca41771aafc9",
+      "author": "ryan",
+      "text": "Implementation complete: rewrote Feedback Loop.excalidraw as a six-stage clockwise data flywheel with stage artifacts, two decision gates (quality threshold + promote/deploy), explicit Yes/No paths, and consistent process/artifact/decision color semantics.",
+      "created_at": "2026-04-03T00:33:36.968902Z"
+    },
+    {
+      "id": "3aa07baa-4ea5-47c2-a507-d92221dfb7aa",
+      "author": "ryan",
+      "text": "Validation: jq JSON parse passes; diagram now contains 6 process rectangles, 2 decision diamonds, 10 bound arrows, and stage artifact callouts. File changed: documentation/diagrams/Feedback Loop.excalidraw.",
+      "created_at": "2026-04-03T00:33:36.969484Z"
+    },
+    {
+      "id": "9ecec327-81e8-402a-9a20-9f7e61ddff55",
+      "author": "ryan",
+      "text": "Follow-up fix for load failure: removed custom \"index\" fields from all elements in Feedback Loop.excalidraw. Root cause is likely invalid element ordering indices (non-fractional tokens like stage_guidelines), which can break Excalidraw scene restore.",
+      "created_at": "2026-04-03T00:41:40.279097Z"
+    },
+    {
+      "id": "dfd1ab43-d3de-4ecf-8745-36fd96cf9d07",
+      "author": "ryan",
+      "text": "Post-fix validation: jq parse passes, no \"index\" keys remain, arrow bindings still valid. Pending user re-open check in UI.",
+      "created_at": "2026-04-03T00:41:40.279693Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:32:08.622143Z",
+  "updated_at": "2026-04-03T00:41:40.279693Z",
+  "closed_at": "2026-04-03T00:33:36.971223Z",
+  "custom": {}
+}
