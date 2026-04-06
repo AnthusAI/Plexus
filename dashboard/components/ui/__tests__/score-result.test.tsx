@@ -32,7 +32,7 @@ describe('ScoreResultComponent misclassification triage', () => {
 
     expect(screen.getByText('Misclassification triage')).toBeInTheDocument()
     expect(screen.getByText('Information gap')).toBeInTheDocument()
-    expect(screen.getByText('Confidence: medium')).toBeInTheDocument()
+    expect(screen.getByText('Triage confidence: medium')).toBeInTheDocument()
     expect(screen.getByText(/Critical phrase appears to be missing/i)).toBeInTheDocument()
     expect(screen.getByText(/Reviewer noted missing transcript phrase/i)).toBeInTheDocument()
   })

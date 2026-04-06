@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { graphqlRequest, handleGraphQLErrors } from "@/utils/amplify-client"
+import { graphqlRequest, handleGraphQLErrors, type GraphQLResponse } from "@/utils/amplify-client"
 import { ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION } from "@/components/data-sources/constants"
 
 export interface DataSourceOption {
@@ -24,6 +24,19 @@ interface DataSourceSelectorProps {
   onChange: (value: string | null, source: DataSourceOption | null) => void
   placeholder?: string
   includeAllOption?: boolean
+}
+
+type ListDataSourceByAccountIdAndNameData = {
+  listDataSourceByAccountIdAndName: {
+    items?: Array<{
+      id?: string | null
+      name?: string | null
+      key?: string | null
+      description?: string | null
+      currentVersionId?: string | null
+    } | null> | null
+    nextToken?: string | null
+  } | null
 }
 
 export default function DataSourceSelector({
@@ -49,7 +62,7 @@ export default function DataSourceSelector({
         let nextToken: string | null | undefined = null
 
         do {
-          const response = await graphqlRequest<any>(
+          const response: GraphQLResponse<ListDataSourceByAccountIdAndNameData> = await graphqlRequest(
             `
               query ListDataSourceByAccountIdAndName(
                 $accountId: String!
@@ -82,15 +95,24 @@ export default function DataSourceSelector({
             }
           )
           handleGraphQLErrors(response)
-          const result = response.data?.listDataSourceByAccountIdAndName
-          const items = (result?.items || []) as any[]
+          const result = response.data.listDataSourceByAccountIdAndName
+          const items = Array.isArray(result?.items) ? result.items : []
           all.push(
             ...items
               .filter(
-                (item) =>
-                  item?.id &&
-                  item?.name &&
-                  (item.description || "").trim() !== ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION
+                (item): item is {
+                  id: string
+                  name: string
+                  key?: string | null
+                  currentVersionId?: string | null
+                  description?: string | null
+                } =>
+                  Boolean(
+                    item
+                    && item.id
+                    && item.name
+                    && (item.description || "").trim() !== ASSOCIATED_DATASET_SCAFFOLD_DESCRIPTION
+                  )
               )
               .map((item) => ({
                 id: item.id,
