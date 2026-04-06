@@ -141,6 +141,7 @@ const docSections: DocSidebarItem[] = [
     href: "/documentation/report-blocks",
     items: [
       { name: "FeedbackAnalysis", href: "/documentation/report-blocks/feedback-analysis" },
+      { name: "FeedbackAlignmentTimeline", href: "/documentation/report-blocks/feedback-alignment-timeline" },
       { name: "TopicAnalysis", href: "/documentation/report-blocks/topic-analysis" },
     ],
   },
