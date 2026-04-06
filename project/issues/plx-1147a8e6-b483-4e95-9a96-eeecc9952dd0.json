@@ -1,0 +1,31 @@
+{
+  "id": "plx-1147a8e6-b483-4e95-9a96-eeecc9952dd0",
+  "title": "Make RCA required by default for feedback-backed evaluations",
+  "description": "## Summary\nMake RCA required by default for feedback-backed evaluations.\n\n## Deliverables\n- RCA is enabled by default in feedback-backed evaluation flows.\n- Disabling RCA becomes an explicit special option rather than the normal path.\n- The default behavior reflects that RCA is required process output.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "93ea2b07-5daf-4a2c-afd6-98ce80503305",
+      "author": "ryan",
+      "text": "Implementing RCA default-on behavior across feedback-backed evaluation entry points; disabling RCA remains explicit opt-out only.",
+      "created_at": "2026-04-02T13:45:35.998172Z"
+    },
+    {
+      "id": "68381c8a-e79b-4b36-8705-53123d36b46d",
+      "author": "ryan",
+      "text": "Implemented RCA-required default behavior across feedback-backed paths by making RCA stage mandatory in command flow and fatal on RCA-stage errors. MCP synchronous feedback response now refreshes final evaluation payload after CLI exit to include finalized RCA/status.",
+      "created_at": "2026-04-02T13:49:35.147698Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:33.269919Z",
+  "updated_at": "2026-04-02T13:49:35.162109Z",
+  "closed_at": "2026-04-02T13:49:35.162109Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dd4b5ac2-e07e-43d2-9dc6-18a51b9e6d0b",
+  "issue_id": "plx-cd69ab9a-59be-4f48-9c49-5c258466be19",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T20:06:16.254Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Code quality comments on PR #139 are resolved safely\n\nScenario: Apply only actionable fixes from github-code-quality\nGiven PR #139 has machine-generated review comments\nWhen maintainers implement scoped changes for valid findings\nThen the flagged code-quality concerns are addressed\nAnd command behavior remains unchanged\nAnd CI remains passing for the pull request",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-d4dcd24b-0042-44de-be07-7958f55b9656",
+    "priority": 1,
+    "status": "open",
+    "title": "Define expected behavior for addressing PR #139 code-quality comments"
+  }
+}

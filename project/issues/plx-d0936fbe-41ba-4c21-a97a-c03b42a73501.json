@@ -3,7 +3,7 @@
   "title": "Clean valid CodeQL findings in plexus/Scorecard.py",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek",
       "text": "Validated and fixed Scorecard.py CodeQL findings: removed unused imports and removed unreachable else branch in get_score_result. rcql --files Scorecard.py now exits clean; targeted scorecard tests pass (15 passed).",
       "created_at": "2026-03-05T18:40:35.981715873Z"
+    },
+    {
+      "id": "0b71804b-fc86-44d0-bc84-6ffa0bfc0cbc",
+      "author": "ryan",
+      "text": "Scorecard.py CodeQL findings resolved; tests pass.",
+      "created_at": "2026-04-04T19:01:13.186902Z"
     }
   ],
   "created_at": "2026-03-05T18:37:21.106269738Z",
-  "updated_at": "2026-03-05T18:40:35.981715873Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:01:13.186902Z",
+  "closed_at": "2026-04-04T19:01:13.186902Z",
   "custom": {}
 }

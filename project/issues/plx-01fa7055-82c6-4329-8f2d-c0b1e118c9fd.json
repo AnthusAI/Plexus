@@ -1,0 +1,42 @@
+{
+  "id": "plx-01fa7055-82c6-4329-8f2d-c0b1e118c9fd",
+  "title": "Implement canonical class-list resolver from champion score YAML",
+  "description": "## Summary\nImplement one canonical class-list resolver from champion score YAML.\n\n## Purpose\nProvide a single source of truth for class labels used by associated-dataset balancing.\n\n## Acceptance Criteria\n- Resolver extracts class list deterministically from champion score YAML.\n- Fail-fast error when class list cannot be resolved.\n- No alternate class-source fallback path is introduced.\n- Tests cover success and fail-fast behavior.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-82a3aa",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "45bd870c-4d88-48a2-aab2-40bb2bacb120",
+      "author": "ryan",
+      "text": "Starting implementation of canonical champion-YAML class resolver for dataset curation. Plan: add deterministic extraction helper + fail-fast behavior + focused tests.",
+      "created_at": "2026-04-03T00:38:53.489742Z"
+    },
+    {
+      "id": "6268ca42-35ea-42be-bb41-b1c71268262b",
+      "author": "ryan",
+      "text": "Implemented canonical class-list resolver in curation layer: resolve_score_valid_classes_from_champion_yaml(client, score_id). Behavior: reads champion score version YAML, extracts classes deterministically from top-level classes[].name and graph[].valid_classes, deduplicates while preserving first-seen order, normalizes YAML bool Yes/No tokens to string class labels, and fails fast on missing champion/config/classes or invalid YAML. Added focused tests in plexus/cli/dataset/curation_test.py (deterministic extraction, missing champion, missing classes). Verification: pytest -q plexus/cli/dataset/curation_test.py tests/scores/test_score_validation.py -q => pass; py_compile for curation modules => pass.",
+      "created_at": "2026-04-03T00:40:02.773611Z"
+    },
+    {
+      "id": "812d2783-48c1-4efc-ac15-056516a79f3b",
+      "author": "ryan",
+      "text": "Completed and verified in branch.",
+      "created_at": "2026-04-03T00:40:02.818270Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.252885Z",
+  "updated_at": "2026-04-03T00:40:02.818270Z",
+  "closed_at": "2026-04-03T00:40:02.798902Z",
+  "custom": {}
+}

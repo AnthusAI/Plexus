@@ -1,0 +1,37 @@
+{
+  "id": "plx-cc3cf381-35c4-4d9f-875e-321308ae1fbf",
+  "title": "Build deterministic single-score reference datasets from curated examples and labels",
+  "description": "## Summary\nBuild deterministic single-score reference datasets from curated examples and resolved labels.\n\n## Deliverables\n- Support inputs from scorecard examples, feedback items, score results, and imported/generated examples.\n- Materialize a frozen single-score `DataSet` artifact.\n- Snapshot labels into the dataset artifact so evaluation never dereferences live source records during regression runs.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ae75d26e-8fb5-49b0-be5a-7a17a92f42a6",
+      "author": "ryan",
+      "text": "Starting implementation. First concrete path: deterministic single-score reference dataset build from scorecard example item associations, with labels resolved and snapshotted into DataSet artifact metadata/buildContext/provenance.",
+      "created_at": "2026-04-02T15:13:54.394716Z"
+    },
+    {
+      "id": "c528bfdb-4679-41a5-9c32-e3c5ca1cdc7d",
+      "author": "ryan",
+      "text": "Progress update (implementation in-flight):\n\nImplemented deterministic reference-build mechanics in dataset load pipeline:\n- Added deterministic row-ordering before parquet materialization (--deterministic-order).\n- Added frozen reference artifact mode (--reference-frozen) with DataSet provenance/buildContext snapshots.\n- Added reference role tagging (--reference-role: active/regression/benchmark).\n- Added optional score pointer assignment to created DataSet (--assign-reference-pointer: active/regression/benchmark), wiring to Score reference fields.\n- Integrated label-resolution report propagation from dataframe attrs into DataSet provenance when available.\n\nFiles touched in this step:\n- plexus/cli/dataset/datasets.py\n\nValidation:\n- python -m py_compile on modified modules passed.\n- pytest -q plexus/cli/dataset/datasets_test.py -k \"load or createDataSet or updateDataSet\" -> 3 passed.\n\nRemaining work for this task:\n- Add explicit multi-source builder path for scorecard-example associations + feedback/score-result/imported label joins (current work establishes materialization and metadata plumbing).",
+      "created_at": "2026-04-02T15:15:16.801352Z"
+    },
+    {
+      "id": "7508f372-3d0f-4531-a1a9-c946d3e41f4a",
+      "author": "ryan",
+      "text": "Implementation completed for deterministic single-score reference dataset build path.\n\nWhat now exists:\n1) New built-in data cache: plexus.data.ScorecardExampleReferenceItems\n- Builds deterministic rows from scorecard example associations.\n- For each example item, resolves label from latest matching feedback item when available.\n- Fallback label source uses latest score result value.\n- Imported/generated labels are resolved via item metadata through FeedbackItems label resolver.\n\n2) Deterministic label-resolution policy in FeedbackItems\n- Source priority enforced in one path:\n  1. vetted/gold feedback\n  2. regular final feedback\n  3. score-result/imported label\n- Unresolved items are skipped with explicit skip-id reporting in dataframe attrs and logs.\n\n3) Frozen DataSet materialization + provenance snapshot\n- dataset load supports:\n  - --reference-frozen\n  - --reference-role [active|regression|benchmark]\n  - --assign-reference-pointer [active|regression|benchmark]\n  - --deterministic-order\n- DataSet provenance/buildContext metadata captures source class, parameters, row schema, and label-resolution report.\n\n4) Built-in class wiring\n- Direct dataset config now resolves class ScorecardExampleReferenceItems from plexus.data namespace.\n\nValidation executed:\n- pytest -q plexus/data/test_feedback_items.py -k \"reference_label_resolution or skips_unresolved or create_dataset_rows_with_data\"  => 4 passed\n- pytest -q plexus/cli/dataset/datasets_test.py -k \"load_command_success or builtin_reference_cache_class_resolution or load_command_applies_item_pipeline_to_text\" => 3 passed\n\nOperator example:\nplexus dataset load --source <data_source_identifier> --reference-frozen --reference-role regression --assign-reference-pointer regression --deterministic-order\n\nThis satisfies the task deliverables for a working deterministic single-score reference dataset build flow with snapshotted labels/provenance.",
+      "created_at": "2026-04-02T15:42:54.750861Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:33.059766Z",
+  "updated_at": "2026-04-02T15:42:56.673352Z",
+  "closed_at": "2026-04-02T15:42:56.673352Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-011ae876-dcdd-407b-8b65-92df9207dc29",
+  "title": "Vercel AI Elements UI integration",
+  "description": "Adopt AI Elements components in console chat UI with adapter boundary to Tactus/HITL message shape.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-19T02:30:11.789026Z",
+  "updated_at": "2026-03-19T02:30:11.789026Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -24,6 +24,7 @@ import pandas as pd
 from .base import BaseReportBlock
 from .data_utils import DatasetResolver
 from . import feedback_utils
+from .reinforcement_helpers import is_normal_prediction_score_result
 
 
 class VectorTopicMemory(BaseReportBlock):
@@ -826,16 +827,7 @@ class VectorTopicMemory(BaseReportBlock):
         - success code 200
         - not linked to an evaluation
         """
-        if score_result.get("evaluationId"):
-            return False
-        score_type = str(score_result.get("type") or "prediction").strip().lower()
-        if score_type != "prediction":
-            return False
-        status = str(score_result.get("status") or "COMPLETED").strip().upper()
-        if status != "COMPLETED":
-            return False
-        code = str(score_result.get("code") or "200").strip()
-        return code == "200"
+        return is_normal_prediction_score_result(score_result)
 
     async def _resolve_feedback_datasets(
         self, scorecard_param: str, days: int

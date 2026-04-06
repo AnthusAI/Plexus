@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "27bd6d83-7ad3-44ad-a748-c14637d8328e",
+  "issue_id": "plx-ea7193d9-7468-4c44-8f1c-1c1de0528077",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:33:51.754Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Runtime validation for 1039/45425: balanced curation + score-page dataset visibility"
+  }
+}

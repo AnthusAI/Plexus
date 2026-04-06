@@ -1,0 +1,18 @@
+{
+  "id": "plx-d4dcd24b-0042-44de-be07-7958f55b9656",
+  "title": "Remediate GitHub Code Quality findings on PR #139",
+  "description": "Address actionable github-code-quality[bot] comments on https://github.com/AnthusAI/Plexus/pull/139 with minimal-risk fixes, then validate CI.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-01T20:06:11.738664Z",
+  "updated_at": "2026-04-01T20:06:11.738664Z",
+  "closed_at": null,
+  "custom": {}
+}

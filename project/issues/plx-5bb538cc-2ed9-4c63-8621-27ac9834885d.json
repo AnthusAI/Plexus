@@ -1,0 +1,18 @@
+{
+  "id": "plx-5bb538cc-2ed9-4c63-8621-27ac9834885d",
+  "title": "Add analysis console shell to dashboard",
+  "description": "Expose /lab/analysis in the dashboard nav, add a proper analysis shell, and fix Settings navigation/redirect behavior.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-18T05:07:33.126191Z",
+  "updated_at": "2026-03-18T05:13:46.861540Z",
+  "closed_at": "2026-03-18T05:13:46.861540Z",
+  "custom": {}
+}

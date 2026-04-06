@@ -1,0 +1,43 @@
+{
+  "id": "plx-0f31acb4-34ea-4ab3-b64c-eb372d2b4b64",
+  "title": "Second-pass optimization for CLI accuracy evaluation throughput",
+  "description": "## Goal\nRun a second performance pass on CLI accuracy evaluations after initial async item-lookup fix.\n\n## Scope\n- Identify next dominant bottleneck in per-item scoring path\n- Implement safe optimization to improve throughput\n- Validate with targeted local checks and summarize expected impact\n\n## Definition of Done\n- One concrete bottleneck fixed\n- Code compiles/tests for touched area pass\n- Results recorded in Kanbus comments",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6db79f85-c74e-4104-8cf5-0c17c9c82759",
+      "author": "derek",
+      "text": "Started second optimization pass. Next step is tracing per-item scoring internals to find the next dominant blocking/expensive operation after async item-lookup fix.",
+      "created_at": "2026-03-27T22:42:42.269883260Z"
+    },
+    {
+      "id": "01309cfd-31a3-406c-880b-fe14c750c449",
+      "author": "derek",
+      "text": "Implemented second-pass optimization in plexus/Scorecard.py: removed redundant per-item score re-instantiation in score_entire_text.process_score (it was calling await score_class.create(...) after prediction just for metrics). Cost/token accounting is already done in get_score_result, so this duplicate setup was pure overhead and could trigger extra LangGraph workflow setup work per item. Kept lightweight ItemTokens and CostPerText metrics logging. Validation: python -m py_compile plexus/Scorecard.py plexus/Evaluation.py passes.",
+      "created_at": "2026-03-27T22:43:43.349600437Z"
+    },
+    {
+      "id": "4b2b4ce0-a9b8-4986-aab5-68c282c55991",
+      "author": "derek",
+      "text": "Validation/risk follow-up: ran targeted tests in py311-dev env after Scorecard optimization patch. Commands: /home/derek/miniconda3/envs/py311-dev/bin/pytest -q plexus/tests/test_processor_e2e_validation.py (13 passed) and /home/derek/miniconda3/envs/py311-dev/bin/pytest -q plexus/test_evaluation_metrics.py (19 passed). Functional risk appears low for scoring outputs and evaluation metrics. Residual risk: telemetry semantics changed because duplicate per-score cost/token CloudWatch metric emissions in score_entire_text were removed; if any downstream dashboard depended on those duplicate emissions specifically, counts could differ.",
+      "created_at": "2026-03-27T22:49:59.851100577Z"
+    },
+    {
+      "id": "621332c7-144a-42d0-bbdf-9deb24490684",
+      "author": "derek",
+      "text": "Landed on branch fix/evaluations-speed in commit 605c5fa8. Change removes redundant post-predict score re-instantiation in Scorecard.score_entire_text; keeps ItemTokens and CostPerText metric logging; cost/token accounting continues in get_score_result. Targeted tests previously run and passing in py311-dev env.",
+      "created_at": "2026-03-27T22:53:23.295068395Z"
+    }
+  ],
+  "created_at": "2026-03-27T22:42:40.284889612Z",
+  "updated_at": "2026-03-27T22:53:23.305045517Z",
+  "closed_at": "2026-03-27T22:53:23.305045517Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "079cf25c-a8f9-456c-8624-1a54daed4b10",
+  "issue_id": "plx-934e0629-f92c-4747-993a-663cc159305b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T01:05:33.780Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 2,
+    "status": "open",
+    "title": "Document non-champion class-source curation via --score-version-id"
+  }
+}

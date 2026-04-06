@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "75874b3f-e833-4bca-9ad4-06969da24d74",
+  "issue_id": "plx-960a54e2-7443-4e0b-a96e-ff6e89e51611",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:07:45.648Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a score optimizer\nI want to resume interrupted optimizations from checkpoints\nSo that long-running optimizations can survive interruptions\n\n## Acceptance Criteria\n\n- Procedure state persists to database after each iteration\n- Can resume from any checkpoint\n- Completed iterations are not re-executed\n- State includes baseline metrics, iteration logs, and RCA data\n\n## Gherkin Specification\n\n```gherkin\nFeature: Checkpoint and Resume for Long-Running Optimizations\n  As a score optimizer\n  I want to resume interrupted optimization runs\n  So that I don't lose progress from completed iterations\n\nScenario: Resume after graceful stop\n  Given an optimization is running for score \"empathy\"\n  And iteration 1 has completed successfully\n  And iteration 2 is about to start\n  When I stop the procedure with Ctrl+C\n  And I run: plexus procedure resume <procedure-id>\n  Then the procedure resumes from iteration 2\n  And iteration 1 is not re-executed\n  And the baseline evaluation is reused\n  And all previous iteration data is preserved\n\nScenario: Resume after system crash\n  Given an optimization is running\n  And 2 iterations have completed\n  And the system crashes during iteration 3\n  When the system restarts\n  And I run: plexus procedure resume <procedure-id>\n  Then the procedure resumes from the point of failure\n  And iterations 1-2 results are preserved\n  And the baseline is still referenced correctly\n\nScenario: Checkpoint storage in database\n  Given an optimization with completed iterations\n  When I query the Procedure record\n  Then the metadata field contains:\n    | Field | Present |\n    | baseline_evaluation_id | Yes |\n    | baseline_metrics | Yes |\n    | iterations | Yes |\n    | current_iteration | Yes |\n    | last_rca | Yes |\n  And each iteration log includes:\n    | Field | Present |\n    | iteration | Yes |\n    | hypothesis | Yes |\n    | score_version_id | Yes |\n    | evaluation_id | Yes |\n    | metrics | Yes |\n    | deltas | Yes |\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Checkpoint and resume capability"
+  }
+}

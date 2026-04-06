@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "040e2850-229f-4225-9c60-fd801dad529d",
+  "issue_id": "plx-22790e84-5971-4c2d-b13d-d300af929b4d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-01T20:34:30.889Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-dc22f539-45b2-4364-9008-be998617ce8d",
+    "priority": 2,
+    "status": "open",
+    "title": "Add reusable skill for scorecard score improvement"
+  }
+}

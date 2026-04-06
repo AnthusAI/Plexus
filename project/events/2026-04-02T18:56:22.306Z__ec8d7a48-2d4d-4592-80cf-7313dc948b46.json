@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ec8d7a48-2d4d-4592-80cf-7313dc948b46",
+  "issue_id": "plx-6a1a4833-c189-4985-a79f-cee6c401856c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:56:22.306Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Extract shared guideline-voting engine for contradiction/alignment analysis"
+  }
+}

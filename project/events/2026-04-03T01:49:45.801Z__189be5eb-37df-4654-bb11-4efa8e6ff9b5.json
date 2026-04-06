@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "189be5eb-37df-4654-bb11-4efa8e6ff9b5",
+  "issue_id": "plx-1d098686-b8ee-4cd3-bc3a-867928b8e6f5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T01:49:45.801Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Vetted+balanced associated dataset builder path"
+  }
+}

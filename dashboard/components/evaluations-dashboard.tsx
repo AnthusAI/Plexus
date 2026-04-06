@@ -339,7 +339,8 @@ export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type'
       ...taskData,
       stages: transformedStages
     } as AmplifyTask) : null,
-    scoreResults: scoreResults
+    scoreResults: scoreResults,
+    parameters: (evaluation.parameters as string | null) ?? null,
   };
 
   return transformedEvaluation;
@@ -764,7 +765,8 @@ export default function EvaluationsDashboard({
           scoreResults: selectedEvaluationScoreResults ?? null,
           scorecardId: evaluation.scorecardId ?? undefined,
           scoreId: evaluation.scoreId ?? undefined,
-          scoreVersionId: evaluation.scoreVersionId ?? undefined
+          scoreVersionId: evaluation.scoreVersionId ?? undefined,
+          parameters: (evaluation.parameters as string | null) ?? null,
         }}
 
         isFullWidth={isFullWidth}

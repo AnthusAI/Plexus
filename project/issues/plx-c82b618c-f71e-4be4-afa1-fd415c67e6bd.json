@@ -1,0 +1,27 @@
+{
+  "id": "plx-c82b618c-f71e-4be4-afa1-fd415c67e6bd",
+  "title": "Compare develop vs main after branch migration",
+  "description": "Audit branch delta between develop and main, confirm whether recent PITR/HITL/code-quality fixes are included in main, and summarize remaining merge items.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [
+    "release"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5233bd10-e881-43bb-a087-e9703474f927",
+      "author": "derek",
+      "text": "Branch audit complete. origin/main...origin/develop = 0 left / 4 right commits. File-level diff is only dashboard/lib/procedure-hitl.ts. Non-merge delta contains commit d6582764 (HITL metadata guard fix), which is present in develop/dev but not in main. PITR commit f328f10c is already contained in origin/main.",
+      "created_at": "2026-03-18T17:11:10.419940336Z"
+    }
+  ],
+  "created_at": "2026-03-18T17:10:58.297894483Z",
+  "updated_at": "2026-03-18T17:11:13.539976431Z",
+  "closed_at": "2026-03-18T17:11:13.539976431Z",
+  "custom": {}
+}

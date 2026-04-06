@@ -1,0 +1,31 @@
+{
+  "id": "plx-612be1f3-14ba-4424-9e69-94a720bae8f0",
+  "title": "Integrate deterministic reference datasets into evaluation flow",
+  "description": "## Summary\nIntegrate deterministic reference datasets into evaluation flows so a score can be evaluated against its frozen reference dataset.\n\n## Deliverables\n- Allow evaluation tooling to run directly against the score's assigned reference dataset.\n- Keep evaluation source-agnostic once the dataset exists.\n- Make deterministic reference datasets the basis for repeatable regression testing.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "86c33404-6e4a-4136-bf0f-faae5b9eab9b",
+      "author": "ryan",
+      "text": "Starting implementation: wire evaluation command to resolve score-assigned deterministic reference dataset pointers and run accuracy evaluation directly from that DataSet artifact.",
+      "created_at": "2026-04-02T15:43:08.044587Z"
+    },
+    {
+      "id": "aaa3f59b-8dec-4657-8f90-74af4029cfbd",
+      "author": "ryan",
+      "text": "Implemented deterministic reference dataset integration in evaluation flow.\n\nChanges:\n- Added accuracy CLI option: --reference-dataset-role [active|regression|benchmark].\n- Added resolver helper `get_reference_dataset_for_score()` that reads score pointers:\n  - referenceDataSetId\n  - referenceRegressionDataSetId\n  - referenceBenchmarkDataSetId\n  and resolves to the corresponding DataSet.\n- Integrated this into cloud-dataset loading branch for `evaluate accuracy`.\n  Selection precedence now is:\n  1) --dataset-id\n  2) --reference-dataset-role\n  3) --data-source-name/--data-source-key/--data-source-id\n\nResult:\n- Evaluation tooling can run directly against score-assigned deterministic reference datasets.\n- Flow remains source-agnostic once DataSet artifact exists.\n\nValidation:\n- Added tests: plexus/cli/evaluation/evaluations_reference_dataset_test.py\n- pytest -q plexus/cli/evaluation/evaluations_reference_dataset_test.py => 3 passed\n- py_compile passed for modified evaluation module.",
+      "created_at": "2026-04-02T15:44:22.914484Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:33.152641Z",
+  "updated_at": "2026-04-02T15:44:27.828154Z",
+  "closed_at": "2026-04-02T15:44:27.828154Z",
+  "custom": {}
+}

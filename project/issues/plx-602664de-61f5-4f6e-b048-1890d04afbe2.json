@@ -1,0 +1,31 @@
+{
+  "id": "plx-602664de-61f5-4f6e-b048-1890d04afbe2",
+  "title": "Implement deterministic label-resolution policy for reference dataset builds",
+  "description": "## Summary\nDefine and implement deterministic label resolution for reference dataset builds.\n\n## Label priority\n1. vetted/gold feedback\n2. regular final feedback\n3. score-result or imported example label\n\n## Deliverables\n- Resolve labels according to the priority order above.\n- Skip unresolved items.\n- Emit skipped counts and item IDs/reasons so the build result is auditable.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "270dfd37-c05e-46aa-996f-de508b153b47",
+      "author": "ryan",
+      "text": "Starting implementation: deterministic label-resolution policy for reference dataset builds with explicit source priority, unresolved-item skipping, and skip reporting.",
+      "created_at": "2026-04-02T15:10:51.875008Z"
+    },
+    {
+      "id": "2b98fe6f-4e55-4bdf-9c5b-e6a603c91d82",
+      "author": "ryan",
+      "text": "Implemented deterministic label-resolution policy in reference dataset row generation (FeedbackItems._create_dataset_rows).\n\nPolicy now enforced in one strict path:\n1) vetted/gold feedback label (vetted_feedback)\n2) regular final feedback label (regular_final_feedback)\n3) score-result/imported label (score_result_or_imported): initialAnswerValue, then deterministic item.metadata keys\n\nBehavior changes:\n- Unresolved items are skipped (not emitted as rows).\n- Skip reporting is produced per build:\n  - self.last_label_resolution_report\n  - df.attrs['label_resolution_report']\n  - includes skipped count + skipped feedback_item_ids.\n- Row metadata now records label source under metadata.label_resolution.\n\nFiles changed:\n- plexus/data/FeedbackItems.py\n- plexus/data/test_feedback_items.py\n\nTargeted validation:\n- pytest -q plexus/data/test_feedback_items.py -k \"reference_label_resolution or skips_unresolved or create_dataset_rows_with_data\"\n- Result: 4 passed.",
+      "created_at": "2026-04-02T15:13:38.460029Z"
+    }
+  ],
+  "created_at": "2026-04-02T12:49:33.090261Z",
+  "updated_at": "2026-04-02T15:13:45.453829Z",
+  "closed_at": "2026-04-02T15:13:45.453829Z",
+  "custom": {}
+}

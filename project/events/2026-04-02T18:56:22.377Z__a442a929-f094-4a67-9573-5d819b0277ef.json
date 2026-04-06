@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a442a929-f094-4a67-9573-5d819b0277ef",
+  "issue_id": "plx-0feba79c-79c7-4970-bece-58cd5a687d7c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:56:22.377Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Add aligned-report UI action to create reference dataset via background task"
+  }
+}

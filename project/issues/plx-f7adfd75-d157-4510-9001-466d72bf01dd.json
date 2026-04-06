@@ -1,0 +1,31 @@
+{
+  "id": "plx-f7adfd75-d157-4510-9001-466d72bf01dd",
+  "title": "Separate shared runtime env from developer test env on staging",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "05070f3a-7bc7-49dd-9e14-077933e9d67e",
+      "author": "derek",
+      "text": "Implementing explicit runtime/dev environment separation: retain py311 for deployed services, add py311-dev bootstrap script for local test work on shared staging instances, and document standard usage.",
+      "created_at": "2026-03-20T20:28:54.395557218Z"
+    },
+    {
+      "id": "9a889e4e-cb2d-4e5f-9b7e-ca0399e07bb8",
+      "author": "derek",
+      "text": "Added scripts/setup_py311_dev_env.sh to clone runtime py311 into isolated py311-dev and install Poetry/dev dependencies there. Updated README development section with explicit runtime-vs-dev env guidance and pytest command for py311-dev. Committed and pushed: 63f8886d.",
+      "created_at": "2026-03-20T20:29:33.926976548Z"
+    }
+  ],
+  "created_at": "2026-03-20T20:28:49.418384061Z",
+  "updated_at": "2026-03-20T20:29:33.937378258Z",
+  "closed_at": "2026-03-20T20:29:33.937378258Z",
+  "custom": {}
+}

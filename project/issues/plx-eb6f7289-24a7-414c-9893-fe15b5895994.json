@@ -1,0 +1,56 @@
+{
+  "id": "plx-eb6f7289-24a7-414c-9893-fe15b5895994",
+  "title": "Add dashboard surfaces for candidate assessment bundles and workflow KPIs",
+  "description": "## Summary\nAdd dashboard surfaces for optimization workflow results so operators can understand candidate assessments and KPI trends.\n\n## Deliverables\n- Surface the candidate assessment bundle in the dashboard.\n- Show deterministic-versus-random evidence and generalization-gap metrics clearly.\n- Show the workflow decision and the evidence that drove it.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-22533f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-3e14e5",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-2f755b",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "da962c07-9d73-440b-8a78-54788685ddf1",
+      "author": "ryan",
+      "text": "Starting implementation: add dashboard surfaces for candidate assessment bundles and workflow KPIs (stage evidence, generalization-gap metrics, and workflow decision context).",
+      "created_at": "2026-04-04T23:02:14.412756Z"
+    },
+    {
+      "id": "27523975-dd63-4b7d-9601-0e1de175500a",
+      "author": "ryan",
+      "text": "Implementation slice: add EvaluationTask detail surface for candidate assessment compact summary (task.metadata.candidate_assessment_compact_summary), including decision, stage evidence (deterministic/random loop/random gate), generalization-gap KPIs, and attachment key display.",
+      "created_at": "2026-04-04T23:04:59.548847Z"
+    },
+    {
+      "id": "31e7e0be-04c1-4734-9f78-a631581b4e32",
+      "author": "ryan",
+      "text": "Implemented dashboard surface in EvaluationTask detail for task.metadata.candidate_assessment_compact_summary (schema candidate_assessment_bundle.v1): decision/reason/confidence, stage evidence rows (deterministic/random loop/random gate with evaluation IDs/statuses/deltas), generalization-gap KPI block, primary route action, and bundle attachment key display. Validation: jest EvaluationTask.memo.test.tsx passed. build:fast currently fails in this repo due unrelated missing pages (/alerts, /activity, /batches, docs routes), not from this component patch.",
+      "created_at": "2026-04-04T23:06:14.178598Z"
+    },
+    {
+      "id": "c3734d8b-d300-4538-86ff-eb7bfd926b97",
+      "author": "ryan",
+      "text": "Completed and pushed: dashboard now surfaces candidate assessment compact summary in EvaluationTask detail (decision, decision reason/confidence, stage evidence for deterministic/random loop/random gate with IDs/statuses/deltas, generalization-gap KPIs, primary route action, bundle attachment key). Commit: cd104b0e8.",
+      "created_at": "2026-04-04T23:06:34.741581Z"
+    }
+  ],
+  "created_at": "2026-04-02T13:31:27.416577Z",
+  "updated_at": "2026-04-04T23:06:34.741581Z",
+  "closed_at": "2026-04-04T23:06:34.727260Z",
+  "custom": {}
+}

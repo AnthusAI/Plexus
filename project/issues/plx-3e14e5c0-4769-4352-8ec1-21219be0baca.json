@@ -1,0 +1,48 @@
+{
+  "id": "plx-3e14e5c0-4769-4352-8ec1-21219be0baca",
+  "title": "Integrate optimization decisions with value function, malfunction mix, and red flags",
+  "description": "## Summary\nIntegrate workflow decisions with value-function scoring, malfunction analysis, and red-flag heuristics.\n\n## Deliverables\n- Define how deterministic metrics, random metrics, malfunction mix, and evaluation-level flags combine into one accept/reject/reroute decision.\n- Ensure the workflow can recommend score optimization, SME clarification, upstream remediation, or bug investigation.\n- Keep the decision policy auditable and explainable.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-7fcaff",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-21138f",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-c7fda3",
+      "type": "blocked-by"
+    },
+    {
+      "target": "plx-cface0",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "1f34025b-61bc-48cb-bd06-0e5fec61eacf",
+      "author": "ryan",
+      "text": "Starting next slice after runner completion: integrate workflow decision synthesis with malfunction mix + red flags into final accept/reject/reroute contract, using bundle outputs as canonical inputs.",
+      "created_at": "2026-04-04T22:47:54.524696Z"
+    },
+    {
+      "id": "dc98379c-adef-4e97-985f-1589c5c6bfe4",
+      "author": "ryan",
+      "text": "Implemented workflow decision synthesis integration: added shared module synthesize_workflow_decision() to combine policy decisions with malfunction category shares/red flags using deterministic routing precedence (bug_investigation, data_remediation, sme_guideline_clarification, score_configuration_optimization). Integrated into run_candidate_assessment_workflow() output as workflow_decision, alongside policy_decision and bundle artifacts. Added unit coverage for reroute and non-reroute paths. Validation: pytest -q plexus/cli/shared/candidate_assessment_bundle_test.py plexus/cli/shared/candidate_assessment_runner_test.py plexus/cli/shared/workflow_decision_synthesis_test.py plexus/cli/shared/evaluation_value_function_test.py plexus/cli/shared/optimization_acceptance_policy_test.py (19 passed).",
+      "created_at": "2026-04-04T22:49:02.760707Z"
+    }
+  ],
+  "created_at": "2026-04-02T13:31:27.386133Z",
+  "updated_at": "2026-04-04T22:49:02.776372Z",
+  "closed_at": "2026-04-04T22:49:02.776372Z",
+  "custom": {}
+}

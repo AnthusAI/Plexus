@@ -1,0 +1,30 @@
+{
+  "id": "plx-5e5ccf87-ecb0-47c8-a0a1-c7b36f360749",
+  "title": "Add item-level drill-down UI for misclassification classifications",
+  "description": "## Summary\nAdd item-level UI in the evaluation task so operators can inspect the classification for individual misclassified items.\n\n## Deliverables\n- Show the per-item category, rationale, confidence, and supporting evidence in item detail views.\n- Make it easy to move from the overall breakdown to the affected misclassification items.\n- Keep item-level classification distinct from topic-level optimization RCA details.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f78d0806-4821-434f-a96d-6d64bb30b645",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-2f755b",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "e3ce62a2-82bf-4d6c-b4d0-312e0dff70bf",
+      "author": "ryan",
+      "text": "Starting implementation: add item-level misclassification drill-down (category, confidence, rationale, evidence) in evaluation RCA topic view and connect it to existing topic filtering flow.",
+      "created_at": "2026-04-04T14:48:59.328150Z"
+    }
+  ],
+  "created_at": "2026-04-02T13:21:09.832266Z",
+  "updated_at": "2026-04-04T14:51:02.221168Z",
+  "closed_at": "2026-04-04T14:51:02.221168Z",
+  "custom": {}
+}

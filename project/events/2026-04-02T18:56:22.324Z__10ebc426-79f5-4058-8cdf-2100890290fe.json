@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "10ebc426-79f5-4058-8cdf-2100890290fe",
+  "issue_id": "plx-d660e1d1-c002-48d3-b869-993919c0ffb9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:56:22.324Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Add report block mode for contradictions vs aligned vetted items"
+  }
+}

@@ -102,6 +102,7 @@ const LIST_TASKS = `
           errorDetails
           confusionMatrix
           scoreGoal
+          parameters
           datasetClassDistribution
           isDatasetClassDistributionBalanced
           predictedClassDistribution
@@ -286,6 +287,7 @@ function transformTaskToActivity(task: ProcessedTask) {
         isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
         predictedClassDistribution: parsedPredictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+        parameters: (evaluation.parameters as string | null) ?? null,
         scoreResults: evaluation.scoreResults?.map((result: {
           id: string;
           value: string | number;
@@ -430,9 +432,21 @@ function transformTaskToActivity(task: ProcessedTask) {
 }
 
 export default function ActivityDashboard({ 
-  initialSelectedTaskId = null 
+  initialSelectedTaskId = null,
+  embedded = false,
+  showHeader = true,
+  selectedScorecard: controlledSelectedScorecard,
+  setSelectedScorecard: setControlledSelectedScorecard,
+  selectedScore: controlledSelectedScore,
+  setSelectedScore: setControlledSelectedScore,
 }: { 
-  initialSelectedTaskId?: string | null 
+  initialSelectedTaskId?: string | null
+  embedded?: boolean
+  showHeader?: boolean
+  selectedScorecard?: string | null
+  setSelectedScorecard?: (value: string | null) => void
+  selectedScore?: string | null
+  setSelectedScore?: (value: string | null) => void
 } = {}) {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
@@ -446,8 +460,16 @@ export default function ActivityDashboard({
   const [selectedTask, setSelectedTask] = useState<string | null>(initialSelectedTaskId)
   const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedTaskId)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
-  const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
-  const [selectedScore, setSelectedScore] = useState<string | null>(null)
+  const [internalSelectedScorecard, setInternalSelectedScorecard] = useState<string | null>(null)
+  const [internalSelectedScore, setInternalSelectedScore] = useState<string | null>(null)
+  const selectedScorecard = controlledSelectedScorecard !== undefined
+    ? controlledSelectedScorecard
+    : internalSelectedScorecard
+  const selectedScore = controlledSelectedScore !== undefined
+    ? controlledSelectedScore
+    : internalSelectedScore
+  const setSelectedScorecard = setControlledSelectedScorecard || setInternalSelectedScorecard
+  const setSelectedScore = setControlledSelectedScore || setInternalSelectedScore
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
@@ -494,10 +516,12 @@ export default function ActivityDashboard({
     // Only update state if the selected task has changed
     if (id !== selectedTask) {
       setSelectedTask(id);
-      
-      // Update URL without triggering a navigation/re-render
-      const newPathname = id ? `/lab/tasks/${id}` : '/lab/activity';
-      window.history.pushState(null, '', newPathname);
+
+      if (!embedded) {
+        // Update URL without triggering a navigation/re-render on the standalone activity route.
+        const newPathname = id ? `/lab/tasks/${id}` : '/lab/activity';
+        window.history.pushState(null, '', newPathname);
+      }
       
       if (id && isNarrowViewport) {
         setIsFullWidth(true);
@@ -509,9 +533,11 @@ export default function ActivityDashboard({
   const handleCloseTask = () => {
     setSelectedTask(null);
     setIsFullWidth(false);
-    
-    // Update URL without triggering a navigation/re-render
-    window.history.pushState(null, '', '/lab/activity');
+
+    if (!embedded) {
+      // Update URL without triggering a navigation/re-render on the standalone activity route.
+      window.history.pushState(null, '', '/lab/activity');
+    }
   };
 
   // Add authentication check
@@ -752,23 +778,25 @@ export default function ActivityDashboard({
   }
 
   return (
-    <div className="@container flex flex-col h-full p-3 overflow-hidden">
+    <div className={`@container flex flex-col h-full overflow-hidden ${embedded ? "p-0" : "p-3"}`}>
       {/* Fixed header */}
-      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
-        <div className="@[600px]:flex-grow w-full">
-          <ScorecardContext 
-            selectedScorecard={selectedScorecard}
-            setSelectedScorecard={setSelectedScorecard}
-            selectedScore={selectedScore}
-            setSelectedScore={setSelectedScore}
-          />
+      {showHeader && (
+        <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+          <div className="@[600px]:flex-grow w-full">
+            <ScorecardContext 
+              selectedScorecard={selectedScorecard}
+              setSelectedScorecard={setSelectedScorecard}
+              selectedScore={selectedScore}
+              setSelectedScore={setSelectedScore}
+            />
+          </div>
+          
+          {/* TaskDispatchButton on top right */}
+          <div className="flex-shrink-0">
+            <TaskDispatchButton config={activityConfig} />
+          </div>
         </div>
-        
-        {/* TaskDispatchButton on top right */}
-        <div className="flex-shrink-0">
-          <TaskDispatchButton config={activityConfig} />
-        </div>
-      </div>
+      )}
       
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <AnimatePresence mode="popLayout">
@@ -802,7 +830,7 @@ export default function ActivityDashboard({
             <div className="@container overflow-visible">
               {/* TasksGauges at the top - only show when not in mobile selected task view */}
               {!(selectedTask && isNarrowViewport) && (
-                <TasksGauges className="mb-3" />
+                <TasksGauges className={embedded ? "mb-4" : "mb-3"} />
               )}
               
               <div className={`

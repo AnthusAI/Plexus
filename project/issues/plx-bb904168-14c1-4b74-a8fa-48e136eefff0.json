@@ -1,0 +1,18 @@
+{
+  "id": "plx-bb904168-14c1-4b74-a8fa-48e136eefff0",
+  "title": "Console layout v2 shell (top controls + 3 columns + collapsed artifact pane)",
+  "description": "Build the /lab/console shell with fixed top controls and a 3-column workspace: session list, chat pane, collapsed artifact pane.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-19T02:30:11.789065Z",
+  "updated_at": "2026-03-19T02:30:11.789065Z",
+  "closed_at": null,
+  "custom": {}
+}

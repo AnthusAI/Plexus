@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "87e4a477-e96f-4078-a4cf-67e8f057ba81",
+  "issue_id": "plx-fe090f8d-a651-4eb5-9610-f06a454b9cd6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T13:31:04.505Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Summary\nAs a score operator, I want to see the gap between fixed benchmark performance and random-sample performance, so that I can judge whether a score is generalizing beyond curated cases.\n\nFeature: Generalization-gap monitoring\nScenario: Operator compares benchmark and random performance\nGiven a score with a fixed benchmark dataset and one or more random evaluation runs\nWhen Plexus computes workflow comparison metrics\nThen it should expose the benchmark-versus-random generalization gap\nAnd it should show enough context to tell whether the observed gap is stable or noisy",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+    "priority": 1,
+    "status": "open",
+    "title": "Track benchmark-versus-random generalization gap and stability"
+  }
+}

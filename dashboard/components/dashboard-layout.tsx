@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints } from "lucide-react"
+import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, SquareTerminal } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -12,7 +12,7 @@ import type { Schema } from "@/amplify/data/resource"
 import type { AccountSettings } from "@/types/account-config"
 import { isValidAccountSettings } from "@/types/account-config"
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -100,10 +100,10 @@ export const menuItems = [
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
-  { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
+  { name: "Data", icon: Database, path: "/lab/datasets" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
-  { name: "Activity", icon: Activity, path: "/lab/activity" },
   { name: "Alerts", icon: Siren, path: "/lab/alerts" },
+  { name: "Console", icon: SquareTerminal, path: "/lab/console" },
   { name: "Help", icon: CircleHelp, path: "/documentation" },
 ]
 
@@ -203,8 +203,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     setIsDashboardDrawerOpen(prev => !prev)
   }
 
-  const isActivityRoute = pathname === "/lab/activity" || pathname.startsWith("/lab/tasks/");
-
   const LeftSidebar = () => {
     return (
       <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-2 mobile-compact' : ''}`}>
@@ -230,7 +228,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                 (item.name === "Reports" && pathname.startsWith(item.path)) ||
                 (item.name === "Sources" && pathname.startsWith(item.path)) ||
-                (item.name === "Activity" && isActivityRoute))
+                (item.name === "Console" && pathname.startsWith(item.path)))
               
               const isLoading = loadingRoute === item.path
               
@@ -284,10 +282,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 className={`w-full justify-start px-2 pr-2 cursor-pointer`}
               >
                 <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                  <AvatarImage 
-                    src={`/avatar-${selectedAccount?.key || '1'}.png`} 
-                    alt={selectedAccount?.name || 'Account'} 
-                  />
                   <AvatarFallback className="bg-background dark:bg-border">
                     {isLoadingAccounts ? (
                       <Spinner className="h-4 w-4" />
@@ -312,7 +306,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 Dashboard
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <Link href="/settings">
+              <Link href="/lab/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings
@@ -353,10 +347,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                         onClick={() => setSelectedAccount(account)}
                       >
                         <Avatar className="h-6 w-6 mr-2">
-                          <AvatarImage 
-                            src={`/avatar-${account.key}.png`} 
-                            alt={account.name} 
-                          />
                           <AvatarFallback className="bg-frame dark:bg-border text-xs">
                             {account.name.split(' ').map(word => word[0]).join('')}
                           </AvatarFallback>
@@ -380,7 +370,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 className={`w-full justify-start px-2 pr-2 cursor-pointer`}
               >
                 <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                  <AvatarImage src="/user-avatar.png" alt="User avatar" />
                   <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
                 </Avatar>
                 {isLeftSidebarOpen && <span className="text-muted-foreground">Ryan Porter</span>}
@@ -389,7 +378,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             <DropdownMenuContent align="end" className="w-[200px] z-[9999]">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <Link href="/settings">
+              <Link href="/lab/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
                   Settings

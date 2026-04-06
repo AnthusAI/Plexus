@@ -1,0 +1,18 @@
+{
+  "id": "plx-6bda8549-8459-46c0-9495-8a77bffa147c",
+  "title": "Switch local repo to updated develop branch",
+  "description": "Move the local workspace to develop and realign it to origin/develop after the Biblicus merge.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-03-18T04:53:07.778952Z",
+  "updated_at": "2026-03-18T04:55:27.042323Z",
+  "closed_at": "2026-03-18T04:55:27.042323Z",
+  "custom": {}
+}

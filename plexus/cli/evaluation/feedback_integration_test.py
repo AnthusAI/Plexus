@@ -24,6 +24,9 @@ class TestFeedbackCommandIntegration:
         assert '--score' in result.output
         assert '--days' in result.output
         assert '--version' in result.output
+        assert '--max-samples' in result.output
+        assert '--sample-seed' in result.output
+        assert '--max-category-summary-items' in result.output
         assert 'WITHOUT --version' in result.output
         assert 'WITH --version' in result.output
     
@@ -58,6 +61,20 @@ class TestFeedbackCommandIntegration:
         
         # Should not be a Click argument error (exit code 2)
         # Will likely be exit code 1 (execution error) or 0 if mocked
+        assert result.exit_code != 2, f"Argument parsing failed: {result.output}"
+
+    def test_feedback_command_accepts_sampling_params(self):
+        """Test that sampling parameters are accepted."""
+        runner = CliRunner()
+        result = runner.invoke(feedback, [
+            '--scorecard', 'nonexistent_scorecard',
+            '--score', 'nonexistent_score',
+            '--days', '30',
+            '--version', 'test_version_123',
+            '--max-samples', '50',
+            '--sample-seed', '42',
+            '--max-category-summary-items', '25'
+        ])
         assert result.exit_code != 2, f"Argument parsing failed: {result.output}"
     
     def test_feedback_command_days_default(self):
@@ -192,7 +209,5 @@ class TestFeedbackCommandExamples:
             result = runner.invoke(feedback, example)
             # Should not be a Click parsing error (exit code 2)
             assert result.exit_code != 2, f"Example failed to parse: {example}\nOutput: {result.output}"
-
-
 
 

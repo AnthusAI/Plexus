@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "412c7440-796c-4bba-a358-a34c1cf2c590",
+  "issue_id": "plx-3cd55363-b10e-4a6f-9ec7-e2865aa0a29e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T12:44:33.651Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Agent speech never collapsed in conversation viewer",
+    "description": "",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-c2f8bb68-b3e3-4fef-b462-20c81b5a5e72",
+    "labels": []
+  }
+}

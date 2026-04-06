@@ -1,0 +1,31 @@
+{
+  "id": "plx-3855e0ec-2ba6-417e-a89f-23967cedb144",
+  "title": "Resume score 45425 optimization loop (180d, random-200)",
+  "description": "Continue iterative feedback evaluations for score 45425 / scorecard 1039 using 180-day window and capped random samples (200). Use baseline evaluation version 59964640-6d7e-4ba3-83ed-84c385706fa1 for comparisons. No champion promotion allowed. Record each iteration with evaluation ID, AC1, accuracy, RCA presence, and config changes.",
+  "type": "task",
+  "status": "blocked",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-65711358-e3b3-497a-87f8-d7f90451b85e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4330e1f7-2008-4d16-bc0a-9bee7b280850",
+      "author": "ryan",
+      "text": "Resumed loop. Next action: run synchronous feedback evaluation (180 days, max_samples=200) via repo-local CLI module, then read final metrics/RCA from evaluation record and log iteration result.",
+      "created_at": "2026-04-02T14:39:42.990101Z"
+    },
+    {
+      "id": "795f16d0-3fc5-473b-a883-a923ff5e76e8",
+      "author": "ryan",
+      "text": "Stopped in-flight evaluation attempt after scope correction from user: optimization phase is complete; work shifts to planned improvement epics. No further score-optimization runs from this task.",
+      "created_at": "2026-04-02T14:52:07.723824Z"
+    }
+  ],
+  "created_at": "2026-04-02T14:39:38.107609Z",
+  "updated_at": "2026-04-02T14:53:04.528701Z",
+  "closed_at": null,
+  "custom": {}
+}

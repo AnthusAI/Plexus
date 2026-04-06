@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7592d527-4c45-46c1-b62f-6fad6d26edc3",
+  "issue_id": "plx-478fd012-fbdb-40af-b7e9-98a13ba8f0b8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T11:54:10.478Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Clean local checkout and pull current branch"
+  }
+}
