@@ -15,7 +15,8 @@ import { useAccount } from '@/app/contexts/AccountContext'
 type ProcedureTemplate = Schema['Procedure']['type']
 type CreateProcedureTemplateInput = Schema['Procedure']['createType']
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 interface TemplatesDashboardProps {
   initialSelectedTemplateId?: string | null
@@ -102,7 +103,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
     try {
       setIsLoading(true)
-      const { data } = await (client.models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
+      const { data } = await (getAmplifyClient().models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
         accountId: selectedAccount.id,
       })
       // Filter for templates only (isTemplate=true) and map code -> template
@@ -154,7 +155,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await (client.models.Procedure.create as any)(input as any)
+      const { data: newTemplate } = await (getAmplifyClient().models.Procedure.create as any)(input as any)
 
       if (newTemplate) {
         loadTemplates()
@@ -185,7 +186,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         accountId: selectedAccount.id
       }
 
-      const { data: newTemplate } = await (client.models.Procedure.create as any)(input as any)
+      const { data: newTemplate } = await (getAmplifyClient().models.Procedure.create as any)(input as any)
 
       if (newTemplate) {
         await loadTemplates()
@@ -221,7 +222,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      await (client.models.Procedure.delete as any)({ id: templateId })
+      await (getAmplifyClient().models.Procedure.delete as any)({ id: templateId })
       setTemplates(prev => prev.filter(t => t.id !== templateId))
       if (selectedTemplateId === templateId) {
         setSelectedTemplateId(null)
@@ -250,7 +251,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         updateData.code = template
       }
 
-      await (client.models.Procedure.update as any)(updateData)
+      await (getAmplifyClient().models.Procedure.update as any)(updateData)
       
       // Update local state - map code back to template for local state consistency
       setTemplates(prev => prev.map(t => {

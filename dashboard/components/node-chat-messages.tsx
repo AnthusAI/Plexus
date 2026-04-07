@@ -40,7 +40,8 @@ interface ChatMessageWithDetails {
   childMessages?: ChatMessageWithDetails[]
 }
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Message type icons and colors
 const getMessageIcon = (role?: string, messageType?: string) => {
@@ -139,7 +140,7 @@ export default function NodeChatMessages({ nodeId }: Props) {
         console.log('NodeChatMessages: Loading sessions for node ID:', nodeId)
         
         // Query chat sessions for this specific node
-        const { data: sessionsData, errors: sessionErrors } = await (client.models.ChatSession.list as any)({
+        const { data: sessionsData, errors: sessionErrors } = await (getAmplifyClient().models.ChatSession.list as any)({
           filter: { nodeId: { eq: nodeId } }
         })
 
@@ -163,7 +164,7 @@ export default function NodeChatMessages({ nodeId }: Props) {
         const allMessages: ChatMessageWithDetails[] = []
         
         for (const session of sessionsData as any[]) {
-          const { data: messagesData, errors: messageErrors } = await (client.models.ChatMessage.list as any)({
+          const { data: messagesData, errors: messageErrors } = await (getAmplifyClient().models.ChatMessage.list as any)({
             filter: { sessionId: { eq: session.id } }
           })
 

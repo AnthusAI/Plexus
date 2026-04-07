@@ -24,7 +24,8 @@ type ProcedureWithTask = Procedure & {
   task?: Task | null
 }
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 const SUBSCRIBE_ON_CREATE_PROCEDURE = `
   subscription OnCreateProcedure {
@@ -146,7 +147,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setIsLoading(true)
       lastLoadTimeRef.current = Date.now()
       // First get procedures
-      const proceduresResult = await client.graphql({
+      const proceduresResult = await getAmplifyClient().graphql({
         query: `
           query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!
@@ -191,7 +192,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       const proceduresData = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
       
       // Then get tasks related to procedures (via metadata)
-      const tasksResult = await client.graphql({
+      const tasksResult = await getAmplifyClient().graphql({
         query: `
           query ListTaskByAccountIdAndUpdatedAt(
             $accountId: String!
@@ -432,7 +433,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     const subscriptionHandlers: { unsubscribe: () => void }[] = [];
 
     try {
-      const createSub = (client.graphql({
+      const createSub = (getAmplifyClient().graphql({
         query: SUBSCRIBE_ON_CREATE_PROCEDURE
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onCreateProcedure: any } }) => {
@@ -451,7 +452,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     }
 
     try {
-      const updateSub = (client.graphql({
+      const updateSub = (getAmplifyClient().graphql({
         query: SUBSCRIBE_ON_UPDATE_PROCEDURE
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onUpdateProcedure: any } }) => {
@@ -499,7 +500,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       }
       
       // Create a duplicate
-      const { data: newProcedure } = await (client.models.Procedure.create as any)({
+      const { data: newProcedure } = await (getAmplifyClient().models.Procedure.create as any)({
         featured: procedure.featured || false,
         code: procedure.code || null, // Copy the code if it exists
         rootNodeId: null, // Will be set after creating nodes
@@ -564,7 +565,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       })
     }
 
-    const taskResult = await client.graphql({
+    const taskResult = await getAmplifyClient().graphql({
       query: `
         mutation CreateTask($input: CreateTaskInput!) {
           createTask(input: $input) {
@@ -599,7 +600,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     console.log('[createTaskWithStagesForProcedure] Creating', stages.length, 'stages (Start, Evaluation, Hypothesis, Test, Insights) for task:', task.id)
     for (const stage of stages) {
       console.log('[createTaskWithStagesForProcedure] Creating stage:', stage.name, 'order:', stage.order)
-      await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation CreateTaskStage($input: CreateTaskStageInput!) {
             createTaskStage(input: $input) {
@@ -704,8 +705,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       
       console.log('Create input:', createInput)
       
-      // Use direct GraphQL mutation instead of client.models
-      const result = await client.graphql({
+      // Use direct GraphQL mutation instead of getAmplifyClient().models
+      const result = await getAmplifyClient().graphql({
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
             createProcedure(input: $input) {
@@ -799,7 +800,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
   const handleDelete = async (procedureId: string) => {
     try {
-      await (client.models.Procedure.delete as any)({ id: procedureId })
+      await (getAmplifyClient().models.Procedure.delete as any)({ id: procedureId })
       setProcedures(prev => prev.filter(proc => proc.id !== procedureId))
       if (selectedProcedureId === procedureId) {
         setSelectedProcedureId(null)
