@@ -94,10 +94,16 @@
       "author": "derek",
       "text": "User approved commit. Staging dashboard lazy Amplify client initialization fixes plus Kanbus issue/event files in this working tree for a single commit on fix branch.",
       "created_at": "2026-04-07T19:33:08.070266681Z"
+    },
+    {
+      "id": "6626f0ef-8634-4880-9a4e-42991e7e7fb2",
+      "author": "derek",
+      "text": "Committed approved fix + Kanbus artifacts on branch fix/plx-7da929-amplify-report-regression: 6617e9f7 (defer Amplify client initialization to runtime, plus issue/event updates).",
+      "created_at": "2026-04-07T19:33:20.649027983Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T19:33:08.070266681Z",
+  "updated_at": "2026-04-07T19:33:20.649027983Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
