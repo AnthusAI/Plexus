@@ -532,8 +532,8 @@ code: |
           table.insert(parts, "      AI reasoning: " .. reasoning)
         end
         if text ~= "" then
-          -- Include up to 2000 chars of transcript (need enough context to see ISR opening)
-          table.insert(parts, "      Transcript: " .. tostring(text):sub(1, 2000))
+          -- Include up to 1200 chars of transcript (ISR opening is in first few lines)
+          table.insert(parts, "      Transcript: " .. tostring(text):sub(1, 1200))
         end
         table.insert(parts, "")
       end
