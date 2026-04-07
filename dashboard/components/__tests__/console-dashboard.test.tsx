@@ -4,13 +4,21 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import ConsoleDashboard from "../console-dashboard"
 import { CONSOLE_BUILTIN_PROCEDURE_ID } from "@/components/console/constants"
 
-const mockPushState = jest.fn()
+const mockReplace = jest.fn()
 const mockUseAccount = jest.fn(() => ({
   selectedAccount: { id: "acct-1", name: "Test Account" },
 }))
 
 jest.mock("@/app/contexts/AccountContext", () => ({
   useAccount: () => mockUseAccount(),
+}))
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: mockReplace,
+    push: jest.fn(),
+    prefetch: jest.fn(),
+  }),
 }))
 
 jest.mock("@/components/ScorecardContext", () => ({
@@ -75,8 +83,7 @@ jest.mock("@/components/task-dispatch", () => ({
 
 describe("ConsoleDashboard", () => {
   beforeEach(() => {
-    mockPushState.mockReset()
-    jest.spyOn(window.history, "pushState").mockImplementation(mockPushState)
+    mockReplace.mockReset()
     mockUseAccount.mockReturnValue({
       selectedAccount: { id: "acct-1", name: "Test Account" },
     })
@@ -108,8 +115,7 @@ describe("ConsoleDashboard", () => {
     })
 
     fireEvent.click(screen.getByText("Select Session"))
-    expect(mockPushState).toHaveBeenCalled()
-    expect(mockPushState).toHaveBeenLastCalledWith(window.history.state, "", "/lab/console/session-picked")
+    expect(mockReplace).toHaveBeenCalledWith("/lab/console/session-picked")
     await waitFor(() => {
       expect(screen.getByTestId("console-chat-adapter")).toHaveTextContent(
         `${CONSOLE_BUILTIN_PROCEDURE_ID}:acct-1:session-picked`
