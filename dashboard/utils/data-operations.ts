@@ -565,6 +565,28 @@ export async function listRecentEvaluations(
   }
 }
 
+export async function fetchEvaluationById(
+  evaluationId: string
+): Promise<ProcessedEvaluation | null> {
+  try {
+    const client = getClient();
+    const query = `
+      query GetEvaluation($id: ID!) {
+        getEvaluation(id: $id) {
+          ${EVALUATION_FIELDS}
+        }
+      }
+    `;
+    const response = await client.graphql({ query, variables: { id: evaluationId } }) as GraphQLResult<any>;
+    const raw = response?.data?.getEvaluation;
+    if (!raw) return null;
+    return transformEvaluation(raw);
+  } catch (error) {
+    console.error('Error in fetchEvaluationById:', error);
+    return null;
+  }
+}
+
 export function observeRecentEvaluations(
   limit: number = 100,
   accountId: string | null = null,
