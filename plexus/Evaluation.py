@@ -3093,18 +3093,15 @@ class FeedbackEvaluation(Evaluation):
                 if isinstance(topic, dict)
             ]
 
-        # Compact full per-item table to essential fields to keep DB payload bounded.
+        # Strip per-item rows from the DB payload — full data is in the attachment file.
+        # Only keep the count and attachment pointer so readers know where to fetch the detail.
         misclassification_analysis = compact_payload.get("misclassification_analysis")
         if isinstance(misclassification_analysis, dict):
             compact_misclassification = dict(misclassification_analysis)
             raw_rows = misclassification_analysis.get("item_classifications_all")
             if isinstance(raw_rows, list):
-                compact_rows = [
-                    cls._compact_item_classification_for_parameters(row)
-                    for row in raw_rows
-                ]
-                compact_misclassification["item_classifications_all"] = compact_rows
                 compact_misclassification["item_classifications_total"] = len(raw_rows)
+                del compact_misclassification["item_classifications_all"]
             compact_misclassification["item_classifications_attachment"] = output_attachment
             compact_payload["misclassification_analysis"] = compact_misclassification
 
@@ -3566,8 +3563,9 @@ class FeedbackEvaluation(Evaluation):
                 # Get the original production ScoreResult by querying for it
                 # The production ScoreResult is the one that was originally scored (without evaluationId)
                 # and matches this FeedbackItem's itemId and scoreId
+                # Note: trace is intentionally not fetched — it is not used by RCA analysis and
+                # can be large enough to push the DynamoDB item over the 400KB size limit.
                 explanation = None
-                trace = None
                 try:
                     # Query for the production ScoreResult using itemId and scoreId
                     query = """
@@ -3577,7 +3575,6 @@ class FeedbackEvaluation(Evaluation):
                                 id
                                 evaluationId
                                 explanation
-                                trace
                             }
                         }
                     }
@@ -3594,25 +3591,22 @@ class FeedbackEvaluation(Evaluation):
                         items = result['listScoreResults'].get('items', [])
                         # Filter for production results (those without evaluationId)
                         production_results = [
-                            item for item in items 
+                            item for item in items
                             if not item.get('evaluationId')
                         ]
-                        
+
                         if production_results:
                             production_result = production_results[0]
                             explanation = production_result.get('explanation')
-                            trace_str = production_result.get('trace')
-                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}, trace: {trace_str is not None}")
-                            if trace_str:
-                                try:
-                                    trace = json.loads(trace_str) if isinstance(trace_str, str) else trace_str
-                                except (TypeError, ValueError, json.JSONDecodeError):
-                                    trace = None
+                            # Truncate explanation to avoid DynamoDB 400KB item size limit
+                            if explanation and len(explanation) > 3000:
+                                explanation = explanation[:3000] + '... [truncated]'
+                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}")
                         else:
                             self.logger.debug(f"No production ScoreResult found for FeedbackItem {feedback_item.id} (found {len(items)} total, {len(production_results)} without evaluationId)")
                 except Exception as e:
                     self.logger.warning(f"Error fetching production ScoreResult for FeedbackItem {feedback_item.id}: {e}")
-                
+
                 # Create metadata with feedback details
                 # IMPORTANT: Use 'human_label' for the actual/ground-truth value (finalAnswerValue)
                 # This is what the frontend expects for displaying actual vs predicted
@@ -3627,10 +3621,10 @@ class FeedbackEvaluation(Evaluation):
                     'edited_at': feedback_item.editedAt.isoformat() if feedback_item.editedAt else None,
                     'editor_name': feedback_item.editorName
                 }
-                
-                # Add text to metadata if available
+
+                # Add text to metadata if available, truncated to avoid DynamoDB 400KB item size limit
                 if item_text:
-                    metadata['text'] = item_text
+                    metadata['text'] = item_text[:15000] if len(item_text) > 15000 else item_text
                 
                 # Add comments if available
                 if feedback_item.editCommentValue:
@@ -3650,8 +3644,7 @@ class FeedbackEvaluation(Evaluation):
                     scoreId=score_id,
                     feedbackItemId=feedback_item.id,
                     value=feedback_item.initialAnswerValue or 'N/A',  # Use initial (predicted) value
-                    explanation=explanation,  # From production ScoreResult
-                    trace=trace,  # From production ScoreResult
+                    explanation=explanation,  # From production ScoreResult (truncated if needed)
                     confidence=None,  # No confidence for feedback evaluations
                     correct=is_correct,
                     metadata=metadata,

@@ -502,6 +502,8 @@ async def _execute_tactus(
                             "      if State ~= nil and State.set ~= nil then\n"
                             "        State.set(\"stage\", value)\n"
                             "      end\n"
+                            "      local stage_tool = Tool.get(\"plexus_set_procedure_stage\")\n"
+                            "      if stage_tool ~= nil then stage_tool({stage = value}) end\n"
                             "      return value\n"
                             "    end,\n"
                             "    get = function()\n"
