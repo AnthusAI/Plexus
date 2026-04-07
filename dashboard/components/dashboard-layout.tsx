@@ -89,7 +89,8 @@ const MobileHeader = ({
   </div>
 )
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 type Account = Schema['Account']['type']
 

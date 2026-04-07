@@ -32,7 +32,8 @@ import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Minimal fallback for YAML editor - actual templates come from procedure data
 const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
@@ -199,7 +200,7 @@ export default function ProcedureTask({
     
     try {
       setIsLoadingYaml(true)
-      const result = await client.graphql({
+      const result = await getAmplifyClient().graphql({
         query: `
           query GetProcedure($id: ID!) {
             getProcedure(id: $id) {
