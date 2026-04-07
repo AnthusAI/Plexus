@@ -4473,16 +4473,11 @@ def feedback(
                     sampling_method="sequential",
                     random_seed=None,
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
+                    rca_pending=True,  # Outer code owns the COMPLETED write after RCA
                 )
                 
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
-
-                # AccuracyEvaluation marks status COMPLETED when predictions are done.
-                # Feedback-backed completion must include RCA persistence, so move back
-                # to RUNNING until RCA contract checks finish.
-                eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-                eval_rec.update(status="RUNNING")
 
                 # Update Analyzing stage status for root-cause analysis
                 # (AccuracyEvaluation.run() already advanced to Analyzing stage)

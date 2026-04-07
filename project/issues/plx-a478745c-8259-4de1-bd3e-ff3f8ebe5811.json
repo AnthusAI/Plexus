@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "## Optimization Test In Progress\n\n### Updates Made\n\nAdded `max_samples` parameter to support limiting feedback samples per evaluation:\n\n**Files Modified:**\n1. `plexus/procedures/feedback_alignment_optimizer.yaml`\n   - Added `max_samples` parameter (default: null = all samples)\n   - Updated both evaluation calls to pass max_samples\n\n2. `plexus/cli/procedure/procedures.py`\n   - Added `--max-samples` CLI option\n   - Pass to procedure params\n\n### Test Running\n\nCurrently running full optimization test:\n- **Target:** Scorecard 731, Score 47086  \n- **Days:** 180\n- **Max samples:** 100 per evaluation\n- **Max iterations:** 3\n- **Command:** plexus procedure optimize -s \"AW Confirmation\" -c \"Transfer Call?\" --days 180 --max-samples 100 --max-iterations 3\n\nProcess running in background. Will update with results when complete.",
       "created_at": "2026-04-02T16:16:11.285348Z"
+    },
+    {
+      "id": "cf15da9c-77b9-4b01-8020-01a6c1409c5f",
+      "author": "ryan",
+      "text": "## Status Update (2026-04-06)\n\nArchitecture now significantly enhanced from original implementation:\n- Single code_editor agent + reviewer agent with Lua orchestration\n- Batch-parallel dual evaluations (accuracy + feedback) for both baselines and iterations\n- Escalating accuracy warnings, target_accuracy early exit (default 0.95)\n- Enriched RCA context with fixable items and category summaries\n- YAML safety guidance and forced tool-call reminders\n- Notes field added to evaluations for self-documenting history\n\n10+ test runs completed on Parties Present / AW - Confirmation. Run 4 achieved all 3 iterations accepted.",
+      "created_at": "2026-04-06T17:15:44.677656Z"
     }
   ],
   "created_at": "2026-04-02T16:06:46.792268Z",
-  "updated_at": "2026-04-02T16:16:11.285348Z",
+  "updated_at": "2026-04-06T17:15:44.677656Z",
   "closed_at": null,
   "custom": {}
 }

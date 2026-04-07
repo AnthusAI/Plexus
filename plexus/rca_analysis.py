@@ -565,13 +565,7 @@ def extract_misclassification_evidence_flags(
         raise ValueError(f"Invalid boolean for {key}: {value}")
 
     raw_source = _normalize_label(kv["BEST_EVIDENCE_SOURCE"]).lower()
-    source_aliases = {
-        "score_context": "score_yaml",
-        "score_guidelines": "guidelines",
-        "guideline": "guidelines",
-        "input": "primary_input",
-    }
-    source = source_aliases.get(raw_source, raw_source)
+    source = normalize_best_evidence_source(raw_source)
     allowed_sources = {
         "edit_comment",
         "score_explanation",
@@ -608,6 +602,33 @@ def extract_misclassification_evidence_flags(
         "best_evidence_source": source,
         "best_evidence_quote": _excerpt(kv["BEST_EVIDENCE_QUOTE"], 260),
     }
+
+
+def normalize_best_evidence_source(raw_source: str) -> str:
+    normalized = _normalize_label(raw_source).lower()
+    source_aliases = {
+        "score_context": "score_yaml",
+        "score_yaml_configuration": "score_yaml",
+        "score_guidelines": "guidelines",
+        "guideline": "guidelines",
+        "guidelines_excerpt": "guidelines",
+        "input": "primary_input",
+        "primary_input_excerpt": "primary_input",
+        "feedback_context": "edit_comment",
+        "feedback_comment": "edit_comment",
+        "feedback_comments": "edit_comment",
+        "reviewer_comment": "edit_comment",
+        "edit_comment_excerpt": "edit_comment",
+        "final_comment_excerpt": "edit_comment",
+        "initial_comment_excerpt": "edit_comment",
+        "metadata_snapshot": "metadata",
+        "metadata_snapshot_excerpt": "metadata",
+    }
+    if normalized.startswith("feedback_comment"):
+        return "edit_comment"
+    if normalized.startswith("reviewer_comment"):
+        return "edit_comment"
+    return source_aliases.get(normalized, normalized)
 
 
 def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str, Any]) -> dict:

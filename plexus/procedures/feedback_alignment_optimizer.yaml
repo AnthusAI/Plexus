@@ -21,19 +21,31 @@ params:
 
   max_samples:
     type: number
-    default: 50
+    default: 100
     required: false
-    description: "Maximum number of feedback samples to use per evaluation (default: 50)"
+    description: "Maximum number of feedback samples to use per evaluation and minimum dataset size"
 
   max_iterations:
     type: number
-    default: 1
+    default: 10
     description: "Maximum number of optimization iterations"
 
   improvement_threshold:
     type: number
     default: 0.02
     description: "Minimum AC1 (Gwet's alignment) improvement to continue iterating (0.02 = 2%)"
+
+  target_accuracy:
+    type: number
+    default: 0.95
+    description: "Stop early if feedback AC1 reaches this threshold (0.0–1.0)"
+    required: false
+
+  num_candidates:
+    type: number
+    default: 3
+    required: false
+    description: "Number of candidate edits per A-phase cycle (1-5). Each targets a different RCA category. Evals run in parallel. Alias: candidates_per_cycle."
 
   dry_run:
     type: boolean
@@ -48,7 +60,7 @@ outputs:
   status:
     type: string
     required: true
-    description: "Completion status: converged, max_iterations, user_stopped, improvement_plateau, or error"
+    description: "Completion status: converged, max_iterations, target_reached, user_stopped, improvement_plateau, or error"
 
   message:
     type: string
@@ -92,57 +104,131 @@ outputs:
 agents:
   code_editor:
     system_prompt: |
-      You are a score configuration editor. Your only job is to propose ONE focused edit
-      to a Plexus score's YAML configuration based on evaluation data showing where it
-      makes errors.
+      You are a score configuration editor optimizing a Plexus score.
 
-      You will receive:
-      - The current score configuration (full YAML content)
-      - Evaluation results with root cause analysis showing misclassification patterns
-      - Optimization history of prior iterations
+      TWO DATASETS — understand their roles before making any edit:
 
-      IMPORTANT: You must respond in a SINGLE turn with EXACTLY two tool calls:
-      1. str_replace_editor(command="str_replace", find="<exact text to find>", replace="<replacement text>")
-      2. done(reason="<what you changed and why>")
+      1. DETERMINISTIC DATASET ("accuracy" metric): A fixed, balanced, held-out dataset
+         associated with this score. It represents overall production performance.
+         → This is your GUARDRAIL. You MUST NOT make it worse.
+         → Any edit that degrades this dataset's AC1 by more than 0.02 will be REJECTED.
+         → If this dataset is significantly worse than baseline (> 0.02 AC1 degradation),
+           fixing it becomes the PRIORITY — do not chase feedback improvements that
+           hurt this dataset. Prefer the SAFEST edits possible.
 
-      The find/replace strings must EXACTLY match text in the score configuration.
-      The system will apply your edit and submit it — you do NOT need to call submit_score_code.
+      2. FEEDBACK DATASET ("feedback" metric): The newest 90 days of human-corrected items.
+         It reflects recent real-world disagreements between AI and human reviewers.
+         → This is your OPTIMIZATION TARGET. Use the RCA from this dataset to guide edits.
+         → Improving feedback AC1 is the goal — but never at the cost of the deterministic dataset.
 
-      If the evaluation data shows no viable improvement path:
-        done(reason="cannot_improve: <explanation>")
+      EDIT STRATEGY — ranked by safety:
+      SAFEST: Add concrete examples to clarify edge cases (rarely hurts deterministic accuracy)
+      SAFE: Sharpen existing criteria with more specific language (low regression risk)
+      RISKY: Expand or broaden criteria to catch more positives (likely to hurt accuracy)
+      DANGEROUS: Remove or weaken criteria (almost always hurts accuracy)
 
-      Rules:
+      When accuracy has regressed in prior iterations, prefer SAFEST edits.
+      When feedback is consistently missing a specific pattern, target that pattern precisely
+      using the suggested fixes from the RCA.
+
+      WORKFLOW — call BOTH tools in ONE response:
+      1. Study the RCA data. Pick the single highest-impact fixable pattern.
+      2. In your response, call BOTH tools together:
+           str_replace_editor(command="str_replace", path="score_config.yaml",
+              old_str="<exact text>", new_str="<replacement>")
+           submit_score_code(version_note="<what you changed and why>")
+      3. If submit_score_code returns an error, fix it and retry submit_score_code.
+      4. If you cannot find any viable improvement:
+           done(success=False, reason="cannot_improve: <explanation>")
+
+      IMPORTANT: You MUST call submit_score_code in every response (unless giving up).
+      If you only call str_replace_editor without submit_score_code, the iteration is wasted.
+
+      YAML RULES — read carefully to avoid validation errors:
       - Make exactly ONE change per iteration
-      - The find text must be an exact substring of the current configuration
+      - The old_str must be an exact substring of the current configuration
       - YAML indentation must be correct in the replacement text
-      - Focus on the most impactful misclassification pattern from the RCA
+      - Learn from history: if an edit type was rejected before, try a different approach
+
+      ADDING A LIST ITEM (critical — this is the most common YAML mistake):
+      When adding a new bullet point to an existing list, you MUST include the
+      previous item in old_str so the replacement has proper context. Example:
+        old_str: "      - existing last item\n"
+        new_str: "      - existing last item\n      - your new item\n"
+      NEVER add a "- " item at the very end of a sequence without including
+      the prior item as context. This causes a "expected <block end>, but found '-'"
+      YAML parse error and your edit will be REJECTED.
+
+      MODIFYING AN EXISTING ITEM (preferred — safer than adding):
+      Replace in-place: include the full item in old_str, provide the updated
+      version in new_str. This never causes YAML structure errors.
 
     initial_message: "Ready."
 
     tools:
       - str_replace_editor
+      - submit_score_code
       - done
 
   reviewer:
     system_prompt: |
-      You are a score optimization reviewer. You will be shown the results of an edit
-      made to a score configuration in the previous step. Your job is to decide whether
-      to keep or revert that change.
+      You are a score optimization reviewer. You will see the eval results for an edit
+      just made to a score configuration. Decide: keep or revert.
 
-      Review the eval results carefully:
-      - Did the change improve feedback alignment (AC1)?
-      - Did accuracy hold up (not regress significantly)?
-      - Does the direction seem promising to continue?
+      Decision rules:
+      - If accuracy delta is worse than -0.03: call done(decision="revert") — accuracy
+        regression this large is not acceptable, even if feedback improved.
+      - If feedback delta is negative AND accuracy delta is <= 0: call done(decision="revert")
+        — both metrics got worse, no reason to keep this.
+      - If feedback delta is positive and accuracy delta is >= -0.02: call done(decision="keep")
+        — this is a good change, accept it.
+      - For borderline cases (feedback improved slightly but accuracy regressed slightly):
+        use your judgment. Prefer keep if feedback gain outweighs accuracy cost.
 
-      Call done(decision="keep") if the change looks good or neutral and worth keeping.
-      Call done(decision="revert") if the change made things worse or is clearly wrong.
+      When multiple candidates were tried, the best one has been pre-selected by metrics.
+      Your job: confirm the selection or revert ALL if none are good enough.
 
-      Note: Metric guardrails still apply — even if you say "keep", a severe accuracy
-      regression will be overridden. Your judgment is most valuable for borderline cases.
+      REQUIRED: You MUST call done() as a tool call. Do NOT return a text response.
+      Always include a brief reason: done(decision="keep", reason="...") or done(decision="revert", reason="...")
 
     initial_message: "Ready to review."
 
     tools:
+      - done
+
+  synthesizer:
+    system_prompt: |
+      You are a score configuration synthesizer. You see multiple candidate edits
+      to a Plexus score configuration and their evaluation results.
+      Your job: combine the best ideas from multiple candidates into ONE improved version.
+
+      RULES:
+      - Start from the base YAML shown in the editor (score_config.yaml)
+      - Study each candidate's diff and evaluation metrics carefully
+      - If candidates edited DIFFERENT regions: apply BOTH changes (they are independent)
+      - If candidates edited the SAME region: pick the better version, or merge the wording
+      - If one candidate is clearly dominant on all metrics: just replicate its exact changes
+      - HARD CONSTRAINT: Do NOT degrade accuracy. Prefer safe combinations.
+      - Make exactly the changes needed — do not add your own novel edits beyond what candidates tried
+
+      WORKFLOW — call BOTH tools in ONE response:
+      1. Decide which changes to apply from which candidates
+      2. Call str_replace_editor for each change you want to apply
+      3. Call submit_score_code with a version_note explaining what you combined
+
+      IMPORTANT: You MUST call submit_score_code in every response.
+      If you only call str_replace_editor without submit_score_code, the iteration is wasted.
+
+      YAML RULES — read carefully to avoid validation errors:
+      - The old_str must be an exact substring of the current configuration
+      - YAML indentation must be correct in the replacement text
+      - When adding a list item, include the previous item in old_str for context
+
+    initial_message: "Ready to synthesize."
+
+    tools:
+      - str_replace_editor
+      - submit_score_code
       - done
 
 stages:
@@ -182,7 +268,10 @@ code: |
     if ok then
       return decoded, nil
     end
-    return nil, decoded
+    -- Not valid JSON — surface the raw string as the error message so callers
+    -- see the actual tool error (e.g. "Error: Missing API credentials.") instead
+    -- of an opaque JSON parse failure.
+    return nil, value
   end
 
   local function safe_get_metric(metrics, name)
@@ -214,6 +303,48 @@ code: |
     }
   end
 
+  local function compute_yaml_diff(base, modified)
+    if base == modified then return "(no changes)" end
+    local base_lines = {}
+    for line in (base .. "\n"):gmatch("([^\n]*)\n") do
+      table.insert(base_lines, line)
+    end
+    local mod_lines = {}
+    for line in (modified .. "\n"):gmatch("([^\n]*)\n") do
+      table.insert(mod_lines, line)
+    end
+    local diff_parts = {}
+    local max_lines = math.max(#base_lines, #mod_lines)
+    local context = 2
+    local last_diff_line = 0
+    for i = 1, max_lines do
+      local bl = base_lines[i] or ""
+      local ml = mod_lines[i] or ""
+      if bl ~= ml then
+        -- Context before (if gap since last diff)
+        if i - last_diff_line > context + 1 then
+          table.insert(diff_parts, "...")
+        end
+        for c = math.max(last_diff_line + 1, i - context), i - 1 do
+          table.insert(diff_parts, string.format(" %4d  %s", c, base_lines[c] or ""))
+        end
+        if bl ~= "" then
+          table.insert(diff_parts, string.format("-%4d  %s", i, bl))
+        end
+        if ml ~= "" then
+          table.insert(diff_parts, string.format("+%4d  %s", i, ml))
+        end
+        last_diff_line = i
+      end
+    end
+    -- Context after last diff
+    for c = last_diff_line + 1, math.min(last_diff_line + context, #base_lines) do
+      table.insert(diff_parts, string.format(" %4d  %s", c, base_lines[c] or ""))
+    end
+    if #diff_parts == 0 then return "(no visible changes)" end
+    return table.concat(diff_parts, "\n")
+  end
+
   local function call_plexus_tool(tool_name, args_table)
     -- Direct programmatic tool invocation via Tactus Tool.get() API
     -- No LLM agent involved — calls MCP tools directly from Lua
@@ -241,16 +372,19 @@ code: |
     table.insert(lines, string.format("%-6s  %-38s  %-10s  %-12s  %-7s  %-12s  %-7s",
       "base", tostring(baseline_version_id), "BASELINE", base_fb, "", base_acc, ""))
 
-    -- Iteration rows
+    -- Cycle rows (each cycle has A-phase candidates + B-phase result)
     for _, iter in ipairs(iterations) do
       local status_str = iter.accepted and "ACCEPTED" or "REJECTED"
+      if iter.skip_reason then status_str = "SKIPPED" end
       local fb_ac1 = iter.feedback_metrics and string.format("%.3f", iter.feedback_metrics.alignment) or "N/A"
       local acc_ac1 = iter.accuracy_metrics and string.format("%.3f", iter.accuracy_metrics.alignment) or "N/A"
       local fb_delta = iter.feedback_deltas and string.format("%+.3f", iter.feedback_deltas.alignment) or ""
       local acc_delta = iter.accuracy_deltas and string.format("%+.3f", iter.accuracy_deltas.alignment) or ""
 
       local note = ""
-      if not iter.accepted and iter.accuracy_deltas and iter.accuracy_deltas.alignment < -0.02 then
+      if iter.skip_reason then
+        note = "  (" .. iter.skip_reason .. ")"
+      elseif not iter.accepted and iter.accuracy_deltas and iter.accuracy_deltas.alignment < -0.02 then
         note = "  (accuracy regressed)"
       elseif not iter.accepted then
         note = "  (no improvement)"
@@ -258,12 +392,119 @@ code: |
         note = "  <- current base"
       end
 
-      table.insert(lines, string.format("%-6s  %-38s  %-10s  %-12s  %-7s  %-12s  %-7s%s",
-        tostring(iter.iteration), tostring(iter.score_version_id), status_str,
+      local synth_tag = iter.synthesis_won and " [SYNTH]" or ""
+      table.insert(lines, string.format("%-8s  %-38s  %-10s  %-12s  %-7s  %-12s  %-7s%s",
+        tostring(iter.iteration) .. synth_tag, tostring(iter.score_version_id), status_str,
         fb_ac1, fb_delta, acc_ac1, acc_delta, note))
+      -- Show what was tried so the agent doesn't repeat failed approaches
+      if iter.done_reason and iter.done_reason ~= "" then
+        table.insert(lines, string.format("          Edit: %s", tostring(iter.done_reason):sub(1, 120)))
+      end
+      -- Show A-phase results summary per cycle
+      if iter.a_phase_results and type(iter.a_phase_results) == "table" then
+        local succeeded_list = {}
+        local failed_list = {}
+        for _, ap in ipairs(iter.a_phase_results) do
+          local fb_d = ap.fb_deltas and ap.fb_deltas.alignment or 0
+          local acc_d = ap.acc_deltas and ap.acc_deltas.alignment or 0
+          local desc = string.format("cand%d: FB %+.3f ACC %+.3f '%s'",
+            ap.index, fb_d, acc_d, tostring(ap.done_reason or ""):sub(1, 60))
+          if ap.succeeded then
+            table.insert(succeeded_list, desc)
+          else
+            table.insert(failed_list, desc)
+          end
+        end
+        if #succeeded_list > 0 then
+          table.insert(lines, "          A-phase succeeded: " .. table.concat(succeeded_list, "; "))
+        end
+        if #failed_list > 0 then
+          table.insert(lines, "          A-phase failed: " .. table.concat(failed_list, "; "))
+        end
+      end
     end
 
     return table.concat(lines, "\n")
+  end
+
+  -- Enrich an RCA table with actionable fields from misclassification_analysis
+  local function enrich_rca(rca)
+    if type(rca) ~= "table" then return rca end
+    local ma = rca.misclassification_analysis
+    if type(ma) ~= "table" then return rca end
+
+    -- Primary next action
+    rca._primary_next_action = ma.primary_next_action or nil
+
+    -- Category summaries (natural language per-category description)
+    rca._category_summaries = ma.category_summaries or nil
+
+    -- Top 10 likely-fixable items with suggested_fix + evidence_quote
+    local all_items = (type(ma.item_classifications_all) == "table" and ma.item_classifications_all) or {}
+    local fixable = {}
+    for _, item in ipairs(all_items) do
+      if item.config_fixability == "likely_fixable" and #fixable < 10 then
+        table.insert(fixable, item)
+      end
+    end
+    rca._fixable_items = fixable
+
+    return rca
+  end
+
+  -- Build a candidate-specific strategy instruction
+  local function build_candidate_strategy(candidate_index, num_candidates, fixable_items, consecutive_acc_rejections)
+    -- If accuracy has regressed repeatedly, all candidates are conservative
+    if consecutive_acc_rejections >= 2 then
+      return "STRATEGY: SAFEST only — add examples to clarify edge cases. Do NOT modify criteria."
+    end
+
+    if num_candidates <= 1 then
+      return ""  -- single candidate, use default behavior
+    end
+
+    -- Each candidate targets a DIFFERENT RCA fixable item (category).
+    -- The synthesis step will combine the best improvements across categories.
+    local num_fixable = type(fixable_items) == "table" and #fixable_items or 0
+    local target_idx = math.min(candidate_index, math.max(num_fixable, 1))
+
+    if num_fixable < 2 then
+      -- Not enough distinct RCA items — fall back to risk-level differentiation
+      if candidate_index == 1 then
+        return "STRATEGY: Target fixable item #1. Use SAFEST edits — add examples or sharpen wording."
+      else
+        return "STRATEGY: Target fixable item #1 with a BOLDER approach. " ..
+          "You ARE ALLOWED to modify criteria wording, add conditions, or restructure. " ..
+          "A SAFE edit that changes classification behavior is better than a SAFEST edit that doesn't."
+      end
+    end
+
+    return string.format(
+      "STRATEGY: You are candidate %d of %d. Each candidate targets a DIFFERENT error category.\n" ..
+      "YOUR ASSIGNMENT: Focus ONLY on fixable item #%d from the RCA above.\n" ..
+      "Do NOT address any other fixable items — other candidates handle those.\n" ..
+      "Make exactly ONE targeted edit to fix the error pattern described in item #%d.\n" ..
+      "Use SAFEST or SAFE edits. The synthesis step will combine the best fixes from all candidates.\n" ..
+      "IMPORTANT: Check the OPTIMIZATION HISTORY above. If a similar edit was tried before and\n" ..
+      "produced +0.000 improvement, you MUST try a fundamentally different approach — not a\n" ..
+      "variation of the same wording change. Consider modifying criteria structure, adding\n" ..
+      "conditions, or changing classification logic rather than just adding examples.",
+      candidate_index, num_candidates, target_idx, target_idx)
+  end
+
+  -- A-phase success classification: noise-aware thresholds
+  local A_PHASE_FB_THRESHOLD = 0.005    -- FB delta must be meaningful (above tight noise floor)
+  local A_PHASE_ACC_THRESHOLD = -0.02   -- ACC regression tolerance
+
+  local function classify_a_phase_success(cand)
+    if not cand.fb_deltas then return false end
+    local fb_d = cand.fb_deltas.alignment or 0
+    local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
+    return (fb_d > A_PHASE_FB_THRESHOLD) and (acc_d >= A_PHASE_ACC_THRESHOLD)
+  end
+
+  local function should_synthesize(succeeded_candidates)
+    return #succeeded_candidates >= 2
   end
 
   -- Build the full context message for the coding agent
@@ -295,7 +536,6 @@ code: |
     end
     if opts.feedback_rca then
       table.insert(parts, "Feedback RCA:")
-      -- Extract compact summary to avoid DynamoDB size limits
       local rca = opts.feedback_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
@@ -310,6 +550,37 @@ code: |
           table.insert(parts, string.format("Topic %d: %s (count=%s)",
             i, tostring(t.label or "?"), tostring(t.count or t.size or "?")))
         end
+        -- Primary next action
+        if rca._primary_next_action then
+          local pna = rca._primary_next_action
+          if type(pna) == "table" then
+            local pna_text = pna.action or pna.description or pna.recommendation or ""
+            if pna_text ~= "" then
+              table.insert(parts, "Primary next action: " .. tostring(pna_text):sub(1, 600))
+            end
+          end
+        end
+        -- Category summaries
+        if type(rca._category_summaries) == "table" then
+          table.insert(parts, "Error categories:")
+          for cat, summary in pairs(rca._category_summaries) do
+            table.insert(parts, string.format("  %s: %s", tostring(cat), tostring(summary):sub(1, 300)))
+          end
+        end
+        -- Top likely-fixable misclassifications with suggested fixes
+        if type(rca._fixable_items) == "table" and #rca._fixable_items > 0 then
+          table.insert(parts, "Top fixable misclassifications:")
+          for i, item in ipairs(rca._fixable_items) do
+            table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
+              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
+            if item.suggested_fix and item.suggested_fix ~= "" then
+              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix):sub(1, 400))
+            end
+            if item.evidence_quote and item.evidence_quote ~= "" then
+              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote):sub(1, 300))
+            end
+          end
+        end
       else
         table.insert(parts, tostring(rca):sub(1, 1000))
       end
@@ -322,7 +593,7 @@ code: |
         acc_m.alignment, acc_m.accuracy, acc_m.precision, acc_m.recall))
     end
     if opts.accuracy_rca then
-      table.insert(parts, "Accuracy RCA:")
+      table.insert(parts, "Accuracy RCA (deterministic dataset — do not regress this):")
       local rca = opts.accuracy_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
@@ -336,6 +607,37 @@ code: |
           if i > 5 then break end
           table.insert(parts, string.format("Topic %d: %s (count=%s)",
             i, tostring(t.label or "?"), tostring(t.count or t.size or "?")))
+        end
+        -- Primary next action
+        if rca._primary_next_action then
+          local pna = rca._primary_next_action
+          if type(pna) == "table" then
+            local pna_text = pna.action or pna.description or pna.recommendation or ""
+            if pna_text ~= "" then
+              table.insert(parts, "Primary next action: " .. tostring(pna_text):sub(1, 600))
+            end
+          end
+        end
+        -- Category summaries
+        if type(rca._category_summaries) == "table" then
+          table.insert(parts, "Error categories:")
+          for cat, summary in pairs(rca._category_summaries) do
+            table.insert(parts, string.format("  %s: %s", tostring(cat), tostring(summary):sub(1, 300)))
+          end
+        end
+        -- Top likely-fixable misclassifications with suggested fixes
+        if type(rca._fixable_items) == "table" and #rca._fixable_items > 0 then
+          table.insert(parts, "Top fixable misclassifications:")
+          for i, item in ipairs(rca._fixable_items) do
+            table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
+              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
+            if item.suggested_fix and item.suggested_fix ~= "" then
+              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix):sub(1, 400))
+            end
+            if item.evidence_quote and item.evidence_quote ~= "" then
+              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote):sub(1, 300))
+            end
+          end
         end
       else
         table.insert(parts, tostring(rca):sub(1, 1000))
@@ -352,12 +654,74 @@ code: |
       table.insert(parts, opts.current_guidelines)
     end
 
+    -- Count consecutive accuracy regressions in prior iterations
+    local consecutive_acc_rejections = 0
+    if opts.iterations then
+      for i = #opts.iterations, 1, -1 do
+        local it = opts.iterations[i]
+        local acc_d = it.accuracy_deltas and it.accuracy_deltas.alignment or 0
+        if not it.accepted and acc_d < -0.02 then
+          consecutive_acc_rejections = consecutive_acc_rejections + 1
+        else
+          break
+        end
+      end
+    end
+
     -- Iteration-specific instruction
+    local cons_failed = opts.consecutive_failed_cycles or 0
     table.insert(parts, "")
-    table.insert(parts, "=== YOUR TASK (iteration " .. tostring(opts.iteration) .. ") ===")
-    table.insert(parts, "Analyze the evaluation data and make ONE targeted improvement to the score configuration.")
-    table.insert(parts, "Focus on the highest-impact error pattern from the RCA data.")
-    table.insert(parts, "Your change must improve feedback alignment WITHOUT regressing accuracy.")
+    table.insert(parts, "=== YOUR TASK (cycle " .. tostring(opts.iteration) .. ") ===")
+    table.insert(parts, "Your PRIMARY OBJECTIVE: Improve feedback alignment (the 90-day items above).")
+    table.insert(parts, "Accuracy is a FLOOR not a ceiling — do not let accuracy drop more than ~2 percentage points.")
+    table.insert(parts, "Focus your edit on the RCA 'Top fixable misclassifications' above.")
+
+    if cons_failed >= 2 then
+      table.insert(parts, "")
+      table.insert(parts, string.format(
+        "ESCALATION (%d consecutive cycles with no feedback improvement):", cons_failed))
+      table.insert(parts, "Previous narrow edits to the 'Conditions for Yes/No' lists produced ZERO feedback improvement.")
+      table.insert(parts, "You MUST try a STRUCTURALLY DIFFERENT approach. Good options:")
+      table.insert(parts, "  1. Rewrite the user_message/system_message to add stronger default-No bias:")
+      table.insert(parts, "     e.g. prepend: 'IMPORTANT: Default to No unless multiple decision-makers are")
+      table.insert(parts, "     EXPLICITLY CONFIRMED as decision participants. Physical presence alone is not enough.'")
+      table.insert(parts, "  2. Add a decision tree / step-by-step reasoning section to the prompt.")
+      table.insert(parts, "  3. Rewrite the Conditions for No to be a comprehensive list with specific examples.")
+      table.insert(parts, "  4. Change the classification threshold — require EXPLICIT confirmation language.")
+      table.insert(parts, "Bold structural changes are encouraged. Small condition additions have already failed.")
+    elseif cons_failed >= 1 then
+      table.insert(parts, "")
+      table.insert(parts, "NOTE: Previous cycle produced no feedback improvement despite correct edits.")
+      table.insert(parts, "Consider a more impactful change — restructuring a section or adding a new rule.")
+      table.insert(parts, "Small additions to conditions lists are unlikely to move the metric.")
+    else
+      table.insert(parts, "Make ONE targeted improvement — the most impactful change you can identify.")
+    end
+
+    -- Candidate-specific strategy override (multi-candidate mode)
+    if has_text(opts.candidate_strategy) then
+      table.insert(parts, "")
+      table.insert(parts, opts.candidate_strategy)
+    end
+
+    -- Escalating warning based on prior accuracy regressions
+    if consecutive_acc_rejections >= 2 then
+      table.insert(parts, "")
+      table.insert(parts, string.format("CRITICAL WARNING: %d consecutive iterations REJECTED for accuracy regression.", consecutive_acc_rejections))
+      table.insert(parts, "You MUST NOT change, expand, or broaden any scoring criteria.")
+      table.insert(parts, "Your ONLY allowed change: add a concrete example to a '- ' bullet point to illustrate edge cases.")
+      table.insert(parts, "Example: Append '(e.g., \"we both need to be there\")' to an existing bullet point.")
+      table.insert(parts, "If you cannot find a safe example addition, call done(reason=\"cannot_improve: accuracy risk too high\").")
+    elseif consecutive_acc_rejections >= 1 then
+      table.insert(parts, "")
+      table.insert(parts, "WARNING: Prior iteration was REJECTED for accuracy regression.")
+      table.insert(parts, "You MUST prefer SAFEST edits only: add examples to clarify edge cases.")
+      table.insert(parts, "Do NOT expand criteria, broaden conditions, or add new bullet points.")
+    end
+
+    table.insert(parts, "")
+    table.insert(parts, "REQUIRED: Call str_replace_editor AND submit_score_code in the SAME response.")
+    table.insert(parts, "Do NOT return text without calling these tools.")
 
     return table.concat(parts, "\n")
   end
@@ -396,9 +760,102 @@ code: |
     end
     table.insert(parts, "")
 
+    -- Multi-candidate comparison table (if applicable)
+    if opts.candidates and #opts.candidates > 1 then
+      table.insert(parts, "=== CANDIDATE COMPARISON ===")
+      table.insert(parts, string.format("%d candidates were tried. The best was pre-selected by metrics:", #opts.candidates))
+      for _, cand in ipairs(opts.candidates) do
+        local selected = cand.version_id == opts.new_version_id and " <- SELECTED" or ""
+        local dq = ""
+        if cand.score and cand.score <= -999 then dq = " (DISQUALIFIED)" end
+        local synth_tag = cand.is_synthesis and " [SYNTH]" or ""
+        table.insert(parts, string.format("  Candidate %d%s: FB AC1 %+.3f, ACC AC1 %+.3f%s%s",
+          cand.index, synth_tag,
+          cand.fb_deltas and cand.fb_deltas.alignment or 0,
+          cand.acc_deltas and cand.acc_deltas.alignment or 0,
+          dq, selected))
+      end
+      table.insert(parts, "")
+    end
+
     table.insert(parts, "=== YOUR DECISION ===")
     table.insert(parts, 'Call done(decision="keep") to accept this change and continue optimization from it.')
     table.insert(parts, 'Call done(decision="revert") to discard this change and revert to the prior version.')
+    table.insert(parts, "")
+    table.insert(parts, 'REQUIRED: Call done(decision="keep", reason="...") or done(decision="revert", reason="...") NOW.')
+    table.insert(parts, "Do NOT return a text response without calling this tool.")
+
+    return table.concat(parts, "\n")
+  end
+
+  local function build_synthesis_context(opts)
+    local parts = {}
+    table.insert(parts, "=== A-PHASE EXPLORATION RESULTS ===")
+    table.insert(parts, "")
+    table.insert(parts, string.format("Score: %s | Scorecard: %s | Cycle: %d",
+      opts.score_name, opts.scorecard_name, opts.cycle))
+    table.insert(parts, string.format("Base version: %s", tostring(opts.base_version_id or "unknown")))
+    table.insert(parts, "")
+    table.insert(parts, "Each candidate targeted a DIFFERENT error category from the RCA.")
+    table.insert(parts, "Each made an independent fix to the same base configuration.")
+    table.insert(parts, "Below are ALL A-phase results — succeeded and failed.")
+    table.insert(parts, "Your job: combine ONLY the SUCCEEDED fixes into ONE version.")
+    table.insert(parts, "")
+
+    -- Base YAML reference
+    table.insert(parts, "The editor is loaded with the BASE configuration (before any candidate edits).")
+    table.insert(parts, "Apply your combined changes using str_replace_editor, then submit_score_code.")
+    table.insert(parts, "")
+
+    -- Show ALL A-phase candidates with success/failure labels
+    if opts.all_a_phase_results then
+      for _, cand in ipairs(opts.all_a_phase_results) do
+        local status_label = cand.succeeded and "SUCCEEDED" or "FAILED"
+        local fb_d = cand.fb_deltas and cand.fb_deltas.alignment or 0
+        local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
+        local failure_reason = ""
+        if not cand.succeeded then
+          if acc_d < A_PHASE_ACC_THRESHOLD then
+            failure_reason = " (accuracy regression)"
+          elseif fb_d <= A_PHASE_FB_THRESHOLD then
+            failure_reason = " (insufficient feedback improvement)"
+          end
+        end
+
+        table.insert(parts, string.format("=== CANDIDATE %d — %s%s ===",
+          cand.index, status_label, failure_reason))
+        table.insert(parts, string.format("RCA target: fixable item #%d", cand.target_item or cand.index))
+        table.insert(parts, string.format("Edit: %s", cand.done_reason or "(none)"))
+        table.insert(parts, string.format("FB AC1 delta: %+.3f  |  ACC AC1 delta: %+.3f",
+          fb_d, acc_d))
+
+        if cand.succeeded and cand.yaml_diff then
+          table.insert(parts, "")
+          table.insert(parts, "Diff from base:")
+          table.insert(parts, cand.yaml_diff)
+        end
+        table.insert(parts, "")
+      end
+    end
+
+    -- Abbreviated RCA context
+    if opts.feedback_rca and type(opts.feedback_rca) == "table" then
+      if opts.feedback_rca.overall_explanation then
+        table.insert(parts, "=== FEEDBACK RCA CONTEXT ===")
+        table.insert(parts, tostring(opts.feedback_rca.overall_explanation):sub(1, 500))
+        table.insert(parts, "")
+      end
+    end
+
+    table.insert(parts, "=== YOUR TASK ===")
+    table.insert(parts, "1. Study ALL candidates above. Apply ONLY the SUCCEEDED fixes.")
+    table.insert(parts, "2. DROP all FAILED fixes — do not include them.")
+    table.insert(parts, "3. Since candidates targeted DIFFERENT error categories, their edits are usually INDEPENDENT.")
+    table.insert(parts, "   Apply ALL successful fixes — they should not conflict.")
+    table.insert(parts, "4. If two edits DO overlap in the same YAML region, merge them carefully or pick the better one.")
+    table.insert(parts, "5. HARD CONSTRAINT: Do NOT degrade accuracy. Do NOT add your own novel edits.")
+    table.insert(parts, "")
+    table.insert(parts, "REQUIRED: Call str_replace_editor AND submit_score_code in the SAME response.")
 
     return table.concat(parts, "\n")
   end
@@ -454,51 +911,56 @@ code: |
     score = params.score
   })
 
-  local dataset_materialized = dataset_check and dataset_check.has_dataset
+  local min_dataset_rows = params.max_samples
+  local dataset_adequate = dataset_check and dataset_check.has_dataset
     and dataset_check.is_materialized
-    and dataset_check.row_count and dataset_check.row_count >= 100
+    and dataset_check.row_count and dataset_check.row_count >= min_dataset_rows
 
-  if dataset_materialized then
+  if dataset_adequate then
     dataset_id = dataset_check.dataset_id
     Human.notify({message = "Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)", level = "info"})
   else
     -- Need to create a dataset
     if dataset_check and dataset_check.has_dataset then
-      Human.notify({message = "Existing dataset too small (" .. tostring(dataset_check.row_count) .. " rows), creating new one...", level = "info"})
+      Human.notify({message = string.format(
+        "Existing dataset has %d rows but need %d, creating new one...",
+        dataset_check.row_count or 0, min_dataset_rows
+      ), level = "info"})
     else
       Human.notify({message = "No associated dataset found, creating one...", level = "info"})
     end
 
-    -- Tier 1: Try 200 balanced
+    -- Tier 1: Try balanced dataset with requested sample size
     Human.notify({
-      message = "Building balanced regression dataset (200 items)...",
+      message = string.format("Building balanced regression dataset (%d items)...", min_dataset_rows),
       level = "info"
     })
     local build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
       scorecard = params.scorecard,
       score = params.score,
-      max_items = 200,
+      max_items = min_dataset_rows,
       days = params.days,
       balance = true
     })
 
-    if build_result and build_result.rows_written and build_result.rows_written >= 100 then
+    local min_acceptable = math.max(math.floor(min_dataset_rows / 2), 50)
+    if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
       dataset_id = build_result.dataset_id
       Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
     else
-      -- Tier 2: Try 200 unbalanced (relax balancing to get more items)
+      -- Tier 2: Try unbalanced (relax balancing to get more items)
       local rows_so_far = (build_result and build_result.rows_written) or 0
       Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
 
       build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
         scorecard = params.scorecard,
         score = params.score,
-        max_items = 200,
+        max_items = min_dataset_rows,
         days = params.days,
         balance = false
       })
 
-      if build_result and build_result.rows_written and build_result.rows_written >= 100 then
+      if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
         dataset_id = build_result.dataset_id
         Human.notify({message = "Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
       else
@@ -508,9 +970,9 @@ code: |
           success = false,
           status = "error",
           message = string.format(
-            "Insufficient feedback data to build a regression dataset. Only %d items available (minimum 100 required). " ..
+            "Insufficient feedback data to build a regression dataset. Only %d items available (need %d, minimum %d). " ..
             "Collect more feedback for score '%s' before running the optimizer.",
-            final_rows, score_name
+            final_rows, min_dataset_rows, min_acceptable, score_name
           )
         }
       end
@@ -543,42 +1005,51 @@ code: |
   end
   Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
 
-  -- Dual baseline evaluations (both programmatic, no AI agent involved)
+  -- Dual baseline evaluations — run both in parallel using batch mode
   Stage.set("baseline")
-
-  -- Baseline 1: Accuracy evaluation on the fixed associated dataset (non-blocking)
-  -- May fail if dataset format is not yet supported; optimizer continues with feedback-only.
   Human.notify({
-    message = "Running baseline accuracy evaluation on regression dataset for " .. score_name .. "...",
+    message = "Running baseline accuracy + feedback evaluations in parallel for " .. score_name .. "...",
     level = "info"
   })
-  local accuracy_baseline = nil
-  local accuracy_baseline_id = nil
+
+  local baseline_batch = call_plexus_tool("plexus_evaluation_run", {
+    batch = {
+      {
+        scorecard_name  = params.scorecard,
+        score_name      = params.score,
+        evaluation_type = "accuracy",
+        dataset_id      = dataset_id,
+        n_samples       = params.max_samples or 100,
+        version         = champion_version_id,
+        notes           = "Baseline: deterministic accuracy dataset for " .. score_name
+      },
+      {
+        scorecard_name     = params.scorecard,
+        score_name         = params.score,
+        evaluation_type    = "feedback",
+        days               = params.days,
+        max_feedback_items = params.max_samples or 100,
+        sampling_mode      = "newest",
+        wait               = true,
+        notes              = "Baseline: recent feedback alignment dataset for " .. score_name
+      }
+    }
+  })
+
+  -- Parse accuracy result (non-fatal — proceed feedback-only if unavailable)
+  local accuracy_baseline         = nil
+  local accuracy_baseline_id      = nil
   local accuracy_baseline_metrics = nil
-  local accuracy_baseline_rca = {}
-  local accuracy_available = false
+  local accuracy_baseline_rca     = {}
+  local accuracy_available        = false
 
-  local acc_ok, acc_err = pcall(function()
-    local result = call_plexus_tool("plexus_evaluation_run", {
-      scorecard_name = params.scorecard,
-      score_name = params.score,
-      evaluation_type = "accuracy",
-      dataset_id = dataset_id,
-      n_samples = params.max_samples or 200,
-      version = champion_version_id
-    })
-    if result and (result.id or result.evaluation_id) then
-      accuracy_baseline = result
-      accuracy_baseline_id = result.id or result.evaluation_id
-      accuracy_baseline_metrics = extract_metrics(result)
-      accuracy_baseline_rca = result.root_cause or {}
-      accuracy_available = true
-    elseif result and result.error then
-      error(result.error)
-    end
-  end)
-
-  if accuracy_available then
+  local acc_result = baseline_batch and baseline_batch[1]
+  if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
+    accuracy_baseline         = acc_result
+    accuracy_baseline_id      = acc_result.id or acc_result.evaluation_id
+    accuracy_baseline_metrics = extract_metrics(acc_result)
+    accuracy_baseline_rca     = enrich_rca(acc_result.root_cause or {})
+    accuracy_available        = true
     Human.notify({message = string.format(
       "Accuracy baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
       accuracy_baseline_metrics.alignment,
@@ -587,33 +1058,22 @@ code: |
       accuracy_baseline_metrics.recall
     ), level = "info"})
   else
-    Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(acc_err), level = "warning"})
+    local err_msg = (acc_result and acc_result.error) or "no result"
+    Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(err_msg), level = "warning"})
   end
 
-  -- Baseline 2: Feedback evaluation on newest items
-  Human.notify({
-    message = "Running baseline feedback evaluation on newest items for " .. score_name .. "...",
-    level = "info"
-  })
-  local feedback_baseline = call_plexus_tool("plexus_evaluation_run", {
-    scorecard_name = params.scorecard,
-    score_name = params.score,
-    evaluation_type = "feedback",
-    days = params.days,
-    max_feedback_items = params.max_samples or 50,
-    sampling_mode = "newest",
-    wait = true
-  })
-  if not feedback_baseline or not (feedback_baseline.id or feedback_baseline.evaluation_id) then
+  -- Parse feedback result (fatal if missing)
+  local fb_result = baseline_batch and baseline_batch[2]
+  if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
     return {
       success = false,
-      status = "error",
-      message = "Failed to run baseline feedback evaluation"
+      status  = "error",
+      message = "Failed to run baseline feedback evaluation: " .. tostring(fb_result and fb_result.error or "no result")
     }
   end
-  local feedback_baseline_id = feedback_baseline.id or feedback_baseline.evaluation_id
-  local feedback_baseline_metrics = extract_metrics(feedback_baseline)
-  local feedback_baseline_rca = feedback_baseline.root_cause or {}
+  local feedback_baseline_id      = fb_result.id or fb_result.evaluation_id
+  local feedback_baseline_metrics = extract_metrics(fb_result)
+  local feedback_baseline_rca     = enrich_rca(fb_result.root_cause or {})
 
   Human.notify({message = string.format(
     "Feedback baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
@@ -624,13 +1084,13 @@ code: |
   ), level = "info"})
 
   -- Store both baselines in state
-  State.set("accuracy_baseline_id", accuracy_baseline_id)
+  State.set("accuracy_baseline_id",      accuracy_baseline_id)
   State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
-  State.set("feedback_baseline_id", feedback_baseline_id)
+  State.set("feedback_baseline_id",      feedback_baseline_id)
   State.set("feedback_baseline_metrics", feedback_baseline_metrics)
-  State.set("scorecard_id", scorecard_id)
-  State.set("score_id", score_id)
-  State.set("iterations", {})
+  State.set("scorecard_id",  scorecard_id)
+  State.set("score_id",      score_id)
+  State.set("iterations",    {})
   -- Store RCA for the coding agent's first iteration
   State.set("last_accuracy_rca", accuracy_baseline_rca)
   State.set("last_feedback_rca", feedback_baseline_rca)
@@ -656,19 +1116,25 @@ code: |
     }
   end
 
-  -- Phase B: Optimization Loop
-  -- Single coding agent per iteration — agent edits, Lua evaluates and decides.
+
+  -- ================================================================
+  -- A/B Phase Optimization Cycles
+  -- A phase: Explore independent fixes for different RCA categories
+  -- B phase: Combine successful A-phase fixes into one version
+  -- ================================================================
   Stage.set("optimize")
 
   local stop_reason = nil
   local iterations = {}
   local last_accepted_version_id = champion_version_id
+  local consecutive_failed_cycles = 0  -- plateau detection
 
-  for iteration = 1, params.max_iterations do
-    Human.notify({message = "Starting iteration " .. iteration .. " of " .. params.max_iterations, level = "info"})
-    State.set("current_iteration", iteration)
+  for cycle = 1, params.max_iterations do
+    Human.notify({message = string.format(
+      "═══ Cycle %d/%d ═══", cycle, params.max_iterations), level = "info"})
+    State.set("current_iteration", cycle)
 
-    -- Pull the last accepted version as starting point for this iteration
+    -- Pull the last accepted version as starting point for this cycle
     local score_pull = call_plexus_tool("plexus_score_pull", {
       scorecard_identifier = params.scorecard,
       score_identifier = params.score,
@@ -678,7 +1144,7 @@ code: |
       return {
         success = false,
         status = "error",
-        message = "Failed to pull score configuration at iteration " .. iteration
+        message = "Failed to pull score configuration at cycle " .. cycle
       }
     end
 
@@ -690,7 +1156,7 @@ code: |
       return {
         success = false,
         status = "error",
-        message = "Failed to read score code file at iteration " .. iteration
+        message = "Failed to read score code file at cycle " .. cycle
       }
     end
     local current_guidelines = ""
@@ -703,297 +1169,707 @@ code: |
       end
     end
 
-    -- Get current eval metrics (updated after accepted iterations)
+    -- Get current eval metrics (updated after accepted cycles)
     local current_fb_metrics = State.get("feedback_baseline_metrics") or feedback_baseline_metrics
     local current_acc_metrics = accuracy_available and (State.get("accuracy_baseline_metrics") or accuracy_baseline_metrics) or nil
     local current_fb_rca = State.get("last_feedback_rca") or feedback_baseline_rca
     local current_acc_rca = accuracy_available and (State.get("last_accuracy_rca") or accuracy_baseline_rca) or nil
 
-    -- Build full context message for the coding agent
-    local inject = build_coding_context({
-      scorecard_name = scorecard_name,
-      score_name = score_name,
-      baseline_version_id = champion_version_id,
-      last_accepted_version_id = last_accepted_version_id,
-      iterations = iterations,
-      baseline_fb_metrics = feedback_baseline_metrics,
-      baseline_acc_metrics = accuracy_baseline_metrics,
-      feedback_metrics = current_fb_metrics,
-      accuracy_metrics = current_acc_metrics,
-      feedback_rca = current_fb_rca,
-      accuracy_rca = current_acc_rca,
-      current_code = current_code,
-      current_guidelines = current_guidelines,
-      iteration = iteration
-    })
-
-    -- Invoke coding agent (single-turn) — agent proposes edit, Lua applies it.
-    -- Multi-turn agent execution crashes in the Tactus sandbox (TaskGroup error),
-    -- so we call the agent ONCE and intercept the tool call for Lua execution.
-    Tool.reset()
-    code_editor.clear_history()
-    Human.notify({message = "Invoking coding agent for iteration " .. iteration .. "...", level = "info"})
-
-    -- Single agent turn: code_editor produces str_replace_editor + done tool calls
-    code_editor({message = inject})
-
-    -- Extract the str_replace_editor tool call and apply it in Lua
-    local str_replace_call = Tool.last_call("str_replace_editor")
-    local edit_applied = false
-    local new_version_id = nil
-
-    if str_replace_call and str_replace_call.args then
-      local args = str_replace_call.args
-      -- Normalize escaped newlines in old_str/new_str strings
-      local find_str = args.old_str or ""
-      local replace_str = args.new_str or ""
-      find_str = string.gsub(find_str, "\\n", "\n")
-      replace_str = string.gsub(replace_str, "\\n", "\n")
-
-      if has_text(find_str) then
-        local code_path = score_pull.codeFilePath
-        local current_yaml = File.read(code_path)
-        local old_start, old_end = string.find(current_yaml, find_str, 1, true)
-        if old_start then
-          local edited_yaml = string.sub(current_yaml, 1, old_start - 1) ..
-                             replace_str ..
-                             string.sub(current_yaml, old_end + 1)
-          File.write(code_path, edited_yaml)
-          -- Also write to exchange path for submit_score_code
-          File.write("/tmp/plexus_score_edit_exchange.yaml", edited_yaml)
-          Human.notify({message = "Applied edit: '" .. string.sub(find_str, 1, 60) .. "' → '" .. string.sub(replace_str, 1, 60) .. "'", level = "info"})
-
-          -- Submit via submit_score_code tool
-          local submit_result = call_plexus_tool("submit_score_code", {})
-          if submit_result and submit_result.version_id then
-            new_version_id = submit_result.version_id
-            edit_applied = true
-            Human.notify({message = "Score version created: " .. new_version_id, level = "info"})
-          else
-            Human.notify({message = "submit_score_code failed: " .. tostring(submit_result and (submit_result.error or submit_result.message) or "unknown"), level = "warning"})
-          end
+    -- Count consecutive accuracy regressions for strategy selection
+    local consecutive_acc_rejections = 0
+    if iterations then
+      for i = #iterations, 1, -1 do
+        local it = iterations[i]
+        local acc_d = it.accuracy_deltas and it.accuracy_deltas.alignment or 0
+        if not it.accepted and acc_d < -0.02 then
+          consecutive_acc_rejections = consecutive_acc_rejections + 1
         else
-          Human.notify({message = "Edit find text not found in score YAML: '" .. string.sub(find_str, 1, 80) .. "'", level = "warning"})
+          break
         end
       end
     end
 
-    -- Extract agent's done reason
-    local done_call = Tool.last_call("done")
-    local done_reason = ""
-    if done_call then
-      local ok_res, done_result = pcall(function() return safe_decode(done_call.result) end)
-      if ok_res and done_result and has_text(done_result.reason) then
-        done_reason = done_result.reason
-      end
-      if not has_text(done_reason) then
-        local ok_r, reason_val = pcall(function() return done_call.args.reason end)
-        if ok_r and has_text(reason_val) then
-          done_reason = string.gsub(reason_val, "\\n", "\n")
+    -- ================================================================
+    -- A PHASE: Explore independent fixes
+    -- Each candidate targets a different RCA fixable item.
+    -- All start from the same base. Results are recorded, not ranked.
+    -- ================================================================
+    Human.notify({message = string.format(
+      "Cycle %d — A Phase: exploring RCA categories...", cycle), level = "info"})
+
+    local candidates = {}
+    local num_cands = math.min(params.num_candidates or 3, 5)
+    local fixable_items = (current_fb_rca and current_fb_rca._fixable_items) or {}
+    local any_cannot_improve = false
+
+    for c = 1, num_cands do
+      -- Reset editor to base YAML for each candidate
+      call_plexus_tool("score_editor_setup", {
+        scorecard_identifier = params.scorecard,
+        score_identifier     = params.score,
+        yaml_content         = current_code,
+        code_file_path       = score_pull.codeFilePath,
+        iteration            = cycle
+      })
+
+      -- Build candidate-specific context
+      local strategy = build_candidate_strategy(c, num_cands, fixable_items, consecutive_acc_rejections)
+      local inject = build_coding_context({
+        scorecard_name = scorecard_name,
+        score_name = score_name,
+        baseline_version_id = champion_version_id,
+        last_accepted_version_id = last_accepted_version_id,
+        iterations = iterations,
+        baseline_fb_metrics = feedback_baseline_metrics,
+        baseline_acc_metrics = accuracy_baseline_metrics,
+        feedback_metrics = current_fb_metrics,
+        accuracy_metrics = current_acc_metrics,
+        feedback_rca = current_fb_rca,
+        accuracy_rca = current_acc_rca,
+        current_code = current_code,
+        current_guidelines = current_guidelines,
+        iteration = cycle,
+        candidate_strategy = strategy,
+        consecutive_failed_cycles = consecutive_failed_cycles
+      })
+
+      Tool.reset()
+      code_editor.clear_history()
+      Human.notify({message = string.format(
+        "  Candidate %d/%d (item #%d): generating edit...",
+        c, num_cands, math.min(c, math.max(#fixable_items, 1))
+      ), level = "info"})
+
+      -- Retry loop: up to 3 attempts per candidate
+      local cand_version_id = nil
+      local cand_done_reason = ""
+      local max_agent_attempts = 3
+
+      for attempt = 1, max_agent_attempts do
+        if attempt == 1 then
+          code_editor({message = inject})
+        else
+          local retry_msg = string.format(
+            "RETRY (attempt %d/%d): Your previous attempt did NOT produce a valid score version.\n\n",
+            attempt, max_agent_attempts)
+          local last_edit = Tool.last_call("str_replace_editor")
+          local last_submit = Tool.last_call("submit_score_code")
+          if not last_submit and last_edit then
+            local edit_result = last_edit.result or ""
+            if string.find(tostring(edit_result), "Error") then
+              retry_msg = retry_msg .. "Your str_replace_editor call FAILED with:\n  " .. tostring(edit_result) .. "\n\n"
+              retry_msg = retry_msg .. "Fix: call str_replace_editor(command='view', path='score_config.yaml') to re-read the file, "
+                .. "then retry with an exactly-matching old_str. After a successful edit, call submit_score_code().\n"
+            else
+              retry_msg = retry_msg .. "You called str_replace_editor but FORGOT to call submit_score_code().\n"
+              retry_msg = retry_msg .. "You MUST call submit_score_code() after a successful edit to create a version.\n"
+            end
+          elseif last_submit then
+            local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
+            if ok_sub and sub_result and sub_result.error then
+              retry_msg = retry_msg .. "submit_score_code returned an error:\n  " .. tostring(sub_result.error) .. "\n\n"
+              retry_msg = retry_msg .. "Fix the issue described above, then call submit_score_code() again.\n"
+            end
+          else
+            retry_msg = retry_msg .. "You did not call any editing tools. You MUST:\n"
+              .. "1. Call str_replace_editor to make an edit\n"
+              .. "2. Call submit_score_code() to submit the change\n"
+          end
+          Human.notify({message = string.format("  Retrying candidate %d (attempt %d/%d)...", c, attempt, max_agent_attempts), level = "info"})
+          Tool.reset()
+          code_editor({message = retry_msg})
         end
-      end
-    end
 
-    -- Check for "cannot_improve" signal
-    if string.find(string.lower(done_reason), "cannot_improve") then
-      Human.notify({message = "Agent signaled cannot_improve: " .. done_reason, level = "info"})
-      stop_reason = "improvement_plateau"
-
-      local iteration_log = {
-        iteration = iteration,
-        done_reason = done_reason,
-        accepted = false,
-        skip_reason = "cannot_improve"
-      }
-      table.insert(iterations, iteration_log)
-      State.set("iterations", iterations)
-      break
-    end
-
-    -- Check if edit was applied (either via Lua interception above or agent tool call)
-    if not edit_applied and not new_version_id then
-      -- Fallback: check if agent managed to call submit_score_code directly
-      local submit_called = Tool.called("submit_score_code")
-      if submit_called then
+        -- Check if submit_score_code succeeded
         local submit_call = Tool.last_call("submit_score_code")
         if submit_call then
-          local submit_result = safe_decode(submit_call.result)
-          new_version_id = submit_result and submit_result.version_id
-          if new_version_id then edit_applied = true end
+          local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
+          if ok and submit_result and submit_result.version_id then
+            cand_version_id = submit_result.version_id
+            Human.notify({message = string.format("  Candidate %d version: %s", c, cand_version_id), level = "info"})
+            break
+          elseif ok and submit_result and submit_result.error then
+            Human.notify({message = string.format("  Candidate %d submit error (attempt %d): %s", c, attempt, tostring(submit_result.error)), level = "warning"})
+          end
+        else
+          Human.notify({message = string.format("  Candidate %d: agent did not call submit (attempt %d)", c, attempt), level = "warning"})
         end
+      end
+
+      -- Extract done_reason
+      local done_call = Tool.last_call("done")
+      if done_call then
+        local ok_res, done_result = pcall(function() return safe_decode(done_call.result) end)
+        if ok_res and done_result and has_text(done_result.reason) then
+          cand_done_reason = done_result.reason
+        end
+        if not has_text(cand_done_reason) then
+          local ok_r, reason_val = pcall(function() return done_call.args.reason end)
+          if ok_r and has_text(reason_val) then
+            cand_done_reason = string.gsub(reason_val, "\\n", "\n")
+          end
+        end
+      end
+      if not has_text(cand_done_reason) and cand_version_id then
+        local sc = Tool.last_call("submit_score_code")
+        if sc then
+          local ok_a, note = pcall(function() return sc.args.version_note end)
+          if ok_a and has_text(note) then cand_done_reason = note end
+        end
+      end
+
+      -- Check for cannot_improve signal
+      if string.find(string.lower(cand_done_reason), "cannot_improve") then
+        any_cannot_improve = true
+      end
+
+      if cand_version_id then
+        table.insert(candidates, {
+          index = c,
+          version_id = cand_version_id,
+          done_reason = cand_done_reason,
+          strategy = strategy,
+          target_item = math.min(c, math.max(#fixable_items, 1))
+        })
+      else
+        Human.notify({message = string.format("  Candidate %d failed (no version created)", c), level = "warning"})
       end
     end
 
-    if not new_version_id then
-      Human.notify({message = "Agent did not submit a new version at iteration " .. iteration, level = "warning"})
-
-      local iteration_log = {
-        iteration = iteration,
-        done_reason = done_reason,
+    -- Check if ALL candidates signaled cannot_improve
+    if #candidates == 0 and any_cannot_improve then
+      Human.notify({message = "All candidates signaled cannot_improve — cycle skipped", level = "info"})
+      consecutive_failed_cycles = consecutive_failed_cycles + 1
+      local cycle_log = {
+        iteration = cycle,
         accepted = false,
-        skip_reason = "no_submission"
+        skip_reason = "cannot_improve",
+        num_candidates = num_cands
       }
-      table.insert(iterations, iteration_log)
+      table.insert(iterations, cycle_log)
       State.set("iterations", iterations)
-
-      if Stop.requested() then
-        stop_reason = "user_stopped"
+      if consecutive_failed_cycles >= 5 then
+        stop_reason = "improvement_plateau"
         break
       end
-      -- Continue to next iteration — agent sees history and can try differently
+      if Stop.requested() then stop_reason = "user_stopped"; break end
+
+    elseif #candidates == 0 then
+      Human.notify({message = "All candidates failed at cycle " .. cycle .. " — cycle skipped", level = "warning"})
+      consecutive_failed_cycles = consecutive_failed_cycles + 1
+      local cycle_log = {
+        iteration = cycle,
+        accepted = false,
+        skip_reason = "all_candidates_failed",
+        num_candidates = num_cands
+      }
+      table.insert(iterations, cycle_log)
+      State.set("iterations", iterations)
+      if consecutive_failed_cycles >= 5 then
+        stop_reason = "improvement_plateau"
+        break
+      end
+      if Stop.requested() then stop_reason = "user_stopped"; break end
+
     else
-      Human.notify({message = "Score version created: " .. new_version_id, level = "info"})
-
-      -- Run dual evaluations programmatically (no agent involvement)
-
-      -- Evaluation 1: Accuracy on fixed regression dataset (non-blocking)
-      local iter_accuracy_ok = false
-      local iter_acc_metrics = accuracy_baseline_metrics
-      local iter_acc_rca = {}
-      local acc_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0}
-
-      if accuracy_available then
-        Human.notify({message = "Running accuracy evaluation for iteration " .. iteration .. "...", level = "info"})
-        local acc_ok2, acc_err2 = pcall(function()
-          local result = call_plexus_tool("plexus_evaluation_run", {
+      -- ================================================================
+      -- A PHASE continued: Batch-eval ALL candidates in parallel
+      -- ================================================================
+      local batch = {}
+      for _, cand in ipairs(candidates) do
+        if accuracy_available then
+          table.insert(batch, {
             scorecard_name = params.scorecard,
             score_name = params.score,
             evaluation_type = "accuracy",
             dataset_id = dataset_id,
-            n_samples = params.max_samples or 200,
-            version = new_version_id,
-            baseline = accuracy_baseline_id
+            n_samples = params.max_samples or 100,
+            version = cand.version_id,
+            baseline = accuracy_baseline_id,
+            notes = string.format("Cycle %d A-phase cand %d (accuracy): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
           })
-          if result and (result.id or result.evaluation_id) then
-            iter_accuracy_ok = true
-            iter_acc_metrics = extract_metrics(result)
-            iter_acc_rca = result.root_cause or {}
-            acc_deltas = calculate_deltas(iter_acc_metrics, accuracy_baseline_metrics)
-          end
-        end)
-        if iter_accuracy_ok then
-          Human.notify({message = string.format(
-            "Iteration %d accuracy: AC1=%.3f (delta %+.3f)",
-            iteration, iter_acc_metrics.alignment, acc_deltas.alignment
-          ), level = "info"})
-        else
-          Human.notify({message = "Accuracy eval failed for iteration " .. iteration .. ": " .. tostring(acc_err2), level = "warning"})
         end
+        table.insert(batch, {
+          scorecard_name = params.scorecard,
+          score_name = params.score,
+          evaluation_type = "feedback",
+          days = params.days,
+          max_feedback_items = params.max_samples or 100,
+          sampling_mode = "newest",
+          version = cand.version_id,
+          baseline = feedback_baseline_id,
+          wait = true,
+          notes = string.format("Cycle %d A-phase cand %d (feedback): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
+        })
       end
-
-      -- Evaluation 2: Feedback on newest items
-      Human.notify({message = "Running feedback evaluation for iteration " .. iteration .. "...", level = "info"})
-      local iter_feedback = call_plexus_tool("plexus_evaluation_run", {
-        scorecard_name = params.scorecard,
-        score_name = params.score,
-        evaluation_type = "feedback",
-        days = params.days,
-        max_feedback_items = params.max_samples or 50,
-        sampling_mode = "newest",
-        baseline = feedback_baseline_id,
-        wait = true
-      })
-      local iter_feedback_ok = iter_feedback and (iter_feedback.id or iter_feedback.evaluation_id)
-
-      local iter_fb_metrics = iter_feedback_ok and extract_metrics(iter_feedback) or feedback_baseline_metrics
-      local iter_fb_rca = (iter_feedback_ok and iter_feedback.root_cause) or {}
-      local fb_deltas = calculate_deltas(iter_fb_metrics, feedback_baseline_metrics)
 
       Human.notify({message = string.format(
-        "Iteration %d feedback: AC1=%.3f (delta %+.3f)",
-        iteration, iter_fb_metrics.alignment, fb_deltas.alignment
+        "  Evaluating %d candidates (%d evals in parallel)...",
+        #candidates, #batch
       ), level = "info"})
 
-      -- Phase 2: Review — let agent see eval results and decide keep/revert
-      Tool.reset()
-      reviewer.clear_history()
-      local review_msg = build_review_context({
-        iteration = iteration,
-        done_reason = done_reason,
-        new_version_id = new_version_id,
-        prior_version_id = last_accepted_version_id,
-        fb_metrics = iter_fb_metrics,
-        acc_metrics = iter_accuracy_ok and iter_acc_metrics or nil,
-        baseline_fb_ac1 = feedback_baseline_metrics.alignment,
-        baseline_acc_ac1 = accuracy_baseline_metrics and accuracy_baseline_metrics.alignment or 0
-      })
-      Human.notify({message = "Invoking reviewer agent for iteration " .. iteration .. "...", level = "info"})
-      reviewer({message = review_msg})
+      local batch_results = call_plexus_tool("plexus_evaluation_run", {batch = batch})
 
-      -- Extract agent's decision from done() call (use pcall for sandbox-proxied args)
-      local review_done = Tool.last_call("done")
-      local agent_decision = "keep"  -- default to keep if reviewer didn't signal revert
-      if review_done and review_done.args then
-        local ok_d, decision_field = pcall(function() return review_done.args.decision or "" end)
-        local ok_r, reason_field = pcall(function() return review_done.args.reason or "" end)
-        local ok_s, success_field = pcall(function() return review_done.args.success end)
-        decision_field = ok_d and decision_field or ""
-        reason_field = ok_r and reason_field or ""
-        -- Check for "revert" in decision or reason fields, OR success=false meaning rejection
-        local combined = string.lower(tostring(decision_field) .. " " .. tostring(reason_field))
-        if string.find(combined, "revert") then
-          agent_decision = "revert"
-        elseif ok_s and success_field == false then
-          -- Agent signaled success=false, treat as revert
-          agent_decision = "revert"
+      -- Parse results
+      local evals_per_cand = accuracy_available and 2 or 1
+      for i, cand in ipairs(candidates) do
+        local base_idx = (i - 1) * evals_per_cand
+        if accuracy_available then
+          local acc_r = batch_results and batch_results[base_idx + 1]
+          if acc_r and (acc_r.id or acc_r.evaluation_id) then
+            cand.acc_metrics = extract_metrics(acc_r)
+            cand.acc_deltas = calculate_deltas(cand.acc_metrics, accuracy_baseline_metrics)
+            cand.acc_rca = enrich_rca(acc_r.root_cause or {})
+            cand.acc_eval_id = acc_r.id or acc_r.evaluation_id
+          end
+        end
+        local fb_r = batch_results and batch_results[base_idx + evals_per_cand]
+        if fb_r and (fb_r.id or fb_r.evaluation_id) then
+          cand.fb_metrics = extract_metrics(fb_r)
+          cand.fb_deltas = calculate_deltas(cand.fb_metrics, feedback_baseline_metrics)
+          cand.fb_rca = enrich_rca(fb_r.root_cause or {})
+          cand.fb_eval_id = fb_r.id or fb_r.evaluation_id
         end
       end
 
-      -- Decision logic: agent decides, with metric guardrails
-      local regression_threshold = -0.02
-      local acc_regressed = accuracy_available and iter_accuracy_ok and (acc_deltas.alignment < regression_threshold)
-      local accept = false
+      -- ================================================================
+      -- A PHASE: Classify candidates as succeeded/failed
+      -- ================================================================
+      local succeeded = {}
+      local failed = {}
+      for _, cand in ipairs(candidates) do
+        cand.succeeded = classify_a_phase_success(cand)
+        if cand.succeeded then
+          table.insert(succeeded, cand)
+        else
+          table.insert(failed, cand)
+        end
+      end
 
-      if agent_decision == "revert" then
+      -- Log A-phase results
+      Human.notify({message = string.format(
+        "  A-phase results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
+      for _, cand in ipairs(candidates) do
+        local status_label = cand.succeeded and "SUCCEEDED" or "FAILED"
+        local fb_d = cand.fb_deltas and cand.fb_deltas.alignment or 0
+        local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
         Human.notify({message = string.format(
-          "Iteration %d REJECTED: reviewer agent chose to revert",
-          iteration
+          "    Cand %d [%s]: FB AC1 %+.3f, ACC AC1 %+.3f  [%s]",
+          cand.index, status_label, fb_d, acc_d,
+          string.sub(cand.done_reason or "", 1, 60)
         ), level = "info"})
-      elseif acc_regressed then
-        -- Metric guardrail overrides agent's keep decision
+      end
+
+      -- ================================================================
+      -- B PHASE: Combine winners
+      -- ================================================================
+      if #succeeded == 0 then
+        -- No A-phase candidates succeeded — skip B phase
         Human.notify({message = string.format(
-          "Iteration %d REJECTED: accuracy regressed by %.4f (guardrail override)",
-          iteration, math.abs(acc_deltas.alignment)
-        ), level = "warning"})
-      else
-        accept = true
-        Human.notify({message = "Iteration " .. iteration .. " ACCEPTED", level = "info"})
-        last_accepted_version_id = new_version_id
-      end
+          "Cycle %d — B Phase: SKIP (no A-phase candidates succeeded)", cycle), level = "info"})
+        consecutive_failed_cycles = consecutive_failed_cycles + 1
 
-      -- Store iteration log
-      local iteration_log = {
-        iteration = iteration,
-        score_version_id = new_version_id,
-        accuracy_evaluation_id = iter_accuracy_ok and (iter_feedback.id or iter_feedback.evaluation_id) or nil,
-        feedback_evaluation_id = iter_feedback_ok and (iter_feedback.id or iter_feedback.evaluation_id) or nil,
-        done_reason = done_reason,
-        accuracy_metrics = iter_acc_metrics,
-        feedback_metrics = iter_fb_metrics,
-        accuracy_deltas = acc_deltas,
-        feedback_deltas = fb_deltas,
-        accepted = accept
-      }
-      table.insert(iterations, iteration_log)
-      State.set("iterations", iterations)
+        -- Still record best candidate metrics for the cycle log
+        table.sort(candidates, function(a, b)
+          local a_fb = a.fb_deltas and a.fb_deltas.alignment or -999
+          local b_fb = b.fb_deltas and b.fb_deltas.alignment or -999
+          return a_fb > b_fb
+        end)
+        local best = candidates[1]
 
-      -- Update running state for next iteration
-      if accept then
-        if iter_accuracy_ok then
-          State.set("accuracy_baseline_metrics", iter_acc_metrics)
+        local cycle_log = {
+          iteration = cycle,
+          score_version_id = best and best.version_id or nil,
+          done_reason = best and best.done_reason or "",
+          accuracy_metrics = best and best.acc_metrics or nil,
+          feedback_metrics = best and best.fb_metrics or nil,
+          accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+          feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+          accepted = false,
+          skip_reason = "no_a_phase_success",
+          num_candidates = #candidates,
+          a_phase_results = candidates,
+          synthesis_attempted = false,
+          synthesis_won = false
+        }
+        table.insert(iterations, cycle_log)
+        State.set("iterations", iterations)
+
+        -- Update RCA from best candidate's eval (even though cycle failed)
+        if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
+        if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
+
+        if consecutive_failed_cycles >= 5 then
+          stop_reason = "improvement_plateau"
+          break
         end
-        State.set("feedback_baseline_metrics", iter_fb_metrics)
-      end
-      State.set("last_accuracy_rca", iter_acc_rca)
-      State.set("last_feedback_rca", iter_fb_rca)
+        if Stop.requested() then stop_reason = "user_stopped"; break end
 
-      -- Check for stop request
-      if Stop.requested() then
-        stop_reason = "user_stopped"
-        break
-      end
-    end
-  end
+      else
+        -- B phase: we have 1+ succeeded candidates
+        Human.notify({message = string.format(
+          "Cycle %d — B Phase: combining %d successful fix%s...",
+          cycle, #succeeded, #succeeded == 1 and "" or "es"), level = "info"})
+
+        local b_phase_version_id = nil
+        local b_phase_is_synthesis = false
+        local b_phase_done_reason = ""
+
+        if #succeeded == 1 then
+          -- Only 1 succeeded — use it directly (no synthesis needed)
+          b_phase_version_id = succeeded[1].version_id
+          b_phase_done_reason = succeeded[1].done_reason or ""
+          Human.notify({message = "  Single winner — skipping synthesis, using directly", level = "info"})
+
+        elseif should_synthesize(succeeded) then
+          -- 2+ succeeded — run synthesis with retry loop
+          Human.notify({message = string.format(
+            "  Synthesizing %d successful fixes...", #succeeded), level = "info"})
+
+          -- Pull YAML for each succeeded candidate and compute diffs
+          for _, cand in ipairs(succeeded) do
+            local cand_pull = call_plexus_tool("plexus_score_pull", {
+              scorecard_identifier = params.scorecard,
+              score_identifier = params.score,
+              version_id = cand.version_id
+            })
+            if cand_pull and cand_pull.success and cand_pull.codeFilePath then
+              local cand_yaml = Step.checkpoint(function()
+                return File.read(cand_pull.codeFilePath)
+              end)
+              if has_text(cand_yaml) then
+                cand.yaml_diff = compute_yaml_diff(current_code, cand_yaml)
+              end
+            end
+          end
+
+          -- Synthesis retry loop (3 attempts)
+          local synth_version_id = nil
+          local max_synth_attempts = 3
+
+          for synth_attempt = 1, max_synth_attempts do
+            -- Reset editor to base YAML for synthesis
+            call_plexus_tool("score_editor_setup", {
+              scorecard_identifier = params.scorecard,
+              score_identifier     = params.score,
+              yaml_content         = current_code,
+              code_file_path       = score_pull.codeFilePath,
+              iteration            = cycle
+            })
+
+            local synth_msg
+            if synth_attempt == 1 then
+              synth_msg = build_synthesis_context({
+                scorecard_name = scorecard_name,
+                score_name = score_name,
+                cycle = cycle,
+                base_version_id = last_accepted_version_id,
+                all_a_phase_results = candidates,
+                feedback_rca = current_fb_rca
+              })
+            else
+              -- Retry message with error context
+              local last_edit = Tool.last_call("str_replace_editor")
+              local last_submit = Tool.last_call("submit_score_code")
+              synth_msg = string.format(
+                "RETRY (attempt %d/%d): Your previous synthesis attempt did NOT produce a valid version.\n\n",
+                synth_attempt, max_synth_attempts)
+              if not last_submit and last_edit then
+                local edit_result = last_edit.result or ""
+                if string.find(tostring(edit_result), "Error") then
+                  synth_msg = synth_msg .. "Your str_replace_editor call FAILED with:\n  " .. tostring(edit_result) .. "\n\n"
+                  synth_msg = synth_msg .. "Fix: call str_replace_editor(command='view', path='score_config.yaml') to re-read the file, "
+                    .. "then retry with an exactly-matching old_str. After a successful edit, call submit_score_code().\n"
+                else
+                  synth_msg = synth_msg .. "You called str_replace_editor but FORGOT to call submit_score_code().\n"
+                end
+              elseif last_submit then
+                local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
+                if ok_sub and sub_result and sub_result.error then
+                  synth_msg = synth_msg .. "submit_score_code returned an error:\n  " .. tostring(sub_result.error) .. "\n\n"
+                end
+              else
+                synth_msg = synth_msg .. "You did not call any tools. You MUST call str_replace_editor and submit_score_code.\n"
+              end
+            end
+
+            Tool.reset()
+            synthesizer.clear_history()
+            if synth_attempt > 1 then
+              Human.notify({message = string.format("  Synthesis retry %d/%d...", synth_attempt, max_synth_attempts), level = "info"})
+            end
+            synthesizer({message = synth_msg})
+
+            -- Extract synthesized version
+            local synth_submit = Tool.last_call("submit_score_code")
+            if synth_submit then
+              local ok, synth_result = pcall(function() return safe_decode(synth_submit.result) end)
+              if ok and synth_result and synth_result.version_id then
+                synth_version_id = synth_result.version_id
+                Human.notify({message = string.format("  Synthesis version: %s", synth_version_id), level = "info"})
+                break
+              end
+            end
+          end
+
+          if synth_version_id then
+            b_phase_version_id = synth_version_id
+            b_phase_is_synthesis = true
+            b_phase_done_reason = string.format("(synthesized from %d A-phase winners)", #succeeded)
+          else
+            -- Synthesis failed after 3 retries — fall back to best single A-phase winner
+            Human.notify({message = "  Synthesis failed — falling back to best single A-phase winner", level = "warning"})
+            table.sort(succeeded, function(a, b)
+              local a_fb = a.fb_deltas and a.fb_deltas.alignment or 0
+              local b_fb = b.fb_deltas and b.fb_deltas.alignment or 0
+              return a_fb > b_fb
+            end)
+            b_phase_version_id = succeeded[1].version_id
+            b_phase_done_reason = succeeded[1].done_reason or ""
+          end
+        end
+
+        -- ================================================================
+        -- B PHASE: Evaluate the combined/selected version
+        -- ================================================================
+        local b_fb_metrics, b_acc_metrics, b_fb_deltas, b_acc_deltas
+        local b_fb_rca, b_acc_rca
+        local b_fb_eval_id, b_acc_eval_id
+
+        -- Check if we already have metrics (single winner case — reuse A-phase evals)
+        if not b_phase_is_synthesis and #succeeded == 1 then
+          b_fb_metrics = succeeded[1].fb_metrics
+          b_acc_metrics = succeeded[1].acc_metrics
+          b_fb_deltas = succeeded[1].fb_deltas
+          b_acc_deltas = succeeded[1].acc_deltas
+          b_fb_rca = succeeded[1].fb_rca or {}
+          b_acc_rca = succeeded[1].acc_rca or {}
+          b_fb_eval_id = succeeded[1].fb_eval_id
+          b_acc_eval_id = succeeded[1].acc_eval_id
+        else
+          -- Need fresh evals for synthesized version
+          Human.notify({message = "  Evaluating B-phase version...", level = "info"})
+          local b_batch = {}
+          if accuracy_available then
+            table.insert(b_batch, {
+              scorecard_name = params.scorecard,
+              score_name = params.score,
+              evaluation_type = "accuracy",
+              dataset_id = dataset_id,
+              n_samples = params.max_samples or 100,
+              version = b_phase_version_id,
+              baseline = accuracy_baseline_id,
+              notes = string.format("Cycle %d B-phase (accuracy)", cycle)
+            })
+          end
+          table.insert(b_batch, {
+            scorecard_name = params.scorecard,
+            score_name = params.score,
+            evaluation_type = "feedback",
+            days = params.days,
+            max_feedback_items = params.max_samples or 100,
+            sampling_mode = "newest",
+            version = b_phase_version_id,
+            baseline = feedback_baseline_id,
+            wait = true,
+            notes = string.format("Cycle %d B-phase (feedback)", cycle)
+          })
+
+          local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
+
+          local b_evals_per = accuracy_available and 2 or 1
+          if accuracy_available then
+            local b_acc_r = b_results and b_results[1]
+            if b_acc_r and (b_acc_r.id or b_acc_r.evaluation_id) then
+              b_acc_metrics = extract_metrics(b_acc_r)
+              b_acc_deltas = calculate_deltas(b_acc_metrics, accuracy_baseline_metrics)
+              b_acc_rca = enrich_rca(b_acc_r.root_cause or {})
+              b_acc_eval_id = b_acc_r.id or b_acc_r.evaluation_id
+            end
+          end
+          local b_fb_r = b_results and b_results[b_evals_per]
+          if b_fb_r and (b_fb_r.id or b_fb_r.evaluation_id) then
+            b_fb_metrics = extract_metrics(b_fb_r)
+            b_fb_deltas = calculate_deltas(b_fb_metrics, feedback_baseline_metrics)
+            b_fb_rca = enrich_rca(b_fb_r.root_cause or {})
+            b_fb_eval_id = b_fb_r.id or b_fb_r.evaluation_id
+          end
+        end
+
+        b_fb_deltas = b_fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0}
+        b_acc_deltas = b_acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0}
+        b_fb_rca = b_fb_rca or {}
+        b_acc_rca = b_acc_rca or {}
+
+        Human.notify({message = string.format(
+          "  B-phase eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
+          b_fb_deltas.alignment, b_acc_deltas.alignment,
+          b_phase_is_synthesis and " [SYNTHESIZED]" or ""
+        ), level = "info"})
+
+        -- ================================================================
+        -- B PHASE: Review
+        -- ================================================================
+        local iter_accuracy_ok = b_acc_metrics ~= nil
+
+        -- Check if version is disqualified before review
+        local disqualified = false
+        if not b_fb_metrics then
+          disqualified = true
+        elseif accuracy_available and b_acc_deltas.alignment < -0.02 then
+          disqualified = true
+        elseif b_fb_deltas.alignment < -0.02 then
+          disqualified = true
+        end
+
+        local accept = false
+
+        if disqualified then
+          Human.notify({message = string.format(
+            "Cycle %d: B-phase version disqualified — skipping review", cycle), level = "warning"})
+        else
+          -- Review the B-phase version
+          Tool.reset()
+          reviewer.clear_history()
+          local review_msg = build_review_context({
+            iteration = cycle,
+            done_reason = b_phase_done_reason,
+            new_version_id = b_phase_version_id,
+            prior_version_id = last_accepted_version_id,
+            fb_metrics = b_fb_metrics or feedback_baseline_metrics,
+            acc_metrics = iter_accuracy_ok and b_acc_metrics or nil,
+            baseline_fb_ac1 = feedback_baseline_metrics.alignment,
+            baseline_acc_ac1 = accuracy_baseline_metrics and accuracy_baseline_metrics.alignment or 0,
+            candidates = candidates
+          })
+          Human.notify({message = "  Invoking reviewer...", level = "info"})
+          reviewer({message = review_msg})
+
+          -- Extract reviewer decision
+          local review_done = Tool.last_call("done")
+          local agent_decision = "keep"
+          if review_done and review_done.args then
+            local ok_d, decision_field = pcall(function() return review_done.args.decision or "" end)
+            local ok_r, reason_field = pcall(function() return review_done.args.reason or "" end)
+            local ok_s, success_field = pcall(function() return review_done.args.success end)
+            decision_field = ok_d and decision_field or ""
+            reason_field = ok_r and reason_field or ""
+            local combined = string.lower(tostring(decision_field) .. " " .. tostring(reason_field))
+            if string.find(combined, "revert") then
+              agent_decision = "revert"
+            elseif ok_s and success_field == false then
+              agent_decision = "revert"
+            end
+            Human.notify({message = string.format(
+              "  Reviewer: %s — %s",
+              agent_decision,
+              has_text(reason_field) and reason_field or "(no reason)"
+            ), level = "info"})
+          end
+
+          -- Decision with guardrails
+          local regression_threshold = -0.02
+          local acc_regressed = accuracy_available and iter_accuracy_ok and (b_acc_deltas.alignment < regression_threshold)
+          local fb_regressed = b_fb_deltas.alignment < regression_threshold
+          local both_worse = (b_fb_deltas.alignment < -0.005)
+            and (not accuracy_available or not iter_accuracy_ok or b_acc_deltas.alignment <= 0)
+
+          if agent_decision == "revert" then
+            Human.notify({message = string.format("Cycle %d REJECTED: reviewer chose to revert", cycle), level = "info"})
+          elseif acc_regressed then
+            Human.notify({message = string.format("Cycle %d REJECTED: accuracy regressed by %.4f", cycle, math.abs(b_acc_deltas.alignment)), level = "warning"})
+          elseif fb_regressed then
+            Human.notify({message = string.format("Cycle %d REJECTED: feedback regressed by %.4f", cycle, math.abs(b_fb_deltas.alignment)), level = "warning"})
+          elseif both_worse then
+            Human.notify({message = string.format("Cycle %d REJECTED: feedback down %.4f with no accuracy gain", cycle, math.abs(b_fb_deltas.alignment)), level = "warning"})
+          else
+            accept = true
+            Human.notify({message = string.format("Cycle %d ACCEPTED", cycle), level = "info"})
+            last_accepted_version_id = b_phase_version_id
+          end
+        end
+
+        -- Store cycle log
+        local cycle_log = {
+          iteration = cycle,
+          score_version_id = b_phase_version_id,
+          accuracy_evaluation_id = b_acc_eval_id,
+          feedback_evaluation_id = b_fb_eval_id,
+          done_reason = b_phase_done_reason,
+          accuracy_metrics = b_acc_metrics,
+          feedback_metrics = b_fb_metrics,
+          accuracy_deltas = b_acc_deltas,
+          feedback_deltas = b_fb_deltas,
+          accepted = accept,
+          num_candidates = #candidates,
+          a_phase_results = candidates,
+          synthesis_attempted = b_phase_is_synthesis,
+          synthesis_won = b_phase_is_synthesis and accept
+        }
+        table.insert(iterations, cycle_log)
+        State.set("iterations", iterations)
+
+        -- Concise cycle summary
+        local accepted_count = 0
+        local rejected_count = 0
+        local skipped_count = 0
+        for _, it in ipairs(iterations) do
+          if it.accepted then accepted_count = accepted_count + 1
+          elseif it.skip_reason then skipped_count = skipped_count + 1
+          else rejected_count = rejected_count + 1 end
+        end
+        local status_str = accept and "ACCEPTED" or "REJECTED"
+        local synth_note = b_phase_is_synthesis and " [SYNTHESIZED]" or ""
+        local reason_short = has_text(b_phase_done_reason) and (": " .. string.sub(b_phase_done_reason, 1, 80)) or ""
+        Human.notify({message = string.format(
+          "┌─ Cycle %d/%d %s%s (A: %d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d rejected, %d skipped\n└─ Current base: %s",
+          cycle, params.max_iterations, status_str, synth_note, #succeeded, #failed, reason_short,
+          b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
+          b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment,
+          accepted_count, rejected_count, skipped_count,
+          tostring(last_accepted_version_id)
+        ), level = "info"})
+
+        -- Update running state for next cycle
+        if accept then
+          consecutive_failed_cycles = 0  -- reset on success
+          if iter_accuracy_ok then
+            State.set("accuracy_baseline_metrics", b_acc_metrics)
+          end
+          State.set("feedback_baseline_metrics", b_fb_metrics)
+        else
+          consecutive_failed_cycles = consecutive_failed_cycles + 1
+        end
+        State.set("last_accuracy_rca", b_acc_rca)
+        State.set("last_feedback_rca", b_fb_rca)
+
+        -- Check if target accuracy was reached (early exit)
+        if accept and b_fb_metrics and b_fb_metrics.alignment >= params.target_accuracy then
+          Human.notify({
+            message = string.format(
+              "Target accuracy reached: feedback AC1=%.3f >= %.3f — stopping early.",
+              b_fb_metrics.alignment, params.target_accuracy),
+            level = "info"
+          })
+          stop_reason = "target_reached"
+          break
+        end
+
+        -- Plateau detection
+        if consecutive_failed_cycles >= 5 then
+          Human.notify({message = "5 consecutive failed cycles — stopping (improvement plateau)", level = "info"})
+          stop_reason = "improvement_plateau"
+          break
+        end
+
+        -- Check for stop request
+        if Stop.requested() then
+          stop_reason = "user_stopped"
+          break
+        end
+      end  -- end of B phase (succeeded > 0)
+    end  -- end of else (#candidates > 0)
+  end  -- end of for cycle
 
   -- Determine final stop reason
   if not stop_reason then
@@ -1007,7 +1883,7 @@ code: |
   -- Phase C: Finalization
   Stage.set("finalize")
 
-  -- Calculate total improvement from accepted iterations
+  -- Calculate total improvement from accepted cycles
   local last_accepted = nil
   for i = #iterations, 1, -1 do
     if iterations[i].accepted then
@@ -1024,7 +1900,7 @@ code: |
   end
 
   Human.notify({message = string.format(
-    "Optimization complete: %d iterations, feedback AC1 improvement: %+.4f, accuracy AC1 improvement: %+.4f",
+    "Optimization complete: %d cycles, feedback AC1 improvement: %+.4f, accuracy AC1 improvement: %+.4f",
     #iterations, total_fb_improvement, total_acc_improvement
   ), level = "info"})
 
@@ -1032,7 +1908,7 @@ code: |
     success = true,
     status = stop_reason,
     message = string.format(
-      "Completed %d iterations. Feedback AC1: %+.4f, Accuracy AC1: %+.4f (%s)",
+      "Completed %d cycles. Feedback AC1: %+.4f, Accuracy AC1: %+.4f (%s)",
       #iterations, total_fb_improvement, total_acc_improvement, stop_reason
     ),
     accuracy_baseline_id = accuracy_baseline_id,
