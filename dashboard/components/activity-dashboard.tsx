@@ -520,7 +520,7 @@ export default function ActivityDashboard({
       if (!embedded) {
         // Update URL without triggering a navigation/re-render on the standalone activity route.
         const newPathname = id ? `/lab/tasks/${id}` : '/lab/activity';
-        router.replace(newPathname);
+        window.history.pushState(null, '', newPathname);
       }
       
       if (id && isNarrowViewport) {
@@ -536,7 +536,7 @@ export default function ActivityDashboard({
 
     if (!embedded) {
       // Update URL without triggering a navigation/re-render on the standalone activity route.
-      router.replace('/lab/activity');
+      window.history.pushState(null, '', '/lab/activity');
     }
   };
 

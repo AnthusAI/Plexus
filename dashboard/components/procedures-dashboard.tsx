@@ -108,12 +108,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     setSelectedProcedureId(id)
     // Update URL without causing full rerender
     const newPathname = id ? `/lab/procedures/${id}` : '/lab/procedures'
-    router.replace(newPathname)
+    window.history.pushState(null, '', newPathname)
     
     if (isNarrowViewport && id) {
       setIsFullWidth(true)
     }
-  }, [isNarrowViewport, router])
+  }, [isNarrowViewport])
 
   const handleCloseProcedure = useCallback(() => {
     setSelectedProcedureId(null)
@@ -121,8 +121,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     setIsEditMode(false)
     
     // Update URL without triggering a navigation/re-render
-    router.replace('/lab/procedures')
-  }, [router])
+    window.history.pushState(null, '', '/lab/procedures')
+  }, [])
 
   // Memoize click handler - moved to top with other hooks
   const getProcedureClickHandler = useCallback((procedureId: string) => {
@@ -806,7 +806,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         setSelectedProcedureId(null)
         setIsEditMode(false)
         // Update URL when deleting the currently selected procedure
-        router.replace('/lab/procedures')
+        window.history.pushState(null, '', '/lab/procedures')
       }
       toast.success('Procedure deleted successfully')
     } catch (error) {
