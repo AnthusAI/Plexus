@@ -431,7 +431,7 @@ describe('ScorecardsComponent', () => {
       })
 
       // URL should be updated when creating new scorecard
-      expect(window.history.pushState).toHaveBeenCalledWith(null, '', '/lab/scorecards/new-scorecard-id')
+      expect(mockReplace).toHaveBeenCalledWith('/lab/scorecards/new-scorecard-id')
     })
   })
 
