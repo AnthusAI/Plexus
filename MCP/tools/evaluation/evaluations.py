@@ -132,6 +132,8 @@ def register_evaluation_tools(mcp: FastMCP):
                             payload[coverage_key] = parameters.get(coverage_key)
                     if "rca_warnings" in parameters:
                         payload["rca_warnings"] = parameters.get("rca_warnings")
+                    if "notes" in parameters:
+                        payload["notes"] = parameters.get("notes")
 
                 root_cause = evaluation_info.get('root_cause')
                 if root_cause:
@@ -249,6 +251,11 @@ def register_evaluation_tools(mcp: FastMCP):
                         # Show short version (first 8 chars) with full ID
                         short_version = version_id[:8] if len(version_id) > 8 else version_id
                         output_lines.append(f"Score Version: {short_version}... (Full ID: {version_id})")
+
+                    # Display notes if available (stored in parameters JSON)
+                    parameters = evaluation_info.get("parameters")
+                    if isinstance(parameters, dict) and parameters.get("notes"):
+                        output_lines.append(f"Notes: {parameters['notes']}")
                     
                     output_lines.append("\n=== Progress & Metrics ===")
                     if evaluation_info.get('total_items'):
@@ -396,6 +403,7 @@ def register_evaluation_tools(mcp: FastMCP):
         # Helper: merge notes into an evaluation's parameters JSON field.
         def _apply_notes_to_evaluation(evaluation_id: str, notes_text: str) -> None:
             if not evaluation_id or not notes_text:
+                logger.info(f"_apply_notes: skipped (eval_id={evaluation_id!r}, notes={'present' if notes_text else 'empty'})")
                 return
             try:
                 from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
@@ -407,8 +415,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 params = dict(existing) if existing else {}
                 params["notes"] = notes_text
                 eval_record.update(parameters=json.dumps(params))
+                logger.info(f"_apply_notes: SUCCESS for evaluation {evaluation_id} — notes='{notes_text[:80]}...'")
             except Exception as exc:
-                logger.warning(f"Could not apply notes to evaluation {evaluation_id}: {exc}")
+                logger.warning(f"_apply_notes: FAILED for evaluation {evaluation_id}: {exc}", exc_info=True)
 
         # Batch mode: run multiple evaluations in parallel and return list of results
         if batch is not None:
@@ -642,6 +651,11 @@ def register_evaluation_tools(mcp: FastMCP):
 
                     # Synchronous mode (default): run orchestration and wait for terminal backend status.
                     logger.info(f"Running feedback evaluation for '{score_name}' (synchronous, waiting for completion + RCA)...")
+                    # When a specific version is requested, yaml mode must be disabled.
+                    # load_scorecard_from_yaml_files ignores specific_version and always
+                    # loads the champion version from the local YAML file, causing all
+                    # candidate evals to run the champion version instead of the candidate.
+                    effective_yaml = yaml and not resolved_version
                     run_summary = await asyncio.to_thread(
                         run_feedback_evaluation_orchestrated,
                         request=FeedbackRunnerRequest(
@@ -655,7 +669,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             sample_seed=sample_seed,
                             max_category_summary_items=max_category_summary_items,
                             task_id=None,
-                            use_yaml=yaml,
+                            use_yaml=effective_yaml,
                         ),
                         client=_runner_client,
                         account_id=_runner_account_id,
@@ -695,6 +709,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         "updated_at": eval_info.get('updated_at'),
                         "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
                     }
+                    if notes:
+                        payload["notes"] = notes
                     root_cause = eval_info.get('root_cause')
                     if root_cause:
                         payload['root_cause'] = root_cause
@@ -803,7 +819,11 @@ def register_evaluation_tools(mcp: FastMCP):
                     '--sampling-method', 'random'
                 ]
 
-                if yaml:
+                # When a specific version is requested, yaml mode must be disabled.
+                # load_scorecard_from_yaml_files ignores specific_version and always
+                # loads the champion version from the local YAML file.
+                acc_effective_yaml = yaml and not version
+                if acc_effective_yaml:
                     args.append('--yaml')
 
                 if score_name:
@@ -888,6 +908,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 'misclassification_analysis': eval_info.get('misclassification_analysis'),
                 'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{eval_id}" if eval_id else None
             }
+
+            if notes:
+                response["notes"] = notes
 
             return json.dumps(response)
 
