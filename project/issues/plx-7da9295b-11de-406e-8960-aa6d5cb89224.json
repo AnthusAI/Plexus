@@ -148,10 +148,16 @@
       "author": "derek",
       "text": "Implemented root-cause fix for replicated React #525/nav hang path: removed runtime JavaScript logo-module execution from BrandProvider and switched branding logos to static variant assets (`squarePath`,`widePath`,`narrowPath`,`altText`) rendered by BrandableLogo. This eliminates cross-React-runtime crashes from externally loaded logo modules. Updated brand config validation, branding docs, and BrandContext tests. Validation: jest pass for BrandContext + console-dashboard + scorecards-dashboard. Next webpack production build remains blocked in this environment by Node 18.18.2 (< required >=20.9.0).",
       "created_at": "2026-04-07T23:12:19.092400349Z"
+    },
+    {
+      "id": "97bd8d9f-49a4-4b3a-b25c-f7d000f82b5e",
+      "author": "derek",
+      "text": "Committed root-cause logo runtime fix on fix branch: 67c676f0. Change removes runtime JS brand logo module loading and uses static variant logo assets from brand.json (`squarePath`, `widePath`, `narrowPath`, optional `altText`), updates validation/docs/tests, and removes LogoErrorBoundary path.",
+      "created_at": "2026-04-07T23:27:21.553889919Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T23:12:19.092400349Z",
+  "updated_at": "2026-04-07T23:27:21.553889919Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
