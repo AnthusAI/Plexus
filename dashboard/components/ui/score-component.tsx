@@ -2196,7 +2196,7 @@ export function ScoreComponent({
       if (!version) return;
 
       // Enable API call to persist the feature status
-      const response = await getAmplifyClient().graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
             updateScoreVersion(input: $input) {
@@ -2240,7 +2240,7 @@ export function ScoreComponent({
       setResetEditingCounter(prev => prev + 1)
       
       // Update the Score record with the new values
-      const updateResult = await getAmplifyClient().graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation UpdateScore($input: UpdateScoreInput!) {
             updateScore(input: $input) {

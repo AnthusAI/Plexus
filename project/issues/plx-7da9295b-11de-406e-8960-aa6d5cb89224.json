@@ -100,10 +100,40 @@
       "author": "derek",
       "text": "Committed approved fix + Kanbus artifacts on branch fix/plx-7da929-amplify-report-regression: 6617e9f7 (defer Amplify client initialization to runtime, plus issue/event updates).",
       "created_at": "2026-04-07T19:33:20.649027983Z"
+    },
+    {
+      "id": "6922ce16-169b-4657-9aaf-c4a2ecf18561",
+      "author": "derek",
+      "text": "Preparing release PR from develop to main after merge of Amplify lazy-init fix. Verifying branch delta and existing PR state before creating/updating PR.",
+      "created_at": "2026-04-07T19:39:20.646905471Z"
+    },
+    {
+      "id": "950c61d8-1daa-4042-878e-b2a0af4f086c",
+      "author": "derek",
+      "text": "Opened release PR develop->main: https://github.com/AnthusAI/Plexus/pull/148 with title 'fix(dashboard): defer Amplify client initialization to runtime'.",
+      "created_at": "2026-04-07T19:39:39.898647271Z"
+    },
+    {
+      "id": "0c88032c-48d4-476a-8124-9e7876586a00",
+      "author": "derek",
+      "text": "Reviewing PR #148 code-quality comments and check annotations; will apply only valid fixes and push follow-up commits to develop.",
+      "created_at": "2026-04-07T19:46:35.956504122Z"
+    },
+    {
+      "id": "9c0da91a-cdcd-46da-8f07-a430980fb150",
+      "author": "derek",
+      "text": "User requested Git Flow only (no direct develop updates). Applying code-quality fixes on current fix branch and leaving integration to normal branch workflow.",
+      "created_at": "2026-04-07T19:47:38.190505078Z"
+    },
+    {
+      "id": "cf70fc83-896f-4a1f-aeb1-ed429a013b48",
+      "author": "derek",
+      "text": "Applied PR #148 code-quality cleanups on fix branch: removed unused lazy-client declarations/imports in dashboard-layout and item-component; removed unused GraphQL response/updateResult bindings in score-component while preserving awaited side effects.",
+      "created_at": "2026-04-07T19:48:03.005551459Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T19:33:20.649027983Z",
+  "updated_at": "2026-04-07T19:48:03.005551459Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
