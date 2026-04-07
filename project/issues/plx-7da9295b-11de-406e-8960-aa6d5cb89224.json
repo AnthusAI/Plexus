@@ -5,7 +5,7 @@
   "type": "bug",
   "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "@me",
   "creator": null,
   "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
   "labels": [],
@@ -130,10 +130,28 @@
       "author": "derek",
       "text": "Applied PR #148 code-quality cleanups on fix branch: removed unused lazy-client declarations/imports in dashboard-layout and item-component; removed unused GraphQL response/updateResult bindings in score-component while preserving awaited side effects.",
       "created_at": "2026-04-07T19:48:03.005551459Z"
+    },
+    {
+      "id": "23ce2396-44ad-4b1b-88c3-e0c3ef5126b8",
+      "author": "derek",
+      "text": "Reverted non-effective navigation changes on fix branch per user decision: reverted commits 2d90feee and 7a94bd20. Keeping Amplify initialization fixes in place for release while nav outage is investigated separately.",
+      "created_at": "2026-04-07T22:59:17.644093938Z"
+    },
+    {
+      "id": "22d5f3d8-a6f1-498b-b884-a49507a26078",
+      "author": "derek",
+      "text": "Replicated production-only nav hang with React #525 path in custom brand logo runtime; investigating deterministic fix in brand loader/rendering path.",
+      "created_at": "2026-04-07T23:09:48.118169047Z"
+    },
+    {
+      "id": "22979ab2-9fe5-47e3-95a2-e3599f1b1929",
+      "author": "derek",
+      "text": "Implemented root-cause fix for replicated React #525/nav hang path: removed runtime JavaScript logo-module execution from BrandProvider and switched branding logos to static variant assets (`squarePath`,`widePath`,`narrowPath`,`altText`) rendered by BrandableLogo. This eliminates cross-React-runtime crashes from externally loaded logo modules. Updated brand config validation, branding docs, and BrandContext tests. Validation: jest pass for BrandContext + console-dashboard + scorecards-dashboard. Next webpack production build remains blocked in this environment by Node 18.18.2 (< required >=20.9.0).",
+      "created_at": "2026-04-07T23:12:19.092400349Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T19:48:03.005551459Z",
+  "updated_at": "2026-04-07T23:12:19.092400349Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
