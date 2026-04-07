@@ -408,9 +408,9 @@ export default function ScorecardsComponent({
       // Update URL immediately
       if (scorecard && (!initialSelectedScoreId || initialSelectedScorecardId !== scorecard.id)) {
         const newPathname = `/lab/scorecards/${scorecard.id}`;
-        window.history.pushState(null, '', newPathname);
+        router.replace(newPathname);
       } else if (!scorecard) {
-        window.history.pushState(null, '', '/lab/scorecards');
+        router.replace('/lab/scorecards');
       }
       
       // Scroll to the selected scorecard
@@ -597,7 +597,7 @@ export default function ScorecardsComponent({
         if (versionId) {
           newPathname += `/versions/${versionId}`;
         }
-        window.history.pushState(null, '', newPathname);
+        router.replace(newPathname);
       }
     }
   };
@@ -609,7 +609,7 @@ export default function ScorecardsComponent({
     // Update URL to include version
     if (selectedScorecard && selectedScore) {
       const newPathname = `/lab/scorecards/${selectedScorecard.id}/scores/${selectedScore.id}/versions/${versionId}`;
-      window.history.pushState(null, '', newPathname);
+      router.replace(newPathname);
     }
   };
 
@@ -945,7 +945,7 @@ export default function ScorecardsComponent({
     setShouldExpandExamples(false); // Reset expand flag
     
     // Update URL without triggering a navigation/re-render
-    window.history.pushState(null, '', '/lab/scorecards');
+    router.replace('/lab/scorecards');
   };
 
   // Initial data load - optimized for immediate display
