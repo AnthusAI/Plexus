@@ -1,0 +1,61 @@
+{
+  "id": "plx-7da9295b-11de-406e-8960-aa6d5cb89224",
+  "title": "Fix dashboard Amplify.configure regression causing reports load failure",
+  "description": "## Summary\nReports dashboard regressed after recent commits with browser errors: Amplify not configured and GraphQL variable id null.\n\n## Acceptance Criteria\n- Root cause identified with commit-level evidence\n- Reports dashboard initializes Amplify exactly once in client runtime\n- Report configuration fetch no longer passes null id\n- Regression checks documented in Kanbus comments",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ee168a08-1d55-4908-b255-68278c799657",
+      "author": "derek",
+      "text": "Starting regression investigation for reports dashboard failure.\n\nPlan:\n1) Diff last commits touching dashboard Amplify bootstrap and report page load path.\n2) Reproduce null-id and Amplify-config flow from code path.\n3) Implement minimal fix and verify with targeted checks.",
+      "created_at": "2026-04-07T16:28:48.370135913Z"
+    },
+    {
+      "id": "0cf69a0e-7286-413a-b593-a5c5f12a6929",
+      "author": "derek",
+      "text": "Findings and fix implemented.\n\nRoot cause hypotheses validated from code history:\n- Amplify bootstrap in app/client-layout can silently skip configuration when amplify_outputs.json is missing at runtime (file is gitignored in dashboard/.gitignore). This produces the observed browser error: \"Amplify has not been configured\".\n- Report configuration edit route can pass an empty/undefined id into GraphQL in Next canary-style params handling, causing \"Variable id has coerced Null value for NonNull type ID!\".\n\nChanges made:\n1) app/client-layout.tsx\n- Added explicit local output loader using ../amplify_outputs.json (relative path).\n- Env override path no longer depends on amplify_outputs existing.\n- Replaced silent warn-and-skip with explicit error logging so config failures surface immediately.\n- Added region validation + API_KEY authorization_types for env override.\n\n2) app/lab/reports/edit/[id]/page.tsx\n- Updated page to async params handling: await params before reading id.\n\n3) components/report-configuration-edit.tsx\n- Added guard for missing id before issuing GraphQL query.\n\nVerification:\n- Attempted local build/typecheck but this workspace has pre-existing dashboard toolchain drift (Next 14 in node_modules vs package.json Next 15 canary, and missing modules), so full build verification is currently blocked.\n- Diff is minimal and targeted to the observed runtime failure paths.",
+      "created_at": "2026-04-07T16:38:22.471440645Z"
+    },
+    {
+      "id": "b0c93882-7378-4a10-9c0d-9a6f4c5009ac",
+      "author": "derek",
+      "text": "Additional diagnosis from user local run:\n- npm run dev currently fails for machine-independent repo reasons, not just host setup.\n- dashboard/package.json dev:dispatcher is hardcoded to /Users/ryan/miniconda3/bin/python (commit 7e130b1b, 2026-04-02), which breaks on non-Ryan hosts.\n- dashboard/package.json dev:web runs `next dev` without `--webpack` (commit e694b909, 2026-04-01) while this repo has custom webpack config and Next canary/turbopack behavior, causing startup failure.\n- Warnings about root lockfiles and invalid next.config keys are secondary/noise; the hard failures are dispatcher interpreter path and turbopack-vs-webpack mode mismatch.",
+      "created_at": "2026-04-07T16:44:02.146485384Z"
+    },
+    {
+      "id": "a446febc-e17a-458b-95aa-4b2d43701e0e",
+      "author": "derek",
+      "text": "Applied portability fix so `npm run dev` works again across machines:\n- dashboard/package.json dev:web now runs `next dev --webpack` (avoids Turbopack/webpack conflict).\n- dashboard/package.json dev:dispatcher now uses `python` from PATH instead of hardcoded /Users/ryan/miniconda3/bin/python.\n\nValidation:\n- Ran `npm run dev` locally.\n- WEB started successfully on Next 15.6.0-canary.61 in webpack mode and reached Ready state.\n- DISPATCH started successfully with `python -m plexus.cli command dispatcher ...` and reached active dispatcher state.\n- Stopped both processes after verification.",
+      "created_at": "2026-04-07T16:47:11.461613398Z"
+    },
+    {
+      "id": "908df9c5-490c-402e-aec2-2d2c25294cb4",
+      "author": "derek",
+      "text": "Investigating production deployment behavior via AWS CLI for Amplify app d1cegb1ft4iove (branch main). Goal: verify whether amplify_outputs generation/pipeline steps regressed and capture concrete job evidence.",
+      "created_at": "2026-04-07T16:53:26.780464287Z"
+    },
+    {
+      "id": "0e90d9bb-32f4-47d8-b601-d8749c9ce616",
+      "author": "derek",
+      "text": "AWS CLI evidence (app d1cegb1ft4iove, branch main):\n- Successful jobs on 2026-04-01 (job 968, 969) and 2026-04-06 (job 978) all ran `npx ampx pipeline-deploy ...` and logged `File written: amplify_outputs.json`.\n- Therefore production did not globally stop generating amplify outputs.\n- Failed jobs 970-977 were mostly build failures before deploy (example job 971: minimatch/GLOBSTAR module error), so they did not produce new live deployments.\n\nInference: the reports outage is more consistent with runtime config handling in client code than with a pipeline output-generation halt. Added local fix already makes client boot resilient (env override path + explicit errors).\n\nRecommended hardening: add explicit build assertion after pipeline-deploy (`test -f amplify_outputs.json`) so missing outputs fail fast with a clear message.",
+      "created_at": "2026-04-07T16:54:30.360546471Z"
+    },
+    {
+      "id": "2c8665c7-4e35-45ec-b0f8-020e453c862b",
+      "author": "derek",
+      "text": "Created fix branch and committed validated changes.\n\nBranch: fix/plx-7da929-amplify-report-regression\nCommit: 31dbe5cb\n\nCommit contents:\n- dashboard/package.json: machine-agnostic dev scripts (`python` from PATH + `next dev --webpack`)\n- dashboard/app/client-layout.tsx: resilient Amplify config resolution + explicit config failure diagnostics\n- dashboard/app/lab/reports/edit/[id]/page.tsx: async-safe params handling\n- dashboard/components/report-configuration-edit.tsx: guard against missing ID before GraphQL query\n\nValidation basis:\n- user reproduced production issue by stashing runtime fixes and confirmed fix resolves issue when restored\n- local `npm run dev` startup verified after script portability fix.",
+      "created_at": "2026-04-07T17:15:58.011801821Z"
+    }
+  ],
+  "created_at": "2026-04-07T16:28:42.748231999Z",
+  "updated_at": "2026-04-07T17:15:58.011801821Z",
+  "closed_at": null,
+  "custom": {}
+}

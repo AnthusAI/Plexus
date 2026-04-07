@@ -1,0 +1,37 @@
+{
+  "id": "plx-1711fdf3-b128-4e0f-a34e-cabe25709ae8",
+  "title": "Remove deprecated scorecards push command and dangerous --all path",
+  "description": "",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ce72e7ae-3ae8-43de-aabf-d623b99c4470",
+      "author": "derek",
+      "text": "Implementing source change to remove  CLI entrypoint entirely, including , and updating tests/docs so the path cannot be accidentally used.",
+      "created_at": "2026-04-06T22:04:28.813184002Z"
+    },
+    {
+      "id": "72d8a5cd-2159-4076-a1ba-af8a71a230d7",
+      "author": "derek",
+      "text": "Implementing source change to remove the scorecards push CLI entrypoint entirely (including the all-scope option), and updating tests/docs so this path cannot be accidentally used.",
+      "created_at": "2026-04-06T22:04:30.982199372Z"
+    },
+    {
+      "id": "a62f1435-73f6-463c-865a-e29d6c773776",
+      "author": "derek",
+      "text": "Completed implementation in working tree: removed the scorecards push command and all related implementation paths from plexus/cli/scorecard/scorecards.py; updated dashboard docs examples to remove scorecards push usage. Validation: `python -m py_compile plexus/cli/scorecard/scorecards.py` passes; `python -m plexus.cli scorecards --help` no longer lists push; `python -m plexus.cli scorecards push --help` now returns `No such command \"push\"`.",
+      "created_at": "2026-04-06T22:07:00.664338608Z"
+    }
+  ],
+  "created_at": "2026-04-06T22:04:25.653642550Z",
+  "updated_at": "2026-04-06T22:07:00.664338608Z",
+  "closed_at": null,
+  "custom": {}
+}
