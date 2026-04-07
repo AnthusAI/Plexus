@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/badge"
 import { SegmentedProgressBar } from "@/components/ui/segmented-progress-bar"
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
 import { DualPhaseProgressBar } from "@/components/ui/dual-phase-progress-bar"
-import { useParams, usePathname } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -439,6 +439,7 @@ export default function BatchesDashboard({
   const subscriptionsRef = useRef<Subscription[]>([])
   const params = useParams()
   const pathname = usePathname()
+  const router = useRouter()
   
   // Ref map to track batch job elements for scroll-to-view functionality
   const batchJobRefsMap = useRef<Map<string, HTMLTableRowElement | null>>(new Map())
@@ -636,7 +637,7 @@ export default function BatchesDashboard({
     
     // Update URL without triggering a navigation/re-render
     const newPathname = `/lab/batches/${job.id}`;
-    window.history.pushState(null, '', newPathname);
+    router.replace(newPathname);
     
     // Scroll to the selected batch job after a brief delay to allow layout updates
     setTimeout(() => {
@@ -654,7 +655,7 @@ export default function BatchesDashboard({
     setIsFullWidth(false);
     
     // Update URL without triggering a navigation/re-render
-    window.history.pushState(null, '', '/lab/batches');
+    router.replace('/lab/batches');
   }
 
   useEffect(() => {

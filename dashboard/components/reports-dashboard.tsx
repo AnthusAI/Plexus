@@ -935,7 +935,7 @@ export default function ReportsDashboard({
     if (id !== selectedReportId) {
       setSelectedReportId(id);
       const newPathname = id ? `/lab/reports/${id}` : '/lab/reports';
-      window.history.pushState(null, '', newPathname);
+      router.replace(newPathname);
       
       // Scroll to the selected report after a brief delay to allow layout updates
       if (id) {
@@ -954,7 +954,7 @@ export default function ReportsDashboard({
   const handleCloseReport = () => {
     setSelectedReportId(null);
     setIsFullWidth(false);
-    window.history.pushState(null, '', '/lab/reports');
+    router.replace('/lab/reports');
   };
 
   // Delete handler
