@@ -1,11 +1,20 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "types": ["node", "react", "react-dom", "next"],
+    "types": [
+      "node",
+      "react",
+      "react-dom",
+      "next"
+    ],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -13,14 +22,16 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "plugins": [
       {
         "name": "next"
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     },
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
