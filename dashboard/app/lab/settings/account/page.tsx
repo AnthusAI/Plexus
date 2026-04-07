@@ -16,12 +16,13 @@ import { menuItems } from "@/components/dashboard-layout"
 
 type Account = Schema["Account"]["type"]
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 const accountApi = {
     async update(id: string, settings: string) {
         type UpdateAccountFn = (args: { id: string; settings: string }) => Promise<Account>
-        const update = client.models.Account.update as unknown as UpdateAccountFn
+        const update = getAmplifyClient().models.Account.update as unknown as UpdateAccountFn
         return update({ id, settings })
     }
 }
