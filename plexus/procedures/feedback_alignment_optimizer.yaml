@@ -118,10 +118,25 @@ agents:
       CORE METHOD — CROSS-CASE PATTERN ANALYSIS:
       If MISCLASSIFICATION EXAMPLES are provided in your context, use this process:
 
-      Step 1 — Read ALL transcript examples.
-        For each error group (e.g., "AI said Yes, human said No"):
-        - What does the AI's reasoning have in common across examples?
-        - What behavioral signal in the transcript led to the wrong prediction?
+      Step 1 — Read ALL transcript examples in EACH error group.
+        For each group, analyze BOTH sides of the conversation separately:
+
+        AGENT/ISR SIDE (read this first):
+        - What exact words or phrases does the ISR use BEFORE the customer responds?
+        - Is the ISR reading/reciting from existing booking notes or records?
+          (e.g., "I see we have you and [Name] for the appointment")
+        - OR is the ISR using a standard invitation/inquiry script?
+          (e.g., "Who else might you like to have present?")
+        - Does the ISR's phrasing DIFFER between the FP group and the FN group?
+
+        CUSTOMER SIDE (read this second):
+        - What does the customer say in response?
+        - Is the customer's response the key differentiator, or is it the same in both groups?
+
+        KEY INSIGHT: The agent/ISR's language often reveals the correct classification
+        signal more reliably than the customer's response. A score may need to classify
+        based on WHAT THE ISR IS DOING (confirming existing booking vs. asking fresh),
+        not just what the customer says.
 
       Step 2 — Find the common root cause.
         The most impactful fixes come from identifying a SINGLE pattern that explains
@@ -453,10 +468,20 @@ code: |
     table.insert(parts, "These are REAL examples of errors from the latest feedback evaluation.")
     table.insert(parts, "Study ALL groups together. Your goal: find the ONE common behavioral")
     table.insert(parts, "pattern that explains most errors in each group.")
-    table.insert(parts, ""    )
+    table.insert(parts, "")
     table.insert(parts, "KEY QUESTION: Is there a FUNDAMENTAL SEMANTIC MISMATCH between what the")
     table.insert(parts, "score is asking and what human reviewers are actually evaluating?")
     table.insert(parts, "If so, a COMPLETE REWRITE of the question/rules is the right fix.")
+    table.insert(parts, "")
+    table.insert(parts, "HOW TO ANALYZE EACH EXAMPLE:")
+    table.insert(parts, "  1. Read what the AGENT/ISR says FIRST (before the customer responds).")
+    table.insert(parts, "     → Is the ISR reading from existing booking notes?")
+    table.insert(parts, "       (e.g., 'I see we have you and [Name] scheduled for...')")
+    table.insert(parts, "     → OR is the ISR asking a fresh inquiry/invitation?")
+    table.insert(parts, "       (e.g., 'Who else would you like to have present at the visit?')")
+    table.insert(parts, "  2. Then read the customer's response.")
+    table.insert(parts, "  3. Ask: Does the ISR's behavior DIFFER between the FP group and FN group?")
+    table.insert(parts, "     If YES → the ISR's behavior may be the classification signal, not the customer's words.")
     table.insert(parts, "")
 
     for cell_key, cell_data in pairs(cross_case_cells) do
@@ -507,8 +532,8 @@ code: |
           table.insert(parts, "      AI reasoning: " .. reasoning)
         end
         if text ~= "" then
-          -- Include up to 1200 chars of transcript
-          table.insert(parts, "      Transcript: " .. tostring(text):sub(1, 1200))
+          -- Include up to 2000 chars of transcript (need enough context to see ISR opening)
+          table.insert(parts, "      Transcript: " .. tostring(text):sub(1, 2000))
         end
         table.insert(parts, "")
       end
@@ -634,12 +659,23 @@ code: |
     if has_cross_case_examples then
       if candidate_index == 1 then
         return "STRATEGY [STRUCTURAL ANALYSIS]: You are candidate 1 — the semantic/structural candidate.\n" ..
-          "Study the misclassification examples with this specific question:\n" ..
-          "  'Is the score measuring the RIGHT THING relative to what human reviewers actually evaluate?'\n" ..
-          "Look for a FUNDAMENTAL SEMANTIC MISMATCH — cases where the score's core question,\n" ..
-          "framing, or key definitions differ from how humans apply the label.\n" ..
-          "If you find one, do a COMPLETE REWRITE of the user_message to fix the framing.\n" ..
-          "This is the highest-impact possible change. Don't be afraid to rewrite the whole question."
+          "Your PRIMARY TASK: Study the AGENT/ISR language in the transcript examples.\n" ..
+          "\n" ..
+          "For EACH error group, answer these questions about what the ISR says:\n" ..
+          "  • FP group (AI said Yes, human said No): What is the ISR's exact phrasing?\n" ..
+          "  • FN group (AI said No, human said Yes): What is the ISR's exact phrasing?\n" ..
+          "  • Does the ISR phrasing DIFFER between the two groups?\n" ..
+          "\n" ..
+          "Common discovery pattern: ISR behavior signals the context:\n" ..
+          "  - ISR reads from existing notes ('I see we have you and [Name] scheduled') → different context\n" ..
+          "  - ISR uses inquiry script ('Who else would you like to have present?') → different context\n" ..
+          "If the ISR's behavior differs between FP and FN groups, the score question may need\n" ..
+          "to be REWRITTEN around that ISR signal, not around the customer's response.\n" ..
+          "\n" ..
+          "If you find a FUNDAMENTAL SEMANTIC MISMATCH (score is asking the wrong question\n" ..
+          "relative to what humans actually evaluate), do a COMPLETE REWRITE of user_message.\n" ..
+          "Don't be afraid to rewrite the whole question and all YES/NO criteria from scratch.\n" ..
+          "This is the highest-impact possible change."
       elseif candidate_index == 2 then
         return "STRATEGY [RULE ANALYSIS]: You are candidate 2 — the missing-rule candidate.\n" ..
           "Study the misclassification examples with this specific question:\n" ..
@@ -1305,7 +1341,7 @@ code: |
   do
     Human.notify({message = "Fetching misclassification examples for pattern analysis...", level = "info"})
     local ok, examples_or_err = pcall(fetch_cross_case_examples,
-      feedback_baseline_id, score_valid_classes, 4)
+      feedback_baseline_id, score_valid_classes, 6)
     if ok and type(examples_or_err) == "table" then
       current_cross_case_examples = examples_or_err
       local cell_count = 0
@@ -2083,7 +2119,7 @@ code: |
           -- (Base changed, so error patterns are different now)
           if b_fb_eval_id then
             local ok_ex, new_examples = pcall(fetch_cross_case_examples,
-              b_fb_eval_id, score_valid_classes, 4)
+              b_fb_eval_id, score_valid_classes, 6)
             if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
               current_cross_case_examples = new_examples
               Human.notify({message = "Refreshed misclassification examples from accepted cycle eval.", level = "info"})
@@ -2095,7 +2131,7 @@ code: |
           -- (The base didn't change, but we may have richer error evidence)
           if b_fb_eval_id then
             local ok_ex, new_examples = pcall(fetch_cross_case_examples,
-              b_fb_eval_id, score_valid_classes, 4)
+              b_fb_eval_id, score_valid_classes, 6)
             if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
               current_cross_case_examples = new_examples
             end
