@@ -44,7 +44,8 @@ import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-hea
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import MetricsSummary from '@/components/MetricsSummary'
 
-const client = generateClient();
+let amplifyClient: any = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient())
 
 export interface ScoreData {
   id: string
@@ -203,7 +204,7 @@ interface DetailContentProps {
 // Helper function to fetch most recent evaluation for a score
 async function fetchMostRecentEvaluation(scoreId: string) {
   try {
-    const response = await client.graphql({
+    const response = await getAmplifyClient().graphql({
       query: `
         query ListEvaluationByScoreIdAndUpdatedAt(
           $scoreId: String!
@@ -284,7 +285,7 @@ async function fetchAssociatedDatasetsForScore(scoreId: string): Promise<Associa
 
   let nextToken: string | null = null
   do {
-    const response = await client.graphql({
+    const response = await getAmplifyClient().graphql({
       query: `
         query ListDataSetByScoreIdAndCreatedAt(
           $scoreId: String!
@@ -343,7 +344,7 @@ async function fetchAssociatedDatasetsForScore(scoreId: string): Promise<Associa
       }
 
       try {
-        const versionResponse = await client.graphql({
+        const versionResponse = await getAmplifyClient().graphql({
           query: `
             query GetDataSourceVersionForDatasetStats($id: ID!) {
               getDataSourceVersion(id: $id) {
@@ -1868,7 +1869,7 @@ export function ScoreComponent({
       try {
         
         // First, get the score details to get the championVersionId
-        const scoreResponse = await client.graphql({
+        const scoreResponse = await getAmplifyClient().graphql({
           query: `
             query GetScore($id: ID!) {
               getScore(id: $id) {
@@ -1905,7 +1906,7 @@ export function ScoreComponent({
         // Then fetch all versions using the secondary index query
         // This query uses the GSI on scoreId with createdAt as sort key
         // which correctly returns all versions for a score
-        const response = await client.graphql({
+        const response = await getAmplifyClient().graphql({
           query: `
             query GetScoreVersionsByScoreId($scoreId: String!, $sortDirection: ModelSortDirection) {
               listScoreVersionByScoreIdAndCreatedAt(
@@ -1982,7 +1983,7 @@ export function ScoreComponent({
               
               // Update the Score record to set this as the champion version
               try {
-                await client.graphql({
+                await getAmplifyClient().graphql({
                   query: `
                     mutation UpdateScoreChampion($input: UpdateScoreInput!) {
                       updateScore(input: $input) {
@@ -2195,7 +2196,7 @@ export function ScoreComponent({
       if (!version) return;
 
       // Enable API call to persist the feature status
-      const response = await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
             updateScoreVersion(input: $input) {
@@ -2239,7 +2240,7 @@ export function ScoreComponent({
       setResetEditingCounter(prev => prev + 1)
       
       // Update the Score record with the new values
-      const updateResult = await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation UpdateScore($input: UpdateScoreInput!) {
             updateScore(input: $input) {
@@ -2364,7 +2365,7 @@ export function ScoreComponent({
         updatedAt: now
       };
 
-      const createVersionResponse = await client.graphql({
+      const createVersionResponse = await getAmplifyClient().graphql({
         query: `
           mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
             createScoreVersion(input: $input) {
@@ -2406,7 +2407,7 @@ export function ScoreComponent({
           
           // Update the Score record to set this as the champion version
           try {
-            await client.graphql({
+            await getAmplifyClient().graphql({
               query: `
                 mutation UpdateScoreChampion($input: UpdateScoreInput!) {
                   updateScore(input: $input) {
@@ -2456,7 +2457,7 @@ export function ScoreComponent({
       if (!version) return;
 
       // Update the Score record to set this as the champion version
-      await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation UpdateScoreChampion($input: UpdateScoreInput!) {
             updateScore(input: $input) {

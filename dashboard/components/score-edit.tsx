@@ -53,29 +53,30 @@ interface ScoreState {
 type ScorecardSectionRecord = Schema['ScorecardSection']['type']
 type ScoreRecord = Schema['Score']['type']
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 const listSections = async (scorecardId: string) => {
-  const response = await (client.models.ScorecardSection as any).list({
+  const response = await (getAmplifyClient().models.ScorecardSection as any).list({
     filter: { scorecardId: { eq: scorecardId } }
   })
   return response.data as Schema['ScorecardSection']['type'][]
 }
 
 const listScores = async (sectionId: string) => {
-  const response = await (client.models.Score as any).list({
+  const response = await (getAmplifyClient().models.Score as any).list({
     filter: { sectionId: { eq: sectionId } }
   })
   return response.data as Schema['Score']['type'][]
 }
 
 const getScore = async (id: string) => {
-  const response = await (client.models.Score as any).get({ id })
+  const response = await (getAmplifyClient().models.Score as any).get({ id })
   return response.data as Schema['Score']['type'] | null
 }
 
 const getSection = async (id: string) => {
-  const response = await (client.models.ScorecardSection as any).get({ id })
+  const response = await (getAmplifyClient().models.ScorecardSection as any).get({ id })
   return response.data as Schema['ScorecardSection']['type'] | null
 }
 
@@ -90,7 +91,7 @@ const createScore = async (scoreData: {
   distribution: any[]
   versionHistory: any[]
 }) => {
-  const response = await (client.models.Score as any).create(scoreData)
+  const response = await (getAmplifyClient().models.Score as any).create(scoreData)
   return response.data as Schema['Score']['type']
 }
 
@@ -106,7 +107,7 @@ const updateScore = async (scoreData: {
   versionHistory: any[]
   isDisabled?: boolean
 }) => {
-  const response = await (client.models.Score as any).update(scoreData)
+  const response = await (getAmplifyClient().models.Score as any).update(scoreData)
   return response.data as Schema['Score']['type']
 }
 

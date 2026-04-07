@@ -52,10 +52,91 @@
       "author": "derek",
       "text": "Created fix branch and committed validated changes.\n\nBranch: fix/plx-7da929-amplify-report-regression\nCommit: 31dbe5cb\n\nCommit contents:\n- dashboard/package.json: machine-agnostic dev scripts (`python` from PATH + `next dev --webpack`)\n- dashboard/app/client-layout.tsx: resilient Amplify config resolution + explicit config failure diagnostics\n- dashboard/app/lab/reports/edit/[id]/page.tsx: async-safe params handling\n- dashboard/components/report-configuration-edit.tsx: guard against missing ID before GraphQL query\n\nValidation basis:\n- user reproduced production issue by stashing runtime fixes and confirmed fix resolves issue when restored\n- local `npm run dev` startup verified after script portability fix.",
       "created_at": "2026-04-07T17:15:58.011801821Z"
+    },
+    {
+      "id": "9dbc6802-54cd-4088-9011-a47eb900918a",
+      "author": "derek",
+      "text": "Updated GitHub PR #146 title/body to reflect combined scope now on develop->main:\n- Removed deprecated scorecards push command/docs\n- Added dashboard Amplify/report regression fix details\n- Added local dev portability script fix details\n- Included updated validation and Kanbus links (plx-1711fd, plx-7da929).\n\nPR URL: https://github.com/AnthusAI/Plexus/pull/146",
+      "created_at": "2026-04-07T17:24:04.532093874Z"
+    },
+    {
+      "id": "fdaa3e5f-adf9-4170-be45-e5c3bd693411",
+      "author": "derek",
+      "text": "Continuing investigation for remaining production-only issue: client-side nav hangs with spinner and repeated 'Amplify has not been configured' errors, while direct URL loads work and local is clean. Next step: inspect deployed runtime chunks + Amplify hosting rewrites/headers to pinpoint mismatch.",
+      "created_at": "2026-04-07T18:14:49.273987134Z"
+    },
+    {
+      "id": "c445c17c-9c6e-4eea-89d9-8cc2fc35f547",
+      "author": "derek",
+      "text": "Starting local mitigation patch for production nav spinner: replace eager module-scope Amplify generateClient calls with lazy runtime getters, beginning with dashboard-layout and reports/evaluations-related modules. Goal is to eliminate pre-configure client construction race exposed by production chunk ordering.",
+      "created_at": "2026-04-07T18:21:24.087000647Z"
+    },
+    {
+      "id": "e1462bc1-b469-441b-aa56-dd920c4d018b",
+      "author": "derek",
+      "text": "Applied local patch across 21 dashboard files: replaced module-scope eager Amplify generateClient construction with lazy getAmplifyClient getters so clients are instantiated only at runtime after app bootstrap. Build verification attempt in this environment is blocked by Node version mismatch (next build requires >=20.9.0, host has 18.18.2).",
+      "created_at": "2026-04-07T18:22:03.742027972Z"
+    },
+    {
+      "id": "3545db1a-00e3-41d7-b8b1-2fe19986acf2",
+      "author": "derek",
+      "text": "Adjusted local lazy Amplify client typing in score-component and item-component to avoid TypeScript recursive type expansion from ReturnType of generateClient. Runtime behavior unchanged; this unblocks webpack production build for local repro setup.",
+      "created_at": "2026-04-07T18:57:36.613594314Z"
+    },
+    {
+      "id": "a5d6fdbc-9338-4d02-aa14-026995bdfdec",
+      "author": "derek",
+      "text": "Investigating whether recent Amplify config changes introduced the production warning. Collecting timeline from git commits and AWS stack metadata with exact dates.",
+      "created_at": "2026-04-07T19:23:28.563420903Z"
+    },
+    {
+      "id": "4d97d62a-4a8f-4a5a-9056-63711df82b3e",
+      "author": "derek",
+      "text": "User approved commit. Staging dashboard lazy Amplify client initialization fixes plus Kanbus issue/event files in this working tree for a single commit on fix branch.",
+      "created_at": "2026-04-07T19:33:08.070266681Z"
+    },
+    {
+      "id": "6626f0ef-8634-4880-9a4e-42991e7e7fb2",
+      "author": "derek",
+      "text": "Committed approved fix + Kanbus artifacts on branch fix/plx-7da929-amplify-report-regression: 6617e9f7 (defer Amplify client initialization to runtime, plus issue/event updates).",
+      "created_at": "2026-04-07T19:33:20.649027983Z"
+    },
+    {
+      "id": "6922ce16-169b-4657-9aaf-c4a2ecf18561",
+      "author": "derek",
+      "text": "Preparing release PR from develop to main after merge of Amplify lazy-init fix. Verifying branch delta and existing PR state before creating/updating PR.",
+      "created_at": "2026-04-07T19:39:20.646905471Z"
+    },
+    {
+      "id": "950c61d8-1daa-4042-878e-b2a0af4f086c",
+      "author": "derek",
+      "text": "Opened release PR develop->main: https://github.com/AnthusAI/Plexus/pull/148 with title 'fix(dashboard): defer Amplify client initialization to runtime'.",
+      "created_at": "2026-04-07T19:39:39.898647271Z"
+    },
+    {
+      "id": "0c88032c-48d4-476a-8124-9e7876586a00",
+      "author": "derek",
+      "text": "Reviewing PR #148 code-quality comments and check annotations; will apply only valid fixes and push follow-up commits to develop.",
+      "created_at": "2026-04-07T19:46:35.956504122Z"
+    },
+    {
+      "id": "9c0da91a-cdcd-46da-8f07-a430980fb150",
+      "author": "derek",
+      "text": "User requested Git Flow only (no direct develop updates). Applying code-quality fixes on current fix branch and leaving integration to normal branch workflow.",
+      "created_at": "2026-04-07T19:47:38.190505078Z"
+    },
+    {
+      "id": "cf70fc83-896f-4a1f-aeb1-ed429a013b48",
+      "author": "derek",
+      "text": "Applied PR #148 code-quality cleanups on fix branch: removed unused lazy-client declarations/imports in dashboard-layout and item-component; removed unused GraphQL response/updateResult bindings in score-component while preserving awaited side effects.",
+      "created_at": "2026-04-07T19:48:03.005551459Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T17:15:58.011801821Z",
+  "updated_at": "2026-04-07T19:48:03.005551459Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
