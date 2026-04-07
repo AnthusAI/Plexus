@@ -148,22 +148,10 @@
       "author": "derek",
       "text": "Applied proper navigation fix on fix branch: replaced all dashboard window.history.pushState usage with Next router.replace across activity, batches, console, items, procedures, scorecards, templates, reports, and evaluations dashboards. Reverted temporary left-nav anchor workaround back to Next Link.",
       "created_at": "2026-04-07T22:09:35.525801076Z"
-    },
-    {
-      "id": "2ebe53d7-b132-4b43-9a91-b69228af6e0c",
-      "author": "derek",
-      "text": "Preparing release PR from develop to main after latest navigation-sync fix merged to develop; checking existing PR state before creating/updating.",
-      "created_at": "2026-04-07T22:16:10.561902472Z"
-    },
-    {
-      "id": "fa91745a-c7c5-42e0-896b-2b9e757e8c1d",
-      "author": "derek",
-      "text": "Opened develop->main release PR #149 for production nav/Amplify stabilization: https://github.com/AnthusAI/Plexus/pull/149",
-      "created_at": "2026-04-07T22:16:23.547753730Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T22:16:23.547753730Z",
+  "updated_at": "2026-04-07T22:09:38.362475397Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
