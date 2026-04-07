@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "event_id": "bfc2fdbd-1ea0-4115-808b-03d15b92cc53",
+  "event_id": "c8db5569-ad6f-48ca-8b6e-e98ae7b99ed8",
   "issue_id": "plx-7da9295b-11de-406e-8960-aa6d5cb89224",
   "event_type": "comment_added",
-  "occurred_at": "2026-04-07T22:05:26.630Z",
+  "occurred_at": "2026-04-07T23:12:19.092Z",
   "actor_id": "derek",
   "payload": {
     "comment_author": "derek",
-    "comment_id": "81ee4a9b-bf01-4623-8bc7-1357b09bea82"
+    "comment_id": "22979ab2-9fe5-47e3-95a2-e3599f1b1929"
   }
 }

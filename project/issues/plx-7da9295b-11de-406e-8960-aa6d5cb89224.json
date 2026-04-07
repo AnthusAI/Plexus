@@ -5,7 +5,7 @@
   "type": "bug",
   "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "@me",
   "creator": null,
   "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
   "labels": [],
@@ -132,38 +132,32 @@
       "created_at": "2026-04-07T19:48:03.005551459Z"
     },
     {
-      "id": "ab8bf4d7-ebc4-4fa1-b1e7-a34c00b9fdb8",
+      "id": "23ce2396-44ad-4b1b-88c3-e0c3ef5126b8",
       "author": "derek",
-      "text": "Added targeted navigation-state fix on fix branch: replaced manual window.history.pushState calls with Next router.replace in reports and evaluations dashboards so app-router state and URL remain synchronized during in-page detail URL updates. This targets production-only nav hangs where left-nav clicks remained pending.",
-      "created_at": "2026-04-07T22:04:45.579396198Z"
+      "text": "Reverted non-effective navigation changes on fix branch per user decision: reverted commits 2d90feee and 7a94bd20. Keeping Amplify initialization fixes in place for release while nav outage is investigated separately.",
+      "created_at": "2026-04-07T22:59:17.644093938Z"
     },
     {
-      "id": "81ee4a9b-bf01-4623-8bc7-1357b09bea82",
+      "id": "22d5f3d8-a6f1-498b-b884-a49507a26078",
       "author": "derek",
-      "text": "Broadened mitigation for production nav lockups: converted sidebar menu links in dashboard-layout from Next Link component to standard anchor navigation, forcing browser-level route changes for left-nav clicks. This bypasses app-router transition deadlocks affecting all sidebar links in production.",
-      "created_at": "2026-04-07T22:05:26.629894869Z"
+      "text": "Replicated production-only nav hang with React #525 path in custom brand logo runtime; investigating deterministic fix in brand loader/rendering path.",
+      "created_at": "2026-04-07T23:09:48.118169047Z"
     },
     {
-      "id": "9e8ef8ff-b5e8-4339-8104-64bd444f605c",
+      "id": "22979ab2-9fe5-47e3-95a2-e3599f1b1929",
       "author": "derek",
-      "text": "Applied proper navigation fix on fix branch: replaced all dashboard window.history.pushState usage with Next router.replace across activity, batches, console, items, procedures, scorecards, templates, reports, and evaluations dashboards. Reverted temporary left-nav anchor workaround back to Next Link.",
-      "created_at": "2026-04-07T22:09:35.525801076Z"
+      "text": "Implemented root-cause fix for replicated React #525/nav hang path: removed runtime JavaScript logo-module execution from BrandProvider and switched branding logos to static variant assets (`squarePath`,`widePath`,`narrowPath`,`altText`) rendered by BrandableLogo. This eliminates cross-React-runtime crashes from externally loaded logo modules. Updated brand config validation, branding docs, and BrandContext tests. Validation: jest pass for BrandContext + console-dashboard + scorecards-dashboard. Next webpack production build remains blocked in this environment by Node 18.18.2 (< required >=20.9.0).",
+      "created_at": "2026-04-07T23:12:19.092400349Z"
     },
     {
-      "id": "2ebe53d7-b132-4b43-9a91-b69228af6e0c",
+      "id": "97bd8d9f-49a4-4b3a-b25c-f7d000f82b5e",
       "author": "derek",
-      "text": "Preparing release PR from develop to main after latest navigation-sync fix merged to develop; checking existing PR state before creating/updating.",
-      "created_at": "2026-04-07T22:16:10.561902472Z"
-    },
-    {
-      "id": "fa91745a-c7c5-42e0-896b-2b9e757e8c1d",
-      "author": "derek",
-      "text": "Opened develop->main release PR #149 for production nav/Amplify stabilization: https://github.com/AnthusAI/Plexus/pull/149",
-      "created_at": "2026-04-07T22:16:23.547753730Z"
+      "text": "Committed root-cause logo runtime fix on fix branch: 67c676f0. Change removes runtime JS brand logo module loading and uses static variant logo assets from brand.json (`squarePath`, `widePath`, `narrowPath`, optional `altText`), updates validation/docs/tests, and removes LogoErrorBoundary path.",
+      "created_at": "2026-04-07T23:27:21.553889919Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T22:16:23.547753730Z",
+  "updated_at": "2026-04-07T23:27:21.553889919Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
