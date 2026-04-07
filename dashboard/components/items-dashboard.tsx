@@ -1,6 +1,6 @@
 "use client"
 import React, { useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react"
-import { useSearchParams, useParams } from 'next/navigation'
+import { useSearchParams, useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -607,6 +607,7 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
 function ItemsDashboardInner() {
   const searchParams = useSearchParams()
   const params = useParams()
+  const router = useRouter()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   
 
@@ -785,7 +786,7 @@ function ItemsDashboardInner() {
         const itemId = identifier.itemId;
         if (itemId) {
           // Navigate to the item without remount
-          window.history.pushState({}, '', `/lab/items/${itemId}`)
+          router.replace(`/lab/items/${itemId}`)
           setSelectedItem(itemId)
           setSearchValue(''); // Clear search on success
         } else {
@@ -2969,7 +2970,7 @@ function ItemsDashboardInner() {
           onClose={() => {
             setShouldAnimateLeftPanel(true); // Enable animation when closing
             setIsFullWidth(false);
-            window.history.pushState({}, '', `/lab/items`)
+            router.replace(`/lab/items`)
             setSelectedItem(null)
           }}
           skeletonMode={true}
@@ -3010,7 +3011,7 @@ function ItemsDashboardInner() {
             onClose={() => {
               setShouldAnimateLeftPanel(true); // Enable animation when closing
               setIsFullWidth(false);
-              window.history.pushState({}, '', `/lab/items`)
+              router.replace(`/lab/items`)
               setSelectedItem(null)
             }}
             skeletonMode={true}
@@ -3070,7 +3071,7 @@ function ItemsDashboardInner() {
           setShouldAnimateLeftPanel(true); // Enable animation when closing
           setIsFullWidth(false);
           // Use window.history to navigate back to grid view without remount
-          window.history.pushState({}, '', `/lab/items`)
+          router.replace(`/lab/items`)
           setSelectedItem(null)
         }}
         onScoreResultsRefetchReady={(refetchFn) => {
@@ -3314,7 +3315,7 @@ function ItemsDashboardInner() {
     setSelectedItem(null);
     setIsFullWidth(false);
     // Navigate to items list without specific item
-    window.history.pushState({}, '', `/lab/items`);
+    router.replace(`/lab/items`);
   };
 
   const handleItemClick = (itemId: string) => {
@@ -3322,7 +3323,7 @@ function ItemsDashboardInner() {
     setShouldAnimateLeftPanel(true);
     
     // Use window.history.pushState for truly shallow navigation that won't cause remount
-    window.history.pushState({}, '', `/lab/items/${itemId}`)
+    router.replace(`/lab/items/${itemId}`)
     // Manually update the selected item state
     setSelectedItem(itemId)
     
@@ -3781,4 +3782,3 @@ export default function ItemsDashboard() {
     </Suspense>
   );
 }
-
