@@ -130,10 +130,40 @@
       "author": "derek",
       "text": "Applied PR #148 code-quality cleanups on fix branch: removed unused lazy-client declarations/imports in dashboard-layout and item-component; removed unused GraphQL response/updateResult bindings in score-component while preserving awaited side effects.",
       "created_at": "2026-04-07T19:48:03.005551459Z"
+    },
+    {
+      "id": "ab8bf4d7-ebc4-4fa1-b1e7-a34c00b9fdb8",
+      "author": "derek",
+      "text": "Added targeted navigation-state fix on fix branch: replaced manual window.history.pushState calls with Next router.replace in reports and evaluations dashboards so app-router state and URL remain synchronized during in-page detail URL updates. This targets production-only nav hangs where left-nav clicks remained pending.",
+      "created_at": "2026-04-07T22:04:45.579396198Z"
+    },
+    {
+      "id": "81ee4a9b-bf01-4623-8bc7-1357b09bea82",
+      "author": "derek",
+      "text": "Broadened mitigation for production nav lockups: converted sidebar menu links in dashboard-layout from Next Link component to standard anchor navigation, forcing browser-level route changes for left-nav clicks. This bypasses app-router transition deadlocks affecting all sidebar links in production.",
+      "created_at": "2026-04-07T22:05:26.629894869Z"
+    },
+    {
+      "id": "9e8ef8ff-b5e8-4339-8104-64bd444f605c",
+      "author": "derek",
+      "text": "Applied proper navigation fix on fix branch: replaced all dashboard window.history.pushState usage with Next router.replace across activity, batches, console, items, procedures, scorecards, templates, reports, and evaluations dashboards. Reverted temporary left-nav anchor workaround back to Next Link.",
+      "created_at": "2026-04-07T22:09:35.525801076Z"
+    },
+    {
+      "id": "2ebe53d7-b132-4b43-9a91-b69228af6e0c",
+      "author": "derek",
+      "text": "Preparing release PR from develop to main after latest navigation-sync fix merged to develop; checking existing PR state before creating/updating.",
+      "created_at": "2026-04-07T22:16:10.561902472Z"
+    },
+    {
+      "id": "fa91745a-c7c5-42e0-896b-2b9e757e8c1d",
+      "author": "derek",
+      "text": "Opened develop->main release PR #149 for production nav/Amplify stabilization: https://github.com/AnthusAI/Plexus/pull/149",
+      "created_at": "2026-04-07T22:16:23.547753730Z"
     }
   ],
   "created_at": "2026-04-07T16:28:42.748231999Z",
-  "updated_at": "2026-04-07T19:48:03.005551459Z",
+  "updated_at": "2026-04-07T22:16:23.547753730Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
