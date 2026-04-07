@@ -334,6 +334,8 @@ def register_evaluation_tools(mcp: FastMCP):
         wait: bool = True,
         dataset_id: Optional[str] = None,
         use_score_associated_dataset: bool = False,
+        batch: Optional[List[Dict[str, Any]]] = None,
+        notes: Optional[str] = None,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
@@ -369,9 +371,18 @@ def register_evaluation_tools(mcp: FastMCP):
                       evaluation uses this specific dataset instead of random sampling.
         - use_score_associated_dataset: If True, use the latest associated dataset for the score
                                         instead of random sampling (accuracy evaluation only).
+        - batch: Optional list of evaluation parameter dicts. When provided, all evaluations run
+                 in parallel and results are returned as a JSON array in the same order. Each dict
+                 uses the same parameter names as the single-eval call. The top-level parameters
+                 are ignored when batch is provided.
+        - notes: Optional freeform string explaining why this evaluation is being run. Stored in
+                 the evaluation's parameters JSON under the "notes" key. Useful for recording
+                 context like "Baseline: deterministic accuracy dataset" or
+                 "Iteration 3: Added example for transfer-request edge case".
 
         Returns:
         - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL.
+          For batch mode, returns a JSON array of result objects in the same order as the input.
           For bulk feedback mode (no score_name), returns aggregate results for all scores.
 
         FEEDBACK EVALUATION BEHAVIOR:
@@ -382,6 +393,44 @@ def register_evaluation_tools(mcp: FastMCP):
         - If score_name is omitted, runs for ALL scores in the scorecard concurrently.
         - Supply version= explicitly to override the champion version (e.g. to test a specific version).
         """
+        # Helper: merge notes into an evaluation's parameters JSON field.
+        def _apply_notes_to_evaluation(evaluation_id: str, notes_text: str) -> None:
+            if not evaluation_id or not notes_text:
+                return
+            try:
+                from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+                from plexus.cli.shared.client_utils import create_client
+                eval_record = DashboardEvaluation.get_by_id(evaluation_id, client=create_client())
+                existing = eval_record.parameters
+                if isinstance(existing, str):
+                    existing = json.loads(existing)
+                params = dict(existing) if existing else {}
+                params["notes"] = notes_text
+                eval_record.update(parameters=json.dumps(params))
+            except Exception as exc:
+                logger.warning(f"Could not apply notes to evaluation {evaluation_id}: {exc}")
+
+        # Batch mode: run multiple evaluations in parallel and return list of results
+        if batch is not None:
+            import asyncio as _asyncio
+            # Lua tables arrive as {1: {...}, 2: {...}} dicts — normalize to a list
+            if isinstance(batch, dict):
+                batch_list = [batch[k] for k in sorted(batch.keys())]
+            else:
+                batch_list = list(batch)
+            tasks = [plexus_evaluation_run(**item) for item in batch_list]
+            raw_results = await _asyncio.gather(*tasks, return_exceptions=True)
+            output = []
+            for r in raw_results:
+                if isinstance(r, Exception):
+                    output.append({"error": str(r)})
+                else:
+                    try:
+                        output.append(json.loads(r))
+                    except Exception:
+                        output.append({"error": "Could not parse result", "raw": str(r)})
+            return json.dumps(output)
+
         if not scorecard_name:
             return "Error: scorecard_name must be provided"
 
@@ -413,7 +462,6 @@ def register_evaluation_tools(mcp: FastMCP):
         )
 
         try:
-            import json
             import asyncio
             from concurrent.futures import ThreadPoolExecutor
             from click.testing import CliRunner
@@ -567,6 +615,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         except Exception:
                             evaluation_id = None
                         if evaluation_id:
+                            if notes:
+                                _apply_notes_to_evaluation(evaluation_id, notes)
                             return json.dumps({
                                 "status": "dispatched",
                                 "evaluation_id": evaluation_id,
@@ -614,6 +664,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         poll_interval_seconds=5,
                     )
                     evaluation_id = run_summary.get("evaluation_id")
+                    if notes and evaluation_id:
+                        _apply_notes_to_evaluation(evaluation_id, notes)
                     eval_info = Evaluation.get_evaluation_info(evaluation_id)
                     logger.info(f"Evaluation completed: {evaluation_id}")
 
@@ -810,9 +862,12 @@ def register_evaluation_tools(mcp: FastMCP):
             if not evaluation_id:
                 return json.dumps({"error": f"Evaluation record missing id attribute. Type: {type(evaluation_record)}"})
 
+            if notes:
+                _apply_notes_to_evaluation(evaluation_id, notes)
+
             # Get full evaluation info using the specific ID
             eval_info = Evaluation.get_evaluation_info(evaluation_id)
-            
+
             if not eval_info:
                 return json.dumps({"error": f"Could not retrieve evaluation info for id: {evaluation_id}"})
 
