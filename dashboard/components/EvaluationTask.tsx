@@ -1964,8 +1964,16 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
-  
-  
+
+  const evaluationNotes = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (params && typeof params.notes === 'string' && params.notes.trim()) {
+        return params.notes.trim()
+      }
+    } catch { /* ignore */ }
+    return null
+  }, [data.parameters])
 
   // Add more detailed logging for incoming data
 
@@ -2496,6 +2504,11 @@ evaluation:
                   ) : (
                     <span>Unavailable</span>
                   )}
+                </div>
+              )}
+              {variant === 'detail' && evaluationNotes && (
+                <div className="text-sm text-muted-foreground">
+                  {evaluationNotes}
                 </div>
               )}
               <Timestamp time={props.task.time} variant="relative" />
