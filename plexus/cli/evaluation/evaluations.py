@@ -3114,12 +3114,13 @@ def accuracy(
                             logging.warning("Dataset-backed RCA warning: %s", warning)
 
                         if rca_outcome.get("error_message"):
+                            # RCA failed but metrics are already computed — continue with warning
+                            rca_error_msg = str(rca_outcome.get("error_message"))
+                            logging.warning("RCA failed (non-fatal) for accuracy evaluation: %s", rca_error_msg)
                             eval_record_for_update.update(
-                                status="FAILED",
-                                errorMessage=str(rca_outcome.get("error_message")),
+                                errorMessage=f"RCA unavailable: {rca_error_msg}",
                                 parameters=json.dumps(existing_parameters),
                             )
-                            raise RuntimeError(str(rca_outcome.get("error_message")))
 
                     # The allowed fields are documented in the GraphQL schema
                     update_fields = {
@@ -4530,17 +4531,20 @@ def feedback(
                     warnings = existing.get("rca_warnings") or []
 
                     if rca_outcome.get("error_message"):
+                        # RCA failed but metrics are already computed — complete with warning, don't crash
+                        rca_error_msg = str(rca_outcome.get("error_message"))
+                        console.print(f"[yellow]Warning: RCA failed (non-fatal): {rca_error_msg}[/yellow]")
+                        logging.warning("RCA failed (non-fatal) for evaluation %s: %s", evaluation_id, rca_error_msg)
                         eval_rec.update(
-                            status="FAILED",
-                            errorMessage=str(rca_outcome.get("error_message")),
+                            status="COMPLETED",
+                            errorMessage=f"RCA unavailable: {rca_error_msg}",
                             parameters=json.dumps(existing),
                         )
-                        raise RuntimeError(str(rca_outcome.get("error_message")))
-
-                    eval_rec.update(
-                        status="COMPLETED",
-                        parameters=json.dumps(existing),
-                    )
+                    else:
+                        eval_rec.update(
+                            status="COMPLETED",
+                            parameters=json.dumps(existing),
+                        )
                     if warnings:
                         for warning in warnings:
                             console.print(f"[yellow]Warning: {warning}[/yellow]")
@@ -4552,13 +4556,14 @@ def feedback(
                         console.print("[dim]Root-cause analysis unavailable for this run[/dim]")
                 except Exception as _rca_err:
                     eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-                    eval_rec.update(
-                        status="FAILED",
-                        errorMessage=f"Feedback RCA stage failed: {_rca_err}",
-                    )
-                    console.print(f"[bold red]Error: root-cause analysis failed: {_rca_err}[/bold red]")
+                    # RCA stage crashed but metrics are already computed — complete with warning
+                    console.print(f"[yellow]Warning: RCA stage failed (non-fatal): {_rca_err}[/yellow]")
+                    logging.warning("RCA stage failed (non-fatal) for evaluation %s: %s", evaluation_id, _rca_err)
                     logging.debug("Root-cause analysis traceback:", exc_info=True)
-                    raise
+                    eval_rec.update(
+                        status="COMPLETED",
+                        errorMessage=f"RCA stage failed: {_rca_err}",
+                    )
 
                 # Complete the tracker with a clear completion message
                 if tracker:

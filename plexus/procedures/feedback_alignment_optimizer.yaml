@@ -27,7 +27,7 @@ params:
 
   max_iterations:
     type: number
-    default: 10
+    default: 3
     description: "Maximum number of optimization iterations"
 
   improvement_threshold:
@@ -45,7 +45,12 @@ params:
     type: number
     default: 3
     required: false
-    description: "Number of candidate edits per A-phase cycle (1-5). Each targets a different RCA category. Evals run in parallel. Alias: candidates_per_cycle."
+    description: "Number of candidate edits per exploration cycle (1-5). Each targets a different RCA category. Evals run in parallel. Alias: candidates_per_cycle."
+
+  hint:
+    type: string
+    required: false
+    description: "Optional expert hint to guide the optimizer. Example: 'The prescriber name is often redacted — the LLM should be warned about this.' This text is included verbatim in the agent's context."
 
   dry_run:
     type: boolean
@@ -149,9 +154,9 @@ agents:
           (Missing example — add a boundary-case example)
 
       Step 3 — Choose fix scope based on root cause:
-        FUNDAMENTAL REWRITE: Score question/framing is wrong →
-          Rewrite user_message to correctly frame what humans evaluate.
-          This is appropriate when FP and FN both trace to the same wrong premise.
+        TARGETED CRITERIA ADJUSTMENT: Refine specific YES/NO conditions or wording.
+          Modify 1-3 specific lines that directly address the error pattern.
+          Do NOT rewrite the entire user_message — full rewrites consistently regress.
         TARGETED RULE: Question is right, specific case unhandled →
           Add one precise rule that captures the pattern.
         EXAMPLE ADDITION: Rules are right but ambiguous at boundaries →
@@ -160,27 +165,47 @@ agents:
       EDIT STRATEGY — ranked by safety:
       SAFEST: Add concrete examples to clarify edge cases
       SAFE: Sharpen existing criteria with specific language
+      MODERATE: Adjust 1-3 lines of existing criteria wording
       RISKY: Expand or broaden criteria (may hurt accuracy)
-      DANGEROUS: Remove or weaken criteria (almost always hurts accuracy)
+      DANGEROUS: Remove criteria or rewrite entire user_message (almost always hurts)
 
-      WORKFLOW — call BOTH tools in ONE response:
-      1. Analyze the cross-case examples (if provided) OR RCA data to identify the fix.
-      2. In your response, call BOTH tools together:
+      WORKFLOW:
+      1. ALWAYS FIRST: call str_replace_editor(command="view", path="score_config.yaml")
+         to read the exact current file contents. You MUST do this before any edit.
+         This gives you the exact text and indentation to use in old_str.
+      2. Analyze the cross-case examples (if provided) OR RCA data to identify the fix.
+      3. Make your edit and submit in ONE response:
            str_replace_editor(command="str_replace", path="score_config.yaml",
-              old_str="<exact text>", new_str="<replacement>")
+              old_str="<exact text copied from the view output>",
+              new_str="<replacement with IDENTICAL indentation>")
            submit_score_code(version_note="<what you changed and why — be specific>")
-      3. If submit_score_code returns an error, fix it and retry.
-      4. If you cannot find any viable improvement:
+      4. If submit_score_code returns an error, call view again and retry with exact text.
+      5. If you cannot find any viable improvement:
            done(success=False, reason="cannot_improve: <explanation>")
 
       IMPORTANT: You MUST call submit_score_code in every response (unless giving up).
       If you only call str_replace_editor without submit_score_code, the iteration is wasted.
+      Calling view first is MANDATORY — never guess old_str from memory.
 
       YAML RULES — read carefully to avoid validation errors:
       - Make exactly ONE change per iteration
       - The old_str must be an exact substring of the current configuration
       - YAML indentation must be correct in the replacement text
       - Learn from history: if an edit type was rejected before, try a different approach
+
+      REWRITING user_message (CRITICAL — most common failure point):
+      The user_message is a multi-line block scalar. Its content lines MUST match
+      the EXACT indentation of the original. WRONG indentation causes YAML parse errors.
+
+      REQUIRED WORKFLOW for any user_message rewrite:
+      Step 1: Call str_replace_editor(command="view", path="score_config.yaml")
+      Step 2: Count the spaces before the FIRST content line inside user_message.
+              Example: if you see "        Analyze the following..." — that is 8 spaces.
+      Step 3: Use THAT SAME indentation for ALL lines in your new_str.
+              Example old_str:  "    user_message: |-\n        Old first line...\n"
+              Example new_str:  "    user_message: |-\n        New first line...\n"
+              NEVER use 2-space indentation if the original uses 8 spaces.
+      Step 4: When the edit succeeds AND submit_score_code confirms — you're done.
 
       ADDING A LIST ITEM (critical — this is the most common YAML mistake):
       When adding a new bullet point to an existing list, you MUST include the
@@ -256,6 +281,10 @@ agents:
       - YAML indentation must be correct in the replacement text
       - When adding a list item, include the previous item in old_str for context
 
+      REWRITING user_message: Call str_replace_editor(command="view") FIRST to get
+      the exact indentation. Then use that SAME indentation in all new_str lines.
+      Wrong indentation = YAML parse error "expected <block end>, but found '?'".
+
     initial_message: "Ready to synthesize."
 
     tools:
@@ -266,12 +295,31 @@ agents:
 stages:
   - setup
   - baseline
-  - optimize
+  - exploration
+  - synthesis
   - finalize
 
 code: |
 
   -- Helper functions
+
+  -- Reliable string truncation — string.sub may not work in Tactus/lupa sandbox
+  local function trunc(s, maxlen)
+    if s == nil then return "" end
+    local str = tostring(s)
+    if #str <= maxlen then return str end
+    local attempt = string.sub(str, 1, maxlen)
+    if #attempt <= maxlen + 10 then
+      return attempt
+    end
+    -- string.sub failed; build char-by-char via table
+    local chars = {}
+    for i = 1, maxlen do
+      chars[i] = string.char(string.byte(str, i))
+    end
+    return table.concat(chars)
+  end
+
   local function has_text(s)
     return type(s) == "string" and #s > 0
   end
@@ -469,9 +517,9 @@ code: |
     table.insert(parts, "Study ALL groups together. Your goal: find the ONE common behavioral")
     table.insert(parts, "pattern that explains most errors in each group.")
     table.insert(parts, "")
-    table.insert(parts, "KEY QUESTION: Is there a FUNDAMENTAL SEMANTIC MISMATCH between what the")
+    table.insert(parts, "KEY QUESTION: Is there a SEMANTIC MISMATCH between what the")
     table.insert(parts, "score is asking and what human reviewers are actually evaluating?")
-    table.insert(parts, "If so, a COMPLETE REWRITE of the question/rules is the right fix.")
+    table.insert(parts, "If so, make TARGETED adjustments to specific criteria (1-3 lines) — do NOT rewrite the entire prompt.")
     table.insert(parts, "")
     table.insert(parts, "HOW TO ANALYZE EACH EXAMPLE:")
     table.insert(parts, "  1. Read what the AGENT/ISR says FIRST (before the customer responds).")
@@ -506,12 +554,12 @@ code: |
         -- AI reasoning
         local reasoning = ""
         if ex.explanation and ex.explanation ~= "" then
-          reasoning = tostring(ex.explanation):sub(1, 250)
+          reasoning = trunc(ex.explanation, 250)
         elseif ex.trace and ex.trace.node_results then
           for _, nr in ipairs(ex.trace.node_results) do
             local out = nr.output or {}
             local exp = out.explanation or out.rationale or ""
-            if exp ~= "" then reasoning = tostring(exp):sub(1, 250); break end
+            if exp ~= "" then reasoning = trunc(exp, 250); break end
           end
         end
 
@@ -532,8 +580,13 @@ code: |
           table.insert(parts, "      AI reasoning: " .. reasoning)
         end
         if text ~= "" then
-          -- Include up to 1200 chars of transcript (ISR opening is in first few lines)
-          table.insert(parts, "      Transcript: " .. tostring(text):sub(1, 1200))
+          -- Include transcript excerpt — strict 400-char limit to prevent inject bloat
+          local text_str = tostring(text)
+          local tlen = #text_str
+          if tlen > 400 then
+            text_str = string.sub(text_str, 1, 400) .. " [..." .. (tlen - 400) .. " more chars]"
+          end
+          table.insert(parts, "      Transcript: " .. text_str)
         end
         table.insert(parts, "")
       end
@@ -558,7 +611,7 @@ code: |
     table.insert(lines, string.format("%-6s  %-38s  %-10s  %-12s  %-7s  %-12s  %-7s",
       "base", tostring(baseline_version_id), "BASELINE", base_fb, "", base_acc, ""))
 
-    -- Cycle rows (each cycle has A-phase candidates + B-phase result)
+    -- Cycle rows (each cycle has exploration candidates + synthesis result)
     for _, iter in ipairs(iterations) do
       local status_str = iter.accepted and "ACCEPTED" or "REJECTED"
       if iter.skip_reason then status_str = "SKIPPED" end
@@ -584,17 +637,17 @@ code: |
         fb_ac1, fb_delta, acc_ac1, acc_delta, note))
       -- Show what was tried so the agent doesn't repeat failed approaches
       if iter.done_reason and iter.done_reason ~= "" then
-        table.insert(lines, string.format("          Edit: %s", tostring(iter.done_reason):sub(1, 120)))
+        table.insert(lines, string.format("          Edit: %s", trunc(iter.done_reason, 120)))
       end
-      -- Show A-phase results summary per cycle
-      if iter.a_phase_results and type(iter.a_phase_results) == "table" then
+      -- Show exploration results summary per cycle
+      if iter.exploration_results and type(iter.exploration_results) == "table" then
         local succeeded_list = {}
         local failed_list = {}
-        for _, ap in ipairs(iter.a_phase_results) do
+        for _, ap in ipairs(iter.exploration_results) do
           local fb_d = ap.fb_deltas and ap.fb_deltas.alignment or 0
           local acc_d = ap.acc_deltas and ap.acc_deltas.alignment or 0
           local desc = string.format("cand%d: FB %+.3f ACC %+.3f '%s'",
-            ap.index, fb_d, acc_d, tostring(ap.done_reason or ""):sub(1, 60))
+            ap.index, fb_d, acc_d, trunc(ap.done_reason or "", 60))
           if ap.succeeded then
             table.insert(succeeded_list, desc)
           else
@@ -602,11 +655,19 @@ code: |
           end
         end
         if #succeeded_list > 0 then
-          table.insert(lines, "          A-phase succeeded: " .. table.concat(succeeded_list, "; "))
+          table.insert(lines, "          Exploration succeeded:" .. table.concat(succeeded_list, "; "))
         end
         if #failed_list > 0 then
-          table.insert(lines, "          A-phase failed: " .. table.concat(failed_list, "; "))
+          table.insert(lines, "          Exploration failed (no improvement):" .. table.concat(failed_list, "; "))
         end
+      end
+      -- Show candidates that failed to create a version
+      if iter.exploration_no_version and type(iter.exploration_no_version) == "table" and #iter.exploration_no_version > 0 then
+        local no_ver_list = {}
+        for _, ap in ipairs(iter.exploration_no_version) do
+          table.insert(no_ver_list, string.format("cand%d (attempted: '%s')", ap.index, trunc(ap.done_reason or "", 80)))
+        end
+        table.insert(lines, "          Exploration no-version (edit failed):" .. table.concat(no_ver_list, "; "))
       end
     end
 
@@ -640,7 +701,7 @@ code: |
 
   -- Build a candidate-specific strategy instruction
   -- With cross-case examples available, candidates get DIVERSIFIED analytical approaches:
-  --   Candidate 1: Semantic/structural — look for a fundamental rewrite
+  --   Candidate 1: Semantic/structural — targeted criteria adjustments (NOT full rewrites)
   --   Candidate 2: Rule-based — look for a specific missing rule
   --   Candidate 3+: Example-based — add targeted examples or sharpen wording
   -- Without cross-case examples, fall back to RCA-item-per-candidate assignment.
@@ -658,7 +719,7 @@ code: |
     -- With cross-case examples: diversify the analytical lens across candidates
     if has_cross_case_examples then
       if candidate_index == 1 then
-        return "STRATEGY [STRUCTURAL ANALYSIS]: You are candidate 1 — the semantic/structural candidate.\n" ..
+        return "STRATEGY [TARGETED STRUCTURAL ANALYSIS]: You are candidate 1 — the criteria-refinement candidate.\n" ..
           "Your PRIMARY TASK: Study the AGENT/ISR language in the transcript examples.\n" ..
           "\n" ..
           "For EACH error group, answer these questions about what the ISR says:\n" ..
@@ -669,13 +730,18 @@ code: |
           "Common discovery pattern: ISR behavior signals the context:\n" ..
           "  - ISR reads from existing notes ('I see we have you and [Name] scheduled') → different context\n" ..
           "  - ISR uses inquiry script ('Who else would you like to have present?') → different context\n" ..
-          "If the ISR's behavior differs between FP and FN groups, the score question may need\n" ..
-          "to be REWRITTEN around that ISR signal, not around the customer's response.\n" ..
+          "If the ISR's behavior differs between FP and FN groups, the score criteria may need\n" ..
+          "to be ADJUSTED to account for that ISR signal.\n" ..
           "\n" ..
-          "If you find a FUNDAMENTAL SEMANTIC MISMATCH (score is asking the wrong question\n" ..
-          "relative to what humans actually evaluate), do a COMPLETE REWRITE of user_message.\n" ..
-          "Don't be afraid to rewrite the whole question and all YES/NO criteria from scratch.\n" ..
-          "This is the highest-impact possible change."
+          "CRITICAL CONSTRAINT — INCREMENTAL EDITS ONLY:\n" ..
+          "Do NOT rewrite the entire user_message from scratch. Full rewrites destroy working\n" ..
+          "parts of the prompt and consistently cause large regressions (-10% or worse).\n" ..
+          "Instead, make TARGETED changes:\n" ..
+          "  - Adjust specific YES/NO conditions that are too broad or too narrow\n" ..
+          "  - Add a clarifying sentence to an existing criterion\n" ..
+          "  - Refine the wording of ONE specific rule that mishandles the error pattern\n" ..
+          "  - Modify at most 2-3 lines of the user_message, not the whole block\n" ..
+          "The goal is a surgical fix, not a rewrite."
       elseif candidate_index == 2 then
         return "STRATEGY [RULE ANALYSIS]: You are candidate 2 — the missing-rule candidate.\n" ..
           "Study the misclassification examples with this specific question:\n" ..
@@ -721,11 +787,11 @@ code: |
       candidate_index, num_candidates, target_idx, target_idx)
   end
 
-  -- A-phase success classification: noise-aware thresholds
+  -- Exploration success classification: noise-aware thresholds
   local A_PHASE_FB_THRESHOLD = 0.005    -- FB delta must be meaningful (above tight noise floor)
   local A_PHASE_ACC_THRESHOLD = -0.02   -- ACC regression tolerance
 
-  local function classify_a_phase_success(cand)
+  local function classify_exploration_success(cand)
     if not cand.fb_deltas then return false end
     local fb_d = cand.fb_deltas.alignment or 0
     local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
@@ -768,16 +834,18 @@ code: |
       local rca = opts.feedback_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
-          table.insert(parts, "Summary: " .. tostring(rca.overall_explanation):sub(1, 800))
+          table.insert(parts, "Summary: " .. trunc(rca.overall_explanation, 400))
         end
         if rca.overall_improvement_suggestion then
-          table.insert(parts, "Suggestion: " .. tostring(rca.overall_improvement_suggestion):sub(1, 800))
+          table.insert(parts, "Suggestion: " .. trunc(rca.overall_improvement_suggestion, 400))
         end
         local topics = (type(rca.topics) == "table" and rca.topics) or {}
         for i, t in ipairs(topics) do
           if i > 5 then break end
+          local topic_count = t.member_count or t.count or t.size or t.total or t.n
+          if not topic_count and type(t.items) == "table" then topic_count = #t.items end
           table.insert(parts, string.format("Topic %d: %s (count=%s)",
-            i, tostring(t.label or "?"), tostring(t.count or t.size or "?")))
+            i, tostring(t.label or "?"), tostring(topic_count or "?")))
         end
         -- Primary next action
         if rca._primary_next_action then
@@ -785,7 +853,8 @@ code: |
           if type(pna) == "table" then
             local pna_text = pna.action or pna.description or pna.recommendation or ""
             if pna_text ~= "" then
-              table.insert(parts, "Primary next action: " .. tostring(pna_text):sub(1, 600))
+              local confidence = pna.confidence and (" [" .. tostring(pna.confidence) .. " confidence]") or ""
+              table.insert(parts, "Primary next action: " .. trunc(pna_text, 300) .. confidence)
             end
           end
         end
@@ -793,25 +862,36 @@ code: |
         if type(rca._category_summaries) == "table" then
           table.insert(parts, "Error categories:")
           for cat, summary in pairs(rca._category_summaries) do
-            table.insert(parts, string.format("  %s: %s", tostring(cat), tostring(summary):sub(1, 300)))
+            local summary_text
+            if type(summary) == "table" then
+              summary_text = summary.category_summary_text or summary.text or summary.description or summary.summary or summary[1] or "?"
+            else
+              summary_text = tostring(summary)
+            end
+            local item_count = ""
+            if type(summary) == "table" and summary.item_count then
+              item_count = string.format(" (%d items)", summary.item_count)
+            end
+            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, trunc(summary_text, 200)))
           end
         end
-        -- Top likely-fixable misclassifications with suggested fixes
+        -- Top likely-fixable misclassifications (limit to 3 to control inject size)
         if type(rca._fixable_items) == "table" and #rca._fixable_items > 0 then
-          table.insert(parts, "Top fixable misclassifications:")
+          local max_fix = 3
+          table.insert(parts, string.format("Top fixable misclassifications (%d of %d):", math.min(max_fix, #rca._fixable_items), #rca._fixable_items))
           for i, item in ipairs(rca._fixable_items) do
+            if i > max_fix then break end
             table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
               i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
             if item.suggested_fix and item.suggested_fix ~= "" then
-              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix):sub(1, 400))
-            end
-            if item.evidence_quote and item.evidence_quote ~= "" then
-              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote):sub(1, 300))
+              local fix_text = tostring(item.suggested_fix)
+              if #fix_text > 200 then fix_text = fix_text:sub(1, 200) .. "..." end
+              table.insert(parts, "      Fix: " .. fix_text)
             end
           end
         end
       else
-        table.insert(parts, tostring(rca):sub(1, 1000))
+        table.insert(parts, trunc(rca, 500))
       end
     end
     table.insert(parts, "")
@@ -826,16 +906,18 @@ code: |
       local rca = opts.accuracy_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
-          table.insert(parts, "Summary: " .. tostring(rca.overall_explanation):sub(1, 800))
+          table.insert(parts, "Summary: " .. trunc(rca.overall_explanation, 400))
         end
         if rca.overall_improvement_suggestion then
-          table.insert(parts, "Suggestion: " .. tostring(rca.overall_improvement_suggestion):sub(1, 800))
+          table.insert(parts, "Suggestion: " .. trunc(rca.overall_improvement_suggestion, 400))
         end
         local topics = (type(rca.topics) == "table" and rca.topics) or {}
         for i, t in ipairs(topics) do
           if i > 5 then break end
+          local topic_count = t.member_count or t.count or t.size or t.total or t.n
+          if not topic_count and type(t.items) == "table" then topic_count = #t.items end
           table.insert(parts, string.format("Topic %d: %s (count=%s)",
-            i, tostring(t.label or "?"), tostring(t.count or t.size or "?")))
+            i, tostring(t.label or "?"), tostring(topic_count or "?")))
         end
         -- Primary next action
         if rca._primary_next_action then
@@ -843,7 +925,8 @@ code: |
           if type(pna) == "table" then
             local pna_text = pna.action or pna.description or pna.recommendation or ""
             if pna_text ~= "" then
-              table.insert(parts, "Primary next action: " .. tostring(pna_text):sub(1, 600))
+              local confidence = pna.confidence and (" [" .. tostring(pna.confidence) .. " confidence]") or ""
+              table.insert(parts, "Primary next action: " .. trunc(pna_text, 300) .. confidence)
             end
           end
         end
@@ -851,25 +934,36 @@ code: |
         if type(rca._category_summaries) == "table" then
           table.insert(parts, "Error categories:")
           for cat, summary in pairs(rca._category_summaries) do
-            table.insert(parts, string.format("  %s: %s", tostring(cat), tostring(summary):sub(1, 300)))
+            local summary_text
+            if type(summary) == "table" then
+              summary_text = summary.category_summary_text or summary.text or summary.description or summary.summary or summary[1] or "?"
+            else
+              summary_text = tostring(summary)
+            end
+            local item_count = ""
+            if type(summary) == "table" and summary.item_count then
+              item_count = string.format(" (%d items)", summary.item_count)
+            end
+            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, trunc(summary_text, 200)))
           end
         end
-        -- Top likely-fixable misclassifications with suggested fixes
+        -- Top likely-fixable misclassifications (limit to 3 to control inject size)
         if type(rca._fixable_items) == "table" and #rca._fixable_items > 0 then
-          table.insert(parts, "Top fixable misclassifications:")
+          local max_fix = 3
+          table.insert(parts, string.format("Top fixable misclassifications (%d of %d):", math.min(max_fix, #rca._fixable_items), #rca._fixable_items))
           for i, item in ipairs(rca._fixable_items) do
+            if i > max_fix then break end
             table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
               i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
             if item.suggested_fix and item.suggested_fix ~= "" then
-              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix):sub(1, 400))
-            end
-            if item.evidence_quote and item.evidence_quote ~= "" then
-              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote):sub(1, 300))
+              local fix_text = tostring(item.suggested_fix)
+              if #fix_text > 200 then fix_text = fix_text:sub(1, 200) .. "..." end
+              table.insert(parts, "      Fix: " .. fix_text)
             end
           end
         end
       else
-        table.insert(parts, tostring(rca):sub(1, 1000))
+        table.insert(parts, trunc(rca, 500))
       end
     end
     table.insert(parts, "")
@@ -904,6 +998,13 @@ code: |
       end
     end
 
+    -- Expert hint (optional, from user)
+    if has_text(opts.hint) then
+      table.insert(parts, "")
+      table.insert(parts, "=== EXPERT HINT (from domain expert — prioritize this guidance) ===")
+      table.insert(parts, opts.hint)
+    end
+
     -- Iteration-specific instruction
     local cons_failed = opts.consecutive_failed_cycles or 0
     table.insert(parts, "")
@@ -921,8 +1022,8 @@ code: |
       table.insert(parts, "   - Is there a key distinction the current rules miss entirely?")
       table.insert(parts, "   - Do both FP and FN groups share a single root cause?")
       table.insert(parts, "3. Based on your pattern analysis, choose the fix scope:")
-      table.insert(parts, "   FUNDAMENTAL REWRITE: If the score is measuring the wrong thing —")
-      table.insert(parts, "     rewrite user_message/question to match what humans actually evaluate.")
+      table.insert(parts, "   TARGETED CRITERIA FIX: Adjust specific YES/NO conditions (1-3 lines).")
+      table.insert(parts, "     Do NOT rewrite the entire user_message — full rewrites cause regressions.")
       table.insert(parts, "   TARGETED RULE: If the question is right but a specific case is unhandled —")
       table.insert(parts, "     add a precise rule or example that handles the pattern.")
       table.insert(parts, "   EXAMPLE ADDITION: If the question and rules are right but ambiguous —")
@@ -935,16 +1036,26 @@ code: |
       table.insert(parts, "")
       table.insert(parts, string.format(
         "ESCALATION (%d consecutive cycles with no feedback improvement):", cons_failed))
-      table.insert(parts, "Incremental condition additions have NOT worked. You MUST try a structurally")
-      table.insert(parts, "different approach. If you have cross-case examples above, look harder for")
-      table.insert(parts, "a semantic mismatch — the score may be answering the wrong question entirely.")
-      table.insert(parts, "Bold structural rewrites of user_message are required. Small edits have failed.")
+      table.insert(parts, "Previous approaches have NOT worked. You MUST try something DIFFERENT.")
+      table.insert(parts, "Review the OPTIMIZATION HISTORY above — do NOT repeat any approach that already failed.")
+      table.insert(parts, "Try a completely different angle: target a different error pattern, adjust different")
+      table.insert(parts, "criteria, or add different examples. But do NOT do a full user_message rewrite.")
     elseif cons_failed >= 1 then
       table.insert(parts, "")
       table.insert(parts, "NOTE: Previous cycle produced no feedback improvement.")
-      table.insert(parts, "A more impactful change is needed. Look for a structural fix, not a condition addition.")
+      table.insert(parts, "Review the OPTIMIZATION HISTORY and try a different approach than what was tried before.")
     else
       table.insert(parts, "Make ONE targeted improvement — the most impactful change you can identify.")
+    end
+
+    -- Explicit do-not-repeat enforcement
+    if opts.iterations and #opts.iterations > 0 then
+      table.insert(parts, "")
+      table.insert(parts, "CRITICAL — DO NOT REPEAT FAILED APPROACHES:")
+      table.insert(parts, "The OPTIMIZATION HISTORY above shows what was tried in previous cycles and the results.")
+      table.insert(parts, "You MUST try a DIFFERENT approach from anything that already failed.")
+      table.insert(parts, "Full user_message rewrites have consistently caused large regressions (-10% or worse).")
+      table.insert(parts, "Instead: make targeted, surgical changes to specific criteria or add specific examples.")
     end
 
     -- Candidate-specific strategy override (multi-candidate mode)
@@ -1047,7 +1158,7 @@ code: |
     table.insert(parts, "")
     table.insert(parts, "Each candidate targeted a DIFFERENT error category from the RCA.")
     table.insert(parts, "Each made an independent fix to the same base configuration.")
-    table.insert(parts, "Below are ALL A-phase results — succeeded and failed.")
+    table.insert(parts, "Below are ALL exploration results — succeeded and failed.")
     table.insert(parts, "Your job: combine ONLY the SUCCEEDED fixes into ONE version.")
     table.insert(parts, "")
 
@@ -1056,9 +1167,9 @@ code: |
     table.insert(parts, "Apply your combined changes using str_replace_editor, then submit_score_code.")
     table.insert(parts, "")
 
-    -- Show ALL A-phase candidates with success/failure labels
-    if opts.all_a_phase_results then
-      for _, cand in ipairs(opts.all_a_phase_results) do
+    -- Show ALL exploration candidates with success/failure labels
+    if opts.all_exploration_results then
+      for _, cand in ipairs(opts.all_exploration_results) do
         local status_label = cand.succeeded and "SUCCEEDED" or "FAILED"
         local fb_d = cand.fb_deltas and cand.fb_deltas.alignment or 0
         local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
@@ -1091,7 +1202,7 @@ code: |
     if opts.feedback_rca and type(opts.feedback_rca) == "table" then
       if opts.feedback_rca.overall_explanation then
         table.insert(parts, "=== FEEDBACK RCA CONTEXT ===")
-        table.insert(parts, tostring(opts.feedback_rca.overall_explanation):sub(1, 500))
+        table.insert(parts, trunc(opts.feedback_rca.overall_explanation, 500))
         table.insert(parts, "")
       end
     end
@@ -1192,7 +1303,7 @@ code: |
       balance = true
     })
 
-    local min_acceptable = math.max(math.floor(min_dataset_rows / 2), 50)
+    local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
     if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
       dataset_id = build_result.dataset_id
       Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
@@ -1341,7 +1452,7 @@ code: |
   do
     Human.notify({message = "Fetching misclassification examples for pattern analysis...", level = "info"})
     local ok, examples_or_err = pcall(fetch_cross_case_examples,
-      feedback_baseline_id, score_valid_classes, 6)
+      feedback_baseline_id, score_valid_classes, 2)
     if ok and type(examples_or_err) == "table" then
       current_cross_case_examples = examples_or_err
       local cell_count = 0
@@ -1389,11 +1500,11 @@ code: |
 
 
   -- ================================================================
-  -- A/B Phase Optimization Cycles
-  -- A phase: Explore independent fixes for different RCA categories
-  -- B phase: Combine successful A-phase fixes into one version
+  -- Exploration / Synthesis Optimization Cycles
+  -- Exploration: Probe independent fixes for different RCA categories
+  -- Synthesis:   Combine successful Exploration fixes into one version
   -- ================================================================
-  Stage.set("optimize")
+  Stage.set("exploration")
 
   local stop_reason = nil
   local iterations = {}
@@ -1462,18 +1573,20 @@ code: |
 
     -- ================================================================
     -- A PHASE: Explore independent fixes
-    -- Candidate 1: structural/semantic analysis (looks for fundamental rewrites)
+    -- Candidate 1: structural/semantic analysis (targeted criteria adjustments)
     -- Candidate 2: rule analysis (looks for missing specific rules)
     -- Candidate 3+: example/RCA-item analysis (targeted condition/example additions)
     -- All start from the same base. Results are recorded, not ranked.
     -- ================================================================
+    Stage.set("exploration")
     local has_examples = next(current_cross_case_examples) ~= nil
     Human.notify({message = string.format(
-      "Cycle %d — A Phase: exploring improvements%s...",
+      "Cycle %d — Exploration: probing improvements%s...",
       cycle, has_examples and " (with transcript examples)" or ""
     ), level = "info"})
 
     local candidates = {}
+    local candidates_no_version = {}  -- candidates that failed to create a version
     local num_cands = math.min(params.num_candidates or 3, 5)
     local fixable_items = (current_fb_rca and current_fb_rca._fixable_items) or {}
     local any_cannot_improve = false
@@ -1508,15 +1621,46 @@ code: |
         iteration = cycle,
         candidate_strategy = strategy,
         consecutive_failed_cycles = consecutive_failed_cycles,
-        cross_case_examples = current_cross_case_examples
+        cross_case_examples = current_cross_case_examples,
+        hint = params.hint
       })
+
+      -- Verify inject completeness — critical sections must be present
+      local has_task = inject:find("YOUR TASK") ~= nil
+      local has_strategy = inject:find("CANDIDATE") ~= nil or inject:find("TARGETED") ~= nil
+      local has_tool_req = inject:find("str_replace_editor") ~= nil
+      if not has_task then
+        Human.notify({message = string.format(
+          "WARNING: inject missing YOUR TASK section! length=%d chars — context engineering bug", #inject
+        ), level = "warning"})
+      end
 
       Tool.reset()
       code_editor.clear_history()
       local approach_label = c == 1 and "structural" or (c == 2 and "rule-based" or "example-based")
       Human.notify({message = string.format(
-        "  Candidate %d/%d (%s approach): generating edit...", c, num_cands, approach_label
+        "  Candidate %d/%d (%s approach): generating edit... [inject=%d chars, task=%s]",
+        c, num_cands, approach_label, #inject, has_task and "ok" or "MISSING!"
       ), level = "info"})
+
+      -- Log the full LLM context for debugging (everything the code_editor sees)
+      -- Write raw inject to verify completeness (no gsub transformation)
+      local inject_for_log = inject
+      local context_log_path = string.format("/tmp/optimizer_cycle%d_cand%d_context.txt", cycle, c)
+      local full_context = "═══════════════════════════════════════════════════════════\n"
+        .. "FULL LLM CONTEXT — Cycle " .. cycle .. " Candidate " .. c .. "\n"
+        .. "═══════════════════════════════════════════════════════════\n\n"
+        .. ">>> [1] SYSTEM PROMPT (static, from YAML code_editor.system_prompt):\n"
+        .. "--- See feedback_alignment_optimizer.yaml lines 106-216 ---\n"
+        .. "(System prompt is static across all candidates; not repeated here for brevity)\n\n"
+        .. ">>> [2] ASSISTANT (initial_message): Ready.\n\n"
+        .. ">>> [3] USER MESSAGE (the inject — this is the key context engineering surface):\n"
+        .. "───────────────────────────────────────────────────────────\n"
+        .. inject_for_log .. "\n"
+        .. "───────────────────────────────────────────────────────────\n"
+        .. ">>> END OF INITIAL LLM CONTEXT\n"
+        .. "(After this, the agent responds with tool calls; retries add more messages)\n"
+      File.write(context_log_path, full_context)
 
       -- Retry loop: up to 3 attempts per candidate
       local cand_version_id = nil
@@ -1611,6 +1755,15 @@ code: |
         })
       else
         Human.notify({message = string.format("  Candidate %d failed (no version created)", c), level = "warning"})
+        -- Track failed-to-create candidates in version history so agents don't repeat them
+        table.insert(candidates_no_version, {
+          index = c,
+          version_id = nil,
+          done_reason = cand_done_reason ~= "" and cand_done_reason or ("candidate " .. c .. " failed to create version"),
+          strategy = strategy,
+          succeeded = false,
+          no_version = true
+        })
       end
     end
 
@@ -1633,13 +1786,14 @@ code: |
       if Stop.requested() then stop_reason = "user_stopped"; break end
 
     elseif #candidates == 0 then
-      Human.notify({message = "All candidates failed at cycle " .. cycle .. " — cycle skipped", level = "warning"})
+      Human.notify({message = string.format("All candidates failed at cycle %d (no versions created) — cycle skipped", cycle), level = "warning"})
       consecutive_failed_cycles = consecutive_failed_cycles + 1
       local cycle_log = {
         iteration = cycle,
         accepted = false,
         skip_reason = "all_candidates_failed",
-        num_candidates = num_cands
+        num_candidates = num_cands,
+        exploration_no_version = candidates_no_version
       }
       table.insert(iterations, cycle_log)
       State.set("iterations", iterations)
@@ -1664,7 +1818,7 @@ code: |
             n_samples = params.max_samples or 100,
             version = cand.version_id,
             baseline = accuracy_baseline_id,
-            notes = string.format("Cycle %d A-phase cand %d (accuracy): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
+            notes = string.format("Cycle %d Exploration probe %d (accuracy): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
           })
         end
         table.insert(batch, {
@@ -1677,7 +1831,7 @@ code: |
           version = cand.version_id,
           baseline = feedback_baseline_id,
           wait = true,
-          notes = string.format("Cycle %d A-phase cand %d (feedback): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
+          notes = string.format("Cycle %d Exploration probe %d (feedback): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
         })
       end
 
@@ -1690,6 +1844,8 @@ code: |
 
       -- Parse results
       local evals_per_cand = accuracy_available and 2 or 1
+      local batch_size = type(batch_results) == "table" and #batch_results or 0
+      Human.notify({message = string.format("  DEBUG: batch has %d results, evals_per_cand=%d", batch_size, evals_per_cand), level = "info"})
       for i, cand in ipairs(candidates) do
         local base_idx = (i - 1) * evals_per_cand
         if accuracy_available then
@@ -1699,6 +1855,8 @@ code: |
             cand.acc_deltas = calculate_deltas(cand.acc_metrics, accuracy_baseline_metrics)
             cand.acc_rca = enrich_rca(acc_r.root_cause or {})
             cand.acc_eval_id = acc_r.id or acc_r.evaluation_id
+          else
+            Human.notify({message = string.format("  DEBUG cand%d: acc_r[%d] nil=%s has_id=%s", i, base_idx+1, tostring(acc_r == nil), tostring(acc_r and (acc_r.id ~= nil) or false)), level = "warning"})
           end
         end
         local fb_r = batch_results and batch_results[base_idx + evals_per_cand]
@@ -1707,6 +1865,9 @@ code: |
           cand.fb_deltas = calculate_deltas(cand.fb_metrics, feedback_baseline_metrics)
           cand.fb_rca = enrich_rca(fb_r.root_cause or {})
           cand.fb_eval_id = fb_r.id or fb_r.evaluation_id
+          Human.notify({message = string.format("  DEBUG cand%d: fb_r[%d] id=%s align=%.4f", i, base_idx+evals_per_cand, tostring(fb_r.id), cand.fb_metrics.alignment), level = "info"})
+        else
+          Human.notify({message = string.format("  DEBUG cand%d: fb_r[%d] nil=%s has_id=%s error=%s", i, base_idx+evals_per_cand, tostring(fb_r == nil), tostring(fb_r and (fb_r.id ~= nil) or false), tostring(fb_r and fb_r.error or "none")), level = "warning"})
         end
       end
 
@@ -1716,7 +1877,7 @@ code: |
       local succeeded = {}
       local failed = {}
       for _, cand in ipairs(candidates) do
-        cand.succeeded = classify_a_phase_success(cand)
+        cand.succeeded = classify_exploration_success(cand)
         if cand.succeeded then
           table.insert(succeeded, cand)
         else
@@ -1724,9 +1885,9 @@ code: |
         end
       end
 
-      -- Log A-phase results
+      -- Log exploration results
       Human.notify({message = string.format(
-        "  A-phase results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
+        "  Exploration results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
       for _, cand in ipairs(candidates) do
         local status_label = cand.succeeded and "SUCCEEDED" or "FAILED"
         local fb_d = cand.fb_deltas and cand.fb_deltas.alignment or 0
@@ -1742,9 +1903,9 @@ code: |
       -- B PHASE: Combine winners
       -- ================================================================
       if #succeeded == 0 then
-        -- No A-phase candidates succeeded — skip B phase
+        -- No exploration candidates succeeded — skip Synthesis
         Human.notify({message = string.format(
-          "Cycle %d — B Phase: SKIP (no A-phase candidates succeeded)", cycle), level = "info"})
+          "Cycle %d — Synthesis: SKIP (no exploration candidates succeeded)", cycle), level = "info"})
         consecutive_failed_cycles = consecutive_failed_cycles + 1
 
         -- Still record best candidate metrics for the cycle log
@@ -1764,9 +1925,10 @@ code: |
           accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
           feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
           accepted = false,
-          skip_reason = "no_a_phase_success",
+          skip_reason = "no_exploration_success",
           num_candidates = #candidates,
-          a_phase_results = candidates,
+          exploration_results = candidates,
+          exploration_no_version = candidates_no_version,
           synthesis_attempted = false,
           synthesis_won = false
         }
@@ -1784,19 +1946,20 @@ code: |
         if Stop.requested() then stop_reason = "user_stopped"; break end
 
       else
-        -- B phase: we have 1+ succeeded candidates
+        -- Synthesis: we have 1+ succeeded candidates
+        Stage.set("synthesis")
         Human.notify({message = string.format(
-          "Cycle %d — B Phase: combining %d successful fix%s...",
+          "Cycle %d — Synthesis: combining %d successful fix%s...",
           cycle, #succeeded, #succeeded == 1 and "" or "es"), level = "info"})
 
-        local b_phase_version_id = nil
-        local b_phase_is_synthesis = false
-        local b_phase_done_reason = ""
+        local synthesis_version_id = nil
+        local synthesis_is_combined = false
+        local synthesis_done_reason = ""
 
         if #succeeded == 1 then
           -- Only 1 succeeded — use it directly (no synthesis needed)
-          b_phase_version_id = succeeded[1].version_id
-          b_phase_done_reason = succeeded[1].done_reason or ""
+          synthesis_version_id = succeeded[1].version_id
+          synthesis_done_reason = succeeded[1].done_reason or ""
           Human.notify({message = "  Single winner — skipping synthesis, using directly", level = "info"})
 
         elseif should_synthesize(succeeded) then
@@ -1842,7 +2005,7 @@ code: |
                 score_name = score_name,
                 cycle = cycle,
                 base_version_id = last_accepted_version_id,
-                all_a_phase_results = candidates,
+                all_exploration_results = candidates,
                 feedback_rca = current_fb_rca
               })
             else
@@ -1891,19 +2054,19 @@ code: |
           end
 
           if synth_version_id then
-            b_phase_version_id = synth_version_id
-            b_phase_is_synthesis = true
-            b_phase_done_reason = string.format("(synthesized from %d A-phase winners)", #succeeded)
+            synthesis_version_id = synth_version_id
+            synthesis_is_combined = true
+            synthesis_done_reason = string.format("(synthesized from %d exploration winners)", #succeeded)
           else
-            -- Synthesis failed after 3 retries — fall back to best single A-phase winner
-            Human.notify({message = "  Synthesis failed — falling back to best single A-phase winner", level = "warning"})
+            -- Synthesis failed after 3 retries — fall back to best single Exploration winner
+            Human.notify({message = "  Synthesis failed — falling back to best single exploration winner", level = "warning"})
             table.sort(succeeded, function(a, b)
               local a_fb = a.fb_deltas and a.fb_deltas.alignment or 0
               local b_fb = b.fb_deltas and b.fb_deltas.alignment or 0
               return a_fb > b_fb
             end)
-            b_phase_version_id = succeeded[1].version_id
-            b_phase_done_reason = succeeded[1].done_reason or ""
+            synthesis_version_id = succeeded[1].version_id
+            synthesis_done_reason = succeeded[1].done_reason or ""
           end
         end
 
@@ -1914,8 +2077,8 @@ code: |
         local b_fb_rca, b_acc_rca
         local b_fb_eval_id, b_acc_eval_id
 
-        -- Check if we already have metrics (single winner case — reuse A-phase evals)
-        if not b_phase_is_synthesis and #succeeded == 1 then
+        -- Check if we already have metrics (single winner case — reuse exploration evals)
+        if not synthesis_is_combined and #succeeded == 1 then
           b_fb_metrics = succeeded[1].fb_metrics
           b_acc_metrics = succeeded[1].acc_metrics
           b_fb_deltas = succeeded[1].fb_deltas
@@ -1926,7 +2089,7 @@ code: |
           b_acc_eval_id = succeeded[1].acc_eval_id
         else
           -- Need fresh evals for synthesized version
-          Human.notify({message = "  Evaluating B-phase version...", level = "info"})
+          Human.notify({message = "  Evaluating synthesis version...", level = "info"})
           local b_batch = {}
           if accuracy_available then
             table.insert(b_batch, {
@@ -1935,9 +2098,9 @@ code: |
               evaluation_type = "accuracy",
               dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
-              version = b_phase_version_id,
+              version = synthesis_version_id,
               baseline = accuracy_baseline_id,
-              notes = string.format("Cycle %d B-phase (accuracy)", cycle)
+              notes = string.format("Cycle %d synthesis (accuracy): %s", cycle, string.sub(synthesis_done_reason or "", 1, 100))
             })
           end
           table.insert(b_batch, {
@@ -1947,10 +2110,10 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
-            version = b_phase_version_id,
+            version = synthesis_version_id,
             baseline = feedback_baseline_id,
             wait = true,
-            notes = string.format("Cycle %d B-phase (feedback)", cycle)
+            notes = string.format("Cycle %d synthesis (feedback): %s", cycle, string.sub(synthesis_done_reason or "", 1, 100))
           })
 
           local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
@@ -1980,9 +2143,9 @@ code: |
         b_acc_rca = b_acc_rca or {}
 
         Human.notify({message = string.format(
-          "  B-phase eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
+          "  Synthesis eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
           b_fb_deltas.alignment, b_acc_deltas.alignment,
-          b_phase_is_synthesis and " [SYNTHESIZED]" or ""
+          synthesis_is_combined and " [SYNTHESIZED]" or ""
         ), level = "info"})
 
         -- ================================================================
@@ -2004,15 +2167,15 @@ code: |
 
         if disqualified then
           Human.notify({message = string.format(
-            "Cycle %d: B-phase version disqualified — skipping review", cycle), level = "warning"})
+            "Cycle %d: Synthesis version disqualified — skipping review", cycle), level = "warning"})
         else
-          -- Review the B-phase version
+          -- Review the synthesis version
           Tool.reset()
           reviewer.clear_history()
           local review_msg = build_review_context({
             iteration = cycle,
-            done_reason = b_phase_done_reason,
-            new_version_id = b_phase_version_id,
+            done_reason = synthesis_done_reason,
+            new_version_id = synthesis_version_id,
             prior_version_id = last_accepted_version_id,
             fb_metrics = b_fb_metrics or feedback_baseline_metrics,
             acc_metrics = iter_accuracy_ok and b_acc_metrics or nil,
@@ -2063,26 +2226,27 @@ code: |
           else
             accept = true
             Human.notify({message = string.format("Cycle %d ACCEPTED", cycle), level = "info"})
-            last_accepted_version_id = b_phase_version_id
+            last_accepted_version_id = synthesis_version_id
           end
         end
 
         -- Store cycle log
         local cycle_log = {
           iteration = cycle,
-          score_version_id = b_phase_version_id,
+          score_version_id = synthesis_version_id,
           accuracy_evaluation_id = b_acc_eval_id,
           feedback_evaluation_id = b_fb_eval_id,
-          done_reason = b_phase_done_reason,
+          done_reason = synthesis_done_reason,
           accuracy_metrics = b_acc_metrics,
           feedback_metrics = b_fb_metrics,
           accuracy_deltas = b_acc_deltas,
           feedback_deltas = b_fb_deltas,
           accepted = accept,
           num_candidates = #candidates,
-          a_phase_results = candidates,
-          synthesis_attempted = b_phase_is_synthesis,
-          synthesis_won = b_phase_is_synthesis and accept
+          exploration_results = candidates,
+          exploration_no_version = candidates_no_version,
+          synthesis_attempted = synthesis_is_combined,
+          synthesis_won = synthesis_is_combined and accept
         }
         table.insert(iterations, cycle_log)
         State.set("iterations", iterations)
@@ -2097,8 +2261,8 @@ code: |
           else rejected_count = rejected_count + 1 end
         end
         local status_str = accept and "ACCEPTED" or "REJECTED"
-        local synth_note = b_phase_is_synthesis and " [SYNTHESIZED]" or ""
-        local reason_short = has_text(b_phase_done_reason) and (": " .. string.sub(b_phase_done_reason, 1, 80)) or ""
+        local synth_note = synthesis_is_combined and " [SYNTHESIZED]" or ""
+        local reason_short = has_text(synthesis_done_reason) and (": " .. string.sub(synthesis_done_reason, 1, 80)) or ""
         Human.notify({message = string.format(
           "┌─ Cycle %d/%d %s%s (A: %d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d rejected, %d skipped\n└─ Current base: %s",
           cycle, params.max_iterations, status_str, synth_note, #succeeded, #failed, reason_short,
@@ -2164,7 +2328,7 @@ code: |
           stop_reason = "user_stopped"
           break
         end
-      end  -- end of B phase (succeeded > 0)
+      end  -- end of Synthesis phase (succeeded > 0)
     end  -- end of else (#candidates > 0)
   end  -- end of for cycle
 

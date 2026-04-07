@@ -545,6 +545,17 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             is_tactus = config.get('class') == 'Tactus'
         except:
             is_tactus = False
+            config = {}
+
+        # Build stage_configs from the YAML stages declaration
+        stage_configs = None
+        yaml_stages = config.get('stages', []) if isinstance(config, dict) else []
+        if yaml_stages:
+            from plexus.cli.shared.task_progress_tracker import StageConfig
+            stage_configs = {
+                stage.title(): StageConfig(order=i + 1, status_message=f"{stage.title()} stage")
+                for i, stage in enumerate(yaml_stages)
+            }
 
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(
@@ -553,7 +564,8 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             score_identifier=None,
             yaml_config=yaml_config,
             featured=False,
-            create_root_node=not is_tactus  # Don't create root node for Tactus procedures
+            create_root_node=not is_tactus,  # Don't create root node for Tactus procedures
+            stage_configs=stage_configs,
         )
 
         if not result.success:

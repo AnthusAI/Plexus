@@ -1045,6 +1045,11 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                         if isinstance(user_context, dict):
                             context.update(user_context)
 
+                        # Expose task_id so the Stage.set() MCP tool can update the dashboard
+                        task_id_for_tracking = options.get('_task_id_for_stage_tracking')
+                        if task_id_for_tracking:
+                            context['task_id'] = task_id_for_tracking
+
                         from .procedure_executor import execute_procedure
                         from .mcp_transport import create_procedure_mcp_server
 

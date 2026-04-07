@@ -2506,7 +2506,7 @@ evaluation:
                   )}
                 </div>
               )}
-              {variant === 'detail' && evaluationNotes && (
+              {evaluationNotes && (
                 <div className="text-sm text-muted-foreground">
                   {evaluationNotes}
                 </div>
