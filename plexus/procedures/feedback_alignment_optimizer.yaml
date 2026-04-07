@@ -104,40 +104,57 @@ outputs:
 agents:
   code_editor:
     system_prompt: |
-      You are a score configuration editor optimizing a Plexus score.
+      You are a score configuration editor optimizing a Plexus score for feedback alignment.
 
       TWO DATASETS — understand their roles before making any edit:
 
-      1. DETERMINISTIC DATASET ("accuracy" metric): A fixed, balanced, held-out dataset
-         associated with this score. It represents overall production performance.
-         → This is your GUARDRAIL. You MUST NOT make it worse.
-         → Any edit that degrades this dataset's AC1 by more than 0.02 will be REJECTED.
-         → If this dataset is significantly worse than baseline (> 0.02 AC1 degradation),
-           fixing it becomes the PRIORITY — do not chase feedback improvements that
-           hurt this dataset. Prefer the SAFEST edits possible.
+      1. DETERMINISTIC DATASET ("accuracy" metric): A fixed, held-out dataset.
+         → GUARDRAIL. Do not degrade AC1 by more than 0.02. If it has already regressed
+           significantly, fixing it is priority over chasing feedback gains.
 
-      2. FEEDBACK DATASET ("feedback" metric): The newest 90 days of human-corrected items.
-         It reflects recent real-world disagreements between AI and human reviewers.
-         → This is your OPTIMIZATION TARGET. Use the RCA from this dataset to guide edits.
-         → Improving feedback AC1 is the goal — but never at the cost of the deterministic dataset.
+      2. FEEDBACK DATASET ("feedback" metric): Newest 90 days of human-corrected items.
+         → OPTIMIZATION TARGET. Improve feedback AC1 without hurting the accuracy dataset.
+
+      CORE METHOD — CROSS-CASE PATTERN ANALYSIS:
+      If MISCLASSIFICATION EXAMPLES are provided in your context, use this process:
+
+      Step 1 — Read ALL transcript examples.
+        For each error group (e.g., "AI said Yes, human said No"):
+        - What does the AI's reasoning have in common across examples?
+        - What behavioral signal in the transcript led to the wrong prediction?
+
+      Step 2 — Find the common root cause.
+        The most impactful fixes come from identifying a SINGLE pattern that explains
+        most errors. Ask:
+        - Is the score measuring the RIGHT thing vs. what humans actually evaluate?
+          (Semantic mismatch — the most common source of large AC1 gaps)
+        - Is there a KEY DISTINCTION the current rules miss entirely?
+          (Missing rule — one clear new rule fixes a whole cluster)
+        - Are rules right but insufficiently illustrated?
+          (Missing example — add a boundary-case example)
+
+      Step 3 — Choose fix scope based on root cause:
+        FUNDAMENTAL REWRITE: Score question/framing is wrong →
+          Rewrite user_message to correctly frame what humans evaluate.
+          This is appropriate when FP and FN both trace to the same wrong premise.
+        TARGETED RULE: Question is right, specific case unhandled →
+          Add one precise rule that captures the pattern.
+        EXAMPLE ADDITION: Rules are right but ambiguous at boundaries →
+          Add a concrete example illustrating the edge case.
 
       EDIT STRATEGY — ranked by safety:
-      SAFEST: Add concrete examples to clarify edge cases (rarely hurts deterministic accuracy)
-      SAFE: Sharpen existing criteria with more specific language (low regression risk)
-      RISKY: Expand or broaden criteria to catch more positives (likely to hurt accuracy)
+      SAFEST: Add concrete examples to clarify edge cases
+      SAFE: Sharpen existing criteria with specific language
+      RISKY: Expand or broaden criteria (may hurt accuracy)
       DANGEROUS: Remove or weaken criteria (almost always hurts accuracy)
 
-      When accuracy has regressed in prior iterations, prefer SAFEST edits.
-      When feedback is consistently missing a specific pattern, target that pattern precisely
-      using the suggested fixes from the RCA.
-
       WORKFLOW — call BOTH tools in ONE response:
-      1. Study the RCA data. Pick the single highest-impact fixable pattern.
+      1. Analyze the cross-case examples (if provided) OR RCA data to identify the fix.
       2. In your response, call BOTH tools together:
            str_replace_editor(command="str_replace", path="score_config.yaml",
               old_str="<exact text>", new_str="<replacement>")
-           submit_score_code(version_note="<what you changed and why>")
-      3. If submit_score_code returns an error, fix it and retry submit_score_code.
+           submit_score_code(version_note="<what you changed and why — be specific>")
+      3. If submit_score_code returns an error, fix it and retry.
       4. If you cannot find any viable improvement:
            done(success=False, reason="cannot_improve: <explanation>")
 
@@ -359,6 +376,150 @@ code: |
     return decoded_result
   end
 
+  -- Parse valid_classes from score YAML code string
+  -- Returns a table like {"Yes", "No"} or nil
+  local function extract_valid_classes(yaml_code)
+    if not yaml_code then return nil end
+    local match = string.match(yaml_code, 'valid_classes:%s*%[([^%]]+)%]')
+    if not match then return nil end
+    local classes = {}
+    for cls in string.gmatch(match, '"?([%w][%w_%-]*)"?') do
+      if cls ~= "" then table.insert(classes, cls) end
+    end
+    return #classes >= 2 and classes or nil
+  end
+
+  -- Fetch actual transcript examples for each confusion-matrix error cell
+  -- Returns a table keyed by "pred=X actual=Y" with a list of example objects, or {}
+  local function fetch_cross_case_examples(eval_id, valid_classes, max_per_cell)
+    if not eval_id then return {} end
+    max_per_cell = max_per_cell or 4
+
+    -- Determine which classes to query. Use provided classes or fall back to common defaults.
+    local classes = valid_classes
+    if type(classes) ~= "table" or #classes < 2 then
+      -- Try to infer from the eval's predicted distribution by fetching a small unfiltered sample
+      local ok_probe, probe = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
+        evaluation_id = eval_id, limit = 10, include_text = false
+      })
+      if ok_probe and probe and type(probe.score_results) == "table" then
+        local seen = {}
+        for _, sr in ipairs(probe.score_results) do
+          local p = tostring(sr.predicted or ""):lower()
+          local a = tostring(sr.actual or ""):lower()
+          if p ~= "" then seen[p] = true end
+          if a ~= "" then seen[a] = true end
+        end
+        classes = {}
+        for k in pairs(seen) do table.insert(classes, k) end
+      end
+    end
+
+    if type(classes) ~= "table" or #classes < 2 then return {} end
+
+    local cells = {}
+    for _, pred in ipairs(classes) do
+      for _, actual in ipairs(classes) do
+        if string.lower(pred) ~= string.lower(actual) then
+          local cell_key = string.format("pred=%s actual=%s", pred, actual)
+          local ok, raw = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
+            evaluation_id   = eval_id,
+            predicted_value = pred,
+            actual_value    = actual,
+            limit           = max_per_cell,
+            include_text    = true
+          })
+          if ok and raw and type(raw.score_results) == "table" and #raw.score_results > 0 then
+            local total = (raw.context and raw.context.confusion_matrix_cells) or {}
+            local cell_count = 0
+            for _, v in pairs(total) do cell_count = cell_count + (tonumber(v) or 0) end
+            cells[cell_key] = {
+              examples   = raw.score_results,
+              total_count = cell_count > 0 and cell_count or #raw.score_results
+            }
+          end
+        end
+      end
+    end
+    return cells
+  end
+
+  -- Format cross-case examples into a readable context block for the agent
+  local function format_cross_case_section(cross_case_cells)
+    if not cross_case_cells or next(cross_case_cells) == nil then return nil end
+
+    local parts = {"=== MISCLASSIFICATION EXAMPLES (actual transcripts — read carefully) ==="}
+    table.insert(parts, "")
+    table.insert(parts, "These are REAL examples of errors from the latest feedback evaluation.")
+    table.insert(parts, "Study ALL groups together. Your goal: find the ONE common behavioral")
+    table.insert(parts, "pattern that explains most errors in each group.")
+    table.insert(parts, ""    )
+    table.insert(parts, "KEY QUESTION: Is there a FUNDAMENTAL SEMANTIC MISMATCH between what the")
+    table.insert(parts, "score is asking and what human reviewers are actually evaluating?")
+    table.insert(parts, "If so, a COMPLETE REWRITE of the question/rules is the right fix.")
+    table.insert(parts, "")
+
+    for cell_key, cell_data in pairs(cross_case_cells) do
+      local examples   = cell_data.examples or {}
+      local total      = cell_data.total_count or #examples
+      if #examples == 0 then goto continue end
+
+      -- Determine human-readable label
+      local label = cell_key
+      local pred_cls  = string.match(cell_key, "pred=(%S+)")
+      local act_cls   = string.match(cell_key, "actual=(%S+)")
+      if pred_cls and act_cls then
+        label = string.format(
+          "AI predicted '%s' but human said '%s'  (total: %d)",
+          pred_cls, act_cls, total)
+      end
+
+      table.insert(parts, "--- " .. label .. " ---")
+      table.insert(parts, "")
+
+      for i, ex in ipairs(examples) do
+        -- AI reasoning
+        local reasoning = ""
+        if ex.explanation and ex.explanation ~= "" then
+          reasoning = tostring(ex.explanation):sub(1, 250)
+        elseif ex.trace and ex.trace.node_results then
+          for _, nr in ipairs(ex.trace.node_results) do
+            local out = nr.output or {}
+            local exp = out.explanation or out.rationale or ""
+            if exp ~= "" then reasoning = tostring(exp):sub(1, 250); break end
+          end
+        end
+
+        -- Transcript excerpt — pull from multiple possible locations
+        local text = ""
+        if ex.item and ex.item.text and ex.item.text ~= "" then
+          text = ex.item.text
+        elseif ex.detailed_metadata then
+          for _, v in pairs(ex.detailed_metadata.results or {}) do
+            if v.metadata and v.metadata.text and v.metadata.text ~= "" then
+              text = v.metadata.text; break
+            end
+          end
+        end
+
+        table.insert(parts, string.format("  [%d] AI said: %s", i, pred_cls or "?"))
+        if reasoning ~= "" then
+          table.insert(parts, "      AI reasoning: " .. reasoning)
+        end
+        if text ~= "" then
+          -- Include up to 1200 chars of transcript
+          table.insert(parts, "      Transcript: " .. tostring(text):sub(1, 1200))
+        end
+        table.insert(parts, "")
+      end
+
+      ::continue::
+    end
+
+    table.insert(parts, "=== END OF EXAMPLES ===")
+    return table.concat(parts, "\n")
+  end
+
   -- Build version history table for agent context
   local function build_version_history(iterations, baseline_version_id, baseline_fb_metrics, baseline_acc_metrics, last_accepted_version_id)
     local lines = {"=== OPTIMIZATION HISTORY ===", ""}
@@ -453,7 +614,13 @@ code: |
   end
 
   -- Build a candidate-specific strategy instruction
-  local function build_candidate_strategy(candidate_index, num_candidates, fixable_items, consecutive_acc_rejections)
+  -- With cross-case examples available, candidates get DIVERSIFIED analytical approaches:
+  --   Candidate 1: Semantic/structural — look for a fundamental rewrite
+  --   Candidate 2: Rule-based — look for a specific missing rule
+  --   Candidate 3+: Example-based — add targeted examples or sharpen wording
+  -- Without cross-case examples, fall back to RCA-item-per-candidate assignment.
+  local function build_candidate_strategy(candidate_index, num_candidates, fixable_items,
+                                           consecutive_acc_rejections, has_cross_case_examples)
     -- If accuracy has regressed repeatedly, all candidates are conservative
     if consecutive_acc_rejections >= 2 then
       return "STRATEGY: SAFEST only — add examples to clarify edge cases. Do NOT modify criteria."
@@ -463,19 +630,49 @@ code: |
       return ""  -- single candidate, use default behavior
     end
 
-    -- Each candidate targets a DIFFERENT RCA fixable item (category).
-    -- The synthesis step will combine the best improvements across categories.
+    -- With cross-case examples: diversify the analytical lens across candidates
+    if has_cross_case_examples then
+      if candidate_index == 1 then
+        return "STRATEGY [STRUCTURAL ANALYSIS]: You are candidate 1 — the semantic/structural candidate.\n" ..
+          "Study the misclassification examples with this specific question:\n" ..
+          "  'Is the score measuring the RIGHT THING relative to what human reviewers actually evaluate?'\n" ..
+          "Look for a FUNDAMENTAL SEMANTIC MISMATCH — cases where the score's core question,\n" ..
+          "framing, or key definitions differ from how humans apply the label.\n" ..
+          "If you find one, do a COMPLETE REWRITE of the user_message to fix the framing.\n" ..
+          "This is the highest-impact possible change. Don't be afraid to rewrite the whole question."
+      elseif candidate_index == 2 then
+        return "STRATEGY [RULE ANALYSIS]: You are candidate 2 — the missing-rule candidate.\n" ..
+          "Study the misclassification examples with this specific question:\n" ..
+          "  'Is there ONE specific behavioral pattern in the transcripts that the current rules\n" ..
+          "   handle incorrectly or not at all?'\n" ..
+          "Look for a rule that is MISSING entirely (not just inadequately worded).\n" ..
+          "Add ONE precise, concrete new rule that handles the specific pattern you found.\n" ..
+          "Be specific: 'When agent says X, classify as Y because Z.'"
+      else
+        local num_fixable = type(fixable_items) == "table" and #fixable_items or 0
+        local target_idx = math.min(candidate_index - 1, math.max(num_fixable, 1))
+        return string.format(
+          "STRATEGY [EXAMPLE ANALYSIS]: You are candidate %d — the boundary-case candidate.\n" ..
+          "Study the misclassification examples with this specific question:\n" ..
+          "  'Which examples most clearly illustrate the boundary between correct and incorrect\n" ..
+          "   classification? Would a concrete example in the score config fix the ambiguity?'\n" ..
+          "Add targeted EXAMPLES (not new rules) that illustrate the boundary cases.\n" ..
+          "Also consider RCA fixable item #%d as a source of specific evidence.\n" ..
+          "Prefer adding examples to existing rules over adding new rules.",
+          candidate_index, target_idx)
+      end
+    end
+
+    -- Without cross-case examples: fall back to RCA-item-per-candidate
     local num_fixable = type(fixable_items) == "table" and #fixable_items or 0
     local target_idx = math.min(candidate_index, math.max(num_fixable, 1))
 
     if num_fixable < 2 then
-      -- Not enough distinct RCA items — fall back to risk-level differentiation
       if candidate_index == 1 then
         return "STRATEGY: Target fixable item #1. Use SAFEST edits — add examples or sharpen wording."
       else
         return "STRATEGY: Target fixable item #1 with a BOLDER approach. " ..
-          "You ARE ALLOWED to modify criteria wording, add conditions, or restructure. " ..
-          "A SAFE edit that changes classification behavior is better than a SAFEST edit that doesn't."
+          "You ARE ALLOWED to modify criteria wording, add conditions, or restructure."
       end
     end
 
@@ -484,11 +681,7 @@ code: |
       "YOUR ASSIGNMENT: Focus ONLY on fixable item #%d from the RCA above.\n" ..
       "Do NOT address any other fixable items — other candidates handle those.\n" ..
       "Make exactly ONE targeted edit to fix the error pattern described in item #%d.\n" ..
-      "Use SAFEST or SAFE edits. The synthesis step will combine the best fixes from all candidates.\n" ..
-      "IMPORTANT: Check the OPTIMIZATION HISTORY above. If a similar edit was tried before and\n" ..
-      "produced +0.000 improvement, you MUST try a fundamentally different approach — not a\n" ..
-      "variation of the same wording change. Consider modifying criteria structure, adding\n" ..
-      "conditions, or changing classification logic rather than just adding examples.",
+      "Use SAFEST or SAFE edits. The synthesis step will combine the best fixes from all candidates.",
       candidate_index, num_candidates, target_idx, target_idx)
   end
 
@@ -654,6 +847,13 @@ code: |
       table.insert(parts, opts.current_guidelines)
     end
 
+    -- Cross-case transcript examples (the core pattern-analysis input)
+    local cross_case_section = format_cross_case_section(opts.cross_case_examples)
+    if cross_case_section then
+      table.insert(parts, "")
+      table.insert(parts, cross_case_section)
+    end
+
     -- Count consecutive accuracy regressions in prior iterations
     local consecutive_acc_rejections = 0
     if opts.iterations then
@@ -672,28 +872,41 @@ code: |
     local cons_failed = opts.consecutive_failed_cycles or 0
     table.insert(parts, "")
     table.insert(parts, "=== YOUR TASK (cycle " .. tostring(opts.iteration) .. ") ===")
-    table.insert(parts, "Your PRIMARY OBJECTIVE: Improve feedback alignment (the 90-day items above).")
-    table.insert(parts, "Accuracy is a FLOOR not a ceiling — do not let accuracy drop more than ~2 percentage points.")
-    table.insert(parts, "Focus your edit on the RCA 'Top fixable misclassifications' above.")
+    table.insert(parts, "PRIMARY OBJECTIVE: Improve feedback alignment (AC1 on the 90-day items).")
+    table.insert(parts, "Accuracy is a FLOOR — do not let it drop more than ~2 percentage points.")
+    table.insert(parts, "")
+
+    if cross_case_section then
+      table.insert(parts, "PATTERN ANALYSIS APPROACH (required before making any edit):")
+      table.insert(parts, "1. Study the MISCLASSIFICATION EXAMPLES above — read ALL transcripts.")
+      table.insert(parts, "2. Find the ONE common behavioral pattern that explains most errors in each group.")
+      table.insert(parts, "   Ask yourself:")
+      table.insert(parts, "   - Is the score asking the RIGHT question for what humans actually evaluate?")
+      table.insert(parts, "   - Is there a key distinction the current rules miss entirely?")
+      table.insert(parts, "   - Do both FP and FN groups share a single root cause?")
+      table.insert(parts, "3. Based on your pattern analysis, choose the fix scope:")
+      table.insert(parts, "   FUNDAMENTAL REWRITE: If the score is measuring the wrong thing —")
+      table.insert(parts, "     rewrite user_message/question to match what humans actually evaluate.")
+      table.insert(parts, "   TARGETED RULE: If the question is right but a specific case is unhandled —")
+      table.insert(parts, "     add a precise rule or example that handles the pattern.")
+      table.insert(parts, "   EXAMPLE ADDITION: If the question and rules are right but ambiguous —")
+      table.insert(parts, "     add a concrete example illustrating the boundary case.")
+    else
+      table.insert(parts, "Focus your edit on the RCA 'Top fixable misclassifications' above.")
+    end
 
     if cons_failed >= 2 then
       table.insert(parts, "")
       table.insert(parts, string.format(
         "ESCALATION (%d consecutive cycles with no feedback improvement):", cons_failed))
-      table.insert(parts, "Previous narrow edits to the 'Conditions for Yes/No' lists produced ZERO feedback improvement.")
-      table.insert(parts, "You MUST try a STRUCTURALLY DIFFERENT approach. Good options:")
-      table.insert(parts, "  1. Rewrite the user_message/system_message to add stronger default-No bias:")
-      table.insert(parts, "     e.g. prepend: 'IMPORTANT: Default to No unless multiple decision-makers are")
-      table.insert(parts, "     EXPLICITLY CONFIRMED as decision participants. Physical presence alone is not enough.'")
-      table.insert(parts, "  2. Add a decision tree / step-by-step reasoning section to the prompt.")
-      table.insert(parts, "  3. Rewrite the Conditions for No to be a comprehensive list with specific examples.")
-      table.insert(parts, "  4. Change the classification threshold — require EXPLICIT confirmation language.")
-      table.insert(parts, "Bold structural changes are encouraged. Small condition additions have already failed.")
+      table.insert(parts, "Incremental condition additions have NOT worked. You MUST try a structurally")
+      table.insert(parts, "different approach. If you have cross-case examples above, look harder for")
+      table.insert(parts, "a semantic mismatch — the score may be answering the wrong question entirely.")
+      table.insert(parts, "Bold structural rewrites of user_message are required. Small edits have failed.")
     elseif cons_failed >= 1 then
       table.insert(parts, "")
-      table.insert(parts, "NOTE: Previous cycle produced no feedback improvement despite correct edits.")
-      table.insert(parts, "Consider a more impactful change — restructuring a section or adding a new rule.")
-      table.insert(parts, "Small additions to conditions lists are unlikely to move the metric.")
+      table.insert(parts, "NOTE: Previous cycle produced no feedback improvement.")
+      table.insert(parts, "A more impactful change is needed. Look for a structural fix, not a condition addition.")
     else
       table.insert(parts, "Make ONE targeted improvement — the most impactful change you can identify.")
     end
@@ -1083,6 +1296,28 @@ code: |
     feedback_baseline_metrics.recall
   ), level = "info"})
 
+  -- Extract valid classes from score YAML for cross-case example fetching
+  local score_valid_classes = extract_valid_classes(current_code)
+
+  -- Fetch baseline cross-case examples (FP + FN transcripts) for pattern analysis
+  -- These give the code editor agent actual evidence to reason about
+  local current_cross_case_examples = {}
+  do
+    Human.notify({message = "Fetching misclassification examples for pattern analysis...", level = "info"})
+    local ok, examples_or_err = pcall(fetch_cross_case_examples,
+      feedback_baseline_id, score_valid_classes, 4)
+    if ok and type(examples_or_err) == "table" then
+      current_cross_case_examples = examples_or_err
+      local cell_count = 0
+      for _ in pairs(current_cross_case_examples) do cell_count = cell_count + 1 end
+      Human.notify({message = string.format(
+        "Fetched examples for %d error cell(s) for cross-case pattern analysis.", cell_count
+      ), level = "info"})
+    else
+      Human.notify({message = "Cross-case example fetch failed (non-fatal): " .. tostring(examples_or_err), level = "warning"})
+    end
+  end
+
   -- Store both baselines in state
   State.set("accuracy_baseline_id",      accuracy_baseline_id)
   State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
@@ -1191,11 +1426,16 @@ code: |
 
     -- ================================================================
     -- A PHASE: Explore independent fixes
-    -- Each candidate targets a different RCA fixable item.
+    -- Candidate 1: structural/semantic analysis (looks for fundamental rewrites)
+    -- Candidate 2: rule analysis (looks for missing specific rules)
+    -- Candidate 3+: example/RCA-item analysis (targeted condition/example additions)
     -- All start from the same base. Results are recorded, not ranked.
     -- ================================================================
+    local has_examples = next(current_cross_case_examples) ~= nil
     Human.notify({message = string.format(
-      "Cycle %d — A Phase: exploring RCA categories...", cycle), level = "info"})
+      "Cycle %d — A Phase: exploring improvements%s...",
+      cycle, has_examples and " (with transcript examples)" or ""
+    ), level = "info"})
 
     local candidates = {}
     local num_cands = math.min(params.num_candidates or 3, 5)
@@ -1213,7 +1453,8 @@ code: |
       })
 
       -- Build candidate-specific context
-      local strategy = build_candidate_strategy(c, num_cands, fixable_items, consecutive_acc_rejections)
+      local strategy = build_candidate_strategy(
+        c, num_cands, fixable_items, consecutive_acc_rejections, has_examples)
       local inject = build_coding_context({
         scorecard_name = scorecard_name,
         score_name = score_name,
@@ -1230,14 +1471,15 @@ code: |
         current_guidelines = current_guidelines,
         iteration = cycle,
         candidate_strategy = strategy,
-        consecutive_failed_cycles = consecutive_failed_cycles
+        consecutive_failed_cycles = consecutive_failed_cycles,
+        cross_case_examples = current_cross_case_examples
       })
 
       Tool.reset()
       code_editor.clear_history()
+      local approach_label = c == 1 and "structural" or (c == 2 and "rule-based" or "example-based")
       Human.notify({message = string.format(
-        "  Candidate %d/%d (item #%d): generating edit...",
-        c, num_cands, math.min(c, math.max(#fixable_items, 1))
+        "  Candidate %d/%d (%s approach): generating edit...", c, num_cands, approach_label
       ), level = "info"})
 
       -- Retry loop: up to 3 attempts per candidate
@@ -1837,8 +2079,27 @@ code: |
             State.set("accuracy_baseline_metrics", b_acc_metrics)
           end
           State.set("feedback_baseline_metrics", b_fb_metrics)
+          -- Refresh cross-case examples from the new accepted version's eval
+          -- (Base changed, so error patterns are different now)
+          if b_fb_eval_id then
+            local ok_ex, new_examples = pcall(fetch_cross_case_examples,
+              b_fb_eval_id, score_valid_classes, 4)
+            if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
+              current_cross_case_examples = new_examples
+              Human.notify({message = "Refreshed misclassification examples from accepted cycle eval.", level = "info"})
+            end
+          end
         else
           consecutive_failed_cycles = consecutive_failed_cycles + 1
+          -- On rejection, keep cross-case examples from the rejected eval if available
+          -- (The base didn't change, but we may have richer error evidence)
+          if b_fb_eval_id then
+            local ok_ex, new_examples = pcall(fetch_cross_case_examples,
+              b_fb_eval_id, score_valid_classes, 4)
+            if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
+              current_cross_case_examples = new_examples
+            end
+          end
         end
         State.set("last_accuracy_rca", b_acc_rca)
         State.set("last_feedback_rca", b_fb_rca)
