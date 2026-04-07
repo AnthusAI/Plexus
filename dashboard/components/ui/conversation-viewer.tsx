@@ -2392,7 +2392,10 @@ function ConversationViewer({
 
                           {toolViewModel ? (
                             <Tool
-                              defaultOpen={toolViewModel.state === 'output-error'}
+                              defaultOpen={
+                                EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                                toolViewModel.state === 'output-error'
+                              }
                             >
                               <ToolHeader
                                 toolType={toolViewModel.type}
