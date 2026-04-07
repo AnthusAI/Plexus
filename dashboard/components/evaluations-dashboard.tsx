@@ -52,8 +52,8 @@ import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
-import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation } from '@/utils/data-operations'
+import { AmplifyTask, ProcessedTask, ProcessedEvaluation, Evaluation, TaskStageType } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation, fetchEvaluationById } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
@@ -544,6 +544,29 @@ export default function EvaluationsDashboard({
     }
   }, [accountId, selectedScorecard, selectedScore, refetch]);
 
+  // Deep-link support: fetch the selected evaluation by ID if it's not in the loaded list
+  const [deepLinkedEvaluation, setDeepLinkedEvaluation] = useState<ProcessedEvaluation | null>(null)
+  useEffect(() => {
+    if (!selectedEvaluationId || isLoading) return
+    const alreadyLoaded = evaluations.some(e => e.id === selectedEvaluationId)
+    if (alreadyLoaded) {
+      setDeepLinkedEvaluation(null)
+      return
+    }
+    let cancelled = false
+    fetchEvaluationById(selectedEvaluationId).then(result => {
+      if (!cancelled && result) setDeepLinkedEvaluation(result)
+    })
+    return () => { cancelled = true }
+  }, [selectedEvaluationId, isLoading, evaluations])
+
+  // Merge the deep-linked evaluation into the list so rendering and score-result loading work
+  const effectiveEvaluations = useMemo(() => {
+    if (!deepLinkedEvaluation) return evaluations
+    if (evaluations.some(e => e.id === deepLinkedEvaluation.id)) return evaluations
+    return [deepLinkedEvaluation, ...evaluations]
+  }, [evaluations, deepLinkedEvaluation])
+
   // Show loading state only on initial load, not when selecting evaluations
   const showLoading = isLoading && !dataHasLoadedOnce;
 
@@ -750,10 +773,8 @@ export default function EvaluationsDashboard({
   // Memoize the renderSelectedTask function to prevent unnecessary re-renders
   const renderSelectedTask = useMemo(() => {
     if (!selectedEvaluationId) return null;
-    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
+    const evaluation = effectiveEvaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
     if (!evaluation) return null;
-
-        // Debug: Log the scoreVersionId
 
     return (
       <TaskDisplay
@@ -778,10 +799,10 @@ export default function EvaluationsDashboard({
         onDelete={handleDelete}
       />
     );
-  }, [selectedEvaluationId, evaluations, isFullWidth, selectedEvaluationScoreResults, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
+  }, [selectedEvaluationId, effectiveEvaluations, isFullWidth, selectedEvaluationScoreResults, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
 
   // Remove client-side filtering logic and use the filtered evaluations directly
-  const filteredEvaluations = evaluations;
+  const filteredEvaluations = effectiveEvaluations;
 
   const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
     if (!selectedEvaluationId || !accountId) return;
