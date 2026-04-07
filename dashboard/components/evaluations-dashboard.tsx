@@ -432,9 +432,9 @@ export default function EvaluationsDashboard({
       const newPathname = id 
         ? `/lab/evaluations/${selectedEvaluationId}/score-results/${id}` 
         : `/lab/evaluations/${selectedEvaluationId}`;
-      window.history.pushState(null, '', newPathname);
+      router.replace(newPathname);
     }
-  }, [selectedEvaluationId]);
+  }, [selectedEvaluationId, router]);
 
   const copyLinkToClipboard = () => {
     if (!selectedEvaluationId || !accountId) return;
@@ -483,7 +483,7 @@ export default function EvaluationsDashboard({
     setSelectedEvaluationId(id)
     // Update URL without causing full rerender
     const newPathname = id ? `/lab/evaluations/${id}` : '/lab/evaluations'
-    window.history.pushState(null, '', newPathname)
+    router.replace(newPathname)
   };
 
   // Handle closing the selected evaluation
@@ -499,7 +499,7 @@ export default function EvaluationsDashboard({
     }
     
     // Update URL without triggering a navigation/re-render
-    window.history.pushState(null, '', '/lab/evaluations');
+    router.replace('/lab/evaluations');
   };
 
   useEffect(() => {
