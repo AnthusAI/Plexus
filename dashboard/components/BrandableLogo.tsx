@@ -3,7 +3,6 @@
 import React from 'react';
 import { useBrand } from '@/app/contexts/BrandContext';
 import SquareLogo, { LogoVariant } from './logo-square';
-import LogoErrorBoundary from './LogoErrorBoundary';
 
 interface BrandableLogoProps {
   variant: LogoVariant;
@@ -24,30 +23,39 @@ export default function BrandableLogo({
   shadowWidth,
   shadowIntensity,
 }: BrandableLogoProps) {
-  const { customLogoComponent, logoLoading } = useBrand();
+  const { config } = useBrand();
+  const logo = config?.logo;
 
-  // If custom logo is loaded, use it; otherwise use default
-  const LogoComponent = customLogoComponent || SquareLogo;
-  
-  // Custom logos should not have shadow effects by default
-  const effectiveShadowEnabled = customLogoComponent ? false : shadowEnabled;
+  if (logo) {
+    const src =
+      variant === LogoVariant.Square
+        ? logo.squarePath
+        : variant === LogoVariant.Wide
+          ? logo.widePath
+          : logo.narrowPath;
+
+    return (
+      <img
+        src={src}
+        alt={logo.altText || `${config?.name || 'Brand'} logo`}
+        className={className}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          display: 'block',
+        }}
+      />
+    );
+  }
 
   return (
-    <LogoErrorBoundary
+    <SquareLogo
       variant={variant}
       className={className}
-      shadowEnabled={effectiveShadowEnabled}
+      shadowEnabled={shadowEnabled}
       shadowWidth={shadowWidth}
       shadowIntensity={shadowIntensity}
-    >
-      <LogoComponent
-        variant={variant}
-        className={className}
-        shadowEnabled={effectiveShadowEnabled}
-        shadowWidth={shadowWidth}
-        shadowIntensity={shadowIntensity}
-      />
-    </LogoErrorBoundary>
+    />
   );
 }
-

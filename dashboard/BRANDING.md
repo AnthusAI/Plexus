@@ -5,7 +5,7 @@ This document explains how to white-label the Plexus dashboard with custom brand
 ## Overview
 
 The white-labeling system allows you to:
-- Replace the Plexus logo with your own custom logo component
+- Replace the Plexus logo with your own static logo assets
 - Override CSS variables (colors, fonts, etc.)
 - Keep branding assets in a separate Git repository
 - Deploy custom branding alongside the Plexus application
@@ -36,7 +36,9 @@ A brand package is a directory containing three files:
 ```
 your-brand/
   brand.json       # Configuration file
-  logo.js          # Custom logo component (ES module)
+  logo-square.svg  # Square logo asset
+  logo-wide.svg    # Wide logo asset
+  logo-narrow.svg  # Narrow logo asset
   styles.css       # CSS variable overrides
 ```
 
@@ -48,7 +50,10 @@ The configuration file specifies paths to your custom assets:
 {
   "name": "Your Brand Name",
   "logo": {
-    "componentPath": "/brands/your-brand/logo.js"
+    "squarePath": "/brands/your-brand/logo-square.svg",
+    "widePath": "/brands/your-brand/logo-wide.svg",
+    "narrowPath": "/brands/your-brand/logo-narrow.svg",
+    "altText": "Your Brand logo"
   },
   "styles": {
     "cssPath": "/brands/your-brand/styles.css"
@@ -58,67 +63,21 @@ The configuration file specifies paths to your custom assets:
 
 **Fields:**
 - `name` (required): Brand name for identification
-- `logo.componentPath` (optional): Path to custom logo ES module
+- `logo.squarePath` (optional): Path to square logo image
+- `logo.widePath` (optional): Path to wide logo image
+- `logo.narrowPath` (optional): Path to narrow logo image
+- `logo.altText` (optional): Accessible alt text for logo images
 - `styles.cssPath` (optional): Path to CSS file with variable overrides
 
-### logo.js
+### Logo Assets
 
-A simple ES module that exports a React component as the default export:
+Provide three image files for the dashboard logo variants:
 
-```javascript
-// Simple example - just displays text
-export default function CustomLogo({ variant, className }) {
-  return (
-    <div className={className} style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      backgroundColor: '#ff6b35',
-      color: 'white',
-      fontWeight: 'bold',
-      fontSize: '1.5em'
-    }}>
-      ACME
-    </div>
-  );
-}
-```
+- `logo-square.svg` for square contexts
+- `logo-wide.svg` for wide headers/navigation
+- `logo-narrow.svg` for compact sidebars
 
-**Component Interface:**
-
-The logo component receives these props:
-
-- `variant`: LogoVariant enum value
-  - `LogoVariant.Square` - Square aspect ratio (6x6 grid)
-  - `LogoVariant.Wide` - Wide aspect ratio (6x2 grid)
-  - `LogoVariant.Narrow` - Narrow aspect ratio (2x2 grid)
-- `className` (optional): CSS classes to apply
-- `shadowEnabled` (optional): Whether to enable drop shadow
-- `shadowWidth` (optional): Shadow blur radius (e.g., "2em")
-- `shadowIntensity` (optional): Shadow opacity (0-100)
-
-**Requirements:**
-- Must export a default function or component
-- Must handle all three variant types
-- Must be a valid ES module (no build step required)
-- Cannot import external npm packages (unless you build it separately)
-
-**Example with image:**
-
-```javascript
-export default function CustomLogo({ variant, className }) {
-  // Use different images for different variants
-  const imageSrc = variant === 0 ? '/brands/acme/logo-square.svg' :
-                   variant === 1 ? '/brands/acme/logo-wide.svg' :
-                   '/brands/acme/logo-narrow.svg';
-  
-  return (
-    <div className={className}>
-      <img src={imageSrc} alt="ACME" style={{ width: '100%', height: '100%' }} />
-    </div>
-  );
-}
-```
+Use SVG when possible for crisp rendering at all sizes.
 
 ### styles.css
 
@@ -204,8 +163,8 @@ git init
 mkdir your-brand
 cd your-brand
 
-# Create the three required files
-touch brand.json logo.js styles.css
+# Create the required files
+touch brand.json logo-square.svg logo-wide.svg logo-narrow.svg styles.css
 ```
 
 ### 2. Symlink to Plexus Public Directory
@@ -238,15 +197,16 @@ Restart the Next.js development server to pick up the environment variable:
 
 ### 5. Verify in Browser
 
-Open the browser console and look for these messages:
+Open the browser devtools and verify:
 
 ```
 [BrandProvider] Loading brand config from: /brands/your-brand/brand.json
 [BrandProvider] Fetched brand config: {name: "Your Brand", ...}
 [BrandProvider] Brand config validated successfully
 [BrandProvider] Injecting custom CSS from: /brands/your-brand/styles.css
-[BrandProvider] Loading custom logo component from: /brands/your-brand/logo.js
-[BrandProvider] Custom logo component loaded successfully
+- `brand.json` is fetched successfully
+- `styles.css` is fetched successfully
+- logo asset paths in `brand.json` return 200
 ```
 
 ## Production Deployment
@@ -268,7 +228,9 @@ The tarball should contain your brand directories with their files:
 ```
 capacity/
   brand.json
-  logo.js
+  logo-square.svg
+  logo-wide.svg
+  logo-narrow.svg
   styles.css
 images/
   capacity-logo.png
@@ -361,13 +323,12 @@ If `styles.css` fails to load:
 - Dashboard uses default Plexus styles
 - Application continues to function normally
 
-### Logo Component Errors
+### Logo Asset Errors
 
-If `logo.js` fails to load or crashes during rendering:
-- Error is caught by React Error Boundary
-- Console error is logged
-- Dashboard falls back to default Plexus logo
-- Application continues to function normally
+If a configured logo asset path is missing:
+- Browser logs a 404 for that asset
+- The logo image will not render for that variant
+- Application shell and routing continue to function normally
 
 ## Testing Your Brand
 
@@ -394,9 +355,8 @@ If `logo.js` fails to load or crashes during rendering:
 
 4. **Error Scenarios**
    - [ ] App works if brand.json is missing (uses default branding)
-   - [ ] App works if logo.js is missing (uses default logo)
+   - [ ] App works if a configured logo image path is missing
    - [ ] App works if styles.css is missing (uses default styles)
-   - [ ] App works if logo.js has syntax error (falls back to default)
 
 ## Example Brand Package
 
@@ -405,7 +365,7 @@ See the example brand in the separate branding repository:
 - Example package: `example/`
 
 The example demonstrates:
-- Simple text-based logo
+- Static image logo variants
 - Orange primary color override
 - Proper brand.json structure
 
@@ -427,14 +387,8 @@ Failed to fetch brand config: 404 Not Found
 
 ### Logo not displaying
 
-**Check console for import errors:**
-```
-[BrandProvider] Failed to load custom logo component: ...
-```
-→ Check logo.js syntax. Must be valid ES module with default export.
-
-**Logo component crashes:**
-→ Check browser console for React errors. Error boundary will fall back to default logo.
+**Check network for asset errors:**
+→ Verify `squarePath`, `widePath`, and `narrowPath` are valid URLs in `brand.json`.
 
 ### Colors not applying
 
@@ -464,38 +418,9 @@ Brand assets must be served from the same origin as the Plexus dashboard. This i
 **Bad:**
 - `NEXT_PUBLIC_BRAND_CONFIG_URL=https://external-site.com/brand.json` (CORS error)
 
-### Code Execution
+### Static Assets Only
 
-The `logo.js` file is executed as JavaScript in the browser. Only load logo components from trusted sources.
-
-**Best Practice:**
-- Keep branding repository in your own infrastructure
-- Review logo.js code before deployment
-- Use Content Security Policy (CSP) headers if needed
-
-## Advanced: Building Custom Logo Components
-
-If you need to use external npm packages or TypeScript in your logo component, you'll need to build it separately:
-
-### Option 1: Simple Build Script
-
-```javascript
-// build-logo.js
-import esbuild from 'esbuild';
-
-esbuild.build({
-  entryPoints: ['src/logo.tsx'],
-  bundle: true,
-  outfile: 'dist/logo.js',
-  format: 'esm',
-  external: ['react', 'react-dom'],
-  jsx: 'automatic',
-});
-```
-
-### Option 2: Full Build System
-
-Create a separate project with its own `package.json` and build system. This is covered in a separate guide (not yet implemented).
+Logo branding uses static image files only (SVG/PNG/WebP). JavaScript logo modules are intentionally unsupported to avoid runtime incompatibilities.
 
 ## Support
 
@@ -504,4 +429,3 @@ For questions or issues:
 2. Review the example brand package
 3. Check browser console for error messages
 4. Contact the Plexus team
-
