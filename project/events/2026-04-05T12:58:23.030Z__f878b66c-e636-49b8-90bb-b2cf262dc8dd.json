@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f878b66c-e636-49b8-90bb-b2cf262dc8dd",
+  "issue_id": "plx-b110f8a8-c827-4ef4-8a10-0b82e98224ab",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-05T12:58:23.030Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e9a60d69-8053-471a-9f50-bda3cb0f2160",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement CLI/MCP feedback selection contract and shared selector"
+  }
+}
