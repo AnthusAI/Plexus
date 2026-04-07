@@ -8,7 +8,8 @@ import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '@/amplify/data/resource'
 import { useAccount } from '@/app/contexts/AccountContext'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 interface ScorecardSelectParameterProps {
   definition: ParameterDefinition
@@ -28,7 +29,7 @@ export function ScorecardSelectParameter({ definition, value, onChange, error }:
     const loadScorecards = async () => {
       setIsLoading(true)
       try {
-        const result = await client.graphql({
+        const result = await getAmplifyClient().graphql({
           query: `
             query ListScorecards($filter: ModelScorecardFilterInput) {
               listScorecards(filter: $filter) {
