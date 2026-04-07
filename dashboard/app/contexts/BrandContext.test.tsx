@@ -43,7 +43,11 @@ describe('BrandContext', () => {
   it('should load brand config when env var is set', async () => {
     const mockConfig = {
       name: 'Test Brand',
-      logo: { componentPath: '/test/logo.js' },
+      logo: {
+        squarePath: '/test/logo-square.svg',
+        widePath: '/test/logo-wide.svg',
+        narrowPath: '/test/logo-narrow.svg'
+      },
       styles: { cssPath: '/test/styles.css' },
       favicon: { faviconPath: '/test/favicon.ico' }
     };
@@ -169,7 +173,11 @@ describe('BrandContext', () => {
   it('should handle invalid brand config gracefully', async () => {
     const invalidConfig = {
       // Missing required 'name' field
-      logo: { componentPath: '/test/logo.js' }
+      logo: {
+        squarePath: '/test/logo-square.svg',
+        widePath: '/test/logo-wide.svg',
+        narrowPath: '/test/logo-narrow.svg'
+      }
     };
 
     process.env.NEXT_PUBLIC_BRAND_CONFIG_URL = '/brands/test/brand.json';
@@ -239,4 +247,3 @@ describe('BrandContext', () => {
     consoleError.mockRestore();
   });
 });
-
