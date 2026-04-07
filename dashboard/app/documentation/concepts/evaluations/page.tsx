@@ -185,6 +185,16 @@ export default function EvaluationsPage() {
             guideline gap requiring SME clarification, or mechanical malfunction.
           </p>
           <p className="text-muted-foreground mb-4">
+            Dataset-backed accuracy evaluations also run this RCA automatically. Coverage is reported as
+            full/partial/none based on how many incorrect items retain <code>feedback_item_id</code> linkage.
+          </p>
+          <p className="text-muted-foreground mb-4">
+            Dataset-backed accuracy requires a materialized associated dataset:
+            <code> DataSet.file </code>
+            must point to parquet/csv. Preflight rejects non-materialized datasets early with explicit
+            reason codes so optimizer agents can rebuild before dispatching evaluations.
+          </p>
+          <p className="text-muted-foreground mb-4">
             Evaluation detail views also surface category summaries, mechanical subtype breakdown,
             evaluation-level red flags, and one primary next action recommendation so you can quickly decide
             whether to continue score optimization or route work to data remediation, SME clarification, or
@@ -209,7 +219,8 @@ export default function EvaluationsPage() {
   --scorecard 1039 \\
   --score 45425 \\
   --days 180 \\
-  --max-samples 50 \\
+  --max-items 50 \\
+  --sampling-mode random \\
   --kanbus-issue-id plx-9aa370`}</code>
           </pre>
           <p className="text-muted-foreground">

@@ -1,11 +1,12 @@
 from plexus.cli.shared.evaluation_value_function import best_of, value
 
 
-def _evaluation(ac1=0.6, recall=0.7, precision=0.7, *, mode="feedback", days=180, max_samples=100, root_cause=True):
+def _evaluation(ac1=0.6, recall=0.7, precision=0.7, *, mode="feedback", days=180, max_items=100, sampling_mode="newest", root_cause=True):
     params = {
         "mode": mode,
         "days": days,
-        "max_samples": max_samples,
+        "max_items": max_items,
+        "sampling_mode": sampling_mode,
         "root_cause_required": True,
     }
     if root_cause:

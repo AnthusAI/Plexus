@@ -25,6 +25,10 @@ from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
+from plexus.utils.feedback_selection import (
+    normalize_feedback_sampling_mode,
+    select_feedback_items,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +71,9 @@ class FeedbackItems(DataCache):
         scorecard: Union[str, int] = Field(..., description="Scorecard identifier (name, key, ID, or external ID)")
         score: Union[str, int] = Field(..., description="Score identifier (name, key, ID, or external ID)")  
         days: Optional[int] = Field(None, description="Number of days back to search for feedback items (None = all time)")
+        max_items: Optional[int] = Field(None, description="Maximum number of feedback items to include using explicit newest/random selection")
+        sampling_mode: str = Field("newest", description="Selection mode when max_items is set: newest or random")
+        sample_seed: Optional[int] = Field(None, description="Optional random seed for random selection mode")
         limit: Optional[int] = Field(None, description="Maximum total number of items in the dataset")
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
@@ -83,6 +90,23 @@ class FeedbackItems(DataCache):
         def days_must_be_positive(cls, v):
             if v is not None and v <= 0:
                 raise ValueError('days must be positive')
+            return v
+
+        @validator('max_items')
+        def max_items_must_be_positive(cls, v):
+            if v is not None and v <= 0:
+                raise ValueError('max_items must be positive')
+            return v
+
+        @validator('sampling_mode')
+        def sampling_mode_must_be_supported(cls, v):
+            return normalize_feedback_sampling_mode(v)
+
+        @validator('sample_seed')
+        def sample_seed_only_for_random(cls, v, values):
+            mode = values.get('sampling_mode', 'newest')
+            if v is not None and mode != 'random':
+                raise ValueError("sample_seed is only valid when sampling_mode='random'")
             return v
             
         @validator('limit')
@@ -415,6 +439,9 @@ class FeedbackItems(DataCache):
             'scorecard_id': scorecard_id,
             'score_id': score_id,
             'days': self.parameters.days,
+            'max_items': self.parameters.max_items,
+            'sampling_mode': self.parameters.sampling_mode,
+            'sample_seed': self.parameters.sample_seed,
             'limit': self.parameters.limit,
             'limit_per_cell': self.parameters.limit_per_cell,
             'initial_value': self.normalized_initial_value,
@@ -538,6 +565,20 @@ class FeedbackItems(DataCache):
         if self.parameters.feedback_id:
             sampled_items = feedback_items
             logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
+        elif self.parameters.max_items is not None:
+            sampled_items, selection_metadata = select_feedback_items(
+                feedback_items,
+                max_items=self.parameters.max_items,
+                sampling_mode=self.parameters.sampling_mode,
+                sample_seed=self.parameters.sample_seed,
+            )
+            logger.info(
+                "Applied explicit feedback selection: mode=%s requested=%s selected=%s candidate_pool=%s",
+                selection_metadata.get("sampling_mode"),
+                selection_metadata.get("requested_max_items"),
+                selection_metadata.get("selected_count"),
+                selection_metadata.get("candidate_pool_count"),
+            )
         else:
             # Build confusion matrix
             matrix_cells = self._build_confusion_matrix(feedback_items)

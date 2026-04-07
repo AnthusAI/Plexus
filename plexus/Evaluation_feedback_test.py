@@ -617,8 +617,8 @@ class TestFeedbackEvaluation:
                         assert result["status"] == "success"
 
     @pytest.mark.asyncio
-    async def test_run_evaluation_sampling_with_seed_is_deterministic(self, mock_api_client):
-        """Sampling with sample_seed should produce the same subset across runs."""
+    async def test_run_evaluation_random_sampling_with_seed_is_deterministic(self, mock_api_client):
+        """Random sampling with sample_seed should produce the same subset across runs."""
         feedback_items = []
         for i in range(10):
             item = MagicMock()
@@ -654,7 +654,8 @@ class TestFeedbackEvaluation:
                 evaluation_id="eval-789",
                 account_id="account-123",
                 account_key="test-account-key",
-                max_samples=5,
+                max_items=5,
+                sampling_mode="random",
                 sample_seed=1337,
             )
 

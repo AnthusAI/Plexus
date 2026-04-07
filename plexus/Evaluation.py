@@ -1391,8 +1391,10 @@ class Evaluation:
                         combined_results.extend(results)
                     
                     metrics = self.calculate_metrics(combined_results)
-                    # If this is the final update (score is complete), mark it as completed
-                    status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
+                    # If this is the final update (score is complete), mark it as completed —
+                    # unless rca_pending=True, in which case the outer code owns the COMPLETED write.
+                    scoring_done = score_name in self.completed_scores
+                    status = "COMPLETED" if (scoring_done and not self.rca_pending) else "RUNNING"
                     
                     # For final updates, use synchronous execution
                     if status == "COMPLETED":
@@ -1433,7 +1435,7 @@ class Evaluation:
 
         except asyncio.CancelledError:
             # Handle final cleanup if needed
-            if score_name in self.completed_scores:
+            if score_name in self.completed_scores and not self.rca_pending:
                 try:
                     # Ensure final metrics are posted synchronously
                     combined_results = []
@@ -4850,7 +4852,7 @@ class FeedbackEvaluation(Evaluation):
         }
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, rca_pending: bool = False, **kwargs):
         # Store evaluation_id BEFORE calling super().__init__ so parent can use it
         self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
@@ -4880,6 +4882,7 @@ class AccuracyEvaluation(Evaluation):
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
+        self.rca_pending = rca_pending  # When True, suppress autonomous COMPLETED — outer code owns the final write
         self.override_data = {}  # Initialize empty override data dictionary
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
         
