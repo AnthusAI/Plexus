@@ -13,7 +13,8 @@ import { toast } from 'sonner'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { MetadataEditor } from './metadata-editor'
 
-const client = generateClient();
+let amplifyClient: any = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient())
 
 export interface ItemData {
   id: string

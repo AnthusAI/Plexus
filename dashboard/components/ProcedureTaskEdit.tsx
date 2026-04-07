@@ -40,7 +40,8 @@ import {
 // Types based on our GraphQL schema
 type Procedure = Schema['Procedure']['type']
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Minimal fallback for YAML editor - actual templates come from backend service
 const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
@@ -128,7 +129,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       setIsLoading(true)
       setError(null)
       
-      const result = await client.graphql({
+      const result = await getAmplifyClient().graphql({
         query: `
           query GetProcedure($id: ID!) {
             getProcedure(id: $id) {
@@ -219,7 +220,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       if (procedureId) {
         // Update existing procedure
         // Note: scoreVersionId is stored in the YAML code, not as a separate field
-        await client.graphql({
+        await getAmplifyClient().graphql({
           query: `
             mutation UpdateProcedure($input: UpdateProcedureInput!) {
               updateProcedure(input: $input) {
@@ -247,7 +248,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       } else {
         // Create new procedure
         // Note: scoreVersionId is stored in the YAML code, not as a separate field
-        const result = await client.graphql({
+        const result = await getAmplifyClient().graphql({
           query: `
             mutation CreateProcedure($input: CreateProcedureInput!) {
               createProcedure(input: $input) {
@@ -323,7 +324,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
     }
 
     try {
-      await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation DeleteProcedure($input: DeleteProcedureInput!) {
             deleteProcedure(input: $input) {
