@@ -345,16 +345,11 @@ export default function ProcedureTask({
                 <Timestamp time={props.task.time} variant="relative" />
               </div>
               
-              {/* Only show scorecard/score if there are no parameters */}
-              {parameters.length === 0 && (
-                <>
-                  {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                    <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
-                  )}
-                  {props.task.score && props.task.score.trim() !== '' && (
-                    <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
-                  )}
-                </>
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
               )}
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
