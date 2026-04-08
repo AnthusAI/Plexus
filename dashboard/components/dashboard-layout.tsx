@@ -224,7 +224,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               const isLoading = loadingRoute === item.path
               
               return (
-                <Link
+                <Link 
                   key={item.name}
                   href={item.path}
                   onClick={() => handleNavClick(item.path)}
