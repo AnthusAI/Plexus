@@ -1371,11 +1371,11 @@ code: |
         if react_step == 1 then
           -- First step for this hypothesis — inject current file as system message
           local editor_content = call_plexus_tool("score_editor_get_content", {})
-          if editor_content and editor_content.content then
+          if editor_content and editor_content.file_content then
             code_editor.history:add({
               role = "system",
               content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
-                .. editor_content.content
+                .. editor_content.file_content
                 .. "\n=== END OF score_config.yaml ==="
             })
           end
@@ -1432,11 +1432,11 @@ code: |
 
           -- Inject updated file content as system message
           local editor_content = call_plexus_tool("score_editor_get_content", {})
-          if editor_content and editor_content.content then
+          if editor_content and editor_content.file_content then
             code_editor.history:add({
               role = "system",
               content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
-                .. editor_content.content
+                .. editor_content.file_content
                 .. "\n=== END OF score_config.yaml ==="
             })
           end
@@ -1802,11 +1802,11 @@ code: |
                 table.insert(combo_parts, string.format("\n(Combination step %d/%d)", combo_step, max_combo_steps))
                 -- Update file system message
                 local editor_content = call_plexus_tool("score_editor_get_content", {})
-                if editor_content and editor_content.content then
+                if editor_content and editor_content.file_content then
                   code_editor.history:add({
                     role = "system",
                     content = "=== CURRENT score_config.yaml ===\n"
-                      .. editor_content.content
+                      .. editor_content.file_content
                       .. "\n=== END OF score_config.yaml ==="
                   })
                 end
