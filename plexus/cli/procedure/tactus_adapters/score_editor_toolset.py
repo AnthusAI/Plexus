@@ -127,7 +127,7 @@ class ScoreEditorToolset:
         """Return the current virtual file content for Lua to build system messages."""
         return {
             "success": True,
-            "content": self._content,
+            "file_content": self._content,
             "original": self._original,
             "modified": self._content != self._original,
             "length": len(self._content),
