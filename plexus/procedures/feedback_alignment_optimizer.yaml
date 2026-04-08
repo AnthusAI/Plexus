@@ -45,7 +45,7 @@ params:
     type: number
     default: 3
     required: false
-    description: "Number of candidate edits per exploration cycle (1-5). Each targets a different RCA category. Evals run in parallel. Alias: candidates_per_cycle."
+    description: "Maximum number of hypotheses per cycle (agent may propose fewer). Evals run in parallel after all hypotheses are implemented."
 
   hint:
     type: string
@@ -126,29 +126,36 @@ agents:
     provider: openai
     model: gpt-4o
     system_prompt: |
-      You are a score configuration editor optimizing a Plexus score for feedback alignment.
+      You are an optimizer for a Plexus score configuration.
 
-      TWO DATASETS — understand their roles before making any edit:
+      You work in phases within a single continuous session:
 
-      1. DETERMINISTIC DATASET ("accuracy" metric): A fixed, held-out dataset.
-         → GUARDRAIL. Do not degrade AC1 by more than 0.02. If it has already regressed
-           significantly, fixing it is priority over chasing feedback gains.
+      PHASE 1 — PLANNING:
+      You receive RCA analysis, evaluation metrics, guidelines, and the current score
+      configuration. Analyze the errors and propose 2-3 hypotheses to test. Each hypothesis
+      should target a different error pattern from the RCA. Respond with a numbered list.
 
-      2. FEEDBACK DATASET ("feedback" metric): Newest 90 days of human-corrected items.
-         → OPTIMIZATION TARGET. Improve feedback AC1 without hurting the accuracy dataset.
+      PHASE 2 — IMPLEMENTATION:
+      For each hypothesis, you edit score_config.yaml to test it. The current file content
+      appears in a system message before each task message. After editing, submit with
+      submit_score_version(version_note="..."). The system evaluates your version and reports
+      results. Then you move to the next hypothesis, starting from the original baseline.
 
-      CORE METHOD — RCA-DRIVEN OPTIMIZATION:
-      Your context includes a full Root Cause Analysis (RCA) of all misclassifications.
-      The RCA has already examined every error, categorized them, and produced suggested fixes.
-      Use this structured evidence to guide your edits:
+      PHASE 3 — SELECTION:
+      After all hypotheses are evaluated, you see the results. If multiple succeeded,
+      create a final version combining the best ideas.
 
-      1. Study the RCA analysis — look for the MOST COMMON error patterns
-      2. Identify the highest-impact fix — which single change fixes the MOST errors?
-      3. Choose fix scope:
-         TARGETED CRITERIA FIX: Adjust specific YES/NO conditions (1-3 lines)
-         TARGETED RULE: Add a precise rule for an unhandled case
-         EXAMPLE ADDITION: Add a concrete example to clarify a boundary case
-         Do NOT rewrite the entire user_message — full rewrites consistently regress.
+      You maintain full context across all phases — use what you learn from earlier
+      results to inform later decisions.
+
+      TWO DATASETS:
+      1. DETERMINISTIC ("accuracy"): Fixed guardrail. Do not degrade AC1 > 0.02.
+      2. FEEDBACK ("feedback"): Optimization target. Improve AC1 on 90-day items.
+
+      TOOLS:
+      - str_replace_editor: view or edit score_config.yaml
+      - submit_score_version: submit current edits for evaluation
+      - done: signal you cannot improve current hypothesis
 
       EDIT SAFETY — ranked:
       SAFEST: Add concrete examples to clarify edge cases
@@ -157,27 +164,7 @@ agents:
       RISKY: Expand or broaden criteria (may hurt accuracy)
       DANGEROUS: Remove criteria or rewrite entire user_message (almost always hurts)
 
-      WORKFLOW — you drive the editing session:
-      You will receive the full file content and RCA analysis in your first message.
-      You have full control of this editing session. You can make multiple edits,
-      view the file, think, and iterate until you are satisfied.
-
-      Available tools:
-      - str_replace_editor: view or edit the file (view, str_replace, insert commands)
-      - submit_score_code: submit your changes as a new version (ends the session)
-      - done: give up if you cannot find a viable improvement (ends the session)
-
-      The file content is provided in your initial context, so you do NOT need to
-      call view first — but you can if you want to re-read after edits.
-
-      When you are satisfied with your edit(s), call submit_score_code with a
-      version_note describing what you changed and why.
-
-      If you cannot find any viable improvement:
-        Call done(success=False, reason="cannot_improve: <explanation>")
-
       YAML RULES:
-      - Make exactly ONE change per iteration
       - old_str must be an exact substring of the current file (copy from the context)
       - Preserve indentation exactly — count spaces from the file shown to you
       - When adding a list item, include the previous item in old_str for context
@@ -187,7 +174,7 @@ agents:
 
     tools:
       - str_replace_editor
-      - submit_score_code
+      - submit_score_version
       - done
 
   reviewer:
@@ -218,52 +205,11 @@ agents:
     tools:
       - done
 
-  synthesizer:
-    provider: openai
-    model: gpt-4o
-    system_prompt: |
-      You are a score configuration synthesizer. You see multiple candidate edits
-      to a Plexus score configuration and their evaluation results.
-      Your job: combine the best ideas from multiple candidates into ONE improved version.
-
-      RULES:
-      - Start from the base YAML shown in the editor (score_config.yaml)
-      - Study each candidate's diff and evaluation metrics carefully
-      - If candidates edited DIFFERENT regions: apply BOTH changes (they are independent)
-      - If candidates edited the SAME region: pick the better version, or merge the wording
-      - If one candidate is clearly dominant on all metrics: just replicate its exact changes
-      - HARD CONSTRAINT: Do NOT degrade accuracy. Prefer safe combinations.
-      - Make exactly the changes needed — do not add your own novel edits beyond what candidates tried
-
-      WORKFLOW — call BOTH tools in ONE response:
-      1. Decide which changes to apply from which candidates
-      2. Call str_replace_editor for each change you want to apply
-      3. Call submit_score_code with a version_note explaining what you combined
-
-      IMPORTANT: You MUST call submit_score_code in every response.
-      If you only call str_replace_editor without submit_score_code, the iteration is wasted.
-
-      YAML RULES — read carefully to avoid validation errors:
-      - The old_str must be an exact substring of the current configuration
-      - YAML indentation must be correct in the replacement text
-      - When adding a list item, include the previous item in old_str for context
-
-      REWRITING user_message: Call str_replace_editor(command="view") FIRST to get
-      the exact indentation. Then use that SAME indentation in all new_str lines.
-      Wrong indentation = YAML parse error "expected <block end>, but found '?'".
-
-    initial_message: "Ready to synthesize."
-
-    tools:
-      - str_replace_editor
-      - submit_score_code
-      - done
-
 stages:
   - setup
   - baseline
   - exploration
-  - synthesis
+  - selection
   - finalize
 
 code: |
@@ -350,48 +296,6 @@ code: |
     }
   end
 
-  local function compute_yaml_diff(base, modified)
-    if base == modified then return "(no changes)" end
-    local base_lines = {}
-    for line in (base .. "\n"):gmatch("([^\n]*)\n") do
-      table.insert(base_lines, line)
-    end
-    local mod_lines = {}
-    for line in (modified .. "\n"):gmatch("([^\n]*)\n") do
-      table.insert(mod_lines, line)
-    end
-    local diff_parts = {}
-    local max_lines = math.max(#base_lines, #mod_lines)
-    local context = 2
-    local last_diff_line = 0
-    for i = 1, max_lines do
-      local bl = base_lines[i] or ""
-      local ml = mod_lines[i] or ""
-      if bl ~= ml then
-        -- Context before (if gap since last diff)
-        if i - last_diff_line > context + 1 then
-          table.insert(diff_parts, "...")
-        end
-        for c = math.max(last_diff_line + 1, i - context), i - 1 do
-          table.insert(diff_parts, string.format(" %4d  %s", c, base_lines[c] or ""))
-        end
-        if bl ~= "" then
-          table.insert(diff_parts, string.format("-%4d  %s", i, bl))
-        end
-        if ml ~= "" then
-          table.insert(diff_parts, string.format("+%4d  %s", i, ml))
-        end
-        last_diff_line = i
-      end
-    end
-    -- Context after last diff
-    for c = last_diff_line + 1, math.min(last_diff_line + context, #base_lines) do
-      table.insert(diff_parts, string.format(" %4d  %s", c, base_lines[c] or ""))
-    end
-    if #diff_parts == 0 then return "(no visible changes)" end
-    return table.concat(diff_parts, "\n")
-  end
-
   local function call_plexus_tool(tool_name, args_table)
     -- Direct programmatic tool invocation via Tactus Tool.get() API
     -- No LLM agent involved — calls MCP tools directly from Lua
@@ -439,9 +343,8 @@ code: |
         note = "  <- current base"
       end
 
-      local synth_tag = iter.synthesis_won and " [SYNTH]" or ""
       table.insert(lines, string.format("%-8s  %-38s  %-10s  %-12s  %-7s  %-12s  %-7s%s",
-        tostring(iter.iteration) .. synth_tag, tostring(iter.score_version_id), status_str,
+        tostring(iter.iteration), tostring(iter.score_version_id), status_str,
         fb_ac1, fb_delta, acc_ac1, acc_delta, note))
       -- Show what was tried so the agent doesn't repeat failed approaches
       if iter.done_reason and iter.done_reason ~= "" then
@@ -506,39 +409,23 @@ code: |
     return rca
   end
 
-  -- Build a candidate-specific strategy instruction
-  -- Diversify candidates across RCA error categories.
-  -- Each candidate targets a different category from the RCA analysis.
-  local function build_candidate_strategy(candidate_index, num_candidates, rca_categories,
-                                           consecutive_acc_rejections)
-    -- If accuracy has regressed repeatedly, all candidates are conservative
-    if consecutive_acc_rejections >= 2 then
-      return "STRATEGY: SAFEST only — add examples to clarify edge cases. Do NOT modify criteria."
-    end
-
-    if num_candidates <= 1 then
-      return ""  -- single candidate, use default behavior
-    end
-
-    local num_categories = type(rca_categories) == "table" and #rca_categories or 0
-    local target_idx = math.min(candidate_index, math.max(num_categories, 1))
-
-    if num_categories < 2 then
-      if candidate_index == 1 then
-        return "STRATEGY: Target the top error category. Use SAFEST edits — add examples or sharpen wording."
-      else
-        return "STRATEGY: Target the top error category with a BOLDER approach. " ..
-          "You ARE ALLOWED to modify criteria wording, add conditions, or restructure."
+  -- Parse numbered hypotheses from an agent planning response
+  local function parse_hypotheses(response_text)
+    local hypotheses = {}
+    if type(response_text) ~= "string" then return hypotheses end
+    for num, rest in response_text:gmatch("(%d+)%.%s*([^\n]+)") do
+      local name, desc = rest:match("^([^:]+):%s*(.+)$")
+      if not name then
+        name = "Hypothesis " .. num
+        desc = rest
       end
+      table.insert(hypotheses, {
+        index = tonumber(num),
+        name = name:match("^%s*(.-)%s*$"),
+        description = desc:match("^%s*(.-)%s*$")
+      })
     end
-
-    return string.format(
-      "STRATEGY: You are candidate %d of %d. Each candidate targets a DIFFERENT error category.\n" ..
-      "YOUR ASSIGNMENT: Focus on the #%d ranked error category from the RCA above.\n" ..
-      "Do NOT address other categories — other candidates handle those.\n" ..
-      "Make exactly ONE targeted edit to fix the error pattern described in that category.\n" ..
-      "Use SAFEST or SAFE edits. The synthesis step will combine the best fixes from all candidates.",
-      candidate_index, num_candidates, target_idx, target_idx)
+    return hypotheses
   end
 
   -- Exploration success classification: noise-aware thresholds
@@ -552,12 +439,8 @@ code: |
     return (fb_d > A_PHASE_FB_THRESHOLD) and (acc_d >= A_PHASE_ACC_THRESHOLD)
   end
 
-  local function should_synthesize(succeeded_candidates)
-    return #succeeded_candidates >= 2
-  end
-
-  -- Build the full context message for the coding agent
-  local function build_coding_context(opts)
+  -- Build the full context message for the planning phase
+  local function build_planning_context(opts)
     local parts = {}
 
     table.insert(parts, string.format('Score: "%s" | Scorecard: "%s"', opts.score_name, opts.scorecard_name))
@@ -825,27 +708,31 @@ code: |
       table.insert(parts, opts.hint)
     end
 
-    -- Iteration-specific instruction
+    -- Planning task instruction
     local cons_failed = opts.consecutive_failed_cycles or 0
     table.insert(parts, "")
     table.insert(parts, "=== YOUR TASK (cycle " .. tostring(opts.iteration) .. ") ===")
     table.insert(parts, "PRIMARY OBJECTIVE: Improve feedback alignment (AC1 on the 90-day items).")
     table.insert(parts, "Accuracy is a FLOOR — do not let it drop more than ~2 percentage points.")
     table.insert(parts, "")
-
-    table.insert(parts, "IMPORTANT: You edit score_config.yaml (the YAML+Lua file shown between the === markers above).")
-    table.insert(parts, "The classification guidelines above are for reference only — they help you understand policy but are not editable.")
-    table.insert(parts, "Your str_replace old_str MUST be copied exactly from the score_config.yaml content above.")
-    table.insert(parts, "The RCA quotes are paraphrased — do NOT use RCA text as old_str.")
+    table.insert(parts, "Analyze the RCA above and propose 2-3 hypotheses to test.")
+    table.insert(parts, "Each hypothesis should target a different error pattern from the RCA.")
     table.insert(parts, "")
-    table.insert(parts, "Use the RCA analysis above to identify the most impactful fix.")
-    table.insert(parts, "Choose the fix scope based on the RCA findings:")
-    table.insert(parts, "  TARGETED CRITERIA FIX: Adjust specific YES/NO conditions (1-3 lines).")
-    table.insert(parts, "    Do NOT rewrite the entire user_message — full rewrites cause regressions.")
-    table.insert(parts, "  TARGETED RULE: If the question is right but a specific case is unhandled —")
-    table.insert(parts, "    add a precise rule or example that handles the pattern.")
-    table.insert(parts, "  EXAMPLE ADDITION: If the question and rules are right but ambiguous —")
-    table.insert(parts, "    add a concrete example illustrating the boundary case.")
+    table.insert(parts, "Fix scope options (ranked by safety):")
+    table.insert(parts, "  SAFEST: Add concrete examples to clarify edge cases")
+    table.insert(parts, "  SAFE: Sharpen existing criteria with specific language")
+    table.insert(parts, "  MODERATE: Adjust 1-3 lines of existing criteria wording")
+    table.insert(parts, "  RISKY: Expand or broaden criteria (may hurt accuracy)")
+    table.insert(parts, "  DANGEROUS: Remove criteria or rewrite entire user_message (almost always hurts)")
+    table.insert(parts, "")
+    table.insert(parts, "IMPORTANT: The classification guidelines above are for reference only — they help you understand policy but are not editable.")
+    table.insert(parts, "You will edit score_config.yaml (shown between the === markers above).")
+    table.insert(parts, "Do NOT rewrite the entire user_message — full rewrites consistently regress.")
+    table.insert(parts, "")
+    table.insert(parts, "Respond with a numbered list:")
+    table.insert(parts, "1. <Hypothesis name>: <Description of what to change and why>")
+    table.insert(parts, "2. <Hypothesis name>: <Description>")
+    table.insert(parts, "...")
 
     if cons_failed >= 2 then
       table.insert(parts, "")
@@ -853,14 +740,10 @@ code: |
         "ESCALATION (%d consecutive cycles with no feedback improvement):", cons_failed))
       table.insert(parts, "Previous approaches have NOT worked. You MUST try something DIFFERENT.")
       table.insert(parts, "Review the OPTIMIZATION HISTORY above — do NOT repeat any approach that already failed.")
-      table.insert(parts, "Try a completely different angle: target a different error pattern, adjust different")
-      table.insert(parts, "criteria, or add different examples. But do NOT do a full user_message rewrite.")
     elseif cons_failed >= 1 then
       table.insert(parts, "")
       table.insert(parts, "NOTE: Previous cycle produced no feedback improvement.")
       table.insert(parts, "Review the OPTIMIZATION HISTORY and try a different approach than what was tried before.")
-    else
-      table.insert(parts, "Make ONE targeted improvement — the most impactful change you can identify.")
     end
 
     -- Explicit do-not-repeat enforcement
@@ -869,34 +752,18 @@ code: |
       table.insert(parts, "CRITICAL — DO NOT REPEAT FAILED APPROACHES:")
       table.insert(parts, "The OPTIMIZATION HISTORY above shows what was tried in previous cycles and the results.")
       table.insert(parts, "You MUST try a DIFFERENT approach from anything that already failed.")
-      table.insert(parts, "Full user_message rewrites have consistently caused large regressions (-10% or worse).")
-      table.insert(parts, "Instead: make targeted, surgical changes to specific criteria or add specific examples.")
-    end
-
-    -- Candidate-specific strategy override (multi-candidate mode)
-    if has_text(opts.candidate_strategy) then
-      table.insert(parts, "")
-      table.insert(parts, opts.candidate_strategy)
     end
 
     -- Escalating warning based on prior accuracy regressions
     if consecutive_acc_rejections >= 2 then
       table.insert(parts, "")
       table.insert(parts, string.format("CRITICAL WARNING: %d consecutive iterations REJECTED for accuracy regression.", consecutive_acc_rejections))
-      table.insert(parts, "You MUST NOT change, expand, or broaden any scoring criteria.")
-      table.insert(parts, "Your ONLY allowed change: add a concrete example to a '- ' bullet point to illustrate edge cases.")
-      table.insert(parts, "Example: Append '(e.g., \"we both need to be there\")' to an existing bullet point.")
-      table.insert(parts, "If you cannot find a safe example addition, call done(reason=\"cannot_improve: accuracy risk too high\").")
+      table.insert(parts, "All hypotheses MUST use SAFEST edits only: add examples to clarify edge cases.")
     elseif consecutive_acc_rejections >= 1 then
       table.insert(parts, "")
       table.insert(parts, "WARNING: Prior iteration was REJECTED for accuracy regression.")
-      table.insert(parts, "You MUST prefer SAFEST edits only: add examples to clarify edge cases.")
-      table.insert(parts, "Do NOT expand criteria, broaden conditions, or add new bullet points.")
+      table.insert(parts, "All hypotheses MUST prefer SAFEST edits: add examples to clarify edge cases.")
     end
-
-    table.insert(parts, "")
-    table.insert(parts, "REQUIRED: You must call submit_score_code to submit your changes when done editing.")
-    table.insert(parts, "You can make multiple edits before submitting. Call done() if you cannot improve.")
 
     return table.concat(parts, "\n")
   end
@@ -959,78 +826,6 @@ code: |
     table.insert(parts, "")
     table.insert(parts, 'REQUIRED: Call done(decision="keep", reason="...") or done(decision="revert", reason="...") NOW.')
     table.insert(parts, "Do NOT return a text response without calling this tool.")
-
-    return table.concat(parts, "\n")
-  end
-
-  local function build_synthesis_context(opts)
-    local parts = {}
-    table.insert(parts, "=== A-PHASE EXPLORATION RESULTS ===")
-    table.insert(parts, "")
-    table.insert(parts, string.format("Score: %s | Scorecard: %s | Cycle: %d",
-      opts.score_name, opts.scorecard_name, opts.cycle))
-    table.insert(parts, string.format("Base version: %s", tostring(opts.base_version_id or "unknown")))
-    table.insert(parts, "")
-    table.insert(parts, "Each candidate targeted a DIFFERENT error category from the RCA.")
-    table.insert(parts, "Each made an independent fix to the same base configuration.")
-    table.insert(parts, "Below are ALL exploration results — succeeded and failed.")
-    table.insert(parts, "Your job: combine ONLY the SUCCEEDED fixes into ONE version.")
-    table.insert(parts, "")
-
-    -- Base YAML reference
-    table.insert(parts, "The editor is loaded with the BASE configuration (before any candidate edits).")
-    table.insert(parts, "Apply your combined changes using str_replace_editor, then submit_score_code.")
-    table.insert(parts, "")
-
-    -- Show ALL exploration candidates with success/failure labels
-    if opts.all_exploration_results then
-      for _, cand in ipairs(opts.all_exploration_results) do
-        local status_label = cand.succeeded and "SUCCEEDED" or "FAILED"
-        local fb_d = cand.fb_deltas and cand.fb_deltas.alignment or 0
-        local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
-        local failure_reason = ""
-        if not cand.succeeded then
-          if acc_d < A_PHASE_ACC_THRESHOLD then
-            failure_reason = " (accuracy regression)"
-          elseif fb_d <= A_PHASE_FB_THRESHOLD then
-            failure_reason = " (insufficient feedback improvement)"
-          end
-        end
-
-        table.insert(parts, string.format("=== CANDIDATE %d — %s%s ===",
-          cand.index, status_label, failure_reason))
-        table.insert(parts, string.format("RCA target: category #%d", cand.target_category or cand.index))
-        table.insert(parts, string.format("Edit: %s", cand.done_reason or "(none)"))
-        table.insert(parts, string.format("FB AC1 delta: %+.3f  |  ACC AC1 delta: %+.3f",
-          fb_d, acc_d))
-
-        if cand.succeeded and cand.yaml_diff then
-          table.insert(parts, "")
-          table.insert(parts, "Diff from base:")
-          table.insert(parts, cand.yaml_diff)
-        end
-        table.insert(parts, "")
-      end
-    end
-
-    -- Full RCA context
-    if opts.feedback_rca and type(opts.feedback_rca) == "table" then
-      if opts.feedback_rca.overall_explanation then
-        table.insert(parts, "=== FEEDBACK RCA CONTEXT ===")
-        table.insert(parts, tostring(opts.feedback_rca.overall_explanation))
-        table.insert(parts, "")
-      end
-    end
-
-    table.insert(parts, "=== YOUR TASK ===")
-    table.insert(parts, "1. Study ALL candidates above. Apply ONLY the SUCCEEDED fixes.")
-    table.insert(parts, "2. DROP all FAILED fixes — do not include them.")
-    table.insert(parts, "3. Since candidates targeted DIFFERENT error categories, their edits are usually INDEPENDENT.")
-    table.insert(parts, "   Apply ALL successful fixes — they should not conflict.")
-    table.insert(parts, "4. If two edits DO overlap in the same YAML region, merge them carefully or pick the better one.")
-    table.insert(parts, "5. HARD CONSTRAINT: Do NOT degrade accuracy. Do NOT add your own novel edits.")
-    table.insert(parts, "")
-    table.insert(parts, "REQUIRED: Call str_replace_editor AND submit_score_code in the SAME response.")
 
     return table.concat(parts, "\n")
   end
@@ -1468,25 +1263,94 @@ code: |
     end
 
     -- ================================================================
-    -- A PHASE: Explore independent fixes
-    -- Candidate 1: structural/semantic analysis (targeted criteria adjustments)
-    -- Candidate 2: rule analysis (looks for missing specific rules)
-    -- Candidate 3+: example/RCA-item analysis (targeted condition/example additions)
-    -- All start from the same base. Results are recorded, not ranked.
+    -- PHASE 1: Planning — single agent proposes hypotheses
     -- ================================================================
     Stage.set("exploration")
     Human.notify({message = string.format(
-      "Cycle %d — Exploration: probing improvements...", cycle
+      "Cycle %d — Planning: agent proposing hypotheses...", cycle
     ), level = "info"})
 
-    local candidates = {}
-    local candidates_no_version = {}  -- candidates that failed to create a version
-    local num_cands = math.min(params.num_candidates or 3, 5)
-    local rca_categories = (current_fb_rca and current_fb_rca._category_hierarchy) or {}
+    -- Build planning context (RCA + metrics + guidelines + score config)
+    local planning_inject = build_planning_context({
+      scorecard_name = scorecard_name,
+      score_name = score_name,
+      baseline_version_id = champion_version_id,
+      last_accepted_version_id = last_accepted_version_id,
+      iterations = iterations,
+      baseline_fb_metrics = feedback_baseline_metrics,
+      baseline_acc_metrics = accuracy_baseline_metrics,
+      feedback_metrics = current_fb_metrics,
+      accuracy_metrics = current_acc_metrics,
+      feedback_rca = current_fb_rca,
+      accuracy_rca = current_acc_rca,
+      current_code = current_code,
+      current_guidelines = current_guidelines,
+      iteration = cycle,
+      consecutive_failed_cycles = consecutive_failed_cycles,
+      hint = params.hint
+    })
+
+    -- Verify inject completeness
+    local has_task = planning_inject:find("YOUR TASK") ~= nil
+    if not has_task then
+      Human.notify({message = string.format(
+        "WARNING: planning inject missing YOUR TASK section! length=%d chars", #planning_inject
+      ), level = "warning"})
+    end
+
+    -- Log planning context for debugging
+    local context_log_path = string.format("/tmp/optimizer_cycle%d_planning_context.txt", cycle)
+    File.write(context_log_path, planning_inject)
+
+    -- Start fresh conversation for this cycle
+    Tool.reset()
+    code_editor.clear_history()
+    code_editor({message = planning_inject})
+
+    -- Parse hypotheses from agent response
+    local plan_response = code_editor.output or ""
+    local hypotheses = parse_hypotheses(plan_response)
+
+    -- Retry if no hypotheses extracted
+    local plan_attempts = 1
+    while #hypotheses == 0 and plan_attempts < 3 do
+      plan_attempts = plan_attempts + 1
+      Human.notify({message = string.format(
+        "  Planning retry %d/3 (no hypotheses parsed)...", plan_attempts), level = "info"})
+      code_editor({message = "I need you to respond with a numbered list of hypotheses. Each should be on its own line starting with a number. Example:\n1. Fix degree type: Adjust conditional logic...\n2. Handle phonetic matching: Add fuzzy matching..."})
+      plan_response = code_editor.output or ""
+      hypotheses = parse_hypotheses(plan_response)
+    end
+
+    if #hypotheses == 0 then
+      -- Fallback: create a single generic hypothesis from RCA primary action
+      local rca_action = current_fb_rca and current_fb_rca._primary_next_action
+      local fallback_desc = "Address top error pattern from RCA"
+      if type(rca_action) == "table" then
+        fallback_desc = rca_action.action or rca_action.description or fallback_desc
+      end
+      hypotheses = {{index = 1, name = "RCA primary fix", description = fallback_desc}}
+    end
+
+    Human.notify({message = string.format(
+      "  Agent proposed %d hypotheses", #hypotheses), level = "info"})
+    for _, hyp in ipairs(hypotheses) do
+      Human.notify({message = string.format(
+        "    %d. %s: %s", hyp.index, hyp.name, trunc(hyp.description, 100)), level = "info"})
+    end
+
+    -- ================================================================
+    -- PHASE 2: Implement each hypothesis (continuous conversation)
+    -- ================================================================
+    local submitted_versions = {}
     local any_cannot_improve = false
 
-    for c = 1, num_cands do
-      -- Reset editor to base YAML for each candidate
+    for h = 1, #hypotheses do
+      local hyp = hypotheses[h]
+      Human.notify({message = string.format(
+        "  Hypothesis %d/%d: %s", h, #hypotheses, hyp.name), level = "info"})
+
+      -- Reset editor to baseline code for each hypothesis
       call_plexus_tool("score_editor_setup", {
         scorecard_identifier = params.scorecard,
         score_identifier     = params.score,
@@ -1495,242 +1359,186 @@ code: |
         iteration            = cycle
       })
 
-      -- Build candidate-specific context
-      local strategy = build_candidate_strategy(
-        c, num_cands, rca_categories, consecutive_acc_rejections)
-      local inject = build_coding_context({
-        scorecard_name = scorecard_name,
-        score_name = score_name,
-        baseline_version_id = champion_version_id,
-        last_accepted_version_id = last_accepted_version_id,
-        iterations = iterations,
-        baseline_fb_metrics = feedback_baseline_metrics,
-        baseline_acc_metrics = accuracy_baseline_metrics,
-        feedback_metrics = current_fb_metrics,
-        accuracy_metrics = current_acc_metrics,
-        feedback_rca = current_fb_rca,
-        accuracy_rca = current_acc_rca,
-        current_code = current_code,
-        current_guidelines = current_guidelines,
-        iteration = cycle,
-        candidate_strategy = strategy,
-        consecutive_failed_cycles = consecutive_failed_cycles,
-        hint = params.hint
-      })
-
-      -- Verify inject completeness — critical sections must be present
-      local has_task = inject:find("YOUR TASK") ~= nil
-      local has_strategy = inject:find("CANDIDATE") ~= nil or inject:find("TARGETED") ~= nil
-      local has_tool_req = inject:find("str_replace_editor") ~= nil
-      if not has_task then
-        Human.notify({message = string.format(
-          "WARNING: inject missing YOUR TASK section! length=%d chars — context engineering bug", #inject
-        ), level = "warning"})
-      end
-
-      Tool.reset()
-      code_editor.clear_history()
-      local approach_label = c == 1 and "structural" or (c == 2 and "rule-based" or "example-based")
-      Human.notify({message = string.format(
-        "  Candidate %d/%d (%s approach): generating edit... [inject=%d chars, task=%s]",
-        c, num_cands, approach_label, #inject, has_task and "ok" or "MISSING!"
-      ), level = "info"})
-
-      -- Log the full LLM context for debugging
-      local context_log_path = string.format("/tmp/optimizer_cycle%d_cand%d_context.txt", cycle, c)
-      local full_context = "═══════════════════════════════════════════════════════════\n"
-        .. "FULL LLM CONTEXT — Cycle " .. cycle .. " Candidate " .. c .. "\n"
-        .. "═══════════════════════════════════════════════════════════\n\n"
-        .. ">>> [1] SYSTEM PROMPT (static, from YAML code_editor.system_prompt):\n"
-        .. "--- See feedback_alignment_optimizer.yaml agents.code_editor.system_prompt ---\n"
-        .. "(System prompt is static across all candidates; not repeated here for brevity)\n\n"
-        .. ">>> [2] ASSISTANT (initial_message): Ready.\n\n"
-        .. ">>> [3] USER MESSAGE (the inject — this is the key context engineering surface):\n"
-        .. "───────────────────────────────────────────────────────────\n"
-        .. inject .. "\n"
-        .. "───────────────────────────────────────────────────────────\n"
-        .. ">>> END OF INITIAL LLM CONTEXT\n"
-        .. "(After this, the harness guides the agent through edit→submit steps)\n"
-      File.write(context_log_path, full_context)
-
-      -- ReAct loop: agent drives the editing session autonomously.
-      -- It can view, edit, edit again, think, etc. The loop ends when the agent
-      -- calls submit_score_code (success) or done (give up), or we hit max_steps.
-      local cand_version_id = nil
-      local cand_done_reason = ""
-      local max_react_steps = 10  -- safety limit to prevent runaway loops
-      local step = 0
+      -- Inner ReAct loop for this hypothesis
+      local max_react_steps = 10
+      local version_id = nil
+      local hyp_done_reason = ""
 
       for react_step = 1, max_react_steps do
-        step = react_step
-        local msg
+        Tool.reset()
 
+        local msg
         if react_step == 1 then
-          -- Initial turn: full context + file content (no view needed)
-          msg = inject
-            .. "\n\nThe file content is shown above — you do NOT need to call view."
-            .. "\nYou have full control of this editing session. You can:"
-            .. "\n  - Call str_replace_editor to view or edit the file"
-            .. "\n  - Make multiple edits before submitting"
-            .. "\n  - Call submit_score_code(version_note=\"...\") when you are satisfied with your changes"
-            .. "\n  - Call done(reason=\"cannot_improve: ...\") if you cannot find a viable improvement"
-            .. "\nThe session ends when you call submit_score_code or done."
+          -- First step for this hypothesis — inject current file as system message
+          local editor_content = call_plexus_tool("score_editor_get_content", {})
+          if editor_content and editor_content.content then
+            code_editor.history:add({
+              role = "system",
+              content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
+                .. editor_content.content
+                .. "\n=== END OF score_config.yaml ==="
+            })
+          end
+
+          msg = string.format(
+            "Implement hypothesis %d of %d: %s\n\n%s\n\n"
+            .. "Edit score_config.yaml to test this hypothesis. "
+            .. "The current file content is shown in the system message above.\n"
+            .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
+            .. "The RCA quotes are paraphrased — do NOT use RCA text as old_str.\n"
+            .. "When done, call submit_score_version(version_note='...') to submit.\n"
+            .. "Call done(reason='cannot_improve: ...') if you cannot find a viable edit.",
+            h, #hypotheses, hyp.name, hyp.description)
         else
           -- Subsequent turns: provide feedback on what just happened
           local last_edit = Tool.last_call("str_replace_editor")
-          local last_submit = Tool.last_call("submit_score_code")
+          local last_submit = Tool.last_call("submit_score_version")
           local last_done = Tool.last_call("done")
 
-          -- Build status message
-          local parts = {}
+          local feedback_parts = {}
           if last_edit then
             local edit_result = tostring(last_edit.result or "")
             local edit_command = (last_edit.args and last_edit.args.command) or ""
             if edit_command == "view" then
-              -- View doesn't change the file — remind the agent to make an actual edit
-              table.insert(parts, "File viewed successfully. The file has NOT been modified yet.")
-              table.insert(parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_code to submit.")
+              table.insert(feedback_parts, "File viewed successfully. The file has NOT been modified yet.")
+              table.insert(feedback_parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_version to submit.")
             elseif string.find(edit_result, "Error") then
-              table.insert(parts, "Your str_replace_editor call returned an error:\n" .. edit_result)
-              table.insert(parts, "\nYou can retry the edit with corrected old_str, or call view to re-read the file and copy the exact text.")
+              table.insert(feedback_parts, "Your str_replace_editor call returned an error:\n" .. edit_result)
+              table.insert(feedback_parts, "\nYou can retry the edit with corrected old_str, or call view to re-read the file and copy the exact text.")
             else
-              table.insert(parts, "Edit applied successfully.")
-              table.insert(parts, "You can make more edits, or call submit_score_code(version_note=\"...\") to submit.")
+              table.insert(feedback_parts, "Edit applied successfully.")
+              table.insert(feedback_parts, "You can make more edits, or call submit_score_version(version_note=\"...\") to submit.")
             end
           end
           if last_submit then
             local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
             if ok_sub and sub_result and sub_result.error then
               local err_text = tostring(sub_result.error)
-              table.insert(parts, "submit_score_code returned an error:\n  " .. err_text)
+              table.insert(feedback_parts, "submit_score_version returned an error:\n  " .. err_text)
               if string.find(err_text, "most recent str_replace_editor") then
-                table.insert(parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_code again.")
+                table.insert(feedback_parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_version again.")
               elseif string.find(err_text, "unchanged from the original") then
-                table.insert(parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting. Use view first if needed to see the exact text to replace.")
+                table.insert(feedback_parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting.")
               else
-                table.insert(parts, "\nFix the issue and try submit_score_code again.")
+                table.insert(feedback_parts, "\nFix the issue and try submit_score_version again.")
               end
             end
           end
-          if #parts == 0 then
-            table.insert(parts, "No recognized tool call was made.")
-            table.insert(parts, "You must call str_replace_editor, submit_score_code, or done.")
+          if #feedback_parts == 0 then
+            table.insert(feedback_parts, "No recognized tool call was made.")
+            table.insert(feedback_parts, "You must call str_replace_editor, submit_score_version, or done.")
           end
-          table.insert(parts, string.format("\n(Step %d/%d)", react_step, max_react_steps))
-          msg = table.concat(parts, "\n")
+          table.insert(feedback_parts, string.format("\n(Hypothesis %d, step %d/%d)", h, react_step, max_react_steps))
+
+          -- Inject updated file content as system message
+          local editor_content = call_plexus_tool("score_editor_get_content", {})
+          if editor_content and editor_content.content then
+            code_editor.history:add({
+              role = "system",
+              content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
+                .. editor_content.content
+                .. "\n=== END OF score_config.yaml ==="
+            })
+          end
+
+          msg = table.concat(feedback_parts, "\n")
         end
 
-        Tool.reset()
         -- Log the feedback message for debugging context construction
         if react_step > 1 then
           Human.notify({message = string.format(
-            "  [ReAct step %d] feedback to agent (%d chars): %s",
-            react_step, #msg, msg:sub(1, 200)
+            "  [Hyp %d, step %d] feedback (%d chars): %s",
+            h, react_step, #msg, trunc(msg, 200)
           ), level = "info"})
         end
         code_editor({message = msg})
 
         -- Check termination conditions
-        local submit_call = Tool.last_call("submit_score_code")
+        local submit_call = Tool.last_call("submit_score_version")
         if submit_call then
           local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
           if ok and submit_result and submit_result.version_id then
-            cand_version_id = submit_result.version_id
-            Human.notify({message = string.format("  Candidate %d version: %s (step %d)", c, cand_version_id, react_step), level = "info"})
+            version_id = submit_result.version_id
+            Human.notify({message = string.format("    Hypothesis %d submitted: %s (step %d)", h, version_id, react_step), level = "info"})
             break
           elseif ok and submit_result and submit_result.error then
-            Human.notify({message = string.format("  Candidate %d submit error (step %d): %s", c, react_step, tostring(submit_result.error)), level = "warning"})
-            -- Continue loop — agent can fix and retry
+            Human.notify({message = string.format("    Hypothesis %d submit error (step %d): %s", h, react_step, tostring(submit_result.error)), level = "warning"})
           end
         end
 
         local done_call = Tool.last_call("done")
         if done_call then
-          Human.notify({message = string.format("  Candidate %d: agent called done (step %d)", c, react_step), level = "info"})
+          Human.notify({message = string.format("    Hypothesis %d: agent called done (step %d)", h, react_step), level = "info"})
+          -- Extract done reason
+          local ok_res, done_result = pcall(function() return safe_decode(done_call.result) end)
+          if ok_res and done_result and has_text(done_result.reason) then
+            hyp_done_reason = done_result.reason
+          end
+          if not has_text(hyp_done_reason) then
+            local ok_r, reason_val = pcall(function() return done_call.args.reason end)
+            if ok_r and has_text(reason_val) then
+              hyp_done_reason = string.gsub(reason_val, "\\n", "\n")
+            end
+          end
+          if string.find(string.lower(hyp_done_reason), "cannot_improve") then
+            any_cannot_improve = true
+          end
           break
         end
       end
 
-      if not cand_version_id and step >= max_react_steps then
-        Human.notify({message = string.format("  Candidate %d: hit max steps (%d) without submitting", c, max_react_steps), level = "warning"})
-      end
-
-      -- Extract done_reason
-      local done_call = Tool.last_call("done")
-      if done_call then
-        local ok_res, done_result = pcall(function() return safe_decode(done_call.result) end)
-        if ok_res and done_result and has_text(done_result.reason) then
-          cand_done_reason = done_result.reason
-        end
-        if not has_text(cand_done_reason) then
-          local ok_r, reason_val = pcall(function() return done_call.args.reason end)
-          if ok_r and has_text(reason_val) then
-            cand_done_reason = string.gsub(reason_val, "\\n", "\n")
-          end
-        end
-      end
-      if not has_text(cand_done_reason) and cand_version_id then
-        local sc = Tool.last_call("submit_score_code")
+      -- Extract version_note as done_reason if we submitted
+      if not has_text(hyp_done_reason) and version_id then
+        local sc = Tool.last_call("submit_score_version")
         if sc then
           local ok_a, note = pcall(function() return sc.args.version_note end)
-          if ok_a and has_text(note) then cand_done_reason = note end
+          if ok_a and has_text(note) then hyp_done_reason = note end
         end
       end
 
-      -- Check for cannot_improve signal
-      if string.find(string.lower(cand_done_reason), "cannot_improve") then
-        any_cannot_improve = true
+      -- Record submitted version
+      if version_id then
+        table.insert(submitted_versions, {
+          index = h,
+          version_id = version_id,
+          done_reason = hyp_done_reason,
+          hypothesis = hyp
+        })
       end
 
-      if cand_version_id then
-        table.insert(candidates, {
-          index = c,
-          version_id = cand_version_id,
-          done_reason = cand_done_reason,
-          strategy = strategy,
-          target_category = math.min(c, math.max(#rca_categories, 1))
-        })
+      -- Transition message to conversation history (so agent has full context)
+      if version_id then
+        code_editor.history:add({role = "user", content = string.format(
+          "Hypothesis %d ('%s') submitted as version %s. Evaluation will run after all hypotheses are complete.",
+          h, hyp.name, version_id)})
       else
-        Human.notify({message = string.format("  Candidate %d failed (no version created)", c), level = "warning"})
-        -- Track failed-to-create candidates in version history so agents don't repeat them
-        table.insert(candidates_no_version, {
-          index = c,
-          version_id = nil,
-          done_reason = cand_done_reason ~= "" and cand_done_reason or ("candidate " .. c .. " failed to create version"),
-          strategy = strategy,
-          succeeded = false,
-          no_version = true
-        })
+        code_editor.history:add({role = "user", content = string.format(
+          "Hypothesis %d ('%s') was not submitted (no viable edit found). Reason: %s",
+          h, hyp.name, has_text(hyp_done_reason) and hyp_done_reason or "unknown")})
+      end
+
+      -- Preview next hypothesis in conversation
+      if h < #hypotheses then
+        code_editor.history:add({role = "user", content = string.format(
+          "Moving to hypothesis %d of %d: %s\n%s",
+          h+1, #hypotheses, hypotheses[h+1].name, hypotheses[h+1].description)})
       end
     end
 
-    -- Check if ALL candidates signaled cannot_improve
-    if #candidates == 0 and any_cannot_improve then
-      Human.notify({message = "All candidates signaled cannot_improve — cycle skipped", level = "info"})
+    -- ================================================================
+    -- PHASE 3: Batch evaluate all submitted versions
+    -- ================================================================
+    if #submitted_versions == 0 then
+      -- No hypotheses produced a version
+      local skip_reason = any_cannot_improve and "cannot_improve" or "all_hypotheses_failed"
+      Human.notify({message = string.format(
+        "Cycle %d — No hypotheses submitted (%s)", cycle, skip_reason), level = "info"})
       consecutive_failed_cycles = consecutive_failed_cycles + 1
       local cycle_log = {
         iteration = cycle,
         accepted = false,
-        skip_reason = "cannot_improve",
-        num_candidates = num_cands
-      }
-      table.insert(iterations, cycle_log)
-      State.set("iterations", iterations)
-      if consecutive_failed_cycles >= 5 then
-        stop_reason = "improvement_plateau"
-        break
-      end
-      if Stop.requested() then stop_reason = "user_stopped"; break end
-
-    elseif #candidates == 0 then
-      Human.notify({message = string.format("All candidates failed at cycle %d (no versions created) — cycle skipped", cycle), level = "warning"})
-      consecutive_failed_cycles = consecutive_failed_cycles + 1
-      local cycle_log = {
-        iteration = cycle,
-        accepted = false,
-        skip_reason = "all_candidates_failed",
-        num_candidates = num_cands,
-        exploration_no_version = candidates_no_version
+        skip_reason = skip_reason,
+        num_candidates = #hypotheses
       }
       table.insert(iterations, cycle_log)
       State.set("iterations", iterations)
@@ -1741,11 +1549,9 @@ code: |
       if Stop.requested() then stop_reason = "user_stopped"; break end
 
     else
-      -- ================================================================
-      -- A PHASE continued: Batch-eval ALL candidates in parallel
-      -- ================================================================
+      -- Batch-eval all submitted hypothesis versions
       local batch = {}
-      for _, cand in ipairs(candidates) do
+      for _, sv in ipairs(submitted_versions) do
         if accuracy_available then
           table.insert(batch, {
             scorecard_name = params.scorecard,
@@ -1753,9 +1559,9 @@ code: |
             evaluation_type = "accuracy",
             dataset_id = dataset_id,
             n_samples = params.max_samples or 100,
-            version = cand.version_id,
+            version = sv.version_id,
             baseline = accuracy_baseline_id,
-            notes = string.format("Cycle %d Exploration probe %d (accuracy): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
+            notes = string.format("Cycle %d hypothesis %d (accuracy): %s", cycle, sv.index, trunc(sv.done_reason or "", 100))
           })
         end
         table.insert(batch, {
@@ -1765,93 +1571,88 @@ code: |
           days = params.days,
           max_feedback_items = params.max_samples or 100,
           sampling_mode = "newest",
-          version = cand.version_id,
+          version = sv.version_id,
           baseline = feedback_baseline_id,
           wait = true,
-          notes = string.format("Cycle %d Exploration probe %d (feedback): %s", cycle, cand.index, string.sub(cand.done_reason or "", 1, 100))
+          notes = string.format("Cycle %d hypothesis %d (feedback): %s", cycle, sv.index, trunc(sv.done_reason or "", 100))
         })
       end
 
       Human.notify({message = string.format(
-        "  Evaluating %d candidates (%d evals in parallel)...",
-        #candidates, #batch
+        "  Evaluating %d hypotheses (%d evals in parallel)...",
+        #submitted_versions, #batch
       ), level = "info"})
 
       local batch_results = call_plexus_tool("plexus_evaluation_run", {batch = batch})
 
       -- Parse results
-      local evals_per_cand = accuracy_available and 2 or 1
-      local batch_size = type(batch_results) == "table" and #batch_results or 0
-      Human.notify({message = string.format("  DEBUG: batch has %d results, evals_per_cand=%d", batch_size, evals_per_cand), level = "info"})
-      for i, cand in ipairs(candidates) do
-        local base_idx = (i - 1) * evals_per_cand
+      local evals_per = accuracy_available and 2 or 1
+      for i, sv in ipairs(submitted_versions) do
+        local base_idx = (i - 1) * evals_per
         if accuracy_available then
           local acc_r = batch_results and batch_results[base_idx + 1]
           if acc_r and (acc_r.id or acc_r.evaluation_id) then
-            cand.acc_metrics = extract_metrics(acc_r)
-            cand.acc_deltas = calculate_deltas(cand.acc_metrics, accuracy_baseline_metrics)
-            cand.acc_rca = enrich_rca(acc_r.root_cause or {})
-            cand.acc_eval_id = acc_r.id or acc_r.evaluation_id
-          else
-            Human.notify({message = string.format("  DEBUG cand%d: acc_r[%d] nil=%s has_id=%s", i, base_idx+1, tostring(acc_r == nil), tostring(acc_r and (acc_r.id ~= nil) or false)), level = "warning"})
+            sv.acc_metrics = extract_metrics(acc_r)
+            sv.acc_deltas = calculate_deltas(sv.acc_metrics, accuracy_baseline_metrics)
+            sv.acc_rca = enrich_rca(acc_r.root_cause or {})
+            sv.acc_eval_id = acc_r.id or acc_r.evaluation_id
           end
         end
-        local fb_r = batch_results and batch_results[base_idx + evals_per_cand]
+        local fb_r = batch_results and batch_results[base_idx + evals_per]
         if fb_r and (fb_r.id or fb_r.evaluation_id) then
-          cand.fb_metrics = extract_metrics(fb_r)
-          cand.fb_deltas = calculate_deltas(cand.fb_metrics, feedback_baseline_metrics)
-          cand.fb_rca = enrich_rca(fb_r.root_cause or {})
-          cand.fb_eval_id = fb_r.id or fb_r.evaluation_id
-          Human.notify({message = string.format("  DEBUG cand%d: fb_r[%d] id=%s align=%.4f", i, base_idx+evals_per_cand, tostring(fb_r.id), cand.fb_metrics.alignment), level = "info"})
-        else
-          Human.notify({message = string.format("  DEBUG cand%d: fb_r[%d] nil=%s has_id=%s error=%s", i, base_idx+evals_per_cand, tostring(fb_r == nil), tostring(fb_r and (fb_r.id ~= nil) or false), tostring(fb_r and fb_r.error or "none")), level = "warning"})
+          sv.fb_metrics = extract_metrics(fb_r)
+          sv.fb_deltas = calculate_deltas(sv.fb_metrics, feedback_baseline_metrics)
+          sv.fb_rca = enrich_rca(fb_r.root_cause or {})
+          sv.fb_eval_id = fb_r.id or fb_r.evaluation_id
         end
       end
 
-      -- ================================================================
-      -- A PHASE: Classify candidates as succeeded/failed
-      -- ================================================================
+      -- Classify hypotheses as succeeded/failed
       local succeeded = {}
       local failed = {}
-      for _, cand in ipairs(candidates) do
-        cand.succeeded = classify_exploration_success(cand)
-        if cand.succeeded then
-          table.insert(succeeded, cand)
+      for _, sv in ipairs(submitted_versions) do
+        sv.succeeded = classify_exploration_success(sv)
+        if sv.succeeded then
+          table.insert(succeeded, sv)
         else
-          table.insert(failed, cand)
+          table.insert(failed, sv)
         end
       end
 
-      -- Log exploration results
+      -- Log results
       Human.notify({message = string.format(
-        "  Exploration results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
-      for _, cand in ipairs(candidates) do
-        local status_label = cand.succeeded and "SUCCEEDED" or "FAILED"
-        local fb_d = cand.fb_deltas and cand.fb_deltas.alignment or 0
-        local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
+        "  Results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
+      for _, sv in ipairs(submitted_versions) do
+        local status_label = sv.succeeded and "SUCCEEDED" or "FAILED"
+        local fb_d = sv.fb_deltas and sv.fb_deltas.alignment or 0
+        local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or 0
         Human.notify({message = string.format(
-          "    Cand %d [%s]: FB AC1 %+.3f, ACC AC1 %+.3f  [%s]",
-          cand.index, status_label, fb_d, acc_d,
-          string.sub(cand.done_reason or "", 1, 60)
+          "    Hyp %d [%s]: FB AC1 %+.3f, ACC AC1 %+.3f  [%s]",
+          sv.index, status_label, fb_d, acc_d,
+          trunc(sv.done_reason or "", 60)
         ), level = "info"})
       end
 
       -- ================================================================
-      -- B PHASE: Combine winners
+      -- PHASE 4: Selection — pick or combine best result
       -- ================================================================
+      local final_version_id = nil
+      local final_is_combined = false
+      local final_done_reason = ""
+
       if #succeeded == 0 then
-        -- No exploration candidates succeeded — skip Synthesis
+        -- No hypotheses succeeded — record as failed cycle
         Human.notify({message = string.format(
-          "Cycle %d — Synthesis: SKIP (no exploration candidates succeeded)", cycle), level = "info"})
+          "Cycle %d — Selection: SKIP (no hypotheses succeeded)", cycle), level = "info"})
         consecutive_failed_cycles = consecutive_failed_cycles + 1
 
-        -- Still record best candidate metrics for the cycle log
-        table.sort(candidates, function(a, b)
+        -- Record best hypothesis metrics for the cycle log
+        table.sort(submitted_versions, function(a, b)
           local a_fb = a.fb_deltas and a.fb_deltas.alignment or -999
           local b_fb = b.fb_deltas and b.fb_deltas.alignment or -999
           return a_fb > b_fb
         end)
-        local best = candidates[1]
+        local best = submitted_versions[1]
 
         local cycle_log = {
           iteration = cycle,
@@ -1862,17 +1663,14 @@ code: |
           accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
           feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
           accepted = false,
-          skip_reason = "no_exploration_success",
-          num_candidates = #candidates,
-          exploration_results = candidates,
-          exploration_no_version = candidates_no_version,
-          synthesis_attempted = false,
-          synthesis_won = false
+          skip_reason = "no_hypothesis_success",
+          num_candidates = #submitted_versions,
+          exploration_results = submitted_versions
         }
         table.insert(iterations, cycle_log)
         State.set("iterations", iterations)
 
-        -- Update RCA from best candidate's eval (even though cycle failed)
+        -- Update RCA from best hypothesis eval
         if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
         if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
 
@@ -1883,50 +1681,72 @@ code: |
         if Stop.requested() then stop_reason = "user_stopped"; break end
 
       else
-        -- Synthesis: we have 1+ succeeded candidates
-        Stage.set("synthesis")
-        Human.notify({message = string.format(
-          "Cycle %d — Synthesis: combining %d successful fix%s...",
-          cycle, #succeeded, #succeeded == 1 and "" or "es"), level = "info"})
-
-        local synthesis_version_id = nil
-        local synthesis_is_combined = false
-        local synthesis_done_reason = ""
+        -- We have succeeded hypotheses
+        Stage.set("selection")
 
         if #succeeded == 1 then
-          -- Only 1 succeeded — use it directly (no synthesis needed)
-          synthesis_version_id = succeeded[1].version_id
-          synthesis_done_reason = succeeded[1].done_reason or ""
-          Human.notify({message = "  Single winner — skipping synthesis, using directly", level = "info"})
+          -- Single winner — use directly
+          final_version_id = succeeded[1].version_id
+          final_done_reason = succeeded[1].done_reason or ""
+          Human.notify({message = "  Single winner — using directly", level = "info"})
 
-        elseif should_synthesize(succeeded) then
-          -- 2+ succeeded — run synthesis with retry loop
+        else
+          -- Multiple successes — structured selection: analysis → combination hypothesis → ReAct
           Human.notify({message = string.format(
-            "  Synthesizing %d successful fixes...", #succeeded), level = "info"})
+            "  %d hypotheses succeeded — running selection analysis...", #succeeded), level = "info"})
 
-          -- Pull YAML for each succeeded candidate and compute diffs
-          for _, cand in ipairs(succeeded) do
-            local cand_pull = call_plexus_tool("plexus_score_pull", {
-              scorecard_identifier = params.scorecard,
-              score_identifier = params.score,
-              version_id = cand.version_id
-            })
-            if cand_pull and cand_pull.success and cand_pull.codeFilePath then
-              local cand_yaml = Step.checkpoint(function()
-                return File.read(cand_pull.codeFilePath)
-              end)
-              if has_text(cand_yaml) then
-                cand.yaml_diff = compute_yaml_diff(current_code, cand_yaml)
-              end
-            end
+          -- Step A: Analysis call — build results summary and ask agent to plan the combination
+          local results_msg = "=== EVALUATION RESULTS ===\n"
+          for _, sv in ipairs(submitted_versions) do
+            local status = sv.succeeded and "SUCCEEDED" or "FAILED"
+            results_msg = results_msg .. string.format(
+              "Hypothesis %d ('%s'): %s\n  Feedback AC1 delta: %+.3f  Accuracy AC1 delta: %+.3f\n  Edit: %s\n",
+              sv.index, sv.hypothesis.name, status,
+              sv.fb_deltas and sv.fb_deltas.alignment or 0,
+              sv.acc_deltas and sv.acc_deltas.alignment or 0,
+              trunc(sv.done_reason or sv.hypothesis.description, 120))
+          end
+          results_msg = results_msg
+            .. "\n=== COMBINATION ANALYSIS TASK ===\n"
+            .. "Multiple hypotheses improved the score. Decide what to combine.\n"
+            .. "Respond with a single numbered item describing the combination:\n"
+            .. "1. <Combination name>: <Exactly what to apply from which hypotheses and why>\n"
+            .. "Focus on what is safe to combine. If one hypothesis is clearly dominant, say so."
+          code_editor({message = results_msg})
+
+          -- Parse combination hypothesis from response (same parser as planning phase)
+          local analysis_response = code_editor.output or ""
+          local combo_hypotheses = parse_hypotheses(analysis_response)
+
+          -- Retry up to 3x if not parseable
+          local analysis_attempts = 1
+          while #combo_hypotheses == 0 and analysis_attempts < 3 do
+            analysis_attempts = analysis_attempts + 1
+            Human.notify({message = string.format(
+              "  Selection analysis retry %d/3...", analysis_attempts), level = "info"})
+            code_editor({message = "Respond with a single numbered item:\n1. <Combination name>: <Description of exactly what to combine>"})
+            analysis_response = code_editor.output or ""
+            combo_hypotheses = parse_hypotheses(analysis_response)
           end
 
-          -- Synthesis retry loop (3 attempts)
-          local synth_version_id = nil
-          local max_synth_attempts = 3
+          -- Determine combo_hyp or fall back to best single winner
+          local combo_hyp
+          if #combo_hypotheses > 0 then
+            combo_hyp = combo_hypotheses[1]
+            Human.notify({message = string.format(
+              "  Combination plan: %s", trunc(combo_hyp.description, 100)), level = "info"})
+          else
+            Human.notify({message = "  Selection analysis unparseable — falling back to best single hypothesis", level = "warning"})
+            table.sort(succeeded, function(a, b)
+              return (a.fb_deltas and a.fb_deltas.alignment or 0) > (b.fb_deltas and b.fb_deltas.alignment or 0)
+            end)
+            final_version_id = succeeded[1].version_id
+            final_done_reason = succeeded[1].done_reason or ""
+          end
 
-          for synth_attempt = 1, max_synth_attempts do
-            -- Reset editor to base YAML for synthesis
+          -- Steps B+C: Implement the combination hypothesis (same pattern as hypothesis loop)
+          if combo_hyp and not final_version_id then
+            -- Reset editor to baseline
             call_plexus_tool("score_editor_setup", {
               scorecard_identifier = params.scorecard,
               score_identifier     = params.score,
@@ -1935,87 +1755,102 @@ code: |
               iteration            = cycle
             })
 
-            local synth_msg
-            if synth_attempt == 1 then
-              synth_msg = build_synthesis_context({
-                scorecard_name = scorecard_name,
-                score_name = score_name,
-                cycle = cycle,
-                base_version_id = last_accepted_version_id,
-                all_exploration_results = candidates,
-                feedback_rca = current_fb_rca
-              })
-            else
-              -- Retry message with error context
-              local last_edit = Tool.last_call("str_replace_editor")
-              local last_submit = Tool.last_call("submit_score_code")
-              synth_msg = string.format(
-                "RETRY (attempt %d/%d): Your previous synthesis attempt did NOT produce a valid version.\n\n",
-                synth_attempt, max_synth_attempts)
-              if not last_submit and last_edit then
-                local edit_result = last_edit.result or ""
-                if string.find(tostring(edit_result), "Error") then
-                  synth_msg = synth_msg .. "Your str_replace_editor call FAILED with:\n  " .. tostring(edit_result) .. "\n\n"
-                  synth_msg = synth_msg .. "Fix: call str_replace_editor(command='view', path='score_config.yaml') to re-read the file, "
-                    .. "then retry with an exactly-matching old_str. After a successful edit, call submit_score_code().\n"
-                else
-                  synth_msg = synth_msg .. "You called str_replace_editor but FORGOT to call submit_score_code().\n"
-                end
-              elseif last_submit then
-                local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
-                if ok_sub and sub_result and sub_result.error then
-                  synth_msg = synth_msg .. "submit_score_code returned an error:\n  " .. tostring(sub_result.error) .. "\n\n"
-                end
+            -- ReAct implementation loop
+            local max_combo_steps = 10
+            for combo_step = 1, max_combo_steps do
+              Tool.reset()
+              local combo_msg
+              if combo_step == 1 then
+                -- Inject baseline file as system message
+                code_editor.history:add({
+                  role = "system",
+                  content = "=== CURRENT score_config.yaml (baseline — apply your combination here) ===\n"
+                    .. current_code .. "\n=== END OF score_config.yaml ==="
+                })
+                combo_msg = string.format(
+                  "Implement this combination: %s\n\n%s\n\n"
+                  .. "Edit score_config.yaml starting from the baseline above.\n"
+                  .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
+                  .. "Call submit_score_version(version_note='...') when done.",
+                  combo_hyp.name, combo_hyp.description)
               else
-                synth_msg = synth_msg .. "You did not call any tools. You MUST call str_replace_editor and submit_score_code.\n"
+                -- Feedback (same pattern as hypothesis loop)
+                local last_edit = Tool.last_call("str_replace_editor")
+                local last_submit = Tool.last_call("submit_score_version")
+                local combo_parts = {}
+                if last_edit then
+                  local edit_result = tostring(last_edit.result or "")
+                  local edit_cmd = (last_edit.args and last_edit.args.command) or ""
+                  if edit_cmd == "view" then
+                    table.insert(combo_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
+                  elseif string.find(edit_result, "Error") then
+                    table.insert(combo_parts, "str_replace_editor error:\n" .. edit_result)
+                    table.insert(combo_parts, "\nCall view to re-read, then retry with exact text.")
+                  else
+                    table.insert(combo_parts, "Edit applied. Submit with submit_score_version or continue editing.")
+                  end
+                end
+                if last_submit then
+                  local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
+                  if ok_sub and sub_result and sub_result.error then
+                    table.insert(combo_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+                  end
+                end
+                if #combo_parts == 0 then
+                  table.insert(combo_parts, "You must call str_replace_editor or submit_score_version.")
+                end
+                table.insert(combo_parts, string.format("\n(Combination step %d/%d)", combo_step, max_combo_steps))
+                -- Update file system message
+                local editor_content = call_plexus_tool("score_editor_get_content", {})
+                if editor_content and editor_content.content then
+                  code_editor.history:add({
+                    role = "system",
+                    content = "=== CURRENT score_config.yaml ===\n"
+                      .. editor_content.content
+                      .. "\n=== END OF score_config.yaml ==="
+                  })
+                end
+                combo_msg = table.concat(combo_parts, "\n")
               end
-            end
 
-            Tool.reset()
-            synthesizer.clear_history()
-            if synth_attempt > 1 then
-              Human.notify({message = string.format("  Synthesis retry %d/%d...", synth_attempt, max_synth_attempts), level = "info"})
-            end
-            synthesizer({message = synth_msg})
+              code_editor({message = combo_msg})
 
-            -- Extract synthesized version
-            local synth_submit = Tool.last_call("submit_score_code")
-            if synth_submit then
-              local ok, synth_result = pcall(function() return safe_decode(synth_submit.result) end)
-              if ok and synth_result and synth_result.version_id then
-                synth_version_id = synth_result.version_id
-                Human.notify({message = string.format("  Synthesis version: %s", synth_version_id), level = "info"})
-                break
+              -- Check for submit
+              local submit_call = Tool.last_call("submit_score_version")
+              if submit_call then
+                local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
+                if ok and submit_result and submit_result.version_id then
+                  final_version_id = submit_result.version_id
+                  final_is_combined = true
+                  final_done_reason = combo_hyp.name .. ": " .. combo_hyp.description
+                  Human.notify({message = string.format("  Combined version: %s", final_version_id), level = "info"})
+                  break
+                end
               end
+              if Tool.last_call("done") then break end
             end
-          end
 
-          if synth_version_id then
-            synthesis_version_id = synth_version_id
-            synthesis_is_combined = true
-            synthesis_done_reason = string.format("(synthesized from %d exploration winners)", #succeeded)
-          else
-            -- Synthesis failed after 3 retries — fall back to best single Exploration winner
-            Human.notify({message = "  Synthesis failed — falling back to best single exploration winner", level = "warning"})
-            table.sort(succeeded, function(a, b)
-              local a_fb = a.fb_deltas and a.fb_deltas.alignment or 0
-              local b_fb = b.fb_deltas and b.fb_deltas.alignment or 0
-              return a_fb > b_fb
-            end)
-            synthesis_version_id = succeeded[1].version_id
-            synthesis_done_reason = succeeded[1].done_reason or ""
+            -- Fallback if combination ReAct loop failed
+            if not final_version_id then
+              Human.notify({message = "  Combination failed — falling back to best single hypothesis", level = "warning"})
+              table.sort(succeeded, function(a, b)
+                return (a.fb_deltas and a.fb_deltas.alignment or 0) > (b.fb_deltas and b.fb_deltas.alignment or 0)
+              end)
+              final_version_id = succeeded[1].version_id
+              final_done_reason = succeeded[1].done_reason or ""
+            end
           end
         end
 
         -- ================================================================
-        -- B PHASE: Evaluate the combined/selected version
+        -- Evaluate the final selected/combined version
         -- ================================================================
         local b_fb_metrics, b_acc_metrics, b_fb_deltas, b_acc_deltas
         local b_fb_rca, b_acc_rca
         local b_fb_eval_id, b_acc_eval_id
 
-        -- Check if we already have metrics (single winner case — reuse exploration evals)
-        if not synthesis_is_combined and #succeeded == 1 then
+        -- Reuse eval if using a single hypothesis directly
+        if not final_is_combined and #succeeded == 1 then
           b_fb_metrics = succeeded[1].fb_metrics
           b_acc_metrics = succeeded[1].acc_metrics
           b_fb_deltas = succeeded[1].fb_deltas
@@ -2025,8 +1860,8 @@ code: |
           b_fb_eval_id = succeeded[1].fb_eval_id
           b_acc_eval_id = succeeded[1].acc_eval_id
         else
-          -- Need fresh evals for synthesized version
-          Human.notify({message = "  Evaluating synthesis version...", level = "info"})
+          -- Need fresh evals for combined version
+          Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
           if accuracy_available then
             table.insert(b_batch, {
@@ -2035,9 +1870,9 @@ code: |
               evaluation_type = "accuracy",
               dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
-              version = synthesis_version_id,
+              version = final_version_id,
               baseline = accuracy_baseline_id,
-              notes = string.format("Cycle %d synthesis (accuracy): %s", cycle, string.sub(synthesis_done_reason or "", 1, 100))
+              notes = string.format("Cycle %d final (accuracy): %s", cycle, trunc(final_done_reason or "", 100))
             })
           end
           table.insert(b_batch, {
@@ -2047,10 +1882,10 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
-            version = synthesis_version_id,
+            version = final_version_id,
             baseline = feedback_baseline_id,
             wait = true,
-            notes = string.format("Cycle %d synthesis (feedback): %s", cycle, string.sub(synthesis_done_reason or "", 1, 100))
+            notes = string.format("Cycle %d final (feedback): %s", cycle, trunc(final_done_reason or "", 100))
           })
 
           local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
@@ -2080,17 +1915,16 @@ code: |
         b_acc_rca = b_acc_rca or {}
 
         Human.notify({message = string.format(
-          "  Synthesis eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
+          "  Final eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
           b_fb_deltas.alignment, b_acc_deltas.alignment,
-          synthesis_is_combined and " [SYNTHESIZED]" or ""
+          final_is_combined and " [COMBINED]" or ""
         ), level = "info"})
 
         -- ================================================================
-        -- B PHASE: Review
+        -- REVIEW
         -- ================================================================
         local iter_accuracy_ok = b_acc_metrics ~= nil
 
-        -- Check if version is disqualified before review
         local disqualified = false
         if not b_fb_metrics then
           disqualified = true
@@ -2104,21 +1938,20 @@ code: |
 
         if disqualified then
           Human.notify({message = string.format(
-            "Cycle %d: Synthesis version disqualified — skipping review", cycle), level = "warning"})
+            "Cycle %d: version disqualified — skipping review", cycle), level = "warning"})
         else
-          -- Review the synthesis version
           Tool.reset()
           reviewer.clear_history()
           local review_msg = build_review_context({
             iteration = cycle,
-            done_reason = synthesis_done_reason,
-            new_version_id = synthesis_version_id,
+            done_reason = final_done_reason,
+            new_version_id = final_version_id,
             prior_version_id = last_accepted_version_id,
             fb_metrics = b_fb_metrics or feedback_baseline_metrics,
             acc_metrics = iter_accuracy_ok and b_acc_metrics or nil,
             baseline_fb_ac1 = feedback_baseline_metrics.alignment,
             baseline_acc_ac1 = accuracy_baseline_metrics and accuracy_baseline_metrics.alignment or 0,
-            candidates = candidates
+            candidates = submitted_versions
           })
           Human.notify({message = "  Invoking reviewer...", level = "info"})
           reviewer({message = review_msg})
@@ -2163,27 +1996,24 @@ code: |
           else
             accept = true
             Human.notify({message = string.format("Cycle %d ACCEPTED", cycle), level = "info"})
-            last_accepted_version_id = synthesis_version_id
+            last_accepted_version_id = final_version_id
           end
         end
 
         -- Store cycle log
         local cycle_log = {
           iteration = cycle,
-          score_version_id = synthesis_version_id,
+          score_version_id = final_version_id,
           accuracy_evaluation_id = b_acc_eval_id,
           feedback_evaluation_id = b_fb_eval_id,
-          done_reason = synthesis_done_reason,
+          done_reason = final_done_reason,
           accuracy_metrics = b_acc_metrics,
           feedback_metrics = b_fb_metrics,
           accuracy_deltas = b_acc_deltas,
           feedback_deltas = b_fb_deltas,
           accepted = accept,
-          num_candidates = #candidates,
-          exploration_results = candidates,
-          exploration_no_version = candidates_no_version,
-          synthesis_attempted = synthesis_is_combined,
-          synthesis_won = synthesis_is_combined and accept
+          num_candidates = #submitted_versions,
+          exploration_results = submitted_versions
         }
         table.insert(iterations, cycle_log)
         State.set("iterations", iterations)
@@ -2198,11 +2028,11 @@ code: |
           else rejected_count = rejected_count + 1 end
         end
         local status_str = accept and "ACCEPTED" or "REJECTED"
-        local synth_note = synthesis_is_combined and " [SYNTHESIZED]" or ""
-        local reason_short = has_text(synthesis_done_reason) and (": " .. string.sub(synthesis_done_reason, 1, 80)) or ""
+        local combined_note = final_is_combined and " [COMBINED]" or ""
+        local reason_short = has_text(final_done_reason) and (": " .. trunc(final_done_reason, 80)) or ""
         Human.notify({message = string.format(
-          "┌─ Cycle %d/%d %s%s (A: %d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d rejected, %d skipped\n└─ Current base: %s",
-          cycle, params.max_iterations, status_str, synth_note, #succeeded, #failed, reason_short,
+          "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d rejected, %d skipped\n└─ Current base: %s",
+          cycle, params.max_iterations, status_str, combined_note, #succeeded, #failed, reason_short,
           b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
           b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment,
           accepted_count, rejected_count, skipped_count,
@@ -2246,8 +2076,8 @@ code: |
           stop_reason = "user_stopped"
           break
         end
-      end  -- end of Synthesis phase (succeeded > 0)
-    end  -- end of else (#candidates > 0)
+      end  -- end of selection phase (succeeded > 0)
+    end  -- end of else (submitted_versions > 0)
   end  -- end of for cycle
 
   -- Determine final stop reason
