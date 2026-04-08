@@ -456,7 +456,7 @@ code: |
   -- Returns a table keyed by "pred=X actual=Y" with a list of example objects, or {}
   local function fetch_cross_case_examples(eval_id, valid_classes, max_per_cell)
     if not eval_id then return {} end
-    max_per_cell = max_per_cell or 4
+    max_per_cell = max_per_cell or 50
 
     -- Determine which classes to query. Use provided classes or fall back to common defaults.
     local classes = valid_classes
@@ -554,12 +554,12 @@ code: |
         -- AI reasoning
         local reasoning = ""
         if ex.explanation and ex.explanation ~= "" then
-          reasoning = trunc(ex.explanation, 250)
+          reasoning = tostring(ex.explanation)
         elseif ex.trace and ex.trace.node_results then
           for _, nr in ipairs(ex.trace.node_results) do
             local out = nr.output or {}
             local exp = out.explanation or out.rationale or ""
-            if exp ~= "" then reasoning = trunc(exp, 250); break end
+            if exp ~= "" then reasoning = tostring(exp); break end
           end
         end
 
@@ -580,13 +580,7 @@ code: |
           table.insert(parts, "      AI reasoning: " .. reasoning)
         end
         if text ~= "" then
-          -- Include transcript excerpt — strict 400-char limit to prevent inject bloat
-          local text_str = tostring(text)
-          local tlen = #text_str
-          if tlen > 400 then
-            text_str = string.sub(text_str, 1, 400) .. " [..." .. (tlen - 400) .. " more chars]"
-          end
-          table.insert(parts, "      Transcript: " .. text_str)
+          table.insert(parts, "      Transcript: " .. tostring(text))
         end
         table.insert(parts, "")
       end
@@ -686,15 +680,8 @@ code: |
     -- Category summaries (natural language per-category description)
     rca._category_summaries = ma.category_summaries or nil
 
-    -- Top 10 likely-fixable items with suggested_fix + evidence_quote
-    local all_items = (type(ma.item_classifications_all) == "table" and ma.item_classifications_all) or {}
-    local fixable = {}
-    for _, item in ipairs(all_items) do
-      if item.config_fixability == "likely_fixable" and #fixable < 10 then
-        table.insert(fixable, item)
-      end
-    end
-    rca._fixable_items = fixable
+    -- All item classifications with suggested_fix + evidence_quote
+    rca._all_item_classifications = (type(ma.item_classifications_all) == "table" and ma.item_classifications_all) or {}
 
     return rca
   end
@@ -834,14 +821,13 @@ code: |
       local rca = opts.feedback_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
-          table.insert(parts, "Summary: " .. trunc(rca.overall_explanation, 400))
+          table.insert(parts, "Summary: " .. tostring(rca.overall_explanation))
         end
         if rca.overall_improvement_suggestion then
-          table.insert(parts, "Suggestion: " .. trunc(rca.overall_improvement_suggestion, 400))
+          table.insert(parts, "Suggestion: " .. tostring(rca.overall_improvement_suggestion))
         end
         local topics = (type(rca.topics) == "table" and rca.topics) or {}
         for i, t in ipairs(topics) do
-          if i > 5 then break end
           local topic_count = t.member_count or t.count or t.size or t.total or t.n
           if not topic_count and type(t.items) == "table" then topic_count = #t.items end
           table.insert(parts, string.format("Topic %d: %s (count=%s)",
@@ -854,7 +840,7 @@ code: |
             local pna_text = pna.action or pna.description or pna.recommendation or ""
             if pna_text ~= "" then
               local confidence = pna.confidence and (" [" .. tostring(pna.confidence) .. " confidence]") or ""
-              table.insert(parts, "Primary next action: " .. trunc(pna_text, 300) .. confidence)
+              table.insert(parts, "Primary next action: " .. pna_text .. confidence)
             end
           end
         end
@@ -872,26 +858,37 @@ code: |
             if type(summary) == "table" and summary.item_count then
               item_count = string.format(" (%d items)", summary.item_count)
             end
-            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, trunc(summary_text, 200)))
+            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, tostring(summary_text)))
           end
         end
-        -- Top likely-fixable misclassifications (limit to 3 to control inject size)
-        if type(rca._fixable_items) == "table" and #rca._fixable_items > 0 then
-          local max_fix = 3
-          table.insert(parts, string.format("Top fixable misclassifications (%d of %d):", math.min(max_fix, #rca._fixable_items), #rca._fixable_items))
-          for i, item in ipairs(rca._fixable_items) do
-            if i > max_fix then break end
-            table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
-              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
+        -- All item classifications from RCA
+        if type(rca._all_item_classifications) == "table" and #rca._all_item_classifications > 0 then
+          table.insert(parts, string.format("All misclassification analyses (%d):", #rca._all_item_classifications))
+          for i, item in ipairs(rca._all_item_classifications) do
+            local fixability = item.config_fixability or "unknown"
+            local category = item.primary_category or "unknown"
+            table.insert(parts, string.format("  [%d] predicted=%s correct=%s category=%s fixability=%s",
+              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?"),
+              category, fixability))
+            if item.rationale_short and item.rationale_short ~= "" then
+              table.insert(parts, "      Summary: " .. tostring(item.rationale_short))
+            end
             if item.suggested_fix and item.suggested_fix ~= "" then
-              local fix_text = tostring(item.suggested_fix)
-              if #fix_text > 200 then fix_text = fix_text:sub(1, 200) .. "..." end
-              table.insert(parts, "      Fix: " .. fix_text)
+              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix))
+            end
+            if item.rationale_paragraph and item.rationale_paragraph ~= "" then
+              table.insert(parts, "      Rationale: " .. tostring(item.rationale_paragraph))
+            end
+            if item.evidence_quote and item.evidence_quote ~= "" then
+              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote))
+            end
+            if item.detailed_cause and item.detailed_cause ~= "" then
+              table.insert(parts, "      Detailed cause: " .. tostring(item.detailed_cause))
             end
           end
         end
       else
-        table.insert(parts, trunc(rca, 500))
+        table.insert(parts, tostring(rca))
       end
     end
     table.insert(parts, "")
@@ -906,14 +903,13 @@ code: |
       local rca = opts.accuracy_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
-          table.insert(parts, "Summary: " .. trunc(rca.overall_explanation, 400))
+          table.insert(parts, "Summary: " .. tostring(rca.overall_explanation))
         end
         if rca.overall_improvement_suggestion then
-          table.insert(parts, "Suggestion: " .. trunc(rca.overall_improvement_suggestion, 400))
+          table.insert(parts, "Suggestion: " .. tostring(rca.overall_improvement_suggestion))
         end
         local topics = (type(rca.topics) == "table" and rca.topics) or {}
         for i, t in ipairs(topics) do
-          if i > 5 then break end
           local topic_count = t.member_count or t.count or t.size or t.total or t.n
           if not topic_count and type(t.items) == "table" then topic_count = #t.items end
           table.insert(parts, string.format("Topic %d: %s (count=%s)",
@@ -926,7 +922,7 @@ code: |
             local pna_text = pna.action or pna.description or pna.recommendation or ""
             if pna_text ~= "" then
               local confidence = pna.confidence and (" [" .. tostring(pna.confidence) .. " confidence]") or ""
-              table.insert(parts, "Primary next action: " .. trunc(pna_text, 300) .. confidence)
+              table.insert(parts, "Primary next action: " .. pna_text .. confidence)
             end
           end
         end
@@ -944,26 +940,37 @@ code: |
             if type(summary) == "table" and summary.item_count then
               item_count = string.format(" (%d items)", summary.item_count)
             end
-            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, trunc(summary_text, 200)))
+            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, tostring(summary_text)))
           end
         end
-        -- Top likely-fixable misclassifications (limit to 3 to control inject size)
-        if type(rca._fixable_items) == "table" and #rca._fixable_items > 0 then
-          local max_fix = 3
-          table.insert(parts, string.format("Top fixable misclassifications (%d of %d):", math.min(max_fix, #rca._fixable_items), #rca._fixable_items))
-          for i, item in ipairs(rca._fixable_items) do
-            if i > max_fix then break end
-            table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
-              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
+        -- All item classifications from RCA
+        if type(rca._all_item_classifications) == "table" and #rca._all_item_classifications > 0 then
+          table.insert(parts, string.format("All misclassification analyses (%d):", #rca._all_item_classifications))
+          for i, item in ipairs(rca._all_item_classifications) do
+            local fixability = item.config_fixability or "unknown"
+            local category = item.primary_category or "unknown"
+            table.insert(parts, string.format("  [%d] predicted=%s correct=%s category=%s fixability=%s",
+              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?"),
+              category, fixability))
+            if item.rationale_short and item.rationale_short ~= "" then
+              table.insert(parts, "      Summary: " .. tostring(item.rationale_short))
+            end
             if item.suggested_fix and item.suggested_fix ~= "" then
-              local fix_text = tostring(item.suggested_fix)
-              if #fix_text > 200 then fix_text = fix_text:sub(1, 200) .. "..." end
-              table.insert(parts, "      Fix: " .. fix_text)
+              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix))
+            end
+            if item.rationale_paragraph and item.rationale_paragraph ~= "" then
+              table.insert(parts, "      Rationale: " .. tostring(item.rationale_paragraph))
+            end
+            if item.evidence_quote and item.evidence_quote ~= "" then
+              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote))
+            end
+            if item.detailed_cause and item.detailed_cause ~= "" then
+              table.insert(parts, "      Detailed cause: " .. tostring(item.detailed_cause))
             end
           end
         end
       else
-        table.insert(parts, trunc(rca, 500))
+        table.insert(parts, tostring(rca))
       end
     end
     table.insert(parts, "")
@@ -1198,11 +1205,11 @@ code: |
       end
     end
 
-    -- Abbreviated RCA context
+    -- Full RCA context
     if opts.feedback_rca and type(opts.feedback_rca) == "table" then
       if opts.feedback_rca.overall_explanation then
         table.insert(parts, "=== FEEDBACK RCA CONTEXT ===")
-        table.insert(parts, trunc(opts.feedback_rca.overall_explanation, 500))
+        table.insert(parts, tostring(opts.feedback_rca.overall_explanation))
         table.insert(parts, "")
       end
     end
@@ -1452,7 +1459,7 @@ code: |
   do
     Human.notify({message = "Fetching misclassification examples for pattern analysis...", level = "info"})
     local ok, examples_or_err = pcall(fetch_cross_case_examples,
-      feedback_baseline_id, score_valid_classes, 2)
+      feedback_baseline_id, score_valid_classes, 50)
     if ok and type(examples_or_err) == "table" then
       current_cross_case_examples = examples_or_err
       local cell_count = 0
@@ -1588,7 +1595,7 @@ code: |
     local candidates = {}
     local candidates_no_version = {}  -- candidates that failed to create a version
     local num_cands = math.min(params.num_candidates or 3, 5)
-    local fixable_items = (current_fb_rca and current_fb_rca._fixable_items) or {}
+    local fixable_items = (current_fb_rca and current_fb_rca._all_item_classifications) or {}
     local any_cannot_improve = false
 
     for c = 1, num_cands do
@@ -2283,7 +2290,7 @@ code: |
           -- (Base changed, so error patterns are different now)
           if b_fb_eval_id then
             local ok_ex, new_examples = pcall(fetch_cross_case_examples,
-              b_fb_eval_id, score_valid_classes, 6)
+              b_fb_eval_id, score_valid_classes, 50)
             if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
               current_cross_case_examples = new_examples
               Human.notify({message = "Refreshed misclassification examples from accepted cycle eval.", level = "info"})
@@ -2295,7 +2302,7 @@ code: |
           -- (The base didn't change, but we may have richer error evidence)
           if b_fb_eval_id then
             local ok_ex, new_examples = pcall(fetch_cross_case_examples,
-              b_fb_eval_id, score_valid_classes, 6)
+              b_fb_eval_id, score_valid_classes, 50)
             if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
               current_cross_case_examples = new_examples
             end

@@ -570,7 +570,16 @@ async def _execute_tactus(
                         params_schema = parsed_source.get('params', {})
                         for param_name, param_def in params_schema.items():
                             if param_name in context:
-                                params_dict[param_name] = context[param_name]
+                                raw_value = context[param_name]
+                                # Coerce numeric context values back to string if the
+                                # schema declares type: string. This handles the case
+                                # where the CLI --set parser converts "45425" → int(45425)
+                                # but the param is an identifier that must stay as string.
+                                if (isinstance(raw_value, (int, float))
+                                        and isinstance(param_def, dict)
+                                        and param_def.get('type') == 'string'):
+                                    raw_value = str(raw_value)
+                                params_dict[param_name] = raw_value
                             elif isinstance(param_def, dict) and param_def.get('default') is not None:
                                 params_dict[param_name] = param_def['default']
 
