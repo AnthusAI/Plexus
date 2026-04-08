@@ -171,7 +171,7 @@ export function ParametersDisplay({
 
   if (variant === 'table') {
     return (
-      <div className="border rounded-lg overflow-hidden">
+      <div className="rounded-lg overflow-hidden">
         <table className="w-full">
           <tbody>
             {parameters.map((param) => {
