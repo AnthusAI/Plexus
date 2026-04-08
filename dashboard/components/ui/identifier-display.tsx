@@ -20,7 +20,7 @@ interface LegacyIdentifier {
 
 interface IdentifierDisplayProps {
   externalId?: string;
-  identifiers?: string | IdentifierItem[]; // Can be JSON string or array
+  identifiers?: string | IdentifierItem[] | Record<string, string>; // Can be JSON string, array, or object map
   className?: string;
   iconSize?: 'sm' | 'md' | 'lg';
   textSize?: 'xs' | 'sm' | 'base';
