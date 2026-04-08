@@ -7,9 +7,10 @@ can make targeted, precise edits to score configuration YAML.
 
 Key tools exposed:
 - str_replace_editor: Standard Claude text editor tool (view/str_replace/insert/undo_edit)
-- submit_score_code: State-transition tool that validates and creates a new ScoreVersion
+- submit_score_version: State-transition tool that validates and creates a new ScoreVersion
 - score_editor_setup: MCP tool called from Lua to initialize the virtual file
 - score_editor_get_result: MCP tool called from Lua to retrieve the created version ID
+- score_editor_get_content: MCP tool called from Lua to read current virtual file content
 """
 
 import logging
@@ -27,7 +28,7 @@ class ScoreEditorToolset:
     Lifecycle per iteration:
       1. Lua calls score_editor_setup(yaml_content, scorecard, score, iteration, hypothesis)
       2. code_editor agent calls str_replace_editor to view and edit the file
-      3. code_editor agent calls submit_score_code() when edits are complete
+      3. code_editor agent calls submit_score_version() when edits are complete
       4. Lua calls score_editor_get_result() to retrieve the new version ID
     """
 
@@ -113,13 +114,23 @@ class ScoreEditorToolset:
         }
 
     def get_result(self, arguments: dict) -> dict:
-        """Return the version ID created by the last submit_score_code call."""
+        """Return the version ID created by the last submit_score_version call."""
         if self._last_version_id:
             return {"success": True, "version_id": self._last_version_id}
         return {
             "success": False,
             "version_id": None,
             "message": "No score version has been submitted yet",
+        }
+
+    def get_content(self, arguments: dict) -> dict:
+        """Return the current virtual file content for Lua to build system messages."""
+        return {
+            "success": True,
+            "content": self._content,
+            "original": self._original,
+            "modified": self._content != self._original,
+            "length": len(self._content),
         }
 
     # ------------------------------------------------------------------
@@ -277,7 +288,7 @@ class ScoreEditorToolset:
                 "Supported: view, str_replace, insert, undo_edit, create"
             )
 
-    async def submit_score_code(self, arguments: dict) -> dict:
+    async def submit_score_version(self, arguments: dict) -> dict:
         """
         Validate and submit the current virtual file as a new score version.
 
@@ -299,7 +310,7 @@ class ScoreEditorToolset:
                     "the current file.\n"
                     "  • Copy the exact text you want to replace (including all whitespace/indentation).\n"
                     "  • Retry str_replace_editor with an exactly-matching old_str.\n"
-                    "  • Then call submit_score_code again."
+                    "  • Then call submit_score_version again."
                 ),
             }
 
@@ -309,7 +320,7 @@ class ScoreEditorToolset:
                 "error": (
                     "Cannot submit: no score code is loaded. "
                     "Call str_replace_editor(command='view', path='score_config.yaml') "
-                    "to load the file, make your edit, then call submit_score_code."
+                    "to load the file, make your edit, then call submit_score_version."
                 ),
             }
 
@@ -319,7 +330,7 @@ class ScoreEditorToolset:
                 "success": False,
                 "error": (
                     "Cannot submit: the score configuration is unchanged from the original champion version. "
-                    "Use str_replace_editor to make a meaningful change, then call submit_score_code again."
+                    "Use str_replace_editor to make a meaningful change, then call submit_score_version again."
                 ),
             }
 
@@ -341,7 +352,7 @@ class ScoreEditorToolset:
                 "success": False,
                 "error": (
                     "Cannot submit: YAML validation failed. Fix these errors with "
-                    f"str_replace_editor, then call submit_score_code again:\n{error_text}"
+                    f"str_replace_editor, then call submit_score_version again:\n{error_text}"
                 ),
             }
 
@@ -394,7 +405,7 @@ class ScoreEditorToolset:
                 }
 
         except Exception as exc:
-            logger.error("ScoreEditorToolset.submit_score_code error: %s", exc)
+            logger.error("ScoreEditorToolset.submit_score_version error: %s", exc)
             return {"success": False, "error": f"Failed to create score version: {exc}"}
 
     # ------------------------------------------------------------------
@@ -589,13 +600,24 @@ class ScoreEditorToolset:
 
         transport.register_tool(MCPToolInfo(
             name="score_editor_get_result",
-            description="Return the version ID created by the last submit_score_code call.",
+            description="Return the version ID created by the last submit_score_version call.",
             input_schema={
                 "type": "object",
                 "properties": {},
                 "additionalProperties": False,
             },
             handler=instance.get_result,
+        ))
+
+        transport.register_tool(MCPToolInfo(
+            name="score_editor_get_content",
+            description="Return the current virtual file content and modification status.",
+            input_schema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+            handler=instance.get_content,
         ))
 
         transport.register_tool(MCPToolInfo(
@@ -643,11 +665,10 @@ class ScoreEditorToolset:
         ))
 
         transport.register_tool(MCPToolInfo(
-            name="submit_score_code",
+            name="submit_score_version",
             description=(
                 "Submit the current virtual score file as a new score version. "
-                "Validates YAML syntax first. Errors if the file is unchanged. "
-                "Call done() after this succeeds."
+                "Validates YAML syntax first. Errors if the file is unchanged."
             ),
             input_schema={
                 "type": "object",
@@ -659,11 +680,11 @@ class ScoreEditorToolset:
                 },
                 "additionalProperties": False,
             },
-            handler=instance.submit_score_code,
+            handler=instance.submit_score_version,
         ))
 
         logger.info(
             "ScoreEditorToolset: registered score_editor_setup, score_editor_get_result, "
-            "str_replace_editor, submit_score_code on MCP transport"
+            "score_editor_get_content, str_replace_editor, submit_score_version on MCP transport"
         )
         return instance
