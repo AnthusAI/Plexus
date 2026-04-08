@@ -1080,8 +1080,8 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
             total_items=total_items,
             status_message="Processing items..."
         ),
-        "Finalizing": StageConfig(
-            order=3, 
+        "Analysis": StageConfig(
+            order=3,
             status_message="Computing metrics..."
         )
     }

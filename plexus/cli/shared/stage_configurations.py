@@ -29,9 +29,9 @@ def get_evaluation_stage_configs(total_items: int = 0) -> Dict[str, StageConfig]
             total_items=total_items,
             status_message="Starting processing..."
         ),
-        "Finalizing": StageConfig(
+        "Analysis": StageConfig(
             order=3,
-            status_message="Starting finalization..."
+            status_message="Analyzing results..."
         )
     }
 
@@ -55,7 +55,7 @@ def get_feedback_evaluation_stage_configs(total_items: int = 0) -> Dict[str, Sta
             total_items=total_items,
             status_message="Analyzing feedback and creating score results..."
         ),
-        "Analyzing": StageConfig(
+        "Analysis": StageConfig(
             order=3,
             status_message="Calculating metrics..."
         ),
