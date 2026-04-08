@@ -46,6 +46,20 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
   className
 }) => {
   const resolvedIdentifiers = React.useMemo(() => {
+    const normalizeIdentifiers = (
+      rawIdentifiers:
+        | string
+        | Array<{ name: string; value: string; url?: string }>
+        | Record<string, string>
+        | undefined
+    ) => {
+      if (!rawIdentifiers || typeof rawIdentifiers === 'string' || Array.isArray(rawIdentifiers)) {
+        return rawIdentifiers;
+      }
+
+      return Object.entries(rawIdentifiers).map(([name, value]) => ({ name, value }));
+    };
+
     const relationshipIdentifiers = item.item?.itemIdentifiers?.items;
     if (Array.isArray(relationshipIdentifiers) && relationshipIdentifiers.length > 0) {
       return relationshipIdentifiers
@@ -53,7 +67,7 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
         .sort((a, b) => (a.position || 0) - (b.position || 0))
         .map(({ name, value, url }) => ({ name, value, url }));
     }
-    return item.item?.identifiers ?? item.item_identifiers;
+    return normalizeIdentifiers(item.item?.identifiers ?? item.item_identifiers);
   }, [item]);
 
   const resolvedExternalId = item.item?.externalId ?? item.item_external_id;
