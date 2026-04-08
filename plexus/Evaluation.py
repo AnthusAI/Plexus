@@ -427,51 +427,54 @@ class Evaluation:
                 
                 return json.dumps(cleaned_obj)
 
-        # Create a fresh client for each update
-        client = PlexusDashboardClient()
+        # Reuse a single client to avoid creating 50+ simultaneous connections
+        if not hasattr(self, '_dashboard_log_client') or self._dashboard_log_client is None:
+            self._dashboard_log_client = PlexusDashboardClient()
+        client = self._dashboard_log_client
+        variables = None
         try:
             # Construct the mutation for updateEvaluation
             mutation = self._get_update_mutation()
-            
+
             # Construct the variables
             variables = self._get_update_variables(metrics, status)
-            
+
             # Ensure we have valid JSON before sending
             try:
                 # Serialize variables safely and log them for debugging
                 serialized_variables = safe_json_dumps(variables)
                 clean_variables = json.loads(serialized_variables)
-                
-                # Updating evaluation metrics
-                
-                # Execute the mutation with proper client handling
-                # Use asyncio.to_thread for the synchronous execute method
-                result = await asyncio.to_thread(client.execute, mutation, clean_variables)
-                
+
+                # Execute with a 30s timeout to prevent thread pool saturation.
+                # Dashboard updates are non-critical and must never block scoring.
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(client.execute, mutation, clean_variables),
+                    timeout=30.0
+                )
+
                 # Log the success
                 logging.info(f"Successfully updated evaluation metrics for task {self.task_id}")
                 return result
-                
+
             except json.JSONDecodeError as je:
                 logging.error(f"JSON serialization error: {je}. Unable to prepare variables for API call.")
                 raise
-                
+
+        except asyncio.TimeoutError:
+            logging.warning(
+                f"Dashboard update timed out after 30s for task {self.task_id}. "
+                "Skipping this update — scoring continues."
+            )
+            # Recreate client on timeout (connection may be stale)
+            self._dashboard_log_client = None
+            return None
         except Exception as e:
             # Log full error details including the mutation and variables
             logging.error(f"Error updating evaluation metrics for task {self.task_id}: {str(e)}")
             if variables:
                 logging.error(f"Failed mutation variables: {variables}")
-            
-            # Re-raise for retry
-            raise
-            
-        finally:
-            # Ensure client is properly closed
-            if hasattr(client, 'close') and callable(client.close):
-                try:
-                    await client.close()
-                except Exception as e:
-                    logging.warning(f"Error closing GraphQL client: {str(e)}")
+            # Don't re-raise — dashboard updates must not crash scoring
+            return None
 
     def calculate_metrics(self, results):
         if not results:
@@ -1284,6 +1287,12 @@ class Evaluation:
             self.results_by_score[score_name] = []
         if score_name not in self.processed_items_by_score:
             self.processed_items_by_score[score_name] = 0
+
+        # Increase the default thread pool so dashboard logging and item scoring
+        # don't compete for the same 8 threads (Python default = min(32, cpu+4)).
+        import concurrent.futures as _cf
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(_cf.ThreadPoolExecutor(max_workers=40))
 
         # Create a semaphore to limit concurrency
         # Default to 20 concurrent operations
