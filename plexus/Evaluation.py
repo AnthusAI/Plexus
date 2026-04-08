@@ -5103,7 +5103,7 @@ class AccuracyEvaluation(Evaluation):
             # Advance to Analyzing stage after all processing is complete
             if tracker:
                 tracker.advance_stage()
-                self.logging.info("==== STAGE: Analyzing ====")
+                self.logging.info("==== STAGE: Analysis ====")
 
             # Calculate metrics from results
             

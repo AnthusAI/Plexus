@@ -3217,7 +3217,7 @@ def accuracy(
             
             # Complete task lifecycle in tracker/API task record.
             if tracker:
-                tracker.complete_with_message("Evaluation completed successfully")
+                tracker.complete_with_message("Accuracy evaluation complete.")
                 logging.info("Analyzing stage completed")
 
         except Exception as e:
@@ -4568,7 +4568,7 @@ def feedback(
                 # Complete the tracker with a clear completion message
                 if tracker:
                     try:
-                        tracker.complete_with_message("Evaluation complete.")
+                        tracker.complete_with_message("Feedback evaluation complete.")
                     except Exception as _tracker_err:
                         console.print(f"[yellow]Warning: tracker.complete() failed: {_tracker_err}[/yellow]")
 
