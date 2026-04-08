@@ -69,19 +69,19 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
   const handleSelectTemplate = useCallback((id: string | null) => {
     setSelectedTemplateId(id)
     const newPathname = id ? `/lab/templates/${id}` : '/lab/templates'
-    router.replace(newPathname)
+    window.history.pushState(null, '', newPathname)
     
     if (isNarrowViewport && id) {
       setIsFullWidth(true)
     }
-  }, [isNarrowViewport, router])
+  }, [isNarrowViewport])
 
   const handleCloseTemplate = useCallback(() => {
     setSelectedTemplateId(null)
     setIsFullWidth(false)
     setEditingTemplateId(null)
-    router.replace('/lab/templates')
-  }, [router])
+    window.history.pushState(null, '', '/lab/templates')
+  }, [])
 
   const getTemplateClickHandler = useCallback((templateId: string) => {
     return (e?: React.MouseEvent | React.SyntheticEvent | any) => {
@@ -227,7 +227,7 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
       if (selectedTemplateId === templateId) {
         setSelectedTemplateId(null)
         setEditingTemplateId(null)
-        router.replace('/lab/templates')
+        window.history.pushState(null, '', '/lab/templates')
       }
       toast.success('Template deleted successfully')
     } catch (error) {

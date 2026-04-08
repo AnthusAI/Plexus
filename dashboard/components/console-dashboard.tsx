@@ -3,7 +3,6 @@
 import * as React from "react"
 import { Activity, PanelRightClose, PanelRightOpen, Play, KanbanSquare, FileBarChart } from "lucide-react"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
 
 import { useAccount } from "@/app/contexts/AccountContext"
 import ActivityDashboard from "@/components/activity-dashboard"
@@ -53,7 +52,6 @@ interface ConsoleDashboardProps {
 }
 
 export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardProps) {
-  const router = useRouter()
   const { selectedAccount } = useAccount()
   const [selectedScorecard, setSelectedScorecard] = React.useState<string | null>(null)
   const [selectedScore, setSelectedScore] = React.useState<string | null>(null)
@@ -152,9 +150,9 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
     setSelectedSessionId(normalizedSessionId)
     const nextPath = `/lab/console/${encodeURIComponent(normalizedSessionId)}`
     if (window.location.pathname !== nextPath) {
-      router.replace(nextPath)
+      window.history.pushState(window.history.state, '', nextPath)
     }
-  }, [selectedSessionId, router])
+  }, [selectedSessionId])
 
   const handleShowActivity = React.useCallback(() => {
     openArtifact('activity', { title: "Activity" })
