@@ -147,6 +147,9 @@ class ScoreEditorToolset:
             )
 
         if command == "view":
+            # Clear any pending edit error — viewing the file is the recovery action
+            self._last_edit_error = None
+
             # Auto-load content on first view if not yet populated
             if not self._content:
                 load_error = self._load_content_from_api()
@@ -173,10 +176,49 @@ class ScoreEditorToolset:
             old_str = old_str.replace("\\n", "\n")
             new_str = new_str.replace("\\n", "\n")
             if old_str not in self._content:
+                # Debug: log first mismatch to diagnose str_replace failures
+                content_search = self._content
+                # Try to find the start of old_str in content
+                first_line = old_str.split("\n")[0][:60]
+                idx = content_search.find(first_line)
+                if idx >= 0:
+                    actual_chunk = content_search[idx:idx + len(old_str) + 20]
+                    # Find first char difference
+                    for ci in range(min(len(old_str), len(actual_chunk))):
+                        if old_str[ci] != actual_chunk[ci]:
+                            logger.warning(
+                                "str_replace mismatch at pos %d: old_str[%d]=U+%04X(%r) "
+                                "content[%d]=U+%04X(%r) context: old=...%r... actual=...%r...",
+                                ci, ci, ord(old_str[ci]), old_str[ci],
+                                ci, ord(actual_chunk[ci]), actual_chunk[ci],
+                                old_str[max(0, ci-15):ci+15],
+                                actual_chunk[max(0, ci-15):ci+15],
+                            )
+                            break
+                    else:
+                        if len(old_str) != len(actual_chunk):
+                            logger.warning(
+                                "str_replace: first line matches at idx %d but lengths differ: "
+                                "old_str=%d actual_chunk=%d", idx, len(old_str), len(actual_chunk)
+                            )
+                        else:
+                            logger.warning(
+                                "str_replace: first line matches at idx %d, chars match for %d chars "
+                                "but 'in' operator says no match?!", idx, len(old_str)
+                            )
+                else:
+                    logger.warning(
+                        "str_replace: could not find first line of old_str: %r",
+                        first_line
+                    )
                 err = (
-                    "Error: No match found for old_str. The exact text (including whitespace "
-                    "and indentation) was not found in the file.\n\n"
-                    "Tip: Use view to re-read the file and copy old_str exactly."
+                    "Error: No match found for old_str in score_config.yaml. "
+                    "The exact text you provided does not appear in the editable file. "
+                    "It may have come from another part of your prompt context "
+                    "(e.g. guidelines, RCA analysis, or instructions) rather than "
+                    "from score_config.yaml itself.\n\n"
+                    "Use str_replace_editor(command='view', path='score_config.yaml') "
+                    "to re-read the editable file and copy the exact text from there."
                 )
                 self._last_edit_error = err
                 return err

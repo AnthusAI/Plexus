@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, Optional, Sequence
 
 from plexus.Evaluation import Evaluation
 from plexus.dashboard.api.models.task import Task
@@ -235,14 +235,30 @@ def wait_for_feedback_evaluation_terminal_status(
     evaluation_id: str,
     timeout_seconds: int = 7200,
     poll_interval_seconds: int = 5,
+    stall_timeout_seconds: int = 600,
 ) -> Dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     latest_info: Dict[str, Any] = {}
+    last_progress_value = None
+    last_progress_time = time.monotonic()
     while time.monotonic() < deadline:
         latest_info = Evaluation.get_evaluation_info(evaluation_id)
         status = str(latest_info.get("status") or "").upper()
         if status in TERMINAL_EVALUATION_STATUSES:
             return latest_info
+        # Stall detection: if total_items hasn't changed for stall_timeout_seconds,
+        # the subprocess is likely deadlocked (e.g. thread pool exhaustion).
+        current_progress = latest_info.get("total_items")
+        if current_progress != last_progress_value:
+            last_progress_value = current_progress
+            last_progress_time = time.monotonic()
+        elif time.monotonic() - last_progress_time > stall_timeout_seconds:
+            raise TimeoutError(
+                f"Evaluation '{evaluation_id}' stalled: no progress for "
+                f"{stall_timeout_seconds}s. Last status={status}, "
+                f"total_items={current_progress}. Likely thread pool deadlock "
+                f"in subprocess."
+            )
         time.sleep(poll_interval_seconds)
     raise TimeoutError(
         f"Timed out waiting for evaluation '{evaluation_id}' to reach terminal status after "
@@ -382,6 +398,7 @@ def run_feedback_evaluation_orchestrated(
     completion_timeout_seconds: int = 7200,
     poll_interval_seconds: int = 5,
     kanbus_issue_id: Optional[str] = None,
+    on_evaluation_created: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     if request.days is not None and request.days <= 0:
         raise ValueError("days must be > 0 when provided.")
@@ -452,6 +469,12 @@ def run_feedback_evaluation_orchestrated(
                     f"STDERR tail:\n{tail}\n"
                     f"STDOUT tail:\n{stdout_tail}"
                 )
+            # Notify caller as soon as eval ID is known (e.g. for early notes)
+            if on_evaluation_created:
+                try:
+                    on_evaluation_created(evaluation_id)
+                except Exception:
+                    pass  # Don't let callback failure break the eval
             evaluation_info = wait_for_feedback_evaluation_terminal_status(
                 evaluation_id=evaluation_id,
                 timeout_seconds=completion_timeout_seconds,
