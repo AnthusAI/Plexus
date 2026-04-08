@@ -663,6 +663,15 @@ def register_evaluation_tools(mcp: FastMCP):
                     # loads the champion version from the local YAML file, causing all
                     # candidate evals to run the champion version instead of the candidate.
                     effective_yaml = yaml and not resolved_version
+
+                    # Apply notes as soon as eval ID is available (not after completion)
+                    _early_notes_applied = False
+                    def _apply_early_notes(eval_id: str):
+                        nonlocal _early_notes_applied
+                        if notes and eval_id:
+                            _apply_notes_to_evaluation(eval_id, notes)
+                            _early_notes_applied = True
+
                     run_summary = await asyncio.to_thread(
                         run_feedback_evaluation_orchestrated,
                         request=FeedbackRunnerRequest(
@@ -683,9 +692,10 @@ def register_evaluation_tools(mcp: FastMCP):
                         creation_timeout_seconds=300,
                         completion_timeout_seconds=7200,
                         poll_interval_seconds=5,
+                        on_evaluation_created=_apply_early_notes,
                     )
                     evaluation_id = run_summary.get("evaluation_id")
-                    if notes and evaluation_id:
+                    if notes and evaluation_id and not _early_notes_applied:
                         _apply_notes_to_evaluation(evaluation_id, notes)
                     eval_info = Evaluation.get_evaluation_info(evaluation_id)
                     logger.info(f"Evaluation completed: {evaluation_id}")
