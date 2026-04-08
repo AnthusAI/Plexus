@@ -427,17 +427,23 @@ def register_evaluation_tools(mcp: FastMCP):
                 batch_list = [batch[k] for k in sorted(batch.keys())]
             else:
                 batch_list = list(batch)
+            logger.info(f"Batch evaluation: dispatching {len(batch_list)} evaluations in parallel")
+            for i, item in enumerate(batch_list):
+                logger.info(f"  Batch item {i+1}: type={item.get('evaluation_type')}, score={item.get('score_name')}, wait={item.get('wait')}")
             tasks = [plexus_evaluation_run(**item) for item in batch_list]
             raw_results = await _asyncio.gather(*tasks, return_exceptions=True)
             output = []
-            for r in raw_results:
+            for i, r in enumerate(raw_results):
                 if isinstance(r, Exception):
-                    output.append({"error": str(r)})
+                    logger.error(f"Batch item {i+1} raised exception: {type(r).__name__}: {r}", exc_info=r)
+                    output.append({"error": f"{type(r).__name__}: {r}"})
                 else:
                     try:
                         output.append(json.loads(r))
-                    except Exception:
+                    except Exception as parse_exc:
+                        logger.error(f"Batch item {i+1} result parse error: {parse_exc}, raw={str(r)[:500]}")
                         output.append({"error": "Could not parse result", "raw": str(r)})
+            logger.info(f"Batch evaluation complete: {len(output)} results")
             return json.dumps(output)
 
         if not scorecard_name:
@@ -478,6 +484,7 @@ def register_evaluation_tools(mcp: FastMCP):
             from plexus.Evaluation import Evaluation
 
             if evaluation_type == "feedback":
+                logger.info(f"Feedback evaluation path entered: score={score_name}, wait={wait}, scorecard={scorecard_name}")
                 import subprocess
                 import shutil
                 import time as _time
@@ -674,7 +681,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         client=_runner_client,
                         account_id=_runner_account_id,
                         creation_timeout_seconds=300,
-                        completion_timeout_seconds=1800,
+                        completion_timeout_seconds=7200,
                         poll_interval_seconds=5,
                     )
                     evaluation_id = run_summary.get("evaluation_id")

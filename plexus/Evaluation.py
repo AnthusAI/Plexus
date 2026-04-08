@@ -2684,8 +2684,22 @@ Total cost:       ${expenses['total_cost']:.6f}
                     baseline_evaluation_id = metadata.get("baseline")
                 root_cause_candidate = parameters.get("root_cause")
                 if isinstance(root_cause_candidate, dict):
-                    root_cause = root_cause_candidate
-                    misclassification_candidate = root_cause_candidate.get("misclassification_analysis")
+                    # If root_cause was compacted (only a pointer), fetch full version from S3
+                    if root_cause_candidate.get("output_compacted") and root_cause_candidate.get("output_attachment"):
+                        try:
+                            from plexus.utils.score_result_s3_utils import download_evaluation_artifact_file
+                            full_rca = download_evaluation_artifact_file(root_cause_candidate["output_attachment"])
+                            if isinstance(full_rca, dict):
+                                root_cause = full_rca
+                            else:
+                                logging.warning(f"Could not fetch full RCA from S3, using compact version")
+                                root_cause = root_cause_candidate
+                        except Exception as e:
+                            logging.warning(f"Failed to fetch full RCA from S3: {e}")
+                            root_cause = root_cause_candidate
+                    else:
+                        root_cause = root_cause_candidate
+                    misclassification_candidate = root_cause.get("misclassification_analysis")
                     if isinstance(misclassification_candidate, dict):
                         misclassification_analysis = misclassification_candidate
             
@@ -3068,23 +3082,27 @@ class FeedbackEvaluation(Evaluation):
 
     @classmethod
     def _compact_root_cause_for_parameters(cls, root_cause_payload: dict, output_attachment: str) -> dict:
-        """Build compact RCA parameters payload with attachment pointer."""
+        """Build minimal RCA for DynamoDB parameters. Full data lives in S3.
+
+        Keeps only top-level narrative fields needed by the dashboard UI.
+        All detailed data (item classifications, etc.) is in the S3 attachment.
+        """
         if not isinstance(root_cause_payload, dict):
             raise ValueError("root_cause_payload must be a dictionary")
         if not output_attachment:
             raise ValueError("output_attachment is required")
 
-        compact_payload = {}
+        compact_payload = {
+            "output_attachment": output_attachment,
+            "output_compacted": True,
+        }
 
-        # Keep top-level narrative fields that power the evaluation UI.
-        for key in (
-            "overall_explanation",
-            "overall_improvement_suggestion",
-            "misclassification_analysis",
-        ):
+        # Keep top-level narrative fields needed by the dashboard UI
+        for key in ("overall_explanation", "overall_improvement_suggestion"):
             if key in root_cause_payload:
-                compact_payload[key] = root_cause_payload.get(key)
+                compact_payload[key] = root_cause_payload[key]
 
+        # Keep compact topic list for dashboard display (labels + counts only)
         raw_topics = root_cause_payload.get("topics")
         if isinstance(raw_topics, list):
             compact_payload["topics"] = [
@@ -3093,21 +3111,6 @@ class FeedbackEvaluation(Evaluation):
                 if isinstance(topic, dict)
             ]
 
-        # Strip per-item rows from the DB payload — full data is in the attachment file.
-        # Only keep the count and attachment pointer so readers know where to fetch the detail.
-        misclassification_analysis = compact_payload.get("misclassification_analysis")
-        if isinstance(misclassification_analysis, dict):
-            compact_misclassification = dict(misclassification_analysis)
-            raw_rows = misclassification_analysis.get("item_classifications_all")
-            if isinstance(raw_rows, list):
-                compact_misclassification["item_classifications_total"] = len(raw_rows)
-                del compact_misclassification["item_classifications_all"]
-            compact_misclassification["item_classifications_attachment"] = output_attachment
-            compact_payload["misclassification_analysis"] = compact_misclassification
-
-        compact_payload["output_compacted"] = True
-        compact_payload["output_attachment"] = output_attachment
-        compact_payload["output_compaction_version"] = "feedback_rca_v1"
         return compact_payload
 
     def _persist_root_cause_for_parameters(self, root_cause_payload: dict) -> dict:
