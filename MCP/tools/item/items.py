@@ -102,18 +102,18 @@ def register_item_tools(mcp: FastMCP):
                 'isEvaluation': item.isEvaluation,
                 'createdByType': item.createdByType,
                 'metadata': item.metadata,
-                'identifiers': item.identifiers,
+                'identifiers': await _get_identifiers_for_item(item.id, client) or item.identifiers,
                 'attachedFiles': item.attachedFiles,
                 'createdAt': item.createdAt.isoformat() if item.createdAt else None,
                 'updatedAt': item.updatedAt.isoformat() if item.updatedAt else None,
                 'url': _get_item_url(item.id)
             }
-            
+
             # Get score results and feedback items by default (unless minimal mode)
             if not minimal:
                 score_results = await _get_score_results_for_item(item.id, client)
                 item_dict['scoreResults'] = score_results
-                
+
                 feedback_items = await _get_feedback_items_for_item(item.id, client)
                 item_dict['feedbackItems'] = feedback_items
             
@@ -303,7 +303,7 @@ def register_item_tools(mcp: FastMCP):
                     'createdByType': item.createdByType,
                     'text': truncate_field(item.text, 'text', 5000),  # Truncate large text content
                     'metadata': item.metadata,  # Keep metadata as-is for now
-                    'identifiers': item.identifiers,
+                    'identifiers': await _get_identifiers_for_item(item.id, client) or item.identifiers,
                     'attachedFiles': item.attachedFiles,
                     'createdAt': item.createdAt.isoformat() if hasattr(item.createdAt, 'isoformat') else item.createdAt,
                     'updatedAt': item.updatedAt.isoformat() if hasattr(item.updatedAt, 'isoformat') else item.updatedAt,
@@ -336,6 +336,31 @@ def register_item_tools(mcp: FastMCP):
                 logger.warning(f"Captured unexpected stdout during get_plexus_item_details: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout
+
+
+async def _get_identifiers_for_item(item_id: str, client) -> Optional[List[Dict[str, Any]]]:
+    """Fetch identifiers from the Identifier table for a given item."""
+    try:
+        query = """
+        query ListIdentifierByItemIdAndPosition($itemId: String!) {
+            listIdentifierByItemIdAndPosition(itemId: $itemId) {
+                items {
+                    name
+                    value
+                    url
+                    position
+                }
+            }
+        }
+        """
+        result = client.execute(query, {'itemId': item_id})
+        items = result.get('listIdentifierByItemIdAndPosition', {}).get('items', [])
+        if items:
+            return [{'name': i['name'], 'value': i['value'], 'url': i.get('url')} for i in items]
+        return None
+    except Exception as e:
+        logger.warning(f"Error fetching identifiers for item {item_id}: {e}")
+        return None
 
 
 async def _get_score_results_for_item(item_id: str, client) -> List[Dict[str, Any]]:

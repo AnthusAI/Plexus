@@ -52,6 +52,21 @@ params:
     required: false
     description: "Optional expert hint to guide the optimizer. Example: 'The prescriber name is often redacted — the LLM should be warned about this.' This text is included verbatim in the agent's context."
 
+  start_version:
+    type: string
+    required: false
+    description: "Score version ID to start from instead of the champion version. Useful for continuing optimization from a previous result."
+
+  resume_accuracy_eval:
+    type: string
+    required: false
+    description: "Evaluation ID of a previous accuracy baseline to reuse. Skips running a new accuracy baseline. Must match the start_version (or champion if not specified)."
+
+  resume_feedback_eval:
+    type: string
+    required: false
+    description: "Evaluation ID of a previous feedback baseline to reuse. Skips running a new feedback baseline. Must match the start_version (or champion if not specified)."
+
   dry_run:
     type: boolean
     default: false
@@ -108,6 +123,8 @@ outputs:
 
 agents:
   code_editor:
+    provider: openai
+    model: gpt-4o
     system_prompt: |
       You are a score configuration editor optimizing a Plexus score for feedback alignment.
 
@@ -120,105 +137,51 @@ agents:
       2. FEEDBACK DATASET ("feedback" metric): Newest 90 days of human-corrected items.
          → OPTIMIZATION TARGET. Improve feedback AC1 without hurting the accuracy dataset.
 
-      CORE METHOD — CROSS-CASE PATTERN ANALYSIS:
-      If MISCLASSIFICATION EXAMPLES are provided in your context, use this process:
+      CORE METHOD — RCA-DRIVEN OPTIMIZATION:
+      Your context includes a full Root Cause Analysis (RCA) of all misclassifications.
+      The RCA has already examined every error, categorized them, and produced suggested fixes.
+      Use this structured evidence to guide your edits:
 
-      Step 1 — Read ALL transcript examples in EACH error group.
-        For each group, analyze BOTH sides of the conversation separately:
+      1. Study the RCA analysis — look for the MOST COMMON error patterns
+      2. Identify the highest-impact fix — which single change fixes the MOST errors?
+      3. Choose fix scope:
+         TARGETED CRITERIA FIX: Adjust specific YES/NO conditions (1-3 lines)
+         TARGETED RULE: Add a precise rule for an unhandled case
+         EXAMPLE ADDITION: Add a concrete example to clarify a boundary case
+         Do NOT rewrite the entire user_message — full rewrites consistently regress.
 
-        AGENT/ISR SIDE (read this first):
-        - What exact words or phrases does the ISR use BEFORE the customer responds?
-        - Is the ISR reading/reciting from existing booking notes or records?
-          (e.g., "I see we have you and [Name] for the appointment")
-        - OR is the ISR using a standard invitation/inquiry script?
-          (e.g., "Who else might you like to have present?")
-        - Does the ISR's phrasing DIFFER between the FP group and the FN group?
-
-        CUSTOMER SIDE (read this second):
-        - What does the customer say in response?
-        - Is the customer's response the key differentiator, or is it the same in both groups?
-
-        KEY INSIGHT: The agent/ISR's language often reveals the correct classification
-        signal more reliably than the customer's response. A score may need to classify
-        based on WHAT THE ISR IS DOING (confirming existing booking vs. asking fresh),
-        not just what the customer says.
-
-      Step 2 — Find the common root cause.
-        The most impactful fixes come from identifying a SINGLE pattern that explains
-        most errors. Ask:
-        - Is the score measuring the RIGHT thing vs. what humans actually evaluate?
-          (Semantic mismatch — the most common source of large AC1 gaps)
-        - Is there a KEY DISTINCTION the current rules miss entirely?
-          (Missing rule — one clear new rule fixes a whole cluster)
-        - Are rules right but insufficiently illustrated?
-          (Missing example — add a boundary-case example)
-
-      Step 3 — Choose fix scope based on root cause:
-        TARGETED CRITERIA ADJUSTMENT: Refine specific YES/NO conditions or wording.
-          Modify 1-3 specific lines that directly address the error pattern.
-          Do NOT rewrite the entire user_message — full rewrites consistently regress.
-        TARGETED RULE: Question is right, specific case unhandled →
-          Add one precise rule that captures the pattern.
-        EXAMPLE ADDITION: Rules are right but ambiguous at boundaries →
-          Add a concrete example illustrating the edge case.
-
-      EDIT STRATEGY — ranked by safety:
+      EDIT SAFETY — ranked:
       SAFEST: Add concrete examples to clarify edge cases
       SAFE: Sharpen existing criteria with specific language
       MODERATE: Adjust 1-3 lines of existing criteria wording
       RISKY: Expand or broaden criteria (may hurt accuracy)
       DANGEROUS: Remove criteria or rewrite entire user_message (almost always hurts)
 
-      WORKFLOW:
-      1. ALWAYS FIRST: call str_replace_editor(command="view", path="score_config.yaml")
-         to read the exact current file contents. You MUST do this before any edit.
-         This gives you the exact text and indentation to use in old_str.
-      2. Analyze the cross-case examples (if provided) OR RCA data to identify the fix.
-      3. Make your edit and submit in ONE response:
-           str_replace_editor(command="str_replace", path="score_config.yaml",
-              old_str="<exact text copied from the view output>",
-              new_str="<replacement with IDENTICAL indentation>")
-           submit_score_code(version_note="<what you changed and why — be specific>")
-      4. If submit_score_code returns an error, call view again and retry with exact text.
-      5. If you cannot find any viable improvement:
-           done(success=False, reason="cannot_improve: <explanation>")
+      WORKFLOW — you drive the editing session:
+      You will receive the full file content and RCA analysis in your first message.
+      You have full control of this editing session. You can make multiple edits,
+      view the file, think, and iterate until you are satisfied.
 
-      IMPORTANT: You MUST call submit_score_code in every response (unless giving up).
-      If you only call str_replace_editor without submit_score_code, the iteration is wasted.
-      Calling view first is MANDATORY — never guess old_str from memory.
+      Available tools:
+      - str_replace_editor: view or edit the file (view, str_replace, insert commands)
+      - submit_score_code: submit your changes as a new version (ends the session)
+      - done: give up if you cannot find a viable improvement (ends the session)
 
-      YAML RULES — read carefully to avoid validation errors:
+      The file content is provided in your initial context, so you do NOT need to
+      call view first — but you can if you want to re-read after edits.
+
+      When you are satisfied with your edit(s), call submit_score_code with a
+      version_note describing what you changed and why.
+
+      If you cannot find any viable improvement:
+        Call done(success=False, reason="cannot_improve: <explanation>")
+
+      YAML RULES:
       - Make exactly ONE change per iteration
-      - The old_str must be an exact substring of the current configuration
-      - YAML indentation must be correct in the replacement text
-      - Learn from history: if an edit type was rejected before, try a different approach
-
-      REWRITING user_message (CRITICAL — most common failure point):
-      The user_message is a multi-line block scalar. Its content lines MUST match
-      the EXACT indentation of the original. WRONG indentation causes YAML parse errors.
-
-      REQUIRED WORKFLOW for any user_message rewrite:
-      Step 1: Call str_replace_editor(command="view", path="score_config.yaml")
-      Step 2: Count the spaces before the FIRST content line inside user_message.
-              Example: if you see "        Analyze the following..." — that is 8 spaces.
-      Step 3: Use THAT SAME indentation for ALL lines in your new_str.
-              Example old_str:  "    user_message: |-\n        Old first line...\n"
-              Example new_str:  "    user_message: |-\n        New first line...\n"
-              NEVER use 2-space indentation if the original uses 8 spaces.
-      Step 4: When the edit succeeds AND submit_score_code confirms — you're done.
-
-      ADDING A LIST ITEM (critical — this is the most common YAML mistake):
-      When adding a new bullet point to an existing list, you MUST include the
-      previous item in old_str so the replacement has proper context. Example:
-        old_str: "      - existing last item\n"
-        new_str: "      - existing last item\n      - your new item\n"
-      NEVER add a "- " item at the very end of a sequence without including
-      the prior item as context. This causes a "expected <block end>, but found '-'"
-      YAML parse error and your edit will be REJECTED.
-
-      MODIFYING AN EXISTING ITEM (preferred — safer than adding):
-      Replace in-place: include the full item in old_str, provide the updated
-      version in new_str. This never causes YAML structure errors.
+      - old_str must be an exact substring of the current file (copy from the context)
+      - Preserve indentation exactly — count spaces from the file shown to you
+      - When adding a list item, include the previous item in old_str for context
+      - When modifying an item, replace in-place (include full item in old_str)
 
     initial_message: "Ready."
 
@@ -228,6 +191,8 @@ agents:
       - done
 
   reviewer:
+    provider: openai
+    model: gpt-4o
     system_prompt: |
       You are a score optimization reviewer. You will see the eval results for an edit
       just made to a score configuration. Decide: keep or revert.
@@ -254,6 +219,8 @@ agents:
       - done
 
   synthesizer:
+    provider: openai
+    model: gpt-4o
     system_prompt: |
       You are a score configuration synthesizer. You see multiple candidate edits
       to a Plexus score configuration and their evaluation results.
@@ -439,159 +406,6 @@ code: |
     return decoded_result
   end
 
-  -- Parse valid_classes from score YAML code string
-  -- Returns a table like {"Yes", "No"} or nil
-  local function extract_valid_classes(yaml_code)
-    if not yaml_code then return nil end
-    local match = string.match(yaml_code, 'valid_classes:%s*%[([^%]]+)%]')
-    if not match then return nil end
-    local classes = {}
-    for cls in string.gmatch(match, '"?([%w][%w_%-]*)"?') do
-      if cls ~= "" then table.insert(classes, cls) end
-    end
-    return #classes >= 2 and classes or nil
-  end
-
-  -- Fetch actual transcript examples for each confusion-matrix error cell
-  -- Returns a table keyed by "pred=X actual=Y" with a list of example objects, or {}
-  local function fetch_cross_case_examples(eval_id, valid_classes, max_per_cell)
-    if not eval_id then return {} end
-    max_per_cell = max_per_cell or 50
-
-    -- Determine which classes to query. Use provided classes or fall back to common defaults.
-    local classes = valid_classes
-    if type(classes) ~= "table" or #classes < 2 then
-      -- Try to infer from the eval's predicted distribution by fetching a small unfiltered sample
-      local ok_probe, probe = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
-        evaluation_id = eval_id, limit = 10, include_text = false
-      })
-      if ok_probe and probe and type(probe.score_results) == "table" then
-        local seen = {}
-        for _, sr in ipairs(probe.score_results) do
-          local p = tostring(sr.predicted or ""):lower()
-          local a = tostring(sr.actual or ""):lower()
-          if p ~= "" then seen[p] = true end
-          if a ~= "" then seen[a] = true end
-        end
-        classes = {}
-        for k in pairs(seen) do table.insert(classes, k) end
-      end
-    end
-
-    if type(classes) ~= "table" or #classes < 2 then return {} end
-
-    local cells = {}
-    for _, pred in ipairs(classes) do
-      for _, actual in ipairs(classes) do
-        if string.lower(pred) ~= string.lower(actual) then
-          local cell_key = string.format("pred=%s actual=%s", pred, actual)
-          local ok, raw = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
-            evaluation_id   = eval_id,
-            predicted_value = pred,
-            actual_value    = actual,
-            limit           = max_per_cell,
-            include_text    = true
-          })
-          if ok and raw and type(raw.score_results) == "table" and #raw.score_results > 0 then
-            local total = (raw.context and raw.context.confusion_matrix_cells) or {}
-            local cell_count = 0
-            for _, v in pairs(total) do cell_count = cell_count + (tonumber(v) or 0) end
-            cells[cell_key] = {
-              examples   = raw.score_results,
-              total_count = cell_count > 0 and cell_count or #raw.score_results
-            }
-          end
-        end
-      end
-    end
-    return cells
-  end
-
-  -- Format cross-case examples into a readable context block for the agent
-  local function format_cross_case_section(cross_case_cells)
-    if not cross_case_cells or next(cross_case_cells) == nil then return nil end
-
-    local parts = {"=== MISCLASSIFICATION EXAMPLES (actual transcripts — read carefully) ==="}
-    table.insert(parts, "")
-    table.insert(parts, "These are REAL examples of errors from the latest feedback evaluation.")
-    table.insert(parts, "Study ALL groups together. Your goal: find the ONE common behavioral")
-    table.insert(parts, "pattern that explains most errors in each group.")
-    table.insert(parts, "")
-    table.insert(parts, "KEY QUESTION: Is there a SEMANTIC MISMATCH between what the")
-    table.insert(parts, "score is asking and what human reviewers are actually evaluating?")
-    table.insert(parts, "If so, make TARGETED adjustments to specific criteria (1-3 lines) — do NOT rewrite the entire prompt.")
-    table.insert(parts, "")
-    table.insert(parts, "HOW TO ANALYZE EACH EXAMPLE:")
-    table.insert(parts, "  1. Read what the AGENT/ISR says FIRST (before the customer responds).")
-    table.insert(parts, "     → Is the ISR reading from existing booking notes?")
-    table.insert(parts, "       (e.g., 'I see we have you and [Name] scheduled for...')")
-    table.insert(parts, "     → OR is the ISR asking a fresh inquiry/invitation?")
-    table.insert(parts, "       (e.g., 'Who else would you like to have present at the visit?')")
-    table.insert(parts, "  2. Then read the customer's response.")
-    table.insert(parts, "  3. Ask: Does the ISR's behavior DIFFER between the FP group and FN group?")
-    table.insert(parts, "     If YES → the ISR's behavior may be the classification signal, not the customer's words.")
-    table.insert(parts, "")
-
-    for cell_key, cell_data in pairs(cross_case_cells) do
-      local examples   = cell_data.examples or {}
-      local total      = cell_data.total_count or #examples
-      if #examples == 0 then goto continue end
-
-      -- Determine human-readable label
-      local label = cell_key
-      local pred_cls  = string.match(cell_key, "pred=(%S+)")
-      local act_cls   = string.match(cell_key, "actual=(%S+)")
-      if pred_cls and act_cls then
-        label = string.format(
-          "AI predicted '%s' but human said '%s'  (total: %d)",
-          pred_cls, act_cls, total)
-      end
-
-      table.insert(parts, "--- " .. label .. " ---")
-      table.insert(parts, "")
-
-      for i, ex in ipairs(examples) do
-        -- AI reasoning
-        local reasoning = ""
-        if ex.explanation and ex.explanation ~= "" then
-          reasoning = tostring(ex.explanation)
-        elseif ex.trace and ex.trace.node_results then
-          for _, nr in ipairs(ex.trace.node_results) do
-            local out = nr.output or {}
-            local exp = out.explanation or out.rationale or ""
-            if exp ~= "" then reasoning = tostring(exp); break end
-          end
-        end
-
-        -- Transcript excerpt — pull from multiple possible locations
-        local text = ""
-        if ex.item and ex.item.text and ex.item.text ~= "" then
-          text = ex.item.text
-        elseif ex.detailed_metadata then
-          for _, v in pairs(ex.detailed_metadata.results or {}) do
-            if v.metadata and v.metadata.text and v.metadata.text ~= "" then
-              text = v.metadata.text; break
-            end
-          end
-        end
-
-        table.insert(parts, string.format("  [%d] AI said: %s", i, pred_cls or "?"))
-        if reasoning ~= "" then
-          table.insert(parts, "      AI reasoning: " .. reasoning)
-        end
-        if text ~= "" then
-          table.insert(parts, "      Transcript: " .. tostring(text))
-        end
-        table.insert(parts, "")
-      end
-
-      ::continue::
-    end
-
-    table.insert(parts, "=== END OF EXAMPLES ===")
-    return table.concat(parts, "\n")
-  end
-
   -- Build version history table for agent context
   local function build_version_history(iterations, baseline_version_id, baseline_fb_metrics, baseline_acc_metrics, last_accepted_version_id)
     local lines = {"=== OPTIMIZATION HISTORY ===", ""}
@@ -680,20 +494,23 @@ code: |
     -- Category summaries (natural language per-category description)
     rca._category_summaries = ma.category_summaries or nil
 
+    -- Category hierarchy (categories with topics nested under them, sorted by size)
+    rca._category_hierarchy = (type(ma.category_hierarchy) == "table" and ma.category_hierarchy) or {}
+
     -- All item classifications with suggested_fix + evidence_quote
     rca._all_item_classifications = (type(ma.item_classifications_all) == "table" and ma.item_classifications_all) or {}
+
+    -- Topic category breakdown for grouping items by topic
+    rca._topic_category_breakdown = (type(ma.topic_category_breakdown) == "table" and ma.topic_category_breakdown) or {}
 
     return rca
   end
 
   -- Build a candidate-specific strategy instruction
-  -- With cross-case examples available, candidates get DIVERSIFIED analytical approaches:
-  --   Candidate 1: Semantic/structural — targeted criteria adjustments (NOT full rewrites)
-  --   Candidate 2: Rule-based — look for a specific missing rule
-  --   Candidate 3+: Example-based — add targeted examples or sharpen wording
-  -- Without cross-case examples, fall back to RCA-item-per-candidate assignment.
-  local function build_candidate_strategy(candidate_index, num_candidates, fixable_items,
-                                           consecutive_acc_rejections, has_cross_case_examples)
+  -- Diversify candidates across RCA error categories.
+  -- Each candidate targets a different category from the RCA analysis.
+  local function build_candidate_strategy(candidate_index, num_candidates, rca_categories,
+                                           consecutive_acc_rejections)
     -- If accuracy has regressed repeatedly, all candidates are conservative
     if consecutive_acc_rejections >= 2 then
       return "STRATEGY: SAFEST only — add examples to clarify edge cases. Do NOT modify criteria."
@@ -703,73 +520,23 @@ code: |
       return ""  -- single candidate, use default behavior
     end
 
-    -- With cross-case examples: diversify the analytical lens across candidates
-    if has_cross_case_examples then
-      if candidate_index == 1 then
-        return "STRATEGY [TARGETED STRUCTURAL ANALYSIS]: You are candidate 1 — the criteria-refinement candidate.\n" ..
-          "Your PRIMARY TASK: Study the AGENT/ISR language in the transcript examples.\n" ..
-          "\n" ..
-          "For EACH error group, answer these questions about what the ISR says:\n" ..
-          "  • FP group (AI said Yes, human said No): What is the ISR's exact phrasing?\n" ..
-          "  • FN group (AI said No, human said Yes): What is the ISR's exact phrasing?\n" ..
-          "  • Does the ISR phrasing DIFFER between the two groups?\n" ..
-          "\n" ..
-          "Common discovery pattern: ISR behavior signals the context:\n" ..
-          "  - ISR reads from existing notes ('I see we have you and [Name] scheduled') → different context\n" ..
-          "  - ISR uses inquiry script ('Who else would you like to have present?') → different context\n" ..
-          "If the ISR's behavior differs between FP and FN groups, the score criteria may need\n" ..
-          "to be ADJUSTED to account for that ISR signal.\n" ..
-          "\n" ..
-          "CRITICAL CONSTRAINT — INCREMENTAL EDITS ONLY:\n" ..
-          "Do NOT rewrite the entire user_message from scratch. Full rewrites destroy working\n" ..
-          "parts of the prompt and consistently cause large regressions (-10% or worse).\n" ..
-          "Instead, make TARGETED changes:\n" ..
-          "  - Adjust specific YES/NO conditions that are too broad or too narrow\n" ..
-          "  - Add a clarifying sentence to an existing criterion\n" ..
-          "  - Refine the wording of ONE specific rule that mishandles the error pattern\n" ..
-          "  - Modify at most 2-3 lines of the user_message, not the whole block\n" ..
-          "The goal is a surgical fix, not a rewrite."
-      elseif candidate_index == 2 then
-        return "STRATEGY [RULE ANALYSIS]: You are candidate 2 — the missing-rule candidate.\n" ..
-          "Study the misclassification examples with this specific question:\n" ..
-          "  'Is there ONE specific behavioral pattern in the transcripts that the current rules\n" ..
-          "   handle incorrectly or not at all?'\n" ..
-          "Look for a rule that is MISSING entirely (not just inadequately worded).\n" ..
-          "Add ONE precise, concrete new rule that handles the specific pattern you found.\n" ..
-          "Be specific: 'When agent says X, classify as Y because Z.'"
-      else
-        local num_fixable = type(fixable_items) == "table" and #fixable_items or 0
-        local target_idx = math.min(candidate_index - 1, math.max(num_fixable, 1))
-        return string.format(
-          "STRATEGY [EXAMPLE ANALYSIS]: You are candidate %d — the boundary-case candidate.\n" ..
-          "Study the misclassification examples with this specific question:\n" ..
-          "  'Which examples most clearly illustrate the boundary between correct and incorrect\n" ..
-          "   classification? Would a concrete example in the score config fix the ambiguity?'\n" ..
-          "Add targeted EXAMPLES (not new rules) that illustrate the boundary cases.\n" ..
-          "Also consider RCA fixable item #%d as a source of specific evidence.\n" ..
-          "Prefer adding examples to existing rules over adding new rules.",
-          candidate_index, target_idx)
-      end
-    end
+    local num_categories = type(rca_categories) == "table" and #rca_categories or 0
+    local target_idx = math.min(candidate_index, math.max(num_categories, 1))
 
-    -- Without cross-case examples: fall back to RCA-item-per-candidate
-    local num_fixable = type(fixable_items) == "table" and #fixable_items or 0
-    local target_idx = math.min(candidate_index, math.max(num_fixable, 1))
-
-    if num_fixable < 2 then
+    if num_categories < 2 then
       if candidate_index == 1 then
-        return "STRATEGY: Target fixable item #1. Use SAFEST edits — add examples or sharpen wording."
+        return "STRATEGY: Target the top error category. Use SAFEST edits — add examples or sharpen wording."
       else
-        return "STRATEGY: Target fixable item #1 with a BOLDER approach. " ..
+        return "STRATEGY: Target the top error category with a BOLDER approach. " ..
           "You ARE ALLOWED to modify criteria wording, add conditions, or restructure."
       end
     end
 
     return string.format(
       "STRATEGY: You are candidate %d of %d. Each candidate targets a DIFFERENT error category.\n" ..
-      "YOUR ASSIGNMENT: Focus ONLY on fixable item #%d from the RCA above.\n" ..
-      "Do NOT address any other fixable items — other candidates handle those.\n" ..
-      "Make exactly ONE targeted edit to fix the error pattern described in item #%d.\n" ..
+      "YOUR ASSIGNMENT: Focus on the #%d ranked error category from the RCA above.\n" ..
+      "Do NOT address other categories — other candidates handle those.\n" ..
+      "Make exactly ONE targeted edit to fix the error pattern described in that category.\n" ..
       "Use SAFEST or SAFE edits. The synthesis step will combine the best fixes from all candidates.",
       candidate_index, num_candidates, target_idx, target_idx)
   end
@@ -826,13 +593,6 @@ code: |
         if rca.overall_improvement_suggestion then
           table.insert(parts, "Suggestion: " .. tostring(rca.overall_improvement_suggestion))
         end
-        local topics = (type(rca.topics) == "table" and rca.topics) or {}
-        for i, t in ipairs(topics) do
-          local topic_count = t.member_count or t.count or t.size or t.total or t.n
-          if not topic_count and type(t.items) == "table" then topic_count = #t.items end
-          table.insert(parts, string.format("Topic %d: %s (count=%s)",
-            i, tostring(t.label or "?"), tostring(topic_count or "?")))
-        end
         -- Primary next action
         if rca._primary_next_action then
           local pna = rca._primary_next_action
@@ -844,46 +604,124 @@ code: |
             end
           end
         end
-        -- Category summaries
-        if type(rca._category_summaries) == "table" then
-          table.insert(parts, "Error categories:")
-          for cat, summary in pairs(rca._category_summaries) do
-            local summary_text
-            if type(summary) == "table" then
-              summary_text = summary.category_summary_text or summary.text or summary.description or summary.summary or summary[1] or "?"
-            else
-              summary_text = tostring(summary)
-            end
-            local item_count = ""
-            if type(summary) == "table" and summary.item_count then
-              item_count = string.format(" (%d items)", summary.item_count)
-            end
-            table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, tostring(summary_text)))
+        -- Misclassification analyses grouped by RCA category
+        -- Use category_hierarchy for structure, items grouped under each category
+        if type(rca._category_hierarchy) == "table" and #rca._category_hierarchy > 0 then
+          -- Sort categories by item_count descending
+          local sorted_cats = {}
+          for _, cat in ipairs(rca._category_hierarchy) do
+            table.insert(sorted_cats, cat)
           end
-        end
-        -- All item classifications from RCA
-        if type(rca._all_item_classifications) == "table" and #rca._all_item_classifications > 0 then
-          table.insert(parts, string.format("All misclassification analyses (%d):", #rca._all_item_classifications))
+          table.sort(sorted_cats, function(a, b)
+            return (a.item_count or 0) > (b.item_count or 0)
+          end)
+
+          -- Build a lookup: category_key -> list of items
+          local items_by_category = {}
+          if type(rca._all_item_classifications) == "table" then
+            for _, item in ipairs(rca._all_item_classifications) do
+              local cat_key = item.primary_category or "unknown"
+              if not items_by_category[cat_key] then
+                items_by_category[cat_key] = {}
+              end
+              table.insert(items_by_category[cat_key], item)
+            end
+          end
+
+          -- Progressive example counts: top category gets 5, second gets 3, rest get 1
+          local example_limits = {5, 3, 2, 1, 1}
+
+          local total_items = type(rca._all_item_classifications) == "table" and #rca._all_item_classifications or 0
+          table.insert(parts, string.format("=== MISCLASSIFICATION ANALYSIS BY CATEGORY (%d total) ===", total_items))
+
+          for cat_rank, cat in ipairs(sorted_cats) do
+            local cat_key = cat.category_key or "unknown"
+            local cat_label = cat.category_label or cat_key
+            local cat_count = cat.item_count or 0
+            local share_pct = (cat.share or 0) * 100
+
+            if cat_count > 0 then
+              table.insert(parts, "")
+              table.insert(parts, string.format("--- %s (%d items, %.0f%%) ---", cat_label, cat_count, share_pct))
+
+              -- Category summary text
+              if cat.summary_text and cat.summary_text ~= "" then
+                table.insert(parts, "Summary: " .. tostring(cat.summary_text))
+              end
+
+              -- Top patterns
+              if type(cat.top_patterns) == "table" and #cat.top_patterns > 0 then
+                local pattern_strs = {}
+                for _, p in ipairs(cat.top_patterns) do
+                  table.insert(pattern_strs, string.format("%s (%d)", tostring(p.pattern or "?"), p.count or 0))
+                end
+                table.insert(parts, "Top patterns: " .. table.concat(pattern_strs, ", "))
+              end
+
+              -- Topics within this category
+              if type(cat.topics) == "table" and #cat.topics > 0 then
+                table.insert(parts, "Topics:")
+                for _, topic in ipairs(cat.topics) do
+                  table.insert(parts, string.format("  - %s (%d items)",
+                    tostring(topic.label or "?"), topic.member_count or 0))
+                end
+              end
+
+              -- Category-level summary from _category_summaries (recursive summarization)
+              if type(rca._category_summaries) == "table" and rca._category_summaries[cat_key] then
+                local cs = rca._category_summaries[cat_key]
+                if type(cs) == "table" then
+                  -- Representative evidence from recursive summarization
+                  if type(cs.representative_evidence) == "table" and #cs.representative_evidence > 0 then
+                    table.insert(parts, "Representative evidence from RCA:")
+                    for _, ev in ipairs(cs.representative_evidence) do
+                      table.insert(parts, "  * " .. tostring(ev))
+                    end
+                  end
+                end
+              end
+
+              -- Detailed examples (progressive: more for top categories)
+              local max_examples = example_limits[math.min(cat_rank, #example_limits)]
+              local cat_items = items_by_category[cat_key] or {}
+              local num_shown = math.min(max_examples, #cat_items)
+              if num_shown > 0 then
+                table.insert(parts, string.format("Detailed examples (%d of %d):", num_shown, #cat_items))
+                for ex_i = 1, num_shown do
+                  local item = cat_items[ex_i]
+                  table.insert(parts, string.format("  [%d] predicted=%s correct=%s",
+                    ex_i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?")))
+                  if item.rationale_short and item.rationale_short ~= "" then
+                    table.insert(parts, "      Summary: " .. tostring(item.rationale_short))
+                  end
+                  if item.suggested_fix and item.suggested_fix ~= "" then
+                    table.insert(parts, "      Suggested fix: " .. tostring(item.suggested_fix))
+                  end
+                  if item.rationale_paragraph and item.rationale_paragraph ~= "" then
+                    table.insert(parts, "      Rationale: " .. tostring(item.rationale_paragraph))
+                  end
+                  if item.evidence_quote and item.evidence_quote ~= "" then
+                    table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote))
+                  end
+                  if item.detailed_cause and item.detailed_cause ~= "" then
+                    table.insert(parts, "      Detailed cause: " .. tostring(item.detailed_cause))
+                  end
+                end
+              end
+            end
+          end
+        elseif type(rca._all_item_classifications) == "table" and #rca._all_item_classifications > 0 then
+          -- Fallback: flat list if no category_hierarchy available
+          table.insert(parts, string.format("Misclassification analyses (%d):", #rca._all_item_classifications))
           for i, item in ipairs(rca._all_item_classifications) do
-            local fixability = item.config_fixability or "unknown"
             local category = item.primary_category or "unknown"
-            table.insert(parts, string.format("  [%d] predicted=%s correct=%s category=%s fixability=%s",
-              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?"),
-              category, fixability))
+            table.insert(parts, string.format("  [%d] predicted=%s correct=%s category=%s",
+              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?"), category))
             if item.rationale_short and item.rationale_short ~= "" then
               table.insert(parts, "      Summary: " .. tostring(item.rationale_short))
             end
             if item.suggested_fix and item.suggested_fix ~= "" then
-              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix))
-            end
-            if item.rationale_paragraph and item.rationale_paragraph ~= "" then
-              table.insert(parts, "      Rationale: " .. tostring(item.rationale_paragraph))
-            end
-            if item.evidence_quote and item.evidence_quote ~= "" then
-              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote))
-            end
-            if item.detailed_cause and item.detailed_cause ~= "" then
-              table.insert(parts, "      Detailed cause: " .. tostring(item.detailed_cause))
+              table.insert(parts, "      Suggested fix: " .. tostring(item.suggested_fix))
             end
           end
         end
@@ -908,13 +746,6 @@ code: |
         if rca.overall_improvement_suggestion then
           table.insert(parts, "Suggestion: " .. tostring(rca.overall_improvement_suggestion))
         end
-        local topics = (type(rca.topics) == "table" and rca.topics) or {}
-        for i, t in ipairs(topics) do
-          local topic_count = t.member_count or t.count or t.size or t.total or t.n
-          if not topic_count and type(t.items) == "table" then topic_count = #t.items end
-          table.insert(parts, string.format("Topic %d: %s (count=%s)",
-            i, tostring(t.label or "?"), tostring(topic_count or "?")))
-        end
         -- Primary next action
         if rca._primary_next_action then
           local pna = rca._primary_next_action
@@ -926,8 +757,19 @@ code: |
             end
           end
         end
-        -- Category summaries
-        if type(rca._category_summaries) == "table" then
+        -- Category summaries (accuracy dataset — brief, for regression awareness)
+        if type(rca._category_hierarchy) == "table" and #rca._category_hierarchy > 0 then
+          table.insert(parts, "Error categories (accuracy dataset — avoid regressing these):")
+          for _, cat in ipairs(rca._category_hierarchy) do
+            local cat_count = cat.item_count or 0
+            if cat_count > 0 then
+              local cat_label = cat.category_label or cat.category_key or "unknown"
+              local share_pct = (cat.share or 0) * 100
+              table.insert(parts, string.format("  %s (%d items, %.0f%%): %s",
+                cat_label, cat_count, share_pct, tostring(cat.summary_text or "")))
+            end
+          end
+        elseif type(rca._category_summaries) == "table" then
           table.insert(parts, "Error categories:")
           for cat, summary in pairs(rca._category_summaries) do
             local summary_text
@@ -943,53 +785,24 @@ code: |
             table.insert(parts, string.format("  %s%s: %s", tostring(cat), item_count, tostring(summary_text)))
           end
         end
-        -- All item classifications from RCA
-        if type(rca._all_item_classifications) == "table" and #rca._all_item_classifications > 0 then
-          table.insert(parts, string.format("All misclassification analyses (%d):", #rca._all_item_classifications))
-          for i, item in ipairs(rca._all_item_classifications) do
-            local fixability = item.config_fixability or "unknown"
-            local category = item.primary_category or "unknown"
-            table.insert(parts, string.format("  [%d] predicted=%s correct=%s category=%s fixability=%s",
-              i, tostring(item.predicted_value or "?"), tostring(item.correct_value or "?"),
-              category, fixability))
-            if item.rationale_short and item.rationale_short ~= "" then
-              table.insert(parts, "      Summary: " .. tostring(item.rationale_short))
-            end
-            if item.suggested_fix and item.suggested_fix ~= "" then
-              table.insert(parts, "      Fix: " .. tostring(item.suggested_fix))
-            end
-            if item.rationale_paragraph and item.rationale_paragraph ~= "" then
-              table.insert(parts, "      Rationale: " .. tostring(item.rationale_paragraph))
-            end
-            if item.evidence_quote and item.evidence_quote ~= "" then
-              table.insert(parts, "      Evidence: " .. tostring(item.evidence_quote))
-            end
-            if item.detailed_cause and item.detailed_cause ~= "" then
-              table.insert(parts, "      Detailed cause: " .. tostring(item.detailed_cause))
-            end
-          end
-        end
       else
         table.insert(parts, tostring(rca))
       end
     end
     table.insert(parts, "")
 
-    -- Current score configuration
-    table.insert(parts, "=== CURRENT SCORE CONFIGURATION (score_config.yaml) ===")
-    table.insert(parts, opts.current_code or "(not available)")
+    -- Guidelines first (read-only reference), then editable score config last
     if has_text(opts.current_guidelines) then
-      table.insert(parts, "")
-      table.insert(parts, "=== CURRENT GUIDELINES ===")
+      table.insert(parts, "=== CLASSIFICATION GUIDELINES (READ-ONLY reference — DO NOT edit this) ===")
       table.insert(parts, opts.current_guidelines)
+      table.insert(parts, "=== END OF GUIDELINES (read-only) ===")
+      table.insert(parts, "")
     end
 
-    -- Cross-case transcript examples (the core pattern-analysis input)
-    local cross_case_section = format_cross_case_section(opts.cross_case_examples)
-    if cross_case_section then
-      table.insert(parts, "")
-      table.insert(parts, cross_case_section)
-    end
+    -- Current score configuration (editable) — placed last so it's most prominent
+    table.insert(parts, "=== CURRENT SCORE CONFIGURATION (score_config.yaml) — THIS IS THE FILE YOU EDIT ===")
+    table.insert(parts, opts.current_code or "(not available)")
+    table.insert(parts, "=== END OF score_config.yaml ===")
 
     -- Count consecutive accuracy regressions in prior iterations
     local consecutive_acc_rejections = 0
@@ -1020,24 +833,19 @@ code: |
     table.insert(parts, "Accuracy is a FLOOR — do not let it drop more than ~2 percentage points.")
     table.insert(parts, "")
 
-    if cross_case_section then
-      table.insert(parts, "PATTERN ANALYSIS APPROACH (required before making any edit):")
-      table.insert(parts, "1. Study the MISCLASSIFICATION EXAMPLES above — read ALL transcripts.")
-      table.insert(parts, "2. Find the ONE common behavioral pattern that explains most errors in each group.")
-      table.insert(parts, "   Ask yourself:")
-      table.insert(parts, "   - Is the score asking the RIGHT question for what humans actually evaluate?")
-      table.insert(parts, "   - Is there a key distinction the current rules miss entirely?")
-      table.insert(parts, "   - Do both FP and FN groups share a single root cause?")
-      table.insert(parts, "3. Based on your pattern analysis, choose the fix scope:")
-      table.insert(parts, "   TARGETED CRITERIA FIX: Adjust specific YES/NO conditions (1-3 lines).")
-      table.insert(parts, "     Do NOT rewrite the entire user_message — full rewrites cause regressions.")
-      table.insert(parts, "   TARGETED RULE: If the question is right but a specific case is unhandled —")
-      table.insert(parts, "     add a precise rule or example that handles the pattern.")
-      table.insert(parts, "   EXAMPLE ADDITION: If the question and rules are right but ambiguous —")
-      table.insert(parts, "     add a concrete example illustrating the boundary case.")
-    else
-      table.insert(parts, "Focus your edit on the RCA 'Top fixable misclassifications' above.")
-    end
+    table.insert(parts, "IMPORTANT: You edit score_config.yaml (the YAML+Lua file shown between the === markers above).")
+    table.insert(parts, "The classification guidelines above are for reference only — they help you understand policy but are not editable.")
+    table.insert(parts, "Your str_replace old_str MUST be copied exactly from the score_config.yaml content above.")
+    table.insert(parts, "The RCA quotes are paraphrased — do NOT use RCA text as old_str.")
+    table.insert(parts, "")
+    table.insert(parts, "Use the RCA analysis above to identify the most impactful fix.")
+    table.insert(parts, "Choose the fix scope based on the RCA findings:")
+    table.insert(parts, "  TARGETED CRITERIA FIX: Adjust specific YES/NO conditions (1-3 lines).")
+    table.insert(parts, "    Do NOT rewrite the entire user_message — full rewrites cause regressions.")
+    table.insert(parts, "  TARGETED RULE: If the question is right but a specific case is unhandled —")
+    table.insert(parts, "    add a precise rule or example that handles the pattern.")
+    table.insert(parts, "  EXAMPLE ADDITION: If the question and rules are right but ambiguous —")
+    table.insert(parts, "    add a concrete example illustrating the boundary case.")
 
     if cons_failed >= 2 then
       table.insert(parts, "")
@@ -1087,8 +895,8 @@ code: |
     end
 
     table.insert(parts, "")
-    table.insert(parts, "REQUIRED: Call str_replace_editor AND submit_score_code in the SAME response.")
-    table.insert(parts, "Do NOT return text without calling these tools.")
+    table.insert(parts, "REQUIRED: You must call submit_score_code to submit your changes when done editing.")
+    table.insert(parts, "You can make multiple edits before submitting. Call done() if you cannot improve.")
 
     return table.concat(parts, "\n")
   end
@@ -1191,7 +999,7 @@ code: |
 
         table.insert(parts, string.format("=== CANDIDATE %d — %s%s ===",
           cand.index, status_label, failure_reason))
-        table.insert(parts, string.format("RCA target: fixable item #%d", cand.target_item or cand.index))
+        table.insert(parts, string.format("RCA target: category #%d", cand.target_category or cand.index))
         table.insert(parts, string.format("Edit: %s", cand.done_reason or "(none)"))
         table.insert(parts, string.format("FB AC1 delta: %+.3f  |  ACC AC1 delta: %+.3f",
           fb_d, acc_d))
@@ -1349,12 +1157,18 @@ code: |
   State.set("dataset_id", dataset_id)
   Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
 
-  -- Pull champion version to get version ID and code for baseline evals
-  Human.notify({message = "Pulling champion score version...", level = "info"})
-  local initial_pull = call_plexus_tool("plexus_score_pull", {
+  -- Pull starting version (champion or specified start_version)
+  local pull_args = {
     scorecard_identifier = params.scorecard,
     score_identifier = params.score
-  })
+  }
+  if has_text(params.start_version) then
+    pull_args.version_id = params.start_version
+    Human.notify({message = "Pulling specified start version: " .. params.start_version, level = "info"})
+  else
+    Human.notify({message = "Pulling champion score version...", level = "info"})
+  end
+  local initial_pull = call_plexus_tool("plexus_score_pull", pull_args)
   if not initial_pull or not initial_pull.success then
     return {
       success = false,
@@ -1372,16 +1186,106 @@ code: |
   end
   Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
 
-  -- Dual baseline evaluations — run both in parallel using batch mode
+  -- Dual baseline evaluations — run new ones or reuse from a previous run
   Stage.set("baseline")
-  Human.notify({
-    message = "Running baseline accuracy + feedback evaluations in parallel for " .. score_name .. "...",
-    level = "info"
-  })
 
-  local baseline_batch = call_plexus_tool("plexus_evaluation_run", {
-    batch = {
-      {
+  local accuracy_baseline         = nil
+  local accuracy_baseline_id      = nil
+  local accuracy_baseline_metrics = nil
+  local accuracy_baseline_rca     = {}
+  local accuracy_available        = false
+  local feedback_baseline_id      = nil
+  local feedback_baseline_metrics = nil
+  local feedback_baseline_rca     = {}
+
+  local resume_acc = has_text(params.resume_accuracy_eval) and params.resume_accuracy_eval or nil
+  local resume_fb  = has_text(params.resume_feedback_eval) and params.resume_feedback_eval or nil
+
+  if resume_acc or resume_fb then
+    -- Resume mode: reuse existing baseline evaluations
+    Human.notify({message = "Resuming from existing baseline evaluations...", level = "info"})
+
+    -- Helper: validate that a resumed eval's score version matches the starting version
+    local function validate_eval_version(eval_info, eval_type, eval_id)
+      local eval_version = eval_info.score_version_id or eval_info.scoreVersionId
+      if eval_version and eval_version ~= champion_version_id then
+        return false, string.format(
+          "%s baseline %s was run on version %s but starting version is %s. "
+          .. "These must match. Use start_version to specify the correct version, "
+          .. "or omit resume_%s_eval to run a fresh baseline.",
+          eval_type, eval_id, eval_version, champion_version_id,
+          eval_type == "Accuracy" and "accuracy" or "feedback")
+      end
+      return true, nil
+    end
+
+    if resume_acc then
+      Human.notify({message = "Fetching accuracy baseline: " .. resume_acc, level = "info"})
+      local acc_info = call_plexus_tool("plexus_evaluation_info", {
+        evaluation_id = resume_acc,
+        output_format = "json"
+      })
+      if acc_info and not acc_info.error then
+        local valid, err = validate_eval_version(acc_info, "Accuracy", resume_acc)
+        if not valid then
+          return {success = false, status = "error", message = err}
+        end
+        accuracy_baseline_id      = resume_acc
+        accuracy_baseline_metrics = extract_metrics(acc_info)
+        accuracy_baseline_rca     = enrich_rca(acc_info.root_cause or {})
+        accuracy_available        = true
+        Human.notify({message = string.format(
+          "Accuracy baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          accuracy_baseline_metrics.alignment,
+          accuracy_baseline_metrics.accuracy,
+          accuracy_baseline_metrics.precision,
+          accuracy_baseline_metrics.recall
+        ), level = "info"})
+      else
+        Human.notify({message = "Failed to resume accuracy baseline: " .. tostring(acc_info and acc_info.error or "not found"), level = "warning"})
+      end
+    end
+
+    if resume_fb then
+      Human.notify({message = "Fetching feedback baseline: " .. resume_fb, level = "info"})
+      local fb_info = call_plexus_tool("plexus_evaluation_info", {
+        evaluation_id = resume_fb,
+        output_format = "json"
+      })
+      if not fb_info or fb_info.error then
+        return {
+          success = false,
+          status  = "error",
+          message = "Failed to resume feedback baseline " .. resume_fb .. ": " .. tostring(fb_info and fb_info.error or "not found")
+        }
+      end
+      local valid, err = validate_eval_version(fb_info, "Feedback", resume_fb)
+      if not valid then
+        return {success = false, status = "error", message = err}
+      end
+      feedback_baseline_id      = resume_fb
+      feedback_baseline_metrics = extract_metrics(fb_info)
+      feedback_baseline_rca     = enrich_rca(fb_info.root_cause or {})
+      Human.notify({message = string.format(
+        "Feedback baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        feedback_baseline_metrics.alignment,
+        feedback_baseline_metrics.accuracy,
+        feedback_baseline_metrics.precision,
+        feedback_baseline_metrics.recall
+      ), level = "info"})
+    end
+
+    -- If feedback baseline not resumed, must run it
+    if not resume_fb then
+      Human.notify({message = "No feedback baseline to resume — running fresh...", level = "info"})
+    end
+  end
+
+  -- Run fresh baselines for any that weren't resumed
+  if not feedback_baseline_id or (not accuracy_baseline_id and not resume_acc) then
+    local batch_items = {}
+    if not accuracy_baseline_id then
+      table.insert(batch_items, {
         scorecard_name  = params.scorecard,
         score_name      = params.score,
         evaluation_type = "accuracy",
@@ -1389,8 +1293,10 @@ code: |
         n_samples       = params.max_samples or 100,
         version         = champion_version_id,
         notes           = "Baseline: deterministic accuracy dataset for " .. score_name
-      },
-      {
+      })
+    end
+    if not feedback_baseline_id then
+      table.insert(batch_items, {
         scorecard_name     = params.scorecard,
         score_name         = params.score,
         evaluation_type    = "feedback",
@@ -1399,76 +1305,59 @@ code: |
         sampling_mode      = "newest",
         wait               = true,
         notes              = "Baseline: recent feedback alignment dataset for " .. score_name
-      }
-    }
-  })
+      })
+    end
 
-  -- Parse accuracy result (non-fatal — proceed feedback-only if unavailable)
-  local accuracy_baseline         = nil
-  local accuracy_baseline_id      = nil
-  local accuracy_baseline_metrics = nil
-  local accuracy_baseline_rca     = {}
-  local accuracy_available        = false
+    Human.notify({
+      message = string.format("Running %d fresh baseline evaluation(s) for %s...", #batch_items, score_name),
+      level = "info"
+    })
 
-  local acc_result = baseline_batch and baseline_batch[1]
-  if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
-    accuracy_baseline         = acc_result
-    accuracy_baseline_id      = acc_result.id or acc_result.evaluation_id
-    accuracy_baseline_metrics = extract_metrics(acc_result)
-    accuracy_baseline_rca     = enrich_rca(acc_result.root_cause or {})
-    accuracy_available        = true
-    Human.notify({message = string.format(
-      "Accuracy baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-      accuracy_baseline_metrics.alignment,
-      accuracy_baseline_metrics.accuracy,
-      accuracy_baseline_metrics.precision,
-      accuracy_baseline_metrics.recall
-    ), level = "info"})
-  else
-    local err_msg = (acc_result and acc_result.error) or "no result"
-    Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(err_msg), level = "warning"})
-  end
+    local baseline_batch = call_plexus_tool("plexus_evaluation_run", {batch = batch_items})
 
-  -- Parse feedback result (fatal if missing)
-  local fb_result = baseline_batch and baseline_batch[2]
-  if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
-    return {
-      success = false,
-      status  = "error",
-      message = "Failed to run baseline feedback evaluation: " .. tostring(fb_result and fb_result.error or "no result")
-    }
-  end
-  local feedback_baseline_id      = fb_result.id or fb_result.evaluation_id
-  local feedback_baseline_metrics = extract_metrics(fb_result)
-  local feedback_baseline_rca     = enrich_rca(fb_result.root_cause or {})
+    -- Parse results — map back to accuracy/feedback based on what we requested
+    local batch_idx = 1
+    if not accuracy_baseline_id then
+      local acc_result = baseline_batch and baseline_batch[batch_idx]
+      if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
+        accuracy_baseline         = acc_result
+        accuracy_baseline_id      = acc_result.id or acc_result.evaluation_id
+        accuracy_baseline_metrics = extract_metrics(acc_result)
+        accuracy_baseline_rca     = enrich_rca(acc_result.root_cause or {})
+        accuracy_available        = true
+        Human.notify({message = string.format(
+          "Accuracy baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          accuracy_baseline_metrics.alignment,
+          accuracy_baseline_metrics.accuracy,
+          accuracy_baseline_metrics.precision,
+          accuracy_baseline_metrics.recall
+        ), level = "info"})
+      else
+        local err_msg = (acc_result and acc_result.error) or "no result"
+        Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(err_msg), level = "warning"})
+      end
+      batch_idx = batch_idx + 1
+    end
 
-  Human.notify({message = string.format(
-    "Feedback baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-    feedback_baseline_metrics.alignment,
-    feedback_baseline_metrics.accuracy,
-    feedback_baseline_metrics.precision,
-    feedback_baseline_metrics.recall
-  ), level = "info"})
-
-  -- Extract valid classes from score YAML for cross-case example fetching
-  local score_valid_classes = extract_valid_classes(current_code)
-
-  -- Fetch baseline cross-case examples (FP + FN transcripts) for pattern analysis
-  -- These give the code editor agent actual evidence to reason about
-  local current_cross_case_examples = {}
-  do
-    Human.notify({message = "Fetching misclassification examples for pattern analysis...", level = "info"})
-    local ok, examples_or_err = pcall(fetch_cross_case_examples,
-      feedback_baseline_id, score_valid_classes, 50)
-    if ok and type(examples_or_err) == "table" then
-      current_cross_case_examples = examples_or_err
-      local cell_count = 0
-      for _ in pairs(current_cross_case_examples) do cell_count = cell_count + 1 end
+    if not feedback_baseline_id then
+      local fb_result = baseline_batch and baseline_batch[batch_idx]
+      if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
+        return {
+          success = false,
+          status  = "error",
+          message = "Failed to run baseline feedback evaluation: " .. tostring(fb_result and fb_result.error or "no result")
+        }
+      end
+      feedback_baseline_id      = fb_result.id or fb_result.evaluation_id
+      feedback_baseline_metrics = extract_metrics(fb_result)
+      feedback_baseline_rca     = enrich_rca(fb_result.root_cause or {})
       Human.notify({message = string.format(
-        "Fetched examples for %d error cell(s) for cross-case pattern analysis.", cell_count
+        "Feedback baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        feedback_baseline_metrics.alignment,
+        feedback_baseline_metrics.accuracy,
+        feedback_baseline_metrics.precision,
+        feedback_baseline_metrics.recall
       ), level = "info"})
-    else
-      Human.notify({message = "Cross-case example fetch failed (non-fatal): " .. tostring(examples_or_err), level = "warning"})
     end
   end
 
@@ -1586,16 +1475,14 @@ code: |
     -- All start from the same base. Results are recorded, not ranked.
     -- ================================================================
     Stage.set("exploration")
-    local has_examples = next(current_cross_case_examples) ~= nil
     Human.notify({message = string.format(
-      "Cycle %d — Exploration: probing improvements%s...",
-      cycle, has_examples and " (with transcript examples)" or ""
+      "Cycle %d — Exploration: probing improvements...", cycle
     ), level = "info"})
 
     local candidates = {}
     local candidates_no_version = {}  -- candidates that failed to create a version
     local num_cands = math.min(params.num_candidates or 3, 5)
-    local fixable_items = (current_fb_rca and current_fb_rca._all_item_classifications) or {}
+    local rca_categories = (current_fb_rca and current_fb_rca._category_hierarchy) or {}
     local any_cannot_improve = false
 
     for c = 1, num_cands do
@@ -1610,7 +1497,7 @@ code: |
 
       -- Build candidate-specific context
       local strategy = build_candidate_strategy(
-        c, num_cands, fixable_items, consecutive_acc_rejections, has_examples)
+        c, num_cands, rca_categories, consecutive_acc_rejections)
       local inject = build_coding_context({
         scorecard_name = scorecard_name,
         score_name = score_name,
@@ -1628,7 +1515,6 @@ code: |
         iteration = cycle,
         candidate_strategy = strategy,
         consecutive_failed_cycles = consecutive_failed_cycles,
-        cross_case_examples = current_cross_case_examples,
         hint = params.hint
       })
 
@@ -1650,79 +1536,123 @@ code: |
         c, num_cands, approach_label, #inject, has_task and "ok" or "MISSING!"
       ), level = "info"})
 
-      -- Log the full LLM context for debugging (everything the code_editor sees)
-      -- Write raw inject to verify completeness (no gsub transformation)
-      local inject_for_log = inject
+      -- Log the full LLM context for debugging
       local context_log_path = string.format("/tmp/optimizer_cycle%d_cand%d_context.txt", cycle, c)
       local full_context = "═══════════════════════════════════════════════════════════\n"
         .. "FULL LLM CONTEXT — Cycle " .. cycle .. " Candidate " .. c .. "\n"
         .. "═══════════════════════════════════════════════════════════\n\n"
         .. ">>> [1] SYSTEM PROMPT (static, from YAML code_editor.system_prompt):\n"
-        .. "--- See feedback_alignment_optimizer.yaml lines 106-216 ---\n"
+        .. "--- See feedback_alignment_optimizer.yaml agents.code_editor.system_prompt ---\n"
         .. "(System prompt is static across all candidates; not repeated here for brevity)\n\n"
         .. ">>> [2] ASSISTANT (initial_message): Ready.\n\n"
         .. ">>> [3] USER MESSAGE (the inject — this is the key context engineering surface):\n"
         .. "───────────────────────────────────────────────────────────\n"
-        .. inject_for_log .. "\n"
+        .. inject .. "\n"
         .. "───────────────────────────────────────────────────────────\n"
         .. ">>> END OF INITIAL LLM CONTEXT\n"
-        .. "(After this, the agent responds with tool calls; retries add more messages)\n"
+        .. "(After this, the harness guides the agent through edit→submit steps)\n"
       File.write(context_log_path, full_context)
 
-      -- Retry loop: up to 3 attempts per candidate
+      -- ReAct loop: agent drives the editing session autonomously.
+      -- It can view, edit, edit again, think, etc. The loop ends when the agent
+      -- calls submit_score_code (success) or done (give up), or we hit max_steps.
       local cand_version_id = nil
       local cand_done_reason = ""
-      local max_agent_attempts = 3
+      local max_react_steps = 10  -- safety limit to prevent runaway loops
+      local step = 0
 
-      for attempt = 1, max_agent_attempts do
-        if attempt == 1 then
-          code_editor({message = inject})
+      for react_step = 1, max_react_steps do
+        step = react_step
+        local msg
+
+        if react_step == 1 then
+          -- Initial turn: full context + file content (no view needed)
+          msg = inject
+            .. "\n\nThe file content is shown above — you do NOT need to call view."
+            .. "\nYou have full control of this editing session. You can:"
+            .. "\n  - Call str_replace_editor to view or edit the file"
+            .. "\n  - Make multiple edits before submitting"
+            .. "\n  - Call submit_score_code(version_note=\"...\") when you are satisfied with your changes"
+            .. "\n  - Call done(reason=\"cannot_improve: ...\") if you cannot find a viable improvement"
+            .. "\nThe session ends when you call submit_score_code or done."
         else
-          local retry_msg = string.format(
-            "RETRY (attempt %d/%d): Your previous attempt did NOT produce a valid score version.\n\n",
-            attempt, max_agent_attempts)
+          -- Subsequent turns: provide feedback on what just happened
           local last_edit = Tool.last_call("str_replace_editor")
           local last_submit = Tool.last_call("submit_score_code")
-          if not last_submit and last_edit then
-            local edit_result = last_edit.result or ""
-            if string.find(tostring(edit_result), "Error") then
-              retry_msg = retry_msg .. "Your str_replace_editor call FAILED with:\n  " .. tostring(edit_result) .. "\n\n"
-              retry_msg = retry_msg .. "Fix: call str_replace_editor(command='view', path='score_config.yaml') to re-read the file, "
-                .. "then retry with an exactly-matching old_str. After a successful edit, call submit_score_code().\n"
+          local last_done = Tool.last_call("done")
+
+          -- Build status message
+          local parts = {}
+          if last_edit then
+            local edit_result = tostring(last_edit.result or "")
+            local edit_command = (last_edit.args and last_edit.args.command) or ""
+            if edit_command == "view" then
+              -- View doesn't change the file — remind the agent to make an actual edit
+              table.insert(parts, "File viewed successfully. The file has NOT been modified yet.")
+              table.insert(parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_code to submit.")
+            elseif string.find(edit_result, "Error") then
+              table.insert(parts, "Your str_replace_editor call returned an error:\n" .. edit_result)
+              table.insert(parts, "\nYou can retry the edit with corrected old_str, or call view to re-read the file and copy the exact text.")
             else
-              retry_msg = retry_msg .. "You called str_replace_editor but FORGOT to call submit_score_code().\n"
-              retry_msg = retry_msg .. "You MUST call submit_score_code() after a successful edit to create a version.\n"
+              table.insert(parts, "Edit applied successfully.")
+              table.insert(parts, "You can make more edits, or call submit_score_code(version_note=\"...\") to submit.")
             end
-          elseif last_submit then
+          end
+          if last_submit then
             local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
             if ok_sub and sub_result and sub_result.error then
-              retry_msg = retry_msg .. "submit_score_code returned an error:\n  " .. tostring(sub_result.error) .. "\n\n"
-              retry_msg = retry_msg .. "Fix the issue described above, then call submit_score_code() again.\n"
+              local err_text = tostring(sub_result.error)
+              table.insert(parts, "submit_score_code returned an error:\n  " .. err_text)
+              if string.find(err_text, "most recent str_replace_editor") then
+                table.insert(parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_code again.")
+              elseif string.find(err_text, "unchanged from the original") then
+                table.insert(parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting. Use view first if needed to see the exact text to replace.")
+              else
+                table.insert(parts, "\nFix the issue and try submit_score_code again.")
+              end
             end
-          else
-            retry_msg = retry_msg .. "You did not call any editing tools. You MUST:\n"
-              .. "1. Call str_replace_editor to make an edit\n"
-              .. "2. Call submit_score_code() to submit the change\n"
           end
-          Human.notify({message = string.format("  Retrying candidate %d (attempt %d/%d)...", c, attempt, max_agent_attempts), level = "info"})
-          Tool.reset()
-          code_editor({message = retry_msg})
+          if #parts == 0 then
+            table.insert(parts, "No recognized tool call was made.")
+            table.insert(parts, "You must call str_replace_editor, submit_score_code, or done.")
+          end
+          table.insert(parts, string.format("\n(Step %d/%d)", react_step, max_react_steps))
+          msg = table.concat(parts, "\n")
         end
 
-        -- Check if submit_score_code succeeded
+        Tool.reset()
+        -- Log the feedback message for debugging context construction
+        if react_step > 1 then
+          Human.notify({message = string.format(
+            "  [ReAct step %d] feedback to agent (%d chars): %s",
+            react_step, #msg, msg:sub(1, 200)
+          ), level = "info"})
+        end
+        code_editor({message = msg})
+
+        -- Check termination conditions
         local submit_call = Tool.last_call("submit_score_code")
         if submit_call then
           local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
           if ok and submit_result and submit_result.version_id then
             cand_version_id = submit_result.version_id
-            Human.notify({message = string.format("  Candidate %d version: %s", c, cand_version_id), level = "info"})
+            Human.notify({message = string.format("  Candidate %d version: %s (step %d)", c, cand_version_id, react_step), level = "info"})
             break
           elseif ok and submit_result and submit_result.error then
-            Human.notify({message = string.format("  Candidate %d submit error (attempt %d): %s", c, attempt, tostring(submit_result.error)), level = "warning"})
+            Human.notify({message = string.format("  Candidate %d submit error (step %d): %s", c, react_step, tostring(submit_result.error)), level = "warning"})
+            -- Continue loop — agent can fix and retry
           end
-        else
-          Human.notify({message = string.format("  Candidate %d: agent did not call submit (attempt %d)", c, attempt), level = "warning"})
         end
+
+        local done_call = Tool.last_call("done")
+        if done_call then
+          Human.notify({message = string.format("  Candidate %d: agent called done (step %d)", c, react_step), level = "info"})
+          break
+        end
+      end
+
+      if not cand_version_id and step >= max_react_steps then
+        Human.notify({message = string.format("  Candidate %d: hit max steps (%d) without submitting", c, max_react_steps), level = "warning"})
       end
 
       -- Extract done_reason
@@ -1758,7 +1688,7 @@ code: |
           version_id = cand_version_id,
           done_reason = cand_done_reason,
           strategy = strategy,
-          target_item = math.min(c, math.max(#fixable_items, 1))
+          target_category = math.min(c, math.max(#rca_categories, 1))
         })
       else
         Human.notify({message = string.format("  Candidate %d failed (no version created)", c), level = "warning"})
@@ -2286,27 +2216,8 @@ code: |
             State.set("accuracy_baseline_metrics", b_acc_metrics)
           end
           State.set("feedback_baseline_metrics", b_fb_metrics)
-          -- Refresh cross-case examples from the new accepted version's eval
-          -- (Base changed, so error patterns are different now)
-          if b_fb_eval_id then
-            local ok_ex, new_examples = pcall(fetch_cross_case_examples,
-              b_fb_eval_id, score_valid_classes, 50)
-            if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
-              current_cross_case_examples = new_examples
-              Human.notify({message = "Refreshed misclassification examples from accepted cycle eval.", level = "info"})
-            end
-          end
         else
           consecutive_failed_cycles = consecutive_failed_cycles + 1
-          -- On rejection, keep cross-case examples from the rejected eval if available
-          -- (The base didn't change, but we may have richer error evidence)
-          if b_fb_eval_id then
-            local ok_ex, new_examples = pcall(fetch_cross_case_examples,
-              b_fb_eval_id, score_valid_classes, 50)
-            if ok_ex and type(new_examples) == "table" and next(new_examples) ~= nil then
-              current_cross_case_examples = new_examples
-            end
-          end
         end
         State.set("last_accuracy_rca", b_acc_rca)
         State.set("last_feedback_rca", b_fb_rca)
