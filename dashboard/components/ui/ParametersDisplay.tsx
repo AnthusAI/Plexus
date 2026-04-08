@@ -177,7 +177,7 @@ export function ParametersDisplay({
             {parameters.map((param) => {
               const value = values[param.name]
               return (
-                <tr key={param.name} className="border-b last:border-b-0">
+                <tr key={param.name}>
                   <td className="pr-4 py-3 text-sm font-medium text-muted-foreground w-1/3">
                     {param.label}
                     {param.required && <span className="text-destructive ml-1">*</span>}
