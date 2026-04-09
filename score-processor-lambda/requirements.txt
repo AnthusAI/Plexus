@@ -4,7 +4,7 @@ awslambdaric
 # LangChain/LangGraph - pin langchain-core to avoid _RestrictedSandboxedEnvironment issue
 langchain==0.3.27
 langgraph==0.6.7
-langchain-core==0.3.78
+langchain-core==0.3.84
 langchain-openai==0.3.35
 langchain-anthropic==0.3.22
 langchain-community==0.3.31
