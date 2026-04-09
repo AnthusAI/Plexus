@@ -1275,7 +1275,186 @@ code: |
   local last_accepted_version_id = champion_version_id
   local consecutive_failed_cycles = 0  -- plateau detection
 
+  -- Diagnostic logger that bypasses broken Python logging by writing directly to file
+  local diag_path = "optimizer_diag.log"
+  local function diag(msg)
+    local ts = os.date("%Y-%m-%d %H:%M:%S")
+    local line = string.format("[%s] %s\n", ts, msg)
+    -- Append by reading existing content
+    local existing = ""
+    pcall(function() existing = File.read(diag_path) end)
+    File.write(diag_path, existing .. line)
+    Human.notify({message = msg, level = "info"})
+  end
+  File.write(diag_path, "")  -- clear at start
+
+  -- ================================================================
+  -- LLM error recovery and context management helpers
+  -- ================================================================
+
+  -- Classify an error string to determine recovery strategy
+  local function classify_error(err_str)
+    local s = string.lower(tostring(err_str))
+    if string.find(s, "contextwindowexceeded")
+      or string.find(s, "context_length_exceeded")
+      or string.find(s, "maximum context length")
+      or string.find(s, "token limit") then
+      return "context_window"
+    end
+    if string.find(s, "rate_limit") or string.find(s, "ratelimit")
+      or string.find(s, "429") or string.find(s, "too many requests") then
+      return "rate_limit"
+    end
+    if string.find(s, "timeout") or string.find(s, "timed out")
+      or string.find(s, "connection") then
+      return "transient"
+    end
+    if string.find(s, "authentication") or string.find(s, "api_key")
+      or string.find(s, "unauthorized") then
+      return "permanent"
+    end
+    return "unknown"
+  end
+
+  -- Proactive token budget guard — trim history before it overflows
+  local CONTEXT_BUDGET_TOKENS = 100000
+  local CONTEXT_BUDGET_WARN   = 80000
+
+  local function guard_context_budget(agent, budget)
+    budget = budget or CONTEXT_BUDGET_TOKENS
+    local ok_count, token_count = pcall(function() return agent.history:count_tokens() end)
+    if not ok_count then return end  -- count_tokens not available, skip guard
+    token_count = token_count or 0
+
+    if token_count <= budget then
+      if token_count > CONTEXT_BUDGET_WARN then
+        diag(string.format("Context budget warning: %d tokens (budget=%d)", token_count, budget))
+      end
+      return
+    end
+
+    diag(string.format("Context budget exceeded: %d tokens > %d budget. Trimming.", token_count, budget))
+
+    -- Get all messages, keep most recent that fit within budget
+    local ok_get, all_msgs = pcall(function() return agent.history:get() end)
+    if not ok_get or not all_msgs then
+      agent.clear_history()
+      return
+    end
+
+    -- Convert lupa table to Lua table if needed
+    local msgs = {}
+    if type(all_msgs) == "table" then
+      msgs = all_msgs
+    else
+      -- lupa proxy — iterate to collect
+      for i = 1, 9999 do
+        local m = all_msgs[i]
+        if m == nil then break end
+        table.insert(msgs, m)
+      end
+    end
+
+    local kept = {}
+    local running_tokens = 0
+    -- Walk backwards, keeping recent messages within budget
+    for i = #msgs, 1, -1 do
+      local msg = msgs[i]
+      local content = ""
+      pcall(function() content = msg.content or "" end)
+      local msg_tokens = math.floor(#tostring(content) / 4) + 4
+      if running_tokens + msg_tokens > budget then
+        break
+      end
+      table.insert(kept, 1, msg)
+      running_tokens = running_tokens + msg_tokens
+    end
+
+    -- Always preserve first system message if it was dropped
+    if #msgs > 0 and #kept > 0 then
+      local first_role = ""
+      pcall(function() first_role = msgs[1].role end)
+      local kept_first_role = ""
+      pcall(function() kept_first_role = kept[1].role end)
+      if first_role == "system" and kept_first_role ~= "system" then
+        table.insert(kept, 1, msgs[1])
+      end
+    end
+
+    agent.clear_history()
+    for _, msg in ipairs(kept) do
+      pcall(function() agent.history:add(msg) end)
+    end
+    diag(string.format("History trimmed: %d tokens -> %d messages (%d tokens est)",
+      token_count, #kept, running_tokens))
+  end
+
+  -- Retry wrapper for code_editor calls with error-type-specific recovery
+  -- recovery_context: {file_content = string, task_description = string} or nil
+  local MAX_EDITOR_RETRIES = 2
+
+  local function safe_editor_call(msg, recovery_context)
+    for attempt = 1, MAX_EDITOR_RETRIES + 1 do
+      Tool.reset()
+      local ok, err = pcall(function()
+        code_editor({message = msg})
+      end)
+      if ok then return true, nil end
+
+      local err_type = classify_error(err)
+      diag(string.format("code_editor error (attempt %d/%d, type=%s): %s",
+        attempt, MAX_EDITOR_RETRIES + 1, err_type, trunc(tostring(err), 300)))
+
+      if err_type == "permanent" then
+        return false, tostring(err)
+      end
+
+      if attempt > MAX_EDITOR_RETRIES then
+        return false, tostring(err)
+      end
+
+      if err_type == "context_window" then
+        -- Recovery: clear history, re-inject just essential context
+        code_editor.clear_history()
+        if recovery_context then
+          if recovery_context.file_content then
+            code_editor.history:add({
+              role = "system",
+              content = "=== CURRENT score_config.yaml ===\n"
+                .. recovery_context.file_content
+                .. "\n=== END OF score_config.yaml ==="
+            })
+          end
+          if recovery_context.task_description then
+            msg = recovery_context.task_description
+          end
+        end
+        diag("Recovered from context window error: cleared history, re-injected context")
+
+      elseif err_type == "rate_limit" or err_type == "transient" then
+        local wait_seconds = attempt * 5
+        diag(string.format("Waiting %d seconds before retry...", wait_seconds))
+        local t = os.clock() + wait_seconds
+        while os.clock() < t do end
+
+      else
+        -- Unknown error: clear history and retry with context
+        code_editor.clear_history()
+        if recovery_context and recovery_context.file_content then
+          code_editor.history:add({
+            role = "system",
+            content = "=== CURRENT score_config.yaml ===\n"
+              .. recovery_context.file_content
+              .. "\n=== END OF score_config.yaml ==="
+          })
+        end
+      end
+    end
+    return false, "max retries exceeded"
+  end
+
   for cycle = 1, params.max_iterations do
+    diag(string.format("=== ENTERING CYCLE %d/%d === (last_accepted=%s)", cycle, params.max_iterations, tostring(last_accepted_version_id)))
     Human.notify({message = string.format(
       "═══ Cycle %d/%d ═══", cycle, params.max_iterations), level = "info"})
     State.set("current_iteration", cycle)
@@ -1372,8 +1551,11 @@ code: |
       table.insert(syn, "\nWrite out your analysis. This reasoning will directly shape your hypotheses for cycle "
         .. tostring(cycle) .. ".")
 
-      Tool.reset()
-      code_editor({message = table.concat(syn, "")})
+      guard_context_budget(code_editor)
+      local syn_ok, syn_err = safe_editor_call(table.concat(syn, ""), nil)
+      if not syn_ok then
+        diag(string.format("CODE_EDITOR FAILED in prior-cycle synthesis: %s", tostring(syn_err)))
+      end
       local syn_text = code_editor.output or "(synthesis complete)"
       Human.notify({message = "  Synthesis:\n" .. syn_text, level = "info"})
     end
@@ -1415,12 +1597,20 @@ code: |
     end
 
     -- Log planning context for debugging
-    local context_log_path = string.format("/tmp/optimizer_cycle%d_planning_context.txt", cycle)
-    File.write(context_log_path, planning_inject)
+    local context_log_path = string.format("optimizer_cycle%d_planning_context.txt", cycle)
+    pcall(function() File.write(context_log_path, planning_inject) end)
 
     -- Continue the same conversation — accumulated history carries learnings forward
-    Tool.reset()
-    code_editor({message = planning_inject})
+    guard_context_budget(code_editor)
+    local plan_ok, plan_err = safe_editor_call(planning_inject, {
+      file_content = current_code,
+      task_description = planning_inject
+    })
+    if not plan_ok then
+      diag(string.format("CODE_EDITOR FAILED in planning: %s", tostring(plan_err)))
+      Human.notify({message = string.format(
+        "  Planning — code_editor failed: %s", trunc(tostring(plan_err), 200)), level = "error"})
+    end
 
     -- Parse hypotheses from agent response
     local plan_response = code_editor.output or ""
@@ -1432,7 +1622,15 @@ code: |
       plan_attempts = plan_attempts + 1
       Human.notify({message = string.format(
         "  Planning retry %d/3 (no hypotheses parsed)...", plan_attempts), level = "info"})
-      code_editor({message = "I need you to respond with a numbered list of hypotheses. Each should be on its own line starting with a number. Example:\n1. Fix degree type: Adjust conditional logic...\n2. Handle phonetic matching: Add fuzzy matching..."})
+      guard_context_budget(code_editor)
+      local retry_ok, retry_err = safe_editor_call(
+        "I need you to respond with a numbered list of hypotheses. Each should be on its own line starting with a number. Example:\n1. Fix degree type: Adjust conditional logic...\n2. Handle phonetic matching: Add fuzzy matching...",
+        {file_content = current_code, task_description = planning_inject}
+      )
+      if not retry_ok then
+        diag(string.format("CODE_EDITOR FAILED in planning retry %d: %s", plan_attempts, tostring(retry_err)))
+        break
+      end
       plan_response = code_editor.output or ""
       hypotheses = parse_hypotheses(plan_response)
     end
@@ -1474,6 +1672,10 @@ code: |
         iteration            = cycle,
         hypothesis           = hyp.name .. ": " .. (hyp.description or "")
       })
+
+      -- Clear accumulated conversation to prevent context window overflow
+      -- Each hypothesis gets a fresh context (planning insights are in the prompt, not history)
+      code_editor.clear_history()
 
       -- Inner ReAct loop for this hypothesis.
       -- Failed str_replace attempts do NOT count as logical steps — the LLM gets
@@ -1580,8 +1782,24 @@ code: |
             h, react_step, total_edit_failures, #msg, trunc(msg, 200)
           ), level = "info"})
         end
-        Tool.reset()
-        code_editor({message = msg})
+        -- Get current file for recovery context
+        local hyp_file_content = nil
+        pcall(function()
+          local ec = call_plexus_tool("score_editor_get_content", {})
+          if ec and ec.file_content then hyp_file_content = ec.file_content end
+        end)
+
+        guard_context_budget(code_editor)
+        local editor_ok, editor_err = safe_editor_call(msg, {
+          file_content = hyp_file_content or current_code,
+          task_description = msg
+        })
+        if not editor_ok then
+          diag(string.format("CODE_EDITOR FAILED in hypothesis %d step %d: %s", h, react_step, tostring(editor_err)))
+          Human.notify({message = string.format(
+            "  Hypothesis %d step %d — code_editor failed: %s", h, react_step, trunc(tostring(editor_err), 200)), level = "error"})
+          hyp_done = true
+        end
 
         -- Determine if this was a failed edit attempt (doesn't count as a logical step)
         local was_edit_failure = false
@@ -1795,7 +2013,9 @@ code: |
         #submitted_versions, #batch
       ), level = "info"})
 
+      diag(string.format("Dispatching hypothesis eval batch (%d evals)", #batch))
       local batch_results = call_plexus_tool("plexus_evaluation_run", {batch = batch})
+      diag(string.format("Hypothesis eval batch returned (%d results)", batch_results and #batch_results or 0))
 
       -- Parse results
       local evals_per = accuracy_available and 2 or 1
@@ -1849,6 +2069,7 @@ code: |
       -- PHASE 4: SYNTHESIS — always create a synthesized version
       -- Combines insights from ALL hypothesis evaluations into one update
       -- ================================================================
+      diag("Entering synthesis phase")
       Stage.set("selection")
       local final_version_id = nil
       local final_is_synthesis = true
@@ -2007,8 +2228,17 @@ code: |
           synth_msg = table.concat(feedback_parts, "\n")
         end
 
-        Tool.reset()
-        code_editor({message = synth_msg})
+        guard_context_budget(code_editor)
+        local editor_ok, editor_err = safe_editor_call(synth_msg, {
+          file_content = current_code,
+          task_description = synth_msg
+        })
+        if not editor_ok then
+          diag(string.format("CODE_EDITOR FAILED in synthesis step %d: %s", synth_step, tostring(editor_err)))
+          Human.notify({message = string.format(
+            "  Synthesis step %d — code_editor failed: %s", synth_step, trunc(tostring(editor_err), 200)), level = "error"})
+          synth_done = true
+        end
 
         -- Detect failed edit attempts
         local synth_was_edit_failure = false
@@ -2073,6 +2303,7 @@ code: |
               final_version_id = candidate_id
               local ok_a, vn = pcall(function() return submit_call.args.version_note end)
               if ok_a and has_text(vn) then final_done_reason = vn end
+              diag(string.format("Synthesis version created: %s", final_version_id))
               Human.notify({message = string.format(
                 "  Synthesis version: %s", final_version_id), level = "info"})
               synth_done = true
@@ -2158,6 +2389,17 @@ code: |
           if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
           if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
 
+          -- Compact history even on failed cycles
+          if cycle < params.max_iterations then
+            code_editor.clear_history()
+            code_editor.history:add({
+              role = "system",
+              content = string.format("=== CYCLE %d SUMMARY ===\nStatus: FAILED (no hypothesis succeeded)\nCurrent base version: %s",
+                cycle, tostring(last_accepted_version_id))
+            })
+            diag(string.format("Cycle %d (failed) history compacted", cycle))
+          end
+
           if consecutive_failed_cycles >= 5 then
             stop_reason = "improvement_plateau"
             break
@@ -2186,6 +2428,7 @@ code: |
           b_acc_eval_id = succeeded[1].acc_eval_id
         else
           -- Need fresh evals for combined version
+          diag(string.format("Dispatching synthesis eval for version %s", tostring(final_version_id)))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
           if accuracy_available then
@@ -2214,6 +2457,7 @@ code: |
           })
 
           local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
+          diag("Synthesis eval batch returned")
 
           local b_evals_per = accuracy_available and 2 or 1
           if accuracy_available then
@@ -2224,6 +2468,7 @@ code: |
               b_acc_rca = enrich_rca(b_acc_r.root_cause or {})
               b_acc_eval_id = b_acc_r.id or b_acc_r.evaluation_id
             end
+            diag(string.format("Accuracy metrics extracted: %s", tostring(b_acc_eval_id)))
           end
           local b_fb_r = b_results and b_results[b_evals_per]
           if b_fb_r and (b_fb_r.id or b_fb_r.evaluation_id) then
@@ -2232,6 +2477,7 @@ code: |
             b_fb_rca = enrich_rca(b_fb_r.root_cause or {})
             b_fb_eval_id = b_fb_r.id or b_fb_r.evaluation_id
           end
+          diag(string.format("Feedback metrics extracted: %s", tostring(b_fb_eval_id)))
         end
 
         b_fb_deltas = b_fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0}
@@ -2246,8 +2492,9 @@ code: |
         ), level = "info"})
 
         -- ================================================================
-        -- REVIEW
+        -- REVIEW (wrapped in pcall for crash diagnosis)
         -- ================================================================
+        diag("Starting review phase")
         local iter_accuracy_ok = b_acc_metrics ~= nil
 
         local disqualified = false
@@ -2258,6 +2505,7 @@ code: |
         elseif b_fb_deltas.alignment < -0.02 then
           disqualified = true
         end
+        diag(string.format("disqualified=%s", tostring(disqualified)))
 
         local accept = false
 
@@ -2267,6 +2515,7 @@ code: |
         else
           Tool.reset()
           reviewer.clear_history()
+          diag("Building review context...")
           local review_msg = build_review_context({
             iteration = cycle,
             done_reason = final_done_reason,
@@ -2278,8 +2527,15 @@ code: |
             baseline_acc_ac1 = accuracy_baseline_metrics and accuracy_baseline_metrics.alignment or 0,
             candidates = submitted_versions
           })
-          Human.notify({message = "  Invoking reviewer...", level = "info"})
-          reviewer({message = review_msg})
+          diag(string.format("Review msg length: %d chars, invoking reviewer...", #review_msg))
+          local review_ok, review_err = pcall(function()
+            reviewer({message = review_msg})
+          end)
+          if not review_ok then
+            diag(string.format("REVIEWER CRASHED: %s", tostring(review_err)))
+          else
+            diag("Reviewer returned")
+          end
 
           -- Extract reviewer assessment (advisory only — metrics determine acceptance)
           local review_done = Tool.last_call("done")
@@ -2316,6 +2572,7 @@ code: |
             end
             last_accepted_version_id = final_version_id
           end
+          diag(string.format("Acceptance decided: accept=%s", tostring(accept)))
         end
 
         -- Store cycle log
@@ -2335,7 +2592,9 @@ code: |
           exploration_results = submitted_versions
         }
         table.insert(iterations, cycle_log)
+        diag("Saving iterations to state...")
         State.set("iterations", iterations)
+        diag("Iterations saved")
 
         -- Concise cycle summary
         local accepted_count = 0
@@ -2380,8 +2639,10 @@ code: |
           -- Only count genuine regressions toward the failure plateau counter
           consecutive_failed_cycles = consecutive_failed_cycles + 1
         end
+        diag("Saving RCA to state...")
         State.set("last_accuracy_rca", b_acc_rca)
         State.set("last_feedback_rca", b_fb_rca)
+        diag("State saved, checking exit conditions...")
 
         -- Check if target accuracy was reached (early exit)
         if accept and b_fb_metrics and b_fb_metrics.alignment >= params.target_accuracy then
@@ -2407,9 +2668,54 @@ code: |
           stop_reason = "user_stopped"
           break
         end
+        -- ================================================================
+        -- End-of-cycle history compaction: replace full conversation with
+        -- a compact summary to prevent context overflow in later cycles.
+        -- build_planning_context() reconstructs the full optimization history
+        -- from the iterations array, so the summary is supplementary context.
+        -- ================================================================
+        if cycle < params.max_iterations then
+          local summary_parts = {}
+          table.insert(summary_parts, string.format("=== CYCLE %d SUMMARY ===", cycle))
+          table.insert(summary_parts, string.format("Status: %s", status_str))
+          table.insert(summary_parts, string.format(
+            "Feedback AC1: %.3f (%+.3f vs baseline)  Accuracy AC1: %.3f (%+.3f vs baseline)",
+            b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
+            b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment))
+
+          if submitted_versions and #submitted_versions > 0 then
+            table.insert(summary_parts, "Hypotheses tested:")
+            for _, sv in ipairs(submitted_versions) do
+              local fb_d = sv.fb_deltas and sv.fb_deltas.alignment or 0
+              local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or 0
+              table.insert(summary_parts, string.format(
+                "  %d. %s: FB %+.3f, ACC %+.3f — %s",
+                sv.index or 0, sv.hypothesis and sv.hypothesis.name or "?",
+                fb_d, acc_d,
+                trunc(sv.done_reason or (sv.hypothesis and sv.hypothesis.description) or "", 100)))
+            end
+          end
+
+          if has_text(final_done_reason) then
+            table.insert(summary_parts, "Synthesis: " .. trunc(final_done_reason, 150))
+          end
+          table.insert(summary_parts, string.format("Current base version: %s",
+            tostring(last_accepted_version_id)))
+
+          code_editor.clear_history()
+          code_editor.history:add({
+            role = "system",
+            content = table.concat(summary_parts, "\n")
+          })
+          diag(string.format("Cycle %d history compacted to summary (%d chars)",
+            cycle, #table.concat(summary_parts, "\n")))
+        end
+
+        diag(string.format("Cycle %d complete, entering next iteration", cycle))
       end  -- end of if final_version_id (synthesis produced a version to evaluate)
     end  -- end of else (submitted_versions > 0)
   end  -- end of for cycle
+  diag("Exited main cycle loop")
 
   -- Determine final stop reason
   if not stop_reason then
