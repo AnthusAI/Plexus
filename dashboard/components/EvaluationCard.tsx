@@ -1,6 +1,9 @@
 'use client'
 
 import React from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import { Card, CardContent } from '@/components/ui/card'
 import ClassDistributionVisualizer, { type ClassDistribution } from './ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from './PredictedClassDistributionVisualizer'
@@ -207,7 +210,14 @@ export default function EvaluationCard({
               {typeof notes === 'string' ? (
                 <>
                   <p className="text-sm font-medium">Key Insight:</p>
-                  <p className="text-sm mt-1">{notes}</p>
+                  <div className="prose prose-sm max-w-none mt-1 prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                      p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                      strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                    }}>
+                      {notes}
+                    </ReactMarkdown>
+                  </div>
                 </>
               ) : (
                 notes

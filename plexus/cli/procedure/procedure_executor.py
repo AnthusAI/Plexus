@@ -69,6 +69,63 @@ def _complete_all_task_stages(client: Any, task_id: str) -> None:
             logger.info(f"[STAGE_COMPLETE] Stage {stage_id} already {stage_status}, skipping")
 
 
+def _fail_all_task_stages(client: Any, task_id: str, error_message: str = "") -> None:
+    """
+    Mark all PENDING or RUNNING task stages as FAILED.
+
+    Called after procedure execution errors so the dashboard stage display
+    reflects the failure rather than appearing as COMPLETED.
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    logger.info(f"[STAGE_FAIL] Task {task_id}: found {len(stages)} stages")
+    if not stages:
+        logger.warning(f"[STAGE_FAIL] No stages found for task {task_id}")
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    short_error = error_message[:500] if error_message else ""
+    for stage in stages:
+        stage_status = stage.get("status")
+        stage_id = stage.get("id")
+        if stage_status in ("PENDING", "RUNNING"):
+            logger.info(f"[STAGE_FAIL] Marking stage {stage_id} (order {stage.get('order')}) FAILED")
+            client.execute(update_mutation, {
+                "input": {
+                    "id": stage_id,
+                    "status": "FAILED",
+                    "completedAt": now,
+                    "statusMessage": short_error,
+                }
+            })
+            logger.info(f"[STAGE_FAIL] Stage {stage_id} marked FAILED")
+        else:
+            logger.info(f"[STAGE_FAIL] Stage {stage_id} already {stage_status}, skipping")
+
+
 def _advance_task_to_running_stage(client: Any, task_id: str, target_order: int) -> None:
     """
     Advance a task's stages so that stages before target_order are COMPLETED
@@ -502,6 +559,8 @@ async def _execute_tactus(
                             "      if State ~= nil and State.set ~= nil then\n"
                             "        State.set(\"stage\", value)\n"
                             "      end\n"
+                            "      local stage_tool = Tool.get(\"plexus_set_procedure_stage\")\n"
+                            "      if stage_tool ~= nil then stage_tool({stage = value}) end\n"
                             "      return value\n"
                             "    end,\n"
                             "    get = function()\n"
@@ -568,7 +627,16 @@ async def _execute_tactus(
                         params_schema = parsed_source.get('params', {})
                         for param_name, param_def in params_schema.items():
                             if param_name in context:
-                                params_dict[param_name] = context[param_name]
+                                raw_value = context[param_name]
+                                # Coerce numeric context values back to string if the
+                                # schema declares type: string. This handles the case
+                                # where the CLI --set parser converts "45425" → int(45425)
+                                # but the param is an identifier that must stay as string.
+                                if (isinstance(raw_value, (int, float))
+                                        and isinstance(param_def, dict)
+                                        and param_def.get('type') == 'string'):
+                                    raw_value = str(raw_value)
+                                params_dict[param_name] = raw_value
                             elif isinstance(param_def, dict) and param_def.get('default') is not None:
                                 params_dict[param_name] = param_def['default']
 
@@ -878,9 +946,9 @@ async def _execute_tactus(
                 logger.warning("Failed closing trace log bridge after error: %s", close_error)
         if _task_id:
             try:
-                _complete_all_task_stages(client, _task_id)
+                _fail_all_task_stages(client, _task_id, str(e))
             except Exception as _ce:
-                logger.warning("Could not complete task stages after error: %s", _ce, exc_info=True)
+                logger.warning("Could not fail task stages after error: %s", _ce, exc_info=True)
         logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
             'success': False,

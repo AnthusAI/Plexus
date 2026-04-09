@@ -234,6 +234,40 @@ class TestScoreTextProcessing:
         assert error_result.value == "Error"
         assert "Timeout/RequestException" in error_result.error
 
+    @pytest.mark.asyncio
+    async def test_score_text_prefers_top_level_linkage_fields(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+        mock_evaluation.dashboard_client = MagicMock()
+        mock_evaluation.experiment_id = "eval-123"
+        mock_evaluation._create_score_result = AsyncMock()
+
+        mock_result = create_mock_score_result("yes", "yes")
+        mock_evaluation.scorecard.score_entire_text = AsyncMock(
+            return_value={"test_score": mock_result}
+        )
+
+        row = pd.Series({
+            "text": "feedback transcript",
+            "content_id": "content-789",
+            "item_id": "item-top-level",
+            "feedback_item_id": "fi-top-level",
+            "columns": {
+                "item_id": "item-nested",
+                "feedback_item_id": "fi-nested",
+                "form_id": "form-789",
+            },
+            "test_score_label": "yes",
+        })
+
+        with patch("plexus.dashboard.api.models.item.Item.get_by_id", return_value=None) as mock_get_item:
+            await mock_evaluation.score_text(row, score_name="test_score")
+
+        assert mock_get_item.call_args.args[0] == "item-top-level"
+        assert mock_evaluation._create_score_result.await_args.kwargs["feedback_item_id"] == "fi-top-level"
+
 
 class TestLabelStandardization:
     """Test label standardization and comparison logic"""

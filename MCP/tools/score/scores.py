@@ -289,7 +289,6 @@ def register_score_tools(mcp: FastMCP):
                                 id
                                 configuration
                                 guidelines
-                                description
                                 createdAt
                                 updatedAt
                                 note
@@ -300,19 +299,13 @@ def register_score_tools(mcp: FastMCP):
                         """
                         version_result = client.execute(version_query)
                         version_data = version_result.get('getScoreVersion')
-                        
+
                         if version_data:
                             # Include code and guidelines from the version
                             response["code"] = version_data.get('configuration')
                             response["guidelines"] = version_data.get('guidelines')
-                            
-                            # Use version description if available, otherwise fall back to Score description
-                            version_description = version_data.get('description')
-                            if version_description:
-                                response["description"] = version_description
-                            else:
-                                response["description"] = score.get('description')
-                                
+                            response["description"] = score.get('description')
+
                             # Explicitly show which version ID is being returned
                             response["targetVersionId"] = target_version_id
                             response["isChampionVersion"] = target_version_id == score.get('championVersionId')

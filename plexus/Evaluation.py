@@ -28,6 +28,10 @@ from sklearn.metrics import confusion_matrix
 
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
+from plexus.utils.feedback_selection import (
+    normalize_feedback_sampling_mode,
+    select_feedback_items,
+)
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
@@ -423,51 +427,54 @@ class Evaluation:
                 
                 return json.dumps(cleaned_obj)
 
-        # Create a fresh client for each update
-        client = PlexusDashboardClient()
+        # Reuse a single client to avoid creating 50+ simultaneous connections
+        if not hasattr(self, '_dashboard_log_client') or self._dashboard_log_client is None:
+            self._dashboard_log_client = PlexusDashboardClient()
+        client = self._dashboard_log_client
+        variables = None
         try:
             # Construct the mutation for updateEvaluation
             mutation = self._get_update_mutation()
-            
+
             # Construct the variables
             variables = self._get_update_variables(metrics, status)
-            
+
             # Ensure we have valid JSON before sending
             try:
                 # Serialize variables safely and log them for debugging
                 serialized_variables = safe_json_dumps(variables)
                 clean_variables = json.loads(serialized_variables)
-                
-                # Updating evaluation metrics
-                
-                # Execute the mutation with proper client handling
-                # Use asyncio.to_thread for the synchronous execute method
-                result = await asyncio.to_thread(client.execute, mutation, clean_variables)
-                
+
+                # Execute with a 30s timeout to prevent thread pool saturation.
+                # Dashboard updates are non-critical and must never block scoring.
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(client.execute, mutation, clean_variables),
+                    timeout=30.0
+                )
+
                 # Log the success
                 logging.info(f"Successfully updated evaluation metrics for task {self.task_id}")
                 return result
-                
+
             except json.JSONDecodeError as je:
                 logging.error(f"JSON serialization error: {je}. Unable to prepare variables for API call.")
                 raise
-                
+
+        except asyncio.TimeoutError:
+            logging.warning(
+                f"Dashboard update timed out after 30s for task {self.task_id}. "
+                "Skipping this update — scoring continues."
+            )
+            # Recreate client on timeout (connection may be stale)
+            self._dashboard_log_client = None
+            return None
         except Exception as e:
             # Log full error details including the mutation and variables
             logging.error(f"Error updating evaluation metrics for task {self.task_id}: {str(e)}")
             if variables:
                 logging.error(f"Failed mutation variables: {variables}")
-            
-            # Re-raise for retry
-            raise
-            
-        finally:
-            # Ensure client is properly closed
-            if hasattr(client, 'close') and callable(client.close):
-                try:
-                    await client.close()
-                except Exception as e:
-                    logging.warning(f"Error closing GraphQL client: {str(e)}")
+            # Don't re-raise — dashboard updates must not crash scoring
+            return None
 
     def calculate_metrics(self, results):
         if not results:
@@ -1207,11 +1214,10 @@ class Evaluation:
                 generate_calibration_report
             )
 
-            logging.info(f"About to check confidence detection on {len(self.all_results)} results")
-            print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+            logging.debug(f"About to check confidence detection on {len(self.all_results)} results")
             confidence_detected = detect_confidence_feature_enabled(self.all_results)
             logging.info(f"Confidence detection result: {confidence_detected}")
-            print(f"DEBUG: Confidence detection result: {confidence_detected}")
+            logging.debug(f"Confidence detection result: {confidence_detected}")
 
             if confidence_detected:
                 logging.info("Confidence feature detected - computing isotonic regression calibration")
@@ -1282,6 +1288,12 @@ class Evaluation:
         if score_name not in self.processed_items_by_score:
             self.processed_items_by_score[score_name] = 0
 
+        # Increase the default thread pool so dashboard logging and item scoring
+        # don't compete for the same 8 threads (Python default = min(32, cpu+4)).
+        import concurrent.futures as _cf
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(_cf.ThreadPoolExecutor(max_workers=40))
+
         # Create a semaphore to limit concurrency
         # Default to 20 concurrent operations
         concurrency_limit = getattr(self, 'concurrency_limit', 20)
@@ -1310,12 +1322,6 @@ class Evaluation:
                         self.processed_items_by_score[score_name] = processed_counter
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
-                        # Advance to Processing stage on first item completed
-                        if processed_counter == 1 and tracker and not getattr(self, '_processing_stage_started', False):
-                            self._processing_stage_started = True
-                            tracker.advance_stage()
-                            self.logging.info("==== STAGE: Processing ====")
-
                         # Update tracker with actual count of processed items
                         if tracker and tracker.current_stage:
                             tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
@@ -1394,8 +1400,10 @@ class Evaluation:
                         combined_results.extend(results)
                     
                     metrics = self.calculate_metrics(combined_results)
-                    # If this is the final update (score is complete), mark it as completed
-                    status = "COMPLETED" if score_name in self.completed_scores else "RUNNING"
+                    # If this is the final update (score is complete), mark it as completed —
+                    # unless rca_pending=True, in which case the outer code owns the COMPLETED write.
+                    scoring_done = score_name in self.completed_scores
+                    status = "COMPLETED" if (scoring_done and not self.rca_pending) else "RUNNING"
                     
                     # For final updates, use synchronous execution
                     if status == "COMPLETED":
@@ -1436,7 +1444,7 @@ class Evaluation:
 
         except asyncio.CancelledError:
             # Handle final cleanup if needed
-            if score_name in self.completed_scores:
+            if score_name in self.completed_scores and not self.rca_pending:
                 try:
                     # Ensure final metrics are posted synchronously
                     combined_results = []
@@ -2021,8 +2029,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                 # but keep legacy support for nested row['columns']['metadata'].
                 metadata_string = row.get('metadata', columns.get('metadata', {}))
 
-                # Get feedback_item_id from the dataset if available
-                feedback_item_id = row.get('feedback_item_id', None)
+                # Get feedback_item_id from dataset row (prefer top-level, then legacy columns field)
+                feedback_item_id = row.get('feedback_item_id')
+                if not feedback_item_id and isinstance(columns, dict):
+                    feedback_item_id = columns.get('feedback_item_id')
 
                 # Fetch Item object if item_id is available (needed for input sources)
                 item = None
@@ -2033,6 +2043,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     item_client = self.dashboard_client
 
                 item_id = row.get('item_id')
+                if not item_id and isinstance(columns, dict):
+                    item_id = columns.get('item_id')
                 if item_id:
                     try:
                         from plexus.dashboard.api.models.item import Item
@@ -2681,8 +2693,22 @@ Total cost:       ${expenses['total_cost']:.6f}
                     baseline_evaluation_id = metadata.get("baseline")
                 root_cause_candidate = parameters.get("root_cause")
                 if isinstance(root_cause_candidate, dict):
-                    root_cause = root_cause_candidate
-                    misclassification_candidate = root_cause_candidate.get("misclassification_analysis")
+                    # If root_cause was compacted (only a pointer), fetch full version from S3
+                    if root_cause_candidate.get("output_compacted") and root_cause_candidate.get("output_attachment"):
+                        try:
+                            from plexus.utils.score_result_s3_utils import download_evaluation_artifact_file
+                            full_rca = download_evaluation_artifact_file(root_cause_candidate["output_attachment"])
+                            if isinstance(full_rca, dict):
+                                root_cause = full_rca
+                            else:
+                                logging.warning(f"Could not fetch full RCA from S3, using compact version")
+                                root_cause = root_cause_candidate
+                        except Exception as e:
+                            logging.warning(f"Failed to fetch full RCA from S3: {e}")
+                            root_cause = root_cause_candidate
+                    else:
+                        root_cause = root_cause_candidate
+                    misclassification_candidate = root_cause.get("misclassification_analysis")
                     if isinstance(misclassification_candidate, dict):
                         misclassification_analysis = misclassification_candidate
             
@@ -2893,14 +2919,15 @@ class FeedbackEvaluation(Evaluation):
     def __init__(
         self,
         *,
-        days: int = 7,
+        days: Optional[int] = None,
         scorecard_id: Optional[str] = None,
         score_id: Optional[str] = None,
         evaluation_id: Optional[str] = None,
         account_id: Optional[str] = None,
         task_id: Optional[str] = None,
         api_client=None,
-        max_samples: Optional[int] = None,
+        max_items: Optional[int] = 200,
+        sampling_mode: str = "newest",
         sample_seed: Optional[int] = None,
         max_category_summary_items: int = 20,
         **kwargs
@@ -2909,22 +2936,24 @@ class FeedbackEvaluation(Evaluation):
         Initialize a FeedbackEvaluation.
         
         Args:
-            days: Number of days to look back for feedback items (default: 7)
+            days: Number of days to look back for feedback items (default: None = all-time)
             scorecard_id: ID of the scorecard to evaluate
             score_id: Optional ID of specific score to evaluate (if None, evaluates all scores)
             evaluation_id: ID of the evaluation record
             account_id: Account ID
             task_id: Optional task ID for progress tracking
             api_client: Optional API client (if not provided, will be created from kwargs)
-            max_samples: Optional maximum number of feedback items to process (default: None = all)
-            sample_seed: Optional random seed used when sampling feedback items
+            max_items: Optional maximum number of feedback items to process (default: 200)
+            sampling_mode: Feedback item selection mode: newest or random (default: newest)
+            sample_seed: Optional random seed used when sampling feedback items in random mode
             max_category_summary_items: Maximum items per category summary during RCA (default: 20)
             **kwargs: Additional arguments passed to parent Evaluation class
         """
         # Store api_client before calling super().__init__
         # Remove it from kwargs since parent Evaluation doesn't accept it
         self.api_client = api_client
-        self.max_samples = max_samples
+        self.max_items = max_items
+        self.sampling_mode = normalize_feedback_sampling_mode(sampling_mode)
         self.sample_seed = sample_seed
         self.max_category_summary_items = max(1, int(max_category_summary_items or 20))
         
@@ -2938,7 +2967,9 @@ class FeedbackEvaluation(Evaluation):
         elif hasattr(self, 'dashboard_client'):
             self.api_client = self.dashboard_client
         
-        self.days = days
+        if days is not None and int(days) <= 0:
+            raise ValueError("days must be a positive integer when provided.")
+        self.days = int(days) if days is not None else None
         self.scorecard_id = scorecard_id
         self.score_id = score_id
         self.evaluation_id = evaluation_id
@@ -3060,23 +3091,27 @@ class FeedbackEvaluation(Evaluation):
 
     @classmethod
     def _compact_root_cause_for_parameters(cls, root_cause_payload: dict, output_attachment: str) -> dict:
-        """Build compact RCA parameters payload with attachment pointer."""
+        """Build minimal RCA for DynamoDB parameters. Full data lives in S3.
+
+        Keeps only top-level narrative fields needed by the dashboard UI.
+        All detailed data (item classifications, etc.) is in the S3 attachment.
+        """
         if not isinstance(root_cause_payload, dict):
             raise ValueError("root_cause_payload must be a dictionary")
         if not output_attachment:
             raise ValueError("output_attachment is required")
 
-        compact_payload = {}
+        compact_payload = {
+            "output_attachment": output_attachment,
+            "output_compacted": True,
+        }
 
-        # Keep top-level narrative fields that power the evaluation UI.
-        for key in (
-            "overall_explanation",
-            "overall_improvement_suggestion",
-            "misclassification_analysis",
-        ):
+        # Keep top-level narrative fields needed by the dashboard UI
+        for key in ("overall_explanation", "overall_improvement_suggestion"):
             if key in root_cause_payload:
-                compact_payload[key] = root_cause_payload.get(key)
+                compact_payload[key] = root_cause_payload[key]
 
+        # Keep compact topic list for dashboard display (labels + counts only)
         raw_topics = root_cause_payload.get("topics")
         if isinstance(raw_topics, list):
             compact_payload["topics"] = [
@@ -3085,24 +3120,6 @@ class FeedbackEvaluation(Evaluation):
                 if isinstance(topic, dict)
             ]
 
-        # Compact full per-item table to essential fields to keep DB payload bounded.
-        misclassification_analysis = compact_payload.get("misclassification_analysis")
-        if isinstance(misclassification_analysis, dict):
-            compact_misclassification = dict(misclassification_analysis)
-            raw_rows = misclassification_analysis.get("item_classifications_all")
-            if isinstance(raw_rows, list):
-                compact_rows = [
-                    cls._compact_item_classification_for_parameters(row)
-                    for row in raw_rows
-                ]
-                compact_misclassification["item_classifications_all"] = compact_rows
-                compact_misclassification["item_classifications_total"] = len(raw_rows)
-            compact_misclassification["item_classifications_attachment"] = output_attachment
-            compact_payload["misclassification_analysis"] = compact_misclassification
-
-        compact_payload["output_compacted"] = True
-        compact_payload["output_attachment"] = output_attachment
-        compact_payload["output_compaction_version"] = "feedback_rca_v1"
         return compact_payload
 
     def _persist_root_cause_for_parameters(self, root_cause_payload: dict) -> dict:
@@ -3190,7 +3207,10 @@ class FeedbackEvaluation(Evaluation):
             
             # Calculate date range
             end_date = datetime.now(timezone.utc)
-            start_date = end_date - timedelta(days=self.days)
+            if self.days is None:
+                start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
+            else:
+                start_date = end_date - timedelta(days=self.days)
             
             # Validate scorecard exists
             scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
@@ -3212,16 +3232,34 @@ class FeedbackEvaluation(Evaluation):
             )
             
             self.logger.info(f"Fetched {len(feedback_items)} feedback items")
-            
-            # Apply max_samples limit if specified
-            if self.max_samples and len(feedback_items) > self.max_samples:
-                import random
-                self.logger.info(f"Sampling {self.max_samples} items from {len(feedback_items)} total feedback items")
-                if self.sample_seed is not None:
-                    rng = random.Random(self.sample_seed)
-                    feedback_items = rng.sample(feedback_items, self.max_samples)
-                else:
-                    feedback_items = random.sample(feedback_items, self.max_samples)
+
+            feedback_items, selection_metadata = select_feedback_items(
+                feedback_items,
+                max_items=self.max_items,
+                sampling_mode=self.sampling_mode,
+                sample_seed=self.sample_seed,
+            )
+            self.logger.info(
+                "Selected %s feedback items from %s candidates "
+                "(sampling_mode=%s, max_items=%s, sample_seed=%s)",
+                len(feedback_items),
+                selection_metadata.get("candidate_pool_count"),
+                selection_metadata.get("sampling_mode"),
+                selection_metadata.get("requested_max_items"),
+                selection_metadata.get("sample_seed"),
+            )
+            if int(selection_metadata.get("shortfall_count") or 0) > 0:
+                self.logger.warning(
+                    "Feedback selection shortfall: requested=%s available_selected=%s shortfall=%s",
+                    selection_metadata.get("requested_max_items"),
+                    selection_metadata.get("selected_count"),
+                    selection_metadata.get("shortfall_count"),
+                )
+            if not feedback_items:
+                raise ValueError(
+                    "No feedback items matched selection criteria "
+                    f"(days={self.days}, sampling_mode={self.sampling_mode}, max_items={self.max_items})."
+                )
             
             # Perform analysis on the feedback items
             overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
@@ -3277,10 +3315,14 @@ class FeedbackEvaluation(Evaluation):
             )
 
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
-            root_cause_result = await self._run_root_cause_analysis(
-                feedback_items,
-                max_category_summary_items=self.max_category_summary_items,
-            )
+            try:
+                root_cause_result = await self._run_root_cause_analysis(
+                    feedback_items,
+                    max_category_summary_items=self.max_category_summary_items,
+                )
+            except Exception as _rca_exc:
+                self.logger.warning(f"Root-cause analysis failed (non-fatal): {_rca_exc}")
+                root_cause_result = []
             persisted_root_cause = await asyncio.to_thread(
                 self._persist_root_cause_for_parameters,
                 root_cause_result,
@@ -3294,6 +3336,7 @@ class FeedbackEvaluation(Evaluation):
                 except Exception:
                     existing_params = {}
             parameters_dict = dict(existing_params) if existing_params else {}
+            parameters_dict.update(selection_metadata)
             incorrect_items = int(overall_analysis.get("disagreements") or 0)
             contract = self.root_cause_contract_outcome(incorrect_items, persisted_root_cause)
             parameters_dict = self.apply_root_cause_contract_to_parameters(
@@ -3344,7 +3387,8 @@ class FeedbackEvaluation(Evaluation):
                 "status": "success",
                 "evaluation_id": self.evaluation_id,
                 "metrics": metrics_dict,
-                "analysis": overall_analysis
+                "analysis": overall_analysis,
+                "selection": selection_metadata,
             }
             
         except Exception as e:
@@ -3531,8 +3575,9 @@ class FeedbackEvaluation(Evaluation):
                 # Get the original production ScoreResult by querying for it
                 # The production ScoreResult is the one that was originally scored (without evaluationId)
                 # and matches this FeedbackItem's itemId and scoreId
+                # Note: trace is intentionally not fetched — it is not used by RCA analysis and
+                # can be large enough to push the DynamoDB item over the 400KB size limit.
                 explanation = None
-                trace = None
                 try:
                     # Query for the production ScoreResult using itemId and scoreId
                     query = """
@@ -3542,7 +3587,6 @@ class FeedbackEvaluation(Evaluation):
                                 id
                                 evaluationId
                                 explanation
-                                trace
                             }
                         }
                     }
@@ -3559,25 +3603,22 @@ class FeedbackEvaluation(Evaluation):
                         items = result['listScoreResults'].get('items', [])
                         # Filter for production results (those without evaluationId)
                         production_results = [
-                            item for item in items 
+                            item for item in items
                             if not item.get('evaluationId')
                         ]
-                        
+
                         if production_results:
                             production_result = production_results[0]
                             explanation = production_result.get('explanation')
-                            trace_str = production_result.get('trace')
-                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}, trace: {trace_str is not None}")
-                            if trace_str:
-                                try:
-                                    trace = json.loads(trace_str) if isinstance(trace_str, str) else trace_str
-                                except (TypeError, ValueError, json.JSONDecodeError):
-                                    trace = None
+                            # Truncate explanation to avoid DynamoDB 400KB item size limit
+                            if explanation and len(explanation) > 3000:
+                                explanation = explanation[:3000] + '... [truncated]'
+                            self.logger.debug(f"Found production ScoreResult for FeedbackItem {feedback_item.id} with explanation: {explanation is not None}")
                         else:
                             self.logger.debug(f"No production ScoreResult found for FeedbackItem {feedback_item.id} (found {len(items)} total, {len(production_results)} without evaluationId)")
                 except Exception as e:
                     self.logger.warning(f"Error fetching production ScoreResult for FeedbackItem {feedback_item.id}: {e}")
-                
+
                 # Create metadata with feedback details
                 # IMPORTANT: Use 'human_label' for the actual/ground-truth value (finalAnswerValue)
                 # This is what the frontend expects for displaying actual vs predicted
@@ -3592,10 +3633,10 @@ class FeedbackEvaluation(Evaluation):
                     'edited_at': feedback_item.editedAt.isoformat() if feedback_item.editedAt else None,
                     'editor_name': feedback_item.editorName
                 }
-                
-                # Add text to metadata if available
+
+                # Add text to metadata if available, truncated to avoid DynamoDB 400KB item size limit
                 if item_text:
-                    metadata['text'] = item_text
+                    metadata['text'] = item_text[:15000] if len(item_text) > 15000 else item_text
                 
                 # Add comments if available
                 if feedback_item.editCommentValue:
@@ -3615,8 +3656,7 @@ class FeedbackEvaluation(Evaluation):
                     scoreId=score_id,
                     feedbackItemId=feedback_item.id,
                     value=feedback_item.initialAnswerValue or 'N/A',  # Use initial (predicted) value
-                    explanation=explanation,  # From production ScoreResult
-                    trace=trace,  # From production ScoreResult
+                    explanation=explanation,  # From production ScoreResult (truncated if needed)
                     confidence=None,  # No confidence for feedback evaluations
                     correct=is_correct,
                     metadata=metadata,
@@ -3839,174 +3879,194 @@ class FeedbackEvaluation(Evaluation):
                     fetched_context = await asyncio.gather(*[_fetch_item_context(iid) for iid in all_item_ids])
                     item_context_cache = {iid: payload for iid, payload in fetched_context}
 
-            for fi in candidate_items:
-                ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
-                ts_str = (
-                    (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
-                    if ts else now.isoformat()
-                )
-                metadata = {
-                    "feedback_item_id": fi.id,
-                    "edit_comment": getattr(fi, "editCommentValue", "") or "",
-                    "initial_comment": getattr(fi, "initialCommentValue", "") or "",
-                    "final_comment": getattr(fi, "finalCommentValue", "") or "",
-                    "label_provenance_source": "feedback_final_answer_value",
-                }
-                if fi.itemId:
-                    metadata["item_id"] = fi.itemId
+            # Process all candidate items in parallel — the per-item RCA work
+            # (2 Bedrock LLM calls each) is the main bottleneck when done sequentially.
+            rca_sem = asyncio.Semaphore(3)
 
-                # Build the text that will be clustered and analysed.
-                # Goal: text explaining WHY the ground-truth label is correct —
-                # not what our model said (which describes the wrong reasoning).
-                #
-                # Source depends on whether the reviewer agreed or disagreed:
-                #   Agreed   → original production explanation describes the correct answer
-                #   Disagreed → edit comment explains why the reviewer changed the label
-                if score_result_map is not None:
-                    sr = score_result_map.get(fi.id, {})
-                    new_pred = (sr.get('value') or '')
-                    correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
-                    our_explanation = sr.get('explanation', '')
-                    orig_explanation = (original_explanations or {}).get(fi.id, '')
-                    reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
+            async def _process_single_candidate(fi):
+                """Process one candidate item: build context, extract evidence, classify, explain."""
+                async with rca_sem:
+                    ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
+                    ts_str = (
+                        (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
+                        if ts else now.isoformat()
+                    )
+                    metadata = {
+                        "feedback_item_id": fi.id,
+                        "edit_comment": getattr(fi, "editCommentValue", "") or "",
+                        "initial_comment": getattr(fi, "initialCommentValue", "") or "",
+                        "final_comment": getattr(fi, "finalCommentValue", "") or "",
+                        "label_provenance_source": "feedback_final_answer_value",
+                    }
+                    if fi.itemId:
+                        metadata["item_id"] = fi.itemId
 
-                    if reviewer_agreed:
-                        # Original was correct; original explanation says why
-                        text = orig_explanation or fi.editCommentValue or our_explanation
+                    # Build the text that will be clustered and analysed.
+                    # Goal: text explaining WHY the ground-truth label is correct —
+                    # not what our model said (which describes the wrong reasoning).
+                    #
+                    # Source depends on whether the reviewer agreed or disagreed:
+                    #   Agreed   → original production explanation describes the correct answer
+                    #   Disagreed → edit comment explains why the reviewer changed the label
+                    if score_result_map is not None:
+                        sr = score_result_map.get(fi.id, {})
+                        new_pred = (sr.get('value') or '')
+                        correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
+                        our_explanation = sr.get('explanation', '')
+                        orig_explanation = (original_explanations or {}).get(fi.id, '')
+                        reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
+
+                        if reviewer_agreed:
+                            text = orig_explanation or fi.editCommentValue or our_explanation
+                        else:
+                            text = fi.editCommentValue or orig_explanation or our_explanation
+
+                        if not text:
+                            text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+
+                        metadata["initial_answer_value"] = new_pred
+                        metadata["final_answer_value"] = correct_label
+                        if our_explanation:
+                            metadata["score_explanation"] = our_explanation
                     else:
-                        # Reviewer corrected original; edit comment explains the correction
-                        text = fi.editCommentValue or orig_explanation or our_explanation
+                        if fi.initialAnswerValue:
+                            metadata["initial_answer_value"] = fi.initialAnswerValue
+                        if fi.finalAnswerValue:
+                            metadata["final_answer_value"] = fi.finalAnswerValue
+                        text = fi.editCommentValue
 
-                    if not text:
-                        text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+                    item_context_record = item_context_cache.get(fi.itemId or "", {})
+                    primary_input_text = item_context_record.get("primary_input", "")
+                    metadata_snapshot = item_context_record.get("metadata_snapshot", "")
+                    primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
+                    primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
+                    misclassification_item_context = build_misclassification_item_context(
+                        feedback_item_id=fi.id,
+                        item_id=fi.itemId or "",
+                        score_id=getattr(self, "score_id", "") or "",
+                        scorecard_id=getattr(self, "scorecard_id", "") or "",
+                        score_version_id=getattr(self, "score_version_id", "") or "",
+                        predicted_value=metadata.get("initial_answer_value", "") or "",
+                        correct_value=metadata.get("final_answer_value", "") or "",
+                        score_explanation=metadata.get("score_explanation", "") or "",
+                        edit_comment=metadata.get("edit_comment", ""),
+                        initial_comment=metadata.get("initial_comment", ""),
+                        final_comment=metadata.get("final_comment", ""),
+                        score_guidelines_text=score_guidelines,
+                        score_yaml_configuration=score_yaml_code,
+                        scorecard_guidance_text=scorecard_guidance_text,
+                        primary_input_text=primary_input_text,
+                        primary_input_modality=primary_input_modality,
+                        metadata_snapshot=metadata_snapshot,
+                        label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
+                        resolved_final_classes=resolved_final_classes,
+                        class_resolution_source=class_resolution_source,
+                        primary_input_fetch_error=primary_input_fetch_error,
+                    )
+                    misclassification_evidence_flags = await asyncio.to_thread(
+                        extract_misclassification_evidence_flags,
+                        item_context=misclassification_item_context,
+                    )
+                    misclassification_classification = classify_misclassification_item(
+                        misclassification_item_context,
+                        misclassification_evidence_flags,
+                    )
+                    triage_explainer = await asyncio.to_thread(
+                        explain_misclassification_item_classification,
+                        item_context=misclassification_item_context,
+                        classification=misclassification_classification,
+                    )
+                    misclassification_classification["rationale_paragraph"] = triage_explainer.get(
+                        "rationale_paragraph", ""
+                    )
+                    misclassification_classification["evidence_quote"] = triage_explainer.get(
+                        "evidence_quote", ""
+                    )
+                    misclassification_classification["config_fixability"] = triage_explainer.get(
+                        "config_fixability", ""
+                    )
+                    primary_category = (
+                        misclassification_classification.get("primary_category")
+                        or "score_configuration_problem"
+                    )
+                    confidence = misclassification_classification.get("confidence") or "unknown"
+                    mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
+                    rationale = (
+                        triage_explainer.get("rationale_paragraph")
+                        or misclassification_classification.get("rationale")
+                        or ""
+                    ).strip()
+                    rationale_single_line = " ".join(rationale.split())
+                    rationale_words = rationale_single_line.split() if rationale_single_line else []
+                    rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
+                    if len(rationale_words) > 12:
+                        rationale_excerpt += "..."
+                    rationale_excerpt = rationale_excerpt.replace(";", ",").replace("]", ")")
 
-                    metadata["initial_answer_value"] = new_pred
-                    metadata["final_answer_value"] = correct_label
-                    if our_explanation:
-                        metadata["score_explanation"] = our_explanation
-                else:
-                    if fi.initialAnswerValue:
-                        metadata["initial_answer_value"] = fi.initialAnswerValue
-                    if fi.finalAnswerValue:
-                        metadata["final_answer_value"] = fi.finalAnswerValue
-                    text = fi.editCommentValue
+                    metadata["pre_cluster_misclassification_category"] = primary_category
+                    metadata["pre_cluster_misclassification_confidence"] = confidence
+                    metadata["pre_cluster_mechanical_subtype"] = mechanical_subtype
+                    metadata["pre_cluster_misclassification_rationale_short"] = rationale_excerpt
 
-                item_context_record = item_context_cache.get(fi.itemId or "", {})
-                primary_input_text = item_context_record.get("primary_input", "")
-                metadata_snapshot = item_context_record.get("metadata_snapshot", "")
-                primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
-                primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
-                misclassification_item_context = build_misclassification_item_context(
-                    feedback_item_id=fi.id,
-                    item_id=fi.itemId or "",
-                    score_id=getattr(self, "score_id", "") or "",
-                    scorecard_id=getattr(self, "scorecard_id", "") or "",
-                    score_version_id=getattr(self, "score_version_id", "") or "",
-                    predicted_value=metadata.get("initial_answer_value", "") or "",
-                    correct_value=metadata.get("final_answer_value", "") or "",
-                    score_explanation=metadata.get("score_explanation", "") or "",
-                    edit_comment=metadata.get("edit_comment", ""),
-                    initial_comment=metadata.get("initial_comment", ""),
-                    final_comment=metadata.get("final_comment", ""),
-                    score_guidelines_text=score_guidelines,
-                    score_yaml_configuration=score_yaml_code,
-                    scorecard_guidance_text=scorecard_guidance_text,
-                    primary_input_text=primary_input_text,
-                    primary_input_modality=primary_input_modality,
-                    metadata_snapshot=metadata_snapshot,
-                    label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
-                    resolved_final_classes=resolved_final_classes,
-                    class_resolution_source=class_resolution_source,
-                    primary_input_fetch_error=primary_input_fetch_error,
-                )
-                misclassification_evidence_flags = await asyncio.to_thread(
-                    extract_misclassification_evidence_flags,
-                    item_context=misclassification_item_context,
-                )
-                misclassification_classification = classify_misclassification_item(
-                    misclassification_item_context,
-                    misclassification_evidence_flags,
-                )
-                triage_explainer = await asyncio.to_thread(
-                    explain_misclassification_item_classification,
-                    item_context=misclassification_item_context,
-                    classification=misclassification_classification,
-                )
-                misclassification_classification["rationale_paragraph"] = triage_explainer.get(
-                    "rationale_paragraph", ""
-                )
-                misclassification_classification["evidence_quote"] = triage_explainer.get(
-                    "evidence_quote", ""
-                )
-                misclassification_classification["config_fixability"] = triage_explainer.get(
-                    "config_fixability", ""
-                )
-                primary_category = (
-                    misclassification_classification.get("primary_category")
-                    or "score_configuration_problem"
-                )
-                confidence = misclassification_classification.get("confidence") or "unknown"
-                mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
-                rationale = (
-                    triage_explainer.get("rationale_paragraph")
-                    or misclassification_classification.get("rationale")
-                    or ""
-                ).strip()
-                rationale_single_line = " ".join(rationale.split())
-                rationale_words = rationale_single_line.split() if rationale_single_line else []
-                rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
-                if len(rationale_words) > 12:
-                    rationale_excerpt += "..."
-                rationale_excerpt = rationale_excerpt.replace(";", ",").replace("]", ")")
+                    canonical_row = {
+                        "feedback_item_id": fi.id,
+                        "item_id": fi.itemId or "",
+                        "timestamp": ts_str,
+                        "topic_id": None,
+                        "topic_label": "",
+                        "predicted_value": metadata.get("initial_answer_value", "") or "",
+                        "correct_value": metadata.get("final_answer_value", "") or "",
+                        "primary_category": primary_category,
+                        "confidence": confidence,
+                        "rationale_short": rationale_excerpt,
+                        "rationale_full": rationale,
+                        "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
+                        "evidence_quote": triage_explainer.get("evidence_quote", ""),
+                        "config_fixability": triage_explainer.get("config_fixability", ""),
+                        "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
+                        "mechanical_subtype": (
+                            mechanical_subtype if mechanical_subtype != "none" else None
+                        ),
+                        "mechanical_details": misclassification_classification.get("mechanical_details"),
+                        "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
+                        "triage_evidence_flags": misclassification_classification.get("evidence_flags"),
+                        "misclassification_item_context": misclassification_item_context,
+                        "misclassification_classification": misclassification_classification,
+                    }
 
-                metadata["pre_cluster_misclassification_category"] = primary_category
-                metadata["pre_cluster_misclassification_confidence"] = confidence
-                metadata["pre_cluster_mechanical_subtype"] = mechanical_subtype
-                metadata["pre_cluster_misclassification_rationale_short"] = rationale_excerpt
+                    text = (
+                        f"[misclassification_category={primary_category};"
+                        f"confidence={confidence};"
+                        f"mechanical_subtype={mechanical_subtype};"
+                        f"triage_rationale={rationale_excerpt}]\n"
+                        f"{rationale_excerpt}\n{text}"
+                    )
 
-                canonical_row = {
-                    "feedback_item_id": fi.id,
-                    "item_id": fi.itemId or "",
-                    "timestamp": ts_str,
-                    "topic_id": None,
-                    "topic_label": "",
-                    "predicted_value": metadata.get("initial_answer_value", "") or "",
-                    "correct_value": metadata.get("final_answer_value", "") or "",
-                    "primary_category": primary_category,
-                    "confidence": confidence,
-                    "rationale_short": rationale_excerpt,
-                    "rationale_full": rationale,
-                    "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
-                    "evidence_quote": triage_explainer.get("evidence_quote", ""),
-                    "config_fixability": triage_explainer.get("config_fixability", ""),
-                    "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
-                    "mechanical_subtype": (
-                        mechanical_subtype if mechanical_subtype != "none" else None
-                    ),
-                    "mechanical_details": misclassification_classification.get("mechanical_details"),
-                    "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
-                    "triage_evidence_flags": misclassification_classification.get("evidence_flags"),
-                    "misclassification_item_context": misclassification_item_context,
-                    "misclassification_classification": misclassification_classification,
-                }
+                    timestamped = TimestampedText(
+                        id=fi.id,
+                        group_id=self.score_id,
+                        timestamp=ts_str,
+                        text=text,
+                        metadata=metadata,
+                    )
+
+                    return timestamped, canonical_row
+
+            _update_status(f"Classifying {len(candidate_items)} misclassified items (parallel)...")
+            rca_results = await asyncio.gather(*[
+                _process_single_candidate(fi) for fi in candidate_items
+            ], return_exceptions=True)
+            rca_errors = 0
+            for result in rca_results:
+                if isinstance(result, Exception):
+                    rca_errors += 1
+                    continue
+                timestamped, canonical_row = result
+                texts.append(timestamped)
                 canonical_item_classifications.append(canonical_row)
-                canonical_item_by_feedback_id[fi.id] = canonical_row
-
-                text = (
-                    f"[misclassification_category={primary_category};"
-                    f"confidence={confidence};"
-                    f"mechanical_subtype={mechanical_subtype};"
-                    f"triage_rationale={rationale_excerpt}]\n"
-                    f"{rationale_excerpt}\n{text}"
-                )
-
-                texts.append(TimestampedText(
-                    id=fi.id,
-                    group_id=self.score_id,
-                    timestamp=ts_str,
-                    text=text,
-                    metadata=metadata,
-                ))
+                canonical_item_by_feedback_id[canonical_row["feedback_item_id"]] = canonical_row
+            if rca_errors:
+                self.logger.warning(f"RCA: {rca_errors}/{len(candidate_items)} items failed (continuing with {len(texts)} successful)")
 
             embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
             # Warm up the model before analysis to avoid meta-tensor race conditions
@@ -4817,7 +4877,7 @@ class FeedbackEvaluation(Evaluation):
         }
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, **kwargs):
+    def __init__(self, *, override_folder: Optional[str] = None, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, account_key: str = None, scorecard_id: str = None, skip_local_reports: bool = False, rca_pending: bool = False, **kwargs):
         # Store evaluation_id BEFORE calling super().__init__ so parent can use it
         self.evaluation_id = evaluation_id
         # Store scorecard_id before calling super().__init__
@@ -4847,6 +4907,7 @@ class AccuracyEvaluation(Evaluation):
         self.metrics_tasks = {}  # Dictionary to track metrics tasks per score
         self.should_stop = False
         self.completed_scores = set()  # Track which scores have completed all their results
+        self.rca_pending = rca_pending  # When True, suppress autonomous COMPLETED — outer code owns the final write
         self.override_data = {}  # Initialize empty override data dictionary
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
         
@@ -5062,7 +5123,7 @@ class AccuracyEvaluation(Evaluation):
             # Advance to Analyzing stage after all processing is complete
             if tracker:
                 tracker.advance_stage()
-                self.logging.info("==== STAGE: Analyzing ====")
+                self.logging.info("==== STAGE: Analysis ====")
 
             # Calculate metrics from results
             
@@ -5221,11 +5282,10 @@ class AccuracyEvaluation(Evaluation):
                         generate_calibration_report
                     )
 
-                    logging.info(f"About to check confidence detection on {len(self.all_results)} results")
-                    print(f"DEBUG: About to check confidence detection on {len(self.all_results)} results")
+                    logging.debug(f"About to check confidence detection on {len(self.all_results)} results")
                     confidence_detected = detect_confidence_feature_enabled(self.all_results)
                     logging.info(f"Confidence detection result: {confidence_detected}")
-                    print(f"DEBUG: Confidence detection result: {confidence_detected}")
+                    logging.debug(f"Confidence detection result: {confidence_detected}")
 
                     if confidence_detected:
                         logging.info("Confidence feature detected - computing two-stage calibration (temperature scaling + isotonic regression)")
@@ -5273,8 +5333,8 @@ class AccuracyEvaluation(Evaluation):
 
                                     logging.info(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
                                     logging.info(f"Temperature scaling: T={optimal_temperature:.4f}")
-                                    print(f"DEBUG: Two-stage reliability diagram saved to: {reliability_plot_path}")
-                                    print(f"DEBUG: Temperature scaling: T={optimal_temperature:.4f}")
+                                    logging.debug(f"Two-stage reliability diagram saved to: {reliability_plot_path}")
+                                    logging.debug(f"Temperature scaling: T={optimal_temperature:.4f}")
 
                                     # Save calibration metrics to JSON file
                                     calibration_metrics_path = f"{report_folder_path}/calibration_metrics_{timestamp}.json"
@@ -5284,19 +5344,19 @@ class AccuracyEvaluation(Evaluation):
 
                                 except Exception as viz_error:
                                     logging.error(f"Error generating two-stage reliability diagram: {viz_error}")
-                                    print(f"DEBUG: Error generating two-stage reliability diagram: {viz_error}")
+                                    logging.debug(f"Error generating two-stage reliability diagram: {viz_error}")
                             else:
                                 logging.warning("Could not compute two-stage calibration model (isotonic regression failed)")
                         else:
                             logging.info(f"Insufficient confidence data for calibration analysis: {len(confidence_scores)} samples (need >= 10)")
-                            print(f"DEBUG: Insufficient confidence data: {len(confidence_scores)} samples")
+                            logging.debug(f"Insufficient confidence data: {len(confidence_scores)} samples")
                     else:
                         logging.info("No confidence features detected - skipping calibration analysis")
-                        print(f"DEBUG: No confidence features detected")
+                        logging.debug("No confidence features detected")
 
                 except Exception as calib_error:
                     logging.error(f"Error in confidence calibration analysis: {calib_error}")
-                    print(f"DEBUG: Error in calibration analysis: {calib_error}")
+                    logging.debug(f"Error in calibration analysis: {calib_error}")
 
             return metrics
         except Exception as e:
