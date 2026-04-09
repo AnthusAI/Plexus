@@ -1,7 +1,6 @@
 "use client";
 
 import React from 'react';
-import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Code, List, X, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
