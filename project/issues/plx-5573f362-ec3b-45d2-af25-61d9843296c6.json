@@ -1,0 +1,25 @@
+{
+  "id": "plx-5573f362-ec3b-45d2-af25-61d9843296c6",
+  "title": "Configurable TaskStage indicators driven by Tactus procedure YAML",
+  "description": "Implement end-to-end support for procedure-defined TaskStage progress indicators in the Plexus dashboard.\n\n## Problem\n\nThe dashboard was showing hardcoded stages (Evaluation, Hypothesis, Test, Insights) for all procedures instead of the stages declared in the optimizer YAML (setup, baseline, optimize, finalize).\n\n## Solution\n\nFour-file fix:\n1. procedures.py: Parse stages from YAML, build stage_configs, pass to create_procedure()\n2. mcp_transport.py: Add _advance_task_to_stage_by_name() helper + plexus_set_procedure_stage MCP tool\n3. service.py: Inject task_id from options into experiment_context before MCP server creation\n4. procedure_executor.py: Stage shim calls Tool.get('plexus_set_procedure_stage') on Stage.set()\n\n## Effect\n\nStage.set('setup'/'baseline'/'optimize'/'finalize') in Lua now updates dashboard TaskStage records in real-time.\n\n## Validation\n\nRun 10 should show: Setup -> Baseline -> Optimize -> Finalize in dashboard.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3a1ee236-877d-48b8-af7d-8bd0f73f6b46",
+      "author": "ryan",
+      "text": "Verified working in run 10. Dashboard task 74eb7306 shows correct stages: Setup (COMPLETED) -> Baseline (RUNNING) -> Optimize (PENDING) -> Finalize (PENDING). Stage transitions fire in real-time via plexus_set_procedure_stage MCP tool called from the Stage shim in procedure_executor.py.",
+      "created_at": "2026-04-07T12:29:10.343800Z"
+    }
+  ],
+  "created_at": "2026-04-07T12:22:11.029038Z",
+  "updated_at": "2026-04-07T12:29:14.909101Z",
+  "closed_at": "2026-04-07T12:29:14.909101Z",
+  "custom": {}
+}

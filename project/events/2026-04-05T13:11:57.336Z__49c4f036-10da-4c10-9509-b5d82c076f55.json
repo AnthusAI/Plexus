@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "49c4f036-10da-4c10-9509-b5d82c076f55",
+  "issue_id": "plx-20501f7b-4bb3-4d6e-84e4-e09766dfad2a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-05T13:11:57.336Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e9a60d69-8053-471a-9f50-bda3cb0f2160",
+    "priority": 1,
+    "status": "open",
+    "title": "Warn on feedback selection shortfall when requested max-items exceeds available"
+  }
+}

@@ -11,7 +11,8 @@ def _evaluation(ac1=0.6, recall=0.7, precision=0.7):
         "parameters": {
             "mode": "feedback",
             "days": 180,
-            "max_samples": 100,
+            "max_items": 100,
+            "sampling_mode": "newest",
             "root_cause_required": False,
         },
     }
@@ -50,7 +51,7 @@ def test_assess_candidate_rejects_on_generalization_regression():
 
 
 def test_assess_candidate_inconclusive_without_required_metrics():
-    incomplete = {"metrics": [], "parameters": {"mode": "feedback", "days": 180, "max_samples": 100}}
+    incomplete = {"metrics": [], "parameters": {"mode": "feedback", "days": 180, "max_items": 100, "sampling_mode": "newest"}}
     result = assess_candidate(
         baseline_reference_eval=incomplete,
         candidate_reference_eval=_evaluation(ac1=0.64),

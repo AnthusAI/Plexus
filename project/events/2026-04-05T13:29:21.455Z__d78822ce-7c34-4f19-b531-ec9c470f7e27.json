@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d78822ce-7c34-4f19-b531-ec9c470f7e27",
+  "issue_id": "plx-9ae8ecd1-399a-4b79-ae96-090efcb4d52c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-05T13:29:21.455Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement automatic RCA for evaluate accuracy when dataset-backed, reusing FeedbackEvaluation RCA pipeline, with partial-coverage metadata and dataset linkage propagation fixes.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+    "priority": 1,
+    "status": "open",
+    "title": "Add RCA to dataset-backed accuracy evaluations"
+  }
+}

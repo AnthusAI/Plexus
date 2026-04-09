@@ -671,13 +671,13 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   ]);
 
   return (
-    <div className="space-y-2">
-      <TaskStatus 
-        {...taskStatus} 
+    <div className="space-y-2 mt-auto">
+      <TaskStatus
+        {...taskStatus}
         key={`${data.id}-${JSON.stringify(stages.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
       />
       {extra && (
-        <EvaluationListAccuracyBar 
+        <EvaluationListAccuracyBar
           progress={progress}
           accuracy={accuracy}
           isSelected={isSelected}
@@ -1047,7 +1047,7 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
-  const rootCauseData = useMemo(() => {
+  const rootCauseData = useMemo((): RootCauseData | null => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
       const rootCause = params?.root_cause
@@ -1059,6 +1059,37 @@ const DetailContent = React.memo(({
 
   const rootCauseTopics = rootCauseData?.topics ?? null
   const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
+  const rcaCoverage = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (!params || typeof params !== 'object') return null
+      return {
+        status: typeof params.rca_coverage_status === 'string' ? params.rca_coverage_status : null,
+        incorrectItemsTotal: typeof params.incorrect_items_total === 'number' ? params.incorrect_items_total : 0,
+        incorrectItemsWithFeedbackLink: typeof params.incorrect_items_with_feedback_link === 'number'
+          ? params.incorrect_items_with_feedback_link
+          : 0,
+        incorrectItemsWithoutFeedbackLink: typeof params.incorrect_items_without_feedback_link === 'number'
+          ? params.incorrect_items_without_feedback_link
+          : 0,
+      }
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+  const rcaCoverageNote = useMemo(() => {
+    if (!rcaCoverage || !rcaCoverage.status) return null
+    if (rcaCoverage.status === 'partial') {
+      return `RCA analyzed ${rcaCoverage.incorrectItemsWithFeedbackLink}/${rcaCoverage.incorrectItemsTotal} incorrect item(s); ${rcaCoverage.incorrectItemsWithoutFeedbackLink} missing feedback linkage.`
+    }
+    if (rcaCoverage.status === 'none' && rcaCoverage.incorrectItemsTotal > 0) {
+      return `RCA unavailable: 0/${rcaCoverage.incorrectItemsTotal} incorrect item(s) had feedback linkage.`
+    }
+    if (rcaCoverage.status === 'full' && rcaCoverage.incorrectItemsTotal > 0) {
+      return `RCA analyzed ${rcaCoverage.incorrectItemsWithFeedbackLink}/${rcaCoverage.incorrectItemsTotal} incorrect item(s).`
+    }
+    return null
+  }, [rcaCoverage])
   const misclassificationCategoryBreakdown = useMemo(() => {
     const totals = misclassificationAnalysis?.category_totals ?? {}
     const itemClassifications = Array.isArray(misclassificationAnalysis?.item_classifications_all)
@@ -1509,6 +1540,11 @@ const DetailContent = React.memo(({
                         <MessageSquareCode className="w-3.5 h-3.5 text-muted-foreground" />
                       </Button>
                     </div>
+                    {rcaCoverageNote && (
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        {rcaCoverageNote}
+                      </div>
+                    )}
                     {showRootCauseCode ? (
                       <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
                         {JSON.stringify(rootCauseData, null, 2)}
@@ -1936,8 +1972,19 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
-  
-  
+
+  const evaluationNotes = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (params && typeof params.notes === 'string' && params.notes.trim()) {
+        // Normalize Markdown: remove spaces before closing bold/italic delimiters so that
+        // AI-generated text like "**label: **" renders correctly (CommonMark rejects a
+        // closing delimiter that is preceded by whitespace).
+        return params.notes.trim().replace(/ (\*+)/g, '$1')
+      }
+    } catch { /* ignore */ }
+    return null
+  }, [data.parameters])
 
   // Add more detailed logging for incoming data
 
@@ -2468,6 +2515,16 @@ evaluation:
                   ) : (
                     <span>Unavailable</span>
                   )}
+                </div>
+              )}
+              {evaluationNotes && (
+                <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                    p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                    strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                  }}>
+                    {evaluationNotes}
+                  </ReactMarkdown>
                 </div>
               )}
               <Timestamp time={props.task.time} variant="relative" />

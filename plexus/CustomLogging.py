@@ -8,11 +8,13 @@ import boto3
 from datetime import datetime
 import time
 
-from dotenv import load_dotenv
-load_dotenv('.env', override=True)
+from dotenv import load_dotenv, find_dotenv
+# Use an absolute path anchored to this file so the .env loads regardless of CWD.
+_env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env')
+load_dotenv(_env_file, override=True)
 
-# Create a Rich console specifically for output
-console = Console()
+# Create a Rich console for logging output on stderr.
+console = Console(stderr=True)
 
 # Default log group name
 if os.getenv("environment"):
@@ -124,8 +126,8 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
     for handler in handlers:
         root_logger.addHandler(handler)
 
-    # Ensure that logging output goes to sys.stdout
-    logging.getLogger().handlers[0].stream = sys.stdout
+    # Ensure logging output goes to stderr so stdout can remain machine-readable.
+    logging.getLogger().handlers[0].stream = sys.stderr
 
     # Configure specific loggers
     # Disable noisy loggers
