@@ -1552,15 +1552,13 @@ code: |
           end
           table.insert(feedback_parts, string.format("\n(Hypothesis %d, step %d/%d)", h, react_step, max_react_steps))
 
-          -- Inject updated file content as system message
+          -- Always include the current file content inline in the feedback message.
+          -- This ensures the LLM reads the exact current file before attempting any str_replace.
           local editor_content = call_plexus_tool("score_editor_get_content", {})
           if editor_content and editor_content.file_content then
-            code_editor.history:add({
-              role = "system",
-              content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
-                .. editor_content.file_content
-                .. "\n=== END OF score_config.yaml ==="
-            })
+            table.insert(feedback_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
+              .. editor_content.file_content
+              .. "\n=== END OF score_config.yaml ===")
           end
 
           msg = table.concat(feedback_parts, "\n")
@@ -1963,15 +1961,12 @@ code: |
           end
           table.insert(feedback_parts, string.format("\n(Synthesis step %d/%d)", synth_step, max_synth_steps))
 
-          -- Update file system message
+          -- Always include current file content inline so old_str can be copied exactly
           local editor_content = call_plexus_tool("score_editor_get_content", {})
           if editor_content and editor_content.file_content then
-            code_editor.history:add({
-              role = "system",
-              content = "=== CURRENT score_config.yaml ===\n"
-                .. editor_content.file_content
-                .. "\n=== END OF score_config.yaml ==="
-            })
+            table.insert(feedback_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
+              .. editor_content.file_content
+              .. "\n=== END OF score_config.yaml ===")
           end
           synth_msg = table.concat(feedback_parts, "\n")
         end
