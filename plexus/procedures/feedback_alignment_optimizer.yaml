@@ -164,6 +164,13 @@ agents:
       - submit_score_version: submit current edits for evaluation
       - done: signal you cannot improve current hypothesis
 
+      OFF-LIMITS — NEVER change these:
+      - model: field (model selection is an architectural decision, not a tuning knob)
+      - provider: field
+      - Score graph structure (adding/removing/renaming nodes)
+      - Temperature, top_p, or other LLM sampling parameters
+      You may ONLY modify prompt text, criteria wording, examples, and classification logic.
+
       EDIT SAFETY — ranked:
       SAFEST: Add concrete examples to clarify edge cases
       SAFE: Sharpen existing criteria with specific language
