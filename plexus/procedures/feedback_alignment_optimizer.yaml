@@ -141,16 +141,23 @@ agents:
       submit_score_version(version_note="..."). The system evaluates your version and reports
       results. Then you move to the next hypothesis, starting from the original baseline.
 
-      PHASE 3 — SELECTION:
-      After all hypotheses are evaluated, you see the results. If multiple succeeded,
-      create a final version combining the best ideas.
+      PHASE 3 — SYNTHESIS:
+      After all hypotheses are evaluated, you see all results with their metrics.
+      Synthesize what you learned. If any versions showed improvement (on either
+      dataset, without significantly hurting the other), create a final version
+      that incorporates the best ideas. If nothing improved, explain what you learned
+      and what to try differently next cycle.
 
-      You maintain full context across all phases — use what you learn from earlier
-      results to inform later decisions.
+      You maintain full context across all phases and cycles — every result, whether
+      it improved things or not, is valuable signal. Use the accumulated history to
+      avoid repeating approaches that didn't work and to build on approaches that did.
 
       TWO DATASETS:
-      1. DETERMINISTIC ("accuracy"): Fixed guardrail. Do not degrade AC1 > 0.02.
-      2. FEEDBACK ("feedback"): Optimization target. Improve AC1 on 90-day items.
+      1. ACCURACY: Regression dataset. Measures overall correctness.
+      2. FEEDBACK: Human-reviewed items from the last 90 days.
+      Both matter. Improving one while not significantly hurting the other is a win.
+      A hypothesis that improves accuracy by +0.3 but nudges feedback by -0.02 is
+      still useful signal — note what it implies for the next hypothesis.
 
       TOOLS:
       - str_replace_editor: view or edit score_config.yaml
@@ -350,26 +357,19 @@ code: |
       if iter.done_reason and iter.done_reason ~= "" then
         table.insert(lines, string.format("          Edit: %s", trunc(iter.done_reason, 120)))
       end
-      -- Show exploration results summary per cycle
+      -- Show all exploration results for this cycle (no pass/fail labeling — show
+      -- raw deltas so the agent can reason about what each approach actually did)
       if iter.exploration_results and type(iter.exploration_results) == "table" then
-        local succeeded_list = {}
-        local failed_list = {}
+        local result_list = {}
         for _, ap in ipairs(iter.exploration_results) do
           local fb_d = ap.fb_deltas and ap.fb_deltas.alignment or 0
           local acc_d = ap.acc_deltas and ap.acc_deltas.alignment or 0
-          local desc = string.format("cand%d: FB %+.3f ACC %+.3f '%s'",
-            ap.index, fb_d, acc_d, trunc(ap.done_reason or "", 60))
-          if ap.succeeded then
-            table.insert(succeeded_list, desc)
-          else
-            table.insert(failed_list, desc)
-          end
+          table.insert(result_list, string.format(
+            "cand%d: FB %+.3f  ACC %+.3f  '%s'",
+            ap.index, fb_d, acc_d, trunc(ap.done_reason or "", 80)))
         end
-        if #succeeded_list > 0 then
-          table.insert(lines, "          Exploration succeeded:" .. table.concat(succeeded_list, "; "))
-        end
-        if #failed_list > 0 then
-          table.insert(lines, "          Exploration failed (no improvement):" .. table.concat(failed_list, "; "))
+        if #result_list > 0 then
+          table.insert(lines, "          Tested: " .. table.concat(result_list, " | "))
         end
       end
       -- Show candidates that failed to create a version
@@ -428,15 +428,18 @@ code: |
     return hypotheses
   end
 
-  -- Exploration success classification: noise-aware thresholds
-  local A_PHASE_FB_THRESHOLD = 0.005    -- FB delta must be meaningful (above tight noise floor)
-  local A_PHASE_ACC_THRESHOLD = -0.02   -- ACC regression tolerance
+  -- Exploration success classification: either metric improving is enough,
+  -- as long as the other doesn't significantly regress.
+  local IMPROVEMENT_THRESHOLD = 0.005   -- meaningful positive delta on the improving metric
+  local REGRESSION_FLOOR      = -0.05   -- the other metric must not drop more than this
 
   local function classify_exploration_success(cand)
     if not cand.fb_deltas then return false end
     local fb_d = cand.fb_deltas.alignment or 0
     local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
-    return (fb_d > A_PHASE_FB_THRESHOLD) and (acc_d >= A_PHASE_ACC_THRESHOLD)
+    local fb_improves  = fb_d  > IMPROVEMENT_THRESHOLD and acc_d >= REGRESSION_FLOOR
+    local acc_improves = acc_d > IMPROVEMENT_THRESHOLD and fb_d  >= REGRESSION_FLOOR
+    return fb_improves or acc_improves
   end
 
   -- Build the full context message for the planning phase
@@ -718,12 +721,35 @@ code: |
     table.insert(parts, "Analyze the RCA above and propose 2-3 hypotheses to test.")
     table.insert(parts, "Each hypothesis should target a different error pattern from the RCA.")
     table.insert(parts, "")
-    table.insert(parts, "Fix scope options (ranked by safety):")
-    table.insert(parts, "  SAFEST: Add concrete examples to clarify edge cases")
-    table.insert(parts, "  SAFE: Sharpen existing criteria with specific language")
-    table.insert(parts, "  MODERATE: Adjust 1-3 lines of existing criteria wording")
-    table.insert(parts, "  RISKY: Expand or broaden criteria (may hurt accuracy)")
-    table.insert(parts, "  DANGEROUS: Remove criteria or rewrite entire user_message (almost always hurts)")
+    table.insert(parts, "=== CHANGE COOKBOOK — OPTIONS TO TRY ===")
+    table.insert(parts, "")
+    table.insert(parts, "IMPORTANT: First scan score_config.yaml above to ensure you are NOT proposing something already there.")
+    table.insert(parts, "")
+    table.insert(parts, "CATEGORY A — Prompt changes (low risk):")
+    table.insert(parts, "  * Add or sharpen a criterion that the RCA shows is ambiguous")
+    table.insert(parts, "  * Add a concrete example to clarify an edge case NOT already covered")
+    table.insert(parts, "  * Tighten language on an existing condition")
+    table.insert(parts, "  DO NOT add examples for patterns already explicitly handled in the current YAML.")
+    table.insert(parts, "")
+    table.insert(parts, "CATEGORY B — Model swap (medium risk, high upside):")
+    table.insert(parts, "  Swap the model_name and model_provider fields. Prefer cost-effective models:")
+    table.insert(parts, "  * gpt-5-mini (RECOMMENDED — best value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000")
+    table.insert(parts, "  * gpt-4o-mini (current default): model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18")
+    table.insert(parts, "  * gpt-oss-120b via Bedrock: model_provider: BedrockChat, model_name: openai.gpt-oss-120b-1:0")
+    table.insert(parts, "    (For Bedrock models: remove the temperature field — it is not supported)")
+    table.insert(parts, "  AVOID unless nothing else works (expensive):")
+    table.insert(parts, "  * Claude 3.5 Haiku (Bedrock): model_provider: BedrockChat, model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0")
+    table.insert(parts, "")
+    table.insert(parts, "CATEGORY C — Architecture change (higher risk, highest upside):")
+    table.insert(parts, "  The current score uses a single Classifier node. Consider splitting into multiple nodes.")
+    table.insert(parts, "  Example: add an extraction node that identifies relevant entities first, then a matching node.")
+    table.insert(parts, "  Example: add a chain-of-thought step that reasons about ambiguous cases before classifying.")
+    table.insert(parts, "  New graph nodes use class: Classifier with their own system_message and user_message.")
+    table.insert(parts, "")
+    table.insert(parts, "DIVERSITY REQUIREMENT — for each cycle you MUST propose:")
+    table.insert(parts, "  * At least 1 hypothesis from Category A (safe prompt change)")
+    table.insert(parts, "  * At least 1 hypothesis from Category B or C (model swap or architecture change)")
+    table.insert(parts, "This lets us compare conservative vs. structural changes and learn what actually works.")
     table.insert(parts, "")
     table.insert(parts, "IMPORTANT: The classification guidelines above are for reference only — they help you understand policy but are not editable.")
     table.insert(parts, "You will edit score_config.yaml (shown between the === markers above).")
@@ -758,11 +784,11 @@ code: |
     if consecutive_acc_rejections >= 2 then
       table.insert(parts, "")
       table.insert(parts, string.format("CRITICAL WARNING: %d consecutive iterations REJECTED for accuracy regression.", consecutive_acc_rejections))
-      table.insert(parts, "All hypotheses MUST use SAFEST edits only: add examples to clarify edge cases.")
+      table.insert(parts, "All hypotheses MUST use Category A changes only (prompt changes — no model swaps or architecture changes).")
     elseif consecutive_acc_rejections >= 1 then
       table.insert(parts, "")
       table.insert(parts, "WARNING: Prior iteration was REJECTED for accuracy regression.")
-      table.insert(parts, "All hypotheses MUST prefer SAFEST edits: add examples to clarify edge cases.")
+      table.insert(parts, "Prefer Category A changes (prompt). You may still try one Category B or C hypothesis if it is unlikely to hurt accuracy.")
     end
 
     return table.concat(parts, "\n")
@@ -951,6 +977,16 @@ code: |
 
   State.set("dataset_id", dataset_id)
   Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
+
+  -- Grab one item from the dataset to use as a smoke test target throughout this run
+  local smoke_test_item_id = nil
+  local item_sample = call_plexus_tool("plexus_item_last", {minimal = true})
+  if item_sample and item_sample.id then
+    smoke_test_item_id = item_sample.id
+    Human.notify({message = "Smoke test item: " .. smoke_test_item_id, level = "info"})
+  else
+    Human.notify({message = "WARNING: could not fetch smoke test item — smoke tests will be skipped", level = "warning"})
+  end
 
   -- Pull starting version (champion or specified start_version)
   local pull_args = {
@@ -1263,6 +1299,49 @@ code: |
     end
 
     -- ================================================================
+    -- SYNTHESIS (cycle 2+): reason explicitly about what was learned
+    -- ================================================================
+    if cycle > 1 and #iterations > 0 then
+      local prev = iterations[#iterations]
+      Human.notify({message = string.format(
+        "Cycle %d — Synthesis: reasoning about lessons from cycle %d...",
+        cycle, cycle - 1), level = "info"})
+
+      local syn = {}
+      table.insert(syn, string.format(
+        "=== LESSONS LEARNED: Cycle %d ===\n", cycle - 1))
+      table.insert(syn,
+        "Before proposing new hypotheses, analyze what we learned from last cycle.\n")
+
+      if prev.exploration_results and type(prev.exploration_results) == "table" then
+        table.insert(syn, "Hypotheses tested:\n")
+        for _, r in ipairs(prev.exploration_results) do
+          local fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
+          local acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
+          local hyp_label = r.hypothesis
+            and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
+            or ("Hypothesis " .. tostring(r.index))
+          table.insert(syn, string.format(
+            "  %d. %s\n     Implemented: %s\n     Feedback AC1 delta: %+.3f   Accuracy AC1 delta: %+.3f\n",
+            r.index, hyp_label, trunc(r.done_reason or "(no note)", 150), fb_d, acc_d))
+        end
+      end
+
+      table.insert(syn, "\nFor each hypothesis above, reason through:\n")
+      table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
+      table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
+      table.insert(syn, "  - What does this tell us about the underlying problem this score is trying to solve?\n")
+      table.insert(syn, "  - What direction does this suggest for the next round of hypotheses?\n")
+      table.insert(syn, "\nWrite out your analysis. This reasoning will directly shape your hypotheses for cycle "
+        .. tostring(cycle) .. ".")
+
+      Tool.reset()
+      code_editor({message = table.concat(syn, "")})
+      local syn_text = code_editor.output or "(synthesis complete)"
+      Human.notify({message = "  Synthesis:\n" .. syn_text, level = "info"})
+    end
+
+    -- ================================================================
     -- PHASE 1: Planning — single agent proposes hypotheses
     -- ================================================================
     Stage.set("exploration")
@@ -1302,9 +1381,8 @@ code: |
     local context_log_path = string.format("/tmp/optimizer_cycle%d_planning_context.txt", cycle)
     File.write(context_log_path, planning_inject)
 
-    -- Start fresh conversation for this cycle
+    -- Continue the same conversation — accumulated history carries learnings forward
     Tool.reset()
-    code_editor.clear_history()
     code_editor({message = planning_inject})
 
     -- Parse hypotheses from agent response
@@ -1356,17 +1434,17 @@ code: |
         score_identifier     = params.score,
         yaml_content         = current_code,
         code_file_path       = score_pull.codeFilePath,
-        iteration            = cycle
+        iteration            = cycle,
+        hypothesis           = hyp.name .. ": " .. (hyp.description or "")
       })
 
       -- Inner ReAct loop for this hypothesis
       local max_react_steps = 10
       local version_id = nil
       local hyp_done_reason = ""
+      local smoke_test_failure = nil  -- set when a version passes validation but fails smoke test
 
       for react_step = 1, max_react_steps do
-        Tool.reset()
-
         local msg
         if react_step == 1 then
           -- First step for this hypothesis — inject current file as system message
@@ -1396,7 +1474,14 @@ code: |
           local last_done = Tool.last_call("done")
 
           local feedback_parts = {}
-          if last_edit then
+
+          -- Smoke test failure takes priority over all other feedback
+          if smoke_test_failure then
+            table.insert(feedback_parts, "SMOKE TEST FAILED for the version you just submitted:\n\n" .. smoke_test_failure)
+            table.insert(feedback_parts, "\nThe score version was created but the prediction engine cannot execute it.")
+            table.insert(feedback_parts, "Fix the issue in score_config.yaml and call submit_score_version again.")
+            smoke_test_failure = nil
+          elseif last_edit then
             local edit_result = tostring(last_edit.result or "")
             local edit_command = (last_edit.args and last_edit.args.command) or ""
             if edit_command == "view" then
@@ -1451,6 +1536,7 @@ code: |
             h, react_step, #msg, trunc(msg, 200)
           ), level = "info"})
         end
+        Tool.reset()
         code_editor({message = msg})
 
         -- Check termination conditions
@@ -1458,11 +1544,72 @@ code: |
         if submit_call then
           local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
           if ok and submit_result and submit_result.version_id then
-            version_id = submit_result.version_id
-            Human.notify({message = string.format("    Hypothesis %d submitted: %s (step %d)", h, version_id, react_step), level = "info"})
-            break
+            local candidate_id = submit_result.version_id
+            Human.notify({message = string.format(
+              "    Hypothesis %d: version %s created (step %d) — smoke testing...",
+              h, candidate_id, react_step), level = "info"})
+
+            -- Smoke test: run one prediction programmatically to verify the score
+            -- config actually executes before committing to a full evaluation.
+            local smoke_passed = false
+            local smoke_detail = ""
+
+            if not smoke_test_item_id then
+              -- No item available — skip smoke test and proceed
+              smoke_passed = true
+              Human.notify({message = "    Smoke test skipped (no item ID available)", level = "warning"})
+            end
+
+            local smoke = smoke_test_item_id and call_plexus_tool("plexus_predict", {
+              scorecard_name = params.scorecard,
+              score_name     = params.score,
+              version        = candidate_id,
+              item_id        = smoke_test_item_id,
+              include_trace  = false,
+              no_cache       = true
+            })
+
+            if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
+              local pred  = smoke.predictions[1]
+              local score = pred.scores and pred.scores[1]
+              if score and score.value ~= "ERROR" and score.value ~= nil then
+                smoke_passed = true
+                Human.notify({message = string.format(
+                  "    Smoke test PASSED (value=%s)", tostring(score.value)), level = "info"})
+              else
+                local ed  = score and score.error_details
+                smoke_detail = (score and score.explanation) or (ed and ed.error_message) or "Prediction returned ERROR"
+                if ed and ed.traceback then
+                  smoke_detail = smoke_detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
+                end
+              end
+            elseif smoke and smoke.error then
+              smoke_detail = "Prediction call failed: " .. tostring(smoke.error)
+            elseif smoke and not smoke_passed then
+              smoke_detail = "Prediction returned no results: " .. (safe_encode(smoke) or "{}")
+            end
+
+            if smoke_passed then
+              version_id = candidate_id
+              -- Capture the version_note the agent provided as done_reason
+              local ok_a, vn = pcall(function() return submit_call.args.version_note end)
+              if ok_a and has_text(vn) then hyp_done_reason = vn end
+              break
+            else
+              Human.notify({message = string.format(
+                "    Hypothesis %d: smoke test FAILED — %s",
+                h, trunc(smoke_detail, 120)), level = "warning"})
+              smoke_test_failure = string.format(
+                "Version %s was created but FAILED the smoke test.\n\nError detail:\n%s\n\n"
+                .. "The score_config.yaml has an execution error. Diagnose and fix it, "
+                .. "then call submit_score_version again.",
+                candidate_id, smoke_detail)
+            end
+
           elseif ok and submit_result and submit_result.error then
-            Human.notify({message = string.format("    Hypothesis %d submit error (step %d): %s", h, react_step, tostring(submit_result.error)), level = "warning"})
+            Human.notify({message = string.format(
+              "    Hypothesis %d submit error (step %d): %s",
+              h, react_step, tostring(submit_result.error)), level = "warning"})
           end
         end
 
@@ -1561,7 +1708,7 @@ code: |
             n_samples = params.max_samples or 100,
             version = sv.version_id,
             baseline = accuracy_baseline_id,
-            notes = string.format("Cycle %d hypothesis %d (accuracy): %s", cycle, sv.index, trunc(sv.done_reason or "", 100))
+            notes = string.format("Cycle %d / %s — deterministic regression dataset", cycle, trunc(sv.hypothesis.name .. ": " .. (sv.hypothesis.description or ""), 120))
           })
         end
         table.insert(batch, {
@@ -1574,7 +1721,7 @@ code: |
           version = sv.version_id,
           baseline = feedback_baseline_id,
           wait = true,
-          notes = string.format("Cycle %d hypothesis %d (feedback): %s", cycle, sv.index, trunc(sv.done_reason or "", 100))
+          notes = string.format("Cycle %d / %s — recent feedback items", cycle, trunc(sv.hypothesis.name .. ": " .. (sv.hypothesis.description or ""), 120))
         })
       end
 
@@ -1634,223 +1781,309 @@ code: |
       end
 
       -- ================================================================
-      -- PHASE 4: Selection — pick or combine best result
+      -- PHASE 4: SYNTHESIS — always create a synthesized version
+      -- Combines insights from ALL hypothesis evaluations into one update
       -- ================================================================
+      Stage.set("selection")
       local final_version_id = nil
-      local final_is_combined = false
+      local final_is_synthesis = true
       local final_done_reason = ""
 
-      if #succeeded == 0 then
-        -- No hypotheses succeeded — record as failed cycle
-        Human.notify({message = string.format(
-          "Cycle %d — Selection: SKIP (no hypotheses succeeded)", cycle), level = "info"})
-        consecutive_failed_cycles = consecutive_failed_cycles + 1
+      Human.notify({message = string.format(
+        "Cycle %d — Synthesis: creating synthesized version from %d hypothesis results (%d succeeded, %d failed)...",
+        cycle, #submitted_versions, #succeeded, #failed), level = "info"})
 
-        -- Record best hypothesis metrics for the cycle log
-        table.sort(submitted_versions, function(a, b)
-          local a_fb = a.fb_deltas and a.fb_deltas.alignment or -999
-          local b_fb = b.fb_deltas and b.fb_deltas.alignment or -999
-          return a_fb > b_fb
-        end)
-        local best = submitted_versions[1]
+      -- Build the synthesis prompt with all hypothesis results
+      local synth_parts = {}
+      table.insert(synth_parts, string.format("=== CYCLE %d SYNTHESIS ===\n", cycle))
+      table.insert(synth_parts, "All hypotheses have been evaluated. Your task is to synthesize a SINGLE")
+      table.insert(synth_parts, "updated version that incorporates the best insights from all results.\n")
 
-        local cycle_log = {
-          iteration = cycle,
-          score_version_id = best and best.version_id or nil,
-          done_reason = best and best.done_reason or "",
-          accuracy_metrics = best and best.acc_metrics or nil,
-          feedback_metrics = best and best.fb_metrics or nil,
-          accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-          feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-          accepted = false,
-          skip_reason = "no_hypothesis_success",
-          num_candidates = #submitted_versions,
-          exploration_results = submitted_versions
-        }
-        table.insert(iterations, cycle_log)
-        State.set("iterations", iterations)
+      -- Show all hypothesis results (succeeded and failed)
+      table.insert(synth_parts, "=== HYPOTHESIS EVALUATION RESULTS ===")
+      for _, sv in ipairs(submitted_versions) do
+        local status = sv.succeeded and "SUCCEEDED" or "FAILED"
+        local fb_d = sv.fb_deltas and sv.fb_deltas.alignment or 0
+        local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or 0
+        table.insert(synth_parts, string.format(
+          "\nHypothesis %d ('%s'): %s",
+          sv.index, sv.hypothesis.name, status))
+        table.insert(synth_parts, string.format(
+          "  Feedback AC1 delta: %+.3f   Accuracy AC1 delta: %+.3f",
+          fb_d, acc_d))
+        table.insert(synth_parts, string.format(
+          "  Edit: %s", trunc(sv.done_reason or sv.hypothesis.description, 150)))
 
-        -- Update RCA from best hypothesis eval
-        if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
-        if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
-
-        if consecutive_failed_cycles >= 5 then
-          stop_reason = "improvement_plateau"
-          break
+        -- Include the actual code for succeeded hypotheses
+        if sv.succeeded then
+          local hyp_pull = call_plexus_tool("plexus_score_pull", {
+            scorecard_identifier = params.scorecard,
+            score_identifier = params.score,
+            version_id = sv.version_id
+          })
+          if hyp_pull and hyp_pull.success and hyp_pull.codeFilePath then
+            local hyp_code = File.read(hyp_pull.codeFilePath)
+            if has_text(hyp_code) then
+              table.insert(synth_parts, string.format(
+                "  === CODE FOR HYPOTHESIS %d (version %s) ===",
+                sv.index, sv.version_id))
+              table.insert(synth_parts, hyp_code)
+              table.insert(synth_parts, string.format(
+                "  === END CODE FOR HYPOTHESIS %d ===", sv.index))
+            end
+          end
         end
-        if Stop.requested() then stop_reason = "user_stopped"; break end
+      end
+      table.insert(synth_parts, "")
 
+      -- Context-specific synthesis instructions
+      if #succeeded > 1 then
+        table.insert(synth_parts, "=== SYNTHESIS TASK (MULTIPLE SUCCESSES) ===")
+        table.insert(synth_parts, "Multiple hypotheses improved the score. Combine the successful changes")
+        table.insert(synth_parts, "into a single version. Where changes conflict, prefer the one with")
+        table.insert(synth_parts, "the higher feedback AC1 delta. Also consider insights from failed")
+        table.insert(synth_parts, "hypotheses — what to avoid.\n")
+      elseif #succeeded == 1 then
+        table.insert(synth_parts, "=== SYNTHESIS TASK (SINGLE SUCCESS) ===")
+        table.insert(synth_parts, "One hypothesis succeeded. Start from its changes as a base,")
+        table.insert(synth_parts, "but also consider whether insights from the failed hypotheses")
+        table.insert(synth_parts, "suggest any additional refinements or adjustments.\n")
       else
-        -- We have succeeded hypotheses
-        Stage.set("selection")
+        table.insert(synth_parts, "=== SYNTHESIS TASK (NO SUCCESSES) ===")
+        table.insert(synth_parts, "No hypothesis met the success threshold, but each result provides signal.")
+        table.insert(synth_parts, "Analyze WHY each approach failed or regressed. Create a modest,")
+        table.insert(synth_parts, "conservative change that avoids the patterns that caused regression")
+        table.insert(synth_parts, "and tries the safest possible improvement based on what was learned.")
+        table.insert(synth_parts, "If a hypothesis was close to neutral (small positive or small negative),")
+        table.insert(synth_parts, "the underlying idea may still be sound with refinement.\n")
+      end
 
-        if #succeeded == 1 then
-          -- Single winner — use directly
-          final_version_id = succeeded[1].version_id
-          final_done_reason = succeeded[1].done_reason or ""
-          Human.notify({message = "  Single winner — using directly", level = "info"})
+      table.insert(synth_parts, "Edit score_config.yaml starting from the BASELINE code below.")
+      table.insert(synth_parts, "When done, call submit_score_version(version_note='Cycle " .. tostring(cycle) .. " synthesis: <brief description>').")
+      table.insert(synth_parts, "If you truly cannot find ANY viable change, call done(reason='cannot_improve: <explanation>').\n")
 
+      -- Reset editor to baseline code
+      call_plexus_tool("score_editor_setup", {
+        scorecard_identifier = params.scorecard,
+        score_identifier     = params.score,
+        yaml_content         = current_code,
+        code_file_path       = score_pull.codeFilePath,
+        iteration            = cycle,
+        hypothesis           = "Cycle " .. tostring(cycle) .. " synthesis"
+      })
+
+      -- Clear accumulated history to avoid context overflow
+      code_editor.clear_history()
+
+      -- Inject baseline file as system message
+      code_editor.history:add({
+        role = "system",
+        content = "=== CURRENT score_config.yaml (baseline — apply your synthesis here) ===\n"
+          .. current_code .. "\n=== END OF score_config.yaml ==="
+      })
+
+      -- ReAct implementation loop for synthesis
+      local max_synth_steps = 12
+      local synth_smoke_failure = nil
+
+      for synth_step = 1, max_synth_steps do
+        local synth_msg
+        if synth_step == 1 then
+          synth_msg = table.concat(synth_parts, "\n")
         else
-          -- Multiple successes — structured selection: analysis → combination hypothesis → ReAct
-          Human.notify({message = string.format(
-            "  %d hypotheses succeeded — running selection analysis...", #succeeded), level = "info"})
+          -- Feedback loop (same pattern as hypothesis and combination loops)
+          local feedback_parts = {}
 
-          -- Step A: Analysis call — build results summary and ask agent to plan the combination
-          local results_msg = "=== EVALUATION RESULTS ===\n"
-          for _, sv in ipairs(submitted_versions) do
-            local status = sv.succeeded and "SUCCEEDED" or "FAILED"
-            results_msg = results_msg .. string.format(
-              "Hypothesis %d ('%s'): %s\n  Feedback AC1 delta: %+.3f  Accuracy AC1 delta: %+.3f\n  Edit: %s\n",
-              sv.index, sv.hypothesis.name, status,
-              sv.fb_deltas and sv.fb_deltas.alignment or 0,
-              sv.acc_deltas and sv.acc_deltas.alignment or 0,
-              trunc(sv.done_reason or sv.hypothesis.description, 120))
-          end
-          results_msg = results_msg
-            .. "\n=== COMBINATION ANALYSIS TASK ===\n"
-            .. "Multiple hypotheses improved the score. Decide what to combine.\n"
-            .. "Respond with a single numbered item describing the combination:\n"
-            .. "1. <Combination name>: <Exactly what to apply from which hypotheses and why>\n"
-            .. "Focus on what is safe to combine. If one hypothesis is clearly dominant, say so."
-          code_editor({message = results_msg})
-
-          -- Parse combination hypothesis from response (same parser as planning phase)
-          local analysis_response = code_editor.output or ""
-          local combo_hypotheses = parse_hypotheses(analysis_response)
-
-          -- Retry up to 3x if not parseable
-          local analysis_attempts = 1
-          while #combo_hypotheses == 0 and analysis_attempts < 3 do
-            analysis_attempts = analysis_attempts + 1
-            Human.notify({message = string.format(
-              "  Selection analysis retry %d/3...", analysis_attempts), level = "info"})
-            code_editor({message = "Respond with a single numbered item:\n1. <Combination name>: <Description of exactly what to combine>"})
-            analysis_response = code_editor.output or ""
-            combo_hypotheses = parse_hypotheses(analysis_response)
-          end
-
-          -- Determine combo_hyp or fall back to best single winner
-          local combo_hyp
-          if #combo_hypotheses > 0 then
-            combo_hyp = combo_hypotheses[1]
-            Human.notify({message = string.format(
-              "  Combination plan: %s", trunc(combo_hyp.description, 100)), level = "info"})
+          if synth_smoke_failure then
+            table.insert(feedback_parts, "SMOKE TEST FAILED:\n\n" .. synth_smoke_failure)
+            table.insert(feedback_parts, "\nFix the issue and call submit_score_version again.")
+            synth_smoke_failure = nil
           else
-            Human.notify({message = "  Selection analysis unparseable — falling back to best single hypothesis", level = "warning"})
-            table.sort(succeeded, function(a, b)
-              return (a.fb_deltas and a.fb_deltas.alignment or 0) > (b.fb_deltas and b.fb_deltas.alignment or 0)
-            end)
-            final_version_id = succeeded[1].version_id
-            final_done_reason = succeeded[1].done_reason or ""
+            local last_edit = Tool.last_call("str_replace_editor")
+            local last_submit = Tool.last_call("submit_score_version")
+            if last_edit then
+              local edit_result = tostring(last_edit.result or "")
+              local edit_cmd = (last_edit.args and last_edit.args.command) or ""
+              if edit_cmd == "view" then
+                table.insert(feedback_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
+              elseif string.find(edit_result, "Error") then
+                table.insert(feedback_parts, "str_replace_editor error:\n" .. edit_result)
+                table.insert(feedback_parts, "\nCall view to re-read, then retry with exact text.")
+              else
+                table.insert(feedback_parts, "Edit applied. Submit with submit_score_version or continue editing.")
+              end
+            end
+            if last_submit then
+              local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
+              if ok_sub and sub_result and sub_result.error then
+                table.insert(feedback_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+              end
+            end
           end
 
-          -- Steps B+C: Implement the combination hypothesis (same pattern as hypothesis loop)
-          if combo_hyp and not final_version_id then
-            -- Reset editor to baseline
-            call_plexus_tool("score_editor_setup", {
-              scorecard_identifier = params.scorecard,
-              score_identifier     = params.score,
-              yaml_content         = current_code,
-              code_file_path       = score_pull.codeFilePath,
-              iteration            = cycle
+          if #feedback_parts == 0 then
+            table.insert(feedback_parts, "You must call str_replace_editor or submit_score_version.")
+          end
+          table.insert(feedback_parts, string.format("\n(Synthesis step %d/%d)", synth_step, max_synth_steps))
+
+          -- Update file system message
+          local editor_content = call_plexus_tool("score_editor_get_content", {})
+          if editor_content and editor_content.file_content then
+            code_editor.history:add({
+              role = "system",
+              content = "=== CURRENT score_config.yaml ===\n"
+                .. editor_content.file_content
+                .. "\n=== END OF score_config.yaml ==="
+            })
+          end
+          synth_msg = table.concat(feedback_parts, "\n")
+        end
+
+        Tool.reset()
+        code_editor({message = synth_msg})
+
+        -- Check for submit
+        local submit_call = Tool.last_call("submit_score_version")
+        if submit_call then
+          local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
+          if ok and submit_result and submit_result.version_id then
+            local candidate_id = submit_result.version_id
+            Human.notify({message = string.format(
+              "  Synthesis version %s created — smoke testing...", candidate_id), level = "info"})
+
+            -- Smoke test the synthesized version
+            local smoke_passed = false
+            local smoke_detail = ""
+
+            if not smoke_test_item_id then
+              smoke_passed = true
+              Human.notify({message = "    Smoke test skipped (no item ID)", level = "warning"})
+            end
+
+            local smoke = smoke_test_item_id and call_plexus_tool("plexus_predict", {
+              scorecard_name = params.scorecard,
+              score_name     = params.score,
+              version        = candidate_id,
+              item_id        = smoke_test_item_id,
+              include_trace  = false,
+              no_cache       = true
             })
 
-            -- ReAct implementation loop
-            local max_combo_steps = 10
-            for combo_step = 1, max_combo_steps do
-              Tool.reset()
-              local combo_msg
-              if combo_step == 1 then
-                -- Inject baseline file as system message
-                code_editor.history:add({
-                  role = "system",
-                  content = "=== CURRENT score_config.yaml (baseline — apply your combination here) ===\n"
-                    .. current_code .. "\n=== END OF score_config.yaml ==="
-                })
-                combo_msg = string.format(
-                  "Implement this combination: %s\n\n%s\n\n"
-                  .. "Edit score_config.yaml starting from the baseline above.\n"
-                  .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
-                  .. "Call submit_score_version(version_note='...') when done.",
-                  combo_hyp.name, combo_hyp.description)
+            if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
+              local pred  = smoke.predictions[1]
+              local score = pred.scores and pred.scores[1]
+              if score and score.value ~= "ERROR" and score.value ~= nil then
+                smoke_passed = true
+                Human.notify({message = string.format(
+                  "    Smoke test PASSED (value=%s)", tostring(score.value)), level = "info"})
               else
-                -- Feedback (same pattern as hypothesis loop)
-                local last_edit = Tool.last_call("str_replace_editor")
-                local last_submit = Tool.last_call("submit_score_version")
-                local combo_parts = {}
-                if last_edit then
-                  local edit_result = tostring(last_edit.result or "")
-                  local edit_cmd = (last_edit.args and last_edit.args.command) or ""
-                  if edit_cmd == "view" then
-                    table.insert(combo_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
-                  elseif string.find(edit_result, "Error") then
-                    table.insert(combo_parts, "str_replace_editor error:\n" .. edit_result)
-                    table.insert(combo_parts, "\nCall view to re-read, then retry with exact text.")
-                  else
-                    table.insert(combo_parts, "Edit applied. Submit with submit_score_version or continue editing.")
-                  end
-                end
-                if last_submit then
-                  local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
-                  if ok_sub and sub_result and sub_result.error then
-                    table.insert(combo_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
-                  end
-                end
-                if #combo_parts == 0 then
-                  table.insert(combo_parts, "You must call str_replace_editor or submit_score_version.")
-                end
-                table.insert(combo_parts, string.format("\n(Combination step %d/%d)", combo_step, max_combo_steps))
-                -- Update file system message
-                local editor_content = call_plexus_tool("score_editor_get_content", {})
-                if editor_content and editor_content.file_content then
-                  code_editor.history:add({
-                    role = "system",
-                    content = "=== CURRENT score_config.yaml ===\n"
-                      .. editor_content.file_content
-                      .. "\n=== END OF score_config.yaml ==="
-                  })
-                end
-                combo_msg = table.concat(combo_parts, "\n")
-              end
-
-              code_editor({message = combo_msg})
-
-              -- Check for submit
-              local submit_call = Tool.last_call("submit_score_version")
-              if submit_call then
-                local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
-                if ok and submit_result and submit_result.version_id then
-                  final_version_id = submit_result.version_id
-                  final_is_combined = true
-                  final_done_reason = combo_hyp.name .. ": " .. combo_hyp.description
-                  Human.notify({message = string.format("  Combined version: %s", final_version_id), level = "info"})
-                  break
+                local ed  = score and score.error_details
+                smoke_detail = (score and score.explanation) or (ed and ed.error_message) or "Prediction returned ERROR"
+                if ed and ed.traceback then
+                  smoke_detail = smoke_detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
                 end
               end
-              if Tool.last_call("done") then break end
+            elseif smoke and smoke.error then
+              smoke_detail = "Prediction call failed: " .. tostring(smoke.error)
+            elseif smoke and not smoke_passed then
+              smoke_detail = "Prediction returned no results"
             end
 
-            -- Fallback if combination ReAct loop failed
-            if not final_version_id then
-              Human.notify({message = "  Combination failed — falling back to best single hypothesis", level = "warning"})
-              table.sort(succeeded, function(a, b)
-                return (a.fb_deltas and a.fb_deltas.alignment or 0) > (b.fb_deltas and b.fb_deltas.alignment or 0)
-              end)
-              final_version_id = succeeded[1].version_id
-              final_done_reason = succeeded[1].done_reason or ""
+            if smoke_passed then
+              final_version_id = candidate_id
+              local ok_a, vn = pcall(function() return submit_call.args.version_note end)
+              if ok_a and has_text(vn) then final_done_reason = vn end
+              Human.notify({message = string.format(
+                "  Synthesis version: %s", final_version_id), level = "info"})
+              break
+            else
+              Human.notify({message = string.format(
+                "  Synthesis smoke test FAILED: %s", trunc(smoke_detail, 120)), level = "warning"})
+              synth_smoke_failure = string.format(
+                "Version %s was created but FAILED the smoke test.\n\nError detail:\n%s\n\n"
+                .. "The score_config.yaml has an execution error. Diagnose and fix it, "
+                .. "then call submit_score_version again.",
+                candidate_id, smoke_detail)
             end
+
+          elseif ok and submit_result and submit_result.error then
+            Human.notify({message = string.format(
+              "  Synthesis submit error (step %d): %s",
+              synth_step, tostring(submit_result.error)), level = "warning"})
           end
         end
 
-        -- ================================================================
-        -- Evaluate the final selected/combined version
-        -- ================================================================
+        -- Check if agent gave up
+        local done_call = Tool.last_call("done")
+        if done_call then
+          local ok_r, reason = pcall(function() return done_call.args.reason or "" end)
+          final_done_reason = ok_r and reason or "agent gave up"
+          Human.notify({message = string.format(
+            "  Synthesis: agent called done — %s", trunc(final_done_reason, 100)), level = "info"})
+          break
+        end
+      end
+
+      -- Fallback if synthesis produced no version
+      if not final_version_id then
+        if #succeeded > 0 then
+          Human.notify({message = "  Synthesis failed — falling back to best succeeded hypothesis", level = "warning"})
+          table.sort(succeeded, function(a, b)
+            return (a.fb_deltas and a.fb_deltas.alignment or 0) > (b.fb_deltas and b.fb_deltas.alignment or 0)
+          end)
+          final_version_id = succeeded[1].version_id
+          final_done_reason = succeeded[1].done_reason or ""
+          final_is_synthesis = false
+        else
+          -- No succeeded hypotheses AND synthesis failed — record as failed cycle
+          Human.notify({message = string.format(
+            "Cycle %d — No synthesis produced and no hypothesis succeeded", cycle), level = "info"})
+          consecutive_failed_cycles = consecutive_failed_cycles + 1
+
+          table.sort(submitted_versions, function(a, b)
+            local a_fb = a.fb_deltas and a.fb_deltas.alignment or -999
+            local b_fb = b.fb_deltas and b.fb_deltas.alignment or -999
+            return a_fb > b_fb
+          end)
+          local best = submitted_versions[1]
+
+          local cycle_log = {
+            iteration = cycle,
+            score_version_id = best and best.version_id or nil,
+            done_reason = best and best.done_reason or "",
+            accuracy_metrics = best and best.acc_metrics or nil,
+            feedback_metrics = best and best.fb_metrics or nil,
+            accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+            feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+            accepted = false,
+            skip_reason = "synthesis_failed_no_hypothesis_success",
+            num_candidates = #submitted_versions,
+            exploration_results = submitted_versions
+          }
+          table.insert(iterations, cycle_log)
+          State.set("iterations", iterations)
+
+          if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
+          if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
+
+          if consecutive_failed_cycles >= 5 then
+            stop_reason = "improvement_plateau"
+            break
+          end
+          if Stop.requested() then stop_reason = "user_stopped"; break end
+        end
+      end
+
+      -- ================================================================
+      -- Evaluate the final synthesized version (if we have one)
+      -- ================================================================
+      if final_version_id then
         local b_fb_metrics, b_acc_metrics, b_fb_deltas, b_acc_deltas
         local b_fb_rca, b_acc_rca
         local b_fb_eval_id, b_acc_eval_id
 
         -- Reuse eval if using a single hypothesis directly
-        if not final_is_combined and #succeeded == 1 then
+        if not final_is_synthesis and #succeeded == 1 then
           b_fb_metrics = succeeded[1].fb_metrics
           b_acc_metrics = succeeded[1].acc_metrics
           b_fb_deltas = succeeded[1].fb_deltas
@@ -1872,7 +2105,7 @@ code: |
               n_samples = params.max_samples or 100,
               version = final_version_id,
               baseline = accuracy_baseline_id,
-              notes = string.format("Cycle %d final (accuracy): %s", cycle, trunc(final_done_reason or "", 100))
+              notes = string.format("Cycle %d synthesis — deterministic regression dataset: %s", cycle, trunc(final_done_reason or "", 100))
             })
           end
           table.insert(b_batch, {
@@ -1885,7 +2118,7 @@ code: |
             version = final_version_id,
             baseline = feedback_baseline_id,
             wait = true,
-            notes = string.format("Cycle %d final (feedback): %s", cycle, trunc(final_done_reason or "", 100))
+            notes = string.format("Cycle %d synthesis — recent feedback items: %s", cycle, trunc(final_done_reason or "", 100))
           })
 
           local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
@@ -1917,7 +2150,7 @@ code: |
         Human.notify({message = string.format(
           "  Final eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
           b_fb_deltas.alignment, b_acc_deltas.alignment,
-          final_is_combined and " [COMBINED]" or ""
+          final_is_synthesis and " [SYNTHESIS]" or ""
         ), level = "info"})
 
         -- ================================================================
@@ -2012,6 +2245,7 @@ code: |
           accuracy_deltas = b_acc_deltas,
           feedback_deltas = b_fb_deltas,
           accepted = accept,
+          is_synthesis = final_is_synthesis,
           num_candidates = #submitted_versions,
           exploration_results = submitted_versions
         }
@@ -2028,11 +2262,11 @@ code: |
           else rejected_count = rejected_count + 1 end
         end
         local status_str = accept and "ACCEPTED" or "REJECTED"
-        local combined_note = final_is_combined and " [COMBINED]" or ""
+        local synthesis_note = final_is_synthesis and " [SYNTHESIS]" or ""
         local reason_short = has_text(final_done_reason) and (": " .. trunc(final_done_reason, 80)) or ""
         Human.notify({message = string.format(
           "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d rejected, %d skipped\n└─ Current base: %s",
-          cycle, params.max_iterations, status_str, combined_note, #succeeded, #failed, reason_short,
+          cycle, params.max_iterations, status_str, synthesis_note, #succeeded, #failed, reason_short,
           b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
           b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment,
           accepted_count, rejected_count, skipped_count,
@@ -2076,7 +2310,7 @@ code: |
           stop_reason = "user_stopped"
           break
         end
-      end  -- end of selection phase (succeeded > 0)
+      end  -- end of if final_version_id (synthesis produced a version to evaluate)
     end  -- end of else (submitted_versions > 0)
   end  -- end of for cycle
 

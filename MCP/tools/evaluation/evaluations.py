@@ -444,6 +444,17 @@ def register_evaluation_tools(mcp: FastMCP):
                         logger.error(f"Batch item {i+1} result parse error: {parse_exc}, raw={str(r)[:500]}")
                         output.append({"error": "Could not parse result", "raw": str(r)})
             logger.info(f"Batch evaluation complete: {len(output)} results")
+            # Post-batch notes application: apply notes to each eval sequentially
+            # using the evaluation IDs from the results. This is more reliable than
+            # applying notes inside concurrent individual eval coroutines.
+            for i, (item, result) in enumerate(zip(batch_list, output)):
+                item_notes = item.get('notes')
+                if item_notes and isinstance(result, dict) and 'error' not in result:
+                    eval_id = result.get('evaluation_id') or result.get('id')
+                    if eval_id:
+                        _apply_notes_to_evaluation(eval_id, item_notes)
+                    else:
+                        logger.warning(f"Batch item {i+1}: no eval_id in result, cannot apply notes")
             return json.dumps(output)
 
         if not scorecard_name:
