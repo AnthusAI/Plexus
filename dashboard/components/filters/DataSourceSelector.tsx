@@ -49,7 +49,7 @@ export default function DataSourceSelector({
         let nextToken: string | null | undefined = null
 
         do {
-          const response = await graphqlRequest<any>(
+          const response: Awaited<ReturnType<typeof graphqlRequest<any>>> = await graphqlRequest<any>(
             `
               query ListDataSourceByAccountIdAndName(
                 $accountId: String!
@@ -82,7 +82,7 @@ export default function DataSourceSelector({
             }
           )
           handleGraphQLErrors(response)
-          const result = response.data?.listDataSourceByAccountIdAndName
+          const result: { items?: any[]; nextToken?: string | null } | undefined = response.data?.listDataSourceByAccountIdAndName
           const items = (result?.items || []) as any[]
           all.push(
             ...items

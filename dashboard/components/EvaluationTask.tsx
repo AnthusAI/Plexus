@@ -12,7 +12,7 @@ import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } fr
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
-import { TopicList } from '@/components/ui/topic-list'
+import { TopicList, type Topic } from '@/components/ui/topic-list'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -321,6 +321,14 @@ type MisclassificationAnalysis = {
     score_fix_candidate_items?: number
   }
   evaluation_red_flags?: MisclassificationRedFlag[]
+}
+
+type RootCauseData = {
+  topics?: Topic[]
+  misclassification_analysis?: MisclassificationAnalysis
+  overall_explanation?: string
+  overall_improvement_suggestion?: string
+  [key: string]: unknown
 }
 
 const MISCLASSIFICATION_CATEGORY_CONFIG: Array<{
@@ -1040,10 +1048,10 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
-  const rootCauseData = useMemo(() => {
+  const rootCauseData = useMemo((): RootCauseData | null => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
-      return params?.root_cause ?? null
+      return (params?.root_cause as RootCauseData) ?? null
     } catch {
       return null
     }
