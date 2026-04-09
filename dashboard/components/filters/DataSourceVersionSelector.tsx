@@ -48,7 +48,7 @@ export default function DataSourceVersionSelector({
         const all: DataSourceVersionOption[] = []
         let nextToken: string | null | undefined = null
         do {
-          const response = await graphqlRequest<any>(
+          const response: Awaited<ReturnType<typeof graphqlRequest<any>>> = await graphqlRequest<any>(
             `
               query ListDataSourceVersionByDataSourceIdAndCreatedAt(
                 $dataSourceId: String!
@@ -79,7 +79,7 @@ export default function DataSourceVersionSelector({
             }
           )
           handleGraphQLErrors(response)
-          const result = response.data?.listDataSourceVersionByDataSourceIdAndCreatedAt
+          const result: { items?: any[]; nextToken?: string | null } | undefined = response.data?.listDataSourceVersionByDataSourceIdAndCreatedAt
           const items = (result?.items || []) as any[]
           all.push(
             ...items
