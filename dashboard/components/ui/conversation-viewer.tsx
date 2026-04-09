@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react"
 import { getClient } from '@/utils/data-operations'
 import {
+  AutoScrollToBottom,
   Conversation,
   ConversationContent,
   ConversationEmptyState,
@@ -2308,6 +2309,7 @@ function ConversationViewer({
         {/* Messages List */}
         <div className="min-h-0 flex-1">
           <Conversation className="h-full">
+            <AutoScrollToBottom trigger={conversationRows.length} />
             <ConversationContent className="gap-4 px-3 py-3">
               {isAuthUnavailable ? (
                 <ConversationEmptyState

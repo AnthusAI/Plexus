@@ -51,7 +51,8 @@
     "lib/**/*.tsx",
     "utils/**/*.ts",
     "utils/**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
