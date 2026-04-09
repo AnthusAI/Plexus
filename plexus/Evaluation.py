@@ -3881,7 +3881,7 @@ class FeedbackEvaluation(Evaluation):
 
             # Process all candidate items in parallel — the per-item RCA work
             # (2 Bedrock LLM calls each) is the main bottleneck when done sequentially.
-            rca_sem = asyncio.Semaphore(10)
+            rca_sem = asyncio.Semaphore(3)
 
             async def _process_single_candidate(fi):
                 """Process one candidate item: build context, extract evidence, classify, explain."""
@@ -4055,11 +4055,18 @@ class FeedbackEvaluation(Evaluation):
             _update_status(f"Classifying {len(candidate_items)} misclassified items (parallel)...")
             rca_results = await asyncio.gather(*[
                 _process_single_candidate(fi) for fi in candidate_items
-            ])
-            for timestamped, canonical_row in rca_results:
+            ], return_exceptions=True)
+            rca_errors = 0
+            for result in rca_results:
+                if isinstance(result, Exception):
+                    rca_errors += 1
+                    continue
+                timestamped, canonical_row = result
                 texts.append(timestamped)
                 canonical_item_classifications.append(canonical_row)
                 canonical_item_by_feedback_id[canonical_row["feedback_item_id"]] = canonical_row
+            if rca_errors:
+                self.logger.warning(f"RCA: {rca_errors}/{len(candidate_items)} items failed (continuing with {len(texts)} successful)")
 
             embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
             # Warm up the model before analysis to avoid meta-tensor race conditions
