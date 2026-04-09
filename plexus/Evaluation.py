@@ -3879,174 +3879,187 @@ class FeedbackEvaluation(Evaluation):
                     fetched_context = await asyncio.gather(*[_fetch_item_context(iid) for iid in all_item_ids])
                     item_context_cache = {iid: payload for iid, payload in fetched_context}
 
-            for fi in candidate_items:
-                ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
-                ts_str = (
-                    (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
-                    if ts else now.isoformat()
-                )
-                metadata = {
-                    "feedback_item_id": fi.id,
-                    "edit_comment": getattr(fi, "editCommentValue", "") or "",
-                    "initial_comment": getattr(fi, "initialCommentValue", "") or "",
-                    "final_comment": getattr(fi, "finalCommentValue", "") or "",
-                    "label_provenance_source": "feedback_final_answer_value",
-                }
-                if fi.itemId:
-                    metadata["item_id"] = fi.itemId
+            # Process all candidate items in parallel — the per-item RCA work
+            # (2 Bedrock LLM calls each) is the main bottleneck when done sequentially.
+            rca_sem = asyncio.Semaphore(10)
 
-                # Build the text that will be clustered and analysed.
-                # Goal: text explaining WHY the ground-truth label is correct —
-                # not what our model said (which describes the wrong reasoning).
-                #
-                # Source depends on whether the reviewer agreed or disagreed:
-                #   Agreed   → original production explanation describes the correct answer
-                #   Disagreed → edit comment explains why the reviewer changed the label
-                if score_result_map is not None:
-                    sr = score_result_map.get(fi.id, {})
-                    new_pred = (sr.get('value') or '')
-                    correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
-                    our_explanation = sr.get('explanation', '')
-                    orig_explanation = (original_explanations or {}).get(fi.id, '')
-                    reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
+            async def _process_single_candidate(fi):
+                """Process one candidate item: build context, extract evidence, classify, explain."""
+                async with rca_sem:
+                    ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
+                    ts_str = (
+                        (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
+                        if ts else now.isoformat()
+                    )
+                    metadata = {
+                        "feedback_item_id": fi.id,
+                        "edit_comment": getattr(fi, "editCommentValue", "") or "",
+                        "initial_comment": getattr(fi, "initialCommentValue", "") or "",
+                        "final_comment": getattr(fi, "finalCommentValue", "") or "",
+                        "label_provenance_source": "feedback_final_answer_value",
+                    }
+                    if fi.itemId:
+                        metadata["item_id"] = fi.itemId
 
-                    if reviewer_agreed:
-                        # Original was correct; original explanation says why
-                        text = orig_explanation or fi.editCommentValue or our_explanation
+                    # Build the text that will be clustered and analysed.
+                    # Goal: text explaining WHY the ground-truth label is correct —
+                    # not what our model said (which describes the wrong reasoning).
+                    #
+                    # Source depends on whether the reviewer agreed or disagreed:
+                    #   Agreed   → original production explanation describes the correct answer
+                    #   Disagreed → edit comment explains why the reviewer changed the label
+                    if score_result_map is not None:
+                        sr = score_result_map.get(fi.id, {})
+                        new_pred = (sr.get('value') or '')
+                        correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
+                        our_explanation = sr.get('explanation', '')
+                        orig_explanation = (original_explanations or {}).get(fi.id, '')
+                        reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
+
+                        if reviewer_agreed:
+                            text = orig_explanation or fi.editCommentValue or our_explanation
+                        else:
+                            text = fi.editCommentValue or orig_explanation or our_explanation
+
+                        if not text:
+                            text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+
+                        metadata["initial_answer_value"] = new_pred
+                        metadata["final_answer_value"] = correct_label
+                        if our_explanation:
+                            metadata["score_explanation"] = our_explanation
                     else:
-                        # Reviewer corrected original; edit comment explains the correction
-                        text = fi.editCommentValue or orig_explanation or our_explanation
+                        if fi.initialAnswerValue:
+                            metadata["initial_answer_value"] = fi.initialAnswerValue
+                        if fi.finalAnswerValue:
+                            metadata["final_answer_value"] = fi.finalAnswerValue
+                        text = fi.editCommentValue
 
-                    if not text:
-                        text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
+                    item_context_record = item_context_cache.get(fi.itemId or "", {})
+                    primary_input_text = item_context_record.get("primary_input", "")
+                    metadata_snapshot = item_context_record.get("metadata_snapshot", "")
+                    primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
+                    primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
+                    misclassification_item_context = build_misclassification_item_context(
+                        feedback_item_id=fi.id,
+                        item_id=fi.itemId or "",
+                        score_id=getattr(self, "score_id", "") or "",
+                        scorecard_id=getattr(self, "scorecard_id", "") or "",
+                        score_version_id=getattr(self, "score_version_id", "") or "",
+                        predicted_value=metadata.get("initial_answer_value", "") or "",
+                        correct_value=metadata.get("final_answer_value", "") or "",
+                        score_explanation=metadata.get("score_explanation", "") or "",
+                        edit_comment=metadata.get("edit_comment", ""),
+                        initial_comment=metadata.get("initial_comment", ""),
+                        final_comment=metadata.get("final_comment", ""),
+                        score_guidelines_text=score_guidelines,
+                        score_yaml_configuration=score_yaml_code,
+                        scorecard_guidance_text=scorecard_guidance_text,
+                        primary_input_text=primary_input_text,
+                        primary_input_modality=primary_input_modality,
+                        metadata_snapshot=metadata_snapshot,
+                        label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
+                        resolved_final_classes=resolved_final_classes,
+                        class_resolution_source=class_resolution_source,
+                        primary_input_fetch_error=primary_input_fetch_error,
+                    )
+                    misclassification_evidence_flags = await asyncio.to_thread(
+                        extract_misclassification_evidence_flags,
+                        item_context=misclassification_item_context,
+                    )
+                    misclassification_classification = classify_misclassification_item(
+                        misclassification_item_context,
+                        misclassification_evidence_flags,
+                    )
+                    triage_explainer = await asyncio.to_thread(
+                        explain_misclassification_item_classification,
+                        item_context=misclassification_item_context,
+                        classification=misclassification_classification,
+                    )
+                    misclassification_classification["rationale_paragraph"] = triage_explainer.get(
+                        "rationale_paragraph", ""
+                    )
+                    misclassification_classification["evidence_quote"] = triage_explainer.get(
+                        "evidence_quote", ""
+                    )
+                    misclassification_classification["config_fixability"] = triage_explainer.get(
+                        "config_fixability", ""
+                    )
+                    primary_category = (
+                        misclassification_classification.get("primary_category")
+                        or "score_configuration_problem"
+                    )
+                    confidence = misclassification_classification.get("confidence") or "unknown"
+                    mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
+                    rationale = (
+                        triage_explainer.get("rationale_paragraph")
+                        or misclassification_classification.get("rationale")
+                        or ""
+                    ).strip()
+                    rationale_single_line = " ".join(rationale.split())
+                    rationale_words = rationale_single_line.split() if rationale_single_line else []
+                    rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
+                    if len(rationale_words) > 12:
+                        rationale_excerpt += "..."
+                    rationale_excerpt = rationale_excerpt.replace(";", ",").replace("]", ")")
 
-                    metadata["initial_answer_value"] = new_pred
-                    metadata["final_answer_value"] = correct_label
-                    if our_explanation:
-                        metadata["score_explanation"] = our_explanation
-                else:
-                    if fi.initialAnswerValue:
-                        metadata["initial_answer_value"] = fi.initialAnswerValue
-                    if fi.finalAnswerValue:
-                        metadata["final_answer_value"] = fi.finalAnswerValue
-                    text = fi.editCommentValue
+                    metadata["pre_cluster_misclassification_category"] = primary_category
+                    metadata["pre_cluster_misclassification_confidence"] = confidence
+                    metadata["pre_cluster_mechanical_subtype"] = mechanical_subtype
+                    metadata["pre_cluster_misclassification_rationale_short"] = rationale_excerpt
 
-                item_context_record = item_context_cache.get(fi.itemId or "", {})
-                primary_input_text = item_context_record.get("primary_input", "")
-                metadata_snapshot = item_context_record.get("metadata_snapshot", "")
-                primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
-                primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
-                misclassification_item_context = build_misclassification_item_context(
-                    feedback_item_id=fi.id,
-                    item_id=fi.itemId or "",
-                    score_id=getattr(self, "score_id", "") or "",
-                    scorecard_id=getattr(self, "scorecard_id", "") or "",
-                    score_version_id=getattr(self, "score_version_id", "") or "",
-                    predicted_value=metadata.get("initial_answer_value", "") or "",
-                    correct_value=metadata.get("final_answer_value", "") or "",
-                    score_explanation=metadata.get("score_explanation", "") or "",
-                    edit_comment=metadata.get("edit_comment", ""),
-                    initial_comment=metadata.get("initial_comment", ""),
-                    final_comment=metadata.get("final_comment", ""),
-                    score_guidelines_text=score_guidelines,
-                    score_yaml_configuration=score_yaml_code,
-                    scorecard_guidance_text=scorecard_guidance_text,
-                    primary_input_text=primary_input_text,
-                    primary_input_modality=primary_input_modality,
-                    metadata_snapshot=metadata_snapshot,
-                    label_provenance_source=metadata.get("label_provenance_source", "feedback_final_answer_value"),
-                    resolved_final_classes=resolved_final_classes,
-                    class_resolution_source=class_resolution_source,
-                    primary_input_fetch_error=primary_input_fetch_error,
-                )
-                misclassification_evidence_flags = await asyncio.to_thread(
-                    extract_misclassification_evidence_flags,
-                    item_context=misclassification_item_context,
-                )
-                misclassification_classification = classify_misclassification_item(
-                    misclassification_item_context,
-                    misclassification_evidence_flags,
-                )
-                triage_explainer = await asyncio.to_thread(
-                    explain_misclassification_item_classification,
-                    item_context=misclassification_item_context,
-                    classification=misclassification_classification,
-                )
-                misclassification_classification["rationale_paragraph"] = triage_explainer.get(
-                    "rationale_paragraph", ""
-                )
-                misclassification_classification["evidence_quote"] = triage_explainer.get(
-                    "evidence_quote", ""
-                )
-                misclassification_classification["config_fixability"] = triage_explainer.get(
-                    "config_fixability", ""
-                )
-                primary_category = (
-                    misclassification_classification.get("primary_category")
-                    or "score_configuration_problem"
-                )
-                confidence = misclassification_classification.get("confidence") or "unknown"
-                mechanical_subtype = misclassification_classification.get("mechanical_subtype") or "none"
-                rationale = (
-                    triage_explainer.get("rationale_paragraph")
-                    or misclassification_classification.get("rationale")
-                    or ""
-                ).strip()
-                rationale_single_line = " ".join(rationale.split())
-                rationale_words = rationale_single_line.split() if rationale_single_line else []
-                rationale_excerpt = " ".join(rationale_words[:12]) if rationale_words else "no rationale"
-                if len(rationale_words) > 12:
-                    rationale_excerpt += "..."
-                rationale_excerpt = rationale_excerpt.replace(";", ",").replace("]", ")")
+                    canonical_row = {
+                        "feedback_item_id": fi.id,
+                        "item_id": fi.itemId or "",
+                        "timestamp": ts_str,
+                        "topic_id": None,
+                        "topic_label": "",
+                        "predicted_value": metadata.get("initial_answer_value", "") or "",
+                        "correct_value": metadata.get("final_answer_value", "") or "",
+                        "primary_category": primary_category,
+                        "confidence": confidence,
+                        "rationale_short": rationale_excerpt,
+                        "rationale_full": rationale,
+                        "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
+                        "evidence_quote": triage_explainer.get("evidence_quote", ""),
+                        "config_fixability": triage_explainer.get("config_fixability", ""),
+                        "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
+                        "mechanical_subtype": (
+                            mechanical_subtype if mechanical_subtype != "none" else None
+                        ),
+                        "mechanical_details": misclassification_classification.get("mechanical_details"),
+                        "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
+                        "triage_evidence_flags": misclassification_classification.get("evidence_flags"),
+                        "misclassification_item_context": misclassification_item_context,
+                        "misclassification_classification": misclassification_classification,
+                    }
 
-                metadata["pre_cluster_misclassification_category"] = primary_category
-                metadata["pre_cluster_misclassification_confidence"] = confidence
-                metadata["pre_cluster_mechanical_subtype"] = mechanical_subtype
-                metadata["pre_cluster_misclassification_rationale_short"] = rationale_excerpt
+                    text = (
+                        f"[misclassification_category={primary_category};"
+                        f"confidence={confidence};"
+                        f"mechanical_subtype={mechanical_subtype};"
+                        f"triage_rationale={rationale_excerpt}]\n"
+                        f"{rationale_excerpt}\n{text}"
+                    )
 
-                canonical_row = {
-                    "feedback_item_id": fi.id,
-                    "item_id": fi.itemId or "",
-                    "timestamp": ts_str,
-                    "topic_id": None,
-                    "topic_label": "",
-                    "predicted_value": metadata.get("initial_answer_value", "") or "",
-                    "correct_value": metadata.get("final_answer_value", "") or "",
-                    "primary_category": primary_category,
-                    "confidence": confidence,
-                    "rationale_short": rationale_excerpt,
-                    "rationale_full": rationale,
-                    "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
-                    "evidence_quote": triage_explainer.get("evidence_quote", ""),
-                    "config_fixability": triage_explainer.get("config_fixability", ""),
-                    "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
-                    "mechanical_subtype": (
-                        mechanical_subtype if mechanical_subtype != "none" else None
-                    ),
-                    "mechanical_details": misclassification_classification.get("mechanical_details"),
-                    "information_gap_subtype": misclassification_classification.get("information_gap_subtype"),
-                    "triage_evidence_flags": misclassification_classification.get("evidence_flags"),
-                    "misclassification_item_context": misclassification_item_context,
-                    "misclassification_classification": misclassification_classification,
-                }
+                    timestamped = TimestampedText(
+                        id=fi.id,
+                        group_id=self.score_id,
+                        timestamp=ts_str,
+                        text=text,
+                        metadata=metadata,
+                    )
+
+                    return timestamped, canonical_row
+
+            _update_status(f"Classifying {len(candidate_items)} misclassified items (parallel)...")
+            rca_results = await asyncio.gather(*[
+                _process_single_candidate(fi) for fi in candidate_items
+            ])
+            for timestamped, canonical_row in rca_results:
+                texts.append(timestamped)
                 canonical_item_classifications.append(canonical_row)
-                canonical_item_by_feedback_id[fi.id] = canonical_row
-
-                text = (
-                    f"[misclassification_category={primary_category};"
-                    f"confidence={confidence};"
-                    f"mechanical_subtype={mechanical_subtype};"
-                    f"triage_rationale={rationale_excerpt}]\n"
-                    f"{rationale_excerpt}\n{text}"
-                )
-
-                texts.append(TimestampedText(
-                    id=fi.id,
-                    group_id=self.score_id,
-                    timestamp=ts_str,
-                    text=text,
-                    metadata=metadata,
-                ))
+                canonical_item_by_feedback_id[canonical_row["feedback_item_id"]] = canonical_row
 
             embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
             # Warm up the model before analysis to avoid meta-tensor race conditions
