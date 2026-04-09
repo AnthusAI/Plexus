@@ -273,17 +273,22 @@ class ProcedureService:
                         )
             
             # If scorecard/score weren't supplied as arguments, try to infer from YAML parameter values.
+            # Handles both 'scorecard_id' (UUID) and 'scorecard' (external ID / name) parameter names.
             if yaml_config and (not scorecard_id or not score_id):
                 from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
                 param_values = ProcedureParameterParser.extract_parameter_values(yaml_config)
-                if not scorecard_id and param_values.get('scorecard_id'):
-                    resolved = resolve_scorecard_identifier(self.client, param_values['scorecard_id'])
-                    if resolved:
-                        scorecard_id = resolved
-                if not score_id and scorecard_id and param_values.get('score_id'):
-                    resolved = self._resolve_score_identifier(scorecard_id, param_values['score_id'])
-                    if resolved:
-                        score_id = resolved
+                if not scorecard_id:
+                    _sc_val = param_values.get('scorecard_id') or param_values.get('scorecard')
+                    if _sc_val:
+                        resolved = resolve_scorecard_identifier(self.client, _sc_val)
+                        if resolved:
+                            scorecard_id = resolved
+                if not score_id and scorecard_id:
+                    _s_val = param_values.get('score_id') or param_values.get('score')
+                    if _s_val:
+                        resolved = self._resolve_score_identifier(scorecard_id, _s_val)
+                        if resolved:
+                            score_id = resolved
 
             # Create experiment
             procedure = Procedure.create(
@@ -1348,8 +1353,13 @@ You can query the current guidelines using the `plexus_score_info` tool with the
 
                 # Sync scorecard/score associations on the Procedure record from parameter values
                 # if they are missing (e.g. procedure was created without explicit identifiers).
+                # Try both 'scorecard_id' (UUID) and 'scorecard' (external ID / name) parameter names.
                 _sc_id = parameter_values.get('scorecard_id')
+                if not _sc_id and parameter_values.get('scorecard'):
+                    _sc_id = resolve_scorecard_identifier(self.client, parameter_values['scorecard'])
                 _s_id = parameter_values.get('score_id')
+                if not _s_id and _sc_id and parameter_values.get('score'):
+                    _s_id = self._resolve_score_identifier(_sc_id, parameter_values['score'])
                 needs_update = (
                     (_sc_id and not procedure_info.procedure.scorecardId) or
                     (_s_id and not procedure_info.procedure.scoreId)
