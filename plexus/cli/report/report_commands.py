@@ -99,7 +99,6 @@ def run(ctx: click.Context, config_identifier: str, days: Optional[int], fresh: 
     """
     client = create_client() # Instantiate client
     tracker = None # Initialize tracker variable
-    task_id = None # Initialize task_id variable
 
     try:
         # --- Step 1: Parse Parameters & Resolve Account ---

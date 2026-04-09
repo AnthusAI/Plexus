@@ -3,7 +3,10 @@
  */
 
 export interface BrandLogoConfig {
-  componentPath: string;
+  squarePath: string;
+  widePath: string;
+  narrowPath: string;
+  altText?: string;
 }
 
 export interface BrandStylesConfig {
@@ -36,13 +39,22 @@ export function validateBrandConfig(config: unknown): config is BrandConfig {
     return false;
   }
 
-  // logo is optional, but if present must have componentPath
+  // logo is optional, but if present must define all variant paths
   if (cfg.logo !== undefined) {
     if (typeof cfg.logo !== 'object' || cfg.logo === null) {
       return false;
     }
     const logo = cfg.logo as Record<string, unknown>;
-    if (typeof logo.componentPath !== 'string' || logo.componentPath.trim() === '') {
+    if (typeof logo.squarePath !== 'string' || logo.squarePath.trim() === '') {
+      return false;
+    }
+    if (typeof logo.widePath !== 'string' || logo.widePath.trim() === '') {
+      return false;
+    }
+    if (typeof logo.narrowPath !== 'string' || logo.narrowPath.trim() === '') {
+      return false;
+    }
+    if (logo.altText !== undefined && typeof logo.altText !== 'string') {
       return false;
     }
   }
@@ -78,4 +90,3 @@ export function validateBrandConfig(config: unknown): config is BrandConfig {
 export function isBrandConfig(value: unknown): value is BrandConfig {
   return validateBrandConfig(value);
 }
-

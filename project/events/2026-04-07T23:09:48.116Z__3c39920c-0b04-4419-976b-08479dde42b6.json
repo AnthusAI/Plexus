@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "3c39920c-0b04-4419-976b-08479dde42b6",
+  "issue_id": "plx-7da9295b-11de-406e-8960-aa6d5cb89224",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-07T23:09:48.116Z",
+  "actor_id": "derek",
+  "payload": {
+    "changes": {
+      "assignee": {
+        "from": null,
+        "to": "@me"
+      }
+    }
+  }
+}

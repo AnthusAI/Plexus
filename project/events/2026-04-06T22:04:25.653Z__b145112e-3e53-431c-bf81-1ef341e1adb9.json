@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b145112e-3e53-431c-bf81-1ef341e1adb9",
+  "issue_id": "plx-1711fdf3-b128-4e0f-a34e-cabe25709ae8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-06T22:04:25.653Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-f45a6b1b-a3fc-4186-a2e7-5b677b7a7323",
+    "priority": 1,
+    "status": "open",
+    "title": "Remove deprecated scorecards push command and dangerous --all path"
+  }
+}

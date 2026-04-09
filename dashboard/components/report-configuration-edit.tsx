@@ -135,6 +135,12 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
   // Fetch report configuration
   useEffect(() => {
     const fetchConfiguration = async () => {
+      if (!id) {
+        setError('Missing report configuration ID')
+        setIsLoading(false)
+        return
+      }
+
       if (!accountId) return
       if (id === 'new') {
         setConfiguration({

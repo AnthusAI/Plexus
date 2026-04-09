@@ -1,0 +1,166 @@
+{
+  "id": "plx-7da9295b-11de-406e-8960-aa6d5cb89224",
+  "title": "Fix dashboard Amplify.configure regression causing reports load failure",
+  "description": "## Summary\nReports dashboard regressed after recent commits with browser errors: Amplify not configured and GraphQL variable id null.\n\n## Acceptance Criteria\n- Root cause identified with commit-level evidence\n- Reports dashboard initializes Amplify exactly once in client runtime\n- Report configuration fetch no longer passes null id\n- Regression checks documented in Kanbus comments",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "@me",
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ee168a08-1d55-4908-b255-68278c799657",
+      "author": "derek",
+      "text": "Starting regression investigation for reports dashboard failure.\n\nPlan:\n1) Diff last commits touching dashboard Amplify bootstrap and report page load path.\n2) Reproduce null-id and Amplify-config flow from code path.\n3) Implement minimal fix and verify with targeted checks.",
+      "created_at": "2026-04-07T16:28:48.370135913Z"
+    },
+    {
+      "id": "0cf69a0e-7286-413a-b593-a5c5f12a6929",
+      "author": "derek",
+      "text": "Findings and fix implemented.\n\nRoot cause hypotheses validated from code history:\n- Amplify bootstrap in app/client-layout can silently skip configuration when amplify_outputs.json is missing at runtime (file is gitignored in dashboard/.gitignore). This produces the observed browser error: \"Amplify has not been configured\".\n- Report configuration edit route can pass an empty/undefined id into GraphQL in Next canary-style params handling, causing \"Variable id has coerced Null value for NonNull type ID!\".\n\nChanges made:\n1) app/client-layout.tsx\n- Added explicit local output loader using ../amplify_outputs.json (relative path).\n- Env override path no longer depends on amplify_outputs existing.\n- Replaced silent warn-and-skip with explicit error logging so config failures surface immediately.\n- Added region validation + API_KEY authorization_types for env override.\n\n2) app/lab/reports/edit/[id]/page.tsx\n- Updated page to async params handling: await params before reading id.\n\n3) components/report-configuration-edit.tsx\n- Added guard for missing id before issuing GraphQL query.\n\nVerification:\n- Attempted local build/typecheck but this workspace has pre-existing dashboard toolchain drift (Next 14 in node_modules vs package.json Next 15 canary, and missing modules), so full build verification is currently blocked.\n- Diff is minimal and targeted to the observed runtime failure paths.",
+      "created_at": "2026-04-07T16:38:22.471440645Z"
+    },
+    {
+      "id": "b0c93882-7378-4a10-9c0d-9a6f4c5009ac",
+      "author": "derek",
+      "text": "Additional diagnosis from user local run:\n- npm run dev currently fails for machine-independent repo reasons, not just host setup.\n- dashboard/package.json dev:dispatcher is hardcoded to /Users/ryan/miniconda3/bin/python (commit 7e130b1b, 2026-04-02), which breaks on non-Ryan hosts.\n- dashboard/package.json dev:web runs `next dev` without `--webpack` (commit e694b909, 2026-04-01) while this repo has custom webpack config and Next canary/turbopack behavior, causing startup failure.\n- Warnings about root lockfiles and invalid next.config keys are secondary/noise; the hard failures are dispatcher interpreter path and turbopack-vs-webpack mode mismatch.",
+      "created_at": "2026-04-07T16:44:02.146485384Z"
+    },
+    {
+      "id": "a446febc-e17a-458b-95aa-4b2d43701e0e",
+      "author": "derek",
+      "text": "Applied portability fix so `npm run dev` works again across machines:\n- dashboard/package.json dev:web now runs `next dev --webpack` (avoids Turbopack/webpack conflict).\n- dashboard/package.json dev:dispatcher now uses `python` from PATH instead of hardcoded /Users/ryan/miniconda3/bin/python.\n\nValidation:\n- Ran `npm run dev` locally.\n- WEB started successfully on Next 15.6.0-canary.61 in webpack mode and reached Ready state.\n- DISPATCH started successfully with `python -m plexus.cli command dispatcher ...` and reached active dispatcher state.\n- Stopped both processes after verification.",
+      "created_at": "2026-04-07T16:47:11.461613398Z"
+    },
+    {
+      "id": "908df9c5-490c-402e-aec2-2d2c25294cb4",
+      "author": "derek",
+      "text": "Investigating production deployment behavior via AWS CLI for Amplify app d1cegb1ft4iove (branch main). Goal: verify whether amplify_outputs generation/pipeline steps regressed and capture concrete job evidence.",
+      "created_at": "2026-04-07T16:53:26.780464287Z"
+    },
+    {
+      "id": "0e90d9bb-32f4-47d8-b601-d8749c9ce616",
+      "author": "derek",
+      "text": "AWS CLI evidence (app d1cegb1ft4iove, branch main):\n- Successful jobs on 2026-04-01 (job 968, 969) and 2026-04-06 (job 978) all ran `npx ampx pipeline-deploy ...` and logged `File written: amplify_outputs.json`.\n- Therefore production did not globally stop generating amplify outputs.\n- Failed jobs 970-977 were mostly build failures before deploy (example job 971: minimatch/GLOBSTAR module error), so they did not produce new live deployments.\n\nInference: the reports outage is more consistent with runtime config handling in client code than with a pipeline output-generation halt. Added local fix already makes client boot resilient (env override path + explicit errors).\n\nRecommended hardening: add explicit build assertion after pipeline-deploy (`test -f amplify_outputs.json`) so missing outputs fail fast with a clear message.",
+      "created_at": "2026-04-07T16:54:30.360546471Z"
+    },
+    {
+      "id": "2c8665c7-4e35-45ec-b0f8-020e453c862b",
+      "author": "derek",
+      "text": "Created fix branch and committed validated changes.\n\nBranch: fix/plx-7da929-amplify-report-regression\nCommit: 31dbe5cb\n\nCommit contents:\n- dashboard/package.json: machine-agnostic dev scripts (`python` from PATH + `next dev --webpack`)\n- dashboard/app/client-layout.tsx: resilient Amplify config resolution + explicit config failure diagnostics\n- dashboard/app/lab/reports/edit/[id]/page.tsx: async-safe params handling\n- dashboard/components/report-configuration-edit.tsx: guard against missing ID before GraphQL query\n\nValidation basis:\n- user reproduced production issue by stashing runtime fixes and confirmed fix resolves issue when restored\n- local `npm run dev` startup verified after script portability fix.",
+      "created_at": "2026-04-07T17:15:58.011801821Z"
+    },
+    {
+      "id": "9dbc6802-54cd-4088-9011-a47eb900918a",
+      "author": "derek",
+      "text": "Updated GitHub PR #146 title/body to reflect combined scope now on develop->main:\n- Removed deprecated scorecards push command/docs\n- Added dashboard Amplify/report regression fix details\n- Added local dev portability script fix details\n- Included updated validation and Kanbus links (plx-1711fd, plx-7da929).\n\nPR URL: https://github.com/AnthusAI/Plexus/pull/146",
+      "created_at": "2026-04-07T17:24:04.532093874Z"
+    },
+    {
+      "id": "fdaa3e5f-adf9-4170-be45-e5c3bd693411",
+      "author": "derek",
+      "text": "Continuing investigation for remaining production-only issue: client-side nav hangs with spinner and repeated 'Amplify has not been configured' errors, while direct URL loads work and local is clean. Next step: inspect deployed runtime chunks + Amplify hosting rewrites/headers to pinpoint mismatch.",
+      "created_at": "2026-04-07T18:14:49.273987134Z"
+    },
+    {
+      "id": "c445c17c-9c6e-4eea-89d9-8cc2fc35f547",
+      "author": "derek",
+      "text": "Starting local mitigation patch for production nav spinner: replace eager module-scope Amplify generateClient calls with lazy runtime getters, beginning with dashboard-layout and reports/evaluations-related modules. Goal is to eliminate pre-configure client construction race exposed by production chunk ordering.",
+      "created_at": "2026-04-07T18:21:24.087000647Z"
+    },
+    {
+      "id": "e1462bc1-b469-441b-aa56-dd920c4d018b",
+      "author": "derek",
+      "text": "Applied local patch across 21 dashboard files: replaced module-scope eager Amplify generateClient construction with lazy getAmplifyClient getters so clients are instantiated only at runtime after app bootstrap. Build verification attempt in this environment is blocked by Node version mismatch (next build requires >=20.9.0, host has 18.18.2).",
+      "created_at": "2026-04-07T18:22:03.742027972Z"
+    },
+    {
+      "id": "3545db1a-00e3-41d7-b8b1-2fe19986acf2",
+      "author": "derek",
+      "text": "Adjusted local lazy Amplify client typing in score-component and item-component to avoid TypeScript recursive type expansion from ReturnType of generateClient. Runtime behavior unchanged; this unblocks webpack production build for local repro setup.",
+      "created_at": "2026-04-07T18:57:36.613594314Z"
+    },
+    {
+      "id": "a5d6fdbc-9338-4d02-aa14-026995bdfdec",
+      "author": "derek",
+      "text": "Investigating whether recent Amplify config changes introduced the production warning. Collecting timeline from git commits and AWS stack metadata with exact dates.",
+      "created_at": "2026-04-07T19:23:28.563420903Z"
+    },
+    {
+      "id": "4d97d62a-4a8f-4a5a-9056-63711df82b3e",
+      "author": "derek",
+      "text": "User approved commit. Staging dashboard lazy Amplify client initialization fixes plus Kanbus issue/event files in this working tree for a single commit on fix branch.",
+      "created_at": "2026-04-07T19:33:08.070266681Z"
+    },
+    {
+      "id": "6626f0ef-8634-4880-9a4e-42991e7e7fb2",
+      "author": "derek",
+      "text": "Committed approved fix + Kanbus artifacts on branch fix/plx-7da929-amplify-report-regression: 6617e9f7 (defer Amplify client initialization to runtime, plus issue/event updates).",
+      "created_at": "2026-04-07T19:33:20.649027983Z"
+    },
+    {
+      "id": "6922ce16-169b-4657-9aaf-c4a2ecf18561",
+      "author": "derek",
+      "text": "Preparing release PR from develop to main after merge of Amplify lazy-init fix. Verifying branch delta and existing PR state before creating/updating PR.",
+      "created_at": "2026-04-07T19:39:20.646905471Z"
+    },
+    {
+      "id": "950c61d8-1daa-4042-878e-b2a0af4f086c",
+      "author": "derek",
+      "text": "Opened release PR develop->main: https://github.com/AnthusAI/Plexus/pull/148 with title 'fix(dashboard): defer Amplify client initialization to runtime'.",
+      "created_at": "2026-04-07T19:39:39.898647271Z"
+    },
+    {
+      "id": "0c88032c-48d4-476a-8124-9e7876586a00",
+      "author": "derek",
+      "text": "Reviewing PR #148 code-quality comments and check annotations; will apply only valid fixes and push follow-up commits to develop.",
+      "created_at": "2026-04-07T19:46:35.956504122Z"
+    },
+    {
+      "id": "9c0da91a-cdcd-46da-8f07-a430980fb150",
+      "author": "derek",
+      "text": "User requested Git Flow only (no direct develop updates). Applying code-quality fixes on current fix branch and leaving integration to normal branch workflow.",
+      "created_at": "2026-04-07T19:47:38.190505078Z"
+    },
+    {
+      "id": "cf70fc83-896f-4a1f-aeb1-ed429a013b48",
+      "author": "derek",
+      "text": "Applied PR #148 code-quality cleanups on fix branch: removed unused lazy-client declarations/imports in dashboard-layout and item-component; removed unused GraphQL response/updateResult bindings in score-component while preserving awaited side effects.",
+      "created_at": "2026-04-07T19:48:03.005551459Z"
+    },
+    {
+      "id": "23ce2396-44ad-4b1b-88c3-e0c3ef5126b8",
+      "author": "derek",
+      "text": "Reverted non-effective navigation changes on fix branch per user decision: reverted commits 2d90feee and 7a94bd20. Keeping Amplify initialization fixes in place for release while nav outage is investigated separately.",
+      "created_at": "2026-04-07T22:59:17.644093938Z"
+    },
+    {
+      "id": "22d5f3d8-a6f1-498b-b884-a49507a26078",
+      "author": "derek",
+      "text": "Replicated production-only nav hang with React #525 path in custom brand logo runtime; investigating deterministic fix in brand loader/rendering path.",
+      "created_at": "2026-04-07T23:09:48.118169047Z"
+    },
+    {
+      "id": "22979ab2-9fe5-47e3-95a2-e3599f1b1929",
+      "author": "derek",
+      "text": "Implemented root-cause fix for replicated React #525/nav hang path: removed runtime JavaScript logo-module execution from BrandProvider and switched branding logos to static variant assets (`squarePath`,`widePath`,`narrowPath`,`altText`) rendered by BrandableLogo. This eliminates cross-React-runtime crashes from externally loaded logo modules. Updated brand config validation, branding docs, and BrandContext tests. Validation: jest pass for BrandContext + console-dashboard + scorecards-dashboard. Next webpack production build remains blocked in this environment by Node 18.18.2 (< required >=20.9.0).",
+      "created_at": "2026-04-07T23:12:19.092400349Z"
+    },
+    {
+      "id": "97bd8d9f-49a4-4b3a-b25c-f7d000f82b5e",
+      "author": "derek",
+      "text": "Committed root-cause logo runtime fix on fix branch: 67c676f0. Change removes runtime JS brand logo module loading and uses static variant logo assets from brand.json (`squarePath`, `widePath`, `narrowPath`, optional `altText`), updates validation/docs/tests, and removes LogoErrorBoundary path.",
+      "created_at": "2026-04-07T23:27:21.553889919Z"
+    }
+  ],
+  "created_at": "2026-04-07T16:28:42.748231999Z",
+  "updated_at": "2026-04-07T23:27:21.553889919Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
