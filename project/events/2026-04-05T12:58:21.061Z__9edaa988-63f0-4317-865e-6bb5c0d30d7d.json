@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9edaa988-63f0-4317-865e-6bb5c0d30d7d",
+  "issue_id": "plx-e9a60d69-8053-471a-9f50-bda3cb0f2160",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-05T12:58:21.061Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+    "priority": 1,
+    "status": "open",
+    "title": "Feedback evaluation selection contract (max-items + sampling-mode)"
+  }
+}

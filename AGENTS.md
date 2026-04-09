@@ -149,6 +149,37 @@ This workflow uses a chain of skills and agents:
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
 - **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
 
+## Debugging Procedures
+
+### LLM Debug Mode (`PLEXUS_DEBUG_LLM`)
+
+When developing or troubleshooting procedures, you can enable full visibility into what the LLM sees and produces by setting the `PLEXUS_DEBUG_LLM` environment variable:
+
+```bash
+PLEXUS_DEBUG_LLM=1 plexus procedure run --id <procedure-id>
+```
+
+This logs to stderr (via Rich logging) at every LLM turn:
+
+- **`[LLM_DEBUG] SYSTEM PROMPT`** — The full system prompt sent to the model
+- **`[LLM_DEBUG] HISTORY`** — Every message in the conversation history, with role labels and sequence numbers
+- **`[LLM_DEBUG] USER MESSAGE`** — The user message for this turn
+- **`[LLM_DEBUG] TOOLS`** — All tools available to the agent, listed by name
+- **`[LLM_DEBUG] MODEL RESPONSE`** — The model's full text response
+- **`[LLM_DEBUG] TOOL CALLS`** — Any tool calls the model made
+
+This works for both streaming and non-streaming agent turns. The debug output is implemented in the Tactus agent layer (`tactus/dspy/agent.py`) and is triggered by any non-empty value of `PLEXUS_DEBUG_LLM`.
+
+**When to use this:**
+- Verifying that conversation context is constructed correctly for the optimizer agent
+- Checking that tool responses are being included/excluded as expected
+- Debugging unexpected model behavior by inspecting the exact input it received
+- Confirming that the system prompt, history, and injected context look correct
+
+### ChatMessage toolResponse Storage
+
+ChatMessage records store only compact references (IDs, status, short scalars) in the `toolResponse` field — not full evaluation data. Large structures like `confusionMatrix`, `misclassification_analysis`, and `root_cause` are dropped at storage time because they already live in the referenced Evaluation record. The frontend dereferences evaluation IDs via `useEvaluationById` to fetch the full data for display. See `_slim_tool_response_for_storage()` in `plexus/cli/procedure/chat_recorder.py`.
+
 ## Troubleshooting
 
 - **"Tool not found"**: Restart the MCP server (in Cursor: CMD+Shift+P -> "Cursor: Restart MCP Server").

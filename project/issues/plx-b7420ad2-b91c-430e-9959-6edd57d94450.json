@@ -3,16 +3,23 @@
   "title": "Run baseline feedback evaluation with RCA",
   "description": "As a score optimizer\nI want to run a baseline feedback evaluation with root-cause analysis\nSo that I can establish a starting point and understand current error patterns\n\n## Acceptance Criteria\n\n- Baseline evaluation runs successfully with feedback data\n- RCA output includes topic-clustered analysis of errors\n- Baseline metrics captured (AC1, Accuracy, Precision, Recall)\n- Evaluation ID stored for future comparisons\n\n## Gherkin Specification\n\n```gherkin\nFeature: Baseline Feedback Evaluation with RCA\n  As a score optimizer\n  I want to run a baseline feedback evaluation\n  So that I can establish starting metrics and error patterns\n\nScenario: Run baseline evaluation on score with feedback data\n  Given a scorecard \"customer-service\" with score \"empathy\"\n  And feedback data exists for the past 90 days\n  And the score has a champion version\n  When I run the feedback alignment optimizer\n  Then a feedback evaluation is created with evaluation_type=\"feedback\"\n  And the evaluation completes with status=\"COMPLETED\"\n  And baseline metrics are captured:\n    | Metric    | Present |\n    | AC1       | Yes     |\n    | Accuracy  | Yes     |\n    | Precision | Yes     |\n    | Recall    | Yes     |\n  And root-cause analysis output contains clustered topics\n  And the baseline evaluation ID is stored for future comparisons\n\nScenario: Handle insufficient feedback data gracefully\n  Given a scorecard \"test-scorecard\" with score \"new-score\"\n  And no feedback data exists for the past 90 days\n  When I run the feedback alignment optimizer\n  Then the procedure fails with a clear error message\n  And the error message indicates \"insufficient feedback data\"\n  And no evaluation record is created\n```",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a0b9fa08-df99-471a-bb49-eec056490c49",
+      "author": "ryan",
+      "text": "Baseline feedback evaluation with RCA verified working on 2026-04-06. Eval bd191e2a completed with full root cause analysis: 47 score_configuration_problem cases, 1 information_gap, primary_next_action=score_configuration_optimization. The rca_pending fix ensures background COMPLETED is suppressed until RCA finishes.",
+      "created_at": "2026-04-06T18:20:34.687421Z"
+    }
+  ],
   "created_at": "2026-04-02T16:07:01.445648Z",
-  "updated_at": "2026-04-02T16:07:01.445648Z",
-  "closed_at": null,
+  "updated_at": "2026-04-06T18:20:34.706020Z",
+  "closed_at": "2026-04-06T18:20:34.706020Z",
   "custom": {}
 }

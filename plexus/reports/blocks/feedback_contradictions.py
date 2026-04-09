@@ -58,7 +58,7 @@ class FeedbackContradictions(BaseReportBlock):
         start_date_str = self.config.get("start_date")
         end_date_str = self.config.get("end_date")
         max_concurrent = int(self.config.get("max_concurrent", 20))
-        max_feedback_items = int(self.config.get("max_feedback_items", 0))
+        max_feedback_items = int(self.config.get("max_feedback_items", 400))
         num_topics = int(self.config.get("num_topics", 8))
         if max_feedback_items < 0:
             raise ValueError("'max_feedback_items' must be >= 0.")
@@ -392,8 +392,10 @@ class FeedbackContradictions(BaseReportBlock):
 
         try:
             topic_map: Dict[str, str] = await asyncio.to_thread(self._call_bedrock_for_topics, cluster_prompt)
-            if "assignments" in topic_map:
+            if isinstance(topic_map, dict) and "assignments" in topic_map:
                 topic_map = topic_map["assignments"]
+            if not isinstance(topic_map, dict):
+                raise ValueError(f"Expected dict from topic clustering LLM, got {type(topic_map).__name__}")
         except Exception as exc:
             self._log(f"Topic clustering LLM call failed: {exc}", level="WARNING")
             topic_map = {str(index + 1): "Unclustered" for index in range(len(items))}
@@ -437,8 +439,16 @@ class FeedbackContradictions(BaseReportBlock):
 
             try:
                 enrich_result = await asyncio.to_thread(self._call_bedrock_for_topics, enrich_prompt)
-                summary_map = enrich_result.get("summaries", {})
-                guideline_quote_map = enrich_result.get("guideline_quotes", {})
+                if not isinstance(enrich_result, dict):
+                    raise ValueError(f"Expected dict from topic enrichment LLM, got {type(enrich_result).__name__}")
+                raw_summaries = enrich_result.get("summaries", {})
+                raw_quotes = enrich_result.get("guideline_quotes", {})
+                if not isinstance(raw_summaries, dict):
+                    raise ValueError(f"Expected dict for 'summaries', got {type(raw_summaries).__name__}")
+                if not isinstance(raw_quotes, dict):
+                    raise ValueError(f"Expected dict for 'guideline_quotes', got {type(raw_quotes).__name__}")
+                summary_map = raw_summaries
+                guideline_quote_map = raw_quotes
             except Exception as exc:
                 self._log(f"Topic enrichment LLM call failed: {exc}", level="WARNING")
 
