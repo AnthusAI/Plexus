@@ -6,12 +6,24 @@ import os
 import sys
 import json
 import logging
+from decimal import Decimal
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
 from plexus.scores.Score import Score
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_decimals(obj):
+    """Recursively convert Decimal values to float for JSON serialization."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_decimals(v) for v in obj]
+    return obj
 
 
 def register_prediction_tools(mcp: FastMCP):
@@ -598,8 +610,8 @@ def register_prediction_tools(mcp: FastMCP):
                 
                 return yaml.dump(result, default_flow_style=False, sort_keys=False)
             else:
-                # Return JSON format
-                return {
+                # Return JSON format (sanitize Decimals from DynamoDB)
+                return _sanitize_decimals({
                     "success": True,
                     "scorecard_name": scorecard_name,
                     "score_name": score_name,
@@ -614,7 +626,7 @@ def register_prediction_tools(mcp: FastMCP):
                     },
                     "predictions": prediction_results_list,
                     "note": "This MCP tool executes real predictions using the shared Plexus prediction service."
-                }
+                })
             
         except Exception as e:
             logger.error(f"Error running predictions: {str(e)}", exc_info=True)
