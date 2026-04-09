@@ -5,7 +5,8 @@ import type { Schema } from "@/amplify/data/resource"
 import { ModelListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
 
-export const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 export interface ReportConfigurationSelectorProps {
   selectedReportConfiguration: string | null;
@@ -15,7 +16,7 @@ export interface ReportConfigurationSelectorProps {
 
 async function listReportConfigurations(accountId: string): ModelListResult<Schema['ReportConfiguration']['type']> {
   return listFromModel<Schema['ReportConfiguration']['type']>(
-    client.models.ReportConfiguration,
+    getAmplifyClient().models.ReportConfiguration,
     { accountId: { eq: accountId } }
   )
 }
@@ -34,7 +35,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
     const fetchAccountId = async () => {
       try {
         const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
-        const accountResponse = await client.graphql({
+        const accountResponse = await getAmplifyClient().graphql({
           query: `
             query ListAccounts($filter: ModelAccountFilterInput) {
               listAccounts(filter: $filter) {
