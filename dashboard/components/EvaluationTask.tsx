@@ -664,13 +664,13 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   ]);
 
   return (
-    <div className="space-y-2">
-      <TaskStatus 
-        {...taskStatus} 
+    <div className="space-y-2 mt-auto">
+      <TaskStatus
+        {...taskStatus}
         key={`${data.id}-${JSON.stringify(stages.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
       />
       {extra && (
-        <EvaluationListAccuracyBar 
+        <EvaluationListAccuracyBar
           progress={progress}
           accuracy={accuracy}
           isSelected={isSelected}
