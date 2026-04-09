@@ -1818,6 +1818,14 @@ code: |
           hyp_done = true
         end
 
+        -- Record agent's text response to session
+        local agent_text = code_editor.output or ""
+        if has_text(agent_text) then
+          Human.notify({message = string.format(
+            "  [Hyp %d, step %d] Agent: %s",
+            h, react_step, agent_text), level = "info"})
+        end
+
         -- Determine if this was a failed edit attempt (doesn't count as a logical step)
         local was_edit_failure = false
         local last_edit_check = Tool.last_call("str_replace_editor")
@@ -2302,6 +2310,14 @@ code: |
           Human.notify({message = string.format(
             "  Synthesis step %d — code_editor failed: %s", synth_step, trunc(tostring(editor_err), 200)), level = "error"})
           synth_done = true
+        end
+
+        -- Record agent's text response to session
+        local agent_text = code_editor.output or ""
+        if has_text(agent_text) then
+          Human.notify({message = string.format(
+            "  [Synthesis, step %d] Agent: %s",
+            synth_step, agent_text), level = "info"})
         end
 
         -- Detect failed edit attempts
