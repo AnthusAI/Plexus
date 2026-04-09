@@ -332,8 +332,15 @@ code: |
 
     -- Cycle rows (each cycle has exploration candidates + synthesis result)
     for _, iter in ipairs(iterations) do
-      local status_str = iter.accepted and "ACCEPTED" or "REJECTED"
-      if iter.skip_reason then status_str = "SKIPPED" end
+      local status_str
+      if iter.skip_reason then
+        status_str = "SKIPPED"
+      elseif iter.accepted then
+        local fb_d = iter.feedback_deltas and iter.feedback_deltas.alignment or 0
+        status_str = fb_d > 0.005 and "ACCEPTED" or "CARRIED"
+      else
+        status_str = "REJECTED"
+      end
       local fb_ac1 = iter.feedback_metrics and string.format("%.3f", iter.feedback_metrics.alignment) or "N/A"
       local acc_ac1 = iter.accuracy_metrics and string.format("%.3f", iter.accuracy_metrics.alignment) or "N/A"
       local fb_delta = iter.feedback_deltas and string.format("%+.3f", iter.feedback_deltas.alignment) or ""
@@ -343,9 +350,9 @@ code: |
       if iter.skip_reason then
         note = "  (" .. iter.skip_reason .. ")"
       elseif not iter.accepted and iter.accuracy_deltas and iter.accuracy_deltas.alignment < -0.02 then
-        note = "  (accuracy regressed)"
+        note = "  (accuracy regressed — do not retry)"
       elseif not iter.accepted then
-        note = "  (no improvement)"
+        note = "  (feedback regressed — do not retry)"
       elseif iter.score_version_id == last_accepted_version_id then
         note = "  <- current base"
       end
@@ -366,7 +373,7 @@ code: |
           local acc_d = ap.acc_deltas and ap.acc_deltas.alignment or 0
           table.insert(result_list, string.format(
             "cand%d: FB %+.3f  ACC %+.3f  '%s'",
-            ap.index, fb_d, acc_d, trunc(ap.done_reason or "", 80)))
+            ap.index, fb_d, acc_d, trunc(ap.done_reason or "", 200)))
         end
         if #result_list > 0 then
           table.insert(lines, "          Tested: " .. table.concat(result_list, " | "))
@@ -376,7 +383,7 @@ code: |
       if iter.exploration_no_version and type(iter.exploration_no_version) == "table" and #iter.exploration_no_version > 0 then
         local no_ver_list = {}
         for _, ap in ipairs(iter.exploration_no_version) do
-          table.insert(no_ver_list, string.format("cand%d (attempted: '%s')", ap.index, trunc(ap.done_reason or "", 80)))
+          table.insert(no_ver_list, string.format("cand%d (attempted: '%s')", ap.index, trunc(ap.done_reason or "", 200)))
         end
         table.insert(lines, "          Exploration no-version (edit failed):" .. table.concat(no_ver_list, "; "))
       end
@@ -763,21 +770,46 @@ code: |
     if cons_failed >= 2 then
       table.insert(parts, "")
       table.insert(parts, string.format(
-        "ESCALATION (%d consecutive cycles with no feedback improvement):", cons_failed))
-      table.insert(parts, "Previous approaches have NOT worked. You MUST try something DIFFERENT.")
-      table.insert(parts, "Review the OPTIMIZATION HISTORY above — do NOT repeat any approach that already failed.")
-    elseif cons_failed >= 1 then
-      table.insert(parts, "")
-      table.insert(parts, "NOTE: Previous cycle produced no feedback improvement.")
-      table.insert(parts, "Review the OPTIMIZATION HISTORY and try a different approach than what was tried before.")
+        "ESCALATION (%d consecutive cycles with regressions):", cons_failed))
+      table.insert(parts, "Recent approaches caused metrics to go DOWN. Review the OPTIMIZATION HISTORY.")
+      table.insert(parts, "Avoid anything similar to what caused regressions. Try more conservative changes.")
     end
 
-    -- Explicit do-not-repeat enforcement
+    -- Build a list of approaches that caused genuine regressions (do not retry those)
+    -- and approaches that were neutral or positive (already incorporated, build on them)
     if opts.iterations and #opts.iterations > 0 then
-      table.insert(parts, "")
-      table.insert(parts, "CRITICAL — DO NOT REPEAT FAILED APPROACHES:")
-      table.insert(parts, "The OPTIMIZATION HISTORY above shows what was tried in previous cycles and the results.")
-      table.insert(parts, "You MUST try a DIFFERENT approach from anything that already failed.")
+      local regressed_approaches = {}
+      local carried_approaches = {}
+      for _, iter in ipairs(opts.iterations) do
+        if iter.exploration_results and type(iter.exploration_results) == "table" then
+          for _, ap in ipairs(iter.exploration_results) do
+            local fb_d = ap.fb_deltas and ap.fb_deltas.alignment or 0
+            local acc_d = ap.acc_deltas and ap.acc_deltas.alignment or 0
+            local desc = ap.done_reason or "(no description)"
+            if fb_d < -0.005 or acc_d < -0.02 then
+              table.insert(regressed_approaches, string.format(
+                "  - Cycle %s, cand%d: FB %+.3f  ACC %+.3f — %s",
+                tostring(iter.iteration), ap.index, fb_d, acc_d, desc))
+            elseif fb_d >= 0 then
+              table.insert(carried_approaches, string.format(
+                "  - Cycle %s, cand%d: FB %+.3f  ACC %+.3f — %s",
+                tostring(iter.iteration), ap.index, fb_d, acc_d, desc))
+            end
+          end
+        end
+      end
+      if #regressed_approaches > 0 then
+        table.insert(parts, "")
+        table.insert(parts, "APPROACHES THAT CAUSED REGRESSIONS — avoid these and similar ideas:")
+        for _, line in ipairs(regressed_approaches) do table.insert(parts, line) end
+      end
+      if #carried_approaches > 0 then
+        table.insert(parts, "")
+        table.insert(parts, "APPROACHES ALREADY IN THE CURRENT CODE (neutral or positive) — build on these:")
+        for _, line in ipairs(carried_approaches) do table.insert(parts, line) end
+        table.insert(parts, "These changes are already applied. Propose hypotheses that EXTEND or COMBINE them,")
+        table.insert(parts, "or target DIFFERENT misclassification patterns not yet addressed.")
+      end
     end
 
     -- Escalating warning based on prior accuracy regressions
@@ -846,9 +878,14 @@ code: |
       table.insert(parts, "")
     end
 
-    table.insert(parts, "=== YOUR DECISION ===")
-    table.insert(parts, 'Call done(decision="keep") to accept this change and continue optimization from it.')
-    table.insert(parts, 'Call done(decision="revert") to discard this change and revert to the prior version.')
+    table.insert(parts, "=== YOUR ASSESSMENT ===")
+    table.insert(parts, "The system will automatically carry this version forward unless metrics regressed.")
+    table.insert(parts, "A result that doesn't improve things is still useful — it gets carried forward as the new base")
+    table.insert(parts, "so future cycles can build on it. Only a genuine regression (metrics went DOWN) causes a revert.")
+    table.insert(parts, "")
+    table.insert(parts, "Provide your assessment:")
+    table.insert(parts, 'Call done(decision="keep", reason="...") — confirm you agree with carrying this forward.')
+    table.insert(parts, 'Call done(decision="revert", reason="...") — flag a regression you observed (metrics went down).')
     table.insert(parts, "")
     table.insert(parts, 'REQUIRED: Call done(decision="keep", reason="...") or done(decision="revert", reason="...") NOW.')
     table.insert(parts, "Do NOT return a text response without calling this tool.")
@@ -2189,46 +2226,39 @@ code: |
           Human.notify({message = "  Invoking reviewer...", level = "info"})
           reviewer({message = review_msg})
 
-          -- Extract reviewer decision
+          -- Extract reviewer assessment (advisory only — metrics determine acceptance)
           local review_done = Tool.last_call("done")
-          local agent_decision = "keep"
           if review_done and review_done.args then
-            local ok_d, decision_field = pcall(function() return review_done.args.decision or "" end)
             local ok_r, reason_field = pcall(function() return review_done.args.reason or "" end)
-            local ok_s, success_field = pcall(function() return review_done.args.success end)
-            decision_field = ok_d and decision_field or ""
+            local ok_d, decision_field = pcall(function() return review_done.args.decision or "" end)
             reason_field = ok_r and reason_field or ""
-            local combined = string.lower(tostring(decision_field) .. " " .. tostring(reason_field))
-            if string.find(combined, "revert") then
-              agent_decision = "revert"
-            elseif ok_s and success_field == false then
-              agent_decision = "revert"
-            end
+            decision_field = ok_d and decision_field or ""
             Human.notify({message = string.format(
-              "  Reviewer: %s — %s",
-              agent_decision,
+              "  Reviewer assessment: %s — %s",
+              decision_field,
               has_text(reason_field) and reason_field or "(no reason)"
             ), level = "info"})
           end
 
-          -- Decision with guardrails
+          -- Acceptance is purely metric-based: carry forward unless metrics genuinely regressed.
+          -- A neutral result (no improvement) is still carried forward — we accumulate
+          -- many small changes across cycles, only rejecting when things actually got worse.
           local regression_threshold = -0.02
           local acc_regressed = accuracy_available and iter_accuracy_ok and (b_acc_deltas.alignment < regression_threshold)
           local fb_regressed = b_fb_deltas.alignment < regression_threshold
-          local both_worse = (b_fb_deltas.alignment < -0.005)
-            and (not accuracy_available or not iter_accuracy_ok or b_acc_deltas.alignment <= 0)
 
-          if agent_decision == "revert" then
-            Human.notify({message = string.format("Cycle %d REJECTED: reviewer chose to revert", cycle), level = "info"})
-          elseif acc_regressed then
+          if acc_regressed then
             Human.notify({message = string.format("Cycle %d REJECTED: accuracy regressed by %.4f", cycle, math.abs(b_acc_deltas.alignment)), level = "warning"})
           elseif fb_regressed then
             Human.notify({message = string.format("Cycle %d REJECTED: feedback regressed by %.4f", cycle, math.abs(b_fb_deltas.alignment)), level = "warning"})
-          elseif both_worse then
-            Human.notify({message = string.format("Cycle %d REJECTED: feedback down %.4f with no accuracy gain", cycle, math.abs(b_fb_deltas.alignment)), level = "warning"})
           else
             accept = true
-            Human.notify({message = string.format("Cycle %d ACCEPTED", cycle), level = "info"})
+            local fb_improved = b_fb_deltas.alignment > 0.005
+            if fb_improved then
+              Human.notify({message = string.format("Cycle %d ACCEPTED: feedback improved by %.4f", cycle, b_fb_deltas.alignment), level = "info"})
+            else
+              Human.notify({message = string.format("Cycle %d CARRIED: neutral result (FB %+.4f) — carrying forward to accumulate improvements", cycle, b_fb_deltas.alignment), level = "info"})
+            end
             last_accepted_version_id = final_version_id
           end
         end
@@ -2254,33 +2284,45 @@ code: |
 
         -- Concise cycle summary
         local accepted_count = 0
+        local carried_count = 0
         local rejected_count = 0
         local skipped_count = 0
         for _, it in ipairs(iterations) do
-          if it.accepted then accepted_count = accepted_count + 1
-          elseif it.skip_reason then skipped_count = skipped_count + 1
+          if it.skip_reason then skipped_count = skipped_count + 1
+          elseif it.accepted then
+            local fb_d = it.feedback_deltas and it.feedback_deltas.alignment or 0
+            if fb_d > 0.005 then accepted_count = accepted_count + 1
+            else carried_count = carried_count + 1 end
           else rejected_count = rejected_count + 1 end
         end
-        local status_str = accept and "ACCEPTED" or "REJECTED"
+        local status_str
+        if not accept then
+          status_str = "REJECTED"
+        elseif b_fb_deltas.alignment > 0.005 then
+          status_str = "ACCEPTED"
+        else
+          status_str = "CARRIED"
+        end
         local synthesis_note = final_is_synthesis and " [SYNTHESIS]" or ""
         local reason_short = has_text(final_done_reason) and (": " .. trunc(final_done_reason, 80)) or ""
         Human.notify({message = string.format(
-          "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d rejected, %d skipped\n└─ Current base: %s",
+          "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d carried (neutral), %d rejected, %d skipped\n└─ Current base: %s",
           cycle, params.max_iterations, status_str, synthesis_note, #succeeded, #failed, reason_short,
           b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
           b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment,
-          accepted_count, rejected_count, skipped_count,
+          accepted_count, carried_count, rejected_count, skipped_count,
           tostring(last_accepted_version_id)
         ), level = "info"})
 
         -- Update running state for next cycle
         if accept then
-          consecutive_failed_cycles = 0  -- reset on success
+          consecutive_failed_cycles = 0  -- reset whenever we carry forward (even neutral)
           if iter_accuracy_ok then
             State.set("accuracy_baseline_metrics", b_acc_metrics)
           end
           State.set("feedback_baseline_metrics", b_fb_metrics)
         else
+          -- Only count genuine regressions toward the failure plateau counter
           consecutive_failed_cycles = consecutive_failed_cycles + 1
         end
         State.set("last_accuracy_rca", b_acc_rca)
