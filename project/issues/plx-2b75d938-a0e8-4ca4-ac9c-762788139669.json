@@ -52,10 +52,40 @@
       "author": "derek",
       "text": "Evidence from report/task inspection: duplicate report IDs 5284c048-... and 4cd37eeb-... map to different task IDs (4c797b6b-... and 4cd37eeb-...). Both tasks are type=report_generation and dispatchStatus=SYNC, created at the same second (21:42:23 UTC). This indicates repeated execution of 'report run' is creating fresh internal sync tasks/reports each time, not UI list duplication. Likely worker still running pre-fix code path that drops --task-id, so retries/replays fan out into extra SYNC task/report records.",
       "created_at": "2026-04-08T21:50:06.794399262Z"
+    },
+    {
+      "id": "e4e16983-e742-45b0-8eb5-a77d85d37cbf",
+      "author": "derek",
+      "text": "Starting production investigation for renewed duplicate report generation and missing identifiers after main deploy/restart. Plan: 1) verify service/process topology on i-06eb3644c23887cc9 via SSM, 2) verify deployed code version and specific edited files on host, 3) trace runtime path that writes report identifiers, 4) capture corrective actions.",
+      "created_at": "2026-04-09T16:02:42.548915473Z"
+    },
+    {
+      "id": "389a42be-229d-4359-9061-c1d2839cbcad",
+      "author": "derek",
+      "text": "Findings from version-path investigation: production worker on i-06eb3644c23887cc9 executes installed package from /home/ec2-user/miniconda3/envs/py311/lib/python3.11/site-packages (not ~/projects/Plexus source). Local Call-Criteria-Python pin is plexus git tag v1.27.0. Identifier/report fixes are commits 14a4b972/f1c8e194/0220c90d; none are contained in release tag v1.29.0 (git merge-base checks fail), so pinned env cannot include them yet. This explains missing identifiers despite dashboard deploy and worker restart.",
+      "created_at": "2026-04-09T16:21:06.768734592Z"
+    },
+    {
+      "id": "ffac6b8d-b8f6-462c-bb7c-d86c2e26119f",
+      "author": "derek",
+      "text": "Applying minimal semantic-release-safe fix: remove unused Card import from dashboard/components/ui/feedback-item-view.tsx; will validate with dashboard typecheck and commit with conventional fix: message.",
+      "created_at": "2026-04-09T16:26:24.105076748Z"
+    },
+    {
+      "id": "bada5ebb-cf5e-41bf-b5a3-2b68b9d9c0c6",
+      "author": "derek",
+      "text": "Completed minimal semantic-release-oriented fix commit: 58b9b36f (fix(ui): remove unused Card import in feedback item view). Verified with dashboard typecheck (pass). Commit touches only dashboard/components/ui/feedback-item-view.tsx.",
+      "created_at": "2026-04-09T16:26:44.814487857Z"
+    },
+    {
+      "id": "7ab0e58f-6c6b-45a2-bba6-02904ed0e120",
+      "author": "derek",
+      "text": "Re-checked duplicate run attribution for reports d36714bc-..., 968292f4-..., 36859634-... using Plexus report/task records + SSM log search. Confirmed one duplicate path on i-06eb3644c23887cc9 (ip-172-31-40-89): report 36859634-... and task 9a402fe2-... appear in plexus-command-worker.service journal. Other two IDs/tasks do not appear in that unit log and do not appear on sibling Linux hosts (i-09a460..., i-0fca5d...), indicating an additional execution path outside that systemd unit (another host/process/runtime path).",
+      "created_at": "2026-04-09T17:34:07.450157268Z"
     }
   ],
   "created_at": "2026-04-08T20:48:18.718044342Z",
-  "updated_at": "2026-04-08T21:50:06.794399262Z",
+  "updated_at": "2026-04-09T17:34:07.450157268Z",
   "closed_at": null,
   "custom": {}
 }
