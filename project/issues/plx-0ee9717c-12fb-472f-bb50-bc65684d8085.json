@@ -1,0 +1,31 @@
+{
+  "id": "plx-0ee9717c-12fb-472f-bb50-bc65684d8085",
+  "title": "Update CI AWS role secret for publish-console-worker-image",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7e22aa45-a1ee-4b50-8cc5-183964c0e2fd",
+      "author": "derek",
+      "text": "Applying workflow change to use AWS_GITHUB_ACTIONS_CONSOLE_WORKER_ROLE_ARN for publish-console-worker-image role-to-assume. Existing trigger-deployment job remains on AWS_GITHUB_ACTIONS_ROLE_ARN.",
+      "created_at": "2026-04-09T18:14:26.770422401Z"
+    },
+    {
+      "id": "b6588ca7-acf7-45f1-909b-66265892cecc",
+      "author": "derek",
+      "text": "Completed workflow patch: .github/workflows/ci.yaml line 179 now uses secrets.AWS_GITHUB_ACTIONS_CONSOLE_WORKER_ROLE_ARN for publish-console-worker-image. trigger-deployment role-to-assume at line 295 remains secrets.AWS_GITHUB_ACTIONS_ROLE_ARN.",
+      "created_at": "2026-04-09T18:14:37.162492711Z"
+    }
+  ],
+  "created_at": "2026-04-09T18:14:24.319781812Z",
+  "updated_at": "2026-04-09T18:14:37.162492711Z",
+  "closed_at": null,
+  "custom": {}
+}
