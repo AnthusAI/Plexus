@@ -130,9 +130,6 @@ plexus scorecards list-scores --scorecard "Content Quality"
 # Pull scorecard configuration to YAML
 plexus scorecards pull --scorecard "Content Quality" --output ./my-scorecards
 
-# Push scorecard configuration from YAML
-plexus scorecards push --scorecard "Content Quality" --file ./my-scorecard.yaml --note "Updated configuration"
-
 # Delete a scorecard
 plexus scorecards delete --scorecard "Content Quality"`}</code>
           </pre>

@@ -151,8 +151,8 @@ plexus scorecards promote --account-key "account-key" --score-id "score-id" --ve
 # Pull latest champion versions (coming soon)
 plexus scorecards pull --account-key "account-key"
 
-# Push local changes as new versions
-plexus scorecards push --scorecard "scorecard-name" --note "Updated configuration"`}</code>
+# Update scores via score-level tools instead of scorecard-wide push
+plexus scores pull --scorecard "scorecard-name" --score "score-name"`}</code>
               </pre>
             </div>
           </div>
