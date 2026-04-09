@@ -336,7 +336,7 @@ const GuidelinesSection: React.FC<{ guidelines: string }> = ({ guidelines }) => 
   return (
     <div className="mb-2">
       <div className="flex items-center justify-between py-2">
-        <span className="font-medium text-sm">Score Guidelines</span>
+        <span className="font-medium text-sm">Guidelines</span>
       </div>
       <div className="flex flex-col items-center">
         <div className="w-full h-px bg-border mb-1" />
@@ -483,6 +483,11 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
                 : `${contradictions_found} contradiction${contradictions_found !== 1 ? 's' : ''} found across ${total_items_analyzed} feedback item${total_items_analyzed !== 1 ? 's' : ''}`
               }
             </p>
+            {!isAlignedMode && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Identifies feedback edits that appear to contradict the current score guidelines — so that either the feedback can be marked invalid, or the guidelines can be updated to reflect the correct policy.
+              </p>
+            )}
           </div>
           <Badge
             variant={isAlignedMode ? 'secondary' : (contradictions_found > 0 ? 'destructive' : 'secondary')}
