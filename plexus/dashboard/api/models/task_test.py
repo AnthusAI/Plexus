@@ -91,8 +91,11 @@ def test_update_task():
         startedAt=datetime(2024, 1, 1, tzinfo=timezone.utc)
     )
 
+    assert updated is mock_task
     assert updated.status == 'RUNNING'
     assert updated.startedAt == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert mock_task.status == 'RUNNING'
+    assert mock_task.startedAt == datetime(2024, 1, 1, tzinfo=timezone.utc)
     assert mock_client.execute.call_count == 2
 
 def test_get_task_by_id():

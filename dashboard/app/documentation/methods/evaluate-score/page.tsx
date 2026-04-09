@@ -30,6 +30,42 @@ plexus evaluate accuracy \\
   --use-score-associated-dataset \\
   --json-only`}</code>
           </pre>
+          <p className="text-muted-foreground mt-3">
+            Dataset-backed <code>evaluate accuracy</code> runs now include RCA automatically.
+            RCA is persisted under <code>parameters.root_cause</code> using the same pipeline as feedback-backed runs.
+          </p>
+          <p className="text-muted-foreground mt-2">
+            Materialized dataset requirement: dataset-backed accuracy preflight requires
+            <code> DataSet.file </code>
+            to point to a parquet/csv object. If missing, evaluation fails immediately with
+            <code> missing_file_pointer </code>
+            or
+            <code> unsupported_file_type </code>
+            and a rebuild hint.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Operator Loop: Build -&gt; Check -&gt; Evaluate</h2>
+          <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
+            <code>{`# 1) Build associated dataset from feedback
+plexus score dataset-curate \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --max-items 200 \\
+  --days 180
+
+# 2) Evaluate baseline/candidate against dataset
+plexus evaluate accuracy \\
+  --scorecard "CMG EDU" \\
+  --score "Identify Objections" \\
+  --use-score-associated-dataset \\
+  --baseline <evaluation-id>`}</code>
+          </pre>
+          <p className="text-muted-foreground mt-3">
+            In MCP workflows, call <code>plexus_dataset_check_associated</code> before dispatching
+            optimizer runs. If readiness fails, rebuild the dataset first.
+          </p>
         </section>
 
         <section>
@@ -259,6 +295,11 @@ plexus evaluate accuracy \\
               before creating the associated dataset.
             </p>
             <p className="text-muted-foreground">
+              RCA coverage status is persisted for dataset-backed accuracy runs:
+              <code> full </code>, <code>partial</code>, or <code>none</code>,
+              with explicit counts for linked vs unlinked incorrect items.
+            </p>
+            <p className="text-muted-foreground">
               The score detail page also includes an <strong>Associated Datasets</strong> panel that
               shows per-dataset row counts and label distributions from persisted build metadata.
             </p>
@@ -300,19 +341,32 @@ plexus evaluate accuracy \\
   --number-of-samples 200
 
 # Stage B: fast random loop
-plexus evaluate feedback \\
+plexus evaluate feedback-runner \\
   --scorecard 1039 \\
   --score 45425 \\
   --days 180 \\
-  --max-samples 50
+  --max-items 50 \\
+  --sampling-mode random \\
+  --kanbus-issue-id plx-9aa370
 
 # Stage C: hard random gate before accept
-plexus evaluate feedback \\
+plexus evaluate feedback-runner \\
   --scorecard 1039 \\
   --score 45425 \\
   --days 180 \\
-  --max-samples 200`}</code>
+  --max-items 200 \\
+  --sampling-mode random \\
+  --kanbus-issue-id plx-9aa370`}</code>
           </pre>
+          <p className="text-muted-foreground mb-3">
+            Use <code>feedback-runner</code> for optimization loops. It captures evaluation ID by runner task ID,
+            waits on backend evaluation status, and writes a standardized run summary comment to Kanbus when
+            <code> --kanbus-issue-id</code> is provided.
+          </p>
+          <p className="text-muted-foreground mb-3">
+            This avoids trusting local process exit and treats the evaluation record as the source of truth
+            for completion, metrics, and RCA availability.
+          </p>
           <p className="text-muted-foreground mb-3">
             Workflow assessments are recorded as canonical bundles (<code>candidate_assessment_bundle.v1</code>)
             with:

@@ -3,7 +3,7 @@
   "title": "Run smoke tests and validate core functionality",
   "description": "Validate that all components are working before running on real data.\n\n## Test Checklist\n\n- [ ] YAML syntax validation passes\n- [ ] MCP tool plexus_evaluation_compare is registered\n- [ ] CLI command plexus procedure optimize exists and shows help\n- [ ] Identifier resolution works for name/key/ID/externalID\n- [ ] Procedure YAML loads without errors\n\n## Commands to Run\n\n```bash\n# 1. Validate YAML syntax\npython3 -c \"import yaml; yaml.safe_load(open('plexus/procedures/feedback_alignment_optimizer.yaml'))\"\n\n# 2. Check CLI help\nplexus procedure optimize --help\n\n# 3. Test identifier resolution (dry run, quick on test scorecard)\nplexus procedure optimize -s <scorecard> -c <score> --days 7 --dry-run\n```\n\n## Success Criteria\n\nAll smoke tests pass without errors.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -25,7 +25,7 @@
     }
   ],
   "created_at": "2026-04-02T16:08:45.982388Z",
-  "updated_at": "2026-04-02T16:11:24.561520Z",
-  "closed_at": null,
+  "updated_at": "2026-04-06T17:15:24.580347Z",
+  "closed_at": "2026-04-06T17:15:24.580347Z",
   "custom": {}
 }

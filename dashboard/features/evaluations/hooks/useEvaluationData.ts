@@ -1033,8 +1033,8 @@ export function useEvaluationData({
               // Find existing evaluation
               const existingEval = prev.find(e => e.id === transformedEvaluation.id);
               if (!existingEval) {
-                console.log(`STAGE_TRACE: Evaluation update for non-existent eval ${transformedEvaluation.id}`);
-                return prev;
+                // Upsert: evaluation arrived via update before create was processed
+                return [transformedEvaluation, ...prev];
               }
 
               // Check if this is a meaningful update by comparing key fields

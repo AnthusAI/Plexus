@@ -21,6 +21,7 @@ from plexus.cli.dataset.datasets import (
     _fetch_feedback_item_with_item,
     _fetch_score_name,
     _fetch_score_champion_version,
+    _persist_dataset_file_reference,
     _upload_dataset_parquet,
 )
 
@@ -778,16 +779,10 @@ def build_associated_dataset_from_vetted_feedback_items(
             account_id=account_id,
             dataset_id=dataset_id,
         )
-        client.execute(
-            """
-            mutation UpdateDataSet($input: UpdateDataSetInput!) {
-                updateDataSet(input: $input) {
-                    id
-                    file
-                }
-            }
-            """,
-            {"input": {"id": dataset_id, "file": s3_key}},
+        _persist_dataset_file_reference(
+            client=client,
+            dataset_id=dataset_id,
+            s3_key=s3_key,
         )
 
         result_payload: Dict[str, Any] = {
@@ -1067,16 +1062,10 @@ def build_associated_dataset_from_feedback_window(
             account_id=account_id,
             dataset_id=dataset_id,
         )
-        client.execute(
-            """
-            mutation UpdateDataSet($input: UpdateDataSetInput!) {
-                updateDataSet(input: $input) {
-                    id
-                    file
-                }
-            }
-            """,
-            {"input": {"id": dataset_id, "file": s3_key}},
+        _persist_dataset_file_reference(
+            client=client,
+            dataset_id=dataset_id,
+            s3_key=s3_key,
         )
 
         result_payload: Dict[str, Any] = {
