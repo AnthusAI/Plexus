@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5e346477-28cc-496a-bb78-d8db9aef952d",
+  "issue_id": "plx-290c2cc3-e8aa-4515-9fb3-b78754845cde",
+  "event_type": "issue_created",
+  "occurred_at": "2026-03-18T14:11:08.369Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create /lab/console, move the nav item to the bottom above Help, remove Analysis and Activity routes, and embed ActivityDashboard under Console tabs with Chat and Board placeholders.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement Console page and fold Activity into it"
+  }
+}

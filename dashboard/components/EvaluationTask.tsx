@@ -324,11 +324,10 @@ type MisclassificationAnalysis = {
 }
 
 type RootCauseData = {
-  topics?: Topic[]
-  misclassification_analysis?: MisclassificationAnalysis
-  overall_explanation?: string
-  overall_improvement_suggestion?: string
-  [key: string]: unknown
+  topics?: Topic[] | null
+  misclassification_analysis?: MisclassificationAnalysis | null
+  overall_explanation?: string | null
+  overall_improvement_suggestion?: string | null
 }
 
 const MISCLASSIFICATION_CATEGORY_CONFIG: Array<{
@@ -1051,14 +1050,15 @@ const DetailContent = React.memo(({
   const rootCauseData = useMemo((): RootCauseData | null => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
-      return (params?.root_cause as RootCauseData) ?? null
+      const rootCause = params?.root_cause
+      return (rootCause && typeof rootCause === 'object') ? (rootCause as RootCauseData) : null
     } catch {
       return null
     }
   }, [data.parameters])
 
   const rootCauseTopics = rootCauseData?.topics ?? null
-  const misclassificationAnalysis = rootCauseData?.misclassification_analysis as MisclassificationAnalysis | null
+  const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
   const rcaCoverage = useMemo(() => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null

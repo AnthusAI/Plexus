@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React from 'react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Code, List, X, CheckCircle, XCircle } from 'lucide-react';
@@ -25,9 +25,14 @@ export interface FeedbackItem {
   editorName?: string;
   item?: {
     id: string;
-    identifiers?: string;
+    identifiers?: string | Array<{ name: string; value: string; url?: string }> | Record<string, string>;
     externalId?: string;
+    itemIdentifiers?: {
+      items?: Array<{ name: string; value: string; url?: string; position?: number }>;
+    };
   };
+  item_identifiers?: string | Array<{ name: string; value: string; url?: string }> | Record<string, string>;
+  item_external_id?: string;
   [key: string]: any; // Allow for additional fields
 }
 
@@ -40,6 +45,33 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
   item,
   className
 }) => {
+  const resolvedIdentifiers = React.useMemo(() => {
+    const normalizeIdentifiers = (
+      rawIdentifiers:
+        | string
+        | Array<{ name: string; value: string; url?: string }>
+        | Record<string, string>
+        | undefined
+    ) => {
+      if (!rawIdentifiers || typeof rawIdentifiers === 'string' || Array.isArray(rawIdentifiers)) {
+        return rawIdentifiers;
+      }
+
+      return Object.entries(rawIdentifiers).map(([name, value]) => ({ name, value }));
+    };
+
+    const relationshipIdentifiers = item.item?.itemIdentifiers?.items;
+    if (Array.isArray(relationshipIdentifiers) && relationshipIdentifiers.length > 0) {
+      return relationshipIdentifiers
+        .slice()
+        .sort((a, b) => (a.position || 0) - (b.position || 0))
+        .map(({ name, value, url }) => ({ name, value, url }));
+    }
+    return normalizeIdentifiers(item.item?.identifiers ?? item.item_identifiers);
+  }, [item]);
+
+  const resolvedExternalId = item.item?.externalId ?? item.item_external_id;
+
   // Format date to a more readable format
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -118,8 +150,8 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
             {/* Item identifiers using the reusable IdentifierDisplay component */}
             <div>
               <IdentifierDisplay 
-                identifiers={item.item?.identifiers}
-                externalId={item.item?.externalId}
+                identifiers={resolvedIdentifiers}
+                externalId={resolvedExternalId}
                 iconSize="sm"
                 textSize="xs"
                 displayMode="full"

@@ -1,0 +1,25 @@
+{
+  "id": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "title": "Replace Analysis with Console",
+  "description": "Retire the Analysis shell and Activity nav entry in favor of a unified Console area in the dashboard.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f71bd916-ac4a-46fa-afb6-e7f133458ecf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "13a5b6f8-09fa-4298-a56e-b7d94acd7b44",
+      "author": "ryan",
+      "text": "# Console Design Spec v1\n\n## Goal\nBuild `/lab/console` as a chat-first workspace with a persistent top controls strip and a collapsible right artifact pane. Replace the current tab-selector UI.\n\n## Layout\n- Top controls row (always visible): existing `ScorecardContext` + `Actions` menu.\n- Workspace below controls: 3 columns.\n- Left column: chat session list.\n- Middle column: active chat session UI.\n- Right column: artifact pane, collapsed by default.\n\n## Artifact Model\n- `artifactKind`: `none | activity | board | report`.\n- `artifactPayload`: contextual data for selected artifact.\n- `isOpen` + `isCollapsed` + `width` for right pane state.\n- Artifact transitions handled in one controller/hook.\n\n## Actions Behavior\n- Add `Show Activity` action in the top actions menu.\n- `Show Activity` opens the right pane and renders embedded `ActivityDashboard`.\n- Session list and chat pane remain visible while artifacts are shown.\n\n## Chat and Procedure Runtime\n- Chat is backed by Tactus procedures.\n- Built-in procedure runs REPL loop using standard HITL requests:\n  - assistant turn\n  - HITL request for user input\n  - user response\n  - repeat\n- Persist chat by session so left list is data-backed.\n\n## UI Technology\n- Use Vercel AI Elements for chat UI composition.\n- Add adapter boundary between Elements component model and Tactus/HITL message model.\n\n## Visual Requirements\n- Remove light-outline/border artifacts in dark mode for Console placeholder states.\n\n## Scope and Defaults\n- Canonical route remains `/lab/console`.\n- Global dashboard right chat panel behavior remains unchanged in this phase.\n- Board artifact stays placeholder-backed this phase.\n- Report artifact plumbing is included; report picker UX may be phased.\n- Kanbus issue comments are source of truth until wiki-write path is confirmed.\n",
+      "created_at": "2026-03-19T02:30:34.098448Z"
+    }
+  ],
+  "created_at": "2026-03-18T14:11:02.455960Z",
+  "updated_at": "2026-03-19T02:30:34.098448Z",
+  "closed_at": null,
+  "custom": {}
+}
