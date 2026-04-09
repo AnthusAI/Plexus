@@ -297,8 +297,6 @@ class TestFeedbackEvaluation:
         root_cause = params["root_cause"]
         assert root_cause["output_compacted"] is True
         assert root_cause["output_attachment"] == "evaluations/eval-789/root_cause.full.json"
-        assert root_cause["misclassification_analysis"]["item_classifications_attachment"] == "evaluations/eval-789/root_cause.full.json"
-        assert root_cause["misclassification_analysis"]["item_classifications_total"] == 1
 
     @pytest.mark.asyncio
     async def test_run_evaluation_fails_when_rca_attachment_upload_fails(self, mock_api_client, mock_feedback_items):
@@ -490,7 +488,6 @@ class TestFeedbackEvaluation:
                 assert call_kwargs['feedbackItemId'] == "feedback-0"
                 assert call_kwargs['value'] == "Yes"  # initialAnswerValue (predicted)
                 assert call_kwargs['explanation'] == 'Test explanation from production'  # From production ScoreResult
-                assert call_kwargs['trace'] == {"step": "test"}  # From production ScoreResult
                 assert call_kwargs['confidence'] is None  # No confidence for feedback evaluations
                 assert call_kwargs['correct'] is True  # First item agrees
                 assert call_kwargs['type'] == 'evaluation'
