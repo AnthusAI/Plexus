@@ -1846,14 +1846,21 @@ code: |
               Human.notify({message = "    Smoke test skipped (no item ID available)", level = "warning"})
             end
 
-            local smoke = smoke_test_item_id and call_plexus_tool("plexus_predict", {
-              scorecard_name = params.scorecard,
-              score_name     = params.score,
-              version        = candidate_id,
-              item_id        = smoke_test_item_id,
-              include_trace  = false,
-              no_cache       = true
-            })
+            local smoke_ok, smoke = true, nil
+            if smoke_test_item_id then
+              smoke_ok, smoke = pcall(call_plexus_tool, "plexus_predict", {
+                scorecard_name = params.scorecard,
+                score_name     = params.score,
+                version        = candidate_id,
+                item_id        = smoke_test_item_id,
+                include_trace  = false,
+                no_cache       = true
+              })
+              if not smoke_ok then
+                smoke_detail = "Smoke test call error: " .. tostring(smoke)
+                smoke = nil
+              end
+            end
 
             if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
               local pred  = smoke.predictions[1]
@@ -2322,14 +2329,21 @@ code: |
               Human.notify({message = "    Smoke test skipped (no item ID)", level = "warning"})
             end
 
-            local smoke = smoke_test_item_id and call_plexus_tool("plexus_predict", {
-              scorecard_name = params.scorecard,
-              score_name     = params.score,
-              version        = candidate_id,
-              item_id        = smoke_test_item_id,
-              include_trace  = false,
-              no_cache       = true
-            })
+            local smoke_ok, smoke = true, nil
+            if smoke_test_item_id then
+              smoke_ok, smoke = pcall(call_plexus_tool, "plexus_predict", {
+                scorecard_name = params.scorecard,
+                score_name     = params.score,
+                version        = candidate_id,
+                item_id        = smoke_test_item_id,
+                include_trace  = false,
+                no_cache       = true
+              })
+              if not smoke_ok then
+                smoke_detail = "Smoke test call error: " .. tostring(smoke)
+                smoke = nil
+              end
+            end
 
             if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
               local pred  = smoke.predictions[1]
