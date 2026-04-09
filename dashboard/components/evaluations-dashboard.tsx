@@ -560,11 +560,17 @@ export default function EvaluationsDashboard({
     return () => { cancelled = true }
   }, [selectedEvaluationId, isLoading, evaluations])
 
-  // Merge the deep-linked evaluation into the list so rendering and score-result loading work
+  // Merge the deep-linked evaluation into the list so rendering and score-result loading work,
+  // then sort by createdAt descending so the grid is always in reverse chronological order.
   const effectiveEvaluations = useMemo(() => {
-    if (!deepLinkedEvaluation) return evaluations
-    if (evaluations.some(e => e.id === deepLinkedEvaluation.id)) return evaluations
-    return [deepLinkedEvaluation, ...evaluations]
+    const base = (!deepLinkedEvaluation || evaluations.some(e => e.id === deepLinkedEvaluation.id))
+      ? evaluations
+      : [deepLinkedEvaluation, ...evaluations]
+    return [...base].sort((a, b) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return bt - at
+    })
   }, [evaluations, deepLinkedEvaluation])
 
   // Show loading state only on initial load, not when selecting evaluations
