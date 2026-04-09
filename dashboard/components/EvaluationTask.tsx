@@ -1969,7 +1969,10 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
       if (params && typeof params.notes === 'string' && params.notes.trim()) {
-        return params.notes.trim()
+        // Normalize Markdown: remove spaces before closing bold/italic delimiters so that
+        // AI-generated text like "**label: **" renders correctly (CommonMark rejects a
+        // closing delimiter that is preceded by whitespace).
+        return params.notes.trim().replace(/ (\*+)/g, '$1')
       }
     } catch { /* ignore */ }
     return null
