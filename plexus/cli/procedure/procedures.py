@@ -937,8 +937,10 @@ def watch(interval: int):
 @click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
 @click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
+@click.option('--resume-accuracy-eval', type=str, default=None, help='Reuse existing accuracy baseline evaluation ID (skip running baselines)')
+@click.option('--resume-feedback-eval', type=str, default=None, help='Reuse existing feedback baseline evaluation ID (skip running baselines)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_accuracy_eval: str, resume_feedback_eval: str, output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -998,6 +1000,10 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     }
     if max_samples is not None:
         params["max_samples"] = max_samples
+    if resume_accuracy_eval is not None:
+        params["resume_accuracy_eval"] = resume_accuracy_eval
+    if resume_feedback_eval is not None:
+        params["resume_feedback_eval"] = resume_feedback_eval
 
     # Load YAML
     try:
