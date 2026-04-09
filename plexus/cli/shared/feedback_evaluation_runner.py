@@ -235,30 +235,42 @@ def wait_for_feedback_evaluation_terminal_status(
     evaluation_id: str,
     timeout_seconds: int = 7200,
     poll_interval_seconds: int = 5,
-    stall_timeout_seconds: int = 600,
+    process: Optional["subprocess.Popen"] = None,
+    stderr_log=None,
+    stdout_log=None,
 ) -> Dict[str, Any]:
+    import subprocess as _subprocess
     deadline = time.monotonic() + timeout_seconds
     latest_info: Dict[str, Any] = {}
-    last_progress_value = None
-    last_progress_time = time.monotonic()
     while time.monotonic() < deadline:
         latest_info = Evaluation.get_evaluation_info(evaluation_id)
         status = str(latest_info.get("status") or "").upper()
         if status in TERMINAL_EVALUATION_STATUSES:
             return latest_info
-        # Stall detection: if total_items hasn't changed for stall_timeout_seconds,
-        # the subprocess is likely deadlocked (e.g. thread pool exhaustion).
-        current_progress = latest_info.get("total_items")
-        if current_progress != last_progress_value:
-            last_progress_value = current_progress
-            last_progress_time = time.monotonic()
-        elif time.monotonic() - last_progress_time > stall_timeout_seconds:
-            raise TimeoutError(
-                f"Evaluation '{evaluation_id}' stalled: no progress for "
-                f"{stall_timeout_seconds}s. Last status={status}, "
-                f"total_items={current_progress}. Likely thread pool deadlock "
-                f"in subprocess."
-            )
+        # If the subprocess exited with an error, surface it immediately.
+        if process is not None:
+            returncode = process.poll()
+            if returncode is not None and returncode != 0:
+                stderr_tail = ""
+                stdout_tail = ""
+                if stderr_log is not None:
+                    try:
+                        stderr_log.seek(0)
+                        stderr_tail = stderr_log.read().decode("utf-8", errors="replace")[-3000:]
+                    except Exception:
+                        pass
+                if stdout_log is not None:
+                    try:
+                        stdout_log.seek(0)
+                        stdout_tail = stdout_log.read().decode("utf-8", errors="replace")[-3000:]
+                    except Exception:
+                        pass
+                raise RuntimeError(
+                    f"Feedback evaluation subprocess exited with error (exit={returncode}) "
+                    f"for evaluation {evaluation_id}. Last status={status}.\n"
+                    f"STDERR tail:\n{stderr_tail}\n"
+                    f"STDOUT tail:\n{stdout_tail}"
+                )
         time.sleep(poll_interval_seconds)
     raise TimeoutError(
         f"Timed out waiting for evaluation '{evaluation_id}' to reach terminal status after "
@@ -438,9 +450,13 @@ def run_feedback_evaluation_orchestrated(
         resolved_task_id=resolved_task_id,
     )
 
-    with tempfile.NamedTemporaryFile(prefix="feedback-runner-stdout-", suffix=".log") as stdout_log, tempfile.NamedTemporaryFile(
-        prefix="feedback-runner-stderr-", suffix=".log"
-    ) as stderr_log:
+    log_dir = os.path.join(os.path.expanduser("~"), ".plexus", "feedback-runner-logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_prefix = f"feedback-{resolved_task_id or 'unknown'}"
+    stdout_path = os.path.join(log_dir, f"{log_prefix}-stdout.log")
+    stderr_path = os.path.join(log_dir, f"{log_prefix}-stderr.log")
+
+    with open(stdout_path, "w+b") as stdout_log, open(stderr_path, "w+b") as stderr_log:
         process = subprocess.Popen(
             command,
             stdout=stdout_log,
@@ -479,6 +495,9 @@ def run_feedback_evaluation_orchestrated(
                 evaluation_id=evaluation_id,
                 timeout_seconds=completion_timeout_seconds,
                 poll_interval_seconds=max(1, poll_interval_seconds),
+                process=process,
+                stderr_log=stderr_log,
+                stdout_log=stdout_log,
             )
             _killed_for_timeout = False
             try:
