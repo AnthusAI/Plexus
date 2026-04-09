@@ -349,6 +349,8 @@ code: |
       local note = ""
       if iter.skip_reason then
         note = "  (" .. iter.skip_reason .. ")"
+      elseif iter.disqualification_reason then
+        note = "  (DISQUALIFIED: " .. iter.disqualification_reason .. ")"
       elseif not iter.accepted and iter.accuracy_deltas and iter.accuracy_deltas.alignment < -0.02 then
         note = "  (accuracy regressed — do not retry)"
       elseif not iter.accepted then
@@ -568,7 +570,15 @@ code: |
                   if type(cs.representative_evidence) == "table" and #cs.representative_evidence > 0 then
                     table.insert(parts, "Representative evidence from RCA:")
                     for _, ev in ipairs(cs.representative_evidence) do
-                      table.insert(parts, "  * " .. tostring(ev))
+                      local ev_str
+                      if type(ev) == "table" then
+                        ev_str = string.format("[%s] %s",
+                          ev.source or "?",
+                          ev.quote_or_fact or tostring(ev))
+                      else
+                        ev_str = tostring(ev)
+                      end
+                      table.insert(parts, "  * " .. ev_str)
                     end
                   end
                 end
@@ -1306,7 +1316,9 @@ code: |
       return "rate_limit"
     end
     if string.find(s, "timeout") or string.find(s, "timed out")
-      or string.find(s, "connection") then
+      or string.find(s, "connection")
+      or string.find(s, "unterminated string")
+      or string.find(s, "unexpected end of json") then
       return "transient"
     end
     if string.find(s, "authentication") or string.find(s, "api_key")
@@ -2099,6 +2111,11 @@ code: |
           fb_d, acc_d))
         table.insert(synth_parts, string.format(
           "  Edit: %s", trunc(sv.done_reason or sv.hypothesis.description, 150)))
+        if acc_d < -0.01 then
+          table.insert(synth_parts, string.format(
+            "  *** WARNING: This hypothesis REGRESSED accuracy by %.3f — do NOT incorporate without ensuring accuracy is preserved. ***",
+            math.abs(acc_d)))
+        end
 
         -- Include the actual code for succeeded hypotheses
         if sv.succeeded then
@@ -2122,18 +2139,53 @@ code: |
       end
       table.insert(synth_parts, "")
 
+      -- Determine the best starting point for synthesis
+      local synth_start_code = current_code  -- default: baseline
+      local synth_start_label = "BASELINE"
+
+      if #succeeded >= 1 then
+        -- Pick the candidate with the highest combined (feedback + accuracy) delta
+        local best = succeeded[1]
+        local best_score = -999
+        for _, sv in ipairs(succeeded) do
+          local combined = (sv.fb_deltas and sv.fb_deltas.alignment or 0)
+                         + (sv.acc_deltas and sv.acc_deltas.alignment or 0)
+          if combined > best_score then
+            best_score = combined
+            best = sv
+          end
+        end
+        local best_pull = call_plexus_tool("plexus_score_pull", {
+          scorecard_identifier = params.scorecard,
+          score_identifier = params.score,
+          version_id = best.version_id
+        })
+        if best_pull and best_pull.success and best_pull.codeFilePath then
+          local best_code = File.read(best_pull.codeFilePath)
+          if has_text(best_code) then
+            synth_start_code = best_code
+            synth_start_label = string.format("HYPOTHESIS %d (%s)", best.index, best.version_id)
+            diag(string.format("Synthesis starting from hypothesis %d (combined delta %+.3f)", best.index, best_score))
+          end
+        end
+      end
+
       -- Context-specific synthesis instructions
       if #succeeded > 1 then
         table.insert(synth_parts, "=== SYNTHESIS TASK (MULTIPLE SUCCESSES) ===")
-        table.insert(synth_parts, "Multiple hypotheses improved the score. Combine the successful changes")
-        table.insert(synth_parts, "into a single version. Where changes conflict, prefer the one with")
-        table.insert(synth_parts, "the higher feedback AC1 delta. Also consider insights from failed")
+        table.insert(synth_parts, string.format(
+          "Multiple hypotheses improved the score. Starting from %s (best combined improvement).", synth_start_label))
+        table.insert(synth_parts, "Incorporate changes from other successful hypotheses ONLY if they don't regress accuracy.")
+        table.insert(synth_parts, "Where changes conflict, prefer approaches that improved BOTH metrics")
+        table.insert(synth_parts, "over those that improved only one. Also consider insights from failed")
         table.insert(synth_parts, "hypotheses — what to avoid.\n")
       elseif #succeeded == 1 then
         table.insert(synth_parts, "=== SYNTHESIS TASK (SINGLE SUCCESS) ===")
-        table.insert(synth_parts, "One hypothesis succeeded. Start from its changes as a base,")
-        table.insert(synth_parts, "but also consider whether insights from the failed hypotheses")
-        table.insert(synth_parts, "suggest any additional refinements or adjustments.\n")
+        table.insert(synth_parts, string.format(
+          "One hypothesis succeeded. Its code is already loaded in the editor (starting from %s).", synth_start_label))
+        table.insert(synth_parts, "Consider whether insights from the failed hypotheses suggest any")
+        table.insert(synth_parts, "additional refinements or adjustments. If no refinement is needed,")
+        table.insert(synth_parts, "submit the current code as-is.\n")
       else
         table.insert(synth_parts, "=== SYNTHESIS TASK (NO SUCCESSES) ===")
         table.insert(synth_parts, "No hypothesis met the success threshold, but each result provides signal.")
@@ -2144,15 +2196,15 @@ code: |
         table.insert(synth_parts, "the underlying idea may still be sound with refinement.\n")
       end
 
-      table.insert(synth_parts, "Edit score_config.yaml starting from the BASELINE code below.")
+      table.insert(synth_parts, string.format("Edit score_config.yaml starting from %s below.", synth_start_label))
       table.insert(synth_parts, "When done, call submit_score_version(version_note='Cycle " .. tostring(cycle) .. " synthesis: <brief description>').")
       table.insert(synth_parts, "If you truly cannot find ANY viable change, call done(reason='cannot_improve: <explanation>').\n")
 
-      -- Reset editor to baseline code
+      -- Reset editor to best starting point code
       call_plexus_tool("score_editor_setup", {
         scorecard_identifier = params.scorecard,
         score_identifier     = params.score,
-        yaml_content         = current_code,
+        yaml_content         = synth_start_code,
         code_file_path       = score_pull.codeFilePath,
         iteration            = cycle,
         hypothesis           = "Cycle " .. tostring(cycle) .. " synthesis"
@@ -2161,11 +2213,11 @@ code: |
       -- Clear accumulated history to avoid context overflow
       code_editor.clear_history()
 
-      -- Inject baseline file as system message
+      -- Inject starting code as system message
       code_editor.history:add({
         role = "system",
-        content = "=== CURRENT score_config.yaml (baseline — apply your synthesis here) ===\n"
-          .. current_code .. "\n=== END OF score_config.yaml ==="
+        content = string.format("=== CURRENT score_config.yaml (starting from %s — apply your synthesis here) ===\n", synth_start_label)
+          .. synth_start_code .. "\n=== END OF score_config.yaml ==="
       })
 
       -- ReAct implementation loop for synthesis (edit retries don't count as logical steps)
@@ -2505,7 +2557,17 @@ code: |
         elseif b_fb_deltas.alignment < -0.02 then
           disqualified = true
         end
-        diag(string.format("disqualified=%s", tostring(disqualified)))
+        local disqualification_reason = nil
+        if disqualified then
+          if not b_fb_metrics then
+            disqualification_reason = "missing_feedback_metrics"
+          elseif accuracy_available and b_acc_deltas.alignment < -0.02 then
+            disqualification_reason = string.format("accuracy_regression_%.3f", b_acc_deltas.alignment)
+          elseif b_fb_deltas.alignment < -0.02 then
+            disqualification_reason = string.format("feedback_regression_%.3f", b_fb_deltas.alignment)
+          end
+        end
+        diag(string.format("disqualified=%s reason=%s", tostring(disqualified), tostring(disqualification_reason)))
 
         local accept = false
 
@@ -2587,6 +2649,8 @@ code: |
           accuracy_deltas = b_acc_deltas,
           feedback_deltas = b_fb_deltas,
           accepted = accept,
+          disqualified = disqualified,
+          disqualification_reason = disqualification_reason,
           is_synthesis = final_is_synthesis,
           num_candidates = #submitted_versions,
           exploration_results = submitted_versions
