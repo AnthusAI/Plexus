@@ -272,6 +272,24 @@ class ProcedureService:
                             message=f"Invalid YAML configuration: {str(e)}"
                         )
             
+            # If scorecard/score weren't supplied as arguments, try to infer from YAML parameter values.
+            # Handles both 'scorecard_id' (UUID) and 'scorecard' (external ID / name) parameter names.
+            if yaml_config and (not scorecard_id or not score_id):
+                from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
+                param_values = ProcedureParameterParser.extract_parameter_values(yaml_config)
+                if not scorecard_id:
+                    _sc_val = param_values.get('scorecard_id') or param_values.get('scorecard')
+                    if _sc_val:
+                        resolved = resolve_scorecard_identifier(self.client, _sc_val)
+                        if resolved:
+                            scorecard_id = resolved
+                if not score_id and scorecard_id:
+                    _s_val = param_values.get('score_id') or param_values.get('score')
+                    if _s_val:
+                        resolved = self._resolve_score_identifier(scorecard_id, _s_val)
+                        if resolved:
+                            score_id = resolved
+
             # Create experiment
             procedure = Procedure.create(
                 client=self.client,
@@ -1045,6 +1063,11 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                         if isinstance(user_context, dict):
                             context.update(user_context)
 
+                        # Expose task_id so the Stage.set() MCP tool can update the dashboard
+                        task_id_for_tracking = options.get('_task_id_for_stage_tracking')
+                        if task_id_for_tracking:
+                            context['task_id'] = task_id_for_tracking
+
                         from .procedure_executor import execute_procedure
                         from .mcp_transport import create_procedure_mcp_server
 
@@ -1327,7 +1350,32 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                 # Parse configurable parameters from YAML
                 parameter_values = ProcedureParameterParser.extract_parameter_values(experiment_yaml)
                 logger.info(f"Extracted {len(parameter_values)} parameter values from YAML: {list(parameter_values.keys())}")
-                
+
+                # Sync scorecard/score associations on the Procedure record from parameter values
+                # if they are missing (e.g. procedure was created without explicit identifiers).
+                # Try both 'scorecard_id' (UUID) and 'scorecard' (external ID / name) parameter names.
+                _sc_id = parameter_values.get('scorecard_id')
+                if not _sc_id and parameter_values.get('scorecard'):
+                    _sc_id = resolve_scorecard_identifier(self.client, parameter_values['scorecard'])
+                _s_id = parameter_values.get('score_id')
+                if not _s_id and _sc_id and parameter_values.get('score'):
+                    _s_id = self._resolve_score_identifier(_sc_id, parameter_values['score'])
+                needs_update = (
+                    (_sc_id and not procedure_info.procedure.scorecardId) or
+                    (_s_id and not procedure_info.procedure.scoreId)
+                )
+                if needs_update:
+                    update_kwargs = {}
+                    if _sc_id and not procedure_info.procedure.scorecardId:
+                        update_kwargs['scorecardId'] = _sc_id
+                    if _s_id and not procedure_info.procedure.scoreId:
+                        update_kwargs['scoreId'] = _s_id
+                    try:
+                        procedure_info.procedure.update(**update_kwargs)
+                        logger.info(f"Updated Procedure {procedure_id} associations from YAML params: {update_kwargs}")
+                    except Exception as _upd_err:
+                        logger.warning(f"Could not update Procedure associations: {_upd_err}")
+
                 # Validate required parameters
                 is_valid, missing = ProcedureParameterParser.validate_parameter_values(experiment_yaml, parameter_values)
                 if not is_valid:

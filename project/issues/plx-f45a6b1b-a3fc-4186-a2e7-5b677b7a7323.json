@@ -3,7 +3,7 @@
   "title": "Data Flywheel Operations",
   "description": "",
   "type": "initiative",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -26,12 +26,18 @@
     {
       "id": "54760e4d-ef14-417b-83cd-69d6802b349d",
       "author": "ryan",
-      "text": "Streaming fix complete and verified. Root cause: _get_console_dispatch_metadata() called on every stream chunk event with no caching of None results \u2014 each call triggered a full paginated DynamoDB scan (~30 pages x 0.3s = ~10s). Fix: cache negative results with False sentinel; eagerly warm cache during _ensure_session(); move metadata construction to only run when persistence is triggered. Verified: 204 successful GraphQL UPDATE mutations at 0.27s avg in overnight test run (optimizer-debug10.log). Non-persisting chunks now complete in sub-milliseconds. Committed in 0259a2cff.",
+      "text": "Streaming fix complete and verified. Root cause: _get_console_dispatch_metadata() called on every stream chunk event with no caching of None results — each call triggered a full paginated DynamoDB scan (~30 pages x 0.3s = ~10s). Fix: cache negative results with False sentinel; eagerly warm cache during _ensure_session(); move metadata construction to only run when persistence is triggered. Verified: 204 successful GraphQL UPDATE mutations at 0.27s avg in overnight test run (optimizer-debug10.log). Non-persisting chunks now complete in sub-milliseconds. Committed in 0259a2cff.",
       "created_at": "2026-04-03T12:42:51.025486Z"
+    },
+    {
+      "id": "9a5dc828-47f7-4885-beff-3efaa7bad077",
+      "author": "ryan",
+      "text": "All scoped epics under Data Flywheel Operations are closed (deterministic datasets, RCA reliability, triage, workflow operationalization). Closing initiative; future work continues under new initiative tracks.",
+      "created_at": "2026-04-05T12:44:26.195653Z"
     }
   ],
   "created_at": "2026-04-02T03:18:39.213158Z",
-  "updated_at": "2026-04-03T12:42:51.025486Z",
-  "closed_at": null,
+  "updated_at": "2026-04-05T12:44:26.208922Z",
+  "closed_at": "2026-04-05T12:44:26.208922Z",
   "custom": {}
 }

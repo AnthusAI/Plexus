@@ -11,19 +11,15 @@
   "labels": [],
   "dependencies": [
     {
-      "target": "plx-ff6ca4",
-      "type": "blocked-by"
-    },
-    {
       "target": "plx-ff6ca47c-11f4-44f2-b6d2-649aea1a9442",
       "type": "blocked-by"
     },
     {
-      "target": "plx-cc3cf3",
+      "target": "plx-cc3cf381-35c4-4d9f-875e-321308ae1fbf",
       "type": "blocked-by"
     },
     {
-      "target": "plx-612be1",
+      "target": "plx-612be1f3-14ba-4424-9e69-94a720bae8f0",
       "type": "blocked-by"
     }
   ],

@@ -22,10 +22,34 @@
       "author": "ryan",
       "text": "Added RCA validity tests for small incorrect-set handling: (1) delegates to small-set RCA path for <5 candidates, (2) returns empty payload when no candidates. Keeping task open for additional failure-mode scenarios beyond these new cases.",
       "created_at": "2026-04-02T14:35:35.458777Z"
+    },
+    {
+      "id": "8ffdb40e-77af-484b-9906-1e6118198f7c",
+      "author": "ryan",
+      "text": "Investigating missing RCA persistence: latest feedback evaluation 1713f6f1-c61a-46cc-891b-6c86412cf9c3 reached processed=total but remained RUNNING with no root_cause visible. Suspected cause: dashboard Evaluation.update uses daemon background thread; terminal COMPLETED/parameters updates can be dropped on process exit. Implementing blocking update path now and validating with targeted tests + real run.",
+      "created_at": "2026-04-06T12:10:48.421024Z"
+    },
+    {
+      "id": "6d3026fa-92f2-4f64-b6bd-c2c0e81f30b1",
+      "author": "ryan",
+      "text": "Confirmed root cause of intermittent 'Analyzing finished but no RCA/terminal status' symptom: Evaluation.update performed writes on daemon thread, so terminal updates could be dropped if process exited promptly. Implemented synchronous durable update in Evaluation model and updated evaluation model tests accordingly. Note: previously reported run 1713f6f1-c61a-46cc-891b-6c86412cf9c3 now shows COMPLETED with RCA payload present.",
+      "created_at": "2026-04-06T12:16:21.575615Z"
+    },
+    {
+      "id": "ba705df3-7cae-493a-a00c-7d8700db2378",
+      "author": "ryan",
+      "text": "Implemented task-stage reliability fix for feedback/accuracy-with-feedback evaluations launched via MCP runner: runner now provisions a real Task + stages (or validates explicit existing task), MCP background dispatch uses that real task ID, and evaluate feedback version-path always attaches a TaskProgressTracker even when --task-id is provided so stages are advanced/completed. Added tests for task provisioning and reran runner/reference-dataset suites.",
+      "created_at": "2026-04-06T12:33:28.099273Z"
+    },
+    {
+      "id": "28b62b5f-e23d-49d6-9d12-02f857768d3e",
+      "author": "ryan",
+      "text": "Additional stage-order fix: removed premature tracker.advance_stage() inside AccuracyEvaluation.score_all_texts_for_score (was advancing to final stage on first processed item). Stage now remains Processing during predictions and advances only after prediction pass completes.",
+      "created_at": "2026-04-06T17:13:10.367793Z"
     }
   ],
   "created_at": "2026-04-02T12:49:33.406160Z",
-  "updated_at": "2026-04-02T14:35:35.458777Z",
+  "updated_at": "2026-04-06T17:13:10.367793Z",
   "closed_at": null,
   "custom": {}
 }
