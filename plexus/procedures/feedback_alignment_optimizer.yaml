@@ -755,7 +755,8 @@ code: |
     table.insert(parts, "")
     table.insert(parts, "CATEGORY B — Model swap (medium risk, high upside):")
     table.insert(parts, "  Swap the model_name and model_provider fields. Prefer cost-effective models:")
-    table.insert(parts, "  * gpt-5-mini (RECOMMENDED — best value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000")
+    table.insert(parts, "  * gpt-5.4-mini (TRY THIS — newest, strongest small model): model_provider: ChatOpenAI, model_name: gpt-5.4-mini, max_tokens: 2000")
+    table.insert(parts, "  * gpt-5-mini (good value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000")
     table.insert(parts, "  * gpt-4o-mini (current default): model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18")
     table.insert(parts, "  * gpt-oss-120b via Bedrock: model_provider: BedrockChat, model_name: openai.gpt-oss-120b-1:0")
     table.insert(parts, "    (For Bedrock models: remove the temperature field — it is not supported)")
@@ -1288,6 +1289,8 @@ code: |
   local stop_reason = nil
   local iterations = {}
   local last_accepted_version_id = champion_version_id
+  local last_accepted_fb_metrics = feedback_baseline_metrics
+  local last_accepted_acc_metrics = accuracy_baseline_metrics
   local consecutive_failed_cycles = 0  -- plateau detection
 
   -- Diagnostic logger that bypasses broken Python logging by writing directly to file
@@ -2572,9 +2575,20 @@ code: |
         b_fb_rca = b_fb_rca or {}
         b_acc_rca = b_acc_rca or {}
 
+        -- Compute vs-accepted deltas for logging
+        local vs_accepted_fb_delta = 0
+        local vs_accepted_acc_delta = 0
+        if last_accepted_fb_metrics and b_fb_metrics then
+          vs_accepted_fb_delta = b_fb_metrics.alignment - last_accepted_fb_metrics.alignment
+        end
+        if last_accepted_acc_metrics and b_acc_metrics then
+          vs_accepted_acc_delta = b_acc_metrics.alignment - last_accepted_acc_metrics.alignment
+        end
+
         Human.notify({message = string.format(
-          "  Final eval: FB AC1 %+.3f, ACC AC1 %+.3f%s",
-          b_fb_deltas.alignment, b_acc_deltas.alignment,
+          "  Final eval: FB AC1 %+.3f (vs base), %+.3f (vs accepted); ACC AC1 %+.3f (vs base), %+.3f (vs accepted)%s",
+          b_fb_deltas.alignment, vs_accepted_fb_delta,
+          b_acc_deltas.alignment, vs_accepted_acc_delta,
           final_is_synthesis and " [SYNTHESIS]" or ""
         ), level = "info"})
 
@@ -2585,21 +2599,32 @@ code: |
         local iter_accuracy_ok = b_acc_metrics ~= nil
 
         local disqualified = false
+        local disqualification_reason = nil
         if not b_fb_metrics then
           disqualified = true
+          disqualification_reason = "missing_feedback_metrics"
         elseif accuracy_available and b_acc_deltas.alignment < -0.02 then
           disqualified = true
+          disqualification_reason = string.format("accuracy_regression_vs_baseline_%.3f", b_acc_deltas.alignment)
         elseif b_fb_deltas.alignment < -0.02 then
           disqualified = true
+          disqualification_reason = string.format("feedback_regression_vs_baseline_%.3f", b_fb_deltas.alignment)
         end
-        local disqualification_reason = nil
-        if disqualified then
-          if not b_fb_metrics then
-            disqualification_reason = "missing_feedback_metrics"
-          elseif accuracy_available and b_acc_deltas.alignment < -0.02 then
-            disqualification_reason = string.format("accuracy_regression_%.3f", b_acc_deltas.alignment)
-          elseif b_fb_deltas.alignment < -0.02 then
-            disqualification_reason = string.format("feedback_regression_%.3f", b_fb_deltas.alignment)
+
+        -- Dual-threshold: also check regression vs last accepted version
+        -- Uses looser threshold (-0.05 vs -0.02) to account for evaluation noise
+        if not disqualified and last_accepted_fb_metrics then
+          local vs_accepted_fb = calculate_deltas(b_fb_metrics or feedback_baseline_metrics, last_accepted_fb_metrics)
+          local vs_accepted_acc = accuracy_available and last_accepted_acc_metrics and b_acc_metrics
+            and calculate_deltas(b_acc_metrics, last_accepted_acc_metrics) or nil
+
+          local accepted_regression_threshold = -0.05
+          if vs_accepted_acc and vs_accepted_acc.alignment < accepted_regression_threshold then
+            disqualified = true
+            disqualification_reason = string.format("accuracy_regression_vs_accepted_%.3f", vs_accepted_acc.alignment)
+          elseif vs_accepted_fb.alignment < accepted_regression_threshold then
+            disqualified = true
+            disqualification_reason = string.format("feedback_regression_vs_accepted_%.3f", vs_accepted_fb.alignment)
           end
         end
         diag(string.format("disqualified=%s reason=%s", tostring(disqualified), tostring(disqualification_reason)))
@@ -2652,13 +2677,32 @@ code: |
           -- A neutral result (no improvement) is still carried forward — we accumulate
           -- many small changes across cycles, only rejecting when things actually got worse.
           local regression_threshold = -0.02
+          local accepted_regression_threshold = -0.05
           local acc_regressed = accuracy_available and iter_accuracy_ok and (b_acc_deltas.alignment < regression_threshold)
           local fb_regressed = b_fb_deltas.alignment < regression_threshold
 
+          -- Also check regression vs last accepted version (prevents sliding backward)
+          local acc_regressed_vs_accepted = false
+          local fb_regressed_vs_accepted = false
+          if last_accepted_fb_metrics then
+            local vs_accepted_fb = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
+            fb_regressed_vs_accepted = vs_accepted_fb.alignment < accepted_regression_threshold
+            if accuracy_available and iter_accuracy_ok and last_accepted_acc_metrics then
+              local vs_accepted_acc = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
+              acc_regressed_vs_accepted = vs_accepted_acc.alignment < accepted_regression_threshold
+            end
+          end
+
           if acc_regressed then
-            Human.notify({message = string.format("Cycle %d REJECTED: accuracy regressed by %.4f", cycle, math.abs(b_acc_deltas.alignment)), level = "warning"})
+            Human.notify({message = string.format("Cycle %d REJECTED: accuracy regressed vs baseline by %.4f", cycle, math.abs(b_acc_deltas.alignment)), level = "warning"})
           elseif fb_regressed then
-            Human.notify({message = string.format("Cycle %d REJECTED: feedback regressed by %.4f", cycle, math.abs(b_fb_deltas.alignment)), level = "warning"})
+            Human.notify({message = string.format("Cycle %d REJECTED: feedback regressed vs baseline by %.4f", cycle, math.abs(b_fb_deltas.alignment)), level = "warning"})
+          elseif acc_regressed_vs_accepted then
+            local vs_acc = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
+            Human.notify({message = string.format("Cycle %d REJECTED: accuracy regressed vs last accepted by %.4f", cycle, math.abs(vs_acc.alignment)), level = "warning"})
+          elseif fb_regressed_vs_accepted then
+            local vs_fb = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
+            Human.notify({message = string.format("Cycle %d REJECTED: feedback regressed vs last accepted by %.4f", cycle, math.abs(vs_fb.alignment)), level = "warning"})
           else
             accept = true
             local fb_improved = b_fb_deltas.alignment > 0.005
@@ -2668,6 +2712,10 @@ code: |
               Human.notify({message = string.format("Cycle %d CARRIED: neutral result (FB %+.4f) — carrying forward to accumulate improvements", cycle, b_fb_deltas.alignment), level = "info"})
             end
             last_accepted_version_id = final_version_id
+            last_accepted_fb_metrics = b_fb_metrics or last_accepted_fb_metrics
+            if accuracy_available and b_acc_metrics then
+              last_accepted_acc_metrics = b_acc_metrics
+            end
           end
           diag(string.format("Acceptance decided: accept=%s", tostring(accept)))
         end
