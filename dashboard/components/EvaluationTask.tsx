@@ -2507,8 +2507,13 @@ evaluation:
                 </div>
               )}
               {evaluationNotes && (
-                <div className="text-sm text-muted-foreground">
-                  {evaluationNotes}
+                <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                    p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                    strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                  }}>
+                    {evaluationNotes}
+                  </ReactMarkdown>
                 </div>
               )}
               <Timestamp time={props.task.time} variant="relative" />
