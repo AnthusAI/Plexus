@@ -6,16 +6,12 @@ This model represents individual Evaluations in the system, tracking:
 - Processing status and progress
 - Error states and details
 - Relationships to accounts, scorecards, and scores
-
-All mutations (create/update) are performed in background threads for 
-non-blocking operation.
 """
 
 import logging
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from threading import Thread
 from .base import BaseModel
 
 if TYPE_CHECKING:
@@ -236,44 +232,48 @@ class Evaluation(BaseModel):
         )
 
     def update(self, **kwargs) -> None:
-        """Update Evaluation fields in a background thread.
-        
-        This is a non-blocking operation - the mutation is performed
-        in a background thread.
-        
+        """Update Evaluation fields synchronously.
+
+        Terminal lifecycle updates (for example RCA persistence + COMPLETED status)
+        must be durable before the process exits.
+
         Args:
             **kwargs: Fields to update
         """
-        def _update_Evaluation():
-            try:
-                # Always update the updatedAt timestamp
-                kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
-                    '+00:00', 'Z'
-                )
-                
-                mutation = """
-                mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                    updateEvaluation(input: $input) {
-                        %s
-                    }
+        try:
+            # Always update the updatedAt timestamp
+            kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
+                '+00:00', 'Z'
+            )
+
+            mutation = """
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    %s
                 }
-                """ % self.fields()
-                
-                variables = {
-                    'input': {
-                        'id': self.id,
-                        **kwargs
-                    }
+            }
+            """ % self.fields()
+
+            variables = {
+                'input': {
+                    'id': self.id,
+                    **kwargs
                 }
-                
-                self._client.execute(mutation, variables)
-                
-            except Exception as e:
-                logger.error(f"Error updating Evaluation: {e}")
-        
-        # Spawn background thread
-        thread = Thread(target=_update_Evaluation, daemon=True)
-        thread.start()
+            }
+
+            result = self._client.execute(mutation, variables)
+            payload = (result or {}).get("updateEvaluation") or {}
+            for field, value in payload.items():
+                if field in ['createdAt', 'updatedAt', 'startedAt'] and isinstance(value, str):
+                    try:
+                        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    except Exception:
+                        pass
+                setattr(self, field, value)
+
+        except Exception as e:
+            logger.error(f"Error updating Evaluation: {e}")
+            raise
 
     @classmethod
     def get_by_id(cls, id: str, client: '_BaseAPIClient', include_score_results: bool = False) -> 'Evaluation':

@@ -468,9 +468,10 @@ def pull(procedure_id: str, output: Optional[str]):
 @click.option('--dry-run', is_flag=True, help='Perform a dry run without actual execution')
 @click.option('--restart-from-root-node', is_flag=True, help='Delete all non-root graph nodes and restart from scratch')
 @click.option('--openai-api-key', help='OpenAI API key for AI-powered experiments (or set OPENAI_API_KEY env var)')
+@click.option('--set', '-s', 'set_params', multiple=True, help='Set procedure parameter as key=value (e.g., --set scorecard="AW - Confirmation")')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
 def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: Optional[int], timeout: Optional[int],
-        async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], output: str):
+        async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], set_params: tuple, output: str):
     """Run a procedure - either by ID or directly from a YAML file.
 
     You can run a procedure in two ways:
@@ -491,6 +492,9 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         plexus procedure run abc123def456 --max-iterations 50 --timeout 300
         plexus procedure run abc123def456 --async-mode -o json
         plexus procedure run abc123def456 --restart-from-root-node
+
+        # Pass parameters to a procedure
+        plexus procedure run -y optimizer.yaml -s scorecard="My Scorecard" -s score="My Score" -s max_samples=100
     """
     # Validate arguments
     if not procedure_id and not yaml_file:
@@ -541,6 +545,17 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             is_tactus = config.get('class') == 'Tactus'
         except:
             is_tactus = False
+            config = {}
+
+        # Build stage_configs from the YAML stages declaration
+        stage_configs = None
+        yaml_stages = config.get('stages', []) if isinstance(config, dict) else []
+        if yaml_stages:
+            from plexus.cli.shared.task_progress_tracker import StageConfig
+            stage_configs = {
+                stage.title(): StageConfig(order=i + 1, status_message=f"{stage.title()} stage")
+                for i, stage in enumerate(yaml_stages)
+            }
 
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(
@@ -549,7 +564,8 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             score_identifier=None,
             yaml_config=yaml_config,
             featured=False,
-            create_root_node=not is_tactus  # Don't create root node for Tactus procedures
+            create_root_node=not is_tactus,  # Don't create root node for Tactus procedures
+            stage_configs=stage_configs,
         )
 
         if not result.success:
@@ -581,6 +597,30 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     # Add AI options
     if openai_api_key:
         options['openai_api_key'] = openai_api_key
+
+    # Parse --set key=value params into context dict
+    if set_params:
+        param_context = {}
+        for param in set_params:
+            if '=' not in param:
+                console.print(f"[red]Error: --set value must be key=value, got: {param}[/red]")
+                return
+            key, value = param.split('=', 1)
+            # Try to parse numeric/boolean values
+            if value.lower() == 'true':
+                value = True
+            elif value.lower() == 'false':
+                value = False
+            else:
+                try:
+                    value = int(value)
+                except ValueError:
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        pass  # Keep as string
+            param_context[key.strip()] = value
+        options['context'] = param_context
     
     # Get account ID for task tracking
     from plexus.cli.report.utils import resolve_account_id_for_command
@@ -897,8 +937,10 @@ def watch(interval: int):
 @click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
 @click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
+@click.option('--resume-accuracy-eval', type=str, default=None, help='Reuse existing accuracy baseline evaluation ID (skip running baselines)')
+@click.option('--resume-feedback-eval', type=str, default=None, help='Reuse existing feedback baseline evaluation ID (skip running baselines)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_accuracy_eval: str, resume_feedback_eval: str, output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -958,6 +1000,10 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     }
     if max_samples is not None:
         params["max_samples"] = max_samples
+    if resume_accuracy_eval is not None:
+        params["resume_accuracy_eval"] = resume_accuracy_eval
+    if resume_feedback_eval is not None:
+        params["resume_feedback_eval"] = resume_feedback_eval
 
     # Load YAML
     try:
@@ -1020,11 +1066,38 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print(f"[red]Error: {exec_result.get('error')}[/red]")
         return
 
+    # Convert Lua tables to native Python types for serialization
+    import json as json_mod
+
+    def _lua_to_python(obj):
+        """Recursively convert Lua tables to Python dicts/lists."""
+        try:
+            if hasattr(obj, 'keys') and hasattr(obj, 'values') and not isinstance(obj, dict):
+                # Lua table acting as dict
+                return {_lua_to_python(k): _lua_to_python(v) for k, v in obj.items()}
+            elif isinstance(obj, dict):
+                return {k: _lua_to_python(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_lua_to_python(v) for v in obj]
+            elif isinstance(obj, tuple):
+                return [_lua_to_python(v) for v in obj]
+            elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+                return [_lua_to_python(v) for v in obj]
+            else:
+                return obj
+        except (TypeError, ValueError):
+            return str(obj)
+
+    try:
+        exec_result_clean = json_mod.loads(json_mod.dumps(_lua_to_python(exec_result), default=str))
+    except (TypeError, ValueError):
+        exec_result_clean = exec_result
+
     # Parse result
     if output == 'json':
-        console.print(JSON.from_data(exec_result))
+        console.print(JSON.from_data(exec_result_clean))
     elif output == 'yaml':
-        console.print(yaml.dump(exec_result, default_flow_style=False))
+        console.print(yaml.dump(exec_result_clean, default_flow_style=False))
     else:
         # Table format - show summary
         console.print()
@@ -1032,9 +1105,9 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print()
 
         # Extract key info from result
-        iterations = exec_result.get('result', {}).get('iterations', [])
-        improvement = exec_result.get('result', {}).get('improvement', 0)
-        status = exec_result.get('result', {}).get('status', 'unknown')
+        iterations = exec_result_clean.get('result', {}).get('iterations', [])
+        improvement = exec_result_clean.get('result', {}).get('improvement', 0)
+        status = exec_result_clean.get('result', {}).get('status', 'unknown')
 
         table = Table(title="Optimization Results")
         table.add_column("Metric", style="cyan")

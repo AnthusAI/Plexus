@@ -186,9 +186,15 @@ class LuaSandbox:
             raise LuaSandboxError(f"Lua runtime error: {error_msg}")
 
         except Exception as e:
-            # Other Python exceptions
-            logger.error(f"Sandbox execution error: {e}")
-            raise LuaSandboxError(f"Sandbox error: {e}")
+            # Unwrap ExceptionGroup to surface the actual sub-exception(s)
+            error_detail = str(e)
+            if hasattr(e, "exceptions") and e.exceptions:
+                sub_details = []
+                for sub_exc in e.exceptions:
+                    sub_details.append(f"  {type(sub_exc).__name__}: {sub_exc}")
+                error_detail = f"{e}\nSub-exceptions:\n" + "\n".join(sub_details)
+            logger.error(f"Sandbox execution error: {error_detail}")
+            raise LuaSandboxError(f"Sandbox error: {error_detail}")
 
     def eval(self, lua_expression: str) -> Any:
         """
