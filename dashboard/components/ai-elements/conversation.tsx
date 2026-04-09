@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { ArrowDownIcon, DownloadIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
@@ -128,6 +128,14 @@ export const messagesToMarkdown = (
     index: number
   ) => string = defaultFormatMessage
 ): string => messages.map((msg, i) => formatMessage(msg, i)).join("\n\n");
+
+export const AutoScrollToBottom = ({ trigger }: { trigger: number }) => {
+  const { scrollToBottom } = useStickToBottomContext()
+  useEffect(() => {
+    scrollToBottom()
+  }, [trigger])
+  return null
+}
 
 export const ConversationDownload = ({
   messages,
