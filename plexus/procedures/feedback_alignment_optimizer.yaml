@@ -164,12 +164,10 @@ agents:
       - submit_score_version: submit current edits for evaluation
       - done: signal you cannot improve current hypothesis
 
-      OFF-LIMITS — NEVER change these:
-      - model: field (model selection is an architectural decision, not a tuning knob)
-      - provider: field
-      - Score graph structure (adding/removing/renaming nodes)
-      - Temperature, top_p, or other LLM sampling parameters
-      You may ONLY modify prompt text, criteria wording, examples, and classification logic.
+      MODEL CHANGES:
+      If you change the model: field, use the base model name WITHOUT a date suffix
+      (e.g. "gpt-5-mini" not "gpt-5-mini-2025-01-01"). The API resolves the alias
+      to the latest snapshot automatically. Getting the date wrong causes a hard failure.
 
       EDIT SAFETY — ranked:
       SAFEST: Add concrete examples to clarify edge cases
