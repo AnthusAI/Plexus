@@ -656,6 +656,50 @@ def _upload_dataset_parquet(
     return s3_key
 
 
+def _persist_dataset_file_reference(
+    *,
+    client: PlexusDashboardClient,
+    dataset_id: str,
+    s3_key: str,
+) -> None:
+    """Persist DataSet.file and verify the reference is stored."""
+    update_result = client.execute(
+        """
+        mutation UpdateDataSet($input: UpdateDataSetInput!) {
+            updateDataSet(input: $input) {
+                id
+                file
+            }
+        }
+        """,
+        {"input": {"id": dataset_id, "file": s3_key}},
+    )
+    updated_dataset = update_result.get("updateDataSet") or {}
+    if not updated_dataset.get("id"):
+        raise ValueError(f"Failed to update DataSet.file for dataset {dataset_id}.")
+
+    verify_result = client.execute(
+        """
+        query GetDataSetFile($id: ID!) {
+            getDataSet(id: $id) {
+                id
+                file
+                attachedFiles
+            }
+        }
+        """,
+        {"id": dataset_id},
+    )
+    verified_dataset = verify_result.get("getDataSet") or {}
+    verified_file = verified_dataset.get("file")
+    if verified_file != s3_key:
+        raise ValueError(
+            "DataSet file reference verification failed. "
+            f"dataset_id={dataset_id}, expected_file={s3_key}, "
+            f"persisted_file={verified_file}, attached_files={verified_dataset.get('attachedFiles')}."
+        )
+
+
 def build_associated_dataset_from_feedback_ids(
     *,
     client: PlexusDashboardClient,
@@ -817,16 +861,10 @@ def build_associated_dataset_from_feedback_ids(
             dataset_id=dataset_id,
         )
 
-        client.execute(
-            """
-            mutation UpdateDataSet($input: UpdateDataSetInput!) {
-                updateDataSet(input: $input) {
-                    id
-                    file
-                }
-            }
-            """,
-            {"input": {"id": dataset_id, "file": s3_key}},
+        _persist_dataset_file_reference(
+            client=client,
+            dataset_id=dataset_id,
+            s3_key=s3_key,
         )
 
         result_payload: Dict[str, Any] = {
