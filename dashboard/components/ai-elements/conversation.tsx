@@ -130,12 +130,12 @@ export const messagesToMarkdown = (
 ): string => messages.map((msg, i) => formatMessage(msg, i)).join("\n\n");
 
 export const AutoScrollToBottom = ({ trigger }: { trigger: number }) => {
-  const { scrollToBottom } = useStickToBottomContext()
+  const { scrollToBottom } = useStickToBottomContext();
   useEffect(() => {
-    scrollToBottom()
-  }, [trigger])
-  return null
-}
+    scrollToBottom();
+  }, [trigger]);
+  return null;
+};
 
 export const ConversationDownload = ({
   messages,
