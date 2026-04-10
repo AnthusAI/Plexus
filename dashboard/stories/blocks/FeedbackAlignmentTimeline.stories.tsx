@@ -6,6 +6,12 @@ const meta: Meta<typeof BlockRenderer> = {
   component: BlockRenderer,
   parameters: {
     layout: "padded",
+    docs: {
+      description: {
+        component:
+          "Includes an introductory summary paragraph plus an always-visible Bucket Details list with per-bucket AC1/Accuracy gauges and raw agreement bars for the selected series.",
+      },
+    },
   },
 };
 
