@@ -124,10 +124,16 @@
       "author": "ryan",
       "text": "Implemented AC1 dynamic y-axis floor in dashboard/components/blocks/FeedbackAlignmentTimeline.tsx: floor now resolves to 0 when selected series has no negative AC1 points and to -1 when any point is negative (ac1YAxisFloor/ac1YAxisDomain). Also changed ReferenceArea ifOverflow from extendDomain to hidden so background bands no longer force domain expansion back below 0. Validation: npx tsc --noEmit (dashboard) passed.",
       "created_at": "2026-04-10T01:31:16.316183Z"
+    },
+    {
+      "id": "35eb4fac-02de-4098-9af9-51e34d8b9c5f",
+      "author": "ryan",
+      "text": "Committed and pushed branch updates (commit 4965dd10) including dashboard/report changes and project/ Kanbus artifacts. Opened PR into develop: https://github.com/AnthusAI/Plexus/pull/159 with semantic release comments including feat entries and validation results.",
+      "created_at": "2026-04-10T01:36:08.455853Z"
     }
   ],
   "created_at": "2026-04-09T18:42:25.218868Z",
-  "updated_at": "2026-04-10T01:31:16.316183Z",
+  "updated_at": "2026-04-10T01:36:08.455853Z",
   "closed_at": null,
   "custom": {}
 }
