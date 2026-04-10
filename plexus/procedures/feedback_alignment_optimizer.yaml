@@ -754,10 +754,11 @@ code: |
     table.insert(parts, "  DO NOT add examples for patterns already explicitly handled in the current YAML.")
     table.insert(parts, "")
     table.insert(parts, "CATEGORY B — Model swap (medium risk, high upside):")
-    table.insert(parts, "  Swap the model_name and model_provider fields. Prefer cost-effective models:")
-    table.insert(parts, "  * gpt-5.4-mini (TRY THIS — newest, strongest small model): model_provider: ChatOpenAI, model_name: gpt-5.4-mini, max_tokens: 2000")
+    table.insert(parts, "  First check score_config.yaml above for the current model_name. Then swap to a DIFFERENT model.")
+    table.insert(parts, "  Available models (only propose one that is NOT already in use):")
+    table.insert(parts, "  * gpt-5.4-mini (newest, strongest small model): model_provider: ChatOpenAI, model_name: gpt-5.4-mini, max_tokens: 2000")
     table.insert(parts, "  * gpt-5-mini (good value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000")
-    table.insert(parts, "  * gpt-4o-mini (current default): model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18")
+    table.insert(parts, "  * gpt-4o-mini: model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18")
     table.insert(parts, "  * gpt-oss-120b via Bedrock: model_provider: BedrockChat, model_name: openai.gpt-oss-120b-1:0")
     table.insert(parts, "    (For Bedrock models: remove the temperature field — it is not supported)")
     table.insert(parts, "  AVOID unless nothing else works (expensive):")
@@ -771,8 +772,10 @@ code: |
     table.insert(parts, "")
     table.insert(parts, "DIVERSITY REQUIREMENT — for each cycle you MUST propose:")
     table.insert(parts, "  * At least 1 hypothesis from Category A (safe prompt change)")
-    table.insert(parts, "  * At least 1 hypothesis from Category B or C (model swap or architecture change)")
-    table.insert(parts, "This lets us compare conservative vs. structural changes and learn what actually works.")
+    table.insert(parts, "  * At least 1 hypothesis from Category B or C — BUT only if not already tried.")
+    table.insert(parts, "    If a model swap has already been tried (see list above), propose Category C instead.")
+    table.insert(parts, "    If both B and C have been tried, propose multiple Category A hypotheses targeting NEW error patterns.")
+    table.insert(parts, "The goal is to EXPLORE NEW TERRITORY each cycle, not revisit what was already tried.")
     table.insert(parts, "")
     table.insert(parts, "IMPORTANT: The classification guidelines above are for reference only — they help you understand policy but are not editable.")
     table.insert(parts, "You will edit score_config.yaml (shown between the === markers above).")
@@ -821,10 +824,11 @@ code: |
       end
       if #carried_approaches > 0 then
         table.insert(parts, "")
-        table.insert(parts, "APPROACHES ALREADY IN THE CURRENT CODE (neutral or positive) — build on these:")
+        table.insert(parts, "APPROACHES ALREADY TRIED (all cycles) — DO NOT REPEAT THESE:")
         for _, line in ipairs(carried_approaches) do table.insert(parts, line) end
-        table.insert(parts, "These changes are already applied. Propose hypotheses that EXTEND or COMBINE them,")
-        table.insert(parts, "or target DIFFERENT misclassification patterns not yet addressed.")
+        table.insert(parts, "These were tested in prior cycles. Some are now in the current code, some were not selected.")
+        table.insert(parts, "DO NOT propose the same approach, a variation of it, or an undo of it.")
+        table.insert(parts, "Each cycle must explore NEW territory. Look at the RCA for error patterns not yet addressed.")
       end
     end
 
