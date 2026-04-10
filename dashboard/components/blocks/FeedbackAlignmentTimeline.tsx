@@ -5,7 +5,8 @@ import { parseOutputString } from "@/lib/utils";
 import ReportBlock, { ReportBlockProps, type BlockComponent } from "./ReportBlock";
 import { ChartContainer } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CartesianGrid, Legend, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
+import { ac1GaugeSegments } from "@/components/ui/scorecard-evaluation";
+import { CartesianGrid, Line, LineChart, ReferenceArea, Tooltip, XAxis, YAxis } from "recharts";
 
 interface AlignmentPoint {
   bucket_index: number;
@@ -52,15 +53,14 @@ interface FeedbackAlignmentTimelineData {
 }
 
 const OVERALL_SERIES_KEY = "__overall__";
+const AC1_COLOR = "#2563eb";
+const AC1_MIN = -1;
+const AC1_MAX = 1;
 
 const chartConfig = {
   ac1: {
     label: "AC1",
-    color: "hsl(var(--chart-1))",
-  },
-  accuracy: {
-    label: "Accuracy (%)",
-    color: "hsl(var(--chart-2))",
+    color: AC1_COLOR,
   },
 };
 
@@ -90,7 +90,6 @@ const AlignmentTooltip: React.FC<any> = ({ active, payload }) => {
       </div>
       <div>Items: {point.item_count}</div>
       <div>AC1: {formatValue(point.ac1, 3)}</div>
-      <div>Accuracy: {point.accuracy === null || point.accuracy === undefined ? "N/A" : `${formatValue(point.accuracy, 2)}%`}</div>
       <div>Agreements: {point.agreements}</div>
       <div>Mismatches: {point.mismatches}</div>
     </div>
@@ -99,7 +98,9 @@ const AlignmentTooltip: React.FC<any> = ({ active, payload }) => {
 
 const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<FeedbackAlignmentTimelineData | null>(null);
+  const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
   const [selectedSeries, setSelectedSeries] = React.useState<string>(OVERALL_SERIES_KEY);
+  const [isSeriesLoading, setIsSeriesLoading] = React.useState(false);
 
   let parsedOutput: FeedbackAlignmentTimelineData = {};
   try {
@@ -117,6 +118,9 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
       return;
     }
 
+    let cancelled = false;
+    setAttachmentLoadError(null);
+
     (async () => {
       try {
         const { downloadData } = await import("aws-amplify/storage");
@@ -125,14 +129,26 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
           options: { bucket: "reportBlockDetails" as any },
         }).result;
         const text = await result.body.text();
-        setLoadedOutput(parseOutputString(text) as FeedbackAlignmentTimelineData);
+        if (!cancelled) {
+          setLoadedOutput(parseOutputString(text) as FeedbackAlignmentTimelineData);
+        }
       } catch (error) {
         console.warn("FeedbackAlignmentTimeline: failed to load compacted output attachment", error);
+        if (!cancelled) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to load compacted output attachment.";
+          setAttachmentLoadError(errorMessage);
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [loadedOutput, parsedOutput.output_attachment, parsedOutput.output_compacted]);
 
   const data = loadedOutput ?? parsedOutput;
+  const isCompactedOutput = Boolean(parsedOutput.output_compacted);
+  const isLoadingCompactedOutput = isCompactedOutput && !loadedOutput && !attachmentLoadError;
   const title =
     props.name && !props.name.startsWith("block_")
       ? props.name
@@ -157,6 +173,31 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
     }
   }, [isSingleScoreMode, scores, selectedSeries]);
 
+  React.useEffect(() => {
+    if (!isSeriesLoading) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsSeriesLoading(false);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isSeriesLoading, selectedSeries]);
+
+  const handleSeriesChange = React.useCallback(
+    (nextSeries: string) => {
+      if (nextSeries === selectedSeries) {
+        return;
+      }
+      setIsSeriesLoading(true);
+      setSelectedSeries(nextSeries);
+    },
+    [selectedSeries]
+  );
+
   const activeSeries = React.useMemo(() => {
     if (isSingleScoreMode) {
       return scores[0] || data.overall || null;
@@ -169,8 +210,119 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
 
   const chartData = activeSeries?.points || [];
   const seriesLabel = activeSeries?.score_name || "Overall";
+  const selectedSeriesLabel = selectedSeries === OVERALL_SERIES_KEY
+    ? "Overall"
+    : scores.find((score) => score.score_id === selectedSeries)?.score_name || "Selected series";
+
+  const itemCountRange = React.useMemo(() => {
+    const counts = chartData
+      .filter((point) => point.ac1 !== null && point.ac1 !== undefined && point.item_count > 0)
+      .map((point) => point.item_count);
+    if (counts.length === 0) {
+      return { min: 0, max: 0 };
+    }
+    return { min: Math.min(...counts), max: Math.max(...counts) };
+  }, [chartData]);
+
+  const getDotRadius = React.useCallback(
+    (itemCount: number): number => {
+      if (!Number.isFinite(itemCount) || itemCount <= 0) {
+        return 0;
+      }
+      if (itemCountRange.max <= itemCountRange.min) {
+        return 5;
+      }
+      const normalized = (itemCount - itemCountRange.min) / (itemCountRange.max - itemCountRange.min);
+      return 3 + (normalized * 6);
+    },
+    [itemCountRange.max, itemCountRange.min]
+  );
+
+  const renderAc1Dot = React.useCallback(
+    (dotProps: any) => {
+      const hiddenDot = <circle cx={0} cy={0} r={0} fill="transparent" stroke="none" />;
+      const point = dotProps?.payload as AlignmentPoint | undefined;
+      if (!point || point.ac1 === null || point.ac1 === undefined) {
+        return hiddenDot;
+      }
+      const cx = Number(dotProps?.cx);
+      const cy = Number(dotProps?.cy);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+        return hiddenDot;
+      }
+      const radius = getDotRadius(point.item_count);
+      if (radius <= 0) {
+        return hiddenDot;
+      }
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill={AC1_COLOR}
+          fillOpacity={0.9}
+          stroke="hsl(var(--background))"
+          strokeWidth={1.25}
+        />
+      );
+    },
+    [getDotRadius]
+  );
+
+  const renderActiveAc1Dot = React.useCallback(
+    (dotProps: any) => {
+      const hiddenDot = <circle cx={0} cy={0} r={0} fill="transparent" stroke="none" />;
+      const point = dotProps?.payload as AlignmentPoint | undefined;
+      if (!point || point.ac1 === null || point.ac1 === undefined) {
+        return hiddenDot;
+      }
+      const cx = Number(dotProps?.cx);
+      const cy = Number(dotProps?.cy);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+        return hiddenDot;
+      }
+      const radius = getDotRadius(point.item_count) + 1.5;
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill={AC1_COLOR}
+          fillOpacity={1}
+          stroke="hsl(var(--background))"
+          strokeWidth={2}
+        />
+      );
+    },
+    [getDotRadius]
+  );
 
   const hasChartData = chartData.length > 0;
+  const renderableAc1Points = React.useMemo(
+    () => chartData.filter((point) => point.ac1 !== null && point.ac1 !== undefined),
+    [chartData]
+  );
+  const ac1YAxisFloor = React.useMemo(() => {
+    return renderableAc1Points.some((point) => (point.ac1 ?? 0) < 0) ? AC1_MIN : 0;
+  }, [renderableAc1Points]);
+  const ac1YAxisDomain = React.useMemo<[number, number]>(
+    () => [ac1YAxisFloor, AC1_MAX],
+    [ac1YAxisFloor]
+  );
+  const ac1BackgroundBands = React.useMemo(() => {
+    const toAc1Value = (percent: number) => AC1_MIN + ((percent / 100) * (AC1_MAX - AC1_MIN));
+    return ac1GaugeSegments.map((segment) => {
+      const bandStart = toAc1Value(segment.start);
+      const bandEnd = toAc1Value(segment.end);
+      return {
+        y1: Math.min(bandStart, bandEnd),
+        y2: Math.max(bandStart, bandEnd),
+        color: segment.color,
+      };
+    });
+  }, []);
+  const hasRenderableAc1Points = renderableAc1Points.length > 0;
+  const canDrawConnectingLine = renderableAc1Points.length > 1;
   const hasSeriesSelector = !isSingleScoreMode && scores.length > 0;
 
   return (
@@ -192,7 +344,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
             </div>
             <div>
               <strong className="text-foreground">Buckets:</strong>{" "}
-              {data.bucket_policy?.bucket_count ?? chartData.length} x{" "}
+              {isLoadingCompactedOutput ? "loading..." : data.bucket_policy?.bucket_count ?? chartData.length} x{" "}
               {data.bucket_policy?.bucket_type || "trailing_7d"} (complete periods only)
             </div>
           </div>
@@ -200,7 +352,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
           {hasSeriesSelector && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Series</span>
-              <Select value={selectedSeries} onValueChange={setSelectedSeries}>
+              <Select value={selectedSeries} onValueChange={handleSeriesChange}>
                 <SelectTrigger className="w-64">
                   <SelectValue />
                 </SelectTrigger>
@@ -219,43 +371,95 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
 
         {data.message && <p className="text-xs text-muted-foreground">{data.message}</p>}
 
-        {!hasChartData ? (
+        {isLoadingCompactedOutput ? (
+          <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+            Loading bucketed alignment data...
+          </div>
+        ) : isSeriesLoading ? (
+          <div className="rounded-md bg-muted/20 p-4 text-sm text-muted-foreground">
+            Loading {selectedSeriesLabel}...
+          </div>
+        ) : attachmentLoadError ? (
+          <div className="rounded-md border bg-amber-50 p-4 text-sm text-amber-800">
+            Failed to load attached report data: {attachmentLoadError}
+          </div>
+        ) : !hasChartData ? (
           <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
             No bucketed alignment data available for the selected series.
           </div>
+        ) : !hasRenderableAc1Points ? (
+          <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+            No AC1 data is available for this series in the selected buckets.
+          </div>
         ) : (
-          <div className="rounded-md border bg-card p-3">
+          <div className="rounded-md bg-background p-3">
             <div className="text-sm font-medium mb-2">{seriesLabel}</div>
             <ChartContainer config={chartConfig} className="h-[320px] w-full">
-              <LineChart data={chartData} margin={{ top: 12, right: 16, left: 6, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis yAxisId="left" domain={[-1, 1]} tickFormatter={(value) => `${value}`} />
-                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+              <LineChart data={chartData} margin={{ top: 12, right: 20, left: 0, bottom: 10 }}>
+                {ac1BackgroundBands.map((band, index) => (
+                  <ReferenceArea
+                    key={`ac1-band-${index}`}
+                    yAxisId="left"
+                    y1={band.y1}
+                    y2={band.y2}
+                    fill={band.color}
+                    fillOpacity={0.22}
+                    strokeOpacity={0}
+                    ifOverflow="hidden"
+                  />
+                ))}
+                <CartesianGrid stroke="hsl(var(--foreground) / 0.18)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="label"
+                  padding={{ left: 0, right: 28 }}
+                  interval="preserveStartEnd"
+                  axisLine={{ stroke: "hsl(var(--foreground) / 0.35)" }}
+                  tickLine={{ stroke: "hsl(var(--foreground) / 0.35)" }}
+                  tick={{ fill: "hsl(var(--foreground) / 0.9)", fontSize: 12 }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  domain={ac1YAxisDomain}
+                  tickFormatter={(value) => `${value}`}
+                  axisLine={{ stroke: "hsl(var(--foreground) / 0.35)" }}
+                  tickLine={{ stroke: "hsl(var(--foreground) / 0.35)" }}
+                  tick={{ fill: "hsl(var(--foreground) / 0.9)", fontSize: 12 }}
+                />
                 <Tooltip content={<AlignmentTooltip />} />
-                <Legend />
                 <Line
                   yAxisId="left"
-                  type="monotone"
+                  type="linear"
                   dataKey="ac1"
                   name="AC1"
-                  stroke="var(--color-ac1)"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  connectNulls={false}
+                  stroke={AC1_COLOR}
+                  strokeWidth={3}
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                  connectNulls
                 />
                 <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="accuracy"
-                  name="Accuracy (%)"
-                  stroke="var(--color-accuracy)"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  connectNulls={false}
+                  yAxisId="left"
+                  type="linear"
+                  dataKey="ac1"
+                  name="AC1 points"
+                  stroke="transparent"
+                  strokeWidth={0}
+                  dot={renderAc1Dot}
+                  activeDot={renderActiveAc1Dot}
+                  isAnimationActive={false}
+                  connectNulls
                 />
               </LineChart>
             </ChartContainer>
+            {!canDrawConnectingLine && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                This series has only one bucket with AC1 data, so there is no line segment to draw yet.
+              </p>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Dot size indicates the number of feedback items in each bucket.
+            </p>
           </div>
         )}
       </div>

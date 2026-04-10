@@ -18,12 +18,7 @@ const jersey20 = Jersey_20({
 export const metadata: Metadata = {
   title: "AI Agent Incubator",
   description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://plexus.anth.us"),
   openGraph: {
     title: "AI Agent Incubator",
     description: "Plexus gives your team a reliable way to evaluate, deploy, and improve AI agents through continuous learning and human feedback loops.",
