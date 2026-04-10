@@ -1885,15 +1885,19 @@ code: |
             if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
               local pred  = smoke.predictions[1]
               local score = pred.scores and pred.scores[1]
-              if score and score.value ~= "ERROR" and score.value ~= nil then
+              if score and score.value ~= "ERROR" and score.value ~= nil and score.value ~= "NA" then
                 smoke_passed = true
                 Human.notify({message = string.format(
                   "    Smoke test PASSED (value=%s)", tostring(score.value)), level = "info"})
               else
                 local ed  = score and score.error_details
-                smoke_detail = (score and score.explanation) or (ed and ed.error_message) or "Prediction returned ERROR"
-                if ed and ed.traceback then
-                  smoke_detail = smoke_detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
+                if score and score.value == "NA" then
+                  smoke_detail = "Smoke test returned NA — LLM was not invoked (test item missing required metadata, or model is invalid). Version blocked."
+                else
+                  smoke_detail = (score and score.explanation) or (ed and ed.error_message) or "Prediction returned ERROR"
+                  if ed and ed.traceback then
+                    smoke_detail = smoke_detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
+                  end
                 end
               end
             elseif smoke and smoke.error then
@@ -2376,15 +2380,19 @@ code: |
             if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
               local pred  = smoke.predictions[1]
               local score = pred.scores and pred.scores[1]
-              if score and score.value ~= "ERROR" and score.value ~= nil then
+              if score and score.value ~= "ERROR" and score.value ~= nil and score.value ~= "NA" then
                 smoke_passed = true
                 Human.notify({message = string.format(
                   "    Smoke test PASSED (value=%s)", tostring(score.value)), level = "info"})
               else
                 local ed  = score and score.error_details
-                smoke_detail = (score and score.explanation) or (ed and ed.error_message) or "Prediction returned ERROR"
-                if ed and ed.traceback then
-                  smoke_detail = smoke_detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
+                if score and score.value == "NA" then
+                  smoke_detail = "Smoke test returned NA — LLM was not invoked (test item missing required metadata, or model is invalid). Version blocked."
+                else
+                  smoke_detail = (score and score.explanation) or (ed and ed.error_message) or "Prediction returned ERROR"
+                  if ed and ed.traceback then
+                    smoke_detail = smoke_detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
+                  end
                 end
               end
             elseif smoke and smoke.error then
