@@ -1,0 +1,103 @@
+{
+  "id": "plx-8b186553-36d4-45c8-8681-ac49cc3746b9",
+  "title": "Add FeedbackAlignmentTimeline report block for alignment-over-time trends",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "084d10f6-d46a-4151-9c19-ec9a20274ab1",
+      "author": "ryan",
+      "text": "Starting implementation: new FeedbackAlignmentTimeline backend ReportBlock + frontend renderer. Scope includes single-score and all-scores-on-scorecard modes, complete previous-period bucketing (trailing + calendar), chart visualization, registry wiring, and tests/docs updates.",
+      "created_at": "2026-04-06T21:02:46.166518Z"
+    },
+    {
+      "id": "6f35ca20-c21c-4e96-ab86-6689065859d0",
+      "author": "ryan",
+      "text": "Implemented FeedbackAlignmentTimeline report block end-to-end. Backend: new class at plexus/reports/blocks/feedback_alignment_timeline.py with complete-period time buckets (trailing_1d/7d/14d/30d plus calendar_day/week/biweek/month), scorecard-only (all scores) and scorecard+score modes, per-bucket AC1 + accuracy + counts, and timezone/week_start controls. Added backend tests in feedback_alignment_timeline_test.py including bucket completeness behavior, single/all score modes, invalid bucket handling, and UUID score membership validation via section->scorecard resolution. Frontend: new renderer dashboard/components/blocks/FeedbackAlignmentTimeline.tsx with horizontal time-series chart (Recharts), series selector, compacted-output attachment loading, tooltip details, and null-gap handling. Wired block registration/exports and display labels; added docs page and storybook story. Validation: pytest plexus/reports/blocks/feedback_alignment_timeline_test.py -q => 6 passed; npx eslint on touched dashboard files => 0 errors (1 pre-existing warning in ReportTask useEffect deps).",
+      "created_at": "2026-04-06T21:21:12.555245Z"
+    },
+    {
+      "id": "796efa46-7ca9-43fb-b679-f2f2cbb20d20",
+      "author": "ryan",
+      "text": "Debugging local dashboard build failure: next/font ERR_REQUIRE_ESM from postcss requiring nanoid/non-secure. Investigating dependency graph and applying minimal lockfile/package fix to restore npm run dev on port 3001.",
+      "created_at": "2026-04-06T21:26:32.438507Z"
+    },
+    {
+      "id": "1909582e-ef29-499d-a4bb-4104a57e8229",
+      "author": "ryan",
+      "text": "Resolved local dev startup failure details: dashboard node_modules was out of sync with lockfile and had nanoid 5.1.7 installed, which breaks postcss require of nanoid/non-secure and causes next/font ERR_REQUIRE_ESM. Ran clean reinstall with npm ci; now nanoid is 3.3.11 and error is gone. Verified Next serves successfully with npx next dev --webpack -p 3011 and GET / returns 200. Also found port 3001 already occupied by PID 78246 (next-server v15.5.14).",
+      "created_at": "2026-04-06T21:30:12.177079Z"
+    },
+    {
+      "id": "a73769ec-42da-490f-9be7-7049b8c6a7aa",
+      "author": "ryan",
+      "text": "Investigating report from user that dev server starts but is not responding on port 3001. Checking listening process, child process health, and dev script behavior.",
+      "created_at": "2026-04-06T21:43:45.883362Z"
+    },
+    {
+      "id": "2c6877f4-a9e5-46e9-a65d-0efec59276b2",
+      "author": "ryan",
+      "text": "Root cause confirmed for non-responsive :3001 in dashboard dev flow: npm run dev -- -p 3001 passes -p to concurrently (not Next), and dev:web was launching plain next dev which exits under Turbopack due existing webpack config. Updated dashboard/package.json dev:web script to run next dev --webpack. Verified with PORT=3001 npm run dev and curl http://127.0.0.1:3001/ => 200.",
+      "created_at": "2026-04-06T21:45:44.897521Z"
+    },
+    {
+      "id": "bb2b208b-15d8-4b4b-a7e5-c1b429adb958",
+      "author": "ryan",
+      "text": "User still cannot reach localhost:3001 in Safari. Re-checking active listeners/processes and reproducing startup in-shell to isolate runtime vs browser issue.",
+      "created_at": "2026-04-06T21:47:54.106570Z"
+    },
+    {
+      "id": "aae52d0c-e4af-47ea-b01d-1fc6850cb364",
+      "author": "ryan",
+      "text": "Verified clean startup path in Plexus-2/dashboard: after killing stale concurrently processes, PORT=3001 npm run dev starts both WEB and DISPATCH; WEB listens on 3001 and curl to http://127.0.0.1:3001/ returns 200. Prior non-response came from stale run where only dispatcher child remained alive while web child was down.",
+      "created_at": "2026-04-06T21:49:06.093543Z"
+    },
+    {
+      "id": "0b73a0fa-643b-4595-96e6-af38dce2dc87",
+      "author": "ryan",
+      "text": "Corrective action: reverted commit 9c5bcbcc on develop via 0e22775a so develop content is restored. Preserved feature work on separate branch feature/feedback-alignment-timeline-review at 9c5bcbcc for explicit human review before any integration.",
+      "created_at": "2026-04-06T21:59:04.020751Z"
+    },
+    {
+      "id": "08cc986d-3961-4188-bb2e-82667bff8464",
+      "author": "ryan",
+      "text": "User requested cleanup of local commit noise. Resetting develop to origin/develop and resuming work from dedicated feature branch.",
+      "created_at": "2026-04-06T22:00:29.599863Z"
+    },
+    {
+      "id": "eeb96a41-aed5-4443-bb78-91752cede539",
+      "author": "ryan",
+      "text": "User approved splitting branch commit into separate feature-only and dev-startup-tweak commits. Rewriting feature branch history to produce clean reviewable commits and excluding unintended tsconfig noise.",
+      "created_at": "2026-04-06T22:39:11.479324Z"
+    },
+    {
+      "id": "32cf127b-aa52-49fc-ab59-787558f2d31b",
+      "author": "ryan",
+      "text": "Rewrote feature branch into two clean commits: 9b3fecbf (feature-only: FeedbackAlignmentTimeline backend/frontend/docs/tests) and ab512706 (dev startup tweak: dashboard package.json dev:web uses next dev --webpack). Dropped unintended dashboard/tsconfig.json change from branch.",
+      "created_at": "2026-04-06T22:39:52.407555Z"
+    },
+    {
+      "id": "deb4aa55-2b76-4453-ac10-d375409ad0ec",
+      "author": "ryan",
+      "text": "Ran demo report for dashboard verification using config e555be4d-8013-419f-bb63-87b348712944 with parameters {days:7, scorecard:1438}. Result: report_id 14567509-4537-4fbb-9536-dc980280558d, task_id e94a457f-139c-411a-a70b-a833c7262602, URL https://plexus.anth.us/lab/reports/14567509-4537-4fbb-9536-dc980280558d.",
+      "created_at": "2026-04-09T17:50:10.724328Z"
+    },
+    {
+      "id": "603cd32a-456d-405f-8c35-372acac0401b",
+      "author": "ryan",
+      "text": "Created temporary report configuration 28266352-80c1-4384-963b-439f27db65e4 containing a FeedbackAlignmentTimeline block and generated report via local service path (uses local block registry): report_id 195d8e61-c2b1-4268-b21f-a56fc50307c2, task_id 7d7b7ba2-f019-4660-a491-20e3ae5a6e7d, no errors. Report includes block type FeedbackAlignmentTimeline with compacted output attachment and log attachment.",
+      "created_at": "2026-04-09T18:28:11.387495Z"
+    }
+  ],
+  "created_at": "2026-04-06T21:02:17.636188Z",
+  "updated_at": "2026-04-09T18:28:11.387495Z",
+  "closed_at": "2026-04-06T21:55:26.075067Z",
+  "custom": {}
+}
