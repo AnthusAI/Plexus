@@ -41,3 +41,8 @@ check_report.py
 project/.overlay/
 project/.cache/
 .venv/*
+
+# Optimizer run logs and scratch files
+optimizer_*.log
+optimizer_*.txt
+prescriber_policy_email.md

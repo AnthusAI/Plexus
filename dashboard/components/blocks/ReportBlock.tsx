@@ -60,6 +60,8 @@ export interface ReportBlockProps {
     start: string;
     end: string;
   }
+  /** When true, hides any write/mutation actions (e.g. in share/public views) */
+  isReadOnly?: boolean
   /** Associated dataset information */
   dataSet?: {
     id: string;
