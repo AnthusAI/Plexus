@@ -75,7 +75,8 @@ export default function FeedbackAlignmentTimelinePage() {
         </div>
         <p className="text-lg text-muted-foreground">
           Tracks feedback alignment change over time using complete historical buckets.
-          Plots AC1 and Accuracy as horizontal time-series, with support for overall and per-score trends.
+          Plots AC1 as a horizontal time-series, supports overall/per-score trends, and includes an expandable
+          per-bucket details section with AC1/Accuracy gauges and raw agreement bars.
         </p>
       </div>
 
@@ -104,6 +105,17 @@ week_start: monday`}</code></pre>
           <p>`trailing_1d`, `trailing_7d`, `trailing_14d`, `trailing_30d`</p>
           <p>`calendar_day`, `calendar_week`, `calendar_biweek`, `calendar_month`</p>
           <p>All policies include complete previous periods only.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bucket Details Panel</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-1">
+          <p>The chart includes an always-visible <strong>Bucket Details</strong> list under the visualization.</p>
+          <p>Each bucket row shows AC1 and Accuracy gauges, raw agreement, and item counts.</p>
+          <p>Rows with no data are explicitly marked so empty periods are easy to spot.</p>
         </CardContent>
       </Card>
 

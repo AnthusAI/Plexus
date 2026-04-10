@@ -6,6 +6,9 @@ import ReportBlock, { ReportBlockProps, type BlockComponent } from "./ReportBloc
 import { ChartContainer } from "@/components/ui/chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ac1GaugeSegments } from "@/components/ui/scorecard-evaluation";
+import { GaugeThresholdComputer } from "@/utils/gauge-thresholds";
+import { Gauge } from "@/components/gauge";
+import { RawAgreementBar } from "@/components/RawAgreementBar";
 import { CartesianGrid, Line, LineChart, ReferenceArea, Tooltip, XAxis, YAxis } from "recharts";
 
 interface AlignmentPoint {
@@ -67,6 +70,15 @@ const chartConfig = {
 const formatValue = (value: number | null | undefined, decimals = 2): string => {
   if (value === null || value === undefined) return "N/A";
   return value.toFixed(decimals);
+};
+
+const formatBucketRange = (start: string, end: string): string => {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return `${start} - ${end}`;
+  }
+  return `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
 };
 
 const AlignmentTooltip: React.FC<any> = ({ active, payload }) => {
@@ -324,6 +336,10 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
   const hasRenderableAc1Points = renderableAc1Points.length > 0;
   const canDrawConnectingLine = renderableAc1Points.length > 1;
   const hasSeriesSelector = !isSingleScoreMode && scores.length > 0;
+  const accuracyGaugeSegments = React.useMemo(
+    () => GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds({})),
+    []
+  );
 
   return (
     <ReportBlock
@@ -368,6 +384,11 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
             </div>
           )}
         </div>
+
+        <p className="text-sm text-muted-foreground">
+          This report shows how feedback alignment changes over complete historical buckets for the selected
+          series, using Gwet&apos;s AC1 as the primary trend metric.
+        </p>
 
         {data.message && <p className="text-xs text-muted-foreground">{data.message}</p>}
 
@@ -460,6 +481,70 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
             <p className="mt-2 text-xs text-muted-foreground">
               Dot size indicates the number of feedback items in each bucket.
             </p>
+            <div className="mt-4 w-full space-y-3">
+              <h4 className="text-sm font-medium">Bucket Details</h4>
+              {chartData.map((point) => {
+                const hasBucketData =
+                  point.item_count > 0 && point.ac1 !== null && point.accuracy !== null;
+
+                return (
+                  <div
+                    key={`${seriesLabel}-${point.bucket_index}-${point.label}`}
+                    className="rounded-md bg-card p-3"
+                  >
+                    <div className="mb-3">
+                      <div className="text-sm font-medium">{point.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatBucketRange(point.start, point.end)}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Items: {point.item_count}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <div className="flex justify-center">
+                        <div style={{ width: "190px" }}>
+                          <Gauge
+                            value={point.ac1 ?? undefined}
+                            title="Alignment"
+                            valueUnit=""
+                            min={AC1_MIN}
+                            max={AC1_MAX}
+                            decimalPlaces={2}
+                            segments={ac1GaugeSegments}
+                            showTicks
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-center">
+                        <div style={{ width: "190px" }}>
+                          <Gauge
+                            value={point.accuracy ?? undefined}
+                            title="Accuracy"
+                            min={0}
+                            max={100}
+                            segments={accuracyGaugeSegments}
+                            showTicks
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">Raw Agreement</div>
+                      <RawAgreementBar agreements={point.agreements} totalItems={point.item_count} />
+                    </div>
+
+                    {!hasBucketData && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        No data for this bucket.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

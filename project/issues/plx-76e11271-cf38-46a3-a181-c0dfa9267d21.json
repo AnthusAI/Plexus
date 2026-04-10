@@ -130,10 +130,46 @@
       "author": "ryan",
       "text": "Committed and pushed branch updates (commit 4965dd10) including dashboard/report changes and project/ Kanbus artifacts. Opened PR into develop: https://github.com/AnthusAI/Plexus/pull/159 with semantic release comments including feat entries and validation results.",
       "created_at": "2026-04-10T01:36:08.455853Z"
+    },
+    {
+      "id": "6abf4211-777c-4dea-b31b-786a5ec8f80d",
+      "author": "ryan",
+      "text": "Implementing approved UI enhancements for FeedbackAlignmentTimeline: add intro paragraph, add collapsed Bucket Details accordion with per-bucket AC1+Accuracy gauges and RawAgreementBar for selected series, include explicit no-data state per bucket, and update story/doc examples accordingly. Will validate with dashboard typecheck.",
+      "created_at": "2026-04-10T18:01:42.165004Z"
+    },
+    {
+      "id": "d446d32c-089c-4d1b-89bf-b97440b5a62b",
+      "author": "ryan",
+      "text": "Implemented timeline intro + expandable per-bucket details UI. Updated dashboard/components/blocks/FeedbackAlignmentTimeline.tsx to add intro paragraph, Bucket Details accordion (collapsed by default), selected-series bucket rows with AC1 gauge, Accuracy gauge, RawAgreementBar, and explicit no-data bucket messaging. Updated story docs text in dashboard/stories/blocks/FeedbackAlignmentTimeline.stories.tsx and docs page copy/panel in dashboard/app/documentation/report-blocks/feedback-alignment-timeline/page.tsx. Validation: cd dashboard && npx tsc --noEmit passed.",
+      "created_at": "2026-04-10T18:03:05.661550Z"
+    },
+    {
+      "id": "bd6cc455-59d4-4f91-9fa9-353699898f4e",
+      "author": "ryan",
+      "text": "Applying UX adjustment per user review: remove collapsible behavior for bucket gauge details and render always-visible ordered list; remove border/outline from individual bucket cards in FeedbackAlignmentTimeline UI; update docs/story wording to match; validate with dashboard typecheck.",
+      "created_at": "2026-04-10T19:05:07.894663Z"
+    },
+    {
+      "id": "ea9e66fe-7783-4d24-bc5e-be909e699e3c",
+      "author": "ryan",
+      "text": "Adjusted per user feedback: Bucket Details is no longer collapsible and now renders as always-visible ordered rows. Removed border/outline styling from each bucket row card (now rounded bg-card only). Updated story/docs wording from 'collapsed accordion' to always-visible list. Validation: cd dashboard && npx tsc --noEmit passed.",
+      "created_at": "2026-04-10T19:06:02.101408Z"
+    },
+    {
+      "id": "5627ecef-204f-42b9-8d9e-24ec67d8975e",
+      "author": "ryan",
+      "text": "Applying label tweak: change bucket gauge title from 'AC1' to 'Alignment' in FeedbackAlignmentTimeline details list and re-run dashboard typecheck.",
+      "created_at": "2026-04-10T19:08:06.034464Z"
+    },
+    {
+      "id": "14d7f452-9d91-404a-aa89-5b55c6bbf5bf",
+      "author": "ryan",
+      "text": "Done: changed per-bucket AC1 gauge title to 'Alignment' in dashboard/components/blocks/FeedbackAlignmentTimeline.tsx. Validation: cd dashboard && npx tsc --noEmit passed.",
+      "created_at": "2026-04-10T19:08:26.588786Z"
     }
   ],
   "created_at": "2026-04-09T18:42:25.218868Z",
-  "updated_at": "2026-04-10T01:36:08.455853Z",
+  "updated_at": "2026-04-10T19:08:26.588786Z",
   "closed_at": null,
   "custom": {}
 }
