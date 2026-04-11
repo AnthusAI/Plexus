@@ -3340,6 +3340,10 @@ class FeedbackEvaluation(Evaluation):
                 account_id=self.account_id
             )
 
+            # Advance to Analyzing stage for root-cause analysis
+            if tracker:
+                tracker.advance_stage()
+
             # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
             try:
                 root_cause_result = await self._run_root_cause_analysis(
@@ -4087,9 +4091,18 @@ class FeedbackEvaluation(Evaluation):
 
                     return timestamped, canonical_row
 
-            _update_status(f"Classifying {len(candidate_items)} misclassified items (parallel)...")
+            _rca_completed = [0]  # mutable counter for closure
+            _rca_total = len(candidate_items)
+
+            async def _process_candidate_with_progress(fi):
+                result = await _process_single_candidate(fi)
+                _rca_completed[0] += 1
+                _update_status(f"Classifying misclassified items ({_rca_completed[0]}/{_rca_total})...")
+                return result
+
+            _update_status(f"Classifying {_rca_total} misclassified items...")
             rca_results = await asyncio.gather(*[
-                _process_single_candidate(fi) for fi in candidate_items
+                _process_candidate_with_progress(fi) for fi in candidate_items
             ], return_exceptions=True)
             rca_errors = 0
             for result in rca_results:
@@ -4458,9 +4471,17 @@ class FeedbackEvaluation(Evaluation):
                     "score_fix_candidate_count": len(score_fix_exemplars),
                 }
 
-            _update_status(f"Analyzing {num_topics} topic(s) in parallel...")
+            _topics_completed = [0]
+
+            async def _process_topic_with_progress(topic_idx, tr):
+                result = await _process_topic(topic_idx, tr)
+                _topics_completed[0] += 1
+                _update_status(f"Analyzing topics ({_topics_completed[0]}/{num_topics})...")
+                return result
+
+            _update_status(f"Analyzing {num_topics} topic(s)...")
             topics = list(await asyncio.gather(
-                *[_process_topic(i, tr) for i, tr in enumerate(result.topics)]
+                *[_process_topic_with_progress(i, tr) for i, tr in enumerate(result.topics)]
             ))
 
             # Post-loop: generate distinct topic titles informed by the detailed explanations.
