@@ -237,9 +237,9 @@ def register_tasks(app):
                                 "statusMessage": state.status,
                                 "taskId": task.id  # Ensure taskId is set
                             },
-                            "Finalizing": {
+                            "Analyzing": {
                                 "order": 3,
-                                "statusMessage": "Waiting to start finalization...",
+                                "statusMessage": "Waiting to start analysis...",
                                 "taskId": task.id  # Ensure taskId is set
                             }
                         }
@@ -333,7 +333,7 @@ def register_tasks(app):
                             for stage in stages:
                                 stage_config = {
                                     "order": stage.order,
-                                    "statusMessage": "Logging final evaluation state..." if stage.name == "Finalizing" else stage.statusMessage,
+                                    "statusMessage": "Logging final evaluation state..." if stage.name == "Analyzing" else stage.statusMessage,
                                     "taskId": task.id
                                 }
                                 # Preserve the actual progress for the Processing stage
@@ -353,7 +353,7 @@ def register_tasks(app):
                             for stage in stages:
                                 stage_config = {
                                     "order": stage.order,
-                                    "statusMessage": "Evaluation completed." if stage.name == "Finalizing" else stage.statusMessage,
+                                    "statusMessage": "Evaluation completed." if stage.name == "Analyzing" else stage.statusMessage,
                                     "taskId": task.id
                                 }
                                 # Preserve the actual progress for the Processing stage

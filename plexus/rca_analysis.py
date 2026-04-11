@@ -132,11 +132,25 @@ def resolve_final_output_classes_from_yaml_text(score_yaml_configuration: str) -
     seen = set()
 
     def add_class(raw_value: Any):
+        # YAML parses Yes/No/True/False as booleans; convert back to strings
+        if isinstance(raw_value, bool):
+            raw_value = "Yes" if raw_value else "No"
         value = _normalize_label(raw_value)
         if not value or value in seen:
             return
         seen.add(value)
         valid_classes.append(value)
+
+    # Check top-level valid_classes (used by TactusScore YAML format)
+    top_level_classes = parsed.get("valid_classes")
+    if isinstance(top_level_classes, list):
+        for class_name in top_level_classes:
+            add_class(class_name)
+    if valid_classes:
+        return {
+            "classes": valid_classes,
+            "source": "valid_classes",
+        }
 
     validation_classes = (
         ((parsed.get("parameters") or {}).get("validation") or {}).get("value") or {}
@@ -800,7 +814,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
                         "Primary input artifact unavailable while score required context.",
                     )
             elif (
-                (valid_class_set and predicted_value not in valid_class_set)
+                (valid_class_set and predicted_value.lower() not in {v.lower() for v in valid_class_set})
                 or normalized_flags["invalid_output_class_signal"]
             ):
                 mechanical_subtype = "invalid_output_class"

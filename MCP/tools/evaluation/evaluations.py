@@ -578,9 +578,7 @@ def register_evaluation_tools(mcp: FastMCP):
                 from plexus.cli.shared.client_utils import create_client
                 from plexus.cli.report.utils import resolve_account_id_for_command
                 from plexus.cli.shared.feedback_evaluation_runner import (
-                    FeedbackRunnerRequest,
                     ensure_feedback_runner_task,
-                    run_feedback_evaluation_orchestrated,
                     wait_for_feedback_evaluation_id,
                 )
                 _runner_client = create_client()
@@ -667,58 +665,83 @@ def register_evaluation_tools(mcp: FastMCP):
                                 "message": "Evaluation dispatched. Use plexus_evaluation_info(use_latest=True) in ~30s.",
                             })
 
-                    # Synchronous mode (default): run orchestration and wait for terminal backend status.
-                    logger.info(f"Running feedback evaluation for '{score_name}' (synchronous, waiting for completion + RCA)...")
+                    # Synchronous mode (default): run feedback evaluation IN-PROCESS via
+                    # CliRunner, matching how accuracy evaluations are dispatched.  This
+                    # avoids subprocess overhead and allows asyncio.gather to interleave
+                    # accuracy + feedback evaluations on the same event loop.
+                    logger.info(f"Running feedback evaluation for '{score_name}' (in-process via CliRunner)...")
+
+                    fb_args = [
+                        '--scorecard', scorecard_name,
+                        '--score', score_name,
+                        '--max-items', str(max_feedback_items or 200),
+                        '--sampling-mode', normalized_sampling_mode,
+                        '--max-category-summary-items', str(max_category_summary_items),
+                    ]
+                    if days is not None:
+                        fb_args.extend(['--days', str(days)])
+                    if resolved_version:
+                        fb_args.extend(['--version', resolved_version])
+                    if baseline:
+                        fb_args.extend(['--baseline', baseline])
+                    if sample_seed is not None:
+                        fb_args.extend(['--sample-seed', str(sample_seed)])
+                    if notes:
+                        fb_args.extend(['--notes', notes])
                     # When a specific version is requested, yaml mode must be disabled.
-                    # load_scorecard_from_yaml_files ignores specific_version and always
-                    # loads the champion version from the local YAML file, causing all
-                    # candidate evals to run the champion version instead of the candidate.
                     effective_yaml = yaml and not resolved_version
+                    if effective_yaml:
+                        fb_args.append('--yaml')
 
-                    # Apply notes as soon as eval ID is available (not after completion)
-                    _early_notes_applied = False
-                    def _apply_early_notes(eval_id: str):
-                        nonlocal _early_notes_applied
-                        if notes and eval_id:
-                            _apply_notes_to_evaluation(eval_id, notes)
-                            _early_notes_applied = True
+                    def run_feedback_cli():
+                        runner = CliRunner()
+                        return runner.invoke(feedback, fb_args, catch_exceptions=False, standalone_mode=False)
 
-                    run_summary = await asyncio.to_thread(
-                        run_feedback_evaluation_orchestrated,
-                        request=FeedbackRunnerRequest(
-                            scorecard=scorecard_name,
-                            score=score_name,
-                            days=days,
-                            version=resolved_version,
-                            baseline=baseline,
-                            max_items=max_feedback_items or 200,
-                            sampling_mode=normalized_sampling_mode,
-                            sample_seed=sample_seed,
-                            max_category_summary_items=max_category_summary_items,
-                            task_id=None,
-                            use_yaml=effective_yaml,
-                        ),
-                        client=_runner_client,
-                        account_id=_runner_account_id,
-                        creation_timeout_seconds=300,
-                        completion_timeout_seconds=7200,
-                        poll_interval_seconds=5,
-                        on_evaluation_created=_apply_early_notes,
-                    )
-                    evaluation_id = run_summary.get("evaluation_id")
-                    if notes and evaluation_id and not _early_notes_applied:
+                    loop = asyncio.get_event_loop()
+                    with ThreadPoolExecutor() as pool:
+                        fb_result = await loop.run_in_executor(pool, run_feedback_cli)
+
+                    if fb_result.exit_code != 0:
+                        error_msg = f"Feedback CLI command failed with exit code {fb_result.exit_code}"
+                        if fb_result.output:
+                            error_msg += f": {fb_result.output}"
+                        logger.error(error_msg)
+                        return json.dumps({"error": error_msg})
+
+                    # Extract evaluation_id from the CLI return value or find it via latest.
+                    # The feedback() Click command returns a DashboardEvaluation object
+                    # (with an .id attribute) when standalone_mode=False.
+                    evaluation_id = None
+                    fb_return = fb_result.return_value
+                    if hasattr(fb_return, 'id'):
+                        evaluation_id = fb_return.id
+                    elif isinstance(fb_return, dict):
+                        evaluation_id = fb_return.get("evaluation_id") or fb_return.get("id")
+                    if not evaluation_id:
+                        # Fallback: find the most recent feedback evaluation for this score
+                        try:
+                            latest_info = Evaluation.get_latest_evaluation(
+                                score_id=score_name,
+                                evaluation_type="feedback",
+                            )
+                            evaluation_id = latest_info.get("id") if latest_info else None
+                        except Exception:
+                            pass
+
+                    if notes and evaluation_id:
                         _apply_notes_to_evaluation(evaluation_id, notes)
-                    eval_info = Evaluation.get_evaluation_info(evaluation_id)
-                    logger.info(f"Evaluation completed: {evaluation_id}")
+
+                    eval_info = Evaluation.get_evaluation_info(evaluation_id) if evaluation_id else {}
+                    logger.info(f"Feedback evaluation completed: {evaluation_id}")
 
                     payload: Dict[str, Any] = {
-                        "id": eval_info['id'],
+                        "id": eval_info.get('id') or evaluation_id,
                         "type": eval_info.get('type', 'feedback'),
                         "status": eval_info.get('status', 'COMPLETED'),
                         "scorecard": eval_info.get('scorecard_name') or scorecard_name,
                         "score": eval_info.get('score_name') or score_name,
                         "score_version_id": eval_info.get('score_version_id'),
-                        "task_id": run_summary.get("task_id"),
+                        "task_id": eval_info.get('task_id'),
                         "max_feedback_items": max_feedback_items,
                         "sampling_mode": normalized_sampling_mode,
                         "sample_seed": sample_seed,
@@ -880,6 +903,9 @@ def register_evaluation_tools(mcp: FastMCP):
 
                 if use_score_associated_dataset:
                     args.append('--use-score-associated-dataset')
+
+                if notes:
+                    args.extend(['--notes', notes])
 
                 # Run the CLI command in a thread pool to avoid event loop conflicts
                 def run_cli_command():
