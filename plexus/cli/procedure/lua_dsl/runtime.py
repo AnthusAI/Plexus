@@ -494,14 +494,17 @@ class LuaDSLRuntime:
 
             langchain_tools.append(done)
 
-            # Create LLM with tools
-            from langchain_openai import ChatOpenAI
+            # Create LLM from agent config
+            from plexus.cli.procedure.model_config import ModelConfig
 
-            llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.7,
-                openai_api_key=self.openai_api_key
+            model_name = agent_config.get('model', 'gpt-5')
+            temperature = agent_config.get('temperature')
+            model_cfg = ModelConfig(
+                model=model_name,
+                temperature=temperature,
+                openai_api_key=self.openai_api_key,
             )
+            llm = model_cfg.create_langchain_llm()
 
             llm_with_tools = llm.bind_tools(langchain_tools)
 
