@@ -2004,6 +2004,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for before/after dashboard comparison.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
+@click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
 def accuracy(
     scorecard: str,
     yaml: bool,
@@ -2030,6 +2031,7 @@ def accuracy(
     allow_no_labels: bool,
     baseline: Optional[str],
     json_only: bool,
+    notes: Optional[str] = None,
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -2376,6 +2378,7 @@ def accuracy(
                             "parameters": json.dumps({
                                 "sampling_method": sampling_method,
                                 "sample_size": number_of_samples,
+                                **({"notes": notes} if notes else {}),
                                 "metadata": {"baseline": baseline} if baseline else {},
                             }),
                             "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
@@ -2446,19 +2449,20 @@ def accuracy(
                     "parameters": json.dumps({
                         "sampling_method": sampling_method,
                         "sample_size": number_of_samples,
+                        **({"notes": notes} if notes else {}),
                         "metadata": {"baseline": baseline} if baseline else {},
                     }),
                     "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                     "estimatedRemainingSeconds": number_of_samples,
                     "taskId": task.id
                 }
-                
+
                 # Add scoreVersionId if using API loading and version is specified
                 # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
                 if not yaml and resolved_version:
                     logging.info(f"Will set scoreVersionId to {resolved_version} in initial evaluation record (Celery path - API loading with specific version)")
                     experiment_params["scoreVersionId"] = resolved_version
-                
+
                 try:
                     logging.info("Creating initial Evaluation record for Celery path...")
                     evaluation_record = DashboardEvaluation.create(
@@ -4099,6 +4103,7 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+@click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
 def feedback(
     scorecard: str,
     score: str,
@@ -4110,7 +4115,8 @@ def feedback(
     max_category_summary_items: int,
     baseline: Optional[str],
     use_yaml: bool,
-    task_id: Optional[str]
+    task_id: Optional[str],
+    notes: Optional[str] = None,
 ):
     """
     Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
@@ -4444,6 +4450,7 @@ def feedback(
                         "sample_seed": sample_seed,
                         "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
+                        **({"notes": notes} if notes else {}),
                         "metadata": {
                             "baseline": baseline
                         } if baseline else {}
@@ -4618,16 +4625,17 @@ def feedback(
                 "sampling_mode": normalized_sampling_mode,
                 "sample_seed": sample_seed,
                 "max_category_summary_items": max_category_summary_items,
+                **({"notes": notes} if notes else {}),
                 "metadata": {
                     "baseline": baseline
                 } if baseline else {}
             }),
             "taskId": task_id
         }
-        
+
         evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
         evaluation_id = evaluation_record.id
-        
+
         console.print(f"Created evaluation record: {evaluation_id}")
         console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
         
