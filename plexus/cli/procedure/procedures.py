@@ -1029,11 +1029,12 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     console.print("Creating optimization procedure...")
     result = service.create_procedure(
         account_identifier=account,
-        scorecard_identifier=None,
-        score_identifier=None,
+        scorecard_identifier=scorecard,
+        score_identifier=score,
         yaml_config=yaml_config,
         featured=False,
-        create_root_node=False
+        create_root_node=False,
+        score_version_id=version,
     )
 
     if not result.success:

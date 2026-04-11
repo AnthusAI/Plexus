@@ -300,17 +300,18 @@ class TactusScore(Score, LangChainUser):
         cost_breakdown = tactus_result.get('cost_breakdown', [])
 
         # If there's a cost breakdown, record individual API calls
+        # CostEvent objects are dataclasses, not dicts — use getattr()
         if cost_breakdown:
             for call in cost_breakdown:
                 from decimal import Decimal
                 self._cost_accumulator.add_api_call(
                     provider='tactus',
-                    model=call.get('model'),
-                    prompt_tokens=call.get('prompt_tokens', 0),
-                    completion_tokens=call.get('completion_tokens', 0),
-                    cached_tokens=call.get('cached_tokens', 0),
-                    usd=Decimal(str(call.get('cost', 0.0))),
-                    metadata={'tactus_call': call}
+                    model=getattr(call, 'model', None),
+                    prompt_tokens=getattr(call, 'prompt_tokens', 0),
+                    completion_tokens=getattr(call, 'completion_tokens', 0),
+                    cached_tokens=getattr(call, 'cache_tokens', 0) or 0,
+                    usd=Decimal(str(getattr(call, 'total_cost', 0.0))),
+                    metadata={'tactus_call': str(call)}
                 )
         elif total_cost > 0 or total_tokens > 0:
             # If no breakdown but we have totals, record a single aggregate call

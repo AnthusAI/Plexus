@@ -3,7 +3,8 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
 import { Button } from '@/components/ui/button'
@@ -347,10 +348,32 @@ export default function ProcedureTask({
               </div>
               
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                  {procedure.scorecardId && (
+                    <Link
+                      href={`/lab/scorecards/${procedure.scorecardId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
               )}
               {props.task.score && props.task.score.trim() !== '' && (
-                <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+                  {procedure.scorecardId && procedure.scoreId && (
+                    <Link
+                      href={`/lab/scorecards/${procedure.scorecardId}/scores/${procedure.scoreId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
@@ -384,16 +407,38 @@ export default function ProcedureTask({
         </div>
       )
     } else {
-      // Use default TaskHeader for grid view
+      // Custom header for grid view with bold scorecard/score
       return (
-        <TaskHeader
-          variant={variant}
-          task={taskObject}
-          controlButtons={controlButtons}
-          isFullWidth={isFullWidth}
-          onToggleFullWidth={onToggleFullWidth}
-          onClose={onClose}
-        />
+        <div className="space-y-1.5 p-0 flex flex-col items-start w-full max-w-full">
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                </div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+                </div>
+              )}
+              {props.task.description && (
+                <div className="text-sm text-muted-foreground truncate">
+                  {props.task.description}
+                </div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="text-muted-foreground">
+                  <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                </div>
+                {controlButtons}
+              </div>
+            </div>
+          </div>
+        </div>
       )
     }
   }

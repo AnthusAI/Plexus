@@ -214,7 +214,8 @@ class ProcedureService:
             # Resolve score identifier (optional for standalone procedures)
             score_id = None
             if score_identifier and scorecard_id:
-                score_id = self._resolve_score_identifier(scorecard_id, score_identifier)
+                from plexus.cli.shared.direct_identifier_resolution import direct_resolve_score_identifier
+                score_id = direct_resolve_score_identifier(self.client, scorecard_id, score_identifier)
                 if not score_id:
                     return ProcedureCreationResult(
                         procedure=None,
