@@ -19,6 +19,7 @@ from plexus.LangChainUser import LangChainUser
 # Import Tactus components
 from tactus.core.runtime import TactusRuntime
 from tactus.adapters.memory import MemoryStorage
+from tactus.adapters.cost_collector_log import CostCollectorLogHandler
 
 logger = logging.getLogger(__name__)
 
@@ -199,10 +200,12 @@ class TactusScore(Score, LangChainUser):
         # Create a fresh runtime for each prediction
         # TactusRuntime holds state that doesn't reset cleanly between executions
         storage = MemoryStorage()
+        log_handler = CostCollectorLogHandler()
         runtime = TactusRuntime(
             procedure_id=self.parameters.name or "tactus_score",
             storage_backend=storage,
             openai_api_key=self._get_openai_api_key(),
+            log_handler=log_handler,
         )
 
         try:
