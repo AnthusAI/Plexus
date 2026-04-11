@@ -2517,6 +2517,18 @@ evaluation:
                   )}
                 </div>
               )}
+              {variant === 'detail' && task.data?.cost != null && task.data.cost > 0 && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Cost:</span>
+                  <span>
+                    ${task.data.cost.toFixed(4)} total
+                    {task.data.processedItems > 0 && (
+                      <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
+                    )}
+                  </span>
+                </div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
               {evaluationNotes && (
                 <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
                   <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
@@ -2527,7 +2539,6 @@ evaluation:
                   </ReactMarkdown>
                 </div>
               )}
-              <Timestamp time={props.task.time} variant="relative" />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (

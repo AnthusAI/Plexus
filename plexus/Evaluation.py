@@ -1362,14 +1362,30 @@ class Evaluation:
         
         # Wait for all tasks to complete
         results = []
+        error_count = 0
+        last_error = None
         for task in asyncio.as_completed(tasks):
             try:
                 result = await task
                 if result:
                     results.append(result)
             except Exception as e:
+                error_count += 1
+                last_error = e
                 logging.error(f"Error in task for {score_name}: {e}")
-        
+
+        # If ALL items failed, raise so the evaluation reports failure
+        if error_count > 0 and len(results) == 0:
+            raise RuntimeError(
+                f"All {error_count}/{total_rows} predictions failed for {score_name}. "
+                f"Last error: {last_error}"
+            )
+        elif error_count > 0:
+            logging.warning(
+                f"{error_count}/{total_rows} predictions failed for {score_name}, "
+                f"{len(results)} succeeded"
+            )
+
         return results
 
     async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
@@ -1547,6 +1563,16 @@ class Evaluation:
             "totalItems": total_for_update,
             "processedItems": self.processed_items
         }
+
+        # Include accumulated cost if available
+        try:
+            if hasattr(self, 'scorecard') and self.scorecard:
+                expenses = self.scorecard.get_accumulated_costs()
+                total_cost = expenses.get('total_cost', 0)
+                if total_cost > 0:
+                    update_input["cost"] = float(total_cost)
+        except Exception as e:
+            logging.debug(f"Could not get accumulated costs: {e}")
         
         # Add score ID and version ID if available
         if hasattr(self, 'score_id') and self.score_id:
@@ -3394,7 +3420,14 @@ class FeedbackEvaluation(Evaluation):
             
         except Exception as e:
             self.logger.error(f"Error during feedback evaluation: {e}", exc_info=True)
-            
+
+            # Update task stage tracker with error
+            if tracker:
+                try:
+                    tracker.fail(f"Feedback evaluation error: {e}")
+                except Exception:
+                    pass  # Don't mask the original error
+
             # Update evaluation record with error
             if self.evaluation_id:
                 try:
@@ -3408,7 +3441,7 @@ class FeedbackEvaluation(Evaluation):
                     )
                 except Exception as update_error:
                     self.logger.error(f"Failed to update evaluation record with error: {update_error}")
-            
+
             raise
     
     async def _fetch_feedback_items(
@@ -5037,6 +5070,27 @@ class AccuracyEvaluation(Evaluation):
             return returned_metrics
         except Exception as e:
             self.logging.error(f"Error during AccuracyEvaluation.run: {e}", exc_info=True)
+            if tracker:
+                try:
+                    tracker.fail(f"Evaluation error: {e}")
+                except Exception:
+                    pass  # Don't mask the original error
+            # Update evaluation record with error status
+            if self.experiment_id and not dry_run:
+                try:
+                    from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+                    from plexus.dashboard.api.client import PlexusDashboardClient
+                    client = PlexusDashboardClient()
+                    evaluation_record = DashboardEvaluation.get_by_id(
+                        self.experiment_id,
+                        client=client
+                    )
+                    evaluation_record.update(
+                        status="FAILED",
+                        errorMessage=str(e)
+                    )
+                except Exception:
+                    pass  # Don't mask the original error
             raise e # Re-raise after logging
         finally:
             self.should_stop = True
