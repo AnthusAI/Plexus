@@ -1323,8 +1323,8 @@ class Evaluation:
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
                         # Update tracker with actual count of processed items
-                        if tracker and tracker.current_stage:
-                            tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
+                        # Note: Don't put the count in the status message — the progress bar
+                        # already shows it, and the message text lags due to API throttling.
                         if tracker:
                             tracker.update(current_items=self.processed_items)
                         
@@ -3330,6 +3330,10 @@ class FeedbackEvaluation(Evaluation):
                 "disagreements": overall_analysis.get("disagreements"),
             }
             
+            # Advance from Setup to Processing before creating ScoreResult records
+            if tracker:
+                tracker.advance_stage()
+
             # Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data
             self.logger.info(f"Creating ScoreResult records for {len(feedback_items)} feedback items")
             await self._create_score_results_from_feedback(
@@ -3340,7 +3344,7 @@ class FeedbackEvaluation(Evaluation):
                 account_id=self.account_id
             )
 
-            # Advance to Analyzing stage for root-cause analysis
+            # Advance from Processing to Analyzing stage for root-cause analysis
             if tracker:
                 tracker.advance_stage()
 
@@ -5183,9 +5187,7 @@ class AccuracyEvaluation(Evaluation):
             else:
                 selected_sample_rows = df
 
-            # Update tracker status without advancing stage
-            if tracker and tracker.current_stage:
-                tracker.current_stage.status_message = "Generating predictions..."
+            # Update tracker for start of processing (stage already advanced by caller)
             if tracker:
                 tracker.update(current_items=0)
 
