@@ -1863,15 +1863,10 @@ async def _pull_specific_version(score, scorecard_name: str, version_id: str, cl
                 "message": f"Version {version_id} not found"
             }
 
-        # Ensure scorecard directory exists
-        scorecard_dir = f"scorecards/{scorecard_name}"
-        os.makedirs(scorecard_dir, exist_ok=True)
-
-        # Prepare file paths
-        yaml_filename = f"{score.name}.yaml"
-        guidelines_filename = f"{score.name}.md"
-        code_file_path = os.path.join(scorecard_dir, yaml_filename)
-        guidelines_file_path = os.path.join(scorecard_dir, guidelines_filename)
+        # Use the shared path helpers so names are filesystem-safe
+        from plexus.cli.shared.shared import get_score_yaml_path, get_score_guidelines_path
+        code_file_path = str(get_score_yaml_path(scorecard_name, score.name))
+        guidelines_file_path = str(get_score_guidelines_path(scorecard_name, score.name))
 
         # Create backups of existing files before overwriting
         backup_created = False
