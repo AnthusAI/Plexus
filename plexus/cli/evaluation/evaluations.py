@@ -4484,6 +4484,11 @@ def feedback(
                     rca_pending=True,  # Outer code owns the COMPLETED write after RCA
                 )
                 
+                # Advance from Setup to Processing stage before running predictions
+                if tracker:
+                    tracker.advance_stage()
+                    logging.info("==== STAGE: Processing ====")
+
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
 
