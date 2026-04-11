@@ -3319,6 +3319,7 @@ class FeedbackEvaluation(Evaluation):
                 root_cause_result = await self._run_root_cause_analysis(
                     feedback_items,
                     max_category_summary_items=self.max_category_summary_items,
+                    tracker=tracker,
                 )
             except Exception as _rca_exc:
                 self.logger.warning(f"Root-cause analysis failed (non-fatal): {_rca_exc}")
@@ -3732,7 +3733,8 @@ class FeedbackEvaluation(Evaluation):
             )
 
             def _update_status(msg: str):
-                """Update tracker status message if tracker is available."""
+                """Update tracker status message and log RCA progress."""
+                self.logger.info(f"RCA: {msg}")
                 if tracker and hasattr(tracker, 'current_stage') and tracker.current_stage:
                     tracker.current_stage.status_message = msg
 
@@ -4515,6 +4517,7 @@ class FeedbackEvaluation(Evaluation):
         )
 
         def _update_status(msg: str):
+            self.logger.info(f"RCA: {msg}")
             if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
                 tracker.current_stage.status_message = msg
 

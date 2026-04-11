@@ -731,7 +731,17 @@ def register_evaluation_tools(mcp: FastMCP):
                     if notes and evaluation_id:
                         _apply_notes_to_evaluation(evaluation_id, notes)
 
-                    eval_info = Evaluation.get_evaluation_info(evaluation_id) if evaluation_id else {}
+                    if evaluation_id:
+                        try:
+                            eval_info = await asyncio.wait_for(
+                                loop.run_in_executor(None, lambda: Evaluation.get_evaluation_info(evaluation_id)),
+                                timeout=120
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(f"get_evaluation_info timed out for feedback {evaluation_id}")
+                            eval_info = {}
+                    else:
+                        eval_info = {}
                     logger.info(f"Feedback evaluation completed: {evaluation_id}")
 
                     payload: Dict[str, Any] = {
@@ -939,11 +949,26 @@ def register_evaluation_tools(mcp: FastMCP):
             if notes:
                 _apply_notes_to_evaluation(evaluation_id, notes)
 
-            # Get full evaluation info using the specific ID
-            eval_info = Evaluation.get_evaluation_info(evaluation_id)
+            # Get full evaluation info using the specific ID — run in executor
+            # to avoid blocking the event loop (get_evaluation_info is synchronous
+            # and may download S3 artifacts)
+            try:
+                eval_info = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: Evaluation.get_evaluation_info(evaluation_id)),
+                    timeout=120
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"get_evaluation_info timed out for {evaluation_id}, returning minimal response")
+                eval_info = None
 
             if not eval_info:
-                return json.dumps({"error": f"Could not retrieve evaluation info for id: {evaluation_id}"})
+                # Return a minimal response instead of failing
+                return json.dumps({
+                    'evaluation_id': evaluation_id,
+                    'evaluation_type': evaluation_type,
+                    'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{evaluation_id}",
+                    'warning': 'Could not retrieve full evaluation info'
+                })
 
             # Return the same format - note that get_evaluation_info uses snake_case keys
             eval_id = eval_info.get('id')
