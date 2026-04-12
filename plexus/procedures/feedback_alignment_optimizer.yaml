@@ -294,12 +294,73 @@ code: |
 
   local function extract_metrics(eval_result)
     local metrics = eval_result.metrics or {}
-    return {
+    local result = {
       alignment = safe_get_metric(metrics, "Alignment") or 0,
       accuracy = safe_get_metric(metrics, "Accuracy") or 0,
       precision = safe_get_metric(metrics, "Precision") or 0,
       recall = safe_get_metric(metrics, "Recall") or 0
     }
+    -- Capture confusion matrix and class distributions for planning context
+    local cm = eval_result.confusionMatrix or eval_result.confusion_matrix
+    if type(cm) == "table" then
+      result.confusion_matrix = cm.matrix
+      result.confusion_labels = cm.labels
+    end
+    local pred_dist = eval_result.predictedClassDistribution or eval_result.predicted_class_distribution
+    if type(pred_dist) == "table" then
+      result.predicted_distribution = pred_dist
+    end
+    local actual_dist = eval_result.datasetClassDistribution or eval_result.dataset_class_distribution
+    if type(actual_dist) == "table" then
+      result.actual_distribution = actual_dist
+    end
+    return result
+  end
+
+  -- Render confusion matrix + class distributions as readable text
+  local function render_confusion_context(m)
+    local lines = {}
+    if m.confusion_matrix and m.confusion_labels then
+      local labels = m.confusion_labels
+      local matrix = m.confusion_matrix
+      -- Header
+      table.insert(lines, string.format("  Confusion matrix (rows=actual, cols=predicted):"))
+      local header = string.format("  %15s", "")
+      for _, lbl in ipairs(labels) do
+        header = header .. string.format("  Pred %-6s", lbl)
+      end
+      table.insert(lines, header)
+      -- Rows
+      for i, row_label in ipairs(labels) do
+        local row = matrix[i]
+        if type(row) == "table" then
+          local line = string.format("  Actual %-6s", row_label)
+          for _, val in ipairs(row) do
+            line = line .. string.format("  %10d", val)
+          end
+          table.insert(lines, line)
+        end
+      end
+    end
+    -- Class distributions
+    if m.predicted_distribution and m.actual_distribution then
+      local pred_parts, actual_parts = {}, {}
+      for _, d in ipairs(m.predicted_distribution) do
+        if type(d) == "table" then
+          table.insert(pred_parts, string.format("%s=%.0f%%(%d)", d.label or "?", d.percentage or 0, d.count or 0))
+        end
+      end
+      for _, d in ipairs(m.actual_distribution) do
+        if type(d) == "table" then
+          table.insert(actual_parts, string.format("%s=%.0f%%(%d)", d.label or "?", d.percentage or 0, d.count or 0))
+        end
+      end
+      if #pred_parts > 0 then
+        table.insert(lines, "  Model predicts: " .. table.concat(pred_parts, ", "))
+        table.insert(lines, "  Actual labels:  " .. table.concat(actual_parts, ", "))
+      end
+    end
+    return lines
   end
 
   local function calculate_deltas(current, baseline)
@@ -311,18 +372,52 @@ code: |
     }
   end
 
-  local function call_plexus_tool(tool_name, args_table)
+  local function call_plexus_tool(tool_name, args_table, opts)
     -- Direct programmatic tool invocation via Tactus Tool.get() API
     -- No LLM agent involved — calls MCP tools directly from Lua
-    local tool_handle = Tool.get(tool_name)
-    local raw_result = tool_handle(args_table or {})
+    -- Includes retry with exponential backoff for transient failures
+    opts = opts or {}
+    local max_retries = opts.max_retries or 3
+    local base_delay = opts.base_delay or 5  -- seconds
 
-    -- Decode JSON result if needed
-    local decoded_result, decode_err = safe_decode(raw_result)
-    if not decoded_result then
-      error("Failed to decode " .. tool_name .. " result: " .. tostring(decode_err))
+    for attempt = 1, max_retries do
+      local ok, raw_result = pcall(function()
+        local tool_handle = Tool.get(tool_name)
+        return tool_handle(args_table or {})
+      end)
+
+      if ok then
+        local decoded_result, decode_err = safe_decode(raw_result)
+        if decoded_result then
+          -- Check for API-level errors (e.g. {error: "Scorecard not found"})
+          if type(decoded_result) == "table" and decoded_result.error then
+            local err_msg = tostring(decoded_result.error)
+            if attempt == max_retries then
+              error(tool_name .. " returned error after " .. max_retries .. " attempts: " .. err_msg)
+            end
+            diag(string.format("%s API error (attempt %d/%d): %s", tool_name, attempt, max_retries, err_msg))
+          else
+            return decoded_result
+          end
+        else
+          if attempt == max_retries then
+            error("Failed to decode " .. tool_name .. " result: " .. tostring(decode_err))
+          end
+          diag(string.format("%s decode error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(decode_err)))
+        end
+      else
+        if attempt == max_retries then
+          error("Failed to call " .. tool_name .. " after " .. max_retries .. " attempts: " .. tostring(raw_result))
+        end
+        diag(string.format("%s error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(raw_result)))
+      end
+
+      -- Exponential backoff: 5s, 10s, 20s
+      local delay = base_delay * (2 ^ (attempt - 1))
+      diag(string.format("Retrying %s in %d seconds...", tool_name, delay))
+      local t = os.clock() + delay
+      while os.clock() < t do end
     end
-    return decoded_result
   end
 
   -- Build version history table for agent context
@@ -372,7 +467,7 @@ code: |
         fb_ac1, fb_delta, acc_ac1, acc_delta, note))
       -- Show what was tried so the agent doesn't repeat failed approaches
       if iter.done_reason and iter.done_reason ~= "" then
-        table.insert(lines, string.format("          Edit: %s", trunc(iter.done_reason, 2000)))
+        table.insert(lines, string.format("          Rationale: %s", trunc(iter.done_reason, 2000)))
       end
       -- Show all exploration results for this cycle (no pass/fail labeling — show
       -- raw deltas so the agent can reason about what each approach actually did)
@@ -498,6 +593,8 @@ code: |
     if fb_m then
       table.insert(parts, string.format("Feedback: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
         fb_m.alignment, fb_m.accuracy, fb_m.precision, fb_m.recall))
+      local cm_lines = render_confusion_context(fb_m)
+      for _, line in ipairs(cm_lines) do table.insert(parts, line) end
     end
     if opts.feedback_rca then
       table.insert(parts, "Feedback RCA:")
@@ -659,6 +756,8 @@ code: |
     if acc_m then
       table.insert(parts, string.format("Accuracy: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
         acc_m.alignment, acc_m.accuracy, acc_m.precision, acc_m.recall))
+      local cm_lines = render_confusion_context(acc_m)
+      for _, line in ipairs(cm_lines) do table.insert(parts, line) end
     end
     if opts.accuracy_rca then
       table.insert(parts, "Accuracy RCA (deterministic dataset — improve this too, not just avoid regression):")
@@ -1678,10 +1777,24 @@ code: |
       }
     end
 
-    -- Read current code and guidelines
-    local current_code = Step.checkpoint(function()
-      return File.read(score_pull.codeFilePath)
-    end)
+    -- Read current code and guidelines (with retry for transient file system issues)
+    local current_code = nil
+    for read_attempt = 1, 3 do
+      local read_ok, read_result = pcall(function()
+        return Step.checkpoint(function()
+          return File.read(score_pull.codeFilePath)
+        end)
+      end)
+      if read_ok and has_text(read_result) then
+        current_code = read_result
+        break
+      end
+      if read_attempt < 3 then
+        diag(string.format("Code file read attempt %d failed, retrying in 2s...", read_attempt))
+        local t = os.clock() + 2
+        while os.clock() < t do end
+      end
+    end
     if not has_text(current_code) then
       return {
         success = false,
@@ -1763,13 +1876,17 @@ code: |
         end
       end
 
-      table.insert(syn, "\n\nNow synthesize everything above. For each cycle's hypotheses, reason through:\n")
-      table.insert(syn, "  - What did each change actually do to the score's behavior?\n")
+      table.insert(syn, "\n\nNow synthesize everything above. For each hypothesis across ALL cycles, reason through:\n")
+      table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
       table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
-      table.insert(syn, "  - What does this tell us about the underlying problem this score is trying to solve?\n")
+      table.insert(syn, "  - CLASSIFY: Is this approach (a) fundamentally wrong — the premise was flawed,\n")
+      table.insert(syn, "    (b) directionally right but implementation was off — worth refining, or\n")
+      table.insert(syn, "    (c) inconclusive — too small an effect to learn from?\n")
+      table.insert(syn, "  - What does this tell us about what this score's evaluation data actually rewards?\n")
       table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
-      table.insert(syn, "  - What direction does this suggest for the next round of hypotheses?\n")
-      table.insert(syn, "\nWrite out your analysis. This reasoning will directly shape your hypotheses for cycle "
+      table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
+      table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
+      table.insert(syn, "This reasoning will directly shape your hypotheses for cycle "
         .. tostring(cycle) .. " and will be preserved for future cycles.")
 
       guard_context_budget(code_editor)
@@ -2002,7 +2119,8 @@ code: |
             .. "The current file content is shown in the system message above.\n"
             .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
             .. "The RCA quotes are paraphrased — do NOT use RCA text as old_str.\n"
-            .. "When done, call submit_score_version(version_note='...') to submit.\n"
+            .. "When done, call submit_score_version(version_note='<what you changed> to address <which error pattern>; expect <predicted effect>').\n"
+            .. "The version_note is your future self's primary learning signal — be specific about WHAT, WHY, and EXPECTED EFFECT.\n"
             .. "Call done(reason='cannot_improve: ...') if you cannot find a viable edit.",
             h, #hypotheses, hyp.name, hyp.description)
         else
@@ -2453,7 +2571,7 @@ code: |
           "  Feedback AC1 delta: %+.3f   Accuracy AC1 delta: %+.3f",
           fb_d, acc_d))
         table.insert(synth_parts, string.format(
-          "  Edit: %s", trunc(sv.done_reason or sv.hypothesis.description, 2000)))
+          "  Rationale: %s", trunc(sv.done_reason or sv.hypothesis.description, 2000)))
         if acc_d < -0.01 then
           table.insert(synth_parts, string.format(
             "  *** WARNING: This hypothesis REGRESSED accuracy by %.3f — do NOT incorporate without ensuring accuracy is preserved. ***",
@@ -2540,7 +2658,8 @@ code: |
       end
 
       table.insert(synth_parts, string.format("Edit score_config.yaml starting from %s below.", synth_start_label))
-      table.insert(synth_parts, "When done, call submit_score_version(version_note='Cycle " .. tostring(cycle) .. " synthesis: <brief description>').")
+      table.insert(synth_parts, "When done, call submit_score_version(version_note='Cycle " .. tostring(cycle) .. " synthesis: <what you combined/changed> to address <which patterns>; expected effect: <prediction>').")
+      table.insert(synth_parts, "The version_note is critical — it becomes the learning signal for future cycles. Include: what ideas you kept/discarded, what error pattern this targets, and what metric movement you predict.")
       table.insert(synth_parts, "If you truly cannot find ANY viable change, call done(reason='cannot_improve: <explanation>').\n")
 
       -- Reset editor to best starting point code
@@ -3214,11 +3333,28 @@ code: |
     end  -- end of else (submitted_versions > 0)
     end)  -- end of pcall(function()
     if not cycle_ok then
-      diag(string.format("FATAL ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
+      diag(string.format("ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
       Human.notify({message = string.format(
-        "FATAL ERROR in cycle %d: %s", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
-      -- Re-raise so the runtime records the failure
-      error(cycle_err)
+        "ERROR in cycle %d: %s — skipping to next cycle", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
+
+      consecutive_failed_cycles = consecutive_failed_cycles + 1
+
+      -- Record as failed cycle so history is preserved
+      table.insert(iterations, {
+        iteration = cycle,
+        accepted = false,
+        skip_reason = "cycle_error: " .. trunc(tostring(cycle_err), 200),
+        feedback_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+        accuracy_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+      })
+      State.set("iterations", iterations)
+
+      -- Only truly fatal errors (auth, permanent) should kill the procedure
+      local err_lower = string.lower(tostring(cycle_err))
+      if string.find(err_lower, "authentication") or string.find(err_lower, "unauthorized") then
+        error(cycle_err)
+      end
+      -- Otherwise continue to next cycle (plateau detection handles repeated failures)
     end
     -- pcall body returns "break_cycle" when it wants to exit the for loop
     if cycle_err == "break_cycle" then break end

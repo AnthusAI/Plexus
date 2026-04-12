@@ -183,9 +183,12 @@ class ScoreEditorToolset:
                 err = "Error: old_str is required for str_replace command"
                 self._last_edit_error = err
                 return err
-            # Normalize escaped newlines — Tactus serializes \n as literal backslash-n in tool args
-            old_str = old_str.replace("\\n", "\n")
-            new_str = new_str.replace("\\n", "\n")
+            # Normalize escape sequences — LLM tool args often contain literal
+            # backslash-escapes instead of the actual characters.  \n is the most
+            # common, but \' and \t also occur in Lua code edits.
+            for esc, char in [("\\n", "\n"), ("\\t", "\t"), ("\\'", "'"), ('\\"', '"')]:
+                old_str = old_str.replace(esc, char)
+                new_str = new_str.replace(esc, char)
             if old_str not in self._content:
                 # Debug: log first mismatch to diagnose str_replace failures
                 content_search = self._content
@@ -434,57 +437,73 @@ class ScoreEditorToolset:
                 },
             )
 
-        try:
-            # Run the async pull in a thread to avoid nested event loop issues
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, _do_pull())
-                result = future.result(timeout=60)
+        import concurrent.futures
+        import time as _time
 
-            # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
-            # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
-            pull_data = None
-            if isinstance(result, dict):
-                for item in result.get("content", []):
-                    if isinstance(item, dict) and item.get("type") == "text":
-                        try:
-                            pull_data = json.loads(item["text"])
-                            break
-                        except (ValueError, TypeError, KeyError):
-                            pass
-                # Also try direct dict fields (non-wrapped response)
-                if pull_data is None:
-                    pull_data = result
+        max_retries = 3
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Run the async pull in a thread to avoid nested event loop issues
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(asyncio.run, _do_pull())
+                    result = future.result(timeout=60)
 
-            if not pull_data or not pull_data.get("success"):
-                return f"plexus_score_pull failed: {result}"
+                # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
+                # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
+                pull_data = None
+                if isinstance(result, dict):
+                    for item in result.get("content", []):
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            try:
+                                pull_data = json.loads(item["text"])
+                                break
+                            except (ValueError, TypeError, KeyError):
+                                pass
+                    # Also try direct dict fields (non-wrapped response)
+                    if pull_data is None:
+                        pull_data = result
 
-            code_file_path = pull_data.get("codeFilePath")
-            if not code_file_path:
-                return f"plexus_score_pull returned no codeFilePath: {pull_data}"
+                if not pull_data or not pull_data.get("success"):
+                    raise RuntimeError(f"plexus_score_pull failed: {result}")
 
-            if not os.path.exists(code_file_path):
-                return f"plexus_score_pull wrote to {code_file_path} but file does not exist"
+                code_file_path = pull_data.get("codeFilePath")
+                if not code_file_path:
+                    raise RuntimeError(f"plexus_score_pull returned no codeFilePath: {pull_data}")
 
-            with open(code_file_path, "r") as f:
-                code = f.read()
+                if not os.path.exists(code_file_path):
+                    raise RuntimeError(f"plexus_score_pull wrote to {code_file_path} but file does not exist")
 
-            if not code:
-                return f"Score code file is empty: {code_file_path}"
+                with open(code_file_path, "r") as f:
+                    code = f.read()
 
-            self._content = code
-            self._original = code
-            self._history = []
-            self._code_file_path = code_file_path
-            logger.info(
-                "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
-                len(code), self._scorecard, self._score, code_file_path,
-            )
-            return None
+                if not code:
+                    raise RuntimeError(f"Score code file is empty: {code_file_path}")
 
-        except Exception as exc:
-            logger.error("ScoreEditorToolset._load_content_from_api error: %s", exc)
-            return str(exc)
+                self._content = code
+                self._original = code
+                self._history = []
+                self._code_file_path = code_file_path
+                logger.info(
+                    "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
+                    len(code), self._scorecard, self._score, code_file_path,
+                )
+                return None
+
+            except Exception as exc:
+                last_error = exc
+                if attempt < max_retries:
+                    logger.warning(
+                        "ScoreEditorToolset._load_content_from_api attempt %d/%d failed: %s, retrying...",
+                        attempt, max_retries, exc,
+                    )
+                    _time.sleep(attempt * 3)
+                else:
+                    logger.error(
+                        "ScoreEditorToolset._load_content_from_api failed after %d attempts: %s",
+                        max_retries, exc,
+                    )
+                    return str(exc)
 
     def _format_edit_result(self, operation: str) -> str:
         validation = self._format_validation()
