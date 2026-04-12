@@ -1484,8 +1484,11 @@ code: |
   State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
   State.set("feedback_baseline_id",      feedback_baseline_id)
   State.set("feedback_baseline_metrics", feedback_baseline_metrics)
-  State.set("scorecard_id",  scorecard_id)
-  State.set("score_id",      score_id)
+  State.set("baseline_version_id",       champion_version_id)
+  State.set("scorecard_id",    scorecard_id)
+  State.set("score_id",        score_id)
+  State.set("scorecard_name",  scorecard_name)
+  State.set("score_name",      score_name)
   State.set("iterations",    {})
   -- Store RCA for the coding agent's first iteration
   State.set("last_accuracy_rca", accuracy_baseline_rca)
@@ -2143,7 +2146,7 @@ code: |
             if edit_command == "view" then
               table.insert(feedback_parts, "File viewed successfully. The file has NOT been modified yet.")
               table.insert(feedback_parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_version to submit.")
-            elseif string.find(edit_result, "Error") then
+            elseif string.sub(edit_result, 1, 6) == "Error:" then
               table.insert(feedback_parts, "Your str_replace_editor call returned an error:\n" .. edit_result)
               table.insert(feedback_parts, "\nYou can retry the edit with corrected old_str, or call view to re-read the file and copy the exact text.")
             else
@@ -2222,7 +2225,7 @@ code: |
         if last_edit_check then
           local edit_result = tostring(last_edit_check.result or "")
           local edit_command = (last_edit_check.args and last_edit_check.args.command) or ""
-          if edit_command ~= "view" and string.find(edit_result, "Error") then
+          if edit_command ~= "view" and string.sub(edit_result, 1, 6) == "Error:" then
             was_edit_failure = true
             total_edit_failures = total_edit_failures + 1
             Human.notify({message = string.format(
@@ -2711,7 +2714,7 @@ code: |
               local edit_cmd = (last_edit.args and last_edit.args.command) or ""
               if edit_cmd == "view" then
                 table.insert(feedback_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
-              elseif string.find(edit_result, "Error") then
+              elseif string.sub(edit_result, 1, 6) == "Error:" then
                 table.insert(feedback_parts, "str_replace_editor error:\n" .. edit_result)
                 table.insert(feedback_parts, "\nCall view to re-read, then retry with exact text.")
               else
@@ -2768,7 +2771,7 @@ code: |
         if last_edit_check then
           local edit_result = tostring(last_edit_check.result or "")
           local edit_command = (last_edit_check.args and last_edit_check.args.command) or ""
-          if edit_command ~= "view" and string.find(edit_result, "Error") then
+          if edit_command ~= "view" and string.sub(edit_result, 1, 6) == "Error:" then
             synth_was_edit_failure = true
             synth_edit_failures = synth_edit_failures + 1
           end
