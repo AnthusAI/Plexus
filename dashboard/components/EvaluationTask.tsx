@@ -532,10 +532,11 @@ const getStatusMessage = (data: EvaluationTaskData) => {
   return undefined;
 }
 
-const GridContent = React.memo(({ data, extra, isSelected }: { 
-  data: EvaluationTaskData; 
+const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy }: {
+  data: EvaluationTaskData;
   extra?: boolean;
   isSelected?: boolean;
+  baselineAccuracy?: number | null;
 }) => {
 
 
@@ -679,6 +680,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
           progress={progress}
           accuracy={accuracy}
           isSelected={isSelected}
+          baselineAccuracy={baselineAccuracy ?? undefined}
         />
       )}
     </div>
@@ -706,6 +708,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   const otherChanged = (
     prevProps.extra !== nextProps.extra ||
     prevProps.isSelected !== nextProps.isSelected ||
+    prevProps.baselineAccuracy !== nextProps.baselineAccuracy ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults)
   );
 
@@ -1967,6 +1970,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     isChampion: boolean;
   } | null>(null);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
+  const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
 
@@ -2047,8 +2051,9 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   }, [data.parameters])
 
   useEffect(() => {
-    if (!baselineEvaluationId || variant !== 'detail') {
+    if (!baselineEvaluationId) {
       setBaselineMetrics(null);
+      setBaselineAccuracy(null);
       return;
     }
 
@@ -2060,6 +2065,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
             query GetBaselineEvaluation($id: ID!) {
               getEvaluation(id: $id) {
                 id
+                accuracy
                 metrics
               }
             }
@@ -2068,6 +2074,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         });
 
         const baselineEval = (result as any).data?.getEvaluation;
+        setBaselineAccuracy(baselineEval?.accuracy ?? null);
         if (baselineEval?.metrics) {
           try {
             const parsed = parseJsonDeep(baselineEval.metrics);
@@ -2649,7 +2656,7 @@ evaluation:
             {detailMetadata}
             <TaskContent {...props} hideTaskStatus={true}>
               {variant === 'grid' ? (
-                <GridContent data={data} extra={extra} isSelected={isSelected} />
+                <GridContent data={data} extra={extra} isSelected={isSelected} baselineAccuracy={baselineAccuracy} />
               ) : (
                 <DetailContent
                   data={data}
