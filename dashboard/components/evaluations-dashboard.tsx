@@ -958,7 +958,7 @@ export default function EvaluationsDashboard({
           >
             {/* Left panel - grid content */}
             <motion.div 
-              className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-y-auto overflow-x-hidden`}
               style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
@@ -969,7 +969,7 @@ export default function EvaluationsDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container space-y-3 overflow-visible">
+            <div className="@container space-y-3">
               {/* EvaluationTasksGauges at the top - only show when not in mobile selected evaluation view */}
               {!(selectedEvaluationId && isNarrowViewport) && (
                 <EvaluationTasksGauges />
@@ -988,19 +988,18 @@ export default function EvaluationsDashboard({
                     // Reduced logging
                     
                     return (
-                      <div 
+                      <div
                         key={evaluation.id}
                         role="button"
                         tabIndex={0}
                         onClick={clickHandler}
-                        onClickCapture={clickHandler}
-                        onPointerDownCapture={clickHandler}
                         onKeyDown={(ev) => {
                           if (ev.key === 'Enter' || ev.key === ' ') {
                             ev.preventDefault();
                             clickHandler();
                           }
                         }}
+                        className="touch-manipulation"
                         aria-pressed={evaluation.id === selectedEvaluationId}
                         data-selected={evaluation.id === selectedEvaluationId ? 'true' : 'false'}
                         ref={(el) => {
