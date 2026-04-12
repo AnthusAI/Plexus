@@ -1780,24 +1780,10 @@ code: |
       }
     end
 
-    -- Read current code and guidelines (with retry for transient file system issues)
-    local current_code = nil
-    for read_attempt = 1, 3 do
-      local read_ok, read_result = pcall(function()
-        return Step.checkpoint(function()
-          return File.read(score_pull.codeFilePath)
-        end)
-      end)
-      if read_ok and has_text(read_result) then
-        current_code = read_result
-        break
-      end
-      if read_attempt < 3 then
-        diag(string.format("Code file read attempt %d failed, retrying in 2s...", read_attempt))
-        local t = os.clock() + 2
-        while os.clock() < t do end
-      end
-    end
+    -- Read current code and guidelines
+    local current_code = Step.checkpoint(function()
+      return File.read(score_pull.codeFilePath)
+    end)
     if not has_text(current_code) then
       return {
         success = false,
