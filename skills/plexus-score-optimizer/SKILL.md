@@ -80,9 +80,7 @@ Save the patched YAML to a temp file.
 The procedure ID is printed in the output (`Creating Task for procedure <ID>`). The CLI may crash on display after creation — that's okay, the procedure is created.
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus procedure run \
-  --id <procedure_id> \
-  --account "call-criteria"
+/Users/ryan/miniconda3/bin/python -m plexus procedure run <procedure_id>
 ```
 
 Run this in the background.
