@@ -599,12 +599,15 @@ class LuaDSLRuntime:
         self.lua_sandbox.set_global("Sleep", sleep_wrapper)
         logger.info("Injected Sleep function")
 
-        # Inject agent primitives (capitalized names)
+        # Inject agent primitives (both original and capitalized names)
         for agent_name, agent_primitive in self.agents.items():
-            # Capitalize first letter for Lua convention (Worker, Assistant, etc.)
+            # Inject with original name (e.g., code_editor) for YAML code that uses it directly
+            self.lua_sandbox.inject_primitive(agent_name, agent_primitive)
+            # Also inject capitalized for Lua convention (Worker, Assistant, etc.)
             lua_name = agent_name.capitalize()
-            self.lua_sandbox.inject_primitive(lua_name, agent_primitive)
-            logger.info(f"Injected agent primitive: {lua_name}")
+            if lua_name != agent_name:
+                self.lua_sandbox.inject_primitive(lua_name, agent_primitive)
+            logger.info(f"Injected agent primitive: {agent_name} (also as {lua_name})")
 
         logger.debug("All primitives injected into Lua sandbox")
 
