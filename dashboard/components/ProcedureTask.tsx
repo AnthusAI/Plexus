@@ -33,7 +33,7 @@ import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
-import { OptimizationDiagnosticBanner, CycleInsightsPanel } from "./OptimizationInsightsPanel"
+import { OptimizationDiagnosticBanner } from "./OptimizationInsightsPanel"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
@@ -708,15 +708,10 @@ export default function ProcedureTask({
             <OptimizerMetricsChart iterations={optimizerIterations} />
           )}
 
-          {/* Cycle Insights - synthesis analysis from each cycle */}
-          {cycleInsights.length > 0 && (
-            <CycleInsightsPanel insights={cycleInsights} />
-          )}
-
-          {/* Score Versions table - links to each cycle's version for champion promotion */}
+          {/* Cycles table - metrics, status, and expandable per-cycle details */}
           {optimizerVersions.length > 0 && (
             <div className="mt-4">
-              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Score Versions</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cycles</h3>
               <table className="w-full text-xs border-separate border-spacing-y-0.5">
                 <thead>
                   <tr className="text-muted-foreground/60">
@@ -774,6 +769,11 @@ export default function ProcedureTask({
                                   : <ChevronRight className="h-3 w-3" />
                               )}
                               {row.label}
+                              {details?.exploration_results?.length > 0 && (
+                                <span className="text-muted-foreground/40 text-xs">
+                                  {details.exploration_results.filter((er: any) => er.succeeded).length}/{details.exploration_results.length}
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap">
@@ -846,6 +846,17 @@ export default function ProcedureTask({
                           <tr>
                             <td colSpan={14} className="px-2 py-2 bg-accent/30 rounded">
                               <div className="space-y-2">
+                                {(() => {
+                                  const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
+                                  return insight?.analysis ? (
+                                    <div>
+                                      <span className="text-muted-foreground/70 text-xs block mb-1">Cycle analysis:</span>
+                                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{
+                                        insight.analysis.length > 600 ? insight.analysis.slice(0, 600) + '...' : insight.analysis
+                                      }</p>
+                                    </div>
+                                  ) : null
+                                })()}
                                 {details.done_reason && (
                                   <div>
                                     <span className="text-muted-foreground/70 text-xs">Result: </span>
