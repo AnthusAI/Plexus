@@ -722,8 +722,8 @@ export default function ProcedureTask({
                   <tr className="text-muted-foreground/60">
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-left font-normal"></th>
-                    <th className="px-1 py-0.5 text-right font-normal border-l border-border/40" colSpan={5}>Feedback</th>
-                    <th className="px-1 py-0.5 text-right font-normal border-l border-border/40" colSpan={5}>Regression</th>
+                    <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5}>Feedback</th>
+                    <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5}>Regression</th>
                     <th className="px-1 py-0.5 font-normal"></th>
                     <th className="px-1 py-0.5 font-normal"></th>
                   </tr>
