@@ -723,7 +723,7 @@ export default function ProcedureTask({
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Feedback</th>
-                    <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Accuracy</th>
+                    <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Regression</th>
                     <th className="px-1 py-0.5 font-normal"></th>
                     <th className="px-1 py-0.5 font-normal"></th>
                   </tr>
@@ -731,12 +731,12 @@ export default function ProcedureTask({
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 text-right font-normal">AC1</th>
-                    <th className="px-1 py-0 text-right font-normal">δ</th>
+                    <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 text-right font-normal">Acc</th>
                     <th className="px-1 py-0 text-right font-normal">P</th>
                     <th className="px-1 py-0 text-right font-normal">R</th>
                     <th className="px-1 py-0 text-right font-normal">AC1</th>
-                    <th className="px-1 py-0 text-right font-normal">δ</th>
+                    <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 text-right font-normal">Acc</th>
                     <th className="px-1 py-0 text-right font-normal">P</th>
                     <th className="px-1 py-0 text-right font-normal">R</th>
@@ -844,7 +844,7 @@ export default function ProcedureTask({
                         </tr>
                         {isExpanded && details && (
                           <tr>
-                            <td colSpan={8} className="px-2 py-2 bg-accent/30 rounded">
+                            <td colSpan={14} className="px-2 py-2 bg-accent/30 rounded">
                               <div className="space-y-2">
                                 {details.done_reason && (
                                   <div>
