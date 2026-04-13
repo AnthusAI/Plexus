@@ -32,6 +32,9 @@ import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkBreaks from "remark-breaks"
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
 import { OptimizationDiagnosticBanner } from "./OptimizationInsightsPanel"
 
@@ -253,27 +256,35 @@ export default function ProcedureTask({
           // For older runs that only have the overwritten keys, infer from the first
           // cycle's stored delta: original_baseline = cycle_ac1 - cycle_delta.
           const firstCycle = cycleIterations[0]
-          const inferredFbBaseline =
-            firstCycle?.feedback_metrics?.alignment != null && firstCycle?.feedback_deltas?.alignment != null
-              ? firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment
-              : null
-          const inferredAccBaseline =
-            firstCycle?.accuracy_metrics?.alignment != null && firstCycle?.accuracy_deltas?.alignment != null
-              ? firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment
-              : null
+          const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
+            ? {
+                alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
+                accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
+                precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
+                recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
+              }
+            : null
+          const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
+            ? {
+                alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
+                accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
+                precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
+                recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
+              }
+            : null
 
-          const fbBase = state.feedback_initial_baseline_metrics ?? state.feedback_baseline_metrics
-          const accBase = state.accuracy_initial_baseline_metrics ?? state.accuracy_baseline_metrics
+          const fbBase  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
+          const accBase = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
           versionRows.push({
             label: 'Baseline',
             versionId: state.baseline_version_id,
             isBaseline: true,
-            feedbackAC1: fbBase?.alignment ?? inferredFbBaseline ?? null,
+            feedbackAC1: fbBase?.alignment ?? null,
             feedbackDelta: null,
             feedbackAccuracy: fbBase?.accuracy ?? null,
             feedbackPrecision: fbBase?.precision ?? null,
             feedbackRecall: fbBase?.recall ?? null,
-            accuracyAC1: accBase?.alignment ?? inferredAccBaseline ?? null,
+            accuracyAC1: accBase?.alignment ?? null,
             accuracyDelta: null,
             accuracyAccuracy: accBase?.accuracy ?? null,
             accuracyPrecision: accBase?.precision ?? null,
@@ -846,17 +857,6 @@ export default function ProcedureTask({
                           <tr>
                             <td colSpan={14} className="px-2 py-2 bg-accent/30 rounded">
                               <div className="space-y-2">
-                                {(() => {
-                                  const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
-                                  return insight?.analysis ? (
-                                    <div>
-                                      <span className="text-muted-foreground/70 text-xs block mb-1">Cycle analysis:</span>
-                                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">{
-                                        insight.analysis.length > 600 ? insight.analysis.slice(0, 600) + '...' : insight.analysis
-                                      }</p>
-                                    </div>
-                                  ) : null
-                                })()}
                                 {details.done_reason && (
                                   <div>
                                     <span className="text-muted-foreground/70 text-xs">Result: </span>
@@ -899,9 +899,9 @@ export default function ProcedureTask({
                                             </summary>
                                             {hypDesc && (
                                               <div className="px-2 py-1.5 border-t border-border/30">
-                                                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{
-                                                  hypDesc.length > 600 ? hypDesc.slice(0, 600) + '...' : hypDesc
-                                                }</p>
+                                                <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+                                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{hypDesc}</ReactMarkdown>
+                                                </div>
                                               </div>
                                             )}
                                           </details>
@@ -944,20 +944,31 @@ export default function ProcedureTask({
                                       )}
                                     </div>
                                     {details.dual_synthesis.selection_reason && (
-                                      <p className="text-xs text-muted-foreground/60 mt-1">{details.dual_synthesis.selection_reason}</p>
+                                      <div className="prose prose-sm max-w-none mt-1 text-muted-foreground/60 prose-p:text-muted-foreground/60 [&_p]:text-xs">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{details.dual_synthesis.selection_reason}</ReactMarkdown>
+                                      </div>
                                     )}
                                   </div>
                                 )}
-                                {details.synthesis_reasoning && (
+                                {details.synthesis_reasoning && !details.synthesis_reasoning.includes('UsageStats') && (
                                   <div>
                                     <span className="text-muted-foreground/70 text-xs block mb-1">Synthesis reasoning:</span>
-                                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{
-                                      details.synthesis_reasoning.length > 500
-                                        ? details.synthesis_reasoning.slice(0, 500) + '...'
-                                        : details.synthesis_reasoning
-                                    }</p>
+                                    <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+                                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{details.synthesis_reasoning}</ReactMarkdown>
+                                    </div>
                                   </div>
                                 )}
+                                {(() => {
+                                  const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
+                                  return insight?.analysis ? (
+                                    <div>
+                                      <span className="text-muted-foreground/70 text-xs block mb-1">Cycle analysis:</span>
+                                      <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{insight.analysis}</ReactMarkdown>
+                                      </div>
+                                    </div>
+                                  ) : null
+                                })()}
                               </div>
                             </td>
                           </tr>
