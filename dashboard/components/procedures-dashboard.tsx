@@ -31,6 +31,7 @@ const SUBSCRIBE_ON_CREATE_PROCEDURE = `
   subscription OnCreateProcedure {
     onCreateProcedure {
       id
+      name
       featured
       code
       rootNodeId
@@ -55,6 +56,7 @@ const SUBSCRIBE_ON_UPDATE_PROCEDURE = `
   subscription OnUpdateProcedure {
     onUpdateProcedure {
       id
+      name
       featured
       code
       rootNodeId
@@ -161,6 +163,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             ) {
               items {
                 id
+                name
                 featured
                 code
                 rootNodeId
@@ -818,12 +821,16 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
   const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => ({
     id: procedure.id,
-    title: `${procedure.scorecard?.name || 'Procedure'} - ${procedure.score?.name || 'Score'}`,
+    title: procedure.scorecard?.name
+      ? `${procedure.scorecard.name} - ${procedure.score?.name || 'Score'}`
+      : (procedure.name || 'Procedure'),
     featured: procedure.featured || false,
     rootNodeId: procedure.rootNodeId || undefined,
     createdAt: procedure.createdAt,
     updatedAt: procedure.updatedAt,
-    scorecard: procedure.scorecard ? { name: procedure.scorecard.name } : null,
+    scorecard: procedure.scorecard
+      ? { name: procedure.scorecard.name }
+      : (procedure.name ? { name: procedure.name } : null),
     score: procedure.score ? { name: procedure.score.name } : null,
     task: procedure.task ? {
       id: procedure.task.id,
