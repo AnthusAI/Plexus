@@ -1069,6 +1069,7 @@ def register_score_tools(mcp: FastMCP):
                 
                 # Use the enhanced create_version_from_code_with_parent method
                 if code is not None:  # Only proceed if we have code
+                    code = _strip_pull_comments(code)
                     result = await _create_version_from_code_with_parent(
                         score=score,
                         client=client,
@@ -1623,6 +1624,30 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
 
+_PULL_COMMENT_PREFIXES = [
+    '# Pulled from Plexus API',
+    '# Score:',
+    '# Champion Version ID:',
+    '# Version ID:',
+    '# Created:',
+    '# Updated:',
+    '# Note:',
+]
+
+
+def _strip_pull_comments(code: str) -> str:
+    """Strip metadata comment blocks added by score pull operations before storing to the API."""
+    lines = []
+    for line in code.split('\n'):
+        stripped = line.strip()
+        if stripped == '#':
+            continue
+        if any(stripped.startswith(prefix) for prefix in _PULL_COMMENT_PREFIXES):
+            continue
+        lines.append(line)
+    return '\n'.join(lines).strip()
+
+
 async def _create_version_from_code_with_parent(
     score,
     client,
@@ -1887,15 +1912,7 @@ async def _pull_specific_version(score, scorecard_name: str, version_id: str, cl
 
         # Write YAML configuration if present
         if configuration:
-            # Add version metadata comment at the top
             with open(code_file_path, 'w') as f:
-                f.write(f"# Pulled from Plexus API\n")
-                f.write(f"# Score: {score.name}\n")
-                f.write(f"# Version ID: {version_id}\n")
-                f.write(f"# Created: {version_data.get('createdAt')}\n")
-                if version_data.get('note'):
-                    f.write(f"# Note: {version_data.get('note')}\n")
-                f.write(f"#\n")
                 f.write(configuration)
 
         # Write guidelines if present
