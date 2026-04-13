@@ -56,8 +56,8 @@ class TestStageConfigurationSystem:
 
         # Verify status messages are set
         assert configs["Setup"].status_message == "Setting up evaluation..."
-        assert configs["Processing"].status_message == "Starting processing..."
-        assert configs["Analyzing"].status_message == "Computing metrics..."
+        assert configs["Processing"].status_message == "Generating predictions..."
+        assert configs["Analyzing"].status_message == "Analyzing results..."
     
     def test_prediction_stage_configs_structure(self):
         """Test prediction stage configuration structure and defaults."""
