@@ -1830,6 +1830,14 @@ code: |
   State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
   State.set("feedback_baseline_id",      feedback_baseline_id)
   State.set("feedback_baseline_metrics", feedback_baseline_metrics)
+  -- Immutable copies for dashboard display — never overwritten on acceptance
+  -- (the non-initial keys are updated each accepted cycle for agent context)
+  if State.get("feedback_initial_baseline_metrics") == nil then
+    State.set("feedback_initial_baseline_metrics", feedback_baseline_metrics)
+  end
+  if State.get("accuracy_initial_baseline_metrics") == nil then
+    State.set("accuracy_initial_baseline_metrics", accuracy_baseline_metrics)
+  end
   State.set("baseline_version_id",       champion_version_id)
   State.set("scorecard_id",    scorecard_id)
   State.set("score_id",        score_id)
