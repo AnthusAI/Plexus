@@ -2634,8 +2634,8 @@ code: |
           Human.notify({message = string.format(
             "  [Hyp %d, step %d] Agent: %s",
             h, react_step, trunc(agent_text, 500)), level = "info"})
-          -- Accumulate actual text reasoning (skip if it looks like raw YAML content)
-          if #agent_text > 20 and #agent_text < 4000
+          -- Accumulate actual text reasoning (skip if it looks like raw YAML content or non-string objects)
+          if type(agent_text) == "string" and #agent_text > 20 and #agent_text < 4000
              and not string.find(agent_text, "^name:") and not string.find(agent_text, "^tactus_code:") then
             table.insert(hyp_reasoning_parts, agent_text)
           end
@@ -3136,7 +3136,7 @@ code: |
             Human.notify({message = string.format(
               "  [%s, step %d] Agent: %s",
               strategy_label, step, trunc(agent_text, 500)), level = "info"})
-            if #agent_text > 20 and #agent_text < 4000
+            if type(agent_text) == "string" and #agent_text > 20 and #agent_text < 4000
                and not string.find(agent_text, "^name:") and not string.find(agent_text, "^tactus_code:") then
               table.insert(react_reasoning, agent_text)
             end
