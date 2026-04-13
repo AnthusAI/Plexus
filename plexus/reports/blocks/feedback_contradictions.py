@@ -133,10 +133,38 @@ class FeedbackContradictions(BaseReportBlock):
             max_feedback_items if max_feedback_items > 0 else None,
         )
 
-        valid_items = [item for item in all_items if not getattr(item, "isInvalid", False)]
-        invalid_count = len(all_items) - len(valid_items)
+        # Group all records by itemId first, then apply invalid + deduplication together.
+        # If ANY record for an itemId is marked invalid, the whole item is excluded.
+        # Among non-invalid records, keep only the most recent per itemId.
+        groups: dict[str, list[Any]] = {}
+        no_item_id: list[Any] = []
+        for item in all_items:
+            item_id = getattr(item, "itemId", None)
+            if not item_id:
+                no_item_id.append(item)
+            else:
+                groups.setdefault(item_id, []).append(item)
+
+        invalid_count = 0
+        duplicate_count = 0
+        valid_items = []
+        for item_id, group in groups.items():
+            if any(getattr(i, "isInvalid", False) for i in group):
+                invalid_count += len(group)
+                continue
+            best = max(group, key=lambda i: getattr(i, "editedAt", None) or "")
+            duplicate_count += len(group) - 1
+            valid_items.append(best)
+        # Items with no itemId: apply only the isInvalid filter, no deduplication possible.
+        for item in no_item_id:
+            if getattr(item, "isInvalid", False):
+                invalid_count += 1
+            else:
+                valid_items.append(item)
+
         self._log(
-            f"Fetched {len(all_items)} feedback items; {len(valid_items)} eligible ({invalid_count} excluded as already-invalid)."
+            f"Fetched {len(all_items)} feedback items; {len(valid_items)} eligible "
+            f"({invalid_count} excluded as already-invalid, {duplicate_count} duplicate item IDs removed)."
         )
         if max_feedback_items > 0 and len(valid_items) > max_feedback_items:
             valid_items = valid_items[:max_feedback_items]
@@ -212,6 +240,7 @@ class FeedbackContradictions(BaseReportBlock):
             "contradictions_found": len(contradictions),
             "aligned_found": len(aligned_items),
             "selected_items_count": len(selected_items),
+            "guidelines": guidelines,
             "topics": topics,
             "block_configuration": {
                 "scorecard": scorecard_param,
