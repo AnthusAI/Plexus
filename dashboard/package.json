@@ -159,6 +159,7 @@
     "@storybook/test-runner": "^0.22.0",
     "@storybook/testing-library": "^0.2.2",
     "@swc/jest": "^0.2.37",
+    "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^29.5.14",
