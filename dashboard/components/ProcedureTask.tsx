@@ -241,13 +241,32 @@ export default function ProcedureTask({
           skipReason?: string; disqualified?: boolean
         }> = []
         if (state.baseline_version_id) {
+          // Prefer the immutable initial-baseline keys (written by newer optimizer runs).
+          // For older runs that only have the overwritten keys, infer from the first
+          // cycle's stored delta: original_baseline = cycle_ac1 - cycle_delta.
+          const firstCycle = cycleIterations[0]
+          const inferredFbBaseline =
+            firstCycle?.feedback_metrics?.alignment != null && firstCycle?.feedback_deltas?.alignment != null
+              ? firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment
+              : null
+          const inferredAccBaseline =
+            firstCycle?.accuracy_metrics?.alignment != null && firstCycle?.accuracy_deltas?.alignment != null
+              ? firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment
+              : null
+
           versionRows.push({
             label: 'Baseline',
             versionId: state.baseline_version_id,
             isBaseline: true,
-            feedbackAC1: (state.feedback_initial_baseline_metrics ?? state.feedback_baseline_metrics)?.alignment ?? null,
+            feedbackAC1: state.feedback_initial_baseline_metrics?.alignment
+              ?? inferredFbBaseline
+              ?? state.feedback_baseline_metrics?.alignment
+              ?? null,
             feedbackDelta: null,
-            accuracyAC1: (state.accuracy_initial_baseline_metrics ?? state.accuracy_baseline_metrics)?.alignment ?? null,
+            accuracyAC1: state.accuracy_initial_baseline_metrics?.alignment
+              ?? inferredAccBaseline
+              ?? state.accuracy_baseline_metrics?.alignment
+              ?? null,
             accuracyDelta: null,
             accepted: true,
           })
