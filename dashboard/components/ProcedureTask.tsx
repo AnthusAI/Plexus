@@ -722,20 +722,20 @@ export default function ProcedureTask({
                   <tr className="text-muted-foreground/60">
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-left font-normal"></th>
-                    <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Feedback</th>
-                    <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Regression</th>
+                    <th className="px-1 py-0.5 text-right font-normal border-l border-border/40" colSpan={5}>Feedback</th>
+                    <th className="px-1 py-0.5 text-right font-normal border-l border-border/40" colSpan={5}>Regression</th>
                     <th className="px-1 py-0.5 font-normal"></th>
                     <th className="px-1 py-0.5 font-normal"></th>
                   </tr>
                   <tr className="text-muted-foreground/40">
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-right font-normal">AC1</th>
+                    <th className="px-1 py-0 text-right font-normal border-l border-border/40">AC1</th>
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 text-right font-normal">Acc</th>
                     <th className="px-1 py-0 text-right font-normal">P</th>
                     <th className="px-1 py-0 text-right font-normal">R</th>
-                    <th className="px-1 py-0 text-right font-normal">AC1</th>
+                    <th className="px-1 py-0 text-right font-normal border-l border-border/40">AC1</th>
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 text-right font-normal">Acc</th>
                     <th className="px-1 py-0 text-right font-normal">P</th>
@@ -789,7 +789,7 @@ export default function ProcedureTask({
                               <Badge variant="secondary" className="text-xs px-1 py-0">Rejected</Badge>
                             )}
                           </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
                             {row.feedbackAC1 != null ? row.feedbackAC1.toFixed(3) : '—'}
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
@@ -808,7 +808,7 @@ export default function ProcedureTask({
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                             {row.feedbackRecall != null ? row.feedbackRecall.toFixed(3) : '—'}
                           </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
                             {row.accuracyAC1 != null ? row.accuracyAC1.toFixed(3) : '—'}
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
