@@ -89,6 +89,9 @@ class AgentPrimitive:
         self._conversation: List[Any] = []
         self._initialized = False
 
+        # Last turn's text content (accessible from Lua as agent.output)
+        self.output = None
+
         # Recording queue (for async chat recording)
         self._recording_queue: List[Dict[str, Any]] = []
 
@@ -134,6 +137,7 @@ class AgentPrimitive:
 
             # Process response
             response_content = getattr(ai_response, 'content', '') or ''
+            self.output = response_content  # Store for Lua access
             tool_calls = getattr(ai_response, 'tool_calls', [])
 
             # Add AI response to conversation
