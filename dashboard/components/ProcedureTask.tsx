@@ -157,8 +157,14 @@ export default function ProcedureTask({
     isBaseline?: boolean
     feedbackAC1?: number | null
     feedbackDelta?: number | null
+    feedbackAccuracy?: number | null
+    feedbackPrecision?: number | null
+    feedbackRecall?: number | null
     accuracyAC1?: number | null
     accuracyDelta?: number | null
+    accuracyAccuracy?: number | null
+    accuracyPrecision?: number | null
+    accuracyRecall?: number | null
     skipReason?: string
     disqualified?: boolean
   }>>([])
@@ -237,7 +243,9 @@ export default function ProcedureTask({
         const versionRows: Array<{
           label: string; versionId?: string; accepted?: boolean; isBaseline?: boolean
           feedbackAC1?: number | null; feedbackDelta?: number | null
+          feedbackAccuracy?: number | null; feedbackPrecision?: number | null; feedbackRecall?: number | null
           accuracyAC1?: number | null; accuracyDelta?: number | null
+          accuracyAccuracy?: number | null; accuracyPrecision?: number | null; accuracyRecall?: number | null
           skipReason?: string; disqualified?: boolean
         }> = []
         if (state.baseline_version_id) {
@@ -254,20 +262,22 @@ export default function ProcedureTask({
               ? firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment
               : null
 
+          const fbBase = state.feedback_initial_baseline_metrics ?? state.feedback_baseline_metrics
+          const accBase = state.accuracy_initial_baseline_metrics ?? state.accuracy_baseline_metrics
           versionRows.push({
             label: 'Baseline',
             versionId: state.baseline_version_id,
             isBaseline: true,
-            feedbackAC1: state.feedback_initial_baseline_metrics?.alignment
-              ?? inferredFbBaseline
-              ?? state.feedback_baseline_metrics?.alignment
-              ?? null,
+            feedbackAC1: fbBase?.alignment ?? inferredFbBaseline ?? null,
             feedbackDelta: null,
-            accuracyAC1: state.accuracy_initial_baseline_metrics?.alignment
-              ?? inferredAccBaseline
-              ?? state.accuracy_baseline_metrics?.alignment
-              ?? null,
+            feedbackAccuracy: fbBase?.accuracy ?? null,
+            feedbackPrecision: fbBase?.precision ?? null,
+            feedbackRecall: fbBase?.recall ?? null,
+            accuracyAC1: accBase?.alignment ?? inferredAccBaseline ?? null,
             accuracyDelta: null,
+            accuracyAccuracy: accBase?.accuracy ?? null,
+            accuracyPrecision: accBase?.precision ?? null,
+            accuracyRecall: accBase?.recall ?? null,
             accepted: true,
           })
         }
@@ -278,8 +288,14 @@ export default function ProcedureTask({
             accepted: it.accepted,
             feedbackAC1: it.feedback_metrics?.alignment ?? null,
             feedbackDelta: it.feedback_deltas?.alignment ?? null,
+            feedbackAccuracy: it.feedback_metrics?.accuracy ?? null,
+            feedbackPrecision: it.feedback_metrics?.precision ?? null,
+            feedbackRecall: it.feedback_metrics?.recall ?? null,
             accuracyAC1: it.accuracy_metrics?.alignment ?? null,
             accuracyDelta: it.accuracy_deltas?.alignment ?? null,
+            accuracyAccuracy: it.accuracy_metrics?.accuracy ?? null,
+            accuracyPrecision: it.accuracy_metrics?.precision ?? null,
+            accuracyRecall: it.accuracy_metrics?.recall ?? null,
             skipReason: it.skip_reason,
             disqualified: it.disqualified,
           })
@@ -706,10 +722,26 @@ export default function ProcedureTask({
                   <tr className="text-muted-foreground/60">
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-left font-normal"></th>
-                    <th className="px-1 py-0.5 text-right font-normal" colSpan={2}>Feedback</th>
-                    <th className="px-1 py-0.5 text-right font-normal" colSpan={2}>Accuracy</th>
+                    <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Feedback</th>
+                    <th className="px-1 py-0.5 text-right font-normal" colSpan={5}>Accuracy</th>
                     <th className="px-1 py-0.5 font-normal"></th>
                     <th className="px-1 py-0.5 font-normal"></th>
+                  </tr>
+                  <tr className="text-muted-foreground/40">
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 text-right font-normal">AC1</th>
+                    <th className="px-1 py-0 text-right font-normal">δ</th>
+                    <th className="px-1 py-0 text-right font-normal">Acc</th>
+                    <th className="px-1 py-0 text-right font-normal">P</th>
+                    <th className="px-1 py-0 text-right font-normal">R</th>
+                    <th className="px-1 py-0 text-right font-normal">AC1</th>
+                    <th className="px-1 py-0 text-right font-normal">δ</th>
+                    <th className="px-1 py-0 text-right font-normal">Acc</th>
+                    <th className="px-1 py-0 text-right font-normal">P</th>
+                    <th className="px-1 py-0 text-right font-normal">R</th>
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 font-normal"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -768,6 +800,15 @@ export default function ProcedureTask({
                             )}
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.feedbackAccuracy != null ? row.feedbackAccuracy.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.feedbackPrecision != null ? row.feedbackPrecision.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.feedbackRecall != null ? row.feedbackRecall.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                             {row.accuracyAC1 != null ? row.accuracyAC1.toFixed(3) : '—'}
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
@@ -776,6 +817,15 @@ export default function ProcedureTask({
                                 {row.accuracyDelta >= 0 ? '+' : ''}{row.accuracyDelta.toFixed(3)}
                               </span>
                             )}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.accuracyAccuracy != null ? row.accuracyAccuracy.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.accuracyPrecision != null ? row.accuracyPrecision.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.accuracyRecall != null ? row.accuracyRecall.toFixed(3) : '—'}
                           </td>
                           <td className="px-1 py-0.5 font-mono text-muted-foreground/60 w-full">
                             {row.versionId ? row.versionId.slice(0, 8) + '…' : '—'}
