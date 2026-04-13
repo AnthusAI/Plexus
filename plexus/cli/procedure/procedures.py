@@ -557,16 +557,44 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 for i, stage in enumerate(yaml_stages)
             }
 
+        # Extract scorecard/score identifiers from --set params so the procedure
+        # DB record can carry the foreign-key association and show names in the UI.
+        scorecard_identifier_for_create = None
+        score_identifier_for_create = None
+        if set_params:
+            for param in set_params:
+                if '=' in param:
+                    k, _, v = param.partition('=')
+                    k = k.strip().strip('"').strip("'")
+                    v = v.strip().strip('"').strip("'")
+                    if k in ('scorecard', 'scorecard_id') and v:
+                        scorecard_identifier_for_create = v
+                    elif k in ('score', 'score_id') and v:
+                        score_identifier_for_create = v
+
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(
             account_identifier=account,
-            scorecard_identifier=None,  # Standalone procedure
-            score_identifier=None,
+            scorecard_identifier=scorecard_identifier_for_create,
+            score_identifier=score_identifier_for_create,
             yaml_config=yaml_config,
             featured=False,
             create_root_node=not is_tactus,  # Don't create root node for Tactus procedures
             stage_configs=stage_configs,
         )
+
+        # If scorecard/score resolution failed, retry without them rather than aborting.
+        if not result.success and (scorecard_identifier_for_create or score_identifier_for_create):
+            console.print(f"[yellow]Warning: Could not resolve scorecard/score identifiers ({result.message}); creating procedure without association.[/yellow]")
+            result = service.create_procedure(
+                account_identifier=account,
+                scorecard_identifier=None,
+                score_identifier=None,
+                yaml_config=yaml_config,
+                featured=False,
+                create_root_node=not is_tactus,
+                stage_configs=stage_configs,
+            )
 
         if not result.success:
             console.print(f"[red]Error creating procedure: {result.message}[/red]")
