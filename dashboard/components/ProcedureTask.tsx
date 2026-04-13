@@ -730,16 +730,16 @@ export default function ProcedureTask({
                   <tr className="text-muted-foreground/40">
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-right font-normal border-l border-border/40">AC1</th>
+                    <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
                     <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-right font-normal">Acc</th>
-                    <th className="px-1 py-0 text-right font-normal">P</th>
-                    <th className="px-1 py-0 text-right font-normal">R</th>
-                    <th className="px-1 py-0 text-right font-normal border-l border-border/40">AC1</th>
+                    <th className="px-1 py-0 text-left font-normal">Acc</th>
+                    <th className="px-1 py-0 text-left font-normal">P</th>
+                    <th className="px-1 py-0 text-left font-normal">R</th>
+                    <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
                     <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-right font-normal">Acc</th>
-                    <th className="px-1 py-0 text-right font-normal">P</th>
-                    <th className="px-1 py-0 text-right font-normal">R</th>
+                    <th className="px-1 py-0 text-left font-normal">Acc</th>
+                    <th className="px-1 py-0 text-left font-normal">P</th>
+                    <th className="px-1 py-0 text-left font-normal">R</th>
                     <th className="px-1 py-0 font-normal"></th>
                     <th className="px-1 py-0 font-normal"></th>
                   </tr>
