@@ -125,7 +125,7 @@ describe('TaskDisplay', () => {
 
     // Loading skeletons should render
     // Look for multiple skeleton rows by their pulse class container
-    const skeletons = document.querySelectorAll('.animate-pulse')
+    const skeletons = document.querySelectorAll('.animate-pulse.rounded-lg.bg-card-light')
     expect(skeletons.length).toBeGreaterThan(0)
 
     const resultsHeader = screen.getByText('Score Results')
@@ -146,7 +146,7 @@ describe('TaskDisplay', () => {
     )
 
     // Skeletons should disappear, and two results should render
-    const afterSkeletons = document.querySelectorAll('.animate-pulse')
+    const afterSkeletons = document.querySelectorAll('.animate-pulse.rounded-lg.bg-card-light')
     expect(afterSkeletons.length).toBe(0)
     // ScoreResultComponent renders result values; assert presence via text
     expect(screen.getByText('yes')).toBeInTheDocument()
