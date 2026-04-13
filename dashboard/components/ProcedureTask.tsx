@@ -245,9 +245,9 @@ export default function ProcedureTask({
             label: 'Baseline',
             versionId: state.baseline_version_id,
             isBaseline: true,
-            feedbackAC1: state.feedback_baseline_metrics?.alignment ?? null,
+            feedbackAC1: (state.feedback_initial_baseline_metrics ?? state.feedback_baseline_metrics)?.alignment ?? null,
             feedbackDelta: null,
-            accuracyAC1: state.accuracy_baseline_metrics?.alignment ?? null,
+            accuracyAC1: (state.accuracy_initial_baseline_metrics ?? state.accuracy_baseline_metrics)?.alignment ?? null,
             accuracyDelta: null,
             accepted: true,
           })
@@ -688,7 +688,7 @@ export default function ProcedureTask({
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-left font-normal"></th>
                     <th className="px-1 py-0.5 text-right font-normal" colSpan={2}>Feedback</th>
-                    <th className="px-1 py-0.5 text-right font-normal" colSpan={2}>Regression</th>
+                    <th className="px-1 py-0.5 text-right font-normal" colSpan={2}>Accuracy</th>
                     <th className="px-1 py-0.5 font-normal"></th>
                     <th className="px-1 py-0.5 font-normal"></th>
                   </tr>
