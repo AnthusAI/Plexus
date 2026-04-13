@@ -14,7 +14,6 @@ from typing import Optional, Union, List, Any, Dict
 from pydantic import ConfigDict, model_validator
 
 from plexus.scores.Score import Score
-from plexus.LangChainUser import LangChainUser
 
 # Import Tactus components
 from tactus.core.runtime import TactusRuntime
@@ -24,46 +23,33 @@ from tactus.adapters.cost_collector_log import CostCollectorLogHandler
 logger = logging.getLogger(__name__)
 
 
-class TactusScore(Score, LangChainUser):
+class TactusScore(Score):
     """
     Score that executes embedded Tactus DSL code for classification.
 
     Uses Tactus runtime with in-process execution (no containers) for
     high-volume Plexus scenarios with trusted code.
 
-    Data flow:
-        1. Agent analyzes transcript and returns text response
-        2. Lua code in Procedure parses/extracts what it needs
-        3. Procedure returns {value, explanation, confidence}
-        4. TactusScore maps Procedure output to Score.Result
+    The model is specified inside the Lua code via ``default_model`` at the
+    procedure level. Individual classifiers inherit it, or can override with
+    their own ``model`` parameter.
 
     Example YAML:
         class: TactusScore
-        model_provider: ChatOpenAI
-        model_name: gpt-4o-mini
         code: |
-          classifier = Agent {
-            system_prompt = "Classify sentiment as positive, negative, or neutral..."
-          }
-
-          Procedure {
-            input = {text = field.string{required = true}},
-            output = {value = field.string{required = true}},
-            function(input)
-              local response = classifier({message = input.text})
-              -- Parse the agent's response to extract classification
-              local value = "neutral"
-              if response:lower():find("positive") then
-                value = "positive"
-              elseif response:lower():find("negative") then
-                value = "negative"
-              end
-              return {value = value, explanation = response}
-            end
+          default_model "openai/gpt-5.4-nano"
+          ClassifyProcedure {
+            classes = {"YES", "NO"},
+            system_message = [[
+          Classification instructions...
+          ]],
+            user_message = [[
+          Analyze: <transcript>{{ text }}</transcript>
+          ]]
           }
     """
 
-    class Parameters(Score.Parameters, LangChainUser.Parameters):
+    class Parameters(Score.Parameters):
         """Configuration parameters for TactusScore."""
         model_config = ConfigDict(protected_namespaces=())
 
@@ -75,6 +61,22 @@ class TactusScore(Score, LangChainUser):
 
         # Output mapping (optional - defaults to value/explanation)
         output: Optional[Dict[str, str]] = None
+
+        # Deprecated: these fields are ignored by TactusScore execution.
+        # The model is specified inside the Lua code. These are kept so
+        # existing YAML configs parse without error during migration.
+        model_provider: Optional[str] = None
+        model_name: Optional[str] = None
+        base_model_name: Optional[str] = None
+        max_tokens: Optional[int] = None
+        temperature: Optional[float] = None
+        top_p: Optional[float] = None
+        reasoning_effort: Optional[str] = None
+        verbosity: Optional[str] = None
+        model_region: Optional[str] = None
+        logprobs: Optional[bool] = None
+        top_logprobs: Optional[int] = None
+        parse_from_start: Optional[bool] = None
 
         @model_validator(mode='before')
         @classmethod
@@ -88,9 +90,8 @@ class TactusScore(Score, LangChainUser):
             return data
 
     def __init__(self, **parameters):
-        """Initialize TactusScore with Tactus code and model configuration."""
+        """Initialize TactusScore with Tactus code."""
         Score.__init__(self, **parameters)
-        LangChainUser.__init__(self, **parameters)
         self.parameters = self.Parameters(**parameters)
         self._runtime: Optional[TactusRuntime] = None
 
