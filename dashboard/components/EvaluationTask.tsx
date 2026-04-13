@@ -2474,16 +2474,6 @@ evaluation:
                     isInProgress={data.status?.toUpperCase() === 'RUNNING'}
                     className="text-muted-foreground"
                   />
-                  {evaluationNotes && (
-                    <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
-                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
-                        p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
-                        strong: ({children}) => <strong className="font-semibold">{children}</strong>,
-                      }}>
-                        {evaluationNotes}
-                      </ReactMarkdown>
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -2548,6 +2538,16 @@ evaluation:
               )}
             </div>
           </div>
+          {variant !== 'detail' && evaluationNotes && (
+            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+              }}>
+                {evaluationNotes}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
       renderContent={(props) => {
