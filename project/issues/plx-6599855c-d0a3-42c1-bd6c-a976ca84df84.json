@@ -28,10 +28,28 @@
       "author": "derek.norrbom",
       "text": "Reviewed history: commit 71515533 intentionally changed FeedbackContradictions scorecard lookup to get_by_name. Updated tests to mock get_by_name (not get_by_external_id) and rerunning failing tests.",
       "created_at": "2026-04-14T22:16:38.935390Z"
+    },
+    {
+      "id": "f7df64ef-800b-49ce-8209-8f9502d23a32",
+      "author": "derek.norrbom",
+      "text": "Implemented fix on branch fix/pr167-feedback-contradictions-develop and opened PR: https://github.com/AnthusAI/Plexus/pull/168. Change updates feedback_contradictions tests to mock Scorecard.get_by_name, matching current source behavior on develop. Targeted failing tests now pass (3/3).",
+      "created_at": "2026-04-14T22:17:32.720524Z"
+    },
+    {
+      "id": "85c281a6-091c-4269-b281-12d0224aec00",
+      "author": "derek.norrbom",
+      "text": "New CI failure reported from PR #167 unit-tests job (run 24425715051, job 71359116117). Investigating log and will patch accordingly.",
+      "created_at": "2026-04-14T22:29:06.239641Z"
+    },
+    {
+      "id": "3b4f11e7-d91c-420b-82d7-043346603208",
+      "author": "derek.norrbom",
+      "text": "Investigated run 24425715051/job 71359116117: failing test is dashboard/components/__tests__/guidelines-functionality.test.tsx (loading-state assertion). Applying deterministic test-only fix.",
+      "created_at": "2026-04-14T22:29:30.268040Z"
     }
   ],
   "created_at": "2026-04-14T22:14:47.099327Z",
-  "updated_at": "2026-04-14T22:16:38.935390Z",
+  "updated_at": "2026-04-14T22:29:30.268040Z",
   "closed_at": null,
   "custom": {}
 }
