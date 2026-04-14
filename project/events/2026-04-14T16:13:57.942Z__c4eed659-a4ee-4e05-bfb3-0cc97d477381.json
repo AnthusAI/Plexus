@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c4eed659-a4ee-4e05-bfb3-0cc97d477381",
+  "issue_id": "plx-ee1949e0-88de-4154-94af-f44a26b5473d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-14T16:13:57.942Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\nDashboard shell renders after login, but all top pages display 'Error: No account found' and page content never loads.\n\n## Repro\n1. Run  in .\n2. Login to dashboard.\n3. Observe nav renders but content regions fail with no account.\n\n## Expected\nAuthenticated users with valid env config should resolve account and load page content.\n\n## Initial hypothesis\nMismatch or timing issue in account-key/account-context resolution between env bootstrap and page data hooks.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix dashboard post-login 'No account found' content load failure"
+  }
+}
