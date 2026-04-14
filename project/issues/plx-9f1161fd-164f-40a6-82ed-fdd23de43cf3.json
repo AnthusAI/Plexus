@@ -1,0 +1,25 @@
+{
+  "id": "plx-9f1161fd-164f-40a6-82ed-fdd23de43cf3",
+  "title": "Bump Tactus to v0.46.0 and regenerate lock for Python 3.11",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ff03372c-f5ac-47cc-a9f6-9f64aba55721",
+      "author": "derek.norrbom",
+      "text": "Closing as duplicate of plx-3c7334 for the Tactus v0.46.0 dependency + lock update.",
+      "created_at": "2026-04-14T21:44:48.144355Z"
+    }
+  ],
+  "created_at": "2026-04-14T21:44:42.100105Z",
+  "updated_at": "2026-04-14T21:44:48.159048Z",
+  "closed_at": "2026-04-14T21:44:48.159048Z",
+  "custom": {}
+}
