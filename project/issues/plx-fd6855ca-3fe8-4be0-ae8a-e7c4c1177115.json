@@ -16,10 +16,22 @@
       "author": "ryan",
       "text": "Committing pending Kanbus issue/event state files from local worktree per request so coworker can continue PR/CI recovery.",
       "created_at": "2026-04-14T22:15:38.963698Z"
+    },
+    {
+      "id": "a607ebd2-de7a-42af-844d-4679b605615f",
+      "author": "ryan",
+      "text": "Committed pending Kanbus state files on develop:  (chore(project): commit pending Kanbus issue/event updates).",
+      "created_at": "2026-04-14T22:15:45.731951Z"
+    },
+    {
+      "id": "8aca3f36-512d-4c89-94ad-794327e3dfb3",
+      "author": "ryan",
+      "text": "Committed pending Kanbus state files on develop: 8f63c27c4 (chore(project): commit pending Kanbus issue/event updates).",
+      "created_at": "2026-04-14T22:15:51.179792Z"
     }
   ],
   "created_at": "2026-04-14T13:06:37.216868Z",
-  "updated_at": "2026-04-14T22:15:38.963698Z",
+  "updated_at": "2026-04-14T22:15:51.179792Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
