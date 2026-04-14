@@ -46,10 +46,16 @@
       "author": "derek",
       "text": "Pre-PR Lambda image verification completed locally via container smoke test: Building Docker image...\ncd .. && docker buildx build \\\n\t--platform linux/amd64 \\\n\t--load \\\n\t-f score-processor-lambda/Dockerfile \\\n\t-t score-processor-lambda:latest \\\n\t.\n✓ Image built: score-processor-lambda:latest\nRunning smoke test in container...\ndocker run --rm \\\n\t-v /home/derek/projects/Plexus/score-processor-lambda/tests/smoke_test.py:/var/task/smoke_test.py \\\n\t--entrypoint python \\\n\tscore-processor-lambda:latest \\\n\tsmoke_test.py\n======================================================================\nLAMBDA CONTAINER SMOKE TEST\n======================================================================\n\n▶ Import core dependencies\n    - langchain: 0.3.27\n    - langchain-core: 0.3.78\n    - tactus: 0.44.0\n  ✓ PASS\n\n▶ Verify pinned LangChain versions\n    - All versions match requirements.txt\n  ✓ PASS\n\n▶ Import Plexus modules\n    - All Plexus models import successfully\n  ✓ PASS\n\n▶ Import handler module\n    - Handler module loads correctly\n  ✓ PASS\n\n▶ Initialize LambdaJobProcessor\n    - LambdaJobProcessor initialized successfully\n  ✓ PASS\n\n▶ Verify NLTK data\n    - NLTK punkt data found\n  ✓ PASS\n\n▶ Check writable directories\n    - /tmp is writable\n  ✓ PASS\n\n▶ Verify tactus version\n    - tactus version matches: 0.44.0\n  ✓ PASS\n\n▶ Instantiate TactusRuntime and MemoryStorage\n    - MemoryStorage instantiated successfully\n    - TactusRuntime instantiated successfully\n  ✓ PASS\n\n▶ Import TactusScore and scoring utilities\n    - TactusScore imported successfully\n    - create_scorecard_instance_for_single_score imported successfully\n    - Scorecard imported successfully\n  ✓ PASS\n\n======================================================================\nRESULTS: 10 passed, 0 failed\n======================================================================. Docker image built from current branch code and smoke_test.py ran inside container. Result: 10 passed, 0 failed. This validates runtime imports, handler initialization, tactus/scorecard loading, and writable dirs in Lambda-like container.",
       "created_at": "2026-04-14T18:05:06.379246988Z"
+    },
+    {
+      "id": "00b2eb72-dc79-45aa-b5e6-49d6c3971090",
+      "author": "derek",
+      "text": "Pushed fix branch fix/score-processor-decimal-cost-regression and opened PR to develop: https://github.com/AnthusAI/Plexus/pull/163. Includes Decimal/float accumulation fix + regression test + Kanbus artifacts. Validation recorded in PR: poetry run pytest -q plexus/Scorecard_test.py (8 passed) and score-processor-lambda make test-smoke (10 passed, 0 failed).",
+      "created_at": "2026-04-14T18:06:36.030334754Z"
     }
   ],
   "created_at": "2026-04-14T17:23:45.220921989Z",
-  "updated_at": "2026-04-14T18:05:06.379246988Z",
+  "updated_at": "2026-04-14T18:06:36.030334754Z",
   "closed_at": null,
   "custom": {}
 }
