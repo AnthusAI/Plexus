@@ -1912,12 +1912,12 @@ async def _pull_specific_version(score, scorecard_name: str, version_id: str, cl
 
         # Write YAML configuration if present
         if configuration:
-            with open(code_file_path, 'w') as f:
+            with open(code_file_path, 'w', encoding='utf-8') as f:
                 f.write(configuration)
 
         # Write guidelines if present
         if guidelines:
-            with open(guidelines_file_path, 'w') as f:
+            with open(guidelines_file_path, 'w', encoding='utf-8') as f:
                 f.write(guidelines)
 
         backup_message = " (backup created)" if backup_created else ""

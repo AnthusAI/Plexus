@@ -952,7 +952,43 @@ code: |
     end
     table.insert(parts, "")
 
-    -- Guidelines first (read-only reference), then editable score config last
+    -- Contradiction landscape — injected before guidelines so agent sees the ceiling
+    -- before reading the score config. Updated every cycle.
+    local known_contra = State.get("known_contradictions")
+    if known_contra and has_text(known_contra.summary) then
+      local kc = known_contra
+      local total_items = kc.total_items_analyzed or 0
+      local contra_found = kc.contradictions_found or 0
+      local gap_count = kc.policy_gap_count or 0
+      local aligned = kc.aligned_found or 0
+
+      table.insert(parts, "=== CONTRADICTION LANDSCAPE (live — refreshed this cycle) ===")
+      table.insert(parts, string.format(
+        "Analyzed: %d feedback items | Contradictions: %d (%.0f%%) | Policy gaps: %d | Aligned: %d",
+        total_items, contra_found,
+        (total_items > 0) and (contra_found / total_items * 100) or 0,
+        gap_count, aligned))
+
+      -- Show optimization ceiling when contradictions are non-trivial
+      if total_items > 0 and contra_found > 0 then
+        local ceiling = math.max(0, (total_items - contra_found) / total_items - 0.05)
+        table.insert(parts, string.format(
+          "OPTIMIZATION CEILING: With %d contradictions in %d items (%.0f%%), prompt optimization"
+          .. "\n  alone cannot drive AC1 above ~%.2f. Cycles spent on contradiction items are wasted.",
+          contra_found, total_items,
+          (contra_found / total_items * 100), ceiling))
+      end
+
+      table.insert(parts, "")
+      table.insert(parts, kc.summary)
+      table.insert(parts, "")
+      table.insert(parts, "IMPLICATION: Hypotheses targeting contradiction items are unlikely to succeed.")
+      table.insert(parts, "Target policy gaps and ambiguous guidelines instead for reliable gains.")
+      table.insert(parts, "=== END CONTRADICTION LANDSCAPE ===")
+      table.insert(parts, "")
+    end
+
+    -- Guidelines (read-only reference), then editable score config last
     if has_text(opts.current_guidelines) then
       table.insert(parts, "=== CLASSIFICATION GUIDELINES (READ-ONLY reference — DO NOT edit this) ===")
       table.insert(parts, opts.current_guidelines)
@@ -1917,6 +1953,135 @@ code: |
   local last_accepted_acc_metrics = accuracy_baseline_metrics
   local consecutive_failed_cycles = 0  -- plateau detection
 
+  -- Helper: run FeedbackContradictions report and cache result in State.
+  -- Called before cycle 1 and refreshed every 3 cycles so the agent always
+  -- sees an up-to-date picture of structural/label-contradiction issues.
+  local function refresh_known_contradictions(current_cycle)
+    Human.notify({message = string.format(
+      "Refreshing contradictions landscape (cycle %d)...", current_cycle), level = "info"})
+    local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
+      block_class = "FeedbackContradictions",
+      block_config = {
+        scorecard = params.scorecard,
+        score = params.score,
+        mode = "contradictions",
+        days = tostring(params.days or 90),
+        max_feedback_items = 200,
+        num_topics = 8
+      }
+    })
+    if not ok or not report_result or not report_result.output then
+      Human.notify({message = "  Contradictions report failed or returned no output", level = "warning"})
+      return
+    end
+
+    local out = report_result.output
+    local topics = out.topics or {}
+    local total_items = out.total_items_analyzed or 0
+    local contradictions_found = out.contradictions_found or 0
+    local aligned_found = out.aligned_found or 0
+
+    -- Separate topics into policy gaps vs. real guideline contradictions.
+    -- Policy gaps have guideline_quote starting with "Policy gap:" — these CAN be fixed.
+    -- Guideline contradictions have a real guideline quote — these CANNOT be fixed.
+    local contradiction_topics = {}
+    local policy_gap_topics = {}
+    local policy_gap_count = 0
+    local topics_structured = {}
+    for _, topic in ipairs(topics) do
+      local gq = topic.guideline_quote or ""
+      local is_gap = string.find(gq, "^Policy gap") ~= nil
+      -- Extract one representative exemplar
+      local exemplar = nil
+      local exemplars = topic.exemplars or {}
+      if #exemplars > 0 then
+        local ex = exemplars[1]
+        exemplar = {
+          initial_value = ex.initial_value or "?",
+          final_value = ex.final_value or "?",
+          edit_comment = trunc(ex.edit_comment or "", 200)
+        }
+        -- Track per-topic item contribution to policy gap count
+        if is_gap then
+          policy_gap_count = policy_gap_count + (topic.count or 0)
+        end
+      end
+      local t = {
+        label = topic.label or "Unknown",
+        count = topic.count or 0,
+        summary = trunc(topic.summary or "", 300),
+        guideline_quote = trunc(gq, 200),
+        is_policy_gap = is_gap,
+        exemplar = exemplar
+      }
+      table.insert(topics_structured, t)
+      if is_gap then
+        table.insert(policy_gap_topics, t)
+      else
+        table.insert(contradiction_topics, t)
+      end
+    end
+
+    -- Build pre-rendered text summary
+    local summary_parts = {}
+    if #topics > 0 then
+      table.insert(summary_parts, string.format(
+        "%d items analyzed | %d contradictions (%.0f%%) | %d policy gaps | %d aligned",
+        total_items, contradictions_found,
+        (total_items > 0) and (contradictions_found / total_items * 100) or 0,
+        policy_gap_count, aligned_found))
+
+      if #contradiction_topics > 0 then
+        table.insert(summary_parts, "\nGuideline contradiction topics (NOT fixable via prompt editing):")
+        for i, t in ipairs(contradiction_topics) do
+          table.insert(summary_parts, string.format(
+            "\n  %d. %s — %d items: %s\n     Guideline violated: \"%s\"",
+            i, t.label, t.count, t.summary, t.guideline_quote))
+          if t.exemplar then
+            table.insert(summary_parts, string.format(
+              "\n     Example: predicted=%s corrected=%s — \"%s\"",
+              t.exemplar.initial_value, t.exemplar.final_value, t.exemplar.edit_comment))
+          end
+        end
+      end
+
+      if #policy_gap_topics > 0 then
+        table.insert(summary_parts, "\nPolicy gap topics (CAN be fixed by adding a guideline rule):")
+        for i, t in ipairs(policy_gap_topics) do
+          table.insert(summary_parts, string.format(
+            "\n  %d. %s — %d items: %s\n     Gap: \"%s\"",
+            i, t.label, t.count, t.summary, t.guideline_quote))
+          if t.exemplar then
+            table.insert(summary_parts, string.format(
+              "\n     Example: predicted=%s corrected=%s — \"%s\"",
+              t.exemplar.initial_value, t.exemplar.final_value, t.exemplar.edit_comment))
+          end
+        end
+      end
+    else
+      table.insert(summary_parts, "No contradiction or policy gap topics found in current feedback window.")
+    end
+
+    State.set("known_contradictions", {
+      cycle = current_cycle,
+      total_items_analyzed = total_items,
+      contradictions_found = contradictions_found,
+      policy_gap_count = policy_gap_count,
+      aligned_found = aligned_found,
+      topic_count = #topics,
+      contradiction_topic_count = #contradiction_topics,
+      policy_gap_topic_count = #policy_gap_topics,
+      topics = topics_structured,
+      summary = table.concat(summary_parts, "")
+    })
+    Human.notify({message = string.format(
+      "  Contradictions landscape: %d items | %d contradictions, %d policy gaps, %d topics",
+      total_items, contradictions_found, policy_gap_count, #topics), level = "info"})
+  end
+
+  -- Run upfront before cycle 1
+  pcall(refresh_known_contradictions, 0)
+
   -- ================================================================
   -- LLM error recovery and context management helpers
   -- ================================================================
@@ -2113,13 +2278,16 @@ code: |
     return false, "max retries exceeded"
   end
 
-  for cycle = 1, params.max_iterations do
+  local max_cycles = params.max_iterations
+  local cycle = 0
+  while cycle < max_cycles do
+    cycle = cycle + 1
     local cycle_ok, cycle_err = pcall(function()
-    diag(string.format("=== ENTERING CYCLE %d/%d === (last_accepted=%s)", cycle, params.max_iterations, tostring(last_accepted_version_id)))
+    diag(string.format("=== ENTERING CYCLE %d/%d === (last_accepted=%s)", cycle, max_cycles, tostring(last_accepted_version_id)))
     Human.notify({message = string.format(
-      "═══ Cycle %d/%d ═══", cycle, params.max_iterations), level = "info"})
+      "═══ Cycle %d/%d ═══", cycle, max_cycles), level = "info"})
     State.set("current_iteration", cycle)
-    Stage.progress(cycle, params.max_iterations)
+    Stage.progress(cycle, max_cycles)
 
     -- Pull the last accepted version as starting point for this cycle
     local score_pull = call_plexus_tool("plexus_score_pull", {
@@ -2260,6 +2428,31 @@ code: |
       table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
       table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
       table.insert(syn, "  - If dual synthesis was used: which strategy (A=cycle-focused, B=arc-focused) worked better and why?\n")
+
+      -- Contradiction audit: wire the landscape data into synthesis reasoning
+      local known_contra = State.get("known_contradictions")
+      if known_contra and (known_contra.contradictions_found or 0) > 0 then
+        table.insert(syn, string.format(
+          "\nCONTRADICTION AUDIT — %d contradiction items detected in the current feedback window:\n",
+          known_contra.contradictions_found))
+        table.insert(syn, "  1. For each accepted cycle so far: did it target a POLICY GAP (could succeed)\n")
+        table.insert(syn, "     or a GUIDELINE CONTRADICTION (cannot succeed via prompt editing)?\n")
+        table.insert(syn, "     Policy gap fixes should produce durable gains. Contradiction-targeting fixes\n")
+        table.insert(syn, "     may show short-term gains that regress when evaluated on new feedback.\n")
+        table.insert(syn, "  2. Are any hypotheses you would consider for the next cycle targeting items\n")
+        table.insert(syn, "     in the contradiction topics listed in the CONTRADICTION LANDSCAPE above?\n")
+        table.insert(syn, "     If so, flag this explicitly — those hypotheses cannot reliably succeed.\n")
+        table.insert(syn, "  3. Has the contradiction rate changed since the run started, or is it stable?\n")
+        table.insert(syn, "     A rising contradiction rate may indicate the score's guidelines have become\n")
+        table.insert(syn, "     inconsistent with current reviewer behavior.\n")
+        if known_contra.policy_gap_count and known_contra.policy_gap_count > 0 then
+          table.insert(syn, string.format(
+            "  NOTE: %d of the contradiction items are POLICY GAPS — these CAN be addressed\n"
+            .. "  by adding explicit guideline rules. Focus on these first.\n",
+            known_contra.policy_gap_count))
+        end
+      end
+
       table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
       table.insert(syn, "This reasoning will directly shape your hypotheses for cycle "
         .. tostring(cycle) .. " and will be preserved for future cycles.")
@@ -2310,6 +2503,9 @@ code: |
     Human.notify({message = string.format(
       "Cycle %d — Planning: generating hypotheses sequentially...", cycle
     ), level = "info"})
+
+    -- Refresh contradictions landscape every cycle (new feedback arrives continuously)
+    pcall(refresh_known_contradictions, cycle)
 
     -- Build base planning context (RCA + metrics + guidelines + score config)
     local planning_inject = build_planning_context({
@@ -2642,12 +2838,17 @@ code: |
         end
 
         -- Capture reasoning from tool calls (agent often produces no text during tool use)
+        -- Use pcall to guard against Python dict KeyError when args lack optional keys
+        -- (e.g. undo_edit has no old_str/new_str; insert has no old_str)
         local last_edit = Tool.last_call("str_replace_editor")
         if last_edit and last_edit.args then
-          local cmd = last_edit.args.command or ""
+          local ok_cmd, cmd = pcall(function() return last_edit.args.command end)
+          cmd = (ok_cmd and cmd) or ""
           if cmd ~= "view" then
-            local old_s = trunc(tostring(last_edit.args.old_str or ""), 200)
-            local new_s = trunc(tostring(last_edit.args.new_str or ""), 400)
+            local ok_old, old_s = pcall(function() return trunc(tostring(last_edit.args.old_str or ""), 200) end)
+            old_s = ok_old and old_s or ""
+            local ok_new, new_s = pcall(function() return trunc(tostring(last_edit.args.new_str or ""), 400) end)
+            new_s = ok_new and new_s or ""
             if has_text(new_s) then
               local edit_reasoning = string.format("Edit: replaced [%s] with [%s]", old_s, new_s)
               table.insert(hyp_reasoning_parts, edit_reasoning)
@@ -3145,10 +3346,13 @@ code: |
           -- Capture reasoning from tool calls
           local last_edit_r = Tool.last_call("str_replace_editor")
           if last_edit_r and last_edit_r.args then
-            local cmd = last_edit_r.args.command or ""
+            local ok_cmd_r, cmd = pcall(function() return last_edit_r.args.command end)
+            cmd = (ok_cmd_r and cmd) or ""
             if cmd ~= "view" then
-              local old_s = trunc(tostring(last_edit_r.args.old_str or ""), 200)
-              local new_s = trunc(tostring(last_edit_r.args.new_str or ""), 400)
+              local ok_old_r, old_s = pcall(function() return trunc(tostring(last_edit_r.args.old_str or ""), 200) end)
+              old_s = ok_old_r and old_s or ""
+              local ok_new_r, new_s = pcall(function() return trunc(tostring(last_edit_r.args.new_str or ""), 400) end)
+              new_s = ok_new_r and new_s or ""
               if has_text(new_s) then
                 table.insert(react_reasoning, string.format("Edit: replaced [%s] with [%s]", old_s, new_s))
               end
@@ -3805,7 +4009,7 @@ code: |
           if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
 
           -- Compact history even on failed cycles
-          if cycle < params.max_iterations then
+          if cycle < max_cycles then
             code_editor.clear_history()
             code_editor.history:add({
               role = "system",
@@ -4138,7 +4342,7 @@ code: |
         local reason_short = has_text(final_done_reason) and (": " .. trunc(final_done_reason, 500)) or ""
         Human.notify({message = string.format(
           "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs baseline)  ACC AC1: %.3f (%+.3f vs baseline)\n│  Running: %d accepted, %d carried (neutral), %d rejected, %d skipped\n└─ Current base: %s",
-          cycle, params.max_iterations, status_str, synthesis_note, #succeeded, #failed, reason_short,
+          cycle, max_cycles, status_str, synthesis_note, #succeeded, #failed, reason_short,
           b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
           b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment,
           accepted_count, carried_count, rejected_count, skipped_count,
@@ -4191,7 +4395,7 @@ code: |
         -- build_planning_context() reconstructs the full optimization history
         -- from the iterations array, so the summary is supplementary context.
         -- ================================================================
-        if cycle < params.max_iterations then
+        if cycle < max_cycles then
           local summary_parts = {}
           table.insert(summary_parts, string.format("=== CYCLE %d SUMMARY ===", cycle))
           table.insert(summary_parts, string.format("Status: %s", status_str))
@@ -4238,6 +4442,7 @@ code: |
         "ERROR in cycle %d: %s — skipping to next cycle", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
 
       consecutive_failed_cycles = consecutive_failed_cycles + 1
+      max_cycles = max_cycles + 1  -- skipped cycle doesn't count toward the limit
 
       -- Record as failed cycle so history is preserved
       table.insert(iterations, {
@@ -4257,9 +4462,9 @@ code: |
       end
       -- Otherwise continue to next cycle (plateau detection handles repeated failures)
     end
-    -- pcall body returns "break_cycle" when it wants to exit the for loop
+    -- pcall body returns "break_cycle" when it wants to exit the while loop
     if cycle_err == "break_cycle" then break end
-  end  -- end of for cycle
+  end  -- end of while cycle
   diag("Exited main cycle loop")
 
   -- Determine final stop reason
@@ -4276,7 +4481,7 @@ code: |
       local last_err = iterations[#iterations].skip_reason or "unknown error"
       stop_reason = "error"
       error("All " .. #iterations .. " cycles failed: " .. last_err)
-    elseif #iterations >= params.max_iterations then
+    elseif #iterations >= max_cycles then
       stop_reason = "max_iterations"
     else
       stop_reason = "converged"
@@ -4351,38 +4556,12 @@ code: |
     table.insert(diag_parts, "4. Is this score OPTIMIZABLE with prompt changes, or does it need a different approach entirely?\n\n")
     table.insert(diag_parts, "Be specific and actionable. This report goes to the human operator.\n")
 
-    -- Run feedback contradictions report for diagnostic context
-    do
-      local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
-        block_class = "FeedbackContradictions",
-        block_config = {
-          scorecard = params.scorecard,
-          score = params.score,
-          mode = "contradictions",
-          days = tostring(params.days or 90),
-          max_feedback_items = 100,
-          num_topics = 5
-        }
-      })
-      if ok and report_result and report_result.output then
-        local topics = report_result.output.topics or {}
-        if #topics > 0 then
-          local parts = {}
-          table.insert(parts, string.format(
-            "Found %d contradiction topics from %d items analyzed:",
-            #topics, report_result.output.total_items_analyzed or 0))
-          for _, topic in ipairs(topics) do
-            table.insert(parts, string.format(
-              "\n- %s (%d items): %s\n  Guideline: %s",
-              topic.label, topic.count or 0,
-              trunc(topic.summary or "", 300),
-              trunc(topic.guideline_quote or "", 200)))
-          end
-          table.insert(diag_parts, "\n=== FEEDBACK CONTRADICTIONS (guidelines vs. feedback labels) ===")
-          table.insert(diag_parts, table.concat(parts, ""))
-          table.insert(diag_parts, "")
-        end
-      end
+    -- Include cached contradictions report (collected per-cycle during the run)
+    local known_contra = State.get("known_contradictions")
+    if known_contra and has_text(known_contra.summary) then
+      table.insert(diag_parts, "\n=== FEEDBACK CONTRADICTIONS (guidelines vs. feedback labels) ===")
+      table.insert(diag_parts, known_contra.summary)
+      table.insert(diag_parts, "")
     end
 
     -- Include cycle history for context
