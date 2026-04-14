@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { getClient } from '@/utils/data-operations'
 import {
@@ -2591,7 +2591,7 @@ function ConversationViewer({
                 <Button
                   size="sm"
                   onClick={handleCreateSession}
-                  disabled={isAuthUnavailable || !canCreateSession || isCreatingSession}
+                  disabled={!canCreateSession || isCreatingSession}
                 >
                   Create New Session
                 </Button>
