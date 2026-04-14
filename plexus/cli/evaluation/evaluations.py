@@ -6,11 +6,12 @@ import re
 import sys
 import json
 import click
+from click.core import ParameterSource
 import yaml
 import asyncio
 import pandas as pd
 import traceback
-from typing import Optional, Dict
+from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 from datetime import datetime, timezone, timedelta
 import tempfile
@@ -62,6 +63,12 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared.CommandProgress import CommandProgress
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageConfig
 from plexus.cli.shared.stage_configurations import get_evaluation_stage_configs
+from plexus.cli.shared.feedback_evaluation_runner import (
+    FeedbackRunnerRequest,
+    format_feedback_run_kanbus_comment,
+    run_feedback_evaluation_orchestrated,
+)
+from plexus.utils.feedback_selection import select_feedback_items
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -584,6 +591,75 @@ def get_dataset_by_id(client: PlexusDashboardClient, dataset_id: str) -> dict:
     return result['getDataSet']
 
 
+def validate_dataset_materialization(dataset: dict) -> Dict[str, Any]:
+    """Validate dataset-backed accuracy readiness from canonical DataSet.file."""
+    dataset_id = str((dataset or {}).get("id") or "unknown")
+    dataset_file_raw = (dataset or {}).get("file")
+    dataset_file = str(dataset_file_raw).strip() if dataset_file_raw else None
+
+    if not dataset_file:
+        return {
+            "is_materialized": False,
+            "dataset_id": dataset_id,
+            "dataset_file": None,
+            "materialization_error": "missing_file_pointer",
+            "next_step_hint": "Rebuild dataset and verify DataSet.file is persisted.",
+        }
+
+    normalized = dataset_file.lower()
+    if not (normalized.endswith(".parquet") or normalized.endswith(".csv")):
+        return {
+            "is_materialized": False,
+            "dataset_id": dataset_id,
+            "dataset_file": dataset_file,
+            "materialization_error": "unsupported_file_type",
+            "next_step_hint": "Rebuild dataset with a parquet or csv file pointer in DataSet.file.",
+        }
+
+    return {
+        "is_materialized": True,
+        "dataset_id": dataset_id,
+        "dataset_file": dataset_file,
+        "materialization_error": None,
+        "next_step_hint": None,
+    }
+
+
+def build_dataset_materialization_failure_message(
+    *,
+    dataset_id: str,
+    reason: str,
+    dataset_file: Optional[str],
+    next_step_hint: str,
+) -> str:
+    dataset_file_value = dataset_file or "none"
+    return (
+        "dataset_materialization_failed "
+        f"dataset_id={dataset_id} "
+        f"reason={reason} "
+        f"dataset_file={dataset_file_value} "
+        f"next_step_hint={next_step_hint}"
+    )
+
+
+def assert_dataset_materialized_for_accuracy(dataset: dict) -> Dict[str, Any]:
+    """Fail fast when a dataset-backed accuracy run points to a non-materialized dataset."""
+    readiness = validate_dataset_materialization(dataset or {})
+    if readiness.get("is_materialized"):
+        return readiness
+
+    reason = str(readiness.get("materialization_error") or "unknown")
+    next_step_hint = str(readiness.get("next_step_hint") or "Rebuild dataset.")
+    raise ValueError(
+        build_dataset_materialization_failure_message(
+            dataset_id=str(readiness.get("dataset_id") or "unknown"),
+            reason=reason,
+            dataset_file=readiness.get("dataset_file"),
+            next_step_hint=next_step_hint,
+        )
+    )
+
+
 def list_associated_datasets_for_score(client: PlexusDashboardClient, score_id: str, limit: int = 200) -> list[dict]:
     """List datasets associated to a score ordered newest-first by createdAt then id."""
     query = """
@@ -921,9 +997,23 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
             'text': sample.get('text', ''),
             f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
             'content_id': sample.get('content_id', ''),
+            'item_id': sample.get('item_id', ''),
+            'feedback_item_id': sample.get('feedback_item_id', ''),
             'IDs': sample.get('IDs', ''),  # Keep IDs at top level
             'columns': {
-                **{k: v for k, v in sample.items() if k not in ['text', score_name_column_name, 'content_id', 'metadata', 'IDs']},
+                **{
+                    k: v
+                    for k, v in sample.items()
+                    if k not in [
+                        'text',
+                        score_name_column_name,
+                        'content_id',
+                        'item_id',
+                        'feedback_item_id',
+                        'metadata',
+                        'IDs',
+                    ]
+                },
                 'metadata': metadata  # Include the metadata in the columns
             }
         }
@@ -931,6 +1021,507 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
     
     logging.info(f"Converted {len(processed_samples)} samples to evaluation format")
     return processed_samples
+
+
+def resolve_cloud_dataset_sample_limit(
+    *,
+    number_of_samples: Optional[int],
+    number_of_samples_explicit: bool,
+) -> Optional[int]:
+    """
+    Determine dataset-backed sample cap.
+
+    For cloud/associated datasets, default CLI sample size should not silently cap
+    the dataset. Only apply a cap when the operator explicitly sets
+    --number-of-samples.
+    """
+    if number_of_samples_explicit:
+        return number_of_samples
+    return None
+
+
+def _parse_score_result_metadata(raw_metadata: Any) -> Dict[str, Any]:
+    if isinstance(raw_metadata, dict):
+        return raw_metadata
+    if isinstance(raw_metadata, str):
+        try:
+            parsed = json.loads(raw_metadata)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _derive_score_result_correctness(
+    *,
+    metadata: Dict[str, Any],
+    predicted_value: Any,
+) -> Tuple[Optional[bool], Optional[str]]:
+    """
+    Determine whether a score result is correct and extract human_label when available.
+
+    Returns:
+      (is_correct, human_label) where is_correct can be True/False or None if unknown.
+    """
+    results_map = metadata.get("results")
+    if isinstance(results_map, dict) and results_map:
+        correctness_values: List[bool] = []
+        human_label: Optional[str] = None
+        for node in results_map.values():
+            if not isinstance(node, dict):
+                continue
+            node_meta = node.get("metadata")
+            if not isinstance(node_meta, dict):
+                continue
+            node_correct = node_meta.get("correct")
+            if isinstance(node_correct, bool):
+                correctness_values.append(node_correct)
+            if human_label is None and node_meta.get("human_label") is not None:
+                human_label = str(node_meta.get("human_label"))
+        if correctness_values:
+            return all(correctness_values), human_label
+
+    direct_correct = metadata.get("correct")
+    direct_human_label = metadata.get("human_label")
+    if isinstance(direct_correct, bool):
+        return direct_correct, str(direct_human_label) if direct_human_label is not None else None
+
+    if direct_human_label is not None and predicted_value is not None:
+        predicted = str(predicted_value).strip().lower()
+        human = str(direct_human_label).strip().lower()
+        return predicted == human, str(direct_human_label)
+
+    return None, str(direct_human_label) if direct_human_label is not None else None
+
+
+async def _fetch_feedback_items_by_ids(
+    *,
+    client: PlexusDashboardClient,
+    feedback_item_ids: List[str],
+) -> Dict[str, Any]:
+    """Fetch FeedbackItem rows by IDs with enough fields for RCA."""
+    from plexus.dashboard.api.models.feedback_item import FeedbackItem
+
+    query = """
+    query GetFeedbackItemForRca($id: ID!) {
+      getFeedbackItem(id: $id) {
+        id
+        accountId
+        scorecardId
+        scoreId
+        itemId
+        initialAnswerValue
+        finalAnswerValue
+        initialCommentValue
+        finalCommentValue
+        editCommentValue
+        editedAt
+        createdAt
+        updatedAt
+        item {
+          id
+          identifiers
+          externalId
+          description
+          text
+          metadata
+          createdAt
+          updatedAt
+        }
+      }
+    }
+    """
+    fetched: Dict[str, Any] = {}
+    for feedback_item_id in feedback_item_ids:
+        try:
+            response = await asyncio.to_thread(
+                client.execute,
+                query,
+                {"id": feedback_item_id},
+            )
+            raw_item = (response or {}).get("getFeedbackItem")
+            if not raw_item:
+                continue
+            fetched_item = FeedbackItem.from_dict(raw_item, client=client)
+            fetched[feedback_item_id] = fetched_item
+        except Exception as exc:
+            logging.debug(
+                "Failed to fetch feedback item %s for RCA linkage: %s",
+                feedback_item_id,
+                exc,
+                exc_info=True,
+            )
+    return fetched
+
+
+async def _run_shared_feedback_root_cause_orchestration(
+    *,
+    client: PlexusDashboardClient,
+    account_key: str,
+    account_id: str,
+    evaluation_id: str,
+    scorecard_identifier: str,
+    scorecard_id: str,
+    score_id: str,
+    score_version_id: Optional[str],
+    max_items: int,
+    sampling_mode: str,
+    sample_seed: Optional[int],
+    max_category_summary_items: int,
+    days: Optional[int],
+    tracker=None,
+    apply_feedback_window_selection: bool = False,
+) -> Dict[str, Any]:
+    """
+    Run the canonical feedback RCA pipeline for an existing evaluation record.
+
+    This helper is intentionally shared between:
+    - `evaluate feedback --version ...` path
+    - dataset-backed `evaluate accuracy ...` path
+    """
+    fe = FeedbackEvaluation(
+        scorecard_name=scorecard_identifier,
+        scorecard=None,
+        account_key=account_key,
+        days=days,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        evaluation_id=evaluation_id,
+        account_id=account_id,
+        api_client=client,
+        max_items=max_items,
+        sampling_mode=sampling_mode,
+        sample_seed=sample_seed,
+        max_category_summary_items=max_category_summary_items,
+    )
+    # FeedbackEvaluation constructor does not accept score_version_id directly.
+    # Set it on the instance for RCA prompt/context usage.
+    fe.score_version_id = score_version_id
+
+    score_result_query = """
+    query ListScoreResultsForEvaluation(
+      $evaluationId: String!,
+      $limit: Int,
+      $nextToken: String
+    ) {
+      listScoreResultByEvaluationId(
+        evaluationId: $evaluationId,
+        limit: $limit,
+        nextToken: $nextToken
+      ) {
+        items {
+          id
+          value
+          itemId
+          metadata
+          explanation
+        }
+        nextToken
+      }
+    }
+    """
+
+    incorrect_rows: List[Dict[str, Any]] = []
+    incorrect_score_result_map: Dict[str, Dict[str, Optional[str]]] = {}
+    next_token = None
+    while True:
+        sr_response = await asyncio.to_thread(
+            client.execute,
+            score_result_query,
+            {
+                "evaluationId": evaluation_id,
+                "limit": 200,
+                "nextToken": next_token,
+            },
+        )
+        score_result_data = (sr_response or {}).get("listScoreResultByEvaluationId") or {}
+        for score_result in score_result_data.get("items") or []:
+            metadata = _parse_score_result_metadata(score_result.get("metadata"))
+            is_correct, human_label = _derive_score_result_correctness(
+                metadata=metadata,
+                predicted_value=score_result.get("value"),
+            )
+            if is_correct is None or is_correct:
+                continue
+
+            feedback_item_id = str(metadata.get("feedback_item_id") or "").strip() or None
+            incorrect_rows.append(
+                {
+                    "score_result_id": score_result.get("id"),
+                    "feedback_item_id": feedback_item_id,
+                }
+            )
+            if feedback_item_id and feedback_item_id not in incorrect_score_result_map:
+                incorrect_score_result_map[feedback_item_id] = {
+                    "value": score_result.get("value"),
+                    "human_label": human_label,
+                    "explanation": score_result.get("explanation"),
+                }
+
+        next_token = score_result_data.get("nextToken")
+        if not next_token:
+            break
+
+    selection_metadata: Dict[str, Any] = {}
+    if apply_feedback_window_selection:
+        # Preserve explicit selection metadata from the shared selector contract.
+        if days is None:
+            start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        else:
+            start_date = datetime.now(timezone.utc) - timedelta(days=days)
+        end_date = datetime.now(timezone.utc)
+        feedback_items_for_selection = await fe._fetch_feedback_items(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        selected_feedback_items, selection_metadata = select_feedback_items(
+            feedback_items_for_selection,
+            max_items=max_items,
+            sampling_mode=sampling_mode,
+            sample_seed=sample_seed,
+        )
+        selected_feedback_ids = {
+            str(getattr(item, "id", "") or "")
+            for item in selected_feedback_items
+            if getattr(item, "id", None)
+        }
+        if selected_feedback_ids:
+            incorrect_rows = [
+                row for row in incorrect_rows
+                if not row.get("feedback_item_id") or row.get("feedback_item_id") in selected_feedback_ids
+            ]
+            incorrect_score_result_map = {
+                feedback_item_id: value
+                for feedback_item_id, value in incorrect_score_result_map.items()
+                if feedback_item_id in selected_feedback_ids
+            }
+        else:
+            incorrect_rows = [row for row in incorrect_rows if not row.get("feedback_item_id")]
+            incorrect_score_result_map = {}
+
+    incorrect_items_total = len(incorrect_rows)
+    incorrect_items_with_feedback_link = len(
+        [row for row in incorrect_rows if row.get("feedback_item_id")]
+    )
+    incorrect_items_without_feedback_link = (
+        incorrect_items_total - incorrect_items_with_feedback_link
+    )
+    linked_feedback_item_ids = sorted(incorrect_score_result_map.keys())
+
+    warnings: List[str] = []
+    if incorrect_items_without_feedback_link > 0:
+        warnings.append(
+            f"{incorrect_items_without_feedback_link} incorrect item(s) are missing feedback_item_id linkage."
+        )
+
+    fetched_feedback_items = await _fetch_feedback_items_by_ids(
+        client=client,
+        feedback_item_ids=linked_feedback_item_ids,
+    )
+    missing_feedback_item_ids = [
+        feedback_item_id
+        for feedback_item_id in linked_feedback_item_ids
+        if feedback_item_id not in fetched_feedback_items
+    ]
+    if missing_feedback_item_ids:
+        warnings.append(
+            f"{len(missing_feedback_item_ids)} linked feedback item(s) could not be fetched for RCA."
+        )
+
+    feedback_items_for_rca = [
+        fetched_feedback_items[feedback_item_id]
+        for feedback_item_id in linked_feedback_item_ids
+        if feedback_item_id in fetched_feedback_items
+    ]
+    incorrect_items_analyzed_for_rca = len(feedback_items_for_rca)
+
+    if incorrect_items_total == 0 or incorrect_items_analyzed_for_rca == 0:
+        if incorrect_items_total > 0 and incorrect_items_with_feedback_link == 0:
+            warnings.append(
+                "RCA unavailable because no incorrect items include feedback_item_id linkage."
+            )
+        root_cause = {}
+    else:
+        original_explanations: Dict[str, str] = {}
+        for feedback_item in feedback_items_for_rca:
+            if not feedback_item.itemId:
+                continue
+            try:
+                original_response = await asyncio.to_thread(
+                    client.execute,
+                    """
+                    query GetOriginalScoreResult(
+                      $itemId: String!,
+                      $typeScoreId: ModelScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAtCompositeKeyConditionInput
+                    ) {
+                      listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
+                        itemId: $itemId,
+                        typeScoreIdUpdatedAt: $typeScoreId,
+                        sortDirection: DESC,
+                        limit: 1
+                      ) {
+                        items {
+                          explanation
+                        }
+                      }
+                    }
+                    """,
+                    {
+                        "itemId": feedback_item.itemId,
+                        "typeScoreId": {
+                            "beginsWith": {
+                                "type": "prediction",
+                                "scoreId": feedback_item.scoreId,
+                            }
+                        },
+                    },
+                )
+                original_items = (
+                    (original_response or {})
+                    .get("listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt", {})
+                    .get("items", [])
+                )
+                for original_item in original_items:
+                    explanation = original_item.get("explanation")
+                    if explanation:
+                        original_explanations[feedback_item.id] = explanation
+                        break
+            except Exception as exc:
+                logging.debug(
+                    "Original explanation lookup failed for feedback item %s: %s",
+                    getattr(feedback_item, "id", None),
+                    exc,
+                    exc_info=True,
+                )
+
+        try:
+            root_cause = await fe._run_root_cause_analysis(
+                feedback_items_for_rca,
+                incorrect_score_result_map,
+                original_explanations,
+                max_report_exemplars=20,
+                max_summarization_exemplars=6,
+                max_category_summary_items=max_category_summary_items,
+                tracker=tracker,
+            )
+        except Exception as _rca_exc:
+            logging.warning(f"Root-cause analysis failed (non-fatal): {_rca_exc}")
+            root_cause = []
+
+    persisted_root_cause = await asyncio.to_thread(
+        fe._persist_root_cause_for_parameters,
+        root_cause,
+    )
+    contract = FeedbackEvaluation.root_cause_contract_outcome(
+        incorrect_items_with_feedback_link,
+        persisted_root_cause,
+    )
+
+    if incorrect_items_total == 0:
+        rca_coverage_status = "none"
+    elif incorrect_items_analyzed_for_rca == 0:
+        rca_coverage_status = "none"
+    elif (
+        incorrect_items_analyzed_for_rca < incorrect_items_total
+        or len(missing_feedback_item_ids) > 0
+    ):
+        rca_coverage_status = "partial"
+    else:
+        rca_coverage_status = "full"
+
+    return {
+        "root_cause": persisted_root_cause,
+        "selection_metadata": selection_metadata,
+        "incorrect_items_total": incorrect_items_total,
+        "incorrect_items_with_feedback_link": incorrect_items_with_feedback_link,
+        "incorrect_items_without_feedback_link": incorrect_items_without_feedback_link,
+        "incorrect_items_analyzed_for_rca": incorrect_items_analyzed_for_rca,
+        "rca_coverage_status": rca_coverage_status,
+        "warnings": warnings,
+        "root_cause_required": contract["root_cause_required"],
+        "has_usable_root_cause": contract["has_usable_root_cause"],
+        "error_message": contract["error_message"],
+    }
+
+
+def _apply_feedback_rca_outcome_to_parameters(
+    existing_parameters: Optional[Dict[str, Any]],
+    rca_outcome: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Apply shared RCA contract/coverage fields to evaluation parameters."""
+    params = FeedbackEvaluation.apply_root_cause_contract_to_parameters(
+        existing_parameters,
+        rca_outcome.get("root_cause"),
+        bool(rca_outcome.get("root_cause_required")),
+        bool(rca_outcome.get("has_usable_root_cause")),
+    )
+    params.update(
+        {
+            "incorrect_items_total": int(rca_outcome.get("incorrect_items_total") or 0),
+            "incorrect_items_with_feedback_link": int(
+                rca_outcome.get("incorrect_items_with_feedback_link") or 0
+            ),
+            "incorrect_items_without_feedback_link": int(
+                rca_outcome.get("incorrect_items_without_feedback_link") or 0
+            ),
+            "incorrect_items_analyzed_for_rca": int(
+                rca_outcome.get("incorrect_items_analyzed_for_rca") or 0
+            ),
+            "rca_coverage_status": rca_outcome.get("rca_coverage_status") or "none",
+        }
+    )
+    warnings = rca_outcome.get("warnings") or []
+    if warnings:
+        params["rca_warnings"] = warnings
+    else:
+        params.pop("rca_warnings", None)
+    return params
+
+
+def _fetch_accuracy_evaluation_summary_for_json(evaluation_id: Optional[str]) -> Dict[str, Any]:
+    """Fetch final persisted evaluation fields for json-only payloads."""
+    if not evaluation_id:
+        return {}
+
+    try:
+        client = PlexusDashboardClient()
+        evaluation = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+    except Exception:
+        return {}
+
+    parameters = {}
+    raw_parameters = getattr(evaluation, "parameters", None)
+    if isinstance(raw_parameters, str):
+        try:
+            parameters = json.loads(raw_parameters) if raw_parameters else {}
+        except Exception:
+            parameters = {}
+    elif isinstance(raw_parameters, dict):
+        parameters = dict(raw_parameters)
+
+    metadata = parameters.get("metadata") if isinstance(parameters, dict) else {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    return {
+        "status": getattr(evaluation, "status", None),
+        "accuracy": getattr(evaluation, "accuracy", None),
+        "processed_items": getattr(evaluation, "processedItems", None),
+        "total_items": getattr(evaluation, "totalItems", None),
+        "score_version_id": getattr(evaluation, "scoreVersionId", None),
+        "dataset_id": parameters.get("dataset_id"),
+        "baseline": metadata.get("baseline"),
+        "root_cause_required": parameters.get("root_cause_required"),
+        "has_root_cause": bool(parameters.get("root_cause")),
+        "incorrect_items_total": parameters.get("incorrect_items_total"),
+        "incorrect_items_with_feedback_link": parameters.get("incorrect_items_with_feedback_link"),
+        "incorrect_items_without_feedback_link": parameters.get("incorrect_items_without_feedback_link"),
+        "incorrect_items_analyzed_for_rca": parameters.get("incorrect_items_analyzed_for_rca"),
+        "rca_coverage_status": parameters.get("rca_coverage_status"),
+        "rca_warnings": parameters.get("rca_warnings"),
+    }
 
 @click.group()
 def evaluate():
@@ -1413,6 +2004,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for before/after dashboard comparison.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
+@click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
 def accuracy(
     scorecard: str,
     yaml: bool,
@@ -1439,34 +2031,48 @@ def accuracy(
     allow_no_labels: bool,
     baseline: Optional[str],
     json_only: bool,
+    notes: Optional[str] = None,
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
     logging.info("Starting accuracy evaluation")
+    ctx = click.get_current_context(silent=True)
+    number_of_samples_explicit = False
+    if ctx is not None:
+        try:
+            source = ctx.get_parameter_source("number_of_samples")
+            number_of_samples_explicit = source is not None and source != ParameterSource.DEFAULT
+        except Exception:
+            number_of_samples_explicit = False
+
+    def emit_json(payload: Dict[str, Any], exit_code: int = 0) -> None:
+        click.echo(json.dumps(payload))
+        if exit_code:
+            raise SystemExit(exit_code)
     
     # Validate mutually exclusive options
     if fresh and reload:
         logging.error("Cannot use both --fresh and --reload options. Choose one.")
         if json_only:
-            click.echo(json.dumps({"error": "Cannot use both --fresh and --reload options. Choose one."}))
-            raise SystemExit(1)
+            emit_json({"error": "Cannot use both --fresh and --reload options. Choose one."}, exit_code=1)
         console.print("[bold red]Error: Cannot use both --fresh and --reload options. Choose one.[/bold red]")
         return
     
     if version and latest:
         logging.error("Cannot use both --version and --latest options. Choose one.")
         if json_only:
-            click.echo(json.dumps({"error": "Cannot use both --version and --latest options. Choose one."}))
-            raise SystemExit(1)
+            emit_json({"error": "Cannot use both --version and --latest options. Choose one."}, exit_code=1)
         console.print("[bold red]Error: Cannot use both --version and --latest options. Choose one.[/bold red]")
         return
 
     if all_score_associated_datasets and not use_score_associated_dataset:
         logging.error("--all-score-associated-datasets requires --use-score-associated-dataset.")
         if json_only:
-            click.echo(json.dumps({"error": "--all-score-associated-datasets requires --use-score-associated-dataset."}))
-            raise SystemExit(1)
+            emit_json(
+                {"error": "--all-score-associated-datasets requires --use-score-associated-dataset."},
+                exit_code=1,
+            )
         console.print("[bold red]Error: --all-score-associated-datasets requires --use-score-associated-dataset.[/bold red]")
         return
     
@@ -1482,38 +2088,39 @@ def accuracy(
     if dry_run:
         # Log the dry run mode message
         logging.info("Dry run mode enabled - database operations will be skipped")
-        console.print("[bold green]Dry run mode enabled - database operations will be skipped[/bold green]")
-        
-        # Log the parameters that would be used
-        console.print(f"[bold]Scorecard:[/bold] {scorecard}")
-        console.print(f"[bold]Loading from:[/bold] {'YAML files' if yaml else 'API'}")
-        console.print(f"[bold]Version:[/bold] {version or 'champion'}")
-        console.print(f"[bold]Number of samples:[/bold] {number_of_samples}")
-        if score:
-            console.print(f"[bold]Target scores:[/bold] {score}")
-        else:
-            console.print("[bold]Target scores:[/bold] All scores in scorecard")
-        
-        # Make it clear that sample retrieval and evaluation would happen in normal mode
-        console.print("\n[yellow]In normal mode, the following operations would be performed:[/yellow]")
-        console.print("1. Load data and retrieve samples from data sources")
-        console.print("2. Evaluate each sample using the scorecard")
-        console.print("3. Calculate accuracy by comparing expected vs. actual results")
-        console.print("4. Store results in the database")
-        
-        # Simulate successful completion
-        console.print("\n[bold green]Dry run completed successfully.[/bold green]")
-        console.print("[dim]No actual evaluation or database operations were performed.[/dim]")
-        console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
+        if not json_only:
+            console.print("[bold green]Dry run mode enabled - database operations will be skipped[/bold green]")
+
+            # Log the parameters that would be used
+            console.print(f"[bold]Scorecard:[/bold] {scorecard}")
+            console.print(f"[bold]Loading from:[/bold] {'YAML files' if yaml else 'API'}")
+            console.print(f"[bold]Version:[/bold] {version or 'champion'}")
+            console.print(f"[bold]Number of samples:[/bold] {number_of_samples}")
+            if score:
+                console.print(f"[bold]Target scores:[/bold] {score}")
+            else:
+                console.print("[bold]Target scores:[/bold] All scores in scorecard")
+
+            # Make it clear that sample retrieval and evaluation would happen in normal mode
+            console.print("\n[yellow]In normal mode, the following operations would be performed:[/yellow]")
+            console.print("1. Load data and retrieve samples from data sources")
+            console.print("2. Evaluate each sample using the scorecard")
+            console.print("3. Calculate accuracy by comparing expected vs. actual results")
+            console.print("4. Store results in the database")
+
+            # Simulate successful completion
+            console.print("\n[bold green]Dry run completed successfully.[/bold green]")
+            console.print("[dim]No actual evaluation or database operations were performed.[/dim]")
+            console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
         if json_only:
-            click.echo(json.dumps({
+            emit_json({
                 "dry_run": True,
                 "scorecard": scorecard,
                 "score": score or None,
                 "version_source": version or "champion",
                 "number_of_samples": number_of_samples,
                 "baseline": baseline,
-            }))
+            })
         return
 
     if all_score_associated_datasets and not dataset_id:
@@ -1531,13 +2138,28 @@ def accuracy(
                 f"No associated datasets found for score {primary_score_id}."
             )
 
-        console.print(
-            f"[cyan]Running accuracy evaluation across {len(associated_datasets)} "
-            f"associated datasets for score {primary_score_id}[/cyan]"
-        )
+        if not json_only:
+            console.print(
+                f"[cyan]Running accuracy evaluation across {len(associated_datasets)} "
+                f"associated datasets for score {primary_score_id}[/cyan]"
+            )
         run_summaries = []
         for dataset in associated_datasets:
             dataset_id_value = dataset["id"]
+            try:
+                assert_dataset_materialized_for_accuracy(dataset)
+            except ValueError as err:
+                failure_message = str(err)
+                reason = "materialization_failed"
+                readiness = validate_dataset_materialization(dataset)
+                run_summaries.append({
+                    "datasetId": dataset_id_value,
+                    "status": f"FAILED ({reason})",
+                    "ac1": "n/a",
+                    "accuracy": "n/a",
+                    "error": failure_message,
+                })
+                continue
             started_at_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             cmd = [
                 sys.executable,
@@ -1549,11 +2171,11 @@ def accuracy(
                 str(scorecard),
                 "--dataset-id",
                 dataset_id_value,
-                "--number-of-samples",
-                str(number_of_samples),
                 "--sampling-method",
                 sampling_method,
             ]
+            if number_of_samples_explicit:
+                cmd.extend(["--number-of-samples", str(number_of_samples)])
 
             if yaml:
                 cmd.append("--yaml")
@@ -1639,19 +2261,20 @@ def accuracy(
                 "accuracy": accuracy_value,
             })
 
-        console.print("\n[bold]Associated Dataset Evaluation Summary[/bold]")
-        console.print("dataset_id                             status               AC1      Accuracy")
-        for row in run_summaries:
-            console.print(
-                f"{row['datasetId']:<38} {row['status']:<20} {row['ac1']:<8} {row['accuracy']}"
-            )
+        if not json_only:
+            console.print("\n[bold]Associated Dataset Evaluation Summary[/bold]")
+            console.print("dataset_id                             status               AC1      Accuracy")
+            for row in run_summaries:
+                console.print(
+                    f"{row['datasetId']:<38} {row['status']:<20} {row['ac1']:<8} {row['accuracy']}"
+                )
         if json_only:
-            click.echo(json.dumps({
+            emit_json({
                 "score_id": primary_score_id,
                 "runs": run_summaries,
                 "all_score_associated_datasets": True,
                 "baseline": baseline,
-            }))
+            })
         return
     
     # Proceeding with normal evaluation
@@ -1755,6 +2378,7 @@ def accuracy(
                             "parameters": json.dumps({
                                 "sampling_method": sampling_method,
                                 "sample_size": number_of_samples,
+                                **({"notes": notes} if notes else {}),
                                 "metadata": {"baseline": baseline} if baseline else {},
                             }),
                             "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
@@ -1825,19 +2449,20 @@ def accuracy(
                     "parameters": json.dumps({
                         "sampling_method": sampling_method,
                         "sample_size": number_of_samples,
+                        **({"notes": notes} if notes else {}),
                         "metadata": {"baseline": baseline} if baseline else {},
                     }),
                     "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                     "estimatedRemainingSeconds": number_of_samples,
                     "taskId": task.id
                 }
-                
+
                 # Add scoreVersionId if using API loading and version is specified
                 # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
                 if not yaml and resolved_version:
                     logging.info(f"Will set scoreVersionId to {resolved_version} in initial evaluation record (Celery path - API loading with specific version)")
                     experiment_params["scoreVersionId"] = resolved_version
-                
+
                 try:
                     logging.info("Creating initial Evaluation record for Celery path...")
                     evaluation_record = DashboardEvaluation.create(
@@ -2126,6 +2751,7 @@ def accuracy(
             # Check if any cloud dataset options are provided
             data_set_id_for_eval = None
             use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id, use_score_associated_dataset])
+            dataset_backed_accuracy = False
             
             if use_cloud_dataset:
                 # Load samples from cloud dataset
@@ -2155,10 +2781,17 @@ def accuracy(
                     
                     logging.info(f"Using cloud dataset: {cloud_dataset['name']} (ID: {cloud_dataset['id']})")
                     data_set_id_for_eval = cloud_dataset.get('id')
+                    dataset_backed_accuracy = bool(data_set_id_for_eval)
+
+                    if dataset_backed_accuracy:
+                        assert_dataset_materialized_for_accuracy(cloud_dataset)
                     
                     labeled_samples_data = load_samples_from_cloud_dataset(
                         cloud_dataset, primary_score_name, primary_score_config,
-                        number_of_samples=number_of_samples,
+                        number_of_samples=resolve_cloud_dataset_sample_limit(
+                            number_of_samples=number_of_samples,
+                            number_of_samples_explicit=number_of_samples_explicit,
+                        ),
                         random_seed=random_seed,
                         progress_callback=tracker.update if tracker else None
                     )
@@ -2430,6 +3063,69 @@ def accuracy(
                         
                         logging.info(f"Using score ID: {score_id} and score version ID: {score_version_id}")
 
+                    # Build parameters payload from the latest evaluation state before updates.
+                    eval_record_for_update = DashboardEvaluation.get_by_id(
+                        evaluation_record.id,
+                        client=client,
+                    )
+                    existing_parameters = {}
+                    try:
+                        raw_parameters = eval_record_for_update.parameters
+                        if isinstance(raw_parameters, str):
+                            existing_parameters = json.loads(raw_parameters) if raw_parameters else {}
+                        elif isinstance(raw_parameters, dict):
+                            existing_parameters = dict(raw_parameters)
+                    except Exception:
+                        existing_parameters = {}
+
+                    if data_set_id_for_eval:
+                        existing_parameters["dataset_id"] = data_set_id_for_eval
+
+                    if dataset_backed_accuracy:
+                        try:
+                            eval_record_for_update.update(status="RUNNING")
+                        except Exception as status_exc:
+                            logging.debug(
+                                "Non-fatal status update failure before dataset-backed RCA: %s",
+                                status_exc,
+                                exc_info=True,
+                            )
+
+                        rca_outcome = await _run_shared_feedback_root_cause_orchestration(
+                            client=client,
+                            account_key=account_key,
+                            account_id=account.id,
+                            evaluation_id=evaluation_record.id,
+                            scorecard_identifier=scorecard,
+                            scorecard_id=scorecard_id,
+                            score_id=score_id_for_eval,
+                            score_version_id=score_version_id_for_eval,
+                            max_items=len(labeled_samples_data),
+                            sampling_mode="newest",
+                            sample_seed=None,
+                            max_category_summary_items=20,
+                            days=None,
+                            tracker=tracker,
+                            apply_feedback_window_selection=False,
+                        )
+
+                        existing_parameters = _apply_feedback_rca_outcome_to_parameters(
+                            existing_parameters,
+                            rca_outcome,
+                        )
+                        warnings = existing_parameters.get("rca_warnings") or []
+                        for warning in warnings:
+                            logging.warning("Dataset-backed RCA warning: %s", warning)
+
+                        if rca_outcome.get("error_message"):
+                            # RCA failed but metrics are already computed — continue with warning
+                            rca_error_msg = str(rca_outcome.get("error_message"))
+                            logging.warning("RCA failed (non-fatal) for accuracy evaluation: %s", rca_error_msg)
+                            eval_record_for_update.update(
+                                errorMessage=f"RCA unavailable: {rca_error_msg}",
+                                parameters=json.dumps(existing_parameters),
+                            )
+
                     # The allowed fields are documented in the GraphQL schema
                     update_fields = {
                         'status': "COMPLETED",
@@ -2453,17 +3149,7 @@ def accuracy(
                         logging.info("Using --yaml flag: not setting scoreVersionId in final evaluation update (local YAML represents champion version)")
                     
                     # Add other data fields
-                    if data_set_id_for_eval:
-                        existing_parameters = {}
-                        try:
-                            raw_parameters = evaluation_record.parameters
-                            if isinstance(raw_parameters, str):
-                                existing_parameters = json.loads(raw_parameters) if raw_parameters else {}
-                            elif isinstance(raw_parameters, dict):
-                                existing_parameters = dict(raw_parameters)
-                        except Exception:
-                            existing_parameters = {}
-                        existing_parameters["dataset_id"] = data_set_id_for_eval
+                    if existing_parameters:
                         update_fields["parameters"] = json.dumps(existing_parameters)
 
                     if final_metrics.get("confusionMatrix"):
@@ -2487,6 +3173,17 @@ def accuracy(
                         raise
                 except Exception as e:
                     logging.error(f"Could not complete evaluation record - error details: {str(e)}")
+                    try:
+                        evaluation_record.update(
+                            status="FAILED",
+                            errorMessage=f"Accuracy completion failed: {str(e)}",
+                        )
+                    except Exception as update_error:
+                        logging.error(
+                            "Failed to mark evaluation as FAILED after completion error: %s",
+                            update_error,
+                        )
+                    raise
             
             # Display final results summary
             logging.info(f"\n{'='*60}")
@@ -2522,10 +3219,9 @@ def accuracy(
             
             logging.info('='*60)
             
-            # Complete the Analyzing stage
+            # Complete task lifecycle in tracker/API task record.
             if tracker:
-                tracker.current_stage.complete()
-                tracker._update_api_task_progress(force_critical=True)
+                tracker.complete_with_message("Accuracy evaluation complete.")
                 logging.info("Analyzing stage completed")
 
         except Exception as e:
@@ -2575,7 +3271,10 @@ def accuracy(
             "all_score_associated_datasets": all_score_associated_datasets,
             "baseline": baseline,
         }
-        click.echo(json.dumps(payload))
+        payload.update(
+            _fetch_accuracy_evaluation_summary_for_json(payload.get("evaluation_id"))
+        )
+        emit_json(payload)
     return evaluation_record
 
 def get_data_driven_samples(
@@ -3395,25 +4094,29 @@ def last(account_key: str, type: Optional[str]):
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID). REQUIRED - feedback evaluations must be run on a single score.')
-@click.option('--days', default=7, type=int, help='Number of days to look back for feedback items (default: 7)')
+@click.option('--days', default=None, type=int, help='Optional lookback window in days (omit for all-time backfill).')
 @click.option('--version', default=None, type=str, help='Specific score version ID to evaluate. If provided, runs accuracy evaluation with FeedbackItems dataset.')
-@click.option('--max-samples', default=None, type=int, help='Optional maximum number of feedback items/samples to evaluate.')
-@click.option('--sample-seed', default=None, type=int, help='Optional random seed used when sampling feedback items.')
+@click.option('--max-items', default=200, type=int, show_default=True, help='Maximum number of feedback items to evaluate.')
+@click.option('--sampling-mode', type=click.Choice(['newest', 'random'], case_sensitive=False), default='newest', show_default=True, help='Feedback item selection mode.')
+@click.option('--sample-seed', default=None, type=int, help='Optional random seed (only valid when --sampling-mode random).')
 @click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20).')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+@click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
 def feedback(
     scorecard: str,
     score: str,
-    days: int,
+    days: Optional[int],
     version: Optional[str],
-    max_samples: Optional[int],
+    max_items: int,
+    sampling_mode: str,
     sample_seed: Optional[int],
     max_category_summary_items: int,
     baseline: Optional[str],
     use_yaml: bool,
-    task_id: Optional[str]
+    task_id: Optional[str],
+    notes: Optional[str] = None,
 ):
     """
     Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
@@ -3441,7 +4144,6 @@ def feedback(
         # Test a specific version against feedback
         plexus evaluate feedback --scorecard "SampleScorecard" --score "SampleScore" --days 30 --version abc123
     
-    See also: 'plexus evaluate feedback-all' for bulk evaluation of all scores with feedback.
     """
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
@@ -3449,19 +4151,36 @@ def feedback(
     from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
     from plexus.dashboard.api.models.score import Score as DashboardScore
     
-    logging.info(f"Starting feedback evaluation for scorecard={scorecard}, score={score}, days={days}")
+    normalized_sampling_mode = str(sampling_mode).lower()
+    logging.info(
+        "Starting feedback evaluation for scorecard=%s, score=%s, days=%s, max_items=%s, sampling_mode=%s",
+        scorecard,
+        score,
+        days,
+        max_items,
+        normalized_sampling_mode,
+    )
     console.print(f"[bold blue]Starting Feedback Evaluation[/bold blue]")
     console.print(f"Scorecard: {scorecard}")
     console.print(f"Score: {score}")
-    console.print(f"Time Period: Last {days} days")
-    if max_samples is not None:
-        console.print(f"Max Samples: {max_samples}")
+    if days is None:
+        console.print("Time Period: All available history")
+    else:
+        console.print(f"Time Period: Last {days} days")
+    console.print(f"Max Items: {max_items}")
+    console.print(f"Sampling Mode: {normalized_sampling_mode}")
     if sample_seed is not None:
         console.print(f"Sample Seed: {sample_seed}")
     console.print(f"Max Category Summary Items: {max_category_summary_items}")
 
-    if max_samples is not None and max_samples <= 0:
-        console.print("[bold red]Error: --max-samples must be a positive integer[/bold red]")
+    if days is not None and days <= 0:
+        console.print("[bold red]Error: --days must be a positive integer when provided[/bold red]")
+        return
+    if max_items <= 0:
+        console.print("[bold red]Error: --max-items must be a positive integer[/bold red]")
+        return
+    if normalized_sampling_mode != "random" and sample_seed is not None:
+        console.print("[bold red]Error: --sample-seed is only valid when --sampling-mode random[/bold red]")
         return
     if max_category_summary_items <= 0:
         console.print("[bold red]Error: --max-category-summary-items must be a positive integer[/bold red]")
@@ -3538,8 +4257,12 @@ def feedback(
                 "class": "FeedbackItems",
                 "scorecard": scorecard,  # Use the identifier provided by user
                 "score": score_name_for_dataset,  # Use score name for reliable FeedbackItems lookup
-                "days": days
+                "max_items": max_items,
+                "sampling_mode": normalized_sampling_mode,
+                "sample_seed": sample_seed,
             }
+            if days is not None:
+                dataset_config["days"] = days
 
             # Load scorecard based on --yaml flag
             if use_yaml:
@@ -3668,12 +4391,21 @@ def feedback(
                 else:
                     console.print("[bold red]Warning: Scorecard object has no 'scores' attribute![/bold red]")
                 
-                # Create Task and TaskStages for progress tracking (if not passed in via --task-id)
-                tracker = None
-                if not task_id:
-                    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
+                # Create/attach TaskProgressTracker for stage updates.
+                from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
 
-                    stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                stage_configs = get_feedback_evaluation_stage_configs(total_items=0)
+                tracker = None
+                if task_id:
+                    existing_task = Task.get_by_id(task_id, client)
+                    tracker = TaskProgressTracker(
+                        total_items=0,
+                        stage_configs=stage_configs,
+                        task_object=existing_task,
+                        prevent_new_task=True,
+                        client=client,
+                    )
+                else:
                     tracker = TaskProgressTracker(
                         total_items=0,
                         stage_configs=stage_configs,
@@ -3712,10 +4444,12 @@ def feedback(
                         "scorecard": scorecard,
                         "score": score,
                         "version": version,
-                        "max_samples": max_samples,
+                        "max_items": max_items,
+                        "sampling_mode": normalized_sampling_mode,
                         "sample_seed": sample_seed,
                         "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
+                        **({"notes": notes} if notes else {}),
                         "metadata": {
                             "baseline": baseline
                         } if baseline else {}
@@ -3742,20 +4476,20 @@ def feedback(
                     scorecard_id=scorecard_id,
                     task_id=task_id,
                     skip_local_reports=True,
-                    # Keep legacy behavior unless an explicit cap is supplied.
-                    number_of_texts_to_sample=max_samples if max_samples is not None else 10000,
-                    random_seed=sample_seed,
+                    number_of_texts_to_sample=max_items,
+                    sampling_method="sequential",
+                    random_seed=None,
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
+                    rca_pending=True,  # Outer code owns the COMPLETED write after RCA
                 )
                 
+                # Advance from Setup to Processing stage before running predictions
+                if tracker:
+                    tracker.advance_stage()
+                    logging.info("==== STAGE: Processing ====")
+
                 # Run the evaluation
                 asyncio.run(accuracy_eval.run(tracker=tracker))
-
-                # AccuracyEvaluation marks status COMPLETED when predictions are done.
-                # Feedback-backed completion must include RCA persistence, so move back
-                # to RUNNING until RCA contract checks finish.
-                eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-                eval_rec.update(status="RUNNING")
 
                 # Update Analyzing stage status for root-cause analysis
                 # (AccuracyEvaluation.run() already advanced to Analyzing stage)
@@ -3773,168 +4507,24 @@ def feedback(
                 # Run root-cause analysis on feedback edit comments.
                 console.print("\n[bold]Running root-cause analysis on feedback edit comments...[/bold]")
                 try:
-                    from plexus.Evaluation import FeedbackEvaluation
-
-                    fe = FeedbackEvaluation(
-                        scorecard_name=scorecard,
-                        scorecard=None,
-                        account_key=account_key,
-                        days=days,
-                        scorecard_id=scorecard_id,
-                        score_id=score_id,
-                        evaluation_id=evaluation_id,
-                        account_id=account_id,
-                        api_client=client,
-                        max_samples=max_samples,
-                        sample_seed=sample_seed,
-                        max_category_summary_items=max_category_summary_items,
-                    )
-
-                    async def _run_rca():
-                        from datetime import timedelta
-
-                        # Build a map of feedback_item_id → {value, human_label} for
-                        # score results where the evaluation prediction was WRONG.
-                        # Only those items should drive root-cause analysis; items that
-                        # the model now gets right should not be included even if they
-                        # had edit comments (those comments describe the old error, not
-                        # a current one).
-                        score_result_map = {}
-                        next_tok = None
-                        while True:
-                            sr_resp = client.execute(
-                                """query ListSR($evalId: String!, $limit: Int, $nextToken: String) {
-                                    listScoreResultByEvaluationId(
-                                        evaluationId: $evalId, limit: $limit, nextToken: $nextToken
-                                    ) { items { value itemId metadata explanation } nextToken }
-                                }""",
-                                {"evalId": evaluation_id, "limit": 200, "nextToken": next_tok},
-                            )
-                            sr_data = sr_resp.get("listScoreResultByEvaluationId", {})
-                            for sr in sr_data.get("items", []):
-                                try:
-                                    meta = json.loads(sr["metadata"]) if isinstance(sr["metadata"], str) else (sr["metadata"] or {})
-                                    fb_id = meta.get("feedback_item_id")
-                                    # Correctness lives one level deeper: results.{score_name}.metadata.correct
-                                    results = meta.get("results", {})
-                                    correct = all(
-                                        v.get("metadata", {}).get("correct", True)
-                                        for v in results.values()
-                                    )
-                                    if not correct and fb_id:
-                                        human_label = next(
-                                            (v["metadata"].get("human_label") for v in results.values() if "metadata" in v),
-                                            None,
-                                        )
-                                        score_result_map[fb_id] = {
-                                            "value": sr.get("value"),
-                                            "human_label": human_label,
-                                            "explanation": sr.get("explanation"),
-                                        }
-                                except Exception as exc:
-                                    logging.debug(
-                                        "Skipping malformed score result record during RCA map build: %s",
-                                        exc,
-                                        exc_info=True,
-                                    )
-                            next_tok = sr_data.get("nextToken")
-                            if not next_tok:
-                                break
-
-                        console.print(f"[dim]Found {len(score_result_map)} incorrectly predicted item(s) to analyse[/dim]")
-
-                        if not score_result_map:
-                            return {
-                                "incorrect_items": 0,
-                                "root_cause": {},
-                            }
-
-                        # Fetch all feedback items in the date window
-                        start_date = datetime.now(timezone.utc) - timedelta(days=days)
-                        end_date = datetime.now(timezone.utc)
-                        feedback_items = await fe._fetch_feedback_items(
+                    rca_outcome = asyncio.run(
+                        _run_shared_feedback_root_cause_orchestration(
+                            client=client,
+                            account_key=account_key,
+                            account_id=account_id,
+                            evaluation_id=evaluation_id,
+                            scorecard_identifier=scorecard,
                             scorecard_id=scorecard_id,
                             score_id=score_id,
-                            start_date=start_date,
-                            end_date=end_date,
-                        )
-
-                        # Fetch original production score result explanations for incorrect items.
-                        # These tell us WHY the ground-truth label is what it is — essential
-                        # for cases where the reviewer agreed with the original (edit comment
-                        # may simply say "Agree.").
-                        original_explanations = {}
-                        for fi in feedback_items:
-                            if fi.id not in score_result_map:
-                                continue
-                            if not fi.itemId:
-                                continue
-                            try:
-                                # Use the GSI (listScoreResults scan doesn't work without
-                                # account-scoped auth; the GSI query does).
-                                # type='prediction' targets original production runs.
-                                orig_resp = client.execute(
-                                    """query GetOrigSR(
-                                        $itemId: String!,
-                                        $typeScoreId: ModelScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAtCompositeKeyConditionInput
-                                    ) {
-                                        listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
-                                            itemId: $itemId,
-                                            typeScoreIdUpdatedAt: $typeScoreId,
-                                            sortDirection: DESC,
-                                            limit: 1
-                                        ) { items { evaluationId explanation } }
-                                    }""",
-                                    {
-                                        "itemId": fi.itemId,
-                                        "typeScoreId": {
-                                            "beginsWith": {
-                                                "type": "prediction",
-                                                "scoreId": fi.scoreId,
-                                            }
-                                        },
-                                    },
-                                )
-                                items_orig = orig_resp.get(
-                                    "listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt", {}
-                                ).get("items", [])
-                                for item in items_orig:
-                                    if item.get("explanation"):
-                                        original_explanations[fi.id] = item["explanation"]
-                                        break
-                            except Exception as exc:
-                                logging.debug(
-                                    "Best-effort original explanation lookup failed for feedback item %s (itemId=%s): %s",
-                                    getattr(fi, "id", None),
-                                    getattr(fi, "itemId", None),
-                                    exc,
-                                    exc_info=True,
-                                )
-
-                        console.print(
-                            f"[dim]Fetched original explanations for "
-                            f"{len(original_explanations)} item(s)[/dim]"
-                        )
-
-                        root_cause = await fe._run_root_cause_analysis(
-                            feedback_items, score_result_map, original_explanations,
-                            max_report_exemplars=20,
-                            max_summarization_exemplars=6,
+                            score_version_id=version,
+                            max_items=max_items,
+                            sampling_mode=normalized_sampling_mode,
+                            sample_seed=sample_seed,
                             max_category_summary_items=max_category_summary_items,
+                            days=days,
                             tracker=tracker,
+                            apply_feedback_window_selection=True,
                         )
-                        return {
-                            "incorrect_items": len(score_result_map),
-                            "root_cause": root_cause,
-                        }
-
-                    rca_outcome = asyncio.run(_run_rca())
-                    incorrect_items = int(rca_outcome.get("incorrect_items") or 0)
-                    root_cause_result = rca_outcome.get("root_cause")
-                    root_cause_result = fe._persist_root_cause_for_parameters(root_cause_result)
-                    contract = FeedbackEvaluation.root_cause_contract_outcome(
-                        incorrect_items,
-                        root_cause_result,
                     )
 
                     eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
@@ -3945,44 +4535,51 @@ def feedback(
                         except Exception:
                             existing = {}
 
-                    existing = FeedbackEvaluation.apply_root_cause_contract_to_parameters(
-                        existing,
-                        root_cause_result,
-                        contract["root_cause_required"],
-                        contract["has_usable_root_cause"],
-                    )
+                    existing = _apply_feedback_rca_outcome_to_parameters(existing, rca_outcome)
+                    selection_metadata = rca_outcome.get("selection_metadata") or {}
+                    if selection_metadata:
+                        existing.update(selection_metadata)
+                    warnings = existing.get("rca_warnings") or []
 
-                    if contract["error_message"]:
+                    if rca_outcome.get("error_message"):
+                        # RCA failed but metrics are already computed — complete with warning, don't crash
+                        rca_error_msg = str(rca_outcome.get("error_message"))
+                        console.print(f"[yellow]Warning: RCA failed (non-fatal): {rca_error_msg}[/yellow]")
+                        logging.warning("RCA failed (non-fatal) for evaluation %s: %s", evaluation_id, rca_error_msg)
                         eval_rec.update(
-                            status="FAILED",
-                            errorMessage=contract["error_message"],
+                            status="COMPLETED",
+                            errorMessage=f"RCA unavailable: {rca_error_msg}",
                             parameters=json.dumps(existing),
                         )
-                        raise RuntimeError(contract["error_message"])
-
-                    eval_rec.update(
-                        status="COMPLETED",
-                        parameters=json.dumps(existing),
-                    )
-                    if contract["has_usable_root_cause"]:
-                        num_topics = len(root_cause_result.get("topics", []))
+                    else:
+                        eval_rec.update(
+                            status="COMPLETED",
+                            parameters=json.dumps(existing),
+                        )
+                    if warnings:
+                        for warning in warnings:
+                            console.print(f"[yellow]Warning: {warning}[/yellow]")
+                    if rca_outcome.get("has_usable_root_cause"):
+                        root_cause_result = rca_outcome.get("root_cause") or {}
+                        num_topics = len((root_cause_result or {}).get("topics", []))
                         console.print(f"[green]Root-cause analysis: {num_topics} topic(s) identified[/green]")
                     else:
-                        console.print("[dim]Root-cause analysis: no incorrect items in this run[/dim]")
+                        console.print("[dim]Root-cause analysis unavailable for this run[/dim]")
                 except Exception as _rca_err:
                     eval_rec = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-                    eval_rec.update(
-                        status="FAILED",
-                        errorMessage=f"Feedback RCA stage failed: {_rca_err}",
-                    )
-                    console.print(f"[bold red]Error: root-cause analysis failed: {_rca_err}[/bold red]")
+                    # RCA stage crashed but metrics are already computed — complete with warning
+                    console.print(f"[yellow]Warning: RCA stage failed (non-fatal): {_rca_err}[/yellow]")
+                    logging.warning("RCA stage failed (non-fatal) for evaluation %s: %s", evaluation_id, _rca_err)
                     logging.debug("Root-cause analysis traceback:", exc_info=True)
-                    raise
+                    eval_rec.update(
+                        status="COMPLETED",
+                        errorMessage=f"RCA stage failed: {_rca_err}",
+                    )
 
                 # Complete the tracker with a clear completion message
                 if tracker:
                     try:
-                        tracker.complete_with_message("Evaluation complete.")
+                        tracker.complete_with_message("Feedback evaluation complete.")
                     except Exception as _tracker_err:
                         console.print(f"[yellow]Warning: tracker.complete() failed: {_tracker_err}[/yellow]")
 
@@ -3992,6 +4589,16 @@ def feedback(
                 
                 # Fetch the updated evaluation record after completion for MCP tool
                 evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
+                total_items = getattr(evaluation_record, "totalItems", None)
+                try:
+                    total_items_int = int(total_items) if total_items is not None else None
+                except (TypeError, ValueError):
+                    total_items_int = None
+                if total_items_int is not None and total_items_int < max_items:
+                    console.print(
+                        f"[yellow]Warning: Requested {max_items} item(s), but only {total_items_int} available. "
+                        f"Proceeding with {total_items_int}.[/yellow]"
+                    )
                 return evaluation_record
                 
             finally:
@@ -3999,482 +4606,105 @@ def feedback(
                 if os.path.exists(tmp_yaml_path):
                     os.unlink(tmp_yaml_path)
         
-        # Default mode: Analyze feedback edits without running predictions
-        # Create evaluation record
-        started_at = datetime.now(timezone.utc)
-        evaluation_params = {
-            "type": "feedback",
-            "accountId": account_id,
-            "status": "SETUP",
-            "scorecardId": scorecard_id,
-            "scoreId": score_id,  # Required for feedback evaluations
-            "accuracy": 0.0,  # Will be updated after analysis
-            "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
-            "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
-            "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
-            "totalItems": 0,  # Will be updated after analysis
-            "processedItems": 0,  # Will be updated after analysis
-            "parameters": json.dumps({
-                "days": days,
-                "scorecard": scorecard,
-                "score": score,
-                "max_samples": max_samples,
-                "sample_seed": sample_seed,
-                "max_category_summary_items": max_category_summary_items,
-                "metadata": {
-                    "baseline": baseline
-                } if baseline else {}
-            }),
-            "taskId": task_id
-        }
-        
-        evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
-        evaluation_id = evaluation_record.id
-        
-        console.print(f"Created evaluation record: {evaluation_id}")
-        console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
-        
-        # Create FeedbackEvaluation instance
-        feedback_eval = FeedbackEvaluation(
-            scorecard_name=scorecard,  # Use the identifier string
-            scorecard=None,  # Not needed for feedback evaluation
-            days=days,
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            evaluation_id=evaluation_id,
-            account_id=account_id,
-            task_id=task_id,
-            api_client=client,  # Pass as keyword arg for FeedbackEvaluation
-            max_samples=max_samples,
-            sample_seed=sample_seed,
-            max_category_summary_items=max_category_summary_items,
-        )
-        
-        # Run the evaluation
-        console.print("\n[bold]Fetching and analyzing feedback items...[/bold]")
-        result = asyncio.run(feedback_eval.run())
-        
-        # Display results
-        console.print("\n[bold green]✓ Feedback Evaluation Complete[/bold green]")
-        console.print(f"\n[bold]Results:[/bold]")
-        
-        metrics = result.get("metrics", {})
-        ac1 = metrics.get("ac1")
-        accuracy = metrics.get("accuracy")
-        precision = metrics.get("precision")
-        recall = metrics.get("recall")
-        total_items = metrics.get("total_items", 0)
-        agreements = metrics.get("agreements", 0)
-        disagreements = metrics.get("disagreements", 0)
-        
-        console.print(f"Total Feedback Items: {total_items}")
-        console.print(f"Agreements: {agreements}")
-        console.print(f"Disagreements: {disagreements}")
-        
-        if ac1 is not None:
-            console.print(f"\n[bold]Gwet's AC1 Agreement:[/bold] {ac1:.3f}")
-            if ac1 >= 0.8:
-                console.print("[green]  ✓ Excellent agreement[/green]")
-            elif ac1 >= 0.6:
-                console.print("[yellow]  ⚠ Good agreement[/yellow]")
-            elif ac1 >= 0.4:
-                console.print("[orange]  ⚠ Moderate agreement[/orange]")
-            else:
-                console.print("[red]  ✗ Poor agreement - review needed[/red]")
-        
-        if accuracy is not None:
-            console.print(f"[bold]Accuracy:[/bold] {accuracy:.1f}%")
-        
-        if precision is not None:
-            console.print(f"[bold]Precision:[/bold] {precision:.1f}%")
-        
-        if recall is not None:
-            console.print(f"[bold]Recall:[/bold] {recall:.1f}%")
-        
-        console.print(f"\n[bold]View full results:[/bold]")
-        console.print(f"https://app.plexusanalytics.com/evaluations/{evaluation_id}")
-        
-        # Fetch the updated evaluation record after completion for MCP tool
-        evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-        return evaluation_record
-        
     except Exception as e:
         logging.error(f"Error during feedback evaluation: {e}", exc_info=True)
         console.print(f"[bold red]Error: {str(e)}[/bold red]")
         raise
 
 
-@evaluate.command()
-@click.option('--days', default=14, type=int, help='Number of days to look back for feedback items (default: 14)')
-@click.option('--start-date', type=str, help='Start date (YYYY-MM-DD). Overrides --days if provided.')
-@click.option('--end-date', type=str, help='End date (YYYY-MM-DD). Defaults to today.')
-@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
-@click.option('--dry-run', is_flag=True, help='Show what would be evaluated without running evaluations')
-@click.option('--concurrency', default=10, type=int, help='Number of scorecards to check concurrently (default: 10)')
-@click.option('--min-feedback', default=10, type=int, help='Minimum number of feedback items required to run evaluation (default: 10)')
-@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
-def feedback_all(
-    days: int,
-    start_date: Optional[str],
-    end_date: Optional[str],
+@evaluate.command(name="feedback-runner")
+@click.option('--scorecard', 'scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', 'score', required=True, help='Score identifier (ID, name, key, or external ID)')
+@click.option('--days', default=None, type=int, help='Optional lookback window in days (omit for all-time backfill).')
+@click.option('--version', default=None, type=str, help='Optional score version ID override')
+@click.option('--max-items', default=200, type=int, show_default=True, help='Maximum number of feedback items to evaluate')
+@click.option('--sampling-mode', type=click.Choice(['newest', 'random'], case_sensitive=False), default='newest', show_default=True, help='Feedback item selection mode')
+@click.option('--sample-seed', default=None, type=int, help='Optional random seed (only valid when --sampling-mode random)')
+@click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20)')
+@click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison')
+@click.option('--task-id', default=None, type=str, help='Optional explicit task ID used to correlate the run to an evaluation record')
+@click.option('--kanbus-issue-id', default=None, type=str, help='Optional Kanbus issue ID to receive standardized run summary comment')
+@click.option('--creation-timeout-seconds', default=180, type=int, help='Timeout waiting for evaluation record creation (default: 180)')
+@click.option('--completion-timeout-seconds', default=7200, type=int, help='Timeout waiting for terminal evaluation status (default: 7200)')
+@click.option('--poll-interval-seconds', default=5, type=int, help='Polling interval while waiting on evaluation status (default: 5)')
+@click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
+def feedback_runner(
+    scorecard: str,
+    score: str,
+    days: Optional[int],
+    version: Optional[str],
+    max_items: int,
+    sampling_mode: str,
+    sample_seed: Optional[int],
+    max_category_summary_items: int,
+    baseline: Optional[str],
     task_id: Optional[str],
-    dry_run: bool,
-    concurrency: int,
-    min_feedback: int,
-    yes: bool
+    kanbus_issue_id: Optional[str],
+    creation_timeout_seconds: int,
+    completion_timeout_seconds: int,
+    poll_interval_seconds: int,
+    use_yaml: bool,
 ):
     """
-    Run feedback evaluations on all scorecards and scores that have feedback in the time range.
-    
-    This command:
-    1. Identifies all scorecards in the account (in parallel for speed)
-    2. For each scorecard, identifies scores with feedback in the time range
-    3. Filters to scores with at least --min-feedback items (default: 10)
-    4. Runs a separate feedback evaluation for each qualifying score
-    5. Creates individual evaluation records that appear in the dashboard
-    
-    Use this to automatically evaluate all feedback across your entire account, rather than
-    running individual evaluations for each score manually.
-    
-    Examples:
-        # Evaluate all feedback from last 14 days (default, min 10 items)
-        plexus evaluate feedback-all
-        
-        # Evaluate feedback from last 30 days with higher concurrency
-        plexus evaluate feedback-all --days 30 --concurrency 20
-        
-        # Lower threshold to 5 feedback items minimum
-        plexus evaluate feedback-all --days 30 --min-feedback 5
-        
-        # Evaluate feedback for specific date range, skip confirmation
-        plexus evaluate feedback-all --start-date 2024-01-01 --end-date 2024-01-31 --yes
-        
-        # Dry run to see what would be evaluated
-        plexus evaluate feedback-all --days 14 --dry-run
-    
-    See also: 'plexus evaluate feedback' for evaluating a single score.
+    Run feedback evaluation with orchestrated lifecycle tracking.
+
+    This runner starts `evaluate feedback`, captures the evaluation ID from the backend record,
+    waits on backend status to terminal completion, then emits a standardized summary.
     """
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.report.utils import resolve_account_id_for_command
-    from plexus.reports.blocks import feedback_utils
-    from datetime import datetime, timedelta, timezone
-    
-    console.print(f"[bold blue]Feedback Evaluation - All Scorecards[/bold blue]")
-    
-    try:
-        # Parse date range
-        if start_date:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        else:
-            start_dt = datetime.now(timezone.utc) - timedelta(days=days)
-        
-        if end_date:
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
-        else:
-            end_dt = datetime.now(timezone.utc)
-        
-        console.print(f"Date Range: {start_dt.date()} to {end_dt.date()}")
-        
-        # Create API client
-        client = create_client()
-        
-        # Resolve account ID
-        account_id = resolve_account_id_for_command(client, None)
-        if not account_id:
-            console.print("[bold red]Error: Could not resolve account ID[/bold red]")
-            return
-        
-        console.print(f"Account ID: {account_id}")
-        console.print("\n[bold]Identifying scorecards and scores with feedback...[/bold]")
-        
-        # Identify scorecards with feedback
-        scorecards_with_feedback = asyncio.run(
-            feedback_utils.identify_scorecards_with_feedback(
-                client,
-                account_id,
-                start_dt,
-                end_dt,
-                max_concurrent=concurrency
-            )
-        )
-        
-        if not scorecards_with_feedback:
-            console.print("[yellow]No scorecards with feedback found in the specified time range.[/yellow]")
-            return
-        
-        # Filter scores by minimum feedback threshold
-        filtered_scorecards = []
-        skipped_count = 0
-        for sc_info in scorecards_with_feedback:
-            filtered_scores = [
-                score for score in sc_info['scores_with_feedback']
-                if score['feedback_count'] >= min_feedback
-            ]
-            if filtered_scores:
-                filtered_scorecards.append({
-                    'scorecard': sc_info['scorecard'],
-                    'scores_with_feedback': filtered_scores
-                })
-            skipped_count += len(sc_info['scores_with_feedback']) - len(filtered_scores)
-        
-        scorecards_with_feedback = filtered_scorecards
-        
-        if not scorecards_with_feedback:
-            console.print(f"[yellow]No scores found with at least {min_feedback} feedback items.[/yellow]")
-            if skipped_count > 0:
-                console.print(f"[yellow]Skipped {skipped_count} score(s) with fewer than {min_feedback} feedback items.[/yellow]")
-            return
-        
-        # Count total scores to evaluate
-        total_scores = sum(len(sc['scores_with_feedback']) for sc in scorecards_with_feedback)
-        total_feedback_items = sum(
-            score['feedback_count']
-            for sc in scorecards_with_feedback
-            for score in sc['scores_with_feedback']
-        )
-        
-        console.print(f"\n[bold]Found:[/bold]")
-        console.print(f"  - {len(scorecards_with_feedback)} scorecard(s) with feedback")
-        console.print(f"  - {total_scores} score(s) with feedback (minimum {min_feedback} items)")
-        console.print(f"  - {total_feedback_items} total feedback items")
-        if skipped_count > 0:
-            console.print(f"  - Skipped {skipped_count} score(s) with fewer than {min_feedback} feedback items")
-        
-        # Display what will be evaluated
-        console.print("\n[bold]Scores to evaluate:[/bold]")
-        for sc_info in scorecards_with_feedback:
-            scorecard = sc_info['scorecard']
-            console.print(f"\n[cyan]{scorecard.name}[/cyan] (ID: {scorecard.id})")
-            for score_info in sc_info['scores_with_feedback']:
-                console.print(f"  • {score_info['score_name']} - {score_info['feedback_count']} feedback items")
-        
-        if dry_run:
-            console.print("\n[yellow]Dry run mode - no evaluations will be created.[/yellow]")
-            return
-        
-        # Confirm before proceeding (unless --yes flag is set)
-        if not yes:
-            console.print(f"\n[bold]Ready to create {total_scores} evaluation(s).[/bold]")
-            if not click.confirm("Continue?", default=True):
-                console.print("[yellow]Cancelled.[/yellow]")
-                return
-        else:
-            console.print(f"\n[bold]Creating {total_scores} evaluation(s)...[/bold]")
-        
-        # Run evaluations for each score (in parallel)
-        console.print(f"\n[bold]Running evaluations (max {concurrency} concurrent)...[/bold]")
-        
-        # Build list of evaluation tasks
-        eval_tasks = []
-        for sc_info in scorecards_with_feedback:
-            scorecard = sc_info['scorecard']
-            for score_info in sc_info['scores_with_feedback']:
-                eval_tasks.append({
-                    'scorecard': scorecard,
-                    'score_info': score_info
-                })
-        
-        completed_count = 0
-        failed_count = 0
-        results_lock = threading.Lock()
-        
-        def run_evaluation_task(task_info, index):
-            """Run a single evaluation task."""
-            scorecard = task_info['scorecard']
-            score_info = task_info['score_info']
-            score_id = score_info['score_id']
-            score_name = score_info['score_name']
-            feedback_count = score_info['feedback_count']
-            
-            nonlocal completed_count, failed_count
-            
-            try:
-                console.print(f"\n[{index}/{total_scores}] [bold]{scorecard.name}[/bold] > [bold]{score_name}[/bold] ({feedback_count} items)")
-                
-                evaluation_record = await_run_single_feedback_evaluation(
-                    client=client,
-                    account_id=account_id,
-                    scorecard_id=scorecard.id,
-                    scorecard_name=scorecard.name,
-                    score_id=score_id,
-                    score_name=score_name,
-                    days=days,
-                    start_date=start_dt,
-                    end_date=end_dt,
-                    task_id=task_id
-                )
-                
-                if evaluation_record:
-                    with results_lock:
-                        completed_count += 1
-                    console.print(f"  [green]✓ Complete[/green] - Evaluation ID: {evaluation_record.id}")
-                    return True
-                else:
-                    with results_lock:
-                        failed_count += 1
-                    console.print(f"  [red]✗ Failed[/red]")
-                    return False
-                    
-            except Exception as e:
-                with results_lock:
-                    failed_count += 1
-                console.print(f"  [red]✗ Error: {str(e)}[/red]")
-                logging.error(f"Error evaluating {scorecard.name} > {score_name}: {e}", exc_info=True)
-                return False
-        
-        # Run evaluations in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            futures = []
-            for i, task_info in enumerate(eval_tasks, 1):
-                future = executor.submit(run_evaluation_task, task_info, i)
-                futures.append(future)
-            
-            # Wait for all to complete
-            concurrent.futures.wait(futures)
-        
-        # Display summary
-        console.print("\n" + "="*60)
-        console.print(f"[bold green]✓ Completed {completed_count} feedback evaluation(s)[/bold green]")
-        if failed_count > 0:
-            console.print(f"[bold red]✗ Failed {failed_count} evaluation(s)[/bold red]")
-        console.print(f"[bold]Total feedback items analyzed: {total_feedback_items}[/bold]")
-        console.print(f"\n[bold]Dashboard:[/bold] https://app.plexusanalytics.com/evaluations")
-        
-    except Exception as e:
-        logging.error(f"Error during feedback-all evaluation: {e}", exc_info=True)
-        console.print(f"[bold red]Error: {str(e)}[/bold red]")
-        raise
+
+    normalized_sampling_mode = str(sampling_mode).lower()
+
+    if days is not None and days <= 0:
+        raise click.ClickException("--days must be a positive integer when provided.")
+    if max_items <= 0:
+        raise click.ClickException("--max-items must be a positive integer.")
+    if normalized_sampling_mode != "random" and sample_seed is not None:
+        raise click.ClickException("--sample-seed is only valid when --sampling-mode random.")
+    if max_category_summary_items <= 0:
+        raise click.ClickException("--max-category-summary-items must be a positive integer.")
+    if creation_timeout_seconds <= 0 or completion_timeout_seconds <= 0 or poll_interval_seconds <= 0:
+        raise click.ClickException("Timeout and polling options must be positive integers.")
+
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, None)
+    if not account_id:
+        raise click.ClickException("Could not resolve account ID.")
+
+    request = FeedbackRunnerRequest(
+        scorecard=scorecard,
+        score=score,
+        days=days,
+        version=version,
+        baseline=baseline,
+        max_items=max_items,
+        sampling_mode=normalized_sampling_mode,
+        sample_seed=sample_seed,
+        max_category_summary_items=max_category_summary_items,
+        task_id=task_id,
+        use_yaml=use_yaml,
+    )
+    summary = run_feedback_evaluation_orchestrated(
+        request=request,
+        client=client,
+        account_id=account_id,
+        creation_timeout_seconds=creation_timeout_seconds,
+        completion_timeout_seconds=completion_timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        kanbus_issue_id=kanbus_issue_id,
+    )
+
+    console.print("[bold green]Feedback runner completed[/bold green]")
+    console.print(f"Evaluation ID: {summary['evaluation_id']}")
+    console.print(f"Status: {summary['status']}")
+    console.print(f"Dashboard URL: {summary['dashboard_url']}")
+    if kanbus_issue_id:
+        console.print(f"Kanbus comment posted to {kanbus_issue_id}")
+
+    click.echo(json.dumps({
+        "summary": summary,
+        "kanbus_comment": format_feedback_run_kanbus_comment(summary),
+    }))
 
 
-def await_run_single_feedback_evaluation(
-    client,
-    account_id: str,
-    scorecard_id: str,
-    scorecard_name: str,
-    score_id: str,
-    score_name: str,
-    days: int,
-    start_date: datetime,
-    end_date: datetime,
-    task_id: Optional[str] = None,
-    max_samples: Optional[int] = 200,
-    sample_seed: Optional[int] = None,
-    max_category_summary_items: int = 20,
-):
-    """
-    Helper function to run a single feedback evaluation.
-    
-    This is used by both the 'feedback' and 'feedback-all' commands.
-    
-    Args:
-        client: API client
-        account_id: Account ID
-        scorecard_id: Scorecard ID
-        scorecard_name: Scorecard name (for display)
-        score_id: Score ID
-        score_name: Score name (for display)
-        days: Number of days to look back
-        start_date: Start date for filtering (UTC aware)
-        end_date: End date for filtering (UTC aware)
-        task_id: Optional task ID for progress tracking
-        max_samples: Optional maximum feedback items to process
-        sample_seed: Optional random seed used when sampling feedback items
-        max_category_summary_items: Maximum misclassification items per category summary
-        
-    Returns:
-        Evaluation record if successful, None otherwise
-    """
-    from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
-    from plexus.Evaluation import FeedbackEvaluation
-    from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
-    import json
-    
-    try:
-        # Create Task and TaskStages for progress tracking
-        tracker = None
-        if not task_id:
-            # Create a new task for this evaluation
-            from plexus.dashboard.api.models.task import Task
-            
-            task = Task.create(
-                client=client,
-                accountId=account_id,
-                type='evaluation',
-                command='feedback-evaluation',
-                status='RUNNING',
-                target=f"evaluation/feedback/{scorecard_name}/{score_name}",
-                description=f"Feedback evaluation for {scorecard_name} > {score_name}"
-            )
-            task_id = task.id
-            
-            # Create tracker with feedback evaluation stage configs
-            stage_configs = get_feedback_evaluation_stage_configs(total_items=0)  # Will be updated when we know count
-            tracker = TaskProgressTracker(
-                total_items=0,
-                stage_configs=stage_configs,
-                task_id=task_id,
-                client=client,
-                account_id=account_id
-            )
-        
-        # Create evaluation record
-        started_at = datetime.now(timezone.utc)
-        evaluation_params = {
-            "type": "feedback",
-            "accountId": account_id,
-            "status": "SETUP",
-            "scorecardId": scorecard_id,
-            "scoreId": score_id,
-            "accuracy": 0.0,
-            "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
-            "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
-            "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
-            "totalItems": 0,
-            "processedItems": 0,
-            "parameters": json.dumps({
-                "days": days,
-                "scorecard": scorecard_name,
-                "score": score_name,
-                "max_samples": max_samples,
-                "sample_seed": sample_seed,
-                "max_category_summary_items": max_category_summary_items,
-            }),
-            "taskId": task_id
-        }
-        
-        evaluation_record = DashboardEvaluation.create(client=client, **evaluation_params)
-        evaluation_id = evaluation_record.id
-        
-        # Create FeedbackEvaluation instance.
-        # Defaults to 200 for feedback-all compatibility unless overridden.
-        feedback_eval = FeedbackEvaluation(
-            scorecard_name=scorecard_name,
-            scorecard=None,
-            days=days,
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            evaluation_id=evaluation_id,
-            account_id=account_id,
-            task_id=task_id,
-            api_client=client,
-            max_samples=max_samples,
-            sample_seed=sample_seed,
-            max_category_summary_items=max_category_summary_items,
-        )
-        
-        # Run the evaluation with tracker
-        result = asyncio.run(feedback_eval.run(tracker=tracker))
-        
-        # Complete the task if we created it
-        if tracker:
-            tracker.complete()
-        
-        # Fetch the updated evaluation record
-        evaluation_record = DashboardEvaluation.get_by_id(evaluation_id, client=client)
-        return evaluation_record
-        
-    except Exception as e:
-        logging.error(f"Error in single feedback evaluation: {e}", exc_info=True)
-        if tracker:
-            tracker.fail_processing(str(e), traceback.format_exc())
-        return None

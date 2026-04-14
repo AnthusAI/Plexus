@@ -6,11 +6,6 @@ import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, Panel
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
-import { generateClient } from "aws-amplify/data"
-import { listFromModel } from "@/utils/amplify-helpers"
-import type { Schema } from "@/amplify/data/resource"
-import type { AccountSettings } from "@/types/account-config"
-import { isValidAccountSettings } from "@/types/account-config"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
@@ -88,10 +83,6 @@ const MobileHeader = ({
     </DashboardButton>
   </div>
 )
-
-const client = generateClient<Schema>()
-
-type Account = Schema['Account']['type']
 
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },

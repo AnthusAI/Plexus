@@ -11,6 +11,7 @@ jest.mock("@/utils/data-operations", () => ({
 jest.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ConversationContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AutoScrollToBottom: () => null,
   ConversationEmptyState: ({
     title,
     description,

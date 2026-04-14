@@ -25,6 +25,36 @@ def truncate_for_log(content: str, max_length: int = 200) -> str:
     return content[:max_length] + f"... [truncated, total: {len(content)} chars]"
 
 
+_SLIM_MAX_STR = 200    # enough for UUIDs (36 chars), URLs, short labels
+_SLIM_MAX_BYTES = 512  # keep small dicts/lists; drop large analysis blobs
+
+
+def _slim_tool_response_for_storage(value: Any) -> Any:
+    """Return a compact representation of a tool response for storage.
+
+    Parses JSON strings, keeps scalar values <= _SLIM_MAX_STR chars, and keeps
+    nested structures only when their serialised size is <= _SLIM_MAX_BYTES.
+    Large blobs (confusionMatrix, misclassification_analysis, etc.) are dropped --
+    they already live in the referenced Evaluation record.
+    """
+    if isinstance(value, str):
+        try:
+            return _slim_tool_response_for_storage(json.loads(value))
+        except (json.JSONDecodeError, ValueError):
+            return value[:_SLIM_MAX_STR] if len(value) > _SLIM_MAX_STR else value
+    if isinstance(value, dict):
+        slimmed = {}
+        for k, v in value.items():
+            sv = _slim_tool_response_for_storage(v)
+            if isinstance(sv, (dict, list)) and len(json.dumps(sv).encode()) > _SLIM_MAX_BYTES:
+                continue  # drop large nested structure
+            slimmed[k] = sv
+        return slimmed
+    if isinstance(value, list):
+        return [_slim_tool_response_for_storage(item) for item in value]
+    return value  # int, float, bool, None
+
+
 class ProcedureChatRecorder:
     """Records chat messages during procedure runs."""
 
@@ -870,17 +900,14 @@ class ProcedureChatRecorder:
             if tool_name:
                 message_data['toolName'] = tool_name
             if tool_parameters:
-                import json
                 message_data['toolParameters'] = json.dumps(tool_parameters)
             if tool_response:
-                import json
-                message_data['toolResponse'] = json.dumps(tool_response)
+                message_data['toolResponse'] = json.dumps(_slim_tool_response_for_storage(tool_response))
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
 
             # Add metadata if provided (for rich message formatting)
             if metadata:
-                import json
                 message_data['metadata'] = json.dumps(metadata)
             
             # Log message recording (reduced noise - just sequence and type)
@@ -969,7 +996,7 @@ class ProcedureChatRecorder:
             update_input["humanInteraction"] = human_interaction
 
         if tool_response is not None:
-            update_input["toolResponse"] = json.dumps(tool_response) if not isinstance(tool_response, str) else tool_response
+            update_input["toolResponse"] = json.dumps(_slim_tool_response_for_storage(tool_response))
 
         if len(update_input) == 1:
             logger.debug("No update fields provided for message %s", message_id)

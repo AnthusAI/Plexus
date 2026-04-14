@@ -121,9 +121,8 @@ class TestScoreConfiguration(unittest.TestCase):
                 with open(yaml_path, 'r') as f:
                     content = f.read()
                 
-                self.assertIn('# Pulled from Plexus API', content)
-                self.assertIn('# Score: Test Score', content)
-                self.assertIn('# Champion Version ID: version-123', content)
+                self.assertNotIn('# Pulled from Plexus API', content)
+                self.assertNotIn('# Champion Version ID:', content)
                 self.assertIn('test: yaml content', content)
 
     def test_pull_configuration_no_client(self):

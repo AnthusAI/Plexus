@@ -322,26 +322,14 @@ async def run_experiment_with_task_tracking(
         if task and task.id:
             run_options.setdefault("_task_id_for_stage_tracking", task.id)
         experiment_result = await service.run_experiment(procedure_id, **run_options)
-        
-        # Complete Hypothesis stage and advance to Evaluation
-        if tracker:
-            tracker.advance_stage()  # This completes Hypothesis and starts Evaluation
-            tracker.current_stage.status_message = "Running experiment evaluation"
-            tracker.update(current_items=0)
-        
-        # Since we're not actually running evaluation yet, mark it as complete and advance to Analysis
-        if tracker:
-            tracker.advance_stage()  # This completes Evaluation and starts Analysis
-            tracker.current_stage.status_message = "Analyzing experiment results"
-            tracker.update(current_items=total_items)
-        
-        # Since we're not actually running analysis yet, complete the Analysis stage
-        if tracker:
-            tracker.current_stage.complete()  # Complete the final Analysis stage
-        
+
         procedure_status = str(experiment_result.get("status") or "").upper()
         is_waiting_for_human = procedure_status == "WAITING_FOR_HUMAN"
         is_success = bool(experiment_result.get("success"))
+        logger.info(
+            f"[PROCEDURE_RUN] procedure={procedure_id} success={is_success} "
+            f"status={procedure_status} result_keys={list(experiment_result.keys())}"
+        )
 
         if is_waiting_for_human:
             mapped_task_status = "RUNNING"
@@ -349,9 +337,23 @@ async def run_experiment_with_task_tracking(
         elif is_success:
             mapped_task_status = "COMPLETED"
             mapped_procedure_status = "COMPLETED"
+            # Only advance tracker stages on success — on failure the executor already
+            # marked them FAILED via _fail_all_task_stages.
+            if tracker:
+                tracker.advance_stage()  # Hypothesis → Evaluation
+                tracker.current_stage.status_message = "Running experiment evaluation"
+                tracker.update(current_items=0)
+                tracker.advance_stage()  # Evaluation → Analysis
+                tracker.current_stage.status_message = "Analyzing experiment results"
+                tracker.update(current_items=total_items)
+                tracker.current_stage.complete()
         else:
             mapped_task_status = "FAILED"
             mapped_procedure_status = "FAILED"
+            logger.warning(
+                f"[PROCEDURE_RUN] procedure={procedure_id} reported failure — "
+                f"error={experiment_result.get('error')} message={experiment_result.get('message')}"
+            )
 
         # Complete or update the task
         if tracker and tracker.task:
@@ -366,34 +368,41 @@ async def run_experiment_with_task_tracking(
             }
             if mapped_task_status in {"COMPLETED", "FAILED"}:
                 update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
+            if mapped_task_status == "FAILED":
+                err_text = experiment_result.get("error") or experiment_result.get("message") or "Procedure failed"
+                update_data["errorMessage"] = str(err_text)[:2000]
+                logger.warning(f"[PROCEDURE_RUN] Updating task {tracker.task.id} to FAILED: {err_text}")
             tracker.task.update(**update_data)
+
+        _procedure_status_mutation = """
+        mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
+            updateProcedure(input: $input) {
+                id
+                status
+                updatedAt
+            }
+        }
+        """
 
         # Keep procedure status consistent with the actual run outcome for DB-backed procedures.
         if not is_builtin_procedure_id(procedure_id):
             try:
-                status_mutation = """
-                mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
-                    updateProcedure(input: $input) {
-                        id
-                        status
-                        updatedAt
-                    }
-                }
-                """
-                client.execute(status_mutation, {"input": {"id": procedure_id, "status": mapped_procedure_status}})
-            except Exception as e:
-                logger.warning(f"Failed to update procedure status for {procedure_id}: {e}")
-        
+                logger.info(f"[PROCEDURE_RUN] Updating procedure {procedure_id} status → {mapped_procedure_status}")
+                client.execute(_procedure_status_mutation, {"input": {"id": procedure_id, "status": mapped_procedure_status}})
+            except Exception as _pe:
+                logger.warning(f"Failed to update procedure status for {procedure_id}: {_pe}")
+
         # Update result with experiment outcome
         result.update(experiment_result)
         result['status'] = mapped_procedure_status
         result['message'] = 'Experiment completed successfully' if mapped_procedure_status == 'COMPLETED' else result.get('message', 'Experiment execution updated')
-        
+
     except Exception as e:
         logging.error(f"Experiment run failed: {str(e)}", exc_info=True)
-        
+
         # Update task with error
         if tracker and tracker.task:
+            logger.warning(f"[PROCEDURE_RUN] Exception path — updating task {tracker.task.id} to FAILED: {e}")
             tracker.task.update(
                 accountId=tracker.task.accountId,
                 type=tracker.task.type,
@@ -405,7 +414,24 @@ async def run_experiment_with_task_tracking(
                 errorMessage=str(e),
                 errorDetails=json.dumps({'error': str(e), 'type': type(e).__name__}, default=str),
             )
-        
+
+        # Update procedure record status even on unexpected exception
+        if not is_builtin_procedure_id(procedure_id):
+            try:
+                _procedure_status_mutation = """
+                mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
+                    updateProcedure(input: $input) {
+                        id
+                        status
+                        updatedAt
+                    }
+                }
+                """
+                logger.warning(f"[PROCEDURE_RUN] Exception path — updating procedure {procedure_id} status → FAILED")
+                client.execute(_procedure_status_mutation, {"input": {"id": procedure_id, "status": "FAILED"}})
+            except Exception as _pe:
+                logger.warning(f"Failed to update procedure status after exception for {procedure_id}: {_pe}")
+
         result.update({
             'status': 'error',
             'error': str(e),

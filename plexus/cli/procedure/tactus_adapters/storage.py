@@ -7,13 +7,59 @@ Stores checkpoints and state in the Procedure.metadata JSON field.
 
 import logging
 import json
+import os
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
+
+import boto3
+from botocore.exceptions import ClientError
 
 from tactus.protocols.models import ProcedureMetadata, CheckpointEntry
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
+
+# S3 offload settings for large metadata
+_S3_THRESHOLD = 350_000  # bytes — offload state when metadata exceeds this (DynamoDB limit is 400KB)
+_S3_BUCKET = os.environ.get("AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME", "reportblockdetails-production")
+
+
+def _lua_to_serializable(value: Any) -> Any:
+    """
+    Recursively convert lupa Lua tables to JSON-serializable Python structures.
+
+    lupa Lua tables have an .items() method but are not natively JSON-serializable.
+    This converts them to Python dicts/lists so json.dumps() succeeds.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+
+    # lupa Lua tables expose .items(); plain Python dicts/lists pass through below
+    if hasattr(value, "items") and not isinstance(value, dict):
+        try:
+            keys = list(value.keys())
+            if not keys:
+                return []
+            if all(isinstance(k, int) for k in keys):
+                sorted_keys = sorted(keys)
+                if sorted_keys == list(range(1, len(keys) + 1)):
+                    return [_lua_to_serializable(value[k]) for k in sorted_keys]
+            return {k: _lua_to_serializable(v) for k, v in value.items()}
+        except Exception:
+            return str(value)
+
+    if isinstance(value, dict):
+        return {k: _lua_to_serializable(v) for k, v in value.items()}
+
+    if isinstance(value, list):
+        return [_lua_to_serializable(item) for item in value]
+
+    # Fallback for unknown types — attempt JSON round-trip, else stringify
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class PlexusStorageAdapter:
@@ -106,12 +152,24 @@ class PlexusStorageAdapter:
                 ))
                 position += 1
 
+            # Load state — may be offloaded to S3 for large procedures
+            state_data = raw_metadata.get('state', {})
+            if isinstance(state_data, dict) and '_s3_key' in state_data:
+                try:
+                    s3 = boto3.client('s3')
+                    obj = s3.get_object(Bucket=_S3_BUCKET, Key=state_data['_s3_key'])
+                    state_data = json.loads(obj['Body'].read().decode('utf-8'))
+                    logger.info("Loaded state from S3: %s/%s", _S3_BUCKET, state_data.get('_s3_key', ''))
+                except (ClientError, json.JSONDecodeError) as s3_err:
+                    logger.error("Failed to load state from S3: %s — using empty state", s3_err)
+                    state_data = {}
+
             # Create metadata object
             metadata = ProcedureMetadata(
                 procedure_id=procedure_id,
                 execution_log=execution_log,
                 replay_index=raw_metadata.get('replay_index', 0),  # Default to 0 if not set
-                state=raw_metadata.get('state', {}),
+                state=state_data,
                 lua_state=raw_metadata.get('lua_state', {}),
                 status=procedure_data.get('status') or 'RUNNING',
                 waiting_on_message_id=procedure_data.get('waitingOnMessageId')
@@ -174,9 +232,34 @@ class PlexusStorageAdapter:
                 logger.debug("Saved in-memory metadata for built-in procedure %s", metadata.procedure_id)
                 return
 
+            serialized = json.dumps(metadata_json)
+
+            # If metadata exceeds DynamoDB threshold, offload state to S3
+            if len(serialized) > _S3_THRESHOLD:
+                s3_key = f"procedures/{metadata.procedure_id}/state.json"
+                state_json = json.dumps(metadata.state)
+                try:
+                    s3 = boto3.client('s3')
+                    s3.put_object(
+                        Bucket=_S3_BUCKET,
+                        Key=s3_key,
+                        Body=state_json.encode('utf-8'),
+                        ContentType='application/json'
+                    )
+                    logger.info(
+                        "Offloaded %d bytes of state to S3: %s/%s",
+                        len(state_json), _S3_BUCKET, s3_key
+                    )
+                    # Replace state with S3 reference in metadata
+                    metadata_json['state'] = {'_s3_key': s3_key}
+                    serialized = json.dumps(metadata_json)
+                except ClientError as s3_err:
+                    logger.error("Failed to offload state to S3: %s", s3_err)
+                    raise
+
             self.client.execute(mutation, {
                 'id': metadata.procedure_id,
-                'metadata': json.dumps(metadata_json)
+                'metadata': serialized
             })
 
             # Update cache
@@ -313,7 +396,7 @@ class PlexusStorageAdapter:
     def set_state(self, procedure_id: str, state: Dict[str, Any]) -> None:
         """Set mutable state dictionary."""
         metadata = self.load_procedure_metadata(procedure_id)
-        metadata.state = state
+        metadata.state = {k: _lua_to_serializable(v) for k, v in state.items()}
         self.save_procedure_metadata(procedure_id, metadata)
 
     def state_get(self, procedure_id: str, key: str, default: Any = None) -> Any:
@@ -324,7 +407,7 @@ class PlexusStorageAdapter:
     def state_set(self, procedure_id: str, key: str, value: Any) -> None:
         """Set state value."""
         metadata = self.load_procedure_metadata(procedure_id)
-        metadata.state[key] = value
+        metadata.state[key] = _lua_to_serializable(value)
         self.save_procedure_metadata(procedure_id, metadata)
 
     def state_delete(self, procedure_id: str, key: str) -> None:

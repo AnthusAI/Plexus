@@ -149,9 +149,14 @@ const taskDispatcherStack = new TaskDispatcherStack(
 
 const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
 const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
+const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
 
 if (!resolvedDataApiUrl || !resolvedDataApiKey) {
     throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
+}
+
+if (!consoleWorkerImageUri) {
+    throw new Error('CONSOLE_WORKER_IMAGE_URI must be set for ConsoleRunWorkerStack deployment');
 }
 
 const consoleRunWorkerStack = new ConsoleRunWorkerStack(
@@ -160,6 +165,7 @@ const consoleRunWorkerStack = new ConsoleRunWorkerStack(
     {
         plexusApiUrl: resolvedDataApiUrl,
         plexusApiKey: resolvedDataApiKey,
+        workerImageUri: consoleWorkerImageUri,
     }
 );
 

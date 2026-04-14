@@ -21,6 +21,7 @@ from plexus.cli.dataset.datasets import (
     _fetch_feedback_item_with_item,
     _fetch_score_name,
     _fetch_score_champion_version,
+    _persist_dataset_file_reference,
     _upload_dataset_parquet,
 )
 
@@ -278,6 +279,18 @@ def _resolve_score_final_classes_from_yaml_details(
         seen.add(candidate)
         valid_classes.append(candidate)
 
+    # Check top-level valid_classes (used by TactusScore YAML format)
+    top_level_classes = parsed.get("valid_classes")
+    if isinstance(top_level_classes, list):
+        for class_name in top_level_classes:
+            add_class(class_name)
+    if valid_classes:
+        return {
+            "classes": valid_classes,
+            "source": "valid_classes",
+            "score_version_id": resolved_score_version_id,
+        }
+
     validation_classes = (
         ((parsed.get("parameters") or {}).get("validation") or {}).get("value") or {}
     ).get("valid_classes")
@@ -349,7 +362,7 @@ def _resolve_score_final_classes_from_yaml_details(
         raise ValueError(
             "No final output classes found in score YAML for "
             f"score {score_id} (version {resolved_score_version_id}). "
-            "Checked: parameters.validation.value.valid_classes, classes[].name, "
+            "Checked: valid_classes, parameters.validation.value.valid_classes, classes[].name, "
             "graph[-1].valid_classes, graph[-1].conditions[].output.value, "
             "graph[-1].LogicalClassifier.code."
         )
@@ -778,16 +791,10 @@ def build_associated_dataset_from_vetted_feedback_items(
             account_id=account_id,
             dataset_id=dataset_id,
         )
-        client.execute(
-            """
-            mutation UpdateDataSet($input: UpdateDataSetInput!) {
-                updateDataSet(input: $input) {
-                    id
-                    file
-                }
-            }
-            """,
-            {"input": {"id": dataset_id, "file": s3_key}},
+        _persist_dataset_file_reference(
+            client=client,
+            dataset_id=dataset_id,
+            s3_key=s3_key,
         )
 
         result_payload: Dict[str, Any] = {
@@ -1067,16 +1074,10 @@ def build_associated_dataset_from_feedback_window(
             account_id=account_id,
             dataset_id=dataset_id,
         )
-        client.execute(
-            """
-            mutation UpdateDataSet($input: UpdateDataSetInput!) {
-                updateDataSet(input: $input) {
-                    id
-                    file
-                }
-            }
-            """,
-            {"input": {"id": dataset_id, "file": s3_key}},
+        _persist_dataset_file_reference(
+            client=client,
+            dataset_id=dataset_id,
+            s3_key=s3_key,
         )
 
         result_payload: Dict[str, Any] = {

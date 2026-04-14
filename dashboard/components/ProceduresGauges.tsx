@@ -141,7 +141,7 @@ export function ProceduresGauges({
       data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
-      title="Procedures & Graph Nodes, Last 24 Hours"
+      title="Procedures"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
