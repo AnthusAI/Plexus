@@ -3,8 +3,8 @@ import { ReportConfigurationEdit } from "@/components/report-configuration-edit"
 export default async function ReportConfigurationEditPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string }
+  params: Promise<{ id: string }>
 }) {
-  const resolvedParams = await params
-  return <ReportConfigurationEdit id={resolvedParams?.id || ''} />
+  const { id } = await params
+  return <ReportConfigurationEdit id={id} />
 }
