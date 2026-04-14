@@ -1,0 +1,31 @@
+{
+  "id": "plx-7e60f108-9b13-4822-9853-0c4916343d9c",
+  "title": "Resolve PR #164 CodeQL findings after develop drift",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5cce3efa-1858-4ca0-b5cf-e6219e7279ae",
+      "author": "derek",
+      "text": "Starting implementation: branch from latest develop, resolve CodeQL findings on PR #164, run targeted validation, open follow-up PR to develop.",
+      "created_at": "2026-04-14T18:38:21.262383065Z"
+    },
+    {
+      "id": "07c04dfa-a00c-4aae-a0be-94f09d1f5455",
+      "author": "derek",
+      "text": "Applied CodeQL follow-up fixes from PR #164 comments in dashboard/components/ui/conversation-viewer.tsx: removed unused useCallback import and simplified unreachable isAuthUnavailable condition in selectedSessionMissing button disabled state. Local lint tooling is currently broken/hanging in this environment (next lint flag mismatch and eslint config crash), so validation is change-scope review plus minimal diff.",
+      "created_at": "2026-04-14T18:41:05.926037710Z"
+    }
+  ],
+  "created_at": "2026-04-14T18:38:19.054032316Z",
+  "updated_at": "2026-04-14T18:41:05.926037710Z",
+  "closed_at": null,
+  "custom": {}
+}
