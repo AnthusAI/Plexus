@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react'
+import React, { useCallback, useState, useEffect, useTransition } from 'react'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
@@ -37,9 +37,14 @@ import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
 import { OptimizationDiagnosticBanner } from "./OptimizationInsightsPanel"
+import { OptimizerMetricsChartSkeleton, CycleHistoryTableSkeleton } from "./loading-skeleton"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
+
+// Module-level stale-while-revalidate cache for procedure state
+// Keyed by procedure ID; allows instant display when navigating back to a procedure
+const procedureStateCache = new Map<string, { state: any; timestamp: number }>()
 
 // Minimal fallback for YAML editor - actual templates come from procedure data
 const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
@@ -146,12 +151,14 @@ export default function ProcedureTask({
   onDuplicate,
   onConversationFullscreenChange
 }: ProcedureTaskProps) {
+  const [, startTransition] = useTransition()
   const [loadedYaml, setLoadedYaml] = useState<string>('')
   const [isLoadingYaml, setIsLoadingYaml] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
   const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const [parameters, setParameters] = useState<ParameterDefinition[]>([])
   const [parameterValues, setParameterValues] = useState<ParameterValue>({})
+  const [isLoadingProcedureState, setIsLoadingProcedureState] = useState(true)
   const [optimizerIterations, setOptimizerIterations] = useState<IterationData[]>([])
   const [optimizerVersions, setOptimizerVersions] = useState<Array<{
     label: string
@@ -190,80 +197,62 @@ export default function ProcedureTask({
   useEffect(() => {
     if (variant !== 'detail' || !procedure.id) return
 
-    const fetchMetrics = async () => {
-      try {
-        const response = await fetch(`/api/procedure-state/${procedure.id}`)
-        if (!response.ok) return
-        const { state } = await response.json()
+    // Apply cached state immediately if fresh enough (< 30s), then fetch in background
+    const cached = procedureStateCache.get(procedure.id)
 
-        // Always extract identity info from state — used for names and link URLs
-        // even when there are no iterations yet (procedure may be starting up)
-        const vscId = state.scorecard_id || procedure.scorecardId
-        const vscoreId = state.score_id || procedure.scoreId
-        if (vscId || vscoreId) {
-          setOptimizerVersionBaseIds({ scorecardId: vscId, scoreId: vscoreId })
-        }
-        if (state.scorecard_name) setStateScorecardName(state.scorecard_name)
-        if (state.score_name) setStateScoreName(state.score_name)
+    const applyState = (state: any) => {
+      // Identity info is critical — apply immediately
+      const vscId = state.scorecard_id || procedure.scorecardId
+      const vscoreId = state.score_id || procedure.scoreId
+      if (vscId || vscoreId) {
+        setOptimizerVersionBaseIds({ scorecardId: vscId, scoreId: vscoreId })
+      }
+      if (state.scorecard_name) setStateScorecardName(state.scorecard_name)
+      if (state.score_name) setStateScoreName(state.score_name)
 
-        const cycleIterations: any[] = state.iterations || []
+      const cycleIterations: any[] = state.iterations || []
 
-        // Use immutable initial baseline when available; otherwise infer from first cycle's deltas;
-        // fall back to the mutable baseline (which gets overwritten as cycles complete).
-        const firstCycle = cycleIterations[0]
-        const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
-          ? {
-              alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
-              accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
-              precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
-              recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
-            }
-          : null
-        const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
-          ? {
-              alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
-              accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
-              precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
-              recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
-            }
-          : null
+      const firstCycle = cycleIterations[0]
+      const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
+        ? {
+            alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
+            accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
+            precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
+            recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
+          }
+        : null
+      const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
+        ? {
+            alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
+            accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
+            precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
+            recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
+          }
+        : null
+      const fbBaseline  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
+      const accBaseline = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
+      if (!fbBaseline && !accBaseline && cycleIterations.length === 0) return
 
-        const fbBaseline  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
-        const accBaseline = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
-
-        if (!fbBaseline && !accBaseline && cycleIterations.length === 0) return
-
+      // Heavy chart/table updates — include setIsLoadingProcedureState so the skeleton
+      // only disappears once the chart data is ready in the same render pass.
+      startTransition(() => {
+        setIsLoadingProcedureState(false)
         const iterations: IterationData[] = []
-
-        // Baseline as first point
         if (fbBaseline || accBaseline) {
-          iterations.push({
-            iteration: 0,
-            label: 'Baseline',
-            feedback_metrics: fbBaseline,
-            accuracy_metrics: accBaseline,
-            accepted: true,
-          })
+          iterations.push({ iteration: 0, label: 'Baseline', feedback_metrics: fbBaseline, accuracy_metrics: accBaseline, accepted: true })
         }
-
-        // Cycle entries from state.iterations
         for (const it of cycleIterations) {
           iterations.push({
-            iteration: it.iteration,
-            label: `Cycle ${it.iteration}`,
+            iteration: it.iteration, label: `Cycle ${it.iteration}`,
             score_version_id: it.score_version_id,
-            feedback_metrics: it.feedback_metrics,
-            accuracy_metrics: it.accuracy_metrics,
-            feedback_deltas: it.feedback_deltas,
-            accuracy_deltas: it.accuracy_deltas,
-            accepted: it.accepted,
-            skip_reason: it.skip_reason,
-            disqualified: it.disqualified,
+            feedback_metrics: it.feedback_metrics, accuracy_metrics: it.accuracy_metrics,
+            feedback_deltas: it.feedback_deltas, accuracy_deltas: it.accuracy_deltas,
+            accepted: it.accepted, skip_reason: it.skip_reason, disqualified: it.disqualified,
           })
         }
-
         setOptimizerIterations(iterations)
 
+        // Version rows for cycles table
         const versionRows: Array<{
           label: string; versionId?: string; accepted?: boolean; isBaseline?: boolean
           feedbackAC1?: number | null; feedbackDelta?: number | null
@@ -273,72 +262,29 @@ export default function ProcedureTask({
           skipReason?: string; disqualified?: boolean
         }> = []
         if (state.baseline_version_id) {
-          // Prefer the immutable initial-baseline keys (written by newer optimizer runs).
-          // For older runs that only have the overwritten keys, infer from the first
-          // cycle's stored delta: original_baseline = cycle_ac1 - cycle_delta.
-          const firstCycle = cycleIterations[0]
-          const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
-            ? {
-                alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
-                accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
-                precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
-                recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
-              }
-            : null
-          const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
-            ? {
-                alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
-                accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
-                precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
-                recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
-              }
-            : null
-
-          const fbBase  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
-          const accBase = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
           versionRows.push({
-            label: 'Baseline',
-            versionId: state.baseline_version_id,
-            isBaseline: true,
-            feedbackAC1: fbBase?.alignment ?? null,
-            feedbackDelta: null,
-            feedbackAccuracy: fbBase?.accuracy ?? null,
-            feedbackPrecision: fbBase?.precision ?? null,
-            feedbackRecall: fbBase?.recall ?? null,
-            accuracyAC1: accBase?.alignment ?? null,
-            accuracyDelta: null,
-            accuracyAccuracy: accBase?.accuracy ?? null,
-            accuracyPrecision: accBase?.precision ?? null,
-            accuracyRecall: accBase?.recall ?? null,
+            label: 'Baseline', versionId: state.baseline_version_id, isBaseline: true,
+            feedbackAC1: fbBaseline?.alignment ?? null, feedbackDelta: null,
+            feedbackAccuracy: fbBaseline?.accuracy ?? null, feedbackPrecision: fbBaseline?.precision ?? null, feedbackRecall: fbBaseline?.recall ?? null,
+            accuracyAC1: accBaseline?.alignment ?? null, accuracyDelta: null,
+            accuracyAccuracy: accBaseline?.accuracy ?? null, accuracyPrecision: accBaseline?.precision ?? null, accuracyRecall: accBaseline?.recall ?? null,
             accepted: true,
           })
         }
         for (const it of cycleIterations) {
           versionRows.push({
-            label: `Cycle ${it.iteration}`,
-            versionId: it.score_version_id,
-            accepted: it.accepted,
-            feedbackAC1: it.feedback_metrics?.alignment ?? null,
-            feedbackDelta: it.feedback_deltas?.alignment ?? null,
-            feedbackAccuracy: it.feedback_metrics?.accuracy ?? null,
-            feedbackPrecision: it.feedback_metrics?.precision ?? null,
-            feedbackRecall: it.feedback_metrics?.recall ?? null,
-            accuracyAC1: it.accuracy_metrics?.alignment ?? null,
-            accuracyDelta: it.accuracy_deltas?.alignment ?? null,
-            accuracyAccuracy: it.accuracy_metrics?.accuracy ?? null,
-            accuracyPrecision: it.accuracy_metrics?.precision ?? null,
-            accuracyRecall: it.accuracy_metrics?.recall ?? null,
-            skipReason: it.skip_reason,
-            disqualified: it.disqualified,
+            label: `Cycle ${it.iteration}`, versionId: it.score_version_id, accepted: it.accepted,
+            feedbackAC1: it.feedback_metrics?.alignment ?? null, feedbackDelta: it.feedback_deltas?.alignment ?? null,
+            feedbackAccuracy: it.feedback_metrics?.accuracy ?? null, feedbackPrecision: it.feedback_metrics?.precision ?? null, feedbackRecall: it.feedback_metrics?.recall ?? null,
+            accuracyAC1: it.accuracy_metrics?.alignment ?? null, accuracyDelta: it.accuracy_deltas?.alignment ?? null,
+            accuracyAccuracy: it.accuracy_metrics?.accuracy ?? null, accuracyPrecision: it.accuracy_metrics?.precision ?? null, accuracyRecall: it.accuracy_metrics?.recall ?? null,
+            skipReason: it.skip_reason, disqualified: it.disqualified,
           })
         }
         if (versionRows.length > 0) setOptimizerVersions(versionRows)
 
-        // Extract cycle insights and optimization diagnostic
         if (state.cycle_insights) setCycleInsights(state.cycle_insights)
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
-
-        // Extract per-iteration details for expandable version rows
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
           if (it.exploration_results || it.done_reason || it.synthesis_reasoning || it.dual_synthesis) {
@@ -352,8 +298,26 @@ export default function ProcedureTask({
           }
         }
         setIterationDetails(details)
+      })
+    }
+
+    // Apply cached state right away for instant display
+    if (cached) applyState(cached.state)
+
+    const fetchMetrics = async () => {
+      try {
+        const response = await fetch(`/api/procedure-state/${procedure.id}`)
+        if (!response.ok) return
+        const { state } = await response.json()
+
+        // Cache the raw state for stale-while-revalidate on next open
+        procedureStateCache.set(procedure.id, { state, timestamp: Date.now() })
+
+        applyState(state)
       } catch (e) {
         console.error('[ProcedureTask] Failed to fetch optimizer metrics:', e)
+      } finally {
+        setIsLoadingProcedureState(false)
       }
     }
 
@@ -735,13 +699,17 @@ export default function ProcedureTask({
             <OptimizationDiagnosticBanner diagnostic={optimizationDiagnostic} />
           )}
 
-          {/* Optimizer Metrics Chart - only show if iterations exist */}
-          {optimizerIterations.length > 0 && (
+          {/* Optimizer Metrics Chart - skeleton while loading, chart when data arrives */}
+          {isLoadingProcedureState ? (
+            <OptimizerMetricsChartSkeleton />
+          ) : optimizerIterations.length > 0 ? (
             <OptimizerMetricsChart iterations={optimizerIterations} />
-          )}
+          ) : null}
 
-          {/* Cycles table - metrics, status, and expandable per-cycle details */}
-          {optimizerVersions.length > 0 && (
+          {/* Cycles table - skeleton while loading, table when data arrives */}
+          {isLoadingProcedureState ? (
+            <CycleHistoryTableSkeleton />
+          ) : optimizerVersions.length > 0 ? (
             <div className="mt-4">
               <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cycles</h3>
               <table className="w-full text-xs border-separate border-spacing-y-0.5">
@@ -1000,7 +968,7 @@ export default function ProcedureTask({
                 </tbody>
               </table>
             </div>
-          )}
+          ) : null}
 
           {/* Procedure Conversation section */}
           <div className="mt-6">
