@@ -175,6 +175,29 @@ class StagePrimitive:
             # Fallback: return list
             return [transition.copy() for transition in self._history]
 
+    def progress(self, current: int, total: int) -> None:
+        """
+        Set progress for the current stage (e.g., cycle 3 of 10).
+
+        Args:
+            current: Current item/cycle number
+            total: Total items/cycles expected
+
+        Example (Lua):
+            Stage.progress(3, 10)  -- Show "3/10" in the progress bar
+        """
+        self._progress_current = int(current)
+        self._progress_total = int(total)
+        logger.info(f"Stage progress: {current}/{total}")
+
+    def get_progress(self):
+        """Get current progress as (current, total) tuple, or None if not set."""
+        current = getattr(self, '_progress_current', None)
+        total = getattr(self, '_progress_total', None)
+        if current is not None and total is not None:
+            return (current, total)
+        return None
+
     def count(self) -> int:
         """
         Get count of stage transitions.

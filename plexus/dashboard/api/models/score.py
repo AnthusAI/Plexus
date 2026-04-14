@@ -712,24 +712,12 @@ class Score(BaseModel):
             # Create directory if it doesn't exist
             code_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Write code to YAML file with version metadata as comments
+            # Write code to YAML file
             with open(code_path, 'w') as f:
-                f.write(f"# Pulled from Plexus API\n")
-                f.write(f"# Score: {self.name}\n")
-                f.write(f"# Champion Version ID: {champion_version_id}\n")
-                f.write(f"# Created: {version_data.get('createdAt', 'Unknown')}\n")
-                f.write(f"# Updated: {version_data.get('updatedAt', 'Unknown')}\n")
-                if version_data.get('note'):
-                    f.write(f"# Note: {version_data['note']}\n")
-                f.write(f"#\n")
                 f.write(code_yaml)
-            
+
             # Write guidelines to markdown file
             with open(guidelines_path, 'w') as f:
-                f.write(f"# Guidelines for {self.name}\n\n")
-                f.write(f"<!-- Pulled from Plexus API -->\n")
-                f.write(f"<!-- Champion Version ID: {champion_version_id} -->\n")
-                f.write(f"<!-- Updated: {version_data.get('updatedAt', 'Unknown')} -->\n\n")
                 if guidelines:
                     f.write(guidelines)
                 else:
@@ -812,6 +800,7 @@ class Score(BaseModel):
                     '# Pulled from Plexus API',
                     '# Score:',
                     '# Champion Version ID:',
+                    '# Version ID:',
                     '# Created:',
                     '# Updated:',
                     '# Note:'

@@ -459,26 +459,29 @@ def register_report_tools(mcp: FastMCP):
 
     @mcp.tool()
     async def plexus_report_run(
-        config_id: str,
-        parameters: Optional[Dict[str, Any]] = None
+        config_id: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        block_class: Optional[str] = None,
+        block_config: Optional[Dict[str, Any]] = None
     ) -> Union[str, Dict[str, Any]]:
         """
-        Generate a new report instance from a ReportConfiguration with optional parameters.
+        Generate a report or run a single report block.
 
-        This is the MCP equivalent of the CLI command: plexus report run --config <config_id> [key=value...]
+        Two modes of operation:
+
+        1. Full report from configuration:
+           plexus_report_run(config_id="<id>", parameters={"days": "30"})
+
+        2. Single report block (no configuration needed):
+           plexus_report_run(block_class="FeedbackContradictions", block_config={"scorecard": "...", "score": "...", "mode": "contradictions", "days": 90})
 
         Parameters:
-        - config_id: ID of the ReportConfiguration to use (required)
-        - parameters: Dictionary of parameters to pass to the report (e.g., {"days": "30", "scorecard": "97"})
+        - config_id: ID of the ReportConfiguration (for full report mode)
+        - parameters: Dictionary of parameters for the report
+        - block_class: Name of a report block class to run in isolation (e.g., "FeedbackContradictions")
+        - block_config: Configuration dict for the block (e.g., scorecard, score, mode, days)
 
-        Returns:
-        - Report information with report ID, task ID, and URL
-
-        Example:
-            plexus_report_run(
-                config_id="e555be4d-8013-419f-bb63-87b348712944",
-                parameters={"days": "30", "scorecard": "97"}
-            )
+        Provide either config_id (full report) or block_class (single block), not both.
         """
         # Temporarily redirect stdout to capture any unexpected output
         old_stdout = sys.stdout
@@ -489,10 +492,16 @@ def register_report_tools(mcp: FastMCP):
             # Import required modules
             try:
                 from plexus.cli.shared.client_utils import create_client as create_dashboard_client
-                from plexus.reports.service import generate_report_with_parameters
+                from plexus.reports.service import generate_report_with_parameters, _instantiate_and_run_block
             except ImportError as e:
                 logger.error(f"ImportError: {str(e)}", exc_info=True)
                 return f"Error: Failed to import Plexus modules: {str(e)}"
+
+            # Validate parameters
+            if block_class and config_id:
+                return {"status": "error", "error": "Provide either config_id or block_class, not both."}
+            if not block_class and not config_id:
+                return {"status": "error", "error": "Provide either config_id (full report) or block_class (single block)."}
 
             # Check if we have the necessary credentials
             api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -511,7 +520,42 @@ def register_report_tools(mcp: FastMCP):
             if not account_id:
                 return "Error: Could not determine default account ID."
 
-            # Prepare parameters
+            # --- Single block mode ---
+            if block_class:
+                logger.info(f"[MCP] Running single report block: {block_class} with config: {block_config}")
+                try:
+                    block_def = {
+                        "class_name": block_class,
+                        "config": block_config or {},
+                        "block_name": block_class
+                    }
+                    report_params = {"account_id": account_id}
+                    output_data, log_output, resolved_dataset_id = _instantiate_and_run_block(
+                        block_def=block_def,
+                        report_params=report_params,
+                        api_client=client
+                    )
+                    if output_data is not None:
+                        logger.info(f"[MCP] Block {block_class} completed successfully")
+                        return {
+                            "status": "success",
+                            "output": output_data,
+                            "log": log_output,
+                            "message": f"Block {block_class} executed successfully"
+                        }
+                    else:
+                        logger.error(f"[MCP] Block {block_class} failed: {log_output}")
+                        return {
+                            "status": "failed",
+                            "error": log_output,
+                            "message": f"Block {block_class} execution failed"
+                        }
+                except Exception as e:
+                    error_msg = f"Error running block {block_class}: {str(e)}"
+                    logger.error(f"[MCP] {error_msg}", exc_info=True)
+                    return {"status": "error", "error": error_msg}
+
+            # --- Full report mode ---
             params = parameters if parameters else {}
 
             logger.info(f"[MCP] Running report from configuration: {config_id} with parameters: {params}")

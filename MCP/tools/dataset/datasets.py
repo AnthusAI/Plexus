@@ -293,6 +293,7 @@ def register_dataset_tools(mcp: FastMCP):
         max_items: int = 100,
         days: Optional[int] = None,
         balance: bool = True,
+        score_version_id: Optional[str] = None,
     ) -> str:
         """
         Build a balanced associated dataset from recent qualifying feedback items.
@@ -307,6 +308,8 @@ def register_dataset_tools(mcp: FastMCP):
         - days: Lookback window in days. If omitted, searches all available feedback history.
         - balance: Apply class balancing via round-robin selection (default: True).
                    Set to False to include more items when feedback is scarce.
+        - score_version_id: Optional specific version to use for class label resolution.
+                            If omitted, uses the champion version.
 
         Returns:
         - JSON payload with dataset_id, rows_written, class_distribution_after,
@@ -341,6 +344,7 @@ def register_dataset_tools(mcp: FastMCP):
                 max_items=max_items,
                 days=days,
                 balance=balance,
+                class_source_score_version_id=score_version_id or None,
             )
             dataset_id = result.get("dataset_id")
             dataset_file = result.get("dataset_file") or result.get("s3_key")

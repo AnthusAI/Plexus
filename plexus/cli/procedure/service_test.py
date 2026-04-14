@@ -85,7 +85,10 @@ prompts:
         self.mock_procedure.create_root_node.return_value = self.mock_root_node
         
         # Mock score resolution
-        with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'):
+        with patch(
+            'plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier',
+            return_value='score-789',
+        ):
             result = self.service.create_procedure(
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
@@ -154,7 +157,10 @@ prompts:
         mock_resolve_account.return_value = 'account-123'
         mock_resolve_scorecard.return_value = 'scorecard-456'
         
-        with patch.object(self.service, '_resolve_score_identifier', return_value=None):
+        with patch(
+            'plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier',
+            return_value=None,
+        ):
             result = self.service.create_procedure(
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
@@ -179,7 +185,10 @@ prompts:
         mock_template_class.get_default_for_account.return_value = None
         mock_template_class.create.return_value = mock_template
         
-        with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'):
+        with patch(
+            'plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier',
+            return_value='score-789',
+        ):
             result = self.service.create_procedure(
                 account_identifier='test-account',
                 scorecard_identifier='test-scorecard',
@@ -209,8 +218,10 @@ prompts:
         mock_procedure_class.create.return_value = self.mock_procedure
         self.mock_procedure.create_root_node.return_value = self.mock_root_node
         
-        with patch.object(self.service, '_resolve_score_identifier', return_value='score-789'), \
-             patch('plexus.cli.procedure.service.Procedure', mock_procedure_class):
+        with patch(
+            'plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier',
+            return_value='score-789',
+        ), patch('plexus.cli.procedure.service.Procedure', mock_procedure_class):
             
             result = self.service.create_procedure(
                 account_identifier='test-account',

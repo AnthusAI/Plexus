@@ -3,7 +3,8 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,11 @@ import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkBreaks from "remark-breaks"
+import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
+import { OptimizationDiagnosticBanner } from "./OptimizationInsightsPanel"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
@@ -146,13 +152,219 @@ export default function ProcedureTask({
   const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const [parameters, setParameters] = useState<ParameterDefinition[]>([])
   const [parameterValues, setParameterValues] = useState<ParameterValue>({})
+  const [optimizerIterations, setOptimizerIterations] = useState<IterationData[]>([])
+  const [optimizerVersions, setOptimizerVersions] = useState<Array<{
+    label: string
+    versionId?: string
+    accepted?: boolean
+    isBaseline?: boolean
+    feedbackAC1?: number | null
+    feedbackDelta?: number | null
+    feedbackAccuracy?: number | null
+    feedbackPrecision?: number | null
+    feedbackRecall?: number | null
+    accuracyAC1?: number | null
+    accuracyDelta?: number | null
+    accuracyAccuracy?: number | null
+    accuracyPrecision?: number | null
+    accuracyRecall?: number | null
+    skipReason?: string
+    disqualified?: boolean
+  }>>([])
+  const [optimizerVersionBaseIds, setOptimizerVersionBaseIds] = useState<{ scorecardId?: string; scoreId?: string }>({})
+  const [stateScorecardName, setStateScorecardName] = useState<string>('')
+  const [stateScoreName, setStateScoreName] = useState<string>('')
+  const [cycleInsights, setCycleInsights] = useState<any[]>([])
+  const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
+  const [iterationDetails, setIterationDetails] = useState<Map<number, any>>(new Map())
+  const [expandedVersionRows, setExpandedVersionRows] = useState<Set<number>>(new Set())
 
-  // Load procedure YAML when component mounts or procedure changes
+  // Load procedure data when component mounts or procedure changes
   useEffect(() => {
     if (variant === 'detail' && procedure.id) {
       loadProcedureYaml()
     }
   }, [variant, procedure.id])
+
+  // Fetch optimizer metrics from procedure metadata (State.set() now persists via on_set callback)
+  useEffect(() => {
+    if (variant !== 'detail' || !procedure.id) return
+
+    const fetchMetrics = async () => {
+      try {
+        const response = await fetch(`/api/procedure-state/${procedure.id}`)
+        if (!response.ok) return
+        const { state } = await response.json()
+
+        // Always extract identity info from state — used for names and link URLs
+        // even when there are no iterations yet (procedure may be starting up)
+        const vscId = state.scorecard_id || procedure.scorecardId
+        const vscoreId = state.score_id || procedure.scoreId
+        if (vscId || vscoreId) {
+          setOptimizerVersionBaseIds({ scorecardId: vscId, scoreId: vscoreId })
+        }
+        if (state.scorecard_name) setStateScorecardName(state.scorecard_name)
+        if (state.score_name) setStateScoreName(state.score_name)
+
+        const cycleIterations: any[] = state.iterations || []
+
+        // Use immutable initial baseline when available; otherwise infer from first cycle's deltas;
+        // fall back to the mutable baseline (which gets overwritten as cycles complete).
+        const firstCycle = cycleIterations[0]
+        const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
+          ? {
+              alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
+              accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
+              precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
+              recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
+            }
+          : null
+        const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
+          ? {
+              alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
+              accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
+              precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
+              recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
+            }
+          : null
+
+        const fbBaseline  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
+        const accBaseline = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
+
+        if (!fbBaseline && !accBaseline && cycleIterations.length === 0) return
+
+        const iterations: IterationData[] = []
+
+        // Baseline as first point
+        if (fbBaseline || accBaseline) {
+          iterations.push({
+            iteration: 0,
+            label: 'Baseline',
+            feedback_metrics: fbBaseline,
+            accuracy_metrics: accBaseline,
+            accepted: true,
+          })
+        }
+
+        // Cycle entries from state.iterations
+        for (const it of cycleIterations) {
+          iterations.push({
+            iteration: it.iteration,
+            label: `Cycle ${it.iteration}`,
+            score_version_id: it.score_version_id,
+            feedback_metrics: it.feedback_metrics,
+            accuracy_metrics: it.accuracy_metrics,
+            feedback_deltas: it.feedback_deltas,
+            accuracy_deltas: it.accuracy_deltas,
+            accepted: it.accepted,
+            skip_reason: it.skip_reason,
+            disqualified: it.disqualified,
+          })
+        }
+
+        setOptimizerIterations(iterations)
+
+        const versionRows: Array<{
+          label: string; versionId?: string; accepted?: boolean; isBaseline?: boolean
+          feedbackAC1?: number | null; feedbackDelta?: number | null
+          feedbackAccuracy?: number | null; feedbackPrecision?: number | null; feedbackRecall?: number | null
+          accuracyAC1?: number | null; accuracyDelta?: number | null
+          accuracyAccuracy?: number | null; accuracyPrecision?: number | null; accuracyRecall?: number | null
+          skipReason?: string; disqualified?: boolean
+        }> = []
+        if (state.baseline_version_id) {
+          // Prefer the immutable initial-baseline keys (written by newer optimizer runs).
+          // For older runs that only have the overwritten keys, infer from the first
+          // cycle's stored delta: original_baseline = cycle_ac1 - cycle_delta.
+          const firstCycle = cycleIterations[0]
+          const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
+            ? {
+                alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
+                accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
+                precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
+                recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
+              }
+            : null
+          const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
+            ? {
+                alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
+                accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
+                precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
+                recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
+              }
+            : null
+
+          const fbBase  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
+          const accBase = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
+          versionRows.push({
+            label: 'Baseline',
+            versionId: state.baseline_version_id,
+            isBaseline: true,
+            feedbackAC1: fbBase?.alignment ?? null,
+            feedbackDelta: null,
+            feedbackAccuracy: fbBase?.accuracy ?? null,
+            feedbackPrecision: fbBase?.precision ?? null,
+            feedbackRecall: fbBase?.recall ?? null,
+            accuracyAC1: accBase?.alignment ?? null,
+            accuracyDelta: null,
+            accuracyAccuracy: accBase?.accuracy ?? null,
+            accuracyPrecision: accBase?.precision ?? null,
+            accuracyRecall: accBase?.recall ?? null,
+            accepted: true,
+          })
+        }
+        for (const it of cycleIterations) {
+          versionRows.push({
+            label: `Cycle ${it.iteration}`,
+            versionId: it.score_version_id,
+            accepted: it.accepted,
+            feedbackAC1: it.feedback_metrics?.alignment ?? null,
+            feedbackDelta: it.feedback_deltas?.alignment ?? null,
+            feedbackAccuracy: it.feedback_metrics?.accuracy ?? null,
+            feedbackPrecision: it.feedback_metrics?.precision ?? null,
+            feedbackRecall: it.feedback_metrics?.recall ?? null,
+            accuracyAC1: it.accuracy_metrics?.alignment ?? null,
+            accuracyDelta: it.accuracy_deltas?.alignment ?? null,
+            accuracyAccuracy: it.accuracy_metrics?.accuracy ?? null,
+            accuracyPrecision: it.accuracy_metrics?.precision ?? null,
+            accuracyRecall: it.accuracy_metrics?.recall ?? null,
+            skipReason: it.skip_reason,
+            disqualified: it.disqualified,
+          })
+        }
+        if (versionRows.length > 0) setOptimizerVersions(versionRows)
+
+        // Extract cycle insights and optimization diagnostic
+        if (state.cycle_insights) setCycleInsights(state.cycle_insights)
+        if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
+
+        // Extract per-iteration details for expandable version rows
+        const details = new Map<number, any>()
+        for (const it of cycleIterations) {
+          if (it.exploration_results || it.done_reason || it.synthesis_reasoning || it.dual_synthesis) {
+            details.set(it.iteration, {
+              exploration_results: it.exploration_results,
+              done_reason: it.done_reason,
+              synthesis_reasoning: it.synthesis_reasoning,
+              synthesis_strategy: it.synthesis_strategy,
+              dual_synthesis: it.dual_synthesis,
+            })
+          }
+        }
+        setIterationDetails(details)
+      } catch (e) {
+        console.error('[ProcedureTask] Failed to fetch optimizer metrics:', e)
+      }
+    }
+
+    fetchMetrics()
+
+    const isCompleted = procedure.task?.status === 'COMPLETED' || procedure.task?.status === 'FAILED'
+    if (!isCompleted) {
+      const interval = setInterval(fetchMetrics, 15000)
+      return () => clearInterval(interval)
+    }
+  }, [variant, procedure.id, procedure.task?.status])
 
   // Parse parameters from YAML whenever it changes
   useEffect(() => {
@@ -211,7 +423,7 @@ export default function ProcedureTask({
         `,
         variables: { id: procedure.id }
       })
-      
+
       const procedureData = (result as any).data?.getProcedure
       if (procedureData?.code) {
         setLoadedYaml(procedureData.code)
@@ -273,8 +485,8 @@ export default function ProcedureTask({
     type: 'Procedure',
     name: procedure.title,
     description: procedure.description,
-    scorecard: procedure.scorecard?.name || '',
-    score: procedure.score?.name || '',
+    scorecard: procedure.scorecard?.name || stateScorecardName || '',
+    score: procedure.score?.name || stateScoreName || '',
     time: procedure.createdAt,
     command: procedure.command,
     output: (procedure as any).output, // May not exist in type definition yet
@@ -347,10 +559,33 @@ export default function ProcedureTask({
               </div>
               
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="text-sm text-muted-foreground truncate">{props.task.scorecard}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                  {(procedure.scorecardId || optimizerVersionBaseIds.scorecardId) && (
+                    <Link
+                      href={`/lab/scorecards/${procedure.scorecardId || optimizerVersionBaseIds.scorecardId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
               )}
               {props.task.score && props.task.score.trim() !== '' && (
-                <div className="text-sm text-muted-foreground truncate">{props.task.score}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+                  {(procedure.scorecardId || optimizerVersionBaseIds.scorecardId) &&
+                   (procedure.scoreId || optimizerVersionBaseIds.scoreId) && (
+                    <Link
+                      href={`/lab/scorecards/${procedure.scorecardId || optimizerVersionBaseIds.scorecardId}/scores/${procedure.scoreId || optimizerVersionBaseIds.scoreId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
@@ -384,16 +619,38 @@ export default function ProcedureTask({
         </div>
       )
     } else {
-      // Use default TaskHeader for grid view
+      // Custom header for grid view with bold scorecard/score
       return (
-        <TaskHeader
-          variant={variant}
-          task={taskObject}
-          controlButtons={controlButtons}
-          isFullWidth={isFullWidth}
-          onToggleFullWidth={onToggleFullWidth}
-          onClose={onClose}
-        />
+        <div className="space-y-1.5 p-0 flex flex-col items-start w-full max-w-full">
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.scorecard}</span>
+                </div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                  <span className="truncate">{props.task.score}</span>
+                </div>
+              )}
+              {props.task.description && (
+                <div className="text-sm text-muted-foreground truncate">
+                  {props.task.description}
+                </div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="text-muted-foreground">
+                  <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                </div>
+                {controlButtons}
+              </div>
+            </div>
+          </div>
+        </div>
       )
     }
   }
@@ -405,15 +662,27 @@ export default function ProcedureTask({
         null
       ) : (
         <div className="p-3">
-          {/* Parameters section - show at top if parameters exist */}
+          {/* Parameters section - collapsed by default */}
           {parameters.length > 0 && (
-            <div className="mb-4">
-              <ParametersDisplay
-                parameters={parameters}
-                values={parameterValues}
-                variant="table"
-              />
-            </div>
+            <Accordion type="multiple" className="w-full mb-4">
+              <AccordionItem value="parameters" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Parameters</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <ParametersDisplay
+                    parameters={parameters}
+                    values={parameterValues}
+                    variant="table"
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           )}
           
           {/* Configuration section */}
@@ -460,7 +729,279 @@ export default function ProcedureTask({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-          
+
+          {/* Optimization Diagnostic Banner - shown when optimizer is stuck */}
+          {optimizationDiagnostic && (
+            <OptimizationDiagnosticBanner diagnostic={optimizationDiagnostic} />
+          )}
+
+          {/* Optimizer Metrics Chart - only show if iterations exist */}
+          {optimizerIterations.length > 0 && (
+            <OptimizerMetricsChart iterations={optimizerIterations} />
+          )}
+
+          {/* Cycles table - metrics, status, and expandable per-cycle details */}
+          {optimizerVersions.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cycles</h3>
+              <table className="w-full text-xs border-separate border-spacing-y-0.5">
+                <thead>
+                  <tr className="text-muted-foreground/60">
+                    <th className="px-1 py-0.5 text-left font-normal"></th>
+                    <th className="px-1 py-0.5 text-left font-normal"></th>
+                    <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5}>Feedback</th>
+                    <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5}>Regression</th>
+                    <th className="px-1 py-0.5 font-normal"></th>
+                    <th className="px-1 py-0.5 font-normal"></th>
+                  </tr>
+                  <tr className="text-muted-foreground/40">
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 text-left font-normal">Acc</th>
+                    <th className="px-1 py-0 text-left font-normal">P</th>
+                    <th className="px-1 py-0 text-left font-normal">R</th>
+                    <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 text-left font-normal">Acc</th>
+                    <th className="px-1 py-0 text-left font-normal">P</th>
+                    <th className="px-1 py-0 text-left font-normal">R</th>
+                    <th className="px-1 py-0 font-normal"></th>
+                    <th className="px-1 py-0 font-normal"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {optimizerVersions.map((row, i) => {
+                    // Extract cycle number from label like "Cycle 1"
+                    const cycleMatch = row.label.match(/Cycle\s+(\d+)/)
+                    const cycleNum = cycleMatch ? parseInt(cycleMatch[1]) : null
+                    const details = cycleNum != null ? iterationDetails.get(cycleNum) : null
+                    const isExpanded = cycleNum != null && expandedVersionRows.has(cycleNum)
+
+                    return (
+                      <React.Fragment key={i}>
+                        <tr
+                          className={details ? 'cursor-pointer hover:bg-accent/50' : ''}
+                          onClick={() => {
+                            if (!details || cycleNum == null) return
+                            setExpandedVersionRows(prev => {
+                              const next = new Set(prev)
+                              if (next.has(cycleNum)) next.delete(cycleNum)
+                              else next.add(cycleNum)
+                              return next
+                            })
+                          }}
+                        >
+                          <td className="px-1 py-0.5 text-muted-foreground whitespace-nowrap">
+                            <span className="flex items-center gap-1">
+                              {details && (
+                                isExpanded
+                                  ? <ChevronDown className="h-3 w-3" />
+                                  : <ChevronRight className="h-3 w-3" />
+                              )}
+                              {row.label}
+                              {details?.exploration_results?.length > 0 && (
+                                <span className="text-muted-foreground/40 text-xs">
+                                  {details.exploration_results.filter((er: any) => er.succeeded).length}/{details.exploration_results.length}
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap">
+                            {row.isBaseline ? (
+                              <Badge variant="outline" className="text-xs px-1 py-0">Baseline</Badge>
+                            ) : row.skipReason ? (
+                              <Badge variant="secondary" className="text-xs px-1 py-0">Skipped</Badge>
+                            ) : row.disqualified ? (
+                              <Badge variant="destructive" className="text-xs px-1 py-0">Disqualified</Badge>
+                            ) : row.accepted ? (
+                              <Badge className="text-xs px-1 py-0">Accepted</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs px-1 py-0">Rejected</Badge>
+                            )}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                            {row.feedbackAC1 != null ? row.feedbackAC1.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
+                            {row.feedbackDelta != null && (
+                              <span className={row.feedbackDelta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {row.feedbackDelta >= 0 ? '+' : ''}{row.feedbackDelta.toFixed(3)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.feedbackAccuracy != null ? row.feedbackAccuracy.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.feedbackPrecision != null ? row.feedbackPrecision.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.feedbackRecall != null ? row.feedbackRecall.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                            {row.accuracyAC1 != null ? row.accuracyAC1.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
+                            {row.accuracyDelta != null && (
+                              <span className={row.accuracyDelta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {row.accuracyDelta >= 0 ? '+' : ''}{row.accuracyDelta.toFixed(3)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.accuracyAccuracy != null ? row.accuracyAccuracy.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.accuracyPrecision != null ? row.accuracyPrecision.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                            {row.accuracyRecall != null ? row.accuracyRecall.toFixed(3) : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 font-mono text-muted-foreground/60 w-full">
+                            {row.versionId ? row.versionId.slice(0, 8) + '…' : '—'}
+                          </td>
+                          <td className="px-1 py-0.5 text-right whitespace-nowrap">
+                            {row.versionId && optimizerVersionBaseIds.scorecardId && optimizerVersionBaseIds.scoreId && (
+                              <Link
+                                href={`/lab/scorecards/${optimizerVersionBaseIds.scorecardId}/scores/${optimizerVersionBaseIds.scoreId}/versions/${row.versionId}`}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && details && (
+                          <tr>
+                            <td colSpan={14} className="px-2 py-2 bg-accent/30 rounded">
+                              <div className="space-y-2">
+                                {details.done_reason && (
+                                  <div>
+                                    <span className="text-muted-foreground/70 text-xs">Result: </span>
+                                    <span className="text-xs">{details.done_reason}</span>
+                                  </div>
+                                )}
+                                {details.exploration_results && details.exploration_results.length > 0 && (
+                                  <div>
+                                    <span className="text-muted-foreground/70 text-xs block mb-1">Hypotheses tested:</span>
+                                    <div className="space-y-1">
+                                      {details.exploration_results.map((er: any, j: number) => {
+                                        const hypDesc = er.done_reason || er.hypothesis?.description || er.agent_reasoning || ''
+                                        return (
+                                          <details key={j} className="border border-border/50 rounded">
+                                            <summary className="flex items-center gap-2 text-xs px-2 py-1 cursor-pointer hover:bg-accent/30">
+                                              <span className="text-muted-foreground truncate flex-1" title={er.hypothesis?.name || `Hyp ${er.index}`}>
+                                                {er.hypothesis?.name || `Hypothesis ${er.index}`}
+                                              </span>
+                                              {er.succeeded ? (
+                                                <Badge className="text-xs px-1 py-0 flex-shrink-0">Pass</Badge>
+                                              ) : (
+                                                <Badge variant="secondary" className="text-xs px-1 py-0 flex-shrink-0">Fail</Badge>
+                                              )}
+                                              <span className="whitespace-nowrap flex-shrink-0">
+                                                <span className="text-muted-foreground/60 mr-1">FB</span>
+                                                {er.fb_deltas?.alignment != null ? (
+                                                  <span className={er.fb_deltas.alignment >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                                    {er.fb_deltas.alignment >= 0 ? '+' : ''}{er.fb_deltas.alignment.toFixed(3)}
+                                                  </span>
+                                                ) : '—'}
+                                              </span>
+                                              <span className="whitespace-nowrap flex-shrink-0">
+                                                <span className="text-muted-foreground/60 mr-1">ACC</span>
+                                                {er.acc_deltas?.alignment != null ? (
+                                                  <span className={er.acc_deltas.alignment >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                                    {er.acc_deltas.alignment >= 0 ? '+' : ''}{er.acc_deltas.alignment.toFixed(3)}
+                                                  </span>
+                                                ) : '—'}
+                                              </span>
+                                            </summary>
+                                            {hypDesc && (
+                                              <div className="px-2 py-1.5 border-t border-border/30">
+                                                <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+                                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{hypDesc}</ReactMarkdown>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </details>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                                {details.dual_synthesis && (
+                                  <div>
+                                    <span className="text-muted-foreground/70 text-xs block mb-1">
+                                      Dual synthesis{details.synthesis_strategy ? ` — selected Strategy ${details.synthesis_strategy}` : ''}:
+                                    </span>
+                                    <div className="flex gap-3 text-xs">
+                                      {details.dual_synthesis.strategy_a && (
+                                        <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'A' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
+                                          <span className="font-medium">A (cycle-focused)</span>
+                                          <span className="ml-2 text-muted-foreground">
+                                            FB <span className={details.dual_synthesis.strategy_a.fb_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_a.fb_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.fb_delta?.toFixed(3)}
+                                            </span>
+                                            {' '}ACC <span className={details.dual_synthesis.strategy_a.acc_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_a.acc_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.acc_delta?.toFixed(3)}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      )}
+                                      {details.dual_synthesis.strategy_b && (
+                                        <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'B' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
+                                          <span className="font-medium">B (arc-focused)</span>
+                                          <span className="ml-2 text-muted-foreground">
+                                            FB <span className={details.dual_synthesis.strategy_b.fb_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_b.fb_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.fb_delta?.toFixed(3)}
+                                            </span>
+                                            {' '}ACC <span className={details.dual_synthesis.strategy_b.acc_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_b.acc_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.acc_delta?.toFixed(3)}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {details.dual_synthesis.selection_reason && (
+                                      <div className="prose prose-sm max-w-none mt-1 text-muted-foreground/60 prose-p:text-muted-foreground/60 [&_p]:text-xs">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{details.dual_synthesis.selection_reason}</ReactMarkdown>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                {details.synthesis_reasoning && !details.synthesis_reasoning.includes('UsageStats') && (
+                                  <div>
+                                    <span className="text-muted-foreground/70 text-xs block mb-1">Synthesis reasoning:</span>
+                                    <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+                                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{details.synthesis_reasoning}</ReactMarkdown>
+                                    </div>
+                                  </div>
+                                )}
+                                {(() => {
+                                  const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
+                                  return insight?.analysis ? (
+                                    <div>
+                                      <span className="text-muted-foreground/70 text-xs block mb-1">Cycle analysis:</span>
+                                      <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{insight.analysis}</ReactMarkdown>
+                                      </div>
+                                    </div>
+                                  ) : null
+                                })()}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* Procedure Conversation section */}
           <div className="mt-6">
             <div className="space-y-4">

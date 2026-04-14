@@ -611,6 +611,70 @@ data:
   balance: false  # Whether to balance positive/negative examples
 ```
 
+## Text Preprocessing with Processors
+
+Scores can preprocess the input text **before** it reaches the LLM using the `item.processors` pipeline. Processors run in order; each transforms the text before the next one sees it. This is especially valuable for long transcripts where you want the LLM to focus on the relevant parts.
+
+### Configuration
+
+```yaml
+# Recommended location (under item):
+item:
+  processors:
+    - class: RelevantWindowsTranscriptFilter
+      parameters:
+        keywords: ["school", "university", "degree"]
+        fuzzy_match: true
+        fuzzy_threshold: 80
+        prev_count: 2
+        next_count: 2
+    - class: RemoveSpeakerIdentifiersTranscriptFilter
+      parameters: {}
+```
+
+A legacy `data.processors` location is also supported but `item.processors` is preferred.
+
+### Available Text Processors
+
+**RelevantWindowsTranscriptFilter** — Extract windows of text around matching keywords. This is the most impactful processor for improving classification on long transcripts — it dramatically reduces noise by showing only the parts of the text relevant to the classification task.
+
+Parameters:
+- `keywords` (list): Keywords/phrases to match
+- `fuzzy_match` (bool): Enable fuzzy matching via RapidFuzz (default: false)
+- `fuzzy_threshold` (int): Minimum similarity score 0-100 for fuzzy matching (default: 80)
+- `case_sensitive` (bool): Case-sensitive matching (default: false)
+- `prev_count` (int): Sentences to include before match (default: 1)
+- `next_count` (int): Sentences to include after match (default: 1)
+- `window_unit` (str): `'sentences'`, `'words'`, or `'characters'` (default: `'sentences'`)
+
+**FilterCustomerOnlyProcessor** — Keep only customer speech (removes agent/system lines).
+
+**RemoveSpeakerIdentifiersTranscriptFilter** — Strip speaker labels (`Agent:`, `Customer:`, etc.) from the text.
+
+**ExpandContractionsProcessor** — Expand contractions (`don't` → `do not`, `can't` → `cannot`).
+
+**RemoveStopWordsTranscriptFilter** — Remove common English filler/stop words.
+
+**AddEnumeratedSpeakerIdentifiersTranscriptFilter** — Normalize speaker labels to `Speaker A`, `Speaker B`, etc.
+
+### Example: Keyword-focused transcript trimming
+
+For a score that classifies whether a school name was mentioned correctly, extract only the parts of the transcript where schools are discussed:
+
+```yaml
+item:
+  processors:
+    - class: RelevantWindowsTranscriptFilter
+      parameters:
+        keywords: ["school", "university", "college", "program", "degree", "campus"]
+        fuzzy_match: true
+        fuzzy_threshold: 75
+        prev_count: 3
+        next_count: 3
+```
+
+This feeds the LLM a focused excerpt instead of the full transcript, reducing both token cost and classification errors from irrelevant context.
+
 ## Confidence Scoring
 
 Enable confidence calculation based on first token log probabilities:

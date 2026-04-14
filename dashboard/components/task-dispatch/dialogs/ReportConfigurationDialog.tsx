@@ -22,6 +22,7 @@ import { getClient } from "@/utils/amplify-client"
 import { toast } from "sonner"
 import { ConfigurableParametersDialog } from "@/components/ui/ConfigurableParametersDialog"
 import { parseParametersFromYaml, hasParameters } from "@/lib/parameter-parser"
+import { useAccount } from "@/app/contexts/AccountContext"
 
 // Report configuration type definition
 interface ReportConfiguration {
@@ -60,6 +61,7 @@ const GET_REPORT_CONFIGURATION = `
 `
 
 export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch }: TaskDialogProps) {
+  const { selectedAccount } = useAccount()
   const [configurations, setConfigurations] = useState<ReportConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string>("")
   const [selectedConfig, setSelectedConfig] = useState<ReportConfiguration | null>(null)
@@ -73,53 +75,33 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   useEffect(() => {
     const fetchConfigurations = async () => {
       if (!isOpen) return
+      if (!selectedAccount?.id) {
+        setError("No account selected")
+        return
+      }
       
       setIsLoading(true)
       setError(null)
       
       try {
-        // First get the account ID
-        const accountResponse = await getClient().graphql({
-          query: `
-            query ListAccounts($filter: ModelAccountFilterInput) {
-              listAccounts(filter: $filter) {
-                items {
-                  id
-                  key
-                }
-              }
-            }
-          `,
+        const configResponse = await getClient().graphql({
+          query: LIST_REPORT_CONFIGURATIONS,
           variables: {
-            filter: { key: { eq: process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '' } }
+            accountId: selectedAccount.id
           }
         })
         
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const accountId = accountResponse.data.listAccounts.items[0].id
+        if ('data' in configResponse && 
+            configResponse.data?.listReportConfigurationByAccountIdAndUpdatedAt?.items) {
+          const configs = configResponse.data.listReportConfigurationByAccountIdAndUpdatedAt.items
+          setConfigurations(configs)
           
-          // Then fetch report configurations for that account
-          const configResponse = await getClient().graphql({
-            query: LIST_REPORT_CONFIGURATIONS,
-            variables: {
-              accountId
-            }
-          })
-          
-          if ('data' in configResponse && 
-              configResponse.data?.listReportConfigurationByAccountIdAndUpdatedAt?.items) {
-            const configs = configResponse.data.listReportConfigurationByAccountIdAndUpdatedAt.items
-            setConfigurations(configs)
-            
-            // Auto-select the first config if none is selected
-            if (configs.length > 0 && !selectedConfigId) {
-              setSelectedConfigId(configs[0].id)
-            }
-          } else {
-            setError("No report configurations found")
+          // Auto-select the first config if none is selected
+          if (configs.length > 0 && !selectedConfigId) {
+            setSelectedConfigId(configs[0].id)
           }
         } else {
-          setError("Account not found")
+          setError("No report configurations found")
         }
       } catch (err: any) {
         console.error('Error fetching report configurations:', err)
@@ -130,7 +112,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
     }
     
     fetchConfigurations()
-  }, [isOpen, selectedConfigId])
+  }, [isOpen, selectedAccount?.id, selectedConfigId])
   
   // Fetch full configuration when selected config changes
   useEffect(() => {
