@@ -48,21 +48,26 @@ def _get_aws_credentials():
     return access_key, secret_key, region, is_configured
 
 def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
+    """
+    Configure the 'plexus' named logger (NOT the root logger).
+
+    This is safe to call at import time because it only touches the 'plexus'
+    logger hierarchy, leaving the root logger — and any host application's
+    logging setup (e.g. Tactus CLI) — completely untouched.
+    """
     global cloudwatch_handler, current_log_group_name
-    
+
+    plexus_logger = logging.getLogger("plexus")
+
     # Remove existing CloudWatch handler if present
     if cloudwatch_handler:
-        logging.getLogger().removeHandler(cloudwatch_handler)
-        logging.debug(f"Removed existing CloudWatch handler for log group: {current_log_group_name}")
-    
+        plexus_logger.removeHandler(cloudwatch_handler)
+
     # Create custom formatter
     class PlexusFormatter(logging.Formatter):
         def format(self, record):
-            # Add timestamp in a consistent format
             record.asctime = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
-            # Add the log group if available
             record.log_group_name = current_log_group_name if current_log_group_name else 'plexus'
-            # First format with our custom format string
             formatted = super().format(record)
             return formatted
 
@@ -73,7 +78,7 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
         rich_tracebacks=True,
         show_time=False,
         show_path=False,
-        show_level=False,  # Don't show level in Rich output since we include it in our format
+        show_level=False,
         log_time_format='[%X]'
     )
     rich_handler.setFormatter(PlexusFormatter('%(asctime)s [%(log_group_name)s] [%(levelname)s] %(message)s'))
@@ -87,11 +92,6 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
     if is_configured:
         try:
             log_stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
-            if os.getenv('DEBUG'):
-                logging.debug(f"Attempting to create CloudWatch handler:")
-                logging.debug(f"- Log Group: {log_group_name}")
-                logging.debug(f"- Stream Name: {log_stream_name}")
-            
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
                 log_group_name=log_group_name,
                 log_stream_name=log_stream_name
@@ -99,46 +99,43 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
             cloudwatch_handler.setFormatter(PlexusFormatter())
             handlers.append(cloudwatch_handler)
             current_log_group_name = log_group_name
-            if os.getenv('DEBUG'):
-                logging.debug("Successfully created CloudWatch handler")
         except Exception as e:
-            logging.error(f"Error creating CloudWatch handler: {str(e)}")
+            plexus_logger.error(f"Error creating CloudWatch handler: {str(e)}")
             cloudwatch_handler = None
             current_log_group_name = None
     else:
-        if os.getenv('DEBUG'):
-            logging.debug("Skipping CloudWatch handler - missing AWS credentials")
         cloudwatch_handler = None
         current_log_group_name = None
 
-    # Configure root logger
-    root_logger = logging.getLogger()
-    
-    # Remove any existing handlers
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-    
+    # Remove any existing handlers from plexus logger
+    for handler in plexus_logger.handlers[:]:
+        plexus_logger.removeHandler(handler)
+
     # Set level based on environment
     log_level = logging.DEBUG if os.getenv('DEBUG') else logging.INFO
-    root_logger.setLevel(log_level)
-    
+    plexus_logger.setLevel(log_level)
+
+    # Don't propagate to root logger — plexus handles its own output
+    plexus_logger.propagate = False
+
     # Add our handlers
     for handler in handlers:
-        root_logger.addHandler(handler)
+        plexus_logger.addHandler(handler)
 
-    # Ensure logging output goes to stderr so stdout can remain machine-readable.
-    logging.getLogger().handlers[0].stream = sys.stderr
-
-    # Configure specific loggers
-    # Disable noisy loggers
+    # Quiet noisy libraries under the plexus namespace
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('botocore').setLevel(logging.WARNING)
     logging.getLogger('boto3').setLevel(logging.WARNING)
     logging.getLogger('gql.transport').setLevel(logging.WARNING)
     logging.getLogger('gql.dsl').setLevel(logging.WARNING)
 
-# Initial setup with default log group
+# Initial setup with default log group — safe because it only touches 'plexus' logger
 setup_logging()
+
+# Pre-built plexus logger for consumers.  Usage:
+#   from plexus.CustomLogging import logger
+#   logger.info("something happened")
+logger = logging.getLogger("plexus")
 
 def set_log_group(new_log_group_name):
     """
@@ -187,9 +184,9 @@ def add_log_stream(log_stream_name):
         use_queues=False  # To ensure immediate logging for the specific stream
     )
     
-    # Add the new handler to the root logger
-    logger = logging.getLogger()
-    logger.addHandler(new_handler)
+    # Add the new handler to the plexus logger
+    plexus_logger = logging.getLogger("plexus")
+    plexus_logger.addHandler(new_handler)
     
     # Log the addition of the new stream
     logging.debug(f"Added new log stream: {log_stream_name}")
@@ -197,4 +194,4 @@ def add_log_stream(log_stream_name):
     return new_handler
 
 # Export the necessary functions and objects
-__all__ = ['logging', 'set_log_group', 'add_log_stream', 'console']
+__all__ = ['logging', 'logger', 'set_log_group', 'add_log_stream', 'console']

@@ -1,0 +1,31 @@
+{
+  "id": "plx-1df1f810-22ef-4c7d-b317-d9da3c15b2c3",
+  "title": "Validate new Branding and Matching version with 100 recent feedback samples",
+  "description": "Run a feedback evaluation for CMG - EDU Branding and Matching using the newly created single-request ScoreVersion.\n\nScope:\n- Evaluate scorecard 1039, score 45425, version c918b11b-8fca-4dbd-b7b4-d130e5f98e94\n- Use recent feedback items with max_samples=100\n- Capture evaluation ID and metrics (AC1, accuracy, precision, recall, confusion matrix)\n- Record results in Kanbus\n\nAssumption:\n- \"Recent feedback items\" interpreted as last 30 days.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "648512c5-bbb4-4c9a-ae57-4dc472704513",
+      "author": "ryan",
+      "text": "Work started.\n\nRunning feedback evaluation for scorecard 1039 / score 45425 / version c918b11b-8fca-4dbd-b7b4-d130e5f98e94 with days=30 and max-samples=100. Will return evaluation ID and metrics.",
+      "created_at": "2026-04-10T12:05:58.788801Z"
+    },
+    {
+      "id": "69f9ab52-9f23-4bbb-a34e-a7d1177f751b",
+      "author": "ryan",
+      "text": "Run attempt 1 failed before scoring items.\n\nCommand:\npython -m plexus.cli evaluate feedback --scorecard 1039 --score 45425 --days 30 --version c918b11b-8fca-4dbd-b7b4-d130e5f98e94 --max-items 100\n\nFailure:\n- Evaluation record created: df5c6275-c03f-451e-a209-8965e3c1e558\n- litellm UnsupportedParamsError: gpt-5 models do not support temperature=0.1; only temperature=1.\n\nNext:\n- Update score YAML Agent temperature to 1 for gpt-5.4-nano.\n- Push new ScoreVersion.\n- Rerun same 30d/100-item feedback accuracy evaluation and capture metrics.",
+      "created_at": "2026-04-10T12:06:59.652022Z"
+    }
+  ],
+  "created_at": "2026-04-10T12:05:54.929577Z",
+  "updated_at": "2026-04-10T12:06:59.652022Z",
+  "closed_at": null,
+  "custom": {}
+}

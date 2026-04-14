@@ -13,7 +13,7 @@ from .data_source_rules import create_data_source_validation_rules
 # Score Configuration Schema (JSON Schema format)
 SCORE_YAML_SCHEMA = {
     "type": "object",
-    "required": ["name", "key"],
+    "required": ["name"],
     "properties": {
         "name": {
             "type": "string",
@@ -193,7 +193,6 @@ def create_score_validation_rules() -> List[ValidationRule]:
     return [
         # Required fields
         RequiredFieldRule('name'),
-        RequiredFieldRule('key'),
         
         # Type validation
         TypeValidationRule('name', str),

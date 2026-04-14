@@ -134,6 +134,143 @@ class ScoreEditorToolset:
         }
 
     # ------------------------------------------------------------------
+    # Helpers for str_replace error recovery
+    # ------------------------------------------------------------------
+
+    def _try_fix_indentation(self, old_str: str, new_str: str):
+        """
+        Try to fix indentation mismatches between old_str and file content.
+
+        LLMs commonly strip leading whitespace when reproducing multi-line text.
+        If old_str's lines match content lines after stripping, re-indent both
+        old_str and new_str with the correct indentation and return the fixed pair.
+
+        Returns (fixed_old, fixed_new) or None if no fix found.
+        """
+        old_lines = old_str.split("\n")
+        if not old_lines or not old_lines[0].strip():
+            return None
+
+        # Find the first non-empty line of old_str in content (stripped match)
+        first_stripped = old_lines[0].strip()
+        if not first_stripped:
+            return None
+
+        content_lines = self._content.split("\n")
+        for ci, cline in enumerate(content_lines):
+            if cline.strip() == first_stripped:
+                # Found the first line — determine the indent
+                indent = cline[:len(cline) - len(cline.lstrip())]
+
+                # Check if ALL old_str lines match content lines with this indent
+                matched = True
+                for oi, oline in enumerate(old_lines):
+                    content_idx = ci + oi
+                    if content_idx >= len(content_lines):
+                        matched = False
+                        break
+                    # Empty lines (blank) should match blank content lines
+                    if oline.strip() == "" and content_lines[content_idx].strip() == "":
+                        continue
+                    # Non-empty lines: stripped version must match
+                    if oline.strip() != content_lines[content_idx].strip():
+                        matched = False
+                        break
+
+                if matched:
+                    # Re-indent old_str and new_str to match the file
+                    fixed_old_lines = []
+                    for oi, oline in enumerate(old_lines):
+                        if oline.strip() == "":
+                            fixed_old_lines.append(content_lines[ci + oi])
+                        else:
+                            fixed_old_lines.append(indent + oline.lstrip())
+                    fixed_old = "\n".join(fixed_old_lines)
+
+                    # Verify the fixed old_str actually matches
+                    if fixed_old not in self._content:
+                        continue  # Try next match location
+
+                    # Apply the same indent to new_str
+                    new_lines = new_str.split("\n")
+                    fixed_new_lines = []
+                    for nline in new_lines:
+                        if nline.strip() == "":
+                            fixed_new_lines.append(nline)
+                        else:
+                            fixed_new_lines.append(indent + nline.lstrip())
+                    fixed_new = "\n".join(fixed_new_lines)
+
+                    return (fixed_old, fixed_new)
+
+        return None
+
+    def _build_match_error(self, old_str: str) -> str:
+        """
+        Build a diagnostic error message showing the agent what went wrong.
+
+        Instead of a generic "no match found", show the actual content near
+        where the agent was trying to edit so it can see the indentation
+        or other differences.
+        """
+        first_line = old_str.split("\n")[0]
+        first_stripped = first_line.strip()
+        hint_lines = []
+
+        # Try to find the first line (stripped) in content
+        content_lines = self._content.split("\n")
+        match_line = None
+        for i, cline in enumerate(content_lines):
+            if first_stripped and first_stripped in cline:
+                match_line = i
+                break
+
+        if match_line is not None:
+            # Show the actual content around the match
+            start = max(0, match_line - 1)
+            end = min(len(content_lines), match_line + len(old_str.split("\n")) + 2)
+            actual_lines = content_lines[start:end]
+            actual_snippet = "\n".join(f"  {start + j + 1}| {ln}" for j, ln in enumerate(actual_lines))
+
+            # Detect the specific problem
+            actual_first = content_lines[match_line]
+            old_first = old_str.split("\n")[0]
+            if actual_first.strip() == old_first.strip() and actual_first != old_first:
+                indent_actual = len(actual_first) - len(actual_first.lstrip())
+                indent_old = len(old_first) - len(old_first.lstrip())
+                hint_lines.append(
+                    f"INDENTATION MISMATCH: Your old_str lines have "
+                    f"{indent_old}-space indent but the file uses "
+                    f"{indent_actual}-space indent."
+                )
+                hint_lines.append(
+                    "Copy the text exactly as shown below, preserving "
+                    "the leading spaces on each line."
+                )
+            else:
+                hint_lines.append(
+                    "The text you provided doesn't exactly match the file content. "
+                    "Compare your old_str with the actual file content below."
+                )
+
+            hint_lines.append(f"\nActual file content near your match target:\n{actual_snippet}")
+        else:
+            # First line not found at all
+            hint_lines.append(
+                "Error: No match found for old_str in score_config.yaml. "
+                "The text you provided does not appear in the editable file. "
+                "It may have come from another part of your prompt context "
+                "(e.g. guidelines, RCA analysis, or instructions) rather than "
+                "from score_config.yaml itself."
+            )
+            hint_lines.append(
+                "\nUse str_replace_editor(command='view', path='score_config.yaml') "
+                "to re-read the editable file and copy the exact text from there."
+            )
+
+        return "\n".join(hint_lines)
+
+    # ------------------------------------------------------------------
     # Agent tools (called by code_editor agent)
     # ------------------------------------------------------------------
 
@@ -183,56 +320,29 @@ class ScoreEditorToolset:
                 err = "Error: old_str is required for str_replace command"
                 self._last_edit_error = err
                 return err
-            # Normalize escaped newlines — Tactus serializes \n as literal backslash-n in tool args
-            old_str = old_str.replace("\\n", "\n")
-            new_str = new_str.replace("\\n", "\n")
+            # Normalize escape sequences — LLM tool args often contain literal
+            # backslash-escapes instead of the actual characters.  \n is the most
+            # common, but \' and \t also occur in Lua code edits.
+            for esc, char in [("\\n", "\n"), ("\\t", "\t"), ("\\'", "'"), ('\\"', '"')]:
+                old_str = old_str.replace(esc, char)
+                new_str = new_str.replace(esc, char)
             if old_str not in self._content:
-                # Debug: log first mismatch to diagnose str_replace failures
-                content_search = self._content
-                # Try to find the start of old_str in content
-                first_line = old_str.split("\n")[0][:60]
-                idx = content_search.find(first_line)
-                if idx >= 0:
-                    actual_chunk = content_search[idx:idx + len(old_str) + 20]
-                    # Find first char difference
-                    for ci in range(min(len(old_str), len(actual_chunk))):
-                        if old_str[ci] != actual_chunk[ci]:
-                            logger.warning(
-                                "str_replace mismatch at pos %d: old_str[%d]=U+%04X(%r) "
-                                "content[%d]=U+%04X(%r) context: old=...%r... actual=...%r...",
-                                ci, ci, ord(old_str[ci]), old_str[ci],
-                                ci, ord(actual_chunk[ci]), actual_chunk[ci],
-                                old_str[max(0, ci-15):ci+15],
-                                actual_chunk[max(0, ci-15):ci+15],
-                            )
-                            break
-                    else:
-                        if len(old_str) != len(actual_chunk):
-                            logger.warning(
-                                "str_replace: first line matches at idx %d but lengths differ: "
-                                "old_str=%d actual_chunk=%d", idx, len(old_str), len(actual_chunk)
-                            )
-                        else:
-                            logger.warning(
-                                "str_replace: first line matches at idx %d, chars match for %d chars "
-                                "but 'in' operator says no match?!", idx, len(old_str)
-                            )
-                else:
-                    logger.warning(
-                        "str_replace: could not find first line of old_str: %r",
-                        first_line
+                # Try auto-fixing indentation mismatches.
+                # LLMs commonly strip leading whitespace when copying multi-line
+                # text from context. Detect this and re-indent old_str/new_str.
+                fixed = self._try_fix_indentation(old_str, new_str)
+                if fixed:
+                    old_str, new_str = fixed
+                    logger.info(
+                        "str_replace: auto-fixed indentation mismatch "
+                        "(added %d-space indent)",
+                        len(old_str.split("\n")[0]) - len(old_str.split("\n")[0].lstrip()),
                     )
-                err = (
-                    "Error: No match found for old_str in score_config.yaml. "
-                    "The exact text you provided does not appear in the editable file. "
-                    "It may have come from another part of your prompt context "
-                    "(e.g. guidelines, RCA analysis, or instructions) rather than "
-                    "from score_config.yaml itself.\n\n"
-                    "Use str_replace_editor(command='view', path='score_config.yaml') "
-                    "to re-read the editable file and copy the exact text from there."
-                )
-                self._last_edit_error = err
-                return err
+                else:
+                    # Build a diagnostic error message the agent can act on
+                    err = self._build_match_error(old_str)
+                    self._last_edit_error = err
+                    return err
             count = self._content.count(old_str)
             if count > 1:
                 err = (
@@ -434,57 +544,77 @@ class ScoreEditorToolset:
                 },
             )
 
-        try:
-            # Run the async pull in a thread to avoid nested event loop issues
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, _do_pull())
-                result = future.result(timeout=60)
+        import concurrent.futures
+        import time as _time
 
-            # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
-            # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
-            pull_data = None
-            if isinstance(result, dict):
-                for item in result.get("content", []):
-                    if isinstance(item, dict) and item.get("type") == "text":
-                        try:
-                            pull_data = json.loads(item["text"])
-                            break
-                        except (ValueError, TypeError, KeyError):
-                            pass
-                # Also try direct dict fields (non-wrapped response)
-                if pull_data is None:
-                    pull_data = result
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Run the async pull in a thread to avoid nested event loop issues
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(asyncio.run, _do_pull())
+                    result = future.result(timeout=60)
 
-            if not pull_data or not pull_data.get("success"):
-                return f"plexus_score_pull failed: {result}"
+                # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
+                # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
+                pull_data = None
+                if isinstance(result, dict):
+                    for item in result.get("content", []):
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            try:
+                                pull_data = json.loads(item["text"])
+                                break
+                            except (ValueError, TypeError, KeyError) as exc:
+                                # Non-fatal: keep scanning for the structured JSON payload.
+                                logger.debug(
+                                    "ScoreEditorToolset._load_content_from_api skipped non-JSON content item for %s/%s: %s",
+                                    self._scorecard,
+                                    self._score,
+                                    exc,
+                                )
+                    # Also try direct dict fields (non-wrapped response)
+                    if pull_data is None:
+                        pull_data = result
 
-            code_file_path = pull_data.get("codeFilePath")
-            if not code_file_path:
-                return f"plexus_score_pull returned no codeFilePath: {pull_data}"
+                if not pull_data or not pull_data.get("success"):
+                    raise RuntimeError(f"plexus_score_pull failed: {result}")
 
-            if not os.path.exists(code_file_path):
-                return f"plexus_score_pull wrote to {code_file_path} but file does not exist"
+                code_file_path = pull_data.get("codeFilePath")
+                if not code_file_path:
+                    raise RuntimeError(f"plexus_score_pull returned no codeFilePath: {pull_data}")
 
-            with open(code_file_path, "r") as f:
-                code = f.read()
+                if not os.path.exists(code_file_path):
+                    raise RuntimeError(f"plexus_score_pull wrote to {code_file_path} but file does not exist")
 
-            if not code:
-                return f"Score code file is empty: {code_file_path}"
+                with open(code_file_path, "r", encoding="utf-8", errors="replace") as f:
+                    code = f.read()
 
-            self._content = code
-            self._original = code
-            self._history = []
-            self._code_file_path = code_file_path
-            logger.info(
-                "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
-                len(code), self._scorecard, self._score, code_file_path,
-            )
-            return None
+                if not code:
+                    raise RuntimeError(f"Score code file is empty: {code_file_path}")
 
-        except Exception as exc:
-            logger.error("ScoreEditorToolset._load_content_from_api error: %s", exc)
-            return str(exc)
+                self._content = code
+                self._original = code
+                self._history = []
+                self._code_file_path = code_file_path
+                logger.info(
+                    "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
+                    len(code), self._scorecard, self._score, code_file_path,
+                )
+                return None
+
+            except Exception as exc:
+                if attempt < max_retries:
+                    logger.warning(
+                        "ScoreEditorToolset._load_content_from_api attempt %d/%d failed: %s, retrying...",
+                        attempt, max_retries, exc,
+                    )
+                    _time.sleep(attempt * 3)
+                else:
+                    logger.error(
+                        "ScoreEditorToolset._load_content_from_api failed after %d attempts: %s",
+                        max_retries, exc,
+                    )
+                    return str(exc)
 
     def _format_edit_result(self, operation: str) -> str:
         validation = self._format_validation()

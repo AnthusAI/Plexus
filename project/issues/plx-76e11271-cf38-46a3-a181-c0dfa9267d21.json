@@ -1,0 +1,175 @@
+{
+  "id": "plx-76e11271-cf38-46a3-a181-c0dfa9267d21",
+  "title": "Fix FeedbackAlignmentTimeline report execution and bucket selection defaults",
+  "description": "Investigate and fix two observed problems while demoing FeedbackAlignmentTimeline: (1) report runs that execute in remote worker path fail with class-not-found, and (2) local runs can show zero buckets / no data due bucket parameter handling or period completeness defaults. Ensure local demo path is reliable and produce a report with visible data for review.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "76aae510-96ee-4e5d-9437-e748f0399ccc",
+      "author": "ryan",
+      "text": "Starting triage. Confirmed class exists in local registry code, so class-not-found appears to be execution-path mismatch (remote worker without new block). Next: inspect timeline bucket-generation logic and parameter parsing to explain 0-bucket local output, then patch for safe defaults and robust parsing.",
+      "created_at": "2026-04-09T18:42:27.469054Z"
+    },
+    {
+      "id": "43d74961-5a60-48cc-a859-e3f5d5d20b41",
+      "author": "ryan",
+      "text": "Patched dashboard/components/blocks/FeedbackAlignmentTimeline.tsx to handle compacted output correctly in UI: added explicit loading state while output_attachment is being fetched and an explicit attachment-load error state if fetch fails. This removes the misleading fallback UI that previously showed 'Buckets: 0 x trailing_7d' and 'No bucketed alignment data' before attachment data arrived. Validation: npx tsc --noEmit (dashboard) passes. ESLint run failed in this env due AJV/eslintrc runtime issue (TypeError: Cannot set properties of undefined setting defaultMeta). Generated fresh local demo report with inline output (REPORT_BLOCK_ATTACH_OUTPUT_JSON_ALWAYS=0) to verify non-empty timeline data: report_id 4743d2ba-a4b5-4cbc-857e-326e44770ba1, task_id 573f8585-c464-4294-a87e-534aca890a1d, URL https://plexus.anth.us/lab/reports/4743d2ba-a4b5-4cbc-857e-326e44770ba1 .",
+      "created_at": "2026-04-09T18:46:09.215284Z"
+    },
+    {
+      "id": "60f758dd-db1a-4028-b51d-5c76863797d5",
+      "author": "ryan",
+      "text": "User found chart contrast issue: timeline data exists but is hard to see due low contrast/muted chart presentation. Implementing UI contrast improvements in FeedbackAlignmentTimeline block (chart background, axis/grid/tick styling, and line visibility) and validating with typecheck.",
+      "created_at": "2026-04-09T18:46:52.573373Z"
+    },
+    {
+      "id": "5df47e51-ead2-41af-924c-9181f60f3553",
+      "author": "ryan",
+      "text": "Implemented requested timeline chart UX refinements in dashboard/components/blocks/FeedbackAlignmentTimeline.tsx: removed chart border/outline; switched visualization to AC1-only (removed right 0-100% axis and removed accuracy line/tooltip field); increased left/right chart margins and added X-axis padding to prevent first/last buckets from touching Y-axes; changed line to explicit connected AC1 line with custom dot renderer where dot radius scales with item_count; added user feedback when switching selector series (temporary 'Loading <series>...' state). Also added caption clarifying dot-size semantics. Validation: dashboard typecheck passes (npx tsc --noEmit).",
+      "created_at": "2026-04-09T19:03:57.989348Z"
+    },
+    {
+      "id": "9fdad4ac-3b81-405f-a66f-1300cba5a43a",
+      "author": "ryan",
+      "text": "Additional UX refinement: when a selected series has bucket rows but no non-null AC1 values, the block now shows an explicit message ('No AC1 data is available for this series in the selected buckets.') instead of a visually blank chart.",
+      "created_at": "2026-04-09T19:04:27.587134Z"
+    },
+    {
+      "id": "faee33fa-a06c-41df-9b05-1d61e379d960",
+      "author": "ryan",
+      "text": "User reports chart currently renders dots without connecting line segments. Adjusting AC1 line rendering to connect across null buckets so visible line path connects available points; will re-run dashboard typecheck.",
+      "created_at": "2026-04-09T19:20:34.155044Z"
+    },
+    {
+      "id": "fe320d26-6977-43b2-ab0b-f5eac89169d2",
+      "author": "ryan",
+      "text": "Applied line-connection fix in FeedbackAlignmentTimeline: AC1 line now uses connectNulls=true so dots are connected across null buckets. Validation: dashboard typecheck passes (npx tsc --noEmit).",
+      "created_at": "2026-04-09T19:20:58.416953Z"
+    },
+    {
+      "id": "728c9971-5d83-4952-b15a-40955caeb0f0",
+      "author": "ryan",
+      "text": "Follow-up line visibility fix: switched AC1 line to explicit linear path with isAnimationActive=false and direct hsl(var(--primary)) stroke/fill, while keeping connectNulls enabled. Added explicit note when the selected series has only one non-null AC1 bucket (no segment can be drawn). This clarifies apparent 'dots-only' cases without requiring report rerun. Validation: dashboard npx tsc --noEmit passes.",
+      "created_at": "2026-04-09T20:26:41.488861Z"
+    },
+    {
+      "id": "c64a31c8-8bf5-42dd-99b1-cd41f43dbc77",
+      "author": "ryan",
+      "text": "Implemented hard line-visibility fix for FeedbackAlignmentTimeline: added a dedicated AC1 line layer (dot=false) with explicit hex stroke (#2563eb), plus separate transparent stroke point layer for variable-size dots. This avoids CSS/theme variable interactions that could hide line strokes while keeping item-count-scaled dots. Validation: dashboard typecheck passes (npx tsc --noEmit).",
+      "created_at": "2026-04-09T20:33:36.295978Z"
+    },
+    {
+      "id": "7bf656c9-7ab7-4206-8290-6f201eff6b6a",
+      "author": "ryan",
+      "text": "Addressing axis overlap report: adjust chart layout so Y-axis is visually left-aligned while first bucket is offset farther right. Plan: reduce LineChart left margin and increase X-axis horizontal padding to prevent leftmost dot/bucket from overlapping Y-axis labels/axis line. Frontend-only change; no report rerun needed.",
+      "created_at": "2026-04-09T21:02:07.640654Z"
+    },
+    {
+      "id": "38a16006-11e3-4bdf-b6cf-6970472da4a3",
+      "author": "ryan",
+      "text": "Adjusted axis/data spacing in FeedbackAlignmentTimeline to fix left-edge overlap: LineChart margin changed to left=4,right=20 (axis appears less inset), and XAxis padding increased to left=44,right=28 so first/last buckets stay clear of Y-axis area. Validation: dashboard npx tsc --noEmit passes.",
+      "created_at": "2026-04-09T21:02:27.378924Z"
+    },
+    {
+      "id": "a9d14d38-4f59-4187-bd2e-39cd5059c171",
+      "author": "ryan",
+      "text": "User requested parity with EvaluationTask AC1 gauge segments/colors. Implementing horizontal background bands in FeedbackAlignmentTimeline chart using the same AC1 value boundaries and color tokens as EvaluationTask.",
+      "created_at": "2026-04-09T21:03:06.900643Z"
+    },
+    {
+      "id": "618e89e5-9185-4a0d-a8ae-2668fc35b222",
+      "author": "ryan",
+      "text": "Implemented AC1 background bands in FeedbackAlignmentTimeline using the same segment thresholds/colors as EvaluationTask gauge via shared ac1GaugeSegments import. Added Recharts ReferenceArea bands mapped from gauge percent space (0..100) to AC1 value space (-1..1): [-1,0], [0,0.2], [0.2,0.5], [0.5,0.8], [0.8,1.0], with fillOpacity 0.22. Validation: dashboard typecheck passes (npx tsc --noEmit).",
+      "created_at": "2026-04-09T21:04:48.048521Z"
+    },
+    {
+      "id": "dfbacc2c-22b2-4be7-9364-d56272c53412",
+      "author": "ryan",
+      "text": "Per user request, removed left-side chart offset in FeedbackAlignmentTimeline: LineChart left margin set to 0 and XAxis left padding set to 0 so Y-axis is no longer shifted right by added spacing.",
+      "created_at": "2026-04-09T21:05:28.755392Z"
+    },
+    {
+      "id": "abda6ae8-ee77-456f-b637-9f455930d11f",
+      "author": "ryan",
+      "text": "User hit Next 15 runtime error on /lab/reports/[id]: params is now Promise-backed and cannot be accessed synchronously. Fixing app/lab/reports/[id]/page.tsx to async-await params; also inspecting route metadata/viewport exports for warning cleanup.",
+      "created_at": "2026-04-10T00:08:43.321925Z"
+    },
+    {
+      "id": "2c1be9ad-ee39-4b3d-8dc6-0406f0dd78e5",
+      "author": "ryan",
+      "text": "Resolved Next 15 sync dynamic params runtime errors for report routes. Updated server pages to await Promise-backed params: app/lab/reports/[id]/page.tsx and app/lab/reports/edit/[id]/page.tsx now use async functions with awaited params id. Also cleaned root metadata warnings by removing deprecated metadata.viewport field from app/layout.tsx and adding metadataBase (NEXT_PUBLIC_SITE_URL fallback https://plexus.anth.us). Validation: dashboard typecheck passes (npx tsc --noEmit).",
+      "created_at": "2026-04-10T00:09:49.896437Z"
+    },
+    {
+      "id": "7f97d13c-1dbc-4650-88d1-fd6773723d69",
+      "author": "ryan",
+      "text": "Generated user-requested demo report for Selectquote - MEL HRA v1.0 (external_id 1461) using fixed FeedbackAlignmentTimeline config: bucket_type=calendar_month, bucket_count=12, timezone=America/New_York, all scores on scorecard. Report ID: 8421c715-8243-4f7b-b2f8-b25b8d345273. URL: https://plexus.anth.us/lab/reports/8421c715-8243-4f7b-b2f8-b25b8d345273",
+      "created_at": "2026-04-10T00:45:47.587922Z"
+    },
+    {
+      "id": "87a138b9-0a42-45d0-a2d6-a5f2c1c5d8ce",
+      "author": "ryan",
+      "text": "User requested chart-domain tweak: set AC1 y-axis floor to 0 when all visible points are >=0; fall back to -1 only when any point is <0. Implementing in FeedbackAlignmentTimeline renderer and validating with dashboard typecheck.",
+      "created_at": "2026-04-10T01:30:33.862218Z"
+    },
+    {
+      "id": "7fd62e06-c7f6-4eb7-91fb-3037b1237dec",
+      "author": "ryan",
+      "text": "Implemented AC1 dynamic y-axis floor in dashboard/components/blocks/FeedbackAlignmentTimeline.tsx: floor now resolves to 0 when selected series has no negative AC1 points and to -1 when any point is negative (ac1YAxisFloor/ac1YAxisDomain). Also changed ReferenceArea ifOverflow from extendDomain to hidden so background bands no longer force domain expansion back below 0. Validation: npx tsc --noEmit (dashboard) passed.",
+      "created_at": "2026-04-10T01:31:16.316183Z"
+    },
+    {
+      "id": "35eb4fac-02de-4098-9af9-51e34d8b9c5f",
+      "author": "ryan",
+      "text": "Committed and pushed branch updates (commit 4965dd10) including dashboard/report changes and project/ Kanbus artifacts. Opened PR into develop: https://github.com/AnthusAI/Plexus/pull/159 with semantic release comments including feat entries and validation results.",
+      "created_at": "2026-04-10T01:36:08.455853Z"
+    },
+    {
+      "id": "6abf4211-777c-4dea-b31b-786a5ec8f80d",
+      "author": "ryan",
+      "text": "Implementing approved UI enhancements for FeedbackAlignmentTimeline: add intro paragraph, add collapsed Bucket Details accordion with per-bucket AC1+Accuracy gauges and RawAgreementBar for selected series, include explicit no-data state per bucket, and update story/doc examples accordingly. Will validate with dashboard typecheck.",
+      "created_at": "2026-04-10T18:01:42.165004Z"
+    },
+    {
+      "id": "d446d32c-089c-4d1b-89bf-b97440b5a62b",
+      "author": "ryan",
+      "text": "Implemented timeline intro + expandable per-bucket details UI. Updated dashboard/components/blocks/FeedbackAlignmentTimeline.tsx to add intro paragraph, Bucket Details accordion (collapsed by default), selected-series bucket rows with AC1 gauge, Accuracy gauge, RawAgreementBar, and explicit no-data bucket messaging. Updated story docs text in dashboard/stories/blocks/FeedbackAlignmentTimeline.stories.tsx and docs page copy/panel in dashboard/app/documentation/report-blocks/feedback-alignment-timeline/page.tsx. Validation: cd dashboard && npx tsc --noEmit passed.",
+      "created_at": "2026-04-10T18:03:05.661550Z"
+    },
+    {
+      "id": "bd6cc455-59d4-4f91-9fa9-353699898f4e",
+      "author": "ryan",
+      "text": "Applying UX adjustment per user review: remove collapsible behavior for bucket gauge details and render always-visible ordered list; remove border/outline from individual bucket cards in FeedbackAlignmentTimeline UI; update docs/story wording to match; validate with dashboard typecheck.",
+      "created_at": "2026-04-10T19:05:07.894663Z"
+    },
+    {
+      "id": "ea9e66fe-7783-4d24-bc5e-be909e699e3c",
+      "author": "ryan",
+      "text": "Adjusted per user feedback: Bucket Details is no longer collapsible and now renders as always-visible ordered rows. Removed border/outline styling from each bucket row card (now rounded bg-card only). Updated story/docs wording from 'collapsed accordion' to always-visible list. Validation: cd dashboard && npx tsc --noEmit passed.",
+      "created_at": "2026-04-10T19:06:02.101408Z"
+    },
+    {
+      "id": "5627ecef-204f-42b9-8d9e-24ec67d8975e",
+      "author": "ryan",
+      "text": "Applying label tweak: change bucket gauge title from 'AC1' to 'Alignment' in FeedbackAlignmentTimeline details list and re-run dashboard typecheck.",
+      "created_at": "2026-04-10T19:08:06.034464Z"
+    },
+    {
+      "id": "14d7f452-9d91-404a-aa89-5b55c6bbf5bf",
+      "author": "ryan",
+      "text": "Done: changed per-bucket AC1 gauge title to 'Alignment' in dashboard/components/blocks/FeedbackAlignmentTimeline.tsx. Validation: cd dashboard && npx tsc --noEmit passed.",
+      "created_at": "2026-04-10T19:08:26.588786Z"
+    }
+  ],
+  "created_at": "2026-04-09T18:42:25.218868Z",
+  "updated_at": "2026-04-10T19:08:26.588786Z",
+  "closed_at": null,
+  "custom": {}
+}

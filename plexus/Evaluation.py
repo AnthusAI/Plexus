@@ -6,7 +6,7 @@ import json
 import pandas as pd
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -239,6 +239,10 @@ class Evaluation:
         self.total_correct = 0
         self.total_questions = 0
         self.total_skipped = 0  # Track scores skipped due to unmet conditions
+        # Shared task state used by run() cleanup and accuracy metrics streaming.
+        self.metrics_tasks = {}
+        self.should_stop = False
+        self.completed_scores = set()
 
     @staticmethod
     def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
@@ -310,13 +314,14 @@ class Evaluation:
         finally:
             # Signal metrics tasks to stop gracefully
             self.should_stop = True
-            
-            if self.metrics_tasks:
+
+            metrics_tasks = getattr(self, "metrics_tasks", None)
+            if metrics_tasks:
                 logging.info("Waiting for metrics tasks to complete...")
                 try:
                     # Wait for all tasks to complete naturally
                     done, pending = await asyncio.wait(
-                        self.metrics_tasks.values(),
+                        metrics_tasks.values(),
                         timeout=30.0,
                         return_when=asyncio.ALL_COMPLETED
                     )
@@ -864,6 +869,12 @@ class Evaluation:
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+        scorecard_name_raw = self.scorecard_name
+        if self.scorecard is not None and hasattr(self.scorecard, "name"):
+            scorecard_name_attr = self.scorecard.name
+            scorecard_name_raw = scorecard_name_attr() if callable(scorecard_name_attr) else scorecard_name_attr
+        scorecard_name = str(scorecard_name_raw).replace(" ", "_")
+
         # Determine the correct report folder
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
             try:
@@ -873,11 +884,9 @@ class Evaluation:
             except ValueError as e:
                 self.logging.info(f"Could not get score instance for report folder: {e}")
                 # Fallback to default report folder structure
-                scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
                 score_name = self.subset_of_score_names[0].replace(' ', '_')
                 report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
         else:
-            scorecard_name = self.scorecard.name.replace(' ', '_')
             report_folder_path = f"./score_results/{scorecard_name}/combined"
 
         # Ensure the report folder exists
@@ -1323,8 +1332,8 @@ class Evaluation:
                         self.processed_items = sum(self.processed_items_by_score.values())
                         
                         # Update tracker with actual count of processed items
-                        if tracker and tracker.current_stage:
-                            tracker.current_stage.status_message = f"Generating predictions ({processed_counter}/{total_rows})"
+                        # Note: Don't put the count in the status message — the progress bar
+                        # already shows it, and the message text lags due to API throttling.
                         if tracker:
                             tracker.update(current_items=self.processed_items)
                         
@@ -1362,14 +1371,30 @@ class Evaluation:
         
         # Wait for all tasks to complete
         results = []
+        error_count = 0
+        last_error = None
         for task in asyncio.as_completed(tasks):
             try:
                 result = await task
                 if result:
                     results.append(result)
             except Exception as e:
+                error_count += 1
+                last_error = e
                 logging.error(f"Error in task for {score_name}: {e}")
-        
+
+        # If ALL items failed, raise so the evaluation reports failure
+        if error_count > 0 and len(results) == 0:
+            raise RuntimeError(
+                f"All {error_count}/{total_rows} predictions failed for {score_name}. "
+                f"Last error: {last_error}"
+            )
+        elif error_count > 0:
+            logging.warning(
+                f"{error_count}/{total_rows} predictions failed for {score_name}, "
+                f"{len(results)} succeeded"
+            )
+
         return results
 
     async def maybe_start_metrics_task(self, score_name: str, is_final_result: bool = False):
@@ -1547,6 +1572,16 @@ class Evaluation:
             "totalItems": total_for_update,
             "processedItems": self.processed_items
         }
+
+        # Include accumulated cost if available
+        try:
+            if hasattr(self, 'scorecard') and self.scorecard:
+                expenses = self.scorecard.get_accumulated_costs()
+                total_cost = expenses.get('total_cost', 0)
+                if total_cost > 0:
+                    update_input["cost"] = float(total_cost)
+        except Exception as e:
+            logging.debug(f"Could not get accumulated costs: {e}")
         
         # Add score ID and version ID if available
         if hasattr(self, 'score_id') and self.score_id:
@@ -3172,244 +3207,149 @@ class FeedbackEvaluation(Evaluation):
         if has_usable_root_cause:
             params["root_cause"] = root_cause_payload
         return params
-    
-    async def run(self, tracker=None):
+
+    async def run(self, tracker=None, progress_callback=None, dry_run=False):
         """
-        Run the feedback evaluation.
-        
-        Args:
-            tracker: Optional TaskProgressTracker for progress updates
-            
-        Returns:
-            Dictionary with evaluation results
+        Run feedback evaluation against human-corrected FeedbackItems.
+
+        This is intentionally separate from AccuracyEvaluation.run(), which executes
+        score predictions over a dataset.
         """
-        from datetime import datetime, timedelta, timezone
-        from plexus.dashboard.api.models.feedback_item import FeedbackItem
-        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
-        from plexus.dashboard.api.models.score import Score as DashboardScore
-        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
         from plexus.analysis.feedback_analyzer import analyze_feedback_items
-        
-        self.logger.info(f"Starting feedback evaluation for scorecard {self.scorecard_id}, score {self.score_id}, days={self.days}")
-        
+        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+
+        evaluation_record = None
         try:
-            # Get evaluation record
-            if not self.evaluation_id:
-                raise ValueError("evaluation_id is required for FeedbackEvaluation")
-            
-            evaluation_record = DashboardEvaluation.get_by_id(
-                self.evaluation_id,
-                client=self.api_client
-            )
-            
-            # Update status to RUNNING
-            evaluation_record.update(status="RUNNING")
-            
-            # Calculate date range
-            end_date = datetime.now(timezone.utc)
+            if self.evaluation_id:
+                evaluation_record = DashboardEvaluation.get_by_id(self.evaluation_id, self.api_client)
+                if evaluation_record:
+                    evaluation_record.update(status="RUNNING")
+
+            if not self.score_id:
+                raise ValueError("score_id is required for feedback evaluation")
+
+            if self.scorecard_id:
+                # Keep this lookup explicit so identifier-resolution failures surface early.
+                DashboardScorecard.get_by_id(self.scorecard_id, self.api_client)
+
             if self.days is None:
                 start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
             else:
-                start_date = end_date - timedelta(days=self.days)
-            
-            # Validate scorecard exists
-            scorecard = DashboardScorecard.get_by_id(self.scorecard_id, client=self.api_client)
-            if scorecard is None:
-                raise ValueError(f"Scorecard {self.scorecard_id} not found")
-            
-            # Feedback evaluation MUST have a score_id
-            if not self.score_id:
-                raise ValueError("score_id is required for FeedbackEvaluation. Feedback evaluations must be run on a single score, not an entire scorecard.")
-            
-            self.logger.info(f"Analyzing feedback for score {self.score_id}")
-            
-            # Fetch feedback items for this specific score
+                start_date = datetime.now(timezone.utc) - timedelta(days=self.days)
+            end_date = datetime.now(timezone.utc)
+
             feedback_items = await self._fetch_feedback_items(
                 scorecard_id=self.scorecard_id,
                 score_id=self.score_id,
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
             )
-            
-            self.logger.info(f"Fetched {len(feedback_items)} feedback items")
 
-            feedback_items, selection_metadata = select_feedback_items(
+            selected_feedback_items, selection_metadata = select_feedback_items(
                 feedback_items,
                 max_items=self.max_items,
                 sampling_mode=self.sampling_mode,
                 sample_seed=self.sample_seed,
             )
-            self.logger.info(
-                "Selected %s feedback items from %s candidates "
-                "(sampling_mode=%s, max_items=%s, sample_seed=%s)",
-                len(feedback_items),
-                selection_metadata.get("candidate_pool_count"),
-                selection_metadata.get("sampling_mode"),
-                selection_metadata.get("requested_max_items"),
-                selection_metadata.get("sample_seed"),
-            )
-            if int(selection_metadata.get("shortfall_count") or 0) > 0:
-                self.logger.warning(
-                    "Feedback selection shortfall: requested=%s available_selected=%s shortfall=%s",
-                    selection_metadata.get("requested_max_items"),
-                    selection_metadata.get("selected_count"),
-                    selection_metadata.get("shortfall_count"),
-                )
-            if not feedback_items:
-                raise ValueError(
-                    "No feedback items matched selection criteria "
-                    f"(days={self.days}, sampling_mode={self.sampling_mode}, max_items={self.max_items})."
-                )
-            
-            # Perform analysis on the feedback items
-            overall_analysis = analyze_feedback_items(feedback_items, score_id=self.score_id)
-            
-            # Prepare metrics array for API (frontend expects array format)
-            # Alignment (Gwet's AC1) is listed first as the primary metric
-            metrics_for_api = []
-            
-            # Get AC1 from analysis and store as "Alignment" to match existing convention
-            ac1 = overall_analysis.get("ac1")
-            if ac1 is not None:
-                # Keep native AC1 in analysis payloads, but map evaluation metric payload
-                # to the legacy-compatible [0, 100] range for dashboard consistency.
-                metrics_for_api.append(
-                    {"name": "Alignment", "value": self._format_alignment_metric_value(ac1)}
-                )
-            
-            accuracy = overall_analysis.get("accuracy")
-            if accuracy is not None:
-                # Accuracy from feedback_analyzer is already a percentage (0-100)
-                # Store as-is to match the format from accuracy evaluation (which multiplies by 100)
-                metrics_for_api.append({"name": "Accuracy", "value": accuracy})
-            
-            precision = overall_analysis.get("precision")
-            if precision is not None:
-                # Precision from feedback_analyzer is already a percentage (0-100)
-                metrics_for_api.append({"name": "Precision", "value": precision})
-            
-            recall = overall_analysis.get("recall")
-            if recall is not None:
-                # Recall from feedback_analyzer is already a percentage (0-100)
-                metrics_for_api.append({"name": "Recall", "value": recall})
-            
-            # Also keep a dictionary version for the return value
-            metrics_dict = {
-                "ac1": ac1,
-                "accuracy": accuracy,
-                "precision": precision,
-                "recall": recall,
-                "total_items": overall_analysis.get("total_items"),
-                "agreements": overall_analysis.get("agreements"),
-                "disagreements": overall_analysis.get("disagreements"),
-            }
-            
-            # Create ScoreResult records for each FeedbackItem to link the evaluation to the original production data
-            self.logger.info(f"Creating ScoreResult records for {len(feedback_items)} feedback items")
+
             await self._create_score_results_from_feedback(
-                feedback_items=feedback_items,
+                feedback_items=selected_feedback_items,
                 evaluation_id=self.evaluation_id,
                 scorecard_id=self.scorecard_id,
                 score_id=self.score_id,
-                account_id=self.account_id
+                account_id=self.account_id,
             )
 
-            # Run root-cause analysis on feedback edit comments (non-fatal if it fails)
-            try:
-                root_cause_result = await self._run_root_cause_analysis(
-                    feedback_items,
+            analysis = analyze_feedback_items(selected_feedback_items, score_id=self.score_id)
+            metrics_summary = {
+                "ac1": self._format_alignment_metric_value(analysis.get("ac1")),
+                "accuracy": float(analysis.get("accuracy") or 0.0),
+                "precision": float(analysis.get("precision") or 0.0),
+                "recall": float(analysis.get("recall") or 0.0),
+            }
+
+            incorrect_items = [
+                item for item in selected_feedback_items
+                if item.initialAnswerValue is not None
+                and item.finalAnswerValue is not None
+                and item.initialAnswerValue != item.finalAnswerValue
+            ]
+            incorrect_items_total = len(incorrect_items)
+
+            score_result_map = {
+                str(item.id): {
+                    "value": item.initialAnswerValue,
+                    "human_label": item.finalAnswerValue,
+                    "explanation": None,
+                }
+                for item in incorrect_items
+            }
+            root_cause_payload = {}
+            if incorrect_items_total > 0:
+                root_cause_payload = await self._run_root_cause_analysis(
+                    selected_feedback_items,
+                    score_result_map=score_result_map,
+                    original_explanations={},
                     max_category_summary_items=self.max_category_summary_items,
+                    tracker=tracker,
                 )
-            except Exception as _rca_exc:
-                self.logger.warning(f"Root-cause analysis failed (non-fatal): {_rca_exc}")
-                root_cause_result = []
+
             persisted_root_cause = await asyncio.to_thread(
                 self._persist_root_cause_for_parameters,
-                root_cause_result,
+                root_cause_payload,
             )
-
-            # Merge root-cause payload into existing parameters (preserving mode/score/days metadata)
-            existing_params = evaluation_record.parameters
-            if isinstance(existing_params, str):
-                try:
-                    existing_params = json.loads(existing_params)
-                except Exception:
-                    existing_params = {}
-            parameters_dict = dict(existing_params) if existing_params else {}
-            parameters_dict.update(selection_metadata)
-            incorrect_items = int(overall_analysis.get("disagreements") or 0)
-            contract = self.root_cause_contract_outcome(incorrect_items, persisted_root_cause)
-            parameters_dict = self.apply_root_cause_contract_to_parameters(
-                parameters_dict,
-                persisted_root_cause,
-                contract["root_cause_required"],
-                contract["has_usable_root_cause"],
-            )
-
+            contract = self.root_cause_contract_outcome(incorrect_items_total, persisted_root_cause)
             if contract["error_message"]:
-                failure_kwargs = dict(
-                    status="FAILED",
-                    errorMessage=contract["error_message"],
-                    accuracy=accuracy if accuracy is not None else 0.0,
-                    metrics=json.dumps(metrics_for_api),
-                    confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
-                    totalItems=overall_analysis.get("total_items"),
-                    processedItems=overall_analysis.get("total_items"),
-                    datasetClassDistribution=json.dumps(overall_analysis.get("class_distribution")),
-                    predictedClassDistribution=json.dumps(overall_analysis.get("predicted_class_distribution")),
-                    parameters=json.dumps(parameters_dict),
-                )
-                evaluation_record.update(**failure_kwargs)
-                raise RuntimeError(contract["error_message"])
+                raise RuntimeError(f"{contract['error_message']} (no usable RCA payload)")
 
-            # Update evaluation record with results
-            # Ensure accuracy is never None (GraphQL schema requires Float!)
-            update_kwargs = dict(
-                status="COMPLETED",
-                accuracy=accuracy if accuracy is not None else 0.0,
-                metrics=json.dumps(metrics_for_api),  # Store as array for frontend
-                confusionMatrix=json.dumps(overall_analysis.get("confusion_matrix")),
-                totalItems=overall_analysis.get("total_items"),
-                processedItems=overall_analysis.get("total_items"),
-                datasetClassDistribution=json.dumps(overall_analysis.get("class_distribution")),
-                predictedClassDistribution=json.dumps(overall_analysis.get("predicted_class_distribution")),
+            metrics_payload = [
+                {"name": "Alignment", "value": metrics_summary["ac1"]},
+                {"name": "Accuracy", "value": metrics_summary["accuracy"]},
+                {"name": "Precision", "value": metrics_summary["precision"]},
+                {"name": "Recall", "value": metrics_summary["recall"]},
+            ]
+
+            parameters_payload = self.apply_root_cause_contract_to_parameters(
+                existing_parameters={
+                    "days": self.days,
+                    "max_items": self.max_items,
+                    "sampling_mode": self.sampling_mode,
+                    "sample_seed": self.sample_seed,
+                    "max_category_summary_items": self.max_category_summary_items,
+                    **(selection_metadata or {}),
+                    "incorrect_items_total": incorrect_items_total,
+                },
+                root_cause_payload=persisted_root_cause,
+                root_cause_required=contract["root_cause_required"],
+                has_usable_root_cause=contract["has_usable_root_cause"],
             )
-            if parameters_dict:
-                update_kwargs["parameters"] = json.dumps(parameters_dict)
-            evaluation_record.update(**update_kwargs)
-            
-            # Format log message with safe handling of None values
-            ac1_str = f"{ac1:.3f}" if ac1 is not None else "N/A"
-            accuracy_str = f"{accuracy:.1f}%" if accuracy is not None else "N/A"
-            self.logger.info(f"Feedback evaluation completed. AC1={ac1_str}, Accuracy={accuracy_str}")
-            
+
+            if evaluation_record:
+                evaluation_record.update(
+                    status="COMPLETED",
+                    accuracy=metrics_summary["accuracy"],
+                    metrics=json.dumps(metrics_payload),
+                    parameters=json.dumps(parameters_payload),
+                    totalItems=analysis.get("total_items") or len(selected_feedback_items),
+                    processedItems=analysis.get("total_items") or len(selected_feedback_items),
+                )
+
             return {
                 "status": "success",
                 "evaluation_id": self.evaluation_id,
-                "metrics": metrics_dict,
-                "analysis": overall_analysis,
-                "selection": selection_metadata,
+                "metrics": metrics_summary,
+                "analysis": analysis,
             }
-            
-        except Exception as e:
-            self.logger.error(f"Error during feedback evaluation: {e}", exc_info=True)
-            
-            # Update evaluation record with error
-            if self.evaluation_id:
+
+        except Exception as exc:
+            if evaluation_record:
                 try:
-                    evaluation_record = DashboardEvaluation.get_by_id(
-                        self.evaluation_id,
-                        client=self.api_client
-                    )
-                    evaluation_record.update(
-                        status="FAILED",
-                        errorMessage=str(e)
-                    )
-                except Exception as update_error:
-                    self.logger.error(f"Failed to update evaluation record with error: {update_error}")
-            
+                    evaluation_record.update(status="FAILED", errorMessage=str(exc))
+                except Exception:
+                    self.logger.exception("Failed to update feedback evaluation record status to FAILED")
             raise
-    
+
     async def _fetch_feedback_items(
         self,
         scorecard_id: str,
@@ -3732,7 +3672,8 @@ class FeedbackEvaluation(Evaluation):
             )
 
             def _update_status(msg: str):
-                """Update tracker status message if tracker is available."""
+                """Update tracker status message and log RCA progress."""
+                self.logger.info(f"RCA: {msg}")
                 if tracker and hasattr(tracker, 'current_stage') and tracker.current_stage:
                     tracker.current_stage.status_message = msg
 
@@ -4052,9 +3993,18 @@ class FeedbackEvaluation(Evaluation):
 
                     return timestamped, canonical_row
 
-            _update_status(f"Classifying {len(candidate_items)} misclassified items (parallel)...")
+            _rca_completed = [0]  # mutable counter for closure
+            _rca_total = len(candidate_items)
+
+            async def _process_candidate_with_progress(fi):
+                result = await _process_single_candidate(fi)
+                _rca_completed[0] += 1
+                _update_status(f"Classifying misclassified items ({_rca_completed[0]}/{_rca_total})...")
+                return result
+
+            _update_status(f"Classifying {_rca_total} misclassified items...")
             rca_results = await asyncio.gather(*[
-                _process_single_candidate(fi) for fi in candidate_items
+                _process_candidate_with_progress(fi) for fi in candidate_items
             ], return_exceptions=True)
             rca_errors = 0
             for result in rca_results:
@@ -4423,9 +4373,17 @@ class FeedbackEvaluation(Evaluation):
                     "score_fix_candidate_count": len(score_fix_exemplars),
                 }
 
-            _update_status(f"Analyzing {num_topics} topic(s) in parallel...")
+            _topics_completed = [0]
+
+            async def _process_topic_with_progress(topic_idx, tr):
+                result = await _process_topic(topic_idx, tr)
+                _topics_completed[0] += 1
+                _update_status(f"Analyzing topics ({_topics_completed[0]}/{num_topics})...")
+                return result
+
+            _update_status(f"Analyzing {num_topics} topic(s)...")
             topics = list(await asyncio.gather(
-                *[_process_topic(i, tr) for i, tr in enumerate(result.topics)]
+                *[_process_topic_with_progress(i, tr) for i, tr in enumerate(result.topics)]
             ))
 
             # Post-loop: generate distinct topic titles informed by the detailed explanations.
@@ -4515,6 +4473,7 @@ class FeedbackEvaluation(Evaluation):
         )
 
         def _update_status(msg: str):
+            self.logger.info(f"RCA: {msg}")
             if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
                 tracker.current_stage.status_message = msg
 
@@ -5034,6 +4993,27 @@ class AccuracyEvaluation(Evaluation):
             return returned_metrics
         except Exception as e:
             self.logging.error(f"Error during AccuracyEvaluation.run: {e}", exc_info=True)
+            if tracker:
+                try:
+                    tracker.fail(f"Evaluation error: {e}")
+                except Exception:
+                    pass  # Don't mask the original error
+            # Update evaluation record with error status
+            if self.experiment_id and not dry_run:
+                try:
+                    from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+                    from plexus.dashboard.api.client import PlexusDashboardClient
+                    client = PlexusDashboardClient()
+                    evaluation_record = DashboardEvaluation.get_by_id(
+                        self.experiment_id,
+                        client=client
+                    )
+                    evaluation_record.update(
+                        status="FAILED",
+                        errorMessage=str(e)
+                    )
+                except Exception:
+                    pass  # Don't mask the original error
             raise e # Re-raise after logging
         finally:
             self.should_stop = True
@@ -5105,9 +5085,7 @@ class AccuracyEvaluation(Evaluation):
             else:
                 selected_sample_rows = df
 
-            # Update tracker status without advancing stage
-            if tracker and tracker.current_stage:
-                tracker.current_stage.status_message = "Generating predictions..."
+            # Update tracker for start of processing (stage already advanced by caller)
             if tracker:
                 tracker.update(current_items=0)
 

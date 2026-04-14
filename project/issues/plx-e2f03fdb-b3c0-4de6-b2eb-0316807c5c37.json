@@ -1,0 +1,31 @@
+{
+  "id": "plx-e2f03fdb-b3c0-4de6-b2eb-0316807c5c37",
+  "title": "Fix develop CI failures in FeedbackEvaluation and LangGraphScore tests",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c03717b3-b733-4386-9f3b-eb11b151306f",
+      "author": "ryan",
+      "text": "CI run 24379873795 failing in Python Tests (3.11/3.12): 10 failures in FeedbackEvaluation (AttributeError: metrics_tasks missing in Evaluation.run finally cleanup path) and 2 failures in LangGraphScore_test patch target (module no longer exports calculate_cost). Implementing fix now.",
+      "created_at": "2026-04-14T04:03:51.608936Z"
+    },
+    {
+      "id": "a4b4205c-0c93-46bd-8743-9375e0ed7a8d",
+      "author": "ryan",
+      "text": "Fixed and pushed commit 062ddefc5 on develop. Root causes from failed run 24379873795: FeedbackEvaluation path regressed (missing feedback-specific run path; cleanup assumed metrics_tasks) and LangGraph cost tests patched removed symbol calculate_cost. Validation: local poetry pytest target files pass, local invoke ci pass, dashboard npm ci --include=optional pass. GitHub CI/CD Pipeline run 24380591229 is green: https://github.com/AnthusAI/Plexus/actions/runs/24380591229",
+      "created_at": "2026-04-14T04:24:32.337028Z"
+    }
+  ],
+  "created_at": "2026-04-14T04:00:12.375162Z",
+  "updated_at": "2026-04-14T04:24:36.054211Z",
+  "closed_at": "2026-04-14T04:24:36.054211Z",
+  "custom": {}
+}
