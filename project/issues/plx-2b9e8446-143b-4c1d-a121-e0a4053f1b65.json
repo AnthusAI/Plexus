@@ -1,0 +1,25 @@
+{
+  "id": "plx-2b9e8446-143b-4c1d-a121-e0a4053f1b65",
+  "title": "Fix failing security/snyk check on PR #159",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1ba94358-2792-4db0-9628-440cfc2df78f",
+      "author": "ryan",
+      "text": "Investigating failing security/snyk status on PR #159 (target develop). Local Snyk integration exists via kbs snyk pull but cannot fetch finding details without SNYK_TOKEN. Branch currently pins langchain-core=0.3.81; proceeding with dependency bump to 0.3.84+ and lock refresh to match Snyk fix direction.",
+      "created_at": "2026-04-14T12:19:07.354588Z"
+    }
+  ],
+  "created_at": "2026-04-14T12:19:01.494118Z",
+  "updated_at": "2026-04-14T12:19:07.354588Z",
+  "closed_at": null,
+  "custom": {}
+}
