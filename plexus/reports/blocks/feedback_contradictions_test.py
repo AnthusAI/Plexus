@@ -30,8 +30,8 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     block.report_block_id = 'block-123'
 
     monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_external_id',
-        lambda external_id, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_name',
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
     )
     monkeypatch.setattr(
         block,
@@ -90,8 +90,8 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     block.report_block_id = 'block-456'
 
     monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_external_id',
-        lambda external_id, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_name',
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
     )
     monkeypatch.setattr(
         block,
@@ -179,8 +179,8 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
     block.report_block_id = 'block-789'
 
     monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_external_id',
-        lambda external_id, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_name',
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
     )
     monkeypatch.setattr(
         block,
