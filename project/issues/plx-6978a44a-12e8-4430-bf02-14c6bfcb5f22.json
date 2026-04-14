@@ -1,0 +1,61 @@
+{
+  "id": "plx-6978a44a-12e8-4430-bf02-14c6bfcb5f22",
+  "title": "Fix score-processing Lambda UnauthorizedException on account lookup",
+  "description": "## Problem\nProduction score-processing Lambda fails during initialization with UnauthorizedException from GraphQL account lookup (Account.get_by_key).\n\n## Evidence\nLambda stack trace shows failure path in plexus/dashboard/api/client.py during client.execute called by plexus/dashboard/api/models/account.py:get_by_key.\n\n## Expected\nLambda should authenticate correctly against AppSync and resolve account by key in production.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "413de461-a30c-4843-965c-f0bed9f154c1",
+      "author": "derek",
+      "text": "Started investigation. Next step: trace Lambda GraphQL auth mode/header selection in plexus/dashboard/api/client.py and runtime env wiring in score-processing Lambda resources.",
+      "created_at": "2026-04-14T17:23:50.807017591Z"
+    },
+    {
+      "id": "89360026-4327-468e-9e1c-cf5957eed1b8",
+      "author": "derek",
+      "text": "Implemented fix for Lambda crash  in plexus/Scorecard.py by normalizing input/output costs to Decimal before accumulation. Added regression test  in plexus/Scorecard_test.py.\n\nValidation attempt:  failed in this shell because pytest is not installed ().",
+      "created_at": "2026-04-14T17:52:14.587642251Z"
+    },
+    {
+      "id": "2e5e5774-ce8b-4bf1-a7f4-25b56629a661",
+      "author": "derek",
+      "text": "Implemented fix for Lambda crash in plexus/Scorecard.py by normalizing input and output costs to Decimal before accumulation. Added regression test test_score_entire_text_handles_float_costs in plexus/Scorecard_test.py. Validation attempt with pytest failed in this shell because pytest is not installed in the active interpreter (ModuleNotFoundError).",
+      "created_at": "2026-04-14T17:52:18.405776086Z"
+    },
+    {
+      "id": "ee0f4ff9-9254-4038-b67c-0248032a3cc0",
+      "author": "derek",
+      "text": "Regression analysis: likely recent. LangGraphScore cost computation changed in commit 90b108bf (2026-04-13) to litellm.cost_per_token and returns float input_cost/output_cost/total_cost. Scorecard accumulators are Decimal, and input/output paths were not Decimal-normalized, which causes Decimal + float TypeError at runtime.\n\nWork is now on branch fix/score-processor-decimal-cost-regression (not develop).\n\nValidation attempt in local venv: pytest collection failed because litellm is missing in .venv (ModuleNotFoundError), so full test run is blocked by environment dependency.",
+      "created_at": "2026-04-14T17:54:30.690364680Z"
+    },
+    {
+      "id": "8e62d3f1-d187-4701-b554-2d3dff7f609c",
+      "author": "derek",
+      "text": "Environment fix applied for full test execution: used poetry-managed environment and installed missing runtime deps used by Scorecard imports. Ran full test file (not subset): poetry run pytest -q plexus/Scorecard_test.py -> 8 passed, 0 failed (warnings only). Regression test for float cost accumulation passes.",
+      "created_at": "2026-04-14T17:58:02.383893652Z"
+    },
+    {
+      "id": "f16ea48c-33a0-44b6-b8ed-92f173d43bed",
+      "author": "derek",
+      "text": "Pre-PR Lambda image verification completed locally via container smoke test: Building Docker image...\ncd .. && docker buildx build \\\n\t--platform linux/amd64 \\\n\t--load \\\n\t-f score-processor-lambda/Dockerfile \\\n\t-t score-processor-lambda:latest \\\n\t.\n✓ Image built: score-processor-lambda:latest\nRunning smoke test in container...\ndocker run --rm \\\n\t-v /home/derek/projects/Plexus/score-processor-lambda/tests/smoke_test.py:/var/task/smoke_test.py \\\n\t--entrypoint python \\\n\tscore-processor-lambda:latest \\\n\tsmoke_test.py\n======================================================================\nLAMBDA CONTAINER SMOKE TEST\n======================================================================\n\n▶ Import core dependencies\n    - langchain: 0.3.27\n    - langchain-core: 0.3.78\n    - tactus: 0.44.0\n  ✓ PASS\n\n▶ Verify pinned LangChain versions\n    - All versions match requirements.txt\n  ✓ PASS\n\n▶ Import Plexus modules\n    - All Plexus models import successfully\n  ✓ PASS\n\n▶ Import handler module\n    - Handler module loads correctly\n  ✓ PASS\n\n▶ Initialize LambdaJobProcessor\n    - LambdaJobProcessor initialized successfully\n  ✓ PASS\n\n▶ Verify NLTK data\n    - NLTK punkt data found\n  ✓ PASS\n\n▶ Check writable directories\n    - /tmp is writable\n  ✓ PASS\n\n▶ Verify tactus version\n    - tactus version matches: 0.44.0\n  ✓ PASS\n\n▶ Instantiate TactusRuntime and MemoryStorage\n    - MemoryStorage instantiated successfully\n    - TactusRuntime instantiated successfully\n  ✓ PASS\n\n▶ Import TactusScore and scoring utilities\n    - TactusScore imported successfully\n    - create_scorecard_instance_for_single_score imported successfully\n    - Scorecard imported successfully\n  ✓ PASS\n\n======================================================================\nRESULTS: 10 passed, 0 failed\n======================================================================. Docker image built from current branch code and smoke_test.py ran inside container. Result: 10 passed, 0 failed. This validates runtime imports, handler initialization, tactus/scorecard loading, and writable dirs in Lambda-like container.",
+      "created_at": "2026-04-14T18:05:06.379246988Z"
+    },
+    {
+      "id": "00b2eb72-dc79-45aa-b5e6-49d6c3971090",
+      "author": "derek",
+      "text": "Pushed fix branch fix/score-processor-decimal-cost-regression and opened PR to develop: https://github.com/AnthusAI/Plexus/pull/163. Includes Decimal/float accumulation fix + regression test + Kanbus artifacts. Validation recorded in PR: poetry run pytest -q plexus/Scorecard_test.py (8 passed) and score-processor-lambda make test-smoke (10 passed, 0 failed).",
+      "created_at": "2026-04-14T18:06:36.030334754Z"
+    }
+  ],
+  "created_at": "2026-04-14T17:23:45.220921989Z",
+  "updated_at": "2026-04-14T18:06:36.030334754Z",
+  "closed_at": null,
+  "custom": {}
+}
