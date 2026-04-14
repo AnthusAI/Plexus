@@ -1,0 +1,55 @@
+{
+  "id": "plx-ee1949e0-88de-4154-94af-f44a26b5473d",
+  "title": "Fix dashboard post-login 'No account found' content load failure",
+  "description": "## Problem\nDashboard shell renders after login, but all top pages display `Error: No account found` and page content never loads.\n\n## Repro\n1. Run `npm run dev:web` in `dashboard/`.\n2. Login to dashboard.\n3. Observe nav renders but content regions fail with no account.\n\n## Expected\nAuthenticated users with valid env config should resolve account and load page content.\n\n## Initial hypothesis\nMismatch or timing issue in account-key/account-context resolution between env bootstrap and page data hooks.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ca845588-9004-4f84-a51e-ed1d4a168aa5",
+      "author": "derek",
+      "text": "Started investigation. Next: locate where dashboard throws 'No account found', validate runtime env propagation for NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY, and patch account resolution so authenticated users can load content.",
+      "created_at": "2026-04-14T16:14:06.613032322Z"
+    },
+    {
+      "id": "bbc8edc6-9403-451e-83cb-37a738eb05a3",
+      "author": "derek",
+      "text": "Root cause confirmed: AppSync  calls are unauthorized in this environment, but dashboard startup code forced Data auth to API key and helper calls also injected . After login this caused account/evaluation queries to fail, leaving selectedAccount null and rendering .\n\nImplemented fixes:\n1) : preserve  and  from  when applying URL/API key overrides, instead of forcing API_KEY-only.\n2) : removed automatic apiKey authMode injection and removed hardcoded  in evaluation query path.\n\nValidation:  passes.",
+      "created_at": "2026-04-14T16:16:31.141187527Z"
+    },
+    {
+      "id": "1f3162fc-8222-48d6-8ec4-fb2380a0ab79",
+      "author": "derek",
+      "text": "Root cause confirmed: AppSync API-key calls are unauthorized in this environment, but dashboard startup code forced Data auth to API key and helper calls also injected authMode apiKey. After login this caused account and evaluation queries to fail, leaving selectedAccount null and rendering No account found.\n\nImplemented fixes:\n1) dashboard/app/client-layout.tsx now preserves default_authorization_type and authorization_types from amplify_outputs.json when applying URL/API key overrides, instead of forcing API_KEY-only.\n2) dashboard/utils/amplify-helpers.ts no longer auto-injects authMode apiKey and no longer hardcodes authMode apiKey in the evaluation query path.\n\nValidation: npm test -- --runInBand components/__tests__/evaluations-dashboard.test.tsx (pass).",
+      "created_at": "2026-04-14T16:16:44.021737513Z"
+    },
+    {
+      "id": "33ee38e1-b07b-480e-b257-1a47263f85a2",
+      "author": "derek",
+      "text": "Follow-up verification requested: checked git history for auth regressions. Found recent commits introducing API-key forcing behavior: \n- 2026-04-07 commit 31dbe5cb added default_authorization_type API_KEY and authorization_types [API_KEY] in dashboard/app/client-layout.tsx.\n- 2026-04-01 commit e694b909 added DEFAULT_LIST_AUTH_MODE apiKey injection in dashboard/utils/amplify-helpers.ts.\n- Earlier 2025-02-05 commit d3617268 added authMode apiKey to evaluation GraphQL query path.\nThis confirms the fix addressed concrete historical changes rather than a speculative patch.",
+      "created_at": "2026-04-14T16:21:36.874250586Z"
+    },
+    {
+      "id": "dbe7d941-ffda-4c0f-94bc-66e2421128e0",
+      "author": "derek",
+      "text": "Created fix branch  from develop and committed the dashboard auth resolution plus Kanbus artifacts in commit . Remaining untracked files intentionally excluded: scoring_jobs_20260409_203632.csv, scripts/list_scorecards_with_score_external_id.py.",
+      "created_at": "2026-04-14T16:29:23.844728080Z"
+    },
+    {
+      "id": "465f75ea-6b9f-48c4-8030-cdf677719709",
+      "author": "derek",
+      "text": "Created fix branch fix/dashboard-account-auth-resolution from develop and committed the dashboard auth resolution plus Kanbus artifacts in commit 2fbbc4b9. Remaining untracked files intentionally excluded: scoring_jobs_20260409_203632.csv, scripts/list_scorecards_with_score_external_id.py.",
+      "created_at": "2026-04-14T16:29:26.493467422Z"
+    }
+  ],
+  "created_at": "2026-04-14T16:13:57.942842448Z",
+  "updated_at": "2026-04-14T16:29:26.493467422Z",
+  "closed_at": null,
+  "custom": {}
+}
