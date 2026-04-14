@@ -34,10 +34,22 @@
       "author": "derek",
       "text": "Follow-up verification requested: checked git history for auth regressions. Found recent commits introducing API-key forcing behavior: \n- 2026-04-07 commit 31dbe5cb added default_authorization_type API_KEY and authorization_types [API_KEY] in dashboard/app/client-layout.tsx.\n- 2026-04-01 commit e694b909 added DEFAULT_LIST_AUTH_MODE apiKey injection in dashboard/utils/amplify-helpers.ts.\n- Earlier 2025-02-05 commit d3617268 added authMode apiKey to evaluation GraphQL query path.\nThis confirms the fix addressed concrete historical changes rather than a speculative patch.",
       "created_at": "2026-04-14T16:21:36.874250586Z"
+    },
+    {
+      "id": "dbe7d941-ffda-4c0f-94bc-66e2421128e0",
+      "author": "derek",
+      "text": "Created fix branch  from develop and committed the dashboard auth resolution plus Kanbus artifacts in commit . Remaining untracked files intentionally excluded: scoring_jobs_20260409_203632.csv, scripts/list_scorecards_with_score_external_id.py.",
+      "created_at": "2026-04-14T16:29:23.844728080Z"
+    },
+    {
+      "id": "465f75ea-6b9f-48c4-8030-cdf677719709",
+      "author": "derek",
+      "text": "Created fix branch fix/dashboard-account-auth-resolution from develop and committed the dashboard auth resolution plus Kanbus artifacts in commit 2fbbc4b9. Remaining untracked files intentionally excluded: scoring_jobs_20260409_203632.csv, scripts/list_scorecards_with_score_external_id.py.",
+      "created_at": "2026-04-14T16:29:26.493467422Z"
     }
   ],
   "created_at": "2026-04-14T16:13:57.942842448Z",
-  "updated_at": "2026-04-14T16:21:36.874250586Z",
+  "updated_at": "2026-04-14T16:29:26.493467422Z",
   "closed_at": null,
   "custom": {}
 }
