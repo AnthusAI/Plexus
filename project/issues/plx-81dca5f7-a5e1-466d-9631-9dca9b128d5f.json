@@ -3,16 +3,29 @@
   "title": "Polish RCA view-items button copy and flat styling",
   "description": "",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a14a299b-2485-492f-905e-3fbbbb1ddf65",
+      "author": "ryan",
+      "text": "Starting implementation on feature/plx-next-data-flywheel: tighten category filter CTA copy and enforce flat, borderless styling in EvaluationTask RCA category cards.",
+      "created_at": "2026-04-04T23:15:26.746855Z"
+    },
+    {
+      "id": "e56f713b-d3e7-4621-b020-931d85ae9f40",
+      "author": "ryan",
+      "text": "Verified current RCA/topic filter CTA implementation is concise and flat-style: both category and topic buttons render as 'View items (N)' using ghost variant with border-0/shadow-none and muted/secondary fills. Confirmed with targeted UI tests: EvaluationTask.category-filter + topic-list tests passing.",
+      "created_at": "2026-04-04T23:15:45.080134Z"
+    }
+  ],
   "created_at": "2026-04-04T19:24:30.573340Z",
-  "updated_at": "2026-04-04T19:24:30.573340Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T23:15:45.091872Z",
+  "closed_at": "2026-04-04T23:15:45.091872Z",
   "custom": {}
 }

@@ -1,0 +1,25 @@
+{
+  "id": "plx-b9f057fc-29ef-4408-bb75-2543a6071ab4",
+  "title": "submit_score_code submits unchanged YAML when str_replace_editor fails",
+  "description": "submit_score_code in ScoreEditorToolset had a disk fallback path that read stale content from /tmp/plexus_score_edit_exchange.yaml. When str_replace_editor failed and content was unchanged, it submitted the stale exchange file as a new version. Fix: removed disk fallback, added unchanged content guard. Also updated agent prompt to call done(cannot_improve) on edit failures.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e132c8c0-47e5-4167-a2e6-ca115ad14e73",
+      "author": "ryan",
+      "text": "Fix applied in score_editor_toolset.py and feedback_alignment_optimizer.yaml. Two changes: (1) submit_score_code now rejects if content unchanged from original, (2) agent prompt tells LLM to call done(cannot_improve) after edit failures.",
+      "created_at": "2026-04-06T18:20:17.422821Z"
+    }
+  ],
+  "created_at": "2026-04-06T18:20:09.408764Z",
+  "updated_at": "2026-04-06T18:20:17.422821Z",
+  "closed_at": "2026-04-06T18:20:17.406019Z",
+  "custom": {}
+}

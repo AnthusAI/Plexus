@@ -1,0 +1,61 @@
+{
+  "id": "plx-2b75d938-a0e8-4ca4-ac9c-762788139669",
+  "title": "Fix duplicate report runs creating extra report records",
+  "description": "## Intent\nEnsure a single user-triggered report run creates exactly one report record.\n\n## Definition of done\n- One click/action triggers one report run\n- No duplicate report records from same trigger\n- Root cause documented in Kanbus comments",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "382c60e8-8cfc-4c5b-b533-8050e384dbb3",
+      "author": "derek",
+      "text": "Investigating duplicate report dispatch: user action appears to create 4 reports instead of 1. Tracing UI run trigger, backend mutation path, and any duplicate side effects/subscriptions.",
+      "created_at": "2026-04-08T20:48:21.575920959Z"
+    },
+    {
+      "id": "14c2e32c-f1b0-4ba6-8432-add3cc45f455",
+      "author": "derek",
+      "text": "Data point: report records are truly duplicated in backend (distinct report IDs + distinct task IDs clustered within same second), not just UI list duplication. Implemented frontend dispatch idempotency guard in ReportConfigurationDialog + RunReportButton: single in-flight dispatch, await onDispatch, and disable repeated submits while dispatching.",
+      "created_at": "2026-04-08T20:51:07.670209470Z"
+    },
+    {
+      "id": "917317c8-e77f-4efb-bbd5-43fc7ceb1433",
+      "author": "derek",
+      "text": "New evidence from browser Network: exactly one GraphQL createTask mutation is sent per click (single task id d311ab31-cea3-45c1-8abf-277e4a5b717f). This rules out frontend multi-submit. Next fix: enforce backend idempotency at report creation path so one task_id can materialize at most one Report record, even if dispatcher/worker redelivers.",
+      "created_at": "2026-04-08T21:14:20.584984378Z"
+    },
+    {
+      "id": "6d638b1c-3de0-41a5-b100-ba7f343ac7ef",
+      "author": "derek",
+      "text": "Implemented backend idempotency for report materialization: Report.create now accepts explicit report_id and _generate_report_core now uses report_id=task_id (deterministic one-report-per-task key). If duplicate worker execution races and create fails, service now loads existing report by task_id and exits duplicate invocation as no-op. Updated tests in plexus/reports/service_test.py and plexus/reports/test_service_integration.py. Local test run blocked in this shell because pytest is not installed (ModuleNotFoundError: No module named pytest).",
+      "created_at": "2026-04-08T21:15:20.597694980Z"
+    },
+    {
+      "id": "ab771d30-6037-452b-8745-a886fda8a1ba",
+      "author": "derek",
+      "text": "Implementing targeted fix: preserve incoming --task-id in plexus.cli report run. Current code resets task_id to None at function start, causing duplicate executions to spawn new tasks/reports instead of binding to original task.",
+      "created_at": "2026-04-08T21:39:15.217356066Z"
+    },
+    {
+      "id": "b53323f8-c74c-419d-b6d1-e4f780adcdaf",
+      "author": "derek",
+      "text": "Validation after patch: replayed report run with --task-id 54647b2c-98f4-4f07-96ac-da625e87adca now prints 'Using existing task from Celery' and returns Report ID/Task ID both equal to 54647b2c-98f4-4f07-96ac-da625e87adca. No new task ID minted in this path.",
+      "created_at": "2026-04-08T21:39:40.761308948Z"
+    },
+    {
+      "id": "bc42c546-bad9-4924-829f-0cc564010dca",
+      "author": "derek",
+      "text": "Evidence from report/task inspection: duplicate report IDs 5284c048-... and 4cd37eeb-... map to different task IDs (4c797b6b-... and 4cd37eeb-...). Both tasks are type=report_generation and dispatchStatus=SYNC, created at the same second (21:42:23 UTC). This indicates repeated execution of 'report run' is creating fresh internal sync tasks/reports each time, not UI list duplication. Likely worker still running pre-fix code path that drops --task-id, so retries/replays fan out into extra SYNC task/report records.",
+      "created_at": "2026-04-08T21:50:06.794399262Z"
+    }
+  ],
+  "created_at": "2026-04-08T20:48:18.718044342Z",
+  "updated_at": "2026-04-08T21:50:06.794399262Z",
+  "closed_at": null,
+  "custom": {}
+}

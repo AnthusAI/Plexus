@@ -67,6 +67,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   const [selectedConfig, setSelectedConfig] = useState<ReportConfiguration | null>(null)
   const [showParametersDialog, setShowParametersDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isDispatching, setIsDispatching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   
@@ -143,6 +144,10 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   }, [selectedConfigId])
   
   const handleRunReport = async () => {
+    if (isDispatching) {
+      return
+    }
+
     if (!selectedConfigId) {
       toast.error("Please select a report configuration")
       return
@@ -155,11 +160,11 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       setShowParametersDialog(true)
     } else {
       // Run directly without parameters
-      handleDispatchReport()
+      await handleDispatchReport()
     }
   }
   
-  const handleDispatchReport = (parameters?: Record<string, any>) => {
+  const handleDispatchReport = async (parameters?: Record<string, any>) => {
     if (!selectedConfigId) return
     
     // Build the command for running this report
@@ -179,14 +184,19 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       parameters: parameters || {}
     }
     
-    // Dispatch the task with metadata
-    onDispatch(command, 'report')
-    onClose()
+    // Dispatch the task once and close only after dispatch attempt completes.
+    setIsDispatching(true)
+    try {
+      await onDispatch(command, 'report')
+      onClose()
+    } finally {
+      setIsDispatching(false)
+    }
   }
   
-  const handleParametersSubmit = (parameters: Record<string, any>) => {
+  const handleParametersSubmit = async (parameters: Record<string, any>) => {
     setShowParametersDialog(false)
-    handleDispatchReport(parameters)
+    await handleDispatchReport(parameters)
   }
   
   return (
@@ -220,7 +230,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
               <Select
                 value={selectedConfigId}
                 onValueChange={setSelectedConfigId}
-                disabled={isLoading || configurations.length === 0}
+                disabled={isLoading || isDispatching || configurations.length === 0}
               >
                 <SelectTrigger className="col-span-3 border-0 bg-background" tabIndex={-1}>
                   <SelectValue placeholder="Select a report configuration" />
@@ -249,9 +259,9 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
             onClick={handleRunReport} 
             className="border-0" 
             tabIndex={-1}
-            disabled={!selectedConfigId || isLoading}
+            disabled={!selectedConfigId || isLoading || isDispatching}
           >
-            Run Report
+            {isDispatching ? "Running..." : "Run Report"}
           </Button>
         </DialogFooter>
       </DialogContent>

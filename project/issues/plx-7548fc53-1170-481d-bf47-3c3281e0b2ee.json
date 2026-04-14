@@ -1,0 +1,49 @@
+{
+  "id": "plx-7548fc53-1170-481d-bf47-3c3281e0b2ee",
+  "title": "Fix develop CI failures from 2026-04-13 runs",
+  "description": "Recover Plexus CI/CD Pipeline failures on run 24370882488 (dashboard npm ci lock mismatch + 4 Python test failures).",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2643b95f-aaf1-4b52-851c-3b95cef7f4c2",
+      "author": "ryan",
+      "text": "Initial triage complete. Failing run: 24370882488. Root causes: (1) dashboard npm ci fails because dashboard/package.json and package-lock.json are out of sync (lockfile mismatch with @aws-sdk/@smithy graph), (2) Python tests fail in both 3.11 and 3.12 with 4 deterministic failures: three in plexus/cli/procedure/service_test.py due stale score-resolution mocks and one in task_progress_tracker_comprehensive_test.py due outdated stage message expectations.",
+      "created_at": "2026-04-13T23:16:48.642707Z"
+    },
+    {
+      "id": "bb2251c4-bb9e-4a10-9242-4ea56e0f4d8d",
+      "author": "ryan",
+      "text": "Progress: Implemented CI remediation for run 24370882488. Updated dashboard/package-lock.json to match package.json and verified cd dashboard && npm ci --include=optional passes. Updated stale test mocks in plexus/cli/procedure/service_test.py to patch direct identifier resolution path used by create_procedure. Updated stage-message expectations in plexus/cli/shared/task_progress_tracker_comprehensive_test.py to current strings (Generating predictions..., Analyzing results...). Local validation: targeted 4 failing tests all passed; workflow-equivalent command uvx --from poetry poetry run invoke ci passed (3059 passed, 41 skipped, 3 xfailed). Next: commit + push develop and confirm CI/CD Pipeline green.",
+      "created_at": "2026-04-13T23:24:00.633392Z"
+    },
+    {
+      "id": "efdc9fcd-edce-4f9e-9324-1720b79aa80f",
+      "author": "ryan",
+      "text": "Update after push run 24372084938: CI uncovered an additional failure in Dashboard Unit Tests (job 71177754476): components/__tests__/TaskDisplay.test.tsx had a brittle global .animate-pulse count assertion. Fixed test to target score-results skeleton rows specifically (.animate-pulse.rounded-lg.bg-card-light). Local revalidation: cd dashboard && npm run ci:unit passed (51 suites, 418 tests). Next: commit this test fix and re-push develop.",
+      "created_at": "2026-04-13T23:37:03.036701Z"
+    },
+    {
+      "id": "1f15c5d8-473e-4bf9-b81d-cdd8f54c941f",
+      "author": "ryan",
+      "text": "Progress update: follow-up commit 6272022d7 is on develop for dashboard unit-test selector stabilization.\n\nCurrent GitHub status:\n- CI/CD Pipeline run 24372503898 is still in progress on develop.\n\nLocal validation already completed earlier:\n- dashboard npm ci --include=optional \u2705\n- targeted failing Python tests \u2705\n- invoke ci \u2705\n- dashboard ci:unit \u2705\n\nWill close after the run turns green.",
+      "created_at": "2026-04-13T23:47:00.371606Z"
+    },
+    {
+      "id": "a5d70172-15f0-4799-89c8-19e8b34a3448",
+      "author": "ryan",
+      "text": "Final verification: CI/CD Pipeline run 24372503898 (head 6272022d7) is SUCCESS on develop. Closing issue.",
+      "created_at": "2026-04-13T23:47:24.871046Z"
+    }
+  ],
+  "created_at": "2026-04-13T23:16:41.200137Z",
+  "updated_at": "2026-04-13T23:47:25.379411Z",
+  "closed_at": "2026-04-13T23:47:25.379411Z",
+  "custom": {}
+}

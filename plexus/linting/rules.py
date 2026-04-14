@@ -330,3 +330,132 @@ class ConfidenceConfigurationRule(ValidationRule):
                     ))
 
         return messages
+
+
+class ProcessorValidationRule(ValidationRule):
+    """Rule that validates item.processors entries reference known classes with required parameters."""
+
+    # Map of processor class name → list of required-parameter groups.
+    # Each group is a set of param names; at least one member must be present.
+    # Empty list = no required params.
+    _KNOWN_PROCESSORS = {
+        "RelevantWindowsTranscriptFilter": [{"keywords", "classifier"}],
+        "FilterCustomerOnlyProcessor": [],
+        "RemoveSpeakerIdentifiersTranscriptFilter": [],
+        "AddUnknownSpeakerIdentifiersTranscriptFilter": [],
+        "AddEnumeratedSpeakerIdentifiersTranscriptFilter": [],
+        "RemoveStopWordsTranscriptFilter": [],
+        "ExpandContractionsProcessor": [],
+        "DeepgramFormatProcessor": [],
+        "DeepgramTimeSliceProcessor": [],
+    }
+
+    # Hand-written fix examples for required-param errors (keyed by class name).
+    # These are shown verbatim in the suggestion so the agent can copy-paste.
+    _FIX_EXAMPLES = {
+        "RelevantWindowsTranscriptFilter": (
+            "  - class: RelevantWindowsTranscriptFilter\n"
+            "    parameters:\n"
+            '      keywords: ["keyword1", "keyword2"]   # REQUIRED\n'
+            "      fuzzy_match: true                     # optional\n"
+            "      fuzzy_threshold: 80                   # optional, 0-100\n"
+            "      prev_count: 1                         # optional, sentences before match\n"
+            "      next_count: 1                         # optional, sentences after match"
+        ),
+    }
+
+    def __init__(self):
+        super().__init__(
+            rule_id="PROCESSOR_VALIDATION",
+            description="item.processors entries must reference known classes with valid parameters",
+            severity='error'
+        )
+
+    def validate(self, data: Dict[str, Any]) -> List['LintMessage']:
+        from .yaml_linter import LintMessage
+
+        messages = []
+
+        item = data.get("item", {})
+        if not isinstance(item, dict):
+            return messages
+
+        processors = item.get("processors")
+        if not processors:
+            return messages
+
+        if not isinstance(processors, list):
+            messages.append(LintMessage(
+                level='error',
+                code='PROCESSOR_NOT_A_LIST',
+                title='processors must be a list',
+                message="item.processors must be a YAML list (sequence of mappings).",
+                suggestion="Use:\n  item:\n    processors:\n      - class: FilterCustomerOnlyProcessor",
+            ))
+            return messages
+
+        known = self._KNOWN_PROCESSORS
+
+        for i, entry in enumerate(processors):
+            if not isinstance(entry, dict):
+                continue
+
+            class_name = entry.get("class")
+            if not class_name:
+                messages.append(LintMessage(
+                    level='error',
+                    code='PROCESSOR_MISSING_CLASS',
+                    title='Processor entry missing class',
+                    message=f"item.processors[{i}] has no 'class' field.",
+                    suggestion="Each processor entry must have a 'class' key naming the processor class.",
+                ))
+                continue
+
+            if class_name not in known:
+                messages.append(LintMessage(
+                    level='error',
+                    code='PROCESSOR_UNKNOWN_CLASS',
+                    title='Unknown processor class',
+                    message=f"'{class_name}' is not a recognised processor class.",
+                    suggestion=(
+                        "Available item processors:\n"
+                        + "\n".join(f"  - {k}" for k in sorted(known))
+                        + "\nCheck for typos or use a processor from the list above."
+                    ),
+                ))
+                continue
+
+            # Check required parameter groups
+            params = entry.get("parameters") or {}
+            if not isinstance(params, dict):
+                params = {}
+
+            required_groups = known[class_name]
+            for group in required_groups:
+                if not any(p in params for p in group):
+                    sorted_group = sorted(group)
+
+                    # Use a hand-written fix example if available; otherwise generate one
+                    fix_example = self._FIX_EXAMPLES.get(class_name)
+                    if fix_example:
+                        suggestion = f"Add the required parameter. Working example:\n{fix_example}"
+                    else:
+                        suggestion = (
+                            f"Add a 'parameters' block with one of {sorted_group}. Example:\n"
+                            f"  - class: {class_name}\n"
+                            f"    parameters:\n"
+                            f"      {sorted_group[0]}: <value>"
+                        )
+
+                    messages.append(LintMessage(
+                        level='error',
+                        code='PROCESSOR_MISSING_REQUIRED_PARAM',
+                        title=f"Missing required parameter for {class_name}",
+                        message=(
+                            f"item.processors[{i}] ({class_name}) requires at least one of: "
+                            f"{', '.join(sorted_group)}."
+                        ),
+                        suggestion=suggestion,
+                    ))
+
+        return messages

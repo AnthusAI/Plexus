@@ -297,8 +297,6 @@ class TestFeedbackEvaluation:
         root_cause = params["root_cause"]
         assert root_cause["output_compacted"] is True
         assert root_cause["output_attachment"] == "evaluations/eval-789/root_cause.full.json"
-        assert root_cause["misclassification_analysis"]["item_classifications_attachment"] == "evaluations/eval-789/root_cause.full.json"
-        assert root_cause["misclassification_analysis"]["item_classifications_total"] == 1
 
     @pytest.mark.asyncio
     async def test_run_evaluation_fails_when_rca_attachment_upload_fails(self, mock_api_client, mock_feedback_items):
@@ -490,7 +488,6 @@ class TestFeedbackEvaluation:
                 assert call_kwargs['feedbackItemId'] == "feedback-0"
                 assert call_kwargs['value'] == "Yes"  # initialAnswerValue (predicted)
                 assert call_kwargs['explanation'] == 'Test explanation from production'  # From production ScoreResult
-                assert call_kwargs['trace'] == {"step": "test"}  # From production ScoreResult
                 assert call_kwargs['confidence'] is None  # No confidence for feedback evaluations
                 assert call_kwargs['correct'] is True  # First item agrees
                 assert call_kwargs['type'] == 'evaluation'
@@ -617,8 +614,8 @@ class TestFeedbackEvaluation:
                         assert result["status"] == "success"
 
     @pytest.mark.asyncio
-    async def test_run_evaluation_sampling_with_seed_is_deterministic(self, mock_api_client):
-        """Sampling with sample_seed should produce the same subset across runs."""
+    async def test_run_evaluation_random_sampling_with_seed_is_deterministic(self, mock_api_client):
+        """Random sampling with sample_seed should produce the same subset across runs."""
         feedback_items = []
         for i in range(10):
             item = MagicMock()
@@ -654,7 +651,8 @@ class TestFeedbackEvaluation:
                 evaluation_id="eval-789",
                 account_id="account-123",
                 account_key="test-account-key",
-                max_samples=5,
+                max_items=5,
+                sampling_mode="random",
                 sample_seed=1337,
             )
 

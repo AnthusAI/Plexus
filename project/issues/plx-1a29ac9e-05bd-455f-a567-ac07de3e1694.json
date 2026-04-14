@@ -1,0 +1,55 @@
+{
+  "id": "plx-1a29ac9e-05bd-455f-a567-ac07de3e1694",
+  "title": "Use shared IdentifierDisplay in report confusion-matrix drilldown",
+  "description": "## Intent\nAlign report confusion-matrix detail rows with evaluation UI by rendering the reusable identifiers component instead of a single report external id value.\n\n## Definition of done\n- Reports drilldown uses shared identifier display component\n- Shows full identifier set consistently with evaluations\n- Existing behavior in evaluations remains unchanged",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "73603125-511b-4fda-9362-4ebe0a7703de",
+      "author": "derek",
+      "text": "Started implementation. Investigating report confusion-matrix detail rendering path and replacing report-specific external-id rendering with shared IdentifierDisplay used by evaluations.",
+      "created_at": "2026-04-08T20:07:28.980960806Z"
+    },
+    {
+      "id": "2b10899a-f54c-4a88-9c93-bbb4c1890176",
+      "author": "derek",
+      "text": "Implemented fix in shared IdentifierDisplay parser so confusion-matrix drilldown can render full identifier sets from report detail payloads (legacy id, modern value, and object-map JSON formats) instead of falling back to a single external id. Added unit tests for modern-array and map-style JSON identifier inputs. Validation: npm --prefix dashboard test -- identifier-display.test.tsx (pass).",
+      "created_at": "2026-04-08T20:09:22.818926040Z"
+    },
+    {
+      "id": "b2db6b56-78e3-41e3-8168-9a61ea2c2dee",
+      "author": "derek",
+      "text": "Follow-up from QA: still only one identifier shown in report confusion-matrix detail rows. Also surfaced Next.js /lab/reports/[id] params Promise runtime warning. Investigating lab route component and detail-row identifier normalization path.",
+      "created_at": "2026-04-08T20:12:38.550328668Z"
+    },
+    {
+      "id": "9ee53afe-fe1d-428f-865c-9c81e2013865",
+      "author": "derek",
+      "text": "Root cause confirmed on report f1a30d58...: detail JSON rows contain item.identifiers=null and only item.externalId (e.g., 308122970), so snapshot alone cannot render multiple identifiers. Implemented targeted UI enrichment in feedback-item-view: when row lacks itemIdentifiers relationship, fetch getItem(itemId) and use itemIdentifiers.items (sorted by position) for IdentifierDisplay; fall back to fetched identifiers/externalId from Item. Also fixed Next.js /lab/reports/[id] params Promise warning by awaiting params in route page.",
+      "created_at": "2026-04-08T20:17:09.138838884Z"
+    },
+    {
+      "id": "ec85a715-3809-4f56-ad32-bec657b7aea9",
+      "author": "derek",
+      "text": "Per direction, removed client-side live getItem lookup from feedback-item-view (no runtime enrichment fallback). UI now only renders identifiers present in report detail payload ( preferred, then snapshot identifiers fields). This makes behavior strict: new reports generated with backend fix show full identifiers; old reports without identifier data may only show externalId.",
+      "created_at": "2026-04-08T20:19:18.371688431Z"
+    },
+    {
+      "id": "b4b095b1-5015-4d09-9f4c-f7939de44079",
+      "author": "derek",
+      "text": "Per direction, removed client-side live getItem lookup from feedback-item-view (no runtime enrichment fallback). UI now only renders identifiers present in report detail payload (prefers itemIdentifiers.items when present, then snapshot identifier fields). Behavior is now strict: new reports generated with backend fix show full identifiers; old reports without identifier data may only show externalId.",
+      "created_at": "2026-04-08T20:19:24.573307913Z"
+    }
+  ],
+  "created_at": "2026-04-08T20:07:26.019412631Z",
+  "updated_at": "2026-04-08T20:19:24.573307913Z",
+  "closed_at": null,
+  "custom": {}
+}

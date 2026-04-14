@@ -132,11 +132,25 @@ def resolve_final_output_classes_from_yaml_text(score_yaml_configuration: str) -
     seen = set()
 
     def add_class(raw_value: Any):
+        # YAML parses Yes/No/True/False as booleans; convert back to strings
+        if isinstance(raw_value, bool):
+            raw_value = "Yes" if raw_value else "No"
         value = _normalize_label(raw_value)
         if not value or value in seen:
             return
         seen.add(value)
         valid_classes.append(value)
+
+    # Check top-level valid_classes (used by TactusScore YAML format)
+    top_level_classes = parsed.get("valid_classes")
+    if isinstance(top_level_classes, list):
+        for class_name in top_level_classes:
+            add_class(class_name)
+    if valid_classes:
+        return {
+            "classes": valid_classes,
+            "source": "valid_classes",
+        }
 
     validation_classes = (
         ((parsed.get("parameters") or {}).get("validation") or {}).get("value") or {}
@@ -565,13 +579,7 @@ def extract_misclassification_evidence_flags(
         raise ValueError(f"Invalid boolean for {key}: {value}")
 
     raw_source = _normalize_label(kv["BEST_EVIDENCE_SOURCE"]).lower()
-    source_aliases = {
-        "score_context": "score_yaml",
-        "score_guidelines": "guidelines",
-        "guideline": "guidelines",
-        "input": "primary_input",
-    }
-    source = source_aliases.get(raw_source, raw_source)
+    source = normalize_best_evidence_source(raw_source)
     allowed_sources = {
         "edit_comment",
         "score_explanation",
@@ -608,6 +616,38 @@ def extract_misclassification_evidence_flags(
         "best_evidence_source": source,
         "best_evidence_quote": _excerpt(kv["BEST_EVIDENCE_QUOTE"], 260),
     }
+
+
+def normalize_best_evidence_source(raw_source: str) -> str:
+    normalized = _normalize_label(raw_source).lower()
+    source_aliases = {
+        "score_context": "score_yaml",
+        "score_yaml_configuration": "score_yaml",
+        "score_guidelines": "guidelines",
+        "guideline": "guidelines",
+        "guidelines_excerpt": "guidelines",
+        "input": "primary_input",
+        "primary_input_excerpt": "primary_input",
+        "transcript": "primary_input",
+        "prediction": "score_explanation",
+        "model_output": "score_explanation",
+        "model_prediction": "score_explanation",
+        "score_output": "score_explanation",
+        "feedback_context": "edit_comment",
+        "feedback_comment": "edit_comment",
+        "feedback_comments": "edit_comment",
+        "reviewer_comment": "edit_comment",
+        "edit_comment_excerpt": "edit_comment",
+        "final_comment_excerpt": "edit_comment",
+        "initial_comment_excerpt": "edit_comment",
+        "metadata_snapshot": "metadata",
+        "metadata_snapshot_excerpt": "metadata",
+    }
+    if normalized.startswith("feedback_comment"):
+        return "edit_comment"
+    if normalized.startswith("reviewer_comment"):
+        return "edit_comment"
+    return source_aliases.get(normalized, normalized)
 
 
 def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str, Any]) -> dict:
@@ -774,7 +814,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
                         "Primary input artifact unavailable while score required context.",
                     )
             elif (
-                (valid_class_set and predicted_value not in valid_class_set)
+                (valid_class_set and predicted_value.lower() not in {v.lower() for v in valid_class_set})
                 or normalized_flags["invalid_output_class_signal"]
             ):
                 mechanical_subtype = "invalid_output_class"
