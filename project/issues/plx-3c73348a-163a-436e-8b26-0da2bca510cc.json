@@ -40,10 +40,28 @@
       "author": "derek.norrbom",
       "text": "Implementation complete in working tree: updated pyproject to tactus ^0.46.0 and lupa 2.7 (required by tactus), regenerated poetry.lock with Poetry 2.3.2 on Python 3.11, and verified with poetry check (warnings only about deprecated poetry metadata fields). Leaving task in_progress until changes are landed.",
       "created_at": "2026-04-14T21:45:54.607102Z"
+    },
+    {
+      "id": "265129eb-a419-4afb-b2af-546d2a06f556",
+      "author": "derek.norrbom",
+      "text": "User requested release-path promotion. Opened PR from develop to main for merged Tactus update work; will share URL once created.",
+      "created_at": "2026-04-14T21:52:38.918694Z"
+    },
+    {
+      "id": "ad143417-3042-4c9b-b980-1032f176d8e8",
+      "author": "derek.norrbom",
+      "text": "PR opened: https://github.com/AnthusAI/Plexus/pull/167 (develop -> main), title: chore: promote develop to main.",
+      "created_at": "2026-04-14T21:52:45.556032Z"
+    },
+    {
+      "id": "cb2289ce-b262-4327-825d-0be53201063c",
+      "author": "derek.norrbom",
+      "text": "Starting follow-up repair: create fix branch from develop and resolve current failing checks on PR #167 (develop -> main) introduced by recent develop commits.",
+      "created_at": "2026-04-14T22:14:46.988659Z"
     }
   ],
   "created_at": "2026-04-14T21:44:42.101227Z",
-  "updated_at": "2026-04-14T21:45:54.607102Z",
+  "updated_at": "2026-04-14T22:14:46.988659Z",
   "closed_at": null,
   "custom": {}
 }
