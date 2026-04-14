@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "72e95f64-5e51-43dc-94ba-97483bc1f730",
+  "issue_id": "plx-6978a44a-12e8-4430-bf02-14c6bfcb5f22",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-14T17:23:45.221Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\nProduction score-processing Lambda fails during initialization with  from GraphQL account lookup ().\n\n## Evidence\nLambda stack trace shows failure path in  during  called by .\n\n## Expected\nLambda should authenticate correctly against AppSync and resolve account by key in production.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+    "priority": 0,
+    "status": "open",
+    "title": "Fix score-processing Lambda UnauthorizedException on account lookup"
+  }
+}
