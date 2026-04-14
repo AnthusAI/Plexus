@@ -467,6 +467,7 @@ class EmbeddedMCPServer:
             from tools.evaluation.evaluations import register_evaluation_tools
             from tools.prediction.predictions import register_prediction_tools
             from tools.dataset.datasets import register_dataset_tools
+            from tools.report.reports import register_report_tools
             
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
@@ -660,6 +661,7 @@ class EmbeddedMCPServer:
                 "evaluation": lambda: register_evaluation_tools(tool_capture),
                 "prediction": lambda: register_prediction_tools(tool_capture),
                 "dataset": lambda: register_dataset_tools(tool_capture),
+                "report": lambda: register_report_tools(tool_capture),
             }
             
             # If no specific tools requested, register all available tools
