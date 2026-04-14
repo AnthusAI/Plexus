@@ -1,10 +1,9 @@
 "use client"
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { getClient } from '@/utils/data-operations'
 import {
-  AutoScrollToBottom,
   Conversation,
-  ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
@@ -820,7 +819,266 @@ const getRowFromMessage = (message: ChatMessage): ConversationRow => {
   }
 }
 
-function ConversationViewer({ 
+// Props passed into each virtualized row
+interface MessageRowProps {
+  row: ConversationRow
+  enableHitlActions: boolean
+  responseParentIds: Set<string>
+  submittedMessageIds: Set<string>
+  submittingMessageIds: Set<string>
+  hitlTextByMessage: Record<string, string>
+  hitlSubmitErrors: Record<string, string>
+  setHitlTextByMessage: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  submitHitlResponse: (message: ChatMessage, action: string, text?: string) => Promise<void>
+}
+
+const MemoizedMessageRow = React.memo(function MessageRow({
+  row,
+  enableHitlActions,
+  responseParentIds,
+  submittedMessageIds,
+  submittingMessageIds,
+  hitlTextByMessage,
+  hitlSubmitErrors,
+  setHitlTextByMessage,
+  submitHitlResponse,
+}: MessageRowProps) {
+  const message = row.message
+  const toolViewModel = mapMessageToToolViewModel(message)
+  const controlEnvelope = getControlEnvelope(message.metadata)
+  const requestType = (
+    controlEnvelope?.request_type
+    || mapPendingInteractionToRequestType(message.humanInteraction)
+  ).toLowerCase()
+  const messageIsPending = enableHitlActions && isPendingHumanInteraction(message.humanInteraction)
+  const responseExists = responseParentIds.has(message.id)
+  const isSubmitted = responseExists || submittedMessageIds.has(message.id)
+  const isSubmitting = submittingMessageIds.has(message.id)
+  const currentInput = hitlTextByMessage[message.id] || ''
+  const messageTypeLabel = getMessageTypeLabel(message)
+  const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
+  const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
+  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge
+
+  return (
+    <Message
+      from={row.from}
+      data-message-id={row.id}
+      data-from={row.from}
+      className="max-w-full"
+    >
+      <div className="flex items-start">
+        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+          {showMetadataBadges && (
+            <div className="mb-2 flex items-center gap-2">
+              {showMessageTypeBadge && (
+                <Badge
+                  variant="secondary"
+                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                >
+                  {messageTypeLabel}
+                </Badge>
+              )}
+              {showToolNameBadge && (
+                <Badge variant="outline" className="text-xs">
+                  {message.toolName}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {toolViewModel ? (
+            <Tool
+              defaultOpen={
+                EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                toolViewModel.state === 'output-error'
+              }
+            >
+              <ToolHeader
+                toolType={toolViewModel.type}
+                state={toolViewModel.state}
+                toolName={toolViewModel.toolName}
+              />
+              <ToolContent>
+                {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
+                  <ToolInput input={toolViewModel.input} />
+                )}
+                {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
+                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                    <React.Suspense fallback={<div className="p-3 text-sm text-muted-foreground">Loading evaluation...</div>}>
+                      <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                    </React.Suspense>
+                  ) : (
+                    <ToolOutput
+                      errorText={toolViewModel.errorText}
+                      output={
+                        <div className="font-mono whitespace-pre-wrap break-words">
+                          {toolViewModel.output === undefined || toolViewModel.output === null
+                            ? 'No output'
+                            : typeof toolViewModel.output === 'string'
+                              ? toolViewModel.output
+                              : formatJsonWithNewlines(toolViewModel.output)}
+                        </div>
+                      }
+                    />
+                  )
+                )}
+              </ToolContent>
+            </Tool>
+          ) : (
+            <div className="text-sm">
+              <CollapsibleText content={message.content} />
+            </div>
+          )}
+
+          {messageIsPending && (
+            <div className="mt-3 space-y-3 rounded-md border border-border p-3">
+              {!controlEnvelope && (
+                <div className="text-xs text-red-600">
+                  Pending request is missing canonical `metadata.control`.
+                </div>
+              )}
+              {hitlSubmitErrors[message.id] && (
+                <div className="text-xs text-red-600">
+                  {hitlSubmitErrors[message.id]}
+                </div>
+              )}
+
+              {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
+                <Textarea
+                  value={currentInput}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setHitlTextByMessage((prev) => ({
+                      ...prev,
+                      [message.id]: value,
+                    }))
+                  }}
+                  rows={requestType === 'review' ? 6 : 4}
+                  placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
+                  disabled={isSubmitting}
+                />
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                {isSubmitted && (
+                  <Badge
+                    variant="outline"
+                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                  >
+                    Response submitted
+                  </Badge>
+                )}
+
+                {!isSubmitted && requestType === 'approval' && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'approve')
+                        } catch (error) {
+                          console.error('Failed submitting approval response', error)
+                        }
+                      }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'reject')
+                        } catch (error) {
+                          console.error('Failed submitting rejection response', error)
+                        }
+                      }}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                )}
+
+                {!isSubmitted && requestType === 'input' && (
+                  <Button
+                    size="sm"
+                    disabled={isSubmitting || !controlEnvelope}
+                    onClick={async () => {
+                      try {
+                        await submitHitlResponse(message, 'submit', currentInput)
+                      } catch (error) {
+                        console.error('Failed submitting input response', error)
+                      }
+                    }}
+                  >
+                    Submit
+                  </Button>
+                )}
+
+                {!isSubmitted && requestType === 'review' && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'approve', currentInput)
+                        } catch (error) {
+                          console.error('Failed submitting review approval', error)
+                        }
+                      }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'request_changes', currentInput)
+                        } catch (error) {
+                          console.error('Failed submitting review feedback', error)
+                        }
+                      }}
+                    >
+                      Request Changes
+                    </Button>
+                  </>
+                )}
+
+                {!isSubmitted && requestType === 'escalation' && (
+                  <Button
+                    size="sm"
+                    disabled={isSubmitting || !controlEnvelope}
+                    onClick={async () => {
+                      try {
+                        await submitHitlResponse(message, 'acknowledge', currentInput)
+                      } catch (error) {
+                        console.error('Failed submitting escalation acknowledgment', error)
+                      }
+                    }}
+                  >
+                    Acknowledge
+                  </Button>
+                )}
+
+                {isSubmitting && (
+                  <Badge variant="outline">Submitting...</Badge>
+                )}
+              </div>
+            </div>
+          )}
+        </MessageContent>
+      </div>
+    </Message>
+  )
+})
+
+function ConversationViewer({
   sessions: propSessions, 
   messages: propMessages, 
   selectedSessionId: propSelectedSessionId,
@@ -858,6 +1116,8 @@ function ConversationViewer({
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const promptSubmitLockRef = React.useRef(false)
+  const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const [atBottom, setAtBottom] = useState(true)
   const reportedTerminalTaskIdsRef = React.useRef<Set<string>>(new Set())
   const authFailureReportedRef = React.useRef(false)
 
@@ -2309,297 +2569,89 @@ function ConversationViewer({
         {/* Messages List */}
         <div className="min-h-0 flex-1">
           <Conversation className="h-full">
-            <AutoScrollToBottom trigger={conversationRows.length} />
-            <ConversationContent className="gap-4 px-3 py-3">
-              {isAuthUnavailable ? (
+            {isAuthUnavailable ? (
+              <ConversationEmptyState
+                title="Console unavailable"
+                description="GraphQL access is unauthorized in this environment. Check API URL/key and restart dev."
+                icon={<AlertCircle className="h-12 w-12 opacity-50" />}
+              />
+            ) : !selectedSessionId ? (
+              <ConversationEmptyState
+                title="No session selected"
+                description="Select a chat session to view messages"
+                icon={<MessageSquare className="h-12 w-12 opacity-50" />}
+              />
+            ) : selectedSessionMissing ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3">
                 <ConversationEmptyState
-                  title="Console unavailable"
-                  description="GraphQL access is unauthorized in this environment. Check API URL/key and restart dev."
+                  title="Session not found"
+                  description="The session in this URL is unavailable for the current account. Select another session or create a new one."
                   icon={<AlertCircle className="h-12 w-12 opacity-50" />}
                 />
-              ) : !selectedSessionId ? (
-                <ConversationEmptyState
-                  title="No session selected"
-                  description="Select a chat session to view messages"
-                  icon={<MessageSquare className="h-12 w-12 opacity-50" />}
-                />
-              ) : selectedSessionMissing ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3">
-                  <ConversationEmptyState
-                    title="Session not found"
-                    description="The session in this URL is unavailable for the current account. Select another session or create a new one."
-                    icon={<AlertCircle className="h-12 w-12 opacity-50" />}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleCreateSession}
-                    disabled={isAuthUnavailable || !canCreateSession || isCreatingSession}
-                  >
-                    Create New Session
-                  </Button>
-                </div>
-              ) : conversationRows.length === 0 ? (
-                <ConversationEmptyState
-                  title="No messages in this session"
-                  description="Run the console REPL or send a message to start this session."
-                  icon={<MessageSquare className="h-12 w-12 opacity-50" />}
-                />
-              ) : (
-                conversationRows.map((row) => {
-                  const message = row.message
-                  const toolViewModel = mapMessageToToolViewModel(message)
-                  const controlEnvelope = getControlEnvelope(message.metadata)
-                  const requestType = (
-                    controlEnvelope?.request_type
-                    || mapPendingInteractionToRequestType(message.humanInteraction)
-                  ).toLowerCase()
-                  const messageIsPending = enableHitlActions && isPendingHumanInteraction(message.humanInteraction)
-                  const responseExists = responseParentIds.has(message.id)
-                  const isSubmitted = responseExists || submittedMessageIds.has(message.id)
-                  const isSubmitting = submittingMessageIds.has(message.id)
-                  const currentInput = hitlTextByMessage[message.id] || ''
-                  const messageTypeLabel = getMessageTypeLabel(message)
-                  const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
-                  const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
-                  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge
-
-                  return (
-                    <Message
-                      key={row.id}
-                      from={row.from}
-                      data-message-id={row.id}
-                      data-from={row.from}
-                      className="max-w-full"
-                    >
-                      <div className="flex items-start">
-                        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                          {showMetadataBadges && (
-                            <div className="mb-2 flex items-center gap-2">
-                              {showMessageTypeBadge && (
-                                <Badge
-                                  variant="secondary"
-                                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
-                                >
-                                  {messageTypeLabel}
-                                </Badge>
-                              )}
-
-                              {showToolNameBadge && (
-                                <Badge variant="outline" className="text-xs">
-                                  {message.toolName}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-
-                          {toolViewModel ? (
-                            <Tool
-                              defaultOpen={
-                                EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
-                                toolViewModel.state === 'output-error'
-                              }
-                            >
-                              <ToolHeader
-                                toolType={toolViewModel.type}
-                                state={toolViewModel.state}
-                                toolName={toolViewModel.toolName}
-                              />
-                              <ToolContent>
-                                {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
-                                  <ToolInput input={toolViewModel.input} />
-                                )}
-                                {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
-                                    <React.Suspense fallback={<div className="p-3 text-sm text-muted-foreground">Loading evaluation...</div>}>
-                                      <EvaluationToolOutput toolOutput={toolViewModel.output} />
-                                    </React.Suspense>
-                                  ) : (
-                                    <ToolOutput
-                                      errorText={toolViewModel.errorText}
-                                      output={
-                                        <div className="font-mono whitespace-pre-wrap break-words">
-                                          {toolViewModel.output === undefined || toolViewModel.output === null
-                                            ? 'No output'
-                                            : typeof toolViewModel.output === 'string'
-                                              ? toolViewModel.output
-                                              : formatJsonWithNewlines(toolViewModel.output)}
-                                        </div>
-                                      }
-                                    />
-                                  )
-                                )}
-                              </ToolContent>
-                            </Tool>
-                          ) : (
-                            <div className="text-sm">
-                              <CollapsibleText content={message.content} />
-                            </div>
-                          )}
-
-                          {messageIsPending && (
-                            <div className="mt-3 space-y-3 rounded-md border border-border p-3">
-                              {!controlEnvelope && (
-                                <div className="text-xs text-red-600">
-                                  Pending request is missing canonical `metadata.control`.
-                                </div>
-                              )}
-                              {hitlSubmitErrors[message.id] && (
-                                <div className="text-xs text-red-600">
-                                  {hitlSubmitErrors[message.id]}
-                                </div>
-                              )}
-
-                              {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
-                                <Textarea
-                                  value={currentInput}
-                                  onChange={(event) => {
-                                    const value = event.target.value
-                                    setHitlTextByMessage((prev) => ({
-                                      ...prev,
-                                      [message.id]: value,
-                                    }))
-                                  }}
-                                  rows={requestType === 'review' ? 6 : 4}
-                                  placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
-                                  disabled={isSubmitting}
-                                />
-                              )}
-
-                              <div className="flex flex-wrap items-center gap-2">
-                                {isSubmitted && (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
-                                  >
-                                    Response submitted
-                                  </Badge>
-                                )}
-
-                                {!isSubmitted && requestType === 'approval' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'approve')
-                                        } catch (error) {
-                                          console.error('Failed submitting approval response', error)
-                                        }
-                                      }}
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'reject')
-                                        } catch (error) {
-                                          console.error('Failed submitting rejection response', error)
-                                        }
-                                      }}
-                                    >
-                                      Reject
-                                    </Button>
-                                  </>
-                                )}
-
-                                {!isSubmitted && requestType === 'input' && (
-                                  <Button
-                                    size="sm"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'submit', currentInput)
-                                      } catch (error) {
-                                        console.error('Failed submitting input response', error)
-                                      }
-                                    }}
-                                  >
-                                    Submit
-                                  </Button>
-                                )}
-
-                                {!isSubmitted && requestType === 'review' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'approve', currentInput)
-                                        } catch (error) {
-                                          console.error('Failed submitting review approval', error)
-                                        }
-                                      }}
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'request_changes', currentInput)
-                                        } catch (error) {
-                                          console.error('Failed submitting review feedback', error)
-                                        }
-                                      }}
-                                    >
-                                      Request Changes
-                                    </Button>
-                                  </>
-                                )}
-
-                                {!isSubmitted && requestType === 'escalation' && (
-                                  <Button
-                                    size="sm"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'acknowledge', currentInput)
-                                      } catch (error) {
-                                        console.error('Failed submitting escalation acknowledgment', error)
-                                      }
-                                    }}
-                                  >
-                                    Acknowledge
-                                  </Button>
-                                )}
-
-                                {isSubmitting && (
-                                  <Badge variant="outline">Submitting...</Badge>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </MessageContent>
-                      </div>
-                    </Message>
-                  )
-                })
-              )}
-              {showThinkingPlaceholder && (
-                <Message
-                  key={`thinking-${selectedSessionId}`}
-                  from="assistant"
-                  data-message-id={`thinking-${selectedSessionId}`}
-                  data-from="assistant"
-                  className="max-w-full"
+                <Button
+                  size="sm"
+                  onClick={handleCreateSession}
+                  disabled={!canCreateSession || isCreatingSession}
                 >
-                  <div className="flex items-start">
-                    <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                      <Shimmer className="text-sm">Thinking</Shimmer>
-                    </MessageContent>
+                  Create New Session
+                </Button>
+              </div>
+            ) : conversationRows.length === 0 && !showThinkingPlaceholder ? (
+              <ConversationEmptyState
+                title="No messages in this session"
+                description="Run the console REPL or send a message to start this session."
+                icon={<MessageSquare className="h-12 w-12 opacity-50" />}
+              />
+            ) : (
+              <Virtuoso
+                ref={virtuosoRef}
+                className="h-full"
+                data={conversationRows}
+                followOutput="smooth"
+                initialTopMostItemIndex={Math.max(0, conversationRows.length - 1)}
+                atBottomStateChange={setAtBottom}
+                atBottomThreshold={50}
+                overscan={600}
+                increaseViewportBy={{ top: 400, bottom: 400 }}
+                itemContent={(_index, row) => (
+                  <div className="px-3 py-2">
+                    <MemoizedMessageRow
+                      row={row}
+                      enableHitlActions={enableHitlActions}
+                      responseParentIds={responseParentIds}
+                      submittedMessageIds={submittedMessageIds}
+                      submittingMessageIds={submittingMessageIds}
+                      hitlTextByMessage={hitlTextByMessage}
+                      hitlSubmitErrors={hitlSubmitErrors}
+                      setHitlTextByMessage={setHitlTextByMessage}
+                      submitHitlResponse={submitHitlResponse}
+                    />
                   </div>
-                </Message>
-              )}
-            </ConversationContent>
-            <ConversationScrollButton />
+                )}
+                components={{
+                  Footer: showThinkingPlaceholder ? () => (
+                    <div className="px-3 py-2">
+                      <Message
+                        from="assistant"
+                        data-message-id={`thinking-${selectedSessionId}`}
+                        data-from="assistant"
+                        className="max-w-full"
+                      >
+                        <div className="flex items-start">
+                          <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                            <Shimmer className="text-sm">Thinking</Shimmer>
+                          </MessageContent>
+                        </div>
+                      </Message>
+                    </div>
+                  ) : undefined,
+                }}
+              />
+            )}
+            <ConversationScrollButton
+              isAtBottom={atBottom}
+              virtuosoRef={virtuosoRef}
+            />
           </Conversation>
         </div>
         <div className="border-t border-border bg-background px-3 py-3">
