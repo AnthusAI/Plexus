@@ -46,10 +46,16 @@
       "author": "derek",
       "text": "Created fix branch fix/dashboard-account-auth-resolution from develop and committed the dashboard auth resolution plus Kanbus artifacts in commit 2fbbc4b9. Remaining untracked files intentionally excluded: scoring_jobs_20260409_203632.csv, scripts/list_scorecards_with_score_external_id.py.",
       "created_at": "2026-04-14T16:29:26.493467422Z"
+    },
+    {
+      "id": "08e1fd1a-2b3d-4bea-9bc8-6c5d7f1aa1cf",
+      "author": "derek",
+      "text": "Opened PR https://github.com/AnthusAI/Plexus/pull/161 from branch fix/dashboard-account-auth-resolution to develop. Includes dashboard auth fix commits and Kanbus artifacts.",
+      "created_at": "2026-04-14T16:30:41.140801676Z"
     }
   ],
   "created_at": "2026-04-14T16:13:57.942842448Z",
-  "updated_at": "2026-04-14T16:29:26.493467422Z",
+  "updated_at": "2026-04-14T16:30:41.140801676Z",
   "closed_at": null,
   "custom": {}
 }
