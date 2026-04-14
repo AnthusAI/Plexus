@@ -16,7 +16,7 @@ export interface ReportConfigurationSelectorProps {
 }
 
 async function listReportConfigurations(accountId: string): ModelListResult<Schema['ReportConfiguration']['type']> {
-  return listFromModel<Schema['ReportConfiguration']['type']}(
+  return listFromModel<Schema['ReportConfiguration']['type']>(
     getAmplifyClient().models.ReportConfiguration,
     { accountId: { eq: accountId } }
   )
