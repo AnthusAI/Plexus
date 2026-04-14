@@ -46,10 +46,16 @@
       "author": "derek.norrbom",
       "text": "Investigated run 24425715051/job 71359116117: failing test is dashboard/components/__tests__/guidelines-functionality.test.tsx (loading-state assertion). Applying deterministic test-only fix.",
       "created_at": "2026-04-14T22:29:30.268040Z"
+    },
+    {
+      "id": "a0085c77-a5d7-4d48-9e4e-966569ba665d",
+      "author": "derek.norrbom",
+      "text": "Fixed CI failure from PR #167 Dashboard Unit Tests: in guidelines-functionality test helper, await onSave during handleSave so loading-state assertion is deterministic. Local run: npm test -- --runInBand components/__tests__/guidelines-functionality.test.tsx (pass).",
+      "created_at": "2026-04-14T22:29:46.733922Z"
     }
   ],
   "created_at": "2026-04-14T22:14:47.099327Z",
-  "updated_at": "2026-04-14T22:29:30.268040Z",
+  "updated_at": "2026-04-14T22:29:46.733922Z",
   "closed_at": null,
   "custom": {}
 }
