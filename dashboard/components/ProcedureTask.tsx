@@ -1011,9 +1011,9 @@ export default function ProcedureTask({
                   <Expand className="h-4 w-4" />
                 </Button>
               </div>
-              <div>
-                <ProcedureConversationViewer 
-                  procedureId={procedure.id} 
+              <div className="h-[600px]">
+                <ProcedureConversationViewer
+                  procedureId={procedure.id}
                   onSessionCountChange={setSessionCount}
                   onFullscreenChange={handleConversationFullscreenChange}
                 />
