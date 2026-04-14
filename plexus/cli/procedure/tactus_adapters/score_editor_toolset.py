@@ -548,7 +548,6 @@ class ScoreEditorToolset:
         import time as _time
 
         max_retries = 3
-        last_error = None
         for attempt in range(1, max_retries + 1):
             try:
                 # Run the async pull in a thread to avoid nested event loop issues
@@ -565,8 +564,14 @@ class ScoreEditorToolset:
                             try:
                                 pull_data = json.loads(item["text"])
                                 break
-                            except (ValueError, TypeError, KeyError):
-                                pass
+                            except (ValueError, TypeError, KeyError) as exc:
+                                # Non-fatal: keep scanning for the structured JSON payload.
+                                logger.debug(
+                                    "ScoreEditorToolset._load_content_from_api skipped non-JSON content item for %s/%s: %s",
+                                    self._scorecard,
+                                    self._score,
+                                    exc,
+                                )
                     # Also try direct dict fields (non-wrapped response)
                     if pull_data is None:
                         pull_data = result
@@ -598,7 +603,6 @@ class ScoreEditorToolset:
                 return None
 
             except Exception as exc:
-                last_error = exc
                 if attempt < max_retries:
                     logger.warning(
                         "ScoreEditorToolset._load_content_from_api attempt %d/%d failed: %s, retrying...",
