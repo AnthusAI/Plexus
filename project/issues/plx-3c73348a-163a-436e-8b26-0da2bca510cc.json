@@ -58,10 +58,16 @@
       "author": "derek.norrbom",
       "text": "Starting follow-up repair: create fix branch from develop and resolve current failing checks on PR #167 (develop -> main) introduced by recent develop commits.",
       "created_at": "2026-04-14T22:14:46.988659Z"
+    },
+    {
+      "id": "fe0a80cb-5357-4f89-806d-47d5b5d8c926",
+      "author": "derek.norrbom",
+      "text": "Opened develop repair PR for CI regressions affecting reviewability of PR #167: https://github.com/AnthusAI/Plexus/pull/168.",
+      "created_at": "2026-04-14T22:17:32.720546Z"
     }
   ],
   "created_at": "2026-04-14T21:44:42.101227Z",
-  "updated_at": "2026-04-14T22:14:46.988659Z",
+  "updated_at": "2026-04-14T22:17:32.720546Z",
   "closed_at": null,
   "custom": {}
 }
