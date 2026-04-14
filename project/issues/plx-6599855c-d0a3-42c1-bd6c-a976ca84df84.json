@@ -1,0 +1,37 @@
+{
+  "id": "plx-6599855c-d0a3-42c1-bd6c-a976ca84df84",
+  "title": "Fix develop CI regressions blocking PR #167 review",
+  "description": "",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3c73348a-163a-436e-8b26-0da2bca510cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a6c45874-81e3-47d1-81db-cd6d15b09da8",
+      "author": "derek.norrbom",
+      "text": "Created fix branch from develop to resolve failing feedback_contradictions tests blocking PR #167 review.",
+      "created_at": "2026-04-14T22:14:51.984842Z"
+    },
+    {
+      "id": "c9509828-d714-49fc-9db7-40d3655d1aef",
+      "author": "derek.norrbom",
+      "text": "Patched feedback_contradictions scorecard resolution for non-UUID identifiers to use Scorecard.get_by_external_id (matching report-block conventions and test expectations). Running targeted tests now.",
+      "created_at": "2026-04-14T22:15:28.208705Z"
+    },
+    {
+      "id": "6798fd87-399d-45c7-b4f7-606deb3b8ef6",
+      "author": "derek.norrbom",
+      "text": "Reviewed history: commit 71515533 intentionally changed FeedbackContradictions scorecard lookup to get_by_name. Updated tests to mock get_by_name (not get_by_external_id) and rerunning failing tests.",
+      "created_at": "2026-04-14T22:16:38.935390Z"
+    }
+  ],
+  "created_at": "2026-04-14T22:14:47.099327Z",
+  "updated_at": "2026-04-14T22:16:38.935390Z",
+  "closed_at": null,
+  "custom": {}
+}
