@@ -306,9 +306,30 @@ export default function ProcedureTask({
 
     const fetchMetrics = async () => {
       try {
-        const response = await fetch(`/api/procedure-state/${procedure.id}`)
-        if (!response.ok) return
-        const { state } = await response.json()
+        // Step 1: fetch metadata via Amplify client — no server env vars needed
+        const result = await (getAmplifyClient() as any).graphql({
+          query: `query GetProcedureMetadata($id: ID!) {
+            getProcedure(id: $id) { metadata }
+          }`,
+          variables: { id: procedure.id },
+          authMode: 'apiKey',
+        })
+        const raw = result?.data?.getProcedure?.metadata
+        if (!raw) return
+
+        const metadata = typeof raw === 'string' ? JSON.parse(raw) : raw
+        let state = metadata?.state || {}
+
+        // Step 2: if state was offloaded to S3, fetch via server route (S3-only)
+        if (state._s3_key) {
+          const s3Res = await fetch(
+            `/api/procedure-state/${procedure.id}?s3key=${encodeURIComponent(state._s3_key)}`
+          )
+          if (s3Res.ok) {
+            const { state: fullState } = await s3Res.json()
+            state = fullState
+          }
+        }
 
         // Cache the raw state for stale-while-revalidate on next open
         procedureStateCache.set(procedure.id, { state, timestamp: Date.now() })
