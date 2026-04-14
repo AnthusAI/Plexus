@@ -557,16 +557,58 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 for i, stage in enumerate(yaml_stages)
             }
 
+        # Extract scorecard/score identifiers so the procedure DB record can carry
+        # the foreign-key association and show names in the UI.
+        # Priority: --set params override YAML param value: fields.
+        scorecard_identifier_for_create = None
+        score_identifier_for_create = None
+        # 1. Pull defaults from YAML param value: fields
+        yaml_params = config.get('params', {}) if isinstance(config, dict) else {}
+        for key, meta in yaml_params.items() if isinstance(yaml_params, dict) else []:
+            if not isinstance(meta, dict):
+                continue
+            val = meta.get('value')
+            if not val:
+                continue
+            if key in ('scorecard', 'scorecard_id'):
+                scorecard_identifier_for_create = str(val)
+            elif key in ('score', 'score_id'):
+                score_identifier_for_create = str(val)
+        # 2. --set params take precedence
+        if set_params:
+            for param in set_params:
+                if '=' in param:
+                    k, _, v = param.partition('=')
+                    k = k.strip().strip('"').strip("'")
+                    v = v.strip().strip('"').strip("'")
+                    if k in ('scorecard', 'scorecard_id') and v:
+                        scorecard_identifier_for_create = v
+                    elif k in ('score', 'score_id') and v:
+                        score_identifier_for_create = v
+
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(
             account_identifier=account,
-            scorecard_identifier=None,  # Standalone procedure
-            score_identifier=None,
+            scorecard_identifier=scorecard_identifier_for_create,
+            score_identifier=score_identifier_for_create,
             yaml_config=yaml_config,
             featured=False,
             create_root_node=not is_tactus,  # Don't create root node for Tactus procedures
             stage_configs=stage_configs,
         )
+
+        # If scorecard/score resolution failed, retry without them rather than aborting.
+        if not result.success and (scorecard_identifier_for_create or score_identifier_for_create):
+            console.print(f"[yellow]Warning: Could not resolve scorecard/score identifiers ({result.message}); creating procedure without association.[/yellow]")
+            result = service.create_procedure(
+                account_identifier=account,
+                scorecard_identifier=None,
+                score_identifier=None,
+                yaml_config=yaml_config,
+                featured=False,
+                create_root_node=not is_tactus,
+                stage_configs=stage_configs,
+            )
 
         if not result.success:
             console.print(f"[red]Error creating procedure: {result.message}[/red]")
@@ -939,8 +981,10 @@ def watch(interval: int):
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
 @click.option('--resume-accuracy-eval', type=str, default=None, help='Reuse existing accuracy baseline evaluation ID (skip running baselines)')
 @click.option('--resume-feedback-eval', type=str, default=None, help='Reuse existing feedback baseline evaluation ID (skip running baselines)')
+@click.option('--version', '-v', type=str, default=None, help='Score version ID to start from instead of the champion version')
+@click.option('--hint', type=str, default=None, help='Expert hint to guide the optimizer (included verbatim in agent context)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_accuracy_eval: str, resume_feedback_eval: str, output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_accuracy_eval: str, resume_feedback_eval: str, version: str, hint: str, output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -1004,6 +1048,10 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         params["resume_accuracy_eval"] = resume_accuracy_eval
     if resume_feedback_eval is not None:
         params["resume_feedback_eval"] = resume_feedback_eval
+    if version is not None:
+        params["start_version"] = version
+    if hint is not None:
+        params["hint"] = hint
 
     # Load YAML
     try:
@@ -1023,11 +1071,12 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     console.print("Creating optimization procedure...")
     result = service.create_procedure(
         account_identifier=account,
-        scorecard_identifier=None,
-        score_identifier=None,
+        scorecard_identifier=scorecard,
+        score_identifier=score,
         yaml_config=yaml_config,
         featured=False,
-        create_root_node=False
+        create_root_node=False,
+        score_version_id=version,
     )
 
     if not result.success:

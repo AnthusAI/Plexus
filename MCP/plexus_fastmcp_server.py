@@ -70,6 +70,9 @@ if using_stdio:
             return False
         def __ge__(self, other):
             return True
+        def __hash__(self):
+            # Required for typing.Optional[DummyRichObject] to work
+            return id(type(self))
         def __iter__(self):
             # Make DummyRichObject iterable to prevent 'not iterable' errors
             return iter([])

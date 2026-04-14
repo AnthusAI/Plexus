@@ -1,0 +1,18 @@
+{
+  "id": "plx-8d7db3fc-af44-4f46-9f88-432fbe1584a9",
+  "title": "Create release PR from develop into main with curated summary",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-14T12:52:33.903906Z",
+  "updated_at": "2026-04-14T12:52:37.630588Z",
+  "closed_at": null,
+  "custom": {}
+}

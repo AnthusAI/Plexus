@@ -6,23 +6,28 @@ interface EvaluationListAccuracyBarProps {
   accuracy: number
   isFocused?: boolean
   isSelected?: boolean
+  baselineAccuracy?: number
 }
 
-export function EvaluationListAccuracyBar({ 
-  progress, 
+export function EvaluationListAccuracyBar({
+  progress,
   accuracy,
   isFocused = false,
-  isSelected = false
+  isSelected = false,
+  baselineAccuracy
 }: EvaluationListAccuracyBarProps) {
-  const formattedAccuracy = accuracy >= 98 
-    ? Math.round(accuracy * 10) / 10 
+  const formattedAccuracy = accuracy >= 98
+    ? Math.round(accuracy * 10) / 10
     : Math.round(accuracy)
   const clampedAccuracy = Math.min(Math.max(formattedAccuracy, 0), 100)
   const clampedProgress = Math.min(Math.max(progress, 0), 100)
   const opacity = clampedProgress / 100
   const trueWidth = clampedAccuracy
   const falseWidth = 100 - trueWidth
-  
+  const clampedBaseline = baselineAccuracy != null
+    ? Math.min(Math.max(baselineAccuracy, 0), 100)
+    : null
+
   return (
     <div className={cn(
       "relative w-full h-8 rounded-md",
@@ -46,9 +51,9 @@ export function EvaluationListAccuracyBar({
                 isSelected ? "bg-true-selected" : "bg-true",
                 isFocused ? "text-focus" : isSelected ? "text-foreground-true" : "text-primary-foreground"
               )}
-              style={{ 
-                width: `${trueWidth}%`, 
-                borderTopLeftRadius: 'inherit', 
+              style={{
+                width: `${trueWidth}%`,
+                borderTopLeftRadius: 'inherit',
                 borderBottomLeftRadius: 'inherit',
                 borderTopRightRadius: falseWidth === 0 ? 'inherit' : 0,
                 borderBottomRightRadius: falseWidth === 0 ? 'inherit' : 0,
@@ -64,8 +69,8 @@ export function EvaluationListAccuracyBar({
                 "absolute top-0 h-full",
                 isSelected ? "bg-false-selected" : "bg-false"
               )}
-              style={{ 
-                left: `${trueWidth}%`, 
+              style={{
+                left: `${trueWidth}%`,
                 width: `${falseWidth}%`,
                 borderTopLeftRadius: trueWidth === 0 ? 'inherit' : 0,
                 borderBottomLeftRadius: trueWidth === 0 ? 'inherit' : 0,
@@ -75,8 +80,14 @@ export function EvaluationListAccuracyBar({
               }}
             />
           )}
+          {clampedBaseline != null && (
+            <div
+              className="absolute top-0 h-full w-[2px] bg-muted-foreground"
+              style={{ left: `${clampedBaseline}%` }}
+            />
+          )}
         </>
       )}
     </div>
   )
-} 
+}

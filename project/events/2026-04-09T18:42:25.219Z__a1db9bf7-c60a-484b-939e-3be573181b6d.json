@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a1db9bf7-c60a-484b-939e-3be573181b6d",
+  "issue_id": "plx-76e11271-cf38-46a3-a181-c0dfa9267d21",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-09T18:42:25.219Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Investigate and fix two observed problems while demoing FeedbackAlignmentTimeline: (1) report runs that execute in remote worker path fail with class-not-found, and (2) local runs can show zero buckets / no data due bucket parameter handling or period completeness defaults. Ensure local demo path is reliable and produce a report with visible data for review.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix FeedbackAlignmentTimeline report execution and bucket selection defaults"
+  }
+}

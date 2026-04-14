@@ -245,17 +245,68 @@ def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -
             })
 
 
+def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:
+    """
+    Update processedItems and totalItems on the current RUNNING TaskStage.
+
+    Args:
+        client: PlexusDashboardClient
+        task_id: Task whose running stage to update
+        current: Current progress count
+        total: Total expected count
+    """
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    name
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    running = next((s for s in stages if s.get("status") == "RUNNING"), None)
+    if not running:
+        logger.debug("No RUNNING stage found for task %s", task_id)
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            processedItems
+            totalItems
+        }
+    }
+    """
+    client.execute(update_mutation, {
+        "input": {
+            "id": running["id"],
+            "processedItems": current,
+            "totalItems": total
+        }
+    })
+    logger.info("Updated stage %s progress: %d/%d", running.get("name"), current, total)
+
+
 class EmbeddedMCPServer:
     """
     An embedded MCP server that runs within an procedure process.
     Provides MCP tools and resources without requiring a separate server process.
     """
-    
+
     def __init__(self, experiment_context: Optional[Dict[str, Any]] = None):
         self.transport = InProcessMCPTransport()
         self.experiment_context = experiment_context or {}
         self._setup_core_tools()
         self._setup_stage_tool()
+        self._setup_stage_progress_tool()
     
     def _setup_core_tools(self):
         """Setup core MCP tools that are useful for experiments."""
@@ -323,6 +374,41 @@ class EmbeddedMCPServer:
             logger.warning(f"plexus_set_procedure_stage failed: {e}")
             return {"success": False, "error": str(e)}
 
+    def _setup_stage_progress_tool(self):
+        """Register the plexus_set_stage_progress tool."""
+        self.transport.register_tool(MCPToolInfo(
+            name="plexus_set_stage_progress",
+            description="Update progress (processedItems/totalItems) on the current RUNNING stage",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "current": {"type": "integer", "description": "Current progress count (e.g., cycle number)"},
+                    "total": {"type": "integer", "description": "Total expected count (e.g., max cycles)"}
+                },
+                "required": ["current", "total"],
+                "additionalProperties": False
+            },
+            handler=self._set_stage_progress
+        ))
+
+    def _set_stage_progress(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Update processedItems/totalItems on the current RUNNING TaskStage."""
+        current = arguments.get('current', 0)
+        total = arguments.get('total', 0)
+        task_id = self.experiment_context.get('task_id')
+
+        if not task_id:
+            return {"success": False, "error": "No task_id in context"}
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+            _update_stage_progress(client, task_id, current, total)
+            return {"success": True, "current": current, "total": total}
+        except Exception as e:
+            logger.warning(f"plexus_set_stage_progress failed: {e}")
+            return {"success": False, "error": str(e)}
+
     def _get_experiment_context(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handler for get_experiment_context tool."""
         # Create a JSON-serializable copy of procedure context
@@ -381,6 +467,7 @@ class EmbeddedMCPServer:
             from tools.evaluation.evaluations import register_evaluation_tools
             from tools.prediction.predictions import register_prediction_tools
             from tools.dataset.datasets import register_dataset_tools
+            from tools.report.reports import register_report_tools
             
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
@@ -574,6 +661,7 @@ class EmbeddedMCPServer:
                 "evaluation": lambda: register_evaluation_tools(tool_capture),
                 "prediction": lambda: register_prediction_tools(tool_capture),
                 "dataset": lambda: register_dataset_tools(tool_capture),
+                "report": lambda: register_report_tools(tool_capture),
             }
             
             # If no specific tools requested, register all available tools

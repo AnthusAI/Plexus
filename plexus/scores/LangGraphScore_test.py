@@ -4200,13 +4200,9 @@ async def test_cost_calculation_across_model_providers():
             
             instance.node_instances = [("classifier_node", mock_node)]
             
-            # Mock the cost calculation function
-            with patch('plexus.scores.LangGraphScore.calculate_cost') as mock_calc_cost:
-                mock_calc_cost.return_value = {
-                    "input_cost": 0.0030,   # Based on GPT-4 pricing
-                    "output_cost": 0.0060,
-                    "total_cost": 0.0090
-                }
+            # Mock the current LiteLLM cost API used by get_accumulated_costs.
+            with patch('plexus.scores.LangGraphScore._litellm.cost_per_token') as mock_cost_per_token:
+                mock_cost_per_token.return_value = (0.0030, 0.0060)  # prompt, completion
                 
                 # Test cost calculation
                 total_costs = instance.get_accumulated_costs()
@@ -4216,13 +4212,13 @@ async def test_cost_calculation_across_model_providers():
                 assert total_costs["completion_tokens"] == 50, "Should include completion tokens"
                 assert total_costs["input_cost"] == 0.0030, f"Expected input cost 0.0030, got {total_costs['input_cost']}"
                 assert total_costs["output_cost"] == 0.0060, f"Expected output cost 0.0060, got {total_costs['output_cost']}"
-                assert total_costs["total_cost"] == 0.0090, f"Expected total cost 0.0090, got {total_costs['total_cost']}"
+                assert total_costs["total_cost"] == pytest.approx(0.0090), f"Expected total cost 0.0090, got {total_costs['total_cost']}"
                 
-                # Verify calculate_cost was called with correct parameters
-                mock_calc_cost.assert_called_once_with(
-                    model_name="gpt-4",
-                    input_tokens=100,
-                    output_tokens=50
+                # Verify LiteLLM cost API was called with correct parameters.
+                mock_cost_per_token.assert_called_once_with(
+                    model="gpt-4",
+                    prompt_tokens=100,
+                    completion_tokens=50
                 )
             
             print("✅ Cost calculation test passed - model-specific cost calculation validated!")
@@ -5034,13 +5030,9 @@ async def test_cost_calculation_with_model_provider():
         with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
             mock_init_model.return_value = AsyncMock()
             
-            # Mock the cost calculation function
-            with patch('plexus.scores.LangGraphScore.calculate_cost') as mock_calculate_cost:
-                mock_calculate_cost.return_value = {
-                    "input_cost": 0.03,
-                    "output_cost": 0.06,
-                    "total_cost": 0.09
-                }
+            # Mock the current LiteLLM cost API used by get_accumulated_costs.
+            with patch('plexus.scores.LangGraphScore._litellm.cost_per_token') as mock_cost_per_token:
+                mock_cost_per_token.return_value = (0.03, 0.06)  # prompt, completion
                 
                 try:
                     instance = await LangGraphScore.create(**config)
@@ -5048,11 +5040,11 @@ async def test_cost_calculation_with_model_provider():
                     # Test cost calculation
                     costs = instance.get_accumulated_costs()
                     
-                    # Verify cost calculation was called with correct parameters
-                    mock_calculate_cost.assert_called_once_with(
-                        model_name="gpt-4",
-                        input_tokens=1000,
-                        output_tokens=500
+                    # Verify LiteLLM cost API was called with correct parameters.
+                    mock_cost_per_token.assert_called_once_with(
+                        model="gpt-4",
+                        prompt_tokens=1000,
+                        completion_tokens=500
                     )
                     
                     # Verify cost structure
