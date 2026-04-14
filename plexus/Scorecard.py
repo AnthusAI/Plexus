@@ -698,8 +698,8 @@ class Scorecard:
                 self.completion_tokens += score_total_cost.get("completion_tokens", 0)
                 self.cached_tokens += score_total_cost.get("cached_tokens", 0)
                 self.llm_calls += score_total_cost.get("llm_calls", 0)
-                self.input_cost += score_total_cost.get("input_cost", 0)
-                self.output_cost += score_total_cost.get("output_cost", 0)
+                self.input_cost += Decimal(str(score_total_cost.get("input_cost", 0)))
+                self.output_cost += Decimal(str(score_total_cost.get("output_cost", 0)))
                 self.total_cost += Decimal(str(score_total_cost.get("total_cost", 0)))
                 self.scorecard_total_cost += Decimal(
                     str(score_total_cost.get("total_cost", 0))
