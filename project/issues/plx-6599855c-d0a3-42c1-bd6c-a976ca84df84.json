@@ -1,0 +1,73 @@
+{
+  "id": "plx-6599855c-d0a3-42c1-bd6c-a976ca84df84",
+  "title": "Fix develop CI regressions blocking PR #167 review",
+  "description": "",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3c73348a-163a-436e-8b26-0da2bca510cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a6c45874-81e3-47d1-81db-cd6d15b09da8",
+      "author": "derek.norrbom",
+      "text": "Created fix branch from develop to resolve failing feedback_contradictions tests blocking PR #167 review.",
+      "created_at": "2026-04-14T22:14:51.984842Z"
+    },
+    {
+      "id": "c9509828-d714-49fc-9db7-40d3655d1aef",
+      "author": "derek.norrbom",
+      "text": "Patched feedback_contradictions scorecard resolution for non-UUID identifiers to use Scorecard.get_by_external_id (matching report-block conventions and test expectations). Running targeted tests now.",
+      "created_at": "2026-04-14T22:15:28.208705Z"
+    },
+    {
+      "id": "6798fd87-399d-45c7-b4f7-606deb3b8ef6",
+      "author": "derek.norrbom",
+      "text": "Reviewed history: commit 71515533 intentionally changed FeedbackContradictions scorecard lookup to get_by_name. Updated tests to mock get_by_name (not get_by_external_id) and rerunning failing tests.",
+      "created_at": "2026-04-14T22:16:38.935390Z"
+    },
+    {
+      "id": "f7df64ef-800b-49ce-8209-8f9502d23a32",
+      "author": "derek.norrbom",
+      "text": "Implemented fix on branch fix/pr167-feedback-contradictions-develop and opened PR: https://github.com/AnthusAI/Plexus/pull/168. Change updates feedback_contradictions tests to mock Scorecard.get_by_name, matching current source behavior on develop. Targeted failing tests now pass (3/3).",
+      "created_at": "2026-04-14T22:17:32.720524Z"
+    },
+    {
+      "id": "85c281a6-091c-4269-b281-12d0224aec00",
+      "author": "derek.norrbom",
+      "text": "New CI failure reported from PR #167 unit-tests job (run 24425715051, job 71359116117). Investigating log and will patch accordingly.",
+      "created_at": "2026-04-14T22:29:06.239641Z"
+    },
+    {
+      "id": "3b4f11e7-d91c-420b-82d7-043346603208",
+      "author": "derek.norrbom",
+      "text": "Investigated run 24425715051/job 71359116117: failing test is dashboard/components/__tests__/guidelines-functionality.test.tsx (loading-state assertion). Applying deterministic test-only fix.",
+      "created_at": "2026-04-14T22:29:30.268040Z"
+    },
+    {
+      "id": "a0085c77-a5d7-4d48-9e4e-966569ba665d",
+      "author": "derek.norrbom",
+      "text": "Fixed CI failure from PR #167 Dashboard Unit Tests: in guidelines-functionality test helper, await onSave during handleSave so loading-state assertion is deterministic. Local run: npm test -- --runInBand components/__tests__/guidelines-functionality.test.tsx (pass).",
+      "created_at": "2026-04-14T22:29:46.733922Z"
+    },
+    {
+      "id": "5e04d499-ed9b-46c5-a139-80ec71a50ff5",
+      "author": "derek.norrbom",
+      "text": "Pushed follow-up commits to PR #168 for Dashboard Unit Tests failure from PR #167: c58f0907 (stabilize guidelines saving-state test) and 805fe849 (Kanbus artifacts).",
+      "created_at": "2026-04-14T22:30:02.836770Z"
+    },
+    {
+      "id": "41fc97ae-f1c8-4811-b5bf-b7ba22a0c13c",
+      "author": "derek.norrbom",
+      "text": "PR #168 was already merged, so opened a new PR from fix/pr167-feedback-contradictions-develop to develop with post-merge follow-up commits (including c58f0907 dashboard test stabilization).",
+      "created_at": "2026-04-14T22:31:24.360318Z"
+    }
+  ],
+  "created_at": "2026-04-14T22:14:47.099327Z",
+  "updated_at": "2026-04-14T22:31:24.360318Z",
+  "closed_at": null,
+  "custom": {}
+}
