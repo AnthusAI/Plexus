@@ -72,6 +72,11 @@ params:
     default: false
     description: "If true, run analysis only without making score updates"
 
+  prior_run_prescription:
+    type: string
+    required: false
+    description: "Prescription text from a prior optimizer run. Injected into planning context to avoid repeating failed approaches and focus on identified gaps."
+
 outputs:
   success:
     type: boolean
@@ -112,6 +117,16 @@ outputs:
     type: number
     required: false
     description: "Total accuracy AC1 improvement from baseline"
+
+  diagnosis:
+    type: string
+    required: false
+    description: "End-of-run diagnostic analysis"
+
+  prescription:
+    type: string
+    required: false
+    description: "End-of-run prescriptive actions for SMEs, developers, and next optimizer run"
 
   scorecard_id:
     type: string
@@ -564,6 +579,20 @@ code: |
     rca._topic_category_breakdown = (type(ma.topic_category_breakdown) == "table" and ma.topic_category_breakdown) or {}
 
     return rca
+  end
+
+  -- Return a slimmed copy of an RCA table safe to store in DynamoDB State.
+  -- Strips _all_item_classifications (large per-item array) which can exceed
+  -- DynamoDB's 400KB item limit. The full data stays in the local iterations table.
+  local function slim_rca_for_state(rca)
+    if type(rca) ~= "table" then return rca end
+    local slim = {}
+    for k, v in pairs(rca) do
+      if k ~= "_all_item_classifications" then
+        slim[k] = v
+      end
+    end
+    return slim
   end
 
   -- Parse numbered hypotheses from an agent planning response
@@ -1022,6 +1051,298 @@ code: |
       table.insert(parts, opts.hint)
     end
 
+    -- Prior run prescription (cross-run learning)
+    if has_text(opts.prior_run_prescription) then
+      table.insert(parts, "")
+      table.insert(parts, "=== PRIOR RUN PRESCRIPTION (from previous optimizer run) ===")
+      table.insert(parts, "The previous optimizer run completed with the following prescription.")
+      table.insert(parts, "Use this to AVOID approaches that already failed and FOCUS on identified gaps:")
+      table.insert(parts, opts.prior_run_prescription)
+      table.insert(parts, "=== END PRIOR RUN PRESCRIPTION ===")
+    end
+
+    return table.concat(parts, "\n")
+  end
+
+  -- === EVIDENCE-COLLECTION HELPERS (for end-of-run diagnosis) ===
+
+  -- Build a table showing feedback-vs-accuracy divergence across all cycles.
+  -- Returns a formatted string showing per-cycle divergence direction.
+  local function build_divergence_analysis(iterations)
+    local parts = {}
+    local divergent_cycles = 0
+    local total_cycles_with_both = 0
+    local fb_sum = 0
+    local acc_sum = 0
+
+    table.insert(parts, "=== FEEDBACK-REGRESSION DIVERGENCE ANALYSIS ===")
+    table.insert(parts, string.format("%-6s %-30s %10s %10s %10s   %s",
+      "Cycle", "Hypothesis", "FB Δ", "ACC Δ", "Diverge", "Direction"))
+    table.insert(parts, string.rep("-", 100))
+
+    for _, iter in ipairs(iterations) do
+      if iter.skip_reason then goto continue_iter end
+
+      -- Use the accepted/final version's deltas
+      local fb_d = iter.feedback_deltas and iter.feedback_deltas.alignment or 0
+      local acc_d = iter.accuracy_deltas and iter.accuracy_deltas.alignment or 0
+      local divergence = fb_d - acc_d
+      local direction = ""
+
+      if acc_d ~= 0 or fb_d ~= 0 then
+        total_cycles_with_both = total_cycles_with_both + 1
+        fb_sum = fb_sum + fb_d
+        acc_sum = acc_sum + acc_d
+      end
+
+      if fb_d > 0.005 and acc_d > 0.005 then
+        direction = "Both improve"
+      elseif fb_d < -0.005 and acc_d < -0.005 then
+        direction = "Both regress"
+      elseif fb_d > 0.005 and acc_d < -0.005 then
+        direction = "!! DIVERGE: FB up ACC down"
+        divergent_cycles = divergent_cycles + 1
+      elseif fb_d < -0.005 and acc_d > 0.005 then
+        direction = "!! DIVERGE: FB down ACC up"
+        divergent_cycles = divergent_cycles + 1
+      else
+        direction = "Neutral"
+      end
+
+      -- Find hypothesis name from exploration_results
+      local hyp_name = "(synthesis)"
+      if iter.exploration_results and #iter.exploration_results > 0 then
+        local best = iter.exploration_results[1]
+        for _, sv in ipairs(iter.exploration_results) do
+          if sv.succeeded then best = sv; break end
+        end
+        if best.hypothesis and best.hypothesis.name then
+          hyp_name = trunc(best.hypothesis.name, 28)
+        end
+      end
+
+      table.insert(parts, string.format("%-6d %-30s %+10.3f %+10.3f %+10.3f   %s",
+        iter.iteration or 0, hyp_name, fb_d, acc_d, divergence, direction))
+
+      -- Also show individual hypotheses if there are interesting divergences
+      if iter.exploration_results then
+        for _, sv in ipairs(iter.exploration_results) do
+          local sv_fb = sv.fb_deltas and sv.fb_deltas.alignment or 0
+          local sv_acc = sv.acc_deltas and sv.acc_deltas.alignment or 0
+          if (sv_fb > 0.005 and sv_acc < -0.005) or (sv_fb < -0.005 and sv_acc > 0.005) then
+            local sv_name = sv.hypothesis and sv.hypothesis.name or "?"
+            table.insert(parts, string.format("  cand %-28s %+10.3f %+10.3f %+10.3f   !! divergent",
+              trunc(sv_name, 28), sv_fb, sv_acc, sv_fb - sv_acc))
+          end
+        end
+      end
+
+      ::continue_iter::
+    end
+
+    table.insert(parts, string.rep("-", 100))
+
+    -- Summary statistics
+    if total_cycles_with_both > 0 then
+      table.insert(parts, string.format(
+        "\nSummary: %d of %d cycles show divergence (FB and ACC move in opposite directions).",
+        divergent_cycles, total_cycles_with_both))
+      table.insert(parts, string.format(
+        "Cumulative: FB %+.3f, ACC %+.3f", fb_sum, acc_sum))
+
+      if divergent_cycles > total_cycles_with_both * 0.5 then
+        table.insert(parts, "\n!! HIGH DIVERGENCE: More than half of cycles show feedback and accuracy")
+        table.insert(parts, "   moving in opposite directions. This strongly suggests:")
+        table.insert(parts, "   (a) Rubric drift: feedback reviewers apply a different standard than the regression ground truth")
+        table.insert(parts, "   (b) Regression dataset staleness: the curated dataset reflects an older rubric interpretation")
+        table.insert(parts, "   (c) Reviewer inconsistency: different reviewers disagree about edge cases")
+      elseif divergent_cycles > 0 then
+        table.insert(parts, "\nSome divergence detected. Changes that improve feedback but hurt accuracy may be")
+        table.insert(parts, "overfitting to recent reviewer patterns rather than finding genuine policy improvements.")
+      else
+        table.insert(parts, "\nDatasets are well-aligned — changes affect both similarly.")
+      end
+    else
+      table.insert(parts, "\nNo cycles with both feedback and accuracy data available.")
+    end
+
+    table.insert(parts, "=== END DIVERGENCE ANALYSIS ===")
+    return table.concat(parts, "\n")
+  end
+
+  -- Build RCA category evolution table across cycles.
+  -- Shows how error categories change over the optimization run.
+  local function build_rca_evolution(iterations)
+    local parts = {}
+    table.insert(parts, "=== RCA CATEGORY EVOLUTION ===")
+    table.insert(parts, "How error root causes changed across cycles (feedback evaluation RCA):")
+    table.insert(parts, "")
+    table.insert(parts, string.format("%-6s %18s %18s %18s %18s %10s",
+      "Cycle", "Config Problem", "Guideline Gap", "Info Gap", "Mechanical", "Fixable%"))
+    table.insert(parts, string.rep("-", 95))
+
+    local has_data = false
+    for _, iter in ipairs(iterations) do
+      if iter.skip_reason then goto continue_rca end
+
+      -- Find the RCA from the accepted/best exploration result
+      local rca = nil
+      if iter.exploration_results then
+        for _, sv in ipairs(iter.exploration_results) do
+          if sv.fb_rca and type(sv.fb_rca) == "table" then
+            local ch = sv.fb_rca._category_hierarchy or
+              (sv.fb_rca.misclassification_analysis and sv.fb_rca.misclassification_analysis.category_hierarchy)
+            if ch and #ch > 0 then
+              rca = sv.fb_rca
+              break
+            end
+          end
+        end
+      end
+
+      if not rca then goto continue_rca end
+
+      local hierarchy = rca._category_hierarchy or
+        (rca.misclassification_analysis and rca.misclassification_analysis.category_hierarchy) or {}
+      if #hierarchy == 0 then goto continue_rca end
+
+      has_data = true
+      local config_n, guideline_n, info_n, mech_n, total_n = 0, 0, 0, 0, 0
+      local fixable_n = 0
+
+      for _, cat in ipairs(hierarchy) do
+        local key = cat.category_key or ""
+        local count = cat.item_count or 0
+        total_n = total_n + count
+        if string.find(key, "score_configuration") then
+          config_n = config_n + count
+        elseif string.find(key, "guideline_gap") then
+          guideline_n = guideline_n + count
+        elseif string.find(key, "information_gap") then
+          info_n = info_n + count
+        elseif string.find(key, "mechanical") then
+          mech_n = mech_n + count
+        end
+      end
+
+      -- Compute fixable% from item classifications if available
+      local item_class = rca._all_item_classifications or
+        (rca.misclassification_analysis and rca.misclassification_analysis.item_classifications_all) or {}
+      if type(item_class) == "table" and #item_class > 0 then
+        for _, ic in ipairs(item_class) do
+          if ic.config_fixability == "likely_fixable" then
+            fixable_n = fixable_n + 1
+          end
+        end
+      end
+
+      local fixable_pct = (total_n > 0) and (fixable_n / total_n * 100) or 0
+
+      local function fmt_cat(n, tot)
+        if tot == 0 then return string.format("%3d", n) end
+        return string.format("%3d (%2.0f%%)", n, n / tot * 100)
+      end
+
+      table.insert(parts, string.format("%-6d %18s %18s %18s %18s %9.0f%%",
+        iter.iteration or 0,
+        fmt_cat(config_n, total_n),
+        fmt_cat(guideline_n, total_n),
+        fmt_cat(info_n, total_n),
+        fmt_cat(mech_n, total_n),
+        fixable_pct))
+
+      ::continue_rca::
+    end
+
+    if not has_data then
+      table.insert(parts, "(No RCA category data available across cycles)")
+    else
+      table.insert(parts, "")
+      table.insert(parts, "Key: Config Problem = fixable via prompt changes. Guideline Gap = needs SME input.")
+      table.insert(parts, "If Config Problem shrinks and Guideline Gap grows as a share, prompt optimization is working")
+      table.insert(parts, "but approaching its ceiling. Remaining errors need human policy decisions.")
+    end
+
+    table.insert(parts, "=== END RCA EVOLUTION ===")
+    return table.concat(parts, "\n")
+  end
+
+  -- Build hypothesis effectiveness summary across all cycles.
+  -- Categorizes hypotheses by type and computes per-category success rates.
+  local function build_hypothesis_effectiveness_summary(iterations)
+    local categories = {
+      {key = "policy_clarification", label = "Policy clarification", patterns = {"clarif", "tighten", "sharpen", "refine", "reword", "disambigu"}},
+      {key = "policy_addition", label = "Policy addition", patterns = {"add", "new rule", "missing", "gap", "cover", "address"}},
+      {key = "structural", label = "Structural/model", patterns = {"model", "architect", "restructur", "node", "preprocess"}},
+      {key = "fewshot", label = "Few-shot examples", patterns = {"example", "few.shot", "sample", "demonstrat"}},
+      {key = "evidence_logic", label = "Evidence/logic", patterns = {"evidence", "anchor", "lock", "override", "precedence", "priority"}},
+    }
+
+    -- Count per category
+    local cat_stats = {}
+    for _, c in ipairs(categories) do
+      cat_stats[c.key] = {label = c.label, tried = 0, succeeded = 0, fb_sum = 0, acc_sum = 0}
+    end
+    cat_stats["other"] = {label = "Other", tried = 0, succeeded = 0, fb_sum = 0, acc_sum = 0}
+
+    for _, iter in ipairs(iterations) do
+      if not iter.exploration_results then goto continue_hyp end
+      for _, sv in ipairs(iter.exploration_results) do
+        local name = ""
+        if sv.hypothesis then
+          name = string.lower((sv.hypothesis.name or "") .. " " .. (sv.hypothesis.description or ""))
+        end
+
+        local matched = false
+        for _, c in ipairs(categories) do
+          for _, pat in ipairs(c.patterns) do
+            if string.find(name, pat) then
+              local s = cat_stats[c.key]
+              s.tried = s.tried + 1
+              if sv.succeeded then s.succeeded = s.succeeded + 1 end
+              s.fb_sum = s.fb_sum + (sv.fb_deltas and sv.fb_deltas.alignment or 0)
+              s.acc_sum = s.acc_sum + (sv.acc_deltas and sv.acc_deltas.alignment or 0)
+              matched = true
+              break
+            end
+          end
+          if matched then break end
+        end
+
+        if not matched then
+          local s = cat_stats["other"]
+          s.tried = s.tried + 1
+          if sv.succeeded then s.succeeded = s.succeeded + 1 end
+          s.fb_sum = s.fb_sum + (sv.fb_deltas and sv.fb_deltas.alignment or 0)
+          s.acc_sum = s.acc_sum + (sv.acc_deltas and sv.acc_deltas.alignment or 0)
+        end
+      end
+      ::continue_hyp::
+    end
+
+    local parts = {}
+    table.insert(parts, "=== HYPOTHESIS EFFECTIVENESS SUMMARY ===")
+    table.insert(parts, string.format("%-25s %7s %10s %10s %10s",
+      "Category", "Tried", "Succeeded", "Avg FB Δ", "Avg ACC Δ"))
+    table.insert(parts, string.rep("-", 65))
+
+    local order = {"policy_clarification", "policy_addition", "evidence_logic", "structural", "fewshot", "other"}
+    local total_tried = 0
+    for _, key in ipairs(order) do
+      local s = cat_stats[key]
+      if s.tried > 0 then
+        total_tried = total_tried + s.tried
+        table.insert(parts, string.format("%-25s %7d %10d %+10.3f %+10.3f",
+          s.label, s.tried, s.succeeded,
+          s.fb_sum / s.tried, s.acc_sum / s.tried))
+      end
+    end
+
+    if total_tried == 0 then
+      table.insert(parts, "(No hypothesis data available)")
+    end
+
+    table.insert(parts, "=== END HYPOTHESIS EFFECTIVENESS ===")
     return table.concat(parts, "\n")
   end
 
@@ -1880,9 +2201,9 @@ code: |
   State.set("scorecard_name",  scorecard_name)
   State.set("score_name",      score_name)
   State.set("iterations",    {})
-  -- Store RCA for the coding agent's first iteration
-  State.set("last_accuracy_rca", accuracy_baseline_rca)
-  State.set("last_feedback_rca", feedback_baseline_rca)
+  -- Store RCA for the coding agent's first iteration (slimmed to avoid DynamoDB 400KB limit)
+  State.set("last_accuracy_rca", slim_rca_for_state(accuracy_baseline_rca))
+  State.set("last_feedback_rca", slim_rca_for_state(feedback_baseline_rca))
 
   -- Fetch smoke test items from the regression dataset (accuracy baseline eval).
   -- Using items from the actual regression dataset ensures they are EDU items
@@ -1966,7 +2287,7 @@ code: |
         score = params.score,
         mode = "contradictions",
         days = tostring(params.days or 90),
-        max_feedback_items = 200,
+        max_feedback_items = 100,
         num_topics = 8
       }
     })
@@ -1976,6 +2297,24 @@ code: |
     end
 
     local out = report_result.output
+    -- The FeedbackContradictions report returns a string (comment header + JSON),
+    -- not a table. Detect this and parse the JSON portion.
+    if type(out) == "string" then
+      local json_start = string.find(out, "%s*{")
+      if json_start then
+        local json_str = string.sub(out, json_start)
+        local parsed, parse_err = safe_decode(json_str)
+        if parsed and type(parsed) == "table" then
+          out = parsed
+        else
+          Human.notify({message = "  Contradictions report: failed to parse JSON output: " .. tostring(parse_err), level = "warning"})
+          return
+        end
+      else
+        Human.notify({message = "  Contradictions report: output has no JSON object", level = "warning"})
+        return
+      end
+    end
     local topics = out.topics or {}
     local total_items = out.total_items_analyzed or 0
     local contradictions_found = out.contradictions_found or 0
@@ -2524,7 +2863,8 @@ code: |
       current_guidelines = current_guidelines,
       iteration = cycle,
       consecutive_failed_cycles = consecutive_failed_cycles,
-      hint = params.hint
+      hint = params.hint,
+      prior_run_prescription = params.prior_run_prescription
     })
 
     -- Build shared cookbook section
@@ -4005,8 +4345,8 @@ code: |
           table.insert(iterations, cycle_log)
           State.set("iterations", iterations)
 
-          if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
-          if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
+          if best and best.fb_rca then State.set("last_feedback_rca", slim_rca_for_state(best.fb_rca)) end
+          if best and best.acc_rca then State.set("last_accuracy_rca", slim_rca_for_state(best.acc_rca)) end
 
           -- Compact history even on failed cycles
           if cycle < max_cycles then
@@ -4361,8 +4701,8 @@ code: |
           consecutive_failed_cycles = consecutive_failed_cycles + 1
         end
         diag("Saving RCA to state...")
-        State.set("last_accuracy_rca", b_acc_rca)
-        State.set("last_feedback_rca", b_fb_rca)
+        State.set("last_accuracy_rca", slim_rca_for_state(b_acc_rca))
+        State.set("last_feedback_rca", slim_rca_for_state(b_fb_rca))
         diag("State saved, checking exit conditions...")
 
         -- Check if target accuracy was reached (early exit)
@@ -4512,83 +4852,513 @@ code: |
     #iterations, total_fb_improvement, total_acc_improvement
   ), level = "info"})
 
-  -- Generate structured diagnostic when optimizer struggled
+  -- ========================================================================
+  -- END-OF-RUN DIAGNOSIS & PRESCRIPTION (always runs, three phases)
+  -- ========================================================================
+  Human.notify({message = "Generating end-of-run diagnosis and prescription...", level = "info"})
+
   local total_accepted = 0
   local total_rejected = 0
   local total_skipped = 0
   for _, iter in ipairs(iterations) do
-    local out = iter.outcome or ""
-    if out == "accepted" or out == "carried" then
+    if iter.accepted then
       total_accepted = total_accepted + 1
-    elseif out == "rejected" then
-      total_rejected = total_rejected + 1
-    elseif out == "skipped" or has_text(iter.skip_reason) then
+    elseif has_text(iter.skip_reason) then
       total_skipped = total_skipped + 1
+    else
+      total_rejected = total_rejected + 1
     end
   end
-
   local success_rate = total_accepted / math.max(1, #iterations)
-  if success_rate < 0.3 and #iterations >= 3 then
-    Human.notify({message = "Generating optimization diagnostic (success rate < 30%)...", level = "info"})
+
+  -- Phase 0: Evidence Collection (Lua computation, no LLM)
+  Human.notify({message = "  Phase 0: Collecting evidence...", level = "info"})
+
+  -- 0a. Final contradictions refresh (expanded scope)
+  local final_contra_ok = pcall(function()
+    Human.notify({message = "  Running final contradictions analysis (expanded scope)...", level = "info"})
+    local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
+      block_class = "FeedbackContradictions",
+      block_config = {
+        scorecard = params.scorecard,
+        score = params.score,
+        mode = "contradictions",
+        days = tostring(params.days or 90),
+        max_feedback_items = 400,
+        num_topics = 12
+      }
+    })
+    if ok and report_result and report_result.output then
+      local out = report_result.output
+      if type(out) == "string" then
+        local json_start = string.find(out, "%s*{")
+        if json_start then
+          local parsed = safe_decode(string.sub(out, json_start))
+          if parsed and type(parsed) == "table" then out = parsed end
+        end
+      end
+      if type(out) == "table" and out.topics then
+        -- Re-run the full topic parsing from refresh_known_contradictions
+        local topics = out.topics or {}
+        local total_items = out.total_items_analyzed or 0
+        local contradictions_found = out.contradictions_found or 0
+        local aligned_found = out.aligned_found or 0
+        local contradiction_topics = {}
+        local policy_gap_topics = {}
+        local policy_gap_count = 0
+        local topics_structured = {}
+        for _, topic in ipairs(topics) do
+          local gq = topic.guideline_quote or ""
+          local is_gap = string.find(gq, "^Policy gap") ~= nil
+          local exemplar = nil
+          local exemplars = topic.exemplars or {}
+          if #exemplars > 0 then
+            local ex = exemplars[1]
+            exemplar = {
+              initial_value = ex.initial_value or "?",
+              final_value = ex.final_value or "?",
+              edit_comment = trunc(ex.edit_comment or "", 200)
+            }
+            if is_gap then policy_gap_count = policy_gap_count + (topic.count or 0) end
+          end
+          local t = {
+            label = topic.label or "Unknown",
+            count = topic.count or 0,
+            summary = trunc(topic.summary or "", 300),
+            guideline_quote = trunc(gq, 200),
+            is_policy_gap = is_gap,
+            exemplar = exemplar
+          }
+          table.insert(topics_structured, t)
+          if is_gap then table.insert(policy_gap_topics, t) else table.insert(contradiction_topics, t) end
+        end
+        local summary_parts = {}
+        if #topics > 0 then
+          table.insert(summary_parts, string.format(
+            "%d items analyzed | %d contradictions (%.0f%%) | %d policy gaps | %d aligned",
+            total_items, contradictions_found,
+            (total_items > 0) and (contradictions_found / total_items * 100) or 0,
+            policy_gap_count, aligned_found))
+          if #contradiction_topics > 0 then
+            table.insert(summary_parts, "\nGuideline contradiction topics (NOT fixable via prompt editing):")
+            for i, t in ipairs(contradiction_topics) do
+              table.insert(summary_parts, string.format("\n  %d. %s — %d items: %s\n     Guideline violated: \"%s\"",
+                i, t.label, t.count, t.summary, t.guideline_quote))
+              if t.exemplar then
+                table.insert(summary_parts, string.format("\n     Example: predicted=%s corrected=%s — \"%s\"",
+                  t.exemplar.initial_value, t.exemplar.final_value, t.exemplar.edit_comment))
+              end
+            end
+          end
+          if #policy_gap_topics > 0 then
+            table.insert(summary_parts, "\nPolicy gap topics (CAN be fixed by adding a guideline rule):")
+            for i, t in ipairs(policy_gap_topics) do
+              table.insert(summary_parts, string.format("\n  %d. %s — %d items: %s\n     Gap: \"%s\"",
+                i, t.label, t.count, t.summary, t.guideline_quote))
+              if t.exemplar then
+                table.insert(summary_parts, string.format("\n     Example: predicted=%s corrected=%s — \"%s\"",
+                  t.exemplar.initial_value, t.exemplar.final_value, t.exemplar.edit_comment))
+              end
+            end
+          end
+        end
+        State.set("known_contradictions", {
+          cycle = "final",
+          total_items_analyzed = total_items,
+          contradictions_found = contradictions_found,
+          policy_gap_count = policy_gap_count,
+          aligned_found = aligned_found,
+          topic_count = #topics,
+          contradiction_topic_count = #contradiction_topics,
+          policy_gap_topic_count = #policy_gap_topics,
+          topics = topics_structured,
+          summary = table.concat(summary_parts, "")
+        })
+        Human.notify({message = string.format(
+          "  Final contradictions: %d items | %d contradictions, %d policy gaps, %d topics",
+          total_items, contradictions_found, policy_gap_count, #topics), level = "info"})
+      end
+    end
+  end)
+  if not final_contra_ok then
+    Human.notify({message = "  Final contradictions refresh failed; using cached data", level = "warning"})
+  end
+
+  -- 0b. Build divergence analysis
+  local divergence_text = ""
+  pcall(function()
+    divergence_text = build_divergence_analysis(iterations)
+  end)
+
+  -- 0c. Build RCA category evolution
+  local rca_evolution_text = ""
+  pcall(function()
+    rca_evolution_text = build_rca_evolution(iterations)
+  end)
+
+  -- 0d. Residual error sampling from RCA item classifications
+  local residual_errors_text = ""
+  pcall(function()
+    local last_rca = State.get("last_feedback_rca")
+    if not last_rca or type(last_rca) ~= "table" then return end
+
+    local items = last_rca._all_item_classifications
+    if not items or type(items) ~= "table" or #items == 0 then
+      -- Try nested path
+      local ma = last_rca.misclassification_analysis
+      if ma and type(ma) == "table" then
+        items = ma.item_classifications_all
+      end
+    end
+    if not items or type(items) ~= "table" or #items == 0 then return end
+
+    -- Group by error direction
+    local fp_items = {}  -- predicted positive, should be negative
+    local fn_items = {}  -- predicted negative, should be positive
+    local other_items = {}
+    for _, ic in ipairs(items) do
+      local pred = string.lower(tostring(ic.predicted_value or ""))
+      local correct = string.lower(tostring(ic.correct_value or ""))
+      if pred == "yes" and correct == "no" then
+        table.insert(fp_items, ic)
+      elseif pred == "no" and correct == "yes" then
+        table.insert(fn_items, ic)
+      else
+        table.insert(other_items, ic)
+      end
+    end
+
+    local parts = {}
+    table.insert(parts, "=== RESIDUAL ERROR SAMPLES (items optimizer could not fix) ===")
+    table.insert(parts, string.format("Total misclassified items in final evaluation: %d (FP: %d, FN: %d, Other: %d)",
+      #items, #fp_items, #fn_items, #other_items))
+    table.insert(parts, "")
+
+    local function render_items(label, item_list, max_show)
+      max_show = max_show or 5
+      if #item_list == 0 then return end
+      table.insert(parts, string.format("%s — showing %d of %d:", label, math.min(max_show, #item_list), #item_list))
+      for i = 1, math.min(max_show, #item_list) do
+        local ic = item_list[i]
+        table.insert(parts, string.format(
+          "  %d. Predicted=%s, Correct=%s | Category: %s | Fixability: %s",
+          i, tostring(ic.predicted_value), tostring(ic.correct_value),
+          tostring(ic.primary_category or "?"), tostring(ic.config_fixability or "?")))
+        if has_text(ic.rationale_paragraph) then
+          table.insert(parts, string.format("     Root cause: %s", trunc(ic.rationale_paragraph, 300)))
+        end
+        if has_text(ic.evidence_quote) then
+          table.insert(parts, string.format("     Evidence: \"%s\"", trunc(ic.evidence_quote, 200)))
+        end
+        if has_text(ic.suggested_fix) then
+          table.insert(parts, string.format("     Suggested fix: %s", trunc(ic.suggested_fix, 200)))
+        end
+        table.insert(parts, "")
+      end
+    end
+
+    render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 5)
+    render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 5)
+    if #other_items > 0 then
+      render_items("OTHER MISCLASSIFICATIONS", other_items, 3)
+    end
+
+    table.insert(parts, "These are items remaining after optimization. The root causes and fixability ratings")
+    table.insert(parts, "show whether prompt changes can address them or whether human intervention is needed.")
+    table.insert(parts, "=== END RESIDUAL ERROR SAMPLES ===")
+    residual_errors_text = table.concat(parts, "\n")
+    Human.notify({message = string.format("  Residual errors sampled: %d FP, %d FN, %d other",
+      #fp_items, #fn_items, #other_items), level = "info"})
+  end)
+
+  -- 0e. Hypothesis effectiveness summary
+  local hypothesis_eff_text = ""
+  pcall(function()
+    hypothesis_eff_text = build_hypothesis_effectiveness_summary(iterations)
+  end)
+
+  -- Phase 1: Diagnosis (agent call)
+  Human.notify({message = "  Phase 1: Generating diagnosis...", level = "info"})
+  local diagnostic_text = "(diagnosis not available)"
+  pcall(function()
     code_editor.clear_history()
 
-    local diag_parts = {
-      "=== OPTIMIZATION DIAGNOSTIC ===\n\n",
-      string.format("Results: %d cycles completed. %d accepted, %d rejected, %d skipped.\n",
-        #iterations, total_accepted, total_rejected, total_skipped),
-    }
+    -- Assemble all evidence into diagnostic context
+    local ctx_parts = {}
+    table.insert(ctx_parts, "=== RUN SUMMARY ===")
+    table.insert(ctx_parts, string.format("Cycles: %d | Accepted: %d | Rejected: %d | Skipped: %d | Success rate: %.0f%%",
+      #iterations, total_accepted, total_rejected, total_skipped, success_rate * 100))
+    table.insert(ctx_parts, string.format("Baseline FB AC1: %.3f | Final FB AC1: %.3f | Total FB improvement: %+.4f",
+      feedback_baseline_metrics.alignment or 0,
+      last_accepted and last_accepted.feedback_metrics and last_accepted.feedback_metrics.alignment or feedback_baseline_metrics.alignment or 0,
+      total_fb_improvement))
     if accuracy_baseline_metrics then
-      table.insert(diag_parts, string.format(
-        "Baseline: AC1=%.3f, accuracy=%.1f%%, precision=%.1f%%, recall=%.1f%%\n",
-        accuracy_baseline_metrics.ac1 or accuracy_baseline_metrics.alignment or 0,
-        (accuracy_baseline_metrics.accuracy or 0) * 100,
-        (accuracy_baseline_metrics.precision or 0) * 100,
-        (accuracy_baseline_metrics.recall or 0) * 100))
+      table.insert(ctx_parts, string.format("Baseline ACC AC1: %.3f | Final ACC AC1: %.3f | Total ACC improvement: %+.4f",
+        accuracy_baseline_metrics.alignment or 0,
+        last_accepted and last_accepted.accuracy_metrics and last_accepted.accuracy_metrics.alignment or accuracy_baseline_metrics.alignment or 0,
+        total_acc_improvement))
     end
-    table.insert(diag_parts, string.format(
-      "Final improvement: FB AC1 %+.4f, ACC AC1 %+.4f\n\n",
-      total_fb_improvement, total_acc_improvement))
+    table.insert(ctx_parts, "")
 
-    table.insert(diag_parts, "The optimizer struggled to improve this score. Analyze:\n")
-    table.insert(diag_parts, "1. What STRUCTURAL issues prevent improvement? (model choice, prediction bias, task ambiguity, contradictory feedback labels)\n")
-    table.insert(diag_parts, "2. What specific patterns emerged across all cycles? (always regresses on same metric, recall stuck near zero, etc.)\n")
-    table.insert(diag_parts, "3. What MANUAL changes should a human make before re-running the optimizer? (change model, restructure prompt fundamentally, relabel feedback, etc.)\n")
-    table.insert(diag_parts, "4. Is this score OPTIMIZABLE with prompt changes, or does it need a different approach entirely?\n\n")
-    table.insert(diag_parts, "Be specific and actionable. This report goes to the human operator.\n")
-
-    -- Include cached contradictions report (collected per-cycle during the run)
-    local known_contra = State.get("known_contradictions")
-    if known_contra and has_text(known_contra.summary) then
-      table.insert(diag_parts, "\n=== FEEDBACK CONTRADICTIONS (guidelines vs. feedback labels) ===")
-      table.insert(diag_parts, known_contra.summary)
-      table.insert(diag_parts, "")
-    end
-
-    -- Include cycle history for context
+    -- Version history
     local history_text = build_version_history(iterations, baseline_version_id, feedback_baseline_metrics, accuracy_baseline_metrics, last_accepted_version_id)
     if has_text(history_text) then
-      table.insert(diag_parts, "\n=== CYCLE HISTORY ===\n" .. trunc(history_text, 5000))
+      table.insert(ctx_parts, "=== CYCLE HISTORY ===")
+      table.insert(ctx_parts, trunc(history_text, 5000))
+      table.insert(ctx_parts, "")
     end
+
+    -- Divergence analysis
+    if has_text(divergence_text) then
+      table.insert(ctx_parts, divergence_text)
+      table.insert(ctx_parts, "")
+    end
+
+    -- Contradictions landscape
+    local kc = State.get("known_contradictions")
+    if kc and has_text(kc.summary) then
+      table.insert(ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
+      local total_kc = kc.total_items_analyzed or 0
+      local contra_kc = kc.contradictions_found or 0
+      if total_kc > 0 and contra_kc > 0 then
+        local ceiling = math.max(0, (total_kc - contra_kc) / total_kc - 0.05)
+        table.insert(ctx_parts, string.format(
+          "OPTIMIZATION CEILING: With %d contradictions in %d items (%.0f%%), ceiling ~%.2f",
+          contra_kc, total_kc, contra_kc / total_kc * 100, ceiling))
+      end
+      table.insert(ctx_parts, kc.summary)
+      table.insert(ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
+      table.insert(ctx_parts, "")
+    end
+
+    -- RCA category evolution
+    if has_text(rca_evolution_text) then
+      table.insert(ctx_parts, rca_evolution_text)
+      table.insert(ctx_parts, "")
+    end
+
+    -- Residual error samples
+    if has_text(residual_errors_text) then
+      table.insert(ctx_parts, residual_errors_text)
+      table.insert(ctx_parts, "")
+    end
+
+    -- Hypothesis effectiveness
+    if has_text(hypothesis_eff_text) then
+      table.insert(ctx_parts, hypothesis_eff_text)
+      table.insert(ctx_parts, "")
+    end
+
+    -- Cycle insights (agent's own synthesis across cycles)
+    local insights = State.get("cycle_insights")
+    if insights and type(insights) == "table" and #insights > 0 then
+      table.insert(ctx_parts, "=== AGENT SYNTHESIS ACROSS CYCLES (most recent first) ===")
+      for i = #insights, math.max(1, #insights - 4), -1 do
+        local ins = insights[i]
+        if ins and has_text(ins.analysis) then
+          table.insert(ctx_parts, string.format("--- Cycle %d Analysis ---", ins.cycle or i))
+          table.insert(ctx_parts, trunc(ins.analysis, 2000))
+        end
+      end
+      table.insert(ctx_parts, "=== END CYCLE INSIGHTS ===")
+      table.insert(ctx_parts, "")
+    end
+
+    -- Inject context as system message, then task as user message
+    code_editor.history:add({role = "system", content = table.concat(ctx_parts, "\n")})
+
+    local diag_prompt_parts = {
+      "=== END-OF-RUN DIAGNOSTIC ANALYSIS ===\n",
+      "\nYou are analyzing the complete results of an optimization run. Your task is",
+      "\nDIAGNOSIS ONLY -- do not prescribe fixes yet. That comes in the next step.",
+      "\n\nProduce a structured analysis with these EXACT sections:",
+      "\n\n## 1. OPTIMIZATION TRAJECTORY",
+      "\n- Starting metrics (baseline) and ending metrics",
+      "\n- Inflection point: at which cycle did improvements plateau?",
+      "\n- Was the trajectory monotonic, oscillating, or stalled?",
+      "\n\n## 2. DATASET DIVERGENCE",
+      "\nThe optimizer tested every change against TWO datasets:",
+      "\n- Feedback dataset: recent human reviewer corrections (current but noisy)",
+      "\n- Regression dataset: curated ground truth (stable but possibly stale)",
+      "\n\nAnalyze the divergence data above. Key questions:",
+      "\n- Are the datasets moving together or apart across cycles?",
+      "\n- Were there cycles where FB improved but ACC regressed? What changed?",
+      "\n  This indicates either: rubric drift (reviewers apply a newer standard),",
+      "\n  reviewer inconsistency, or overfitting to recent feedback patterns.",
+      "\n- Were there cycles where ACC improved but FB regressed?",
+      "\n  This indicates the change generalizes but conflicts with reviewer expectations.",
+      "\n- Is the regression dataset still representative of the current rubric?",
+      "\n\n## 3. CONTRADICTION ANALYSIS",
+      "\n- How many feedback items are contradictions vs. policy gaps vs. aligned?",
+      "\n- List the top contradiction topics with guideline quotes and exemplars.",
+      "\n- What fraction of remaining errors are attributable to contradictions?",
+      "\n\n## 4. POLICY GAP ANALYSIS",
+      "\n- Which gaps were addressed by accepted hypotheses during the run?",
+      "\n- Which gaps remain unaddressed?",
+      "\n- For each unaddressed gap: what specific behavior do reviewers expect?",
+      "\n\n## 5. RESIDUAL ERROR FORENSICS",
+      "\nExamine the residual error samples above. For EACH item:",
+      "\n- What did the model think the rule was? (from the root cause analysis)",
+      "\n- What did the reviewer think the rule was? (from the evidence/edit comment)",
+      "\n- Classify: (a) guideline contradiction, (b) policy gap, (c) ambiguous",
+      "\n  guideline language, (d) genuine model error, (e) noisy/incorrect label",
+      "\n- What specific policy question would resolve this item?",
+      "\n\n## 6. ERROR CATEGORY EVOLUTION",
+      "\nExamine the RCA category evolution table. Key questions:",
+      "\n- Is score_configuration_problem shrinking? (Should be, if optimization works)",
+      "\n- Is guideline_gap_requires_sme growing as a share? (Expected -- these are",
+      "\n  the errors that remain after fixable ones are addressed)",
+      "\n- What is the current fixable% and what does it imply for the ceiling?",
+      "\n\n## 7. HYPOTHESIS EFFECTIVENESS",
+      "\n- Which categories of changes worked? Which consistently failed?",
+      "\n- Did any category show FB improvement but ACC regression? (rubric drift signal)",
+      "\n\n## 8. CEILING ESTIMATE",
+      "\nSynthesize evidence from: contradictions rate, fixable% from RCA, dataset",
+      "\ndivergence trend, and error category evolution. What is the realistic maximum",
+      "\nAC1 achievable through prompt optimization alone? Cite specific numbers.",
+      "\n\n## 9. BLOCKING FACTORS (ranked by impact)",
+      "\nSpecific factors preventing further improvement, each with evidence.",
+      "\n\nUse specific numbers, item IDs, and AC1 values throughout.",
+      "\nDo not hedge -- state conclusions directly."
+    }
+    local diag_prompt = table.concat(diag_prompt_parts, "")
 
     guard_context_budget(code_editor)
-    local diag_ok, diag_err = safe_editor_call(table.concat(diag_parts, ""), nil)
-    local diagnostic_text = code_editor.output or "(no diagnostic generated)"
-    if not diag_ok then
-      diagnostic_text = "Diagnostic generation failed: " .. tostring(diag_err)
+    local ok, err = safe_editor_call(diag_prompt, nil)
+    diagnostic_text = code_editor.output or "(no diagnosis generated)"
+    if not ok then
+      diagnostic_text = "Diagnostic generation failed: " .. tostring(err)
+    end
+  end)
+
+  -- Phase 2: Prescription (agent call)
+  Human.notify({message = "  Phase 2: Generating prescription...", level = "info"})
+  local prescription_text = "(prescription not available)"
+  pcall(function()
+    code_editor.clear_history()
+
+    -- Feed diagnosis + raw evidence to prescription agent
+    local presc_ctx_parts = {}
+    table.insert(presc_ctx_parts, "=== DIAGNOSTIC ANALYSIS (from Phase 1) ===")
+    table.insert(presc_ctx_parts, trunc(diagnostic_text, 8000))
+    table.insert(presc_ctx_parts, "=== END DIAGNOSTIC ===")
+    table.insert(presc_ctx_parts, "")
+
+    -- Include contradiction exemplars for specific references
+    local kc = State.get("known_contradictions")
+    if kc and has_text(kc.summary) then
+      table.insert(presc_ctx_parts, "=== CONTRADICTION DETAILS ===")
+      table.insert(presc_ctx_parts, kc.summary)
+      table.insert(presc_ctx_parts, "=== END CONTRADICTION DETAILS ===")
+      table.insert(presc_ctx_parts, "")
     end
 
-    -- Store as metadata visible in dashboard/procedure info
-    State.set("optimization_diagnostic", {
-      text = trunc(diagnostic_text, 10000),
-      success_rate = success_rate,
+    -- Include residual errors for specific item references
+    if has_text(residual_errors_text) then
+      table.insert(presc_ctx_parts, residual_errors_text)
+      table.insert(presc_ctx_parts, "")
+    end
+
+    code_editor.history:add({role = "system", content = table.concat(presc_ctx_parts, "\n")})
+
+    local presc_prompt_parts = {
+      "=== END-OF-RUN PRESCRIPTION ===\n",
+      "\nBased on the diagnostic analysis above, produce SPECIFIC, ACTIONABLE prescriptions.",
+      "\nEach prescription must cite evidence from the diagnosis.",
+      "\n\n## FOR SMEs / STAKEHOLDERS",
+      "\n\n### Policy Decisions Required",
+      "\nFor each: formulate the EXACT question an SME needs to answer.",
+      "\nNot 'should we change the guideline?' but:",
+      "\n'When a caller says [X] in context [Y], should the score be [Z]?",
+      "\nCurrently guidelines say [W] but reviewers consistently correct to [V].",
+      "\nEvidence: [N items affected, specific topic/category, edit comments].'",
+      "\n\n### Guideline Changes Needed",
+      "\nFor each: specify the EXACT guideline text to add, modify, or remove.",
+      "\nInclude: current text, proposed text, evidence, items affected, priority (HIGH/MEDIUM/LOW).",
+      "\n\n### Label Reconciliation Needed",
+      "\nFor each contradiction topic: what items should reviewers re-examine?",
+      "\nInclude: topic name, item count, what the conflict is.",
+      "\n\n### Regression Dataset Recommendations",
+      "\nIf feedback and accuracy diverged consistently:",
+      "\n- Are specific items in the regression set reflecting a stale interpretation?",
+      "\n- Should specific items be relabeled to match the current rubric?",
+      "\n- Should new items from recent feedback be added to the regression set?",
+      "\n\n## FOR DEVELOPERS",
+      "\n\n### Score Configuration Changes",
+      "\n- Specific YAML changes to make before the next optimizer run",
+      "\n- Model/architecture considerations (if structural hypotheses were informative)",
+      "\n\n## FOR THE NEXT OPTIMIZER RUN",
+      "\n\n### Focus Areas",
+      "\n- Policy gaps to target first (ranked by item count and expected impact)",
+      "\n- Specific residual error patterns that look fixable",
+      "\n\n### Avoidance List",
+      "\n- Contradiction topics that will waste cycles",
+      "\n- Hypothesis types that consistently failed",
+      "\n- Specific criteria that were changed and reverted multiple times",
+      "\n\n### Configuration Recommendations",
+      "\n- Suggested hint parameter text (based on residual error patterns)",
+      "\n- Whether to use start_version from this run's final accepted version",
+      "\n\nEvery prescription must include:",
+      "\n- EVIDENCE: specific counts, metric values, topic names",
+      "\n- EXPECTED IMPACT: estimated items affected, estimated AC1 improvement",
+      "\n- DECISION-MAKER: who needs to act (SME, developer, reviewer lead)",
+      "\n- URGENCY: must-fix before next run / nice-to-have / long-term"
+    }
+    local presc_prompt = table.concat(presc_prompt_parts, "")
+
+    guard_context_budget(code_editor)
+    local ok, err = safe_editor_call(presc_prompt, nil)
+    prescription_text = code_editor.output or "(no prescription generated)"
+    if not ok then
+      prescription_text = "Prescription generation failed: " .. tostring(err)
+    end
+  end)
+
+  -- Store results
+  State.set("end_of_run_report", {
+    generated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    run_summary = {
       cycles = #iterations,
       accepted = total_accepted,
       rejected = total_rejected,
-      skipped = total_skipped
-    })
+      skipped = total_skipped,
+      success_rate = success_rate,
+      baseline_fb_ac1 = feedback_baseline_metrics and feedback_baseline_metrics.alignment or 0,
+      final_fb_ac1 = last_accepted and last_accepted.feedback_metrics and last_accepted.feedback_metrics.alignment
+        or (feedback_baseline_metrics and feedback_baseline_metrics.alignment or 0),
+      total_fb_improvement = total_fb_improvement,
+      total_acc_improvement = total_acc_improvement,
+      stop_reason = stop_reason
+    },
+    diagnosis = {text = trunc(diagnostic_text, 10000)},
+    prescription = {text = trunc(prescription_text, 10000)},
+    evidence = {
+      divergence_summary = trunc(divergence_text, 3000),
+      rca_evolution = trunc(rca_evolution_text, 3000),
+      residual_errors = trunc(residual_errors_text, 3000)
+    }
+  })
 
-    Human.notify({message = "\n=== OPTIMIZATION DIAGNOSTIC ===\n" .. trunc(diagnostic_text, 3000), level = "info"})
-  end
+  -- Backward-compatible storage
+  State.set("optimization_diagnostic", {
+    text = trunc(diagnostic_text, 10000),
+    success_rate = success_rate,
+    cycles = #iterations,
+    accepted = total_accepted,
+    rejected = total_rejected,
+    skipped = total_skipped
+  })
+
+  -- Emit to human
+  Human.notify({message = "\n" .. string.rep("=", 60)
+    .. "\n=== END-OF-RUN DIAGNOSIS ===\n"
+    .. string.rep("=", 60) .. "\n\n"
+    .. trunc(diagnostic_text, 4000), level = "info"})
+
+  Human.notify({message = "\n" .. string.rep("=", 60)
+    .. "\n=== END-OF-RUN PRESCRIPTION ===\n"
+    .. string.rep("=", 60) .. "\n\n"
+    .. trunc(prescription_text, 4000), level = "info"})
 
   return {
     success = true,
@@ -4604,5 +5374,7 @@ code: |
     feedback_improvement = total_fb_improvement,
     accuracy_improvement = total_acc_improvement,
     scorecard_id = scorecard_id,
-    score_id = score_id
+    score_id = score_id,
+    diagnosis = trunc(diagnostic_text, 10000),
+    prescription = trunc(prescription_text, 10000)
   }
