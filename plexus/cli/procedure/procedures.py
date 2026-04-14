@@ -557,10 +557,24 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 for i, stage in enumerate(yaml_stages)
             }
 
-        # Extract scorecard/score identifiers from --set params so the procedure
-        # DB record can carry the foreign-key association and show names in the UI.
+        # Extract scorecard/score identifiers so the procedure DB record can carry
+        # the foreign-key association and show names in the UI.
+        # Priority: --set params override YAML param value: fields.
         scorecard_identifier_for_create = None
         score_identifier_for_create = None
+        # 1. Pull defaults from YAML param value: fields
+        yaml_params = config.get('params', {}) if isinstance(config, dict) else {}
+        for key, meta in yaml_params.items() if isinstance(yaml_params, dict) else []:
+            if not isinstance(meta, dict):
+                continue
+            val = meta.get('value')
+            if not val:
+                continue
+            if key in ('scorecard', 'scorecard_id'):
+                scorecard_identifier_for_create = str(val)
+            elif key in ('score', 'score_id'):
+                score_identifier_for_create = str(val)
+        # 2. --set params take precedence
         if set_params:
             for param in set_params:
                 if '=' in param:
