@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "421936ba-8402-471d-b6bc-5276c098fe26",
+  "issue_id": "plx-6599855c-d0a3-42c1-bd6c-a976ca84df84",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-14T22:14:47.099Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-3c73348a-163a-436e-8b26-0da2bca510cc",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix develop CI regressions blocking PR #167 review"
+  }
+}
