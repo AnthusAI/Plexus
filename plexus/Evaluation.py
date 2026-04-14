@@ -6,7 +6,7 @@ import json
 import pandas as pd
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -239,6 +239,10 @@ class Evaluation:
         self.total_correct = 0
         self.total_questions = 0
         self.total_skipped = 0  # Track scores skipped due to unmet conditions
+        # Shared task state used by run() cleanup and accuracy metrics streaming.
+        self.metrics_tasks = {}
+        self.should_stop = False
+        self.completed_scores = set()
 
     @staticmethod
     def _format_alignment_metric_value(alignment_value: Optional[float]) -> float:
@@ -310,13 +314,14 @@ class Evaluation:
         finally:
             # Signal metrics tasks to stop gracefully
             self.should_stop = True
-            
-            if self.metrics_tasks:
+
+            metrics_tasks = getattr(self, "metrics_tasks", None)
+            if metrics_tasks:
                 logging.info("Waiting for metrics tasks to complete...")
                 try:
                     # Wait for all tasks to complete naturally
                     done, pending = await asyncio.wait(
-                        self.metrics_tasks.values(),
+                        metrics_tasks.values(),
                         timeout=30.0,
                         return_when=asyncio.ALL_COMPLETED
                     )
@@ -864,6 +869,12 @@ class Evaluation:
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+        scorecard_name_raw = self.scorecard_name
+        if self.scorecard is not None and hasattr(self.scorecard, "name"):
+            scorecard_name_attr = self.scorecard.name
+            scorecard_name_raw = scorecard_name_attr() if callable(scorecard_name_attr) else scorecard_name_attr
+        scorecard_name = str(scorecard_name_raw).replace(" ", "_")
+
         # Determine the correct report folder
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
             try:
@@ -873,11 +884,9 @@ class Evaluation:
             except ValueError as e:
                 self.logging.info(f"Could not get score instance for report folder: {e}")
                 # Fallback to default report folder structure
-                scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
                 score_name = self.subset_of_score_names[0].replace(' ', '_')
                 report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
         else:
-            scorecard_name = self.scorecard.name.replace(' ', '_')
             report_folder_path = f"./score_results/{scorecard_name}/combined"
 
         # Ensure the report folder exists
@@ -3198,6 +3207,148 @@ class FeedbackEvaluation(Evaluation):
         if has_usable_root_cause:
             params["root_cause"] = root_cause_payload
         return params
+
+    async def run(self, tracker=None, progress_callback=None, dry_run=False):
+        """
+        Run feedback evaluation against human-corrected FeedbackItems.
+
+        This is intentionally separate from AccuracyEvaluation.run(), which executes
+        score predictions over a dataset.
+        """
+        from plexus.analysis.feedback_analyzer import analyze_feedback_items
+        from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+        from plexus.dashboard.api.models.scorecard import Scorecard as DashboardScorecard
+
+        evaluation_record = None
+        try:
+            if self.evaluation_id:
+                evaluation_record = DashboardEvaluation.get_by_id(self.evaluation_id, self.api_client)
+                if evaluation_record:
+                    evaluation_record.update(status="RUNNING")
+
+            if not self.score_id:
+                raise ValueError("score_id is required for feedback evaluation")
+
+            if self.scorecard_id:
+                # Keep this lookup explicit so identifier-resolution failures surface early.
+                DashboardScorecard.get_by_id(self.scorecard_id, self.api_client)
+
+            if self.days is None:
+                start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
+            else:
+                start_date = datetime.now(timezone.utc) - timedelta(days=self.days)
+            end_date = datetime.now(timezone.utc)
+
+            feedback_items = await self._fetch_feedback_items(
+                scorecard_id=self.scorecard_id,
+                score_id=self.score_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+            selected_feedback_items, selection_metadata = select_feedback_items(
+                feedback_items,
+                max_items=self.max_items,
+                sampling_mode=self.sampling_mode,
+                sample_seed=self.sample_seed,
+            )
+
+            await self._create_score_results_from_feedback(
+                feedback_items=selected_feedback_items,
+                evaluation_id=self.evaluation_id,
+                scorecard_id=self.scorecard_id,
+                score_id=self.score_id,
+                account_id=self.account_id,
+            )
+
+            analysis = analyze_feedback_items(selected_feedback_items, score_id=self.score_id)
+            metrics_summary = {
+                "ac1": self._format_alignment_metric_value(analysis.get("ac1")),
+                "accuracy": float(analysis.get("accuracy") or 0.0),
+                "precision": float(analysis.get("precision") or 0.0),
+                "recall": float(analysis.get("recall") or 0.0),
+            }
+
+            incorrect_items = [
+                item for item in selected_feedback_items
+                if item.initialAnswerValue is not None
+                and item.finalAnswerValue is not None
+                and item.initialAnswerValue != item.finalAnswerValue
+            ]
+            incorrect_items_total = len(incorrect_items)
+
+            score_result_map = {
+                str(item.id): {
+                    "value": item.initialAnswerValue,
+                    "human_label": item.finalAnswerValue,
+                    "explanation": None,
+                }
+                for item in incorrect_items
+            }
+            root_cause_payload = {}
+            if incorrect_items_total > 0:
+                root_cause_payload = await self._run_root_cause_analysis(
+                    selected_feedback_items,
+                    score_result_map=score_result_map,
+                    original_explanations={},
+                    max_category_summary_items=self.max_category_summary_items,
+                    tracker=tracker,
+                )
+
+            persisted_root_cause = await asyncio.to_thread(
+                self._persist_root_cause_for_parameters,
+                root_cause_payload,
+            )
+            contract = self.root_cause_contract_outcome(incorrect_items_total, persisted_root_cause)
+            if contract["error_message"]:
+                raise RuntimeError(f"{contract['error_message']} (no usable RCA payload)")
+
+            metrics_payload = [
+                {"name": "Alignment", "value": metrics_summary["ac1"]},
+                {"name": "Accuracy", "value": metrics_summary["accuracy"]},
+                {"name": "Precision", "value": metrics_summary["precision"]},
+                {"name": "Recall", "value": metrics_summary["recall"]},
+            ]
+
+            parameters_payload = self.apply_root_cause_contract_to_parameters(
+                existing_parameters={
+                    "days": self.days,
+                    "max_items": self.max_items,
+                    "sampling_mode": self.sampling_mode,
+                    "sample_seed": self.sample_seed,
+                    "max_category_summary_items": self.max_category_summary_items,
+                    **(selection_metadata or {}),
+                    "incorrect_items_total": incorrect_items_total,
+                },
+                root_cause_payload=persisted_root_cause,
+                root_cause_required=contract["root_cause_required"],
+                has_usable_root_cause=contract["has_usable_root_cause"],
+            )
+
+            if evaluation_record:
+                evaluation_record.update(
+                    status="COMPLETED",
+                    accuracy=metrics_summary["accuracy"],
+                    metrics=json.dumps(metrics_payload),
+                    parameters=json.dumps(parameters_payload),
+                    totalItems=analysis.get("total_items") or len(selected_feedback_items),
+                    processedItems=analysis.get("total_items") or len(selected_feedback_items),
+                )
+
+            return {
+                "status": "success",
+                "evaluation_id": self.evaluation_id,
+                "metrics": metrics_summary,
+                "analysis": analysis,
+            }
+
+        except Exception as exc:
+            if evaluation_record:
+                try:
+                    evaluation_record.update(status="FAILED", errorMessage=str(exc))
+                except Exception:
+                    self.logger.exception("Failed to update feedback evaluation record status to FAILED")
+            raise
 
     async def _fetch_feedback_items(
         self,
