@@ -581,7 +581,7 @@ class ScoreEditorToolset:
                 if not os.path.exists(code_file_path):
                     raise RuntimeError(f"plexus_score_pull wrote to {code_file_path} but file does not exist")
 
-                with open(code_file_path, "r") as f:
+                with open(code_file_path, "r", encoding="utf-8", errors="replace") as f:
                     code = f.read()
 
                 if not code:
