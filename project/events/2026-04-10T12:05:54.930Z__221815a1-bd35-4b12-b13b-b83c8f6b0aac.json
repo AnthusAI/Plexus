@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "221815a1-bd35-4b12-b13b-b83c8f6b0aac",
+  "issue_id": "plx-1df1f810-22ef-4c7d-b317-d9da3c15b2c3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-10T12:05:54.930Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run a feedback evaluation for CMG - EDU Branding and Matching using the newly created single-request ScoreVersion.\n\nScope:\n- Evaluate scorecard 1039, score 45425, version c918b11b-8fca-4dbd-b7b4-d130e5f98e94\n- Use recent feedback items with max_samples=100\n- Capture evaluation ID and metrics (AC1, accuracy, precision, recall, confusion matrix)\n- Record results in Kanbus\n\nAssumption:\n- \"Recent feedback items\" interpreted as last 30 days.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+    "priority": 1,
+    "status": "open",
+    "title": "Validate new Branding and Matching version with 100 recent feedback samples"
+  }
+}

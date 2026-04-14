@@ -129,14 +129,39 @@ export type ToolInputProps = ComponentProps<"div"> & {
   input?: unknown;
 };
 
-export const ToolInput = ({ input, className, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-1", className)} {...props}>
-    <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Input</div>
-    <pre className="overflow-x-auto rounded-md bg-background p-2 text-xs text-foreground">
-      {JSON.stringify(input ?? {}, null, 2)}
-    </pre>
-  </div>
-);
+function formatInputValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+export const ToolInput = ({ input, className, ...props }: ToolInputProps) => {
+  const entries =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? Object.entries(input as Record<string, unknown>)
+      : null;
+
+  return (
+    <div className={cn("space-y-1", className)} {...props}>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Input</div>
+      {entries ? (
+        <dl className="rounded-md bg-background p-2 text-xs text-foreground space-y-1">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex gap-2 min-w-0">
+              <dt className="shrink-0 text-muted-foreground font-medium">{k}:</dt>
+              <dd className="truncate font-mono">{formatInputValue(v)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <pre className="overflow-x-auto rounded-md bg-background p-2 text-xs text-foreground">
+          {JSON.stringify(input ?? {}, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+};
 
 export type ToolOutputProps = ComponentProps<"div"> & {
   output?: ReactNode;

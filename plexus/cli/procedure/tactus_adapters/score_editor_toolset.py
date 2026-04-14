@@ -7,9 +7,10 @@ can make targeted, precise edits to score configuration YAML.
 
 Key tools exposed:
 - str_replace_editor: Standard Claude text editor tool (view/str_replace/insert/undo_edit)
-- submit_score_code: State-transition tool that validates and creates a new ScoreVersion
+- submit_score_version: State-transition tool that validates and creates a new ScoreVersion
 - score_editor_setup: MCP tool called from Lua to initialize the virtual file
 - score_editor_get_result: MCP tool called from Lua to retrieve the created version ID
+- score_editor_get_content: MCP tool called from Lua to read current virtual file content
 """
 
 import logging
@@ -27,7 +28,7 @@ class ScoreEditorToolset:
     Lifecycle per iteration:
       1. Lua calls score_editor_setup(yaml_content, scorecard, score, iteration, hypothesis)
       2. code_editor agent calls str_replace_editor to view and edit the file
-      3. code_editor agent calls submit_score_code() when edits are complete
+      3. code_editor agent calls submit_score_version() when edits are complete
       4. Lua calls score_editor_get_result() to retrieve the new version ID
     """
 
@@ -43,6 +44,7 @@ class ScoreEditorToolset:
         self._dry_run: bool = False
         self._last_version_id: Optional[str] = None
         self._code_file_path: Optional[str] = None
+        self._last_edit_error: Optional[str] = None
 
     # ------------------------------------------------------------------
     # MCP tools (called from Lua via call_plexus_tool)
@@ -52,9 +54,10 @@ class ScoreEditorToolset:
         """
         Set up the score editor for a new iteration.
 
-        NOTE: yaml_content is NOT accepted here — it is too large to pass through
-        the orchestrator LLM. Content is eagerly loaded via plexus_score_pull so
-        that _code_file_path is set (needed for Lua direct-edit + submit path).
+        Accepts optional yaml_content parameter. When provided by Lua (which already
+        has the YAML from plexus_score_pull + File.read), content is loaded directly
+        without any async API call — bypassing nested event loop issues in the Tactus
+        agent context. When yaml_content is omitted, falls back to _load_content_from_api().
         """
         self._content = ""
         self._original = ""
@@ -73,34 +76,45 @@ class ScoreEditorToolset:
         self._hypothesis = str(arguments.get("hypothesis", "") or "")
         self._dry_run = bool(arguments.get("dry_run", False))
         self._last_version_id = None
+        self._last_edit_error = None
 
-        # Accept code_file_path from Lua (may be stripped by DSPy, so also try eager load)
         code_file_path = arguments.get("code_file_path", "")
         if code_file_path:
             self._code_file_path = code_file_path
 
-        # Eagerly load content so _code_file_path and _original are set
-        # for the Lua direct-edit + submit path.
-        load_error = self._load_content_from_api()
-        if load_error:
-            logger.warning("ScoreEditorToolset: eager load failed: %s", load_error)
+        yaml_content = arguments.get("yaml_content", "")
+        if yaml_content:
+            # Direct injection from Lua — no async call needed
+            self._content = yaml_content
+            self._original = yaml_content
+            self._history = []
+            logger.info(
+                "ScoreEditorToolset: loaded %d chars directly for iteration %d, score=%s, dry_run=%s",
+                len(yaml_content), self._iteration, self._score, self._dry_run,
+            )
+        else:
+            # Fallback: try async API load (may fail in nested event loop contexts)
+            load_error = self._load_content_from_api()
+            if load_error:
+                logger.warning("ScoreEditorToolset: eager load failed: %s", load_error)
+            logger.info(
+                "ScoreEditorToolset: initialized for iteration %d, score=%s, dry_run=%s, file=%s",
+                self._iteration, self._score, self._dry_run, self._code_file_path,
+            )
 
-        logger.info(
-            "ScoreEditorToolset: initialized for iteration %d, score=%s, dry_run=%s, file=%s",
-            self._iteration, self._score, self._dry_run, self._code_file_path,
-        )
         return {
             "success": True,
             "message": (
                 f"Score editor ready for iteration {self._iteration}. "
-                f"Code file: {self._code_file_path or 'not loaded yet'}."
+                f"Content: {len(self._content)} chars. "
+                f"Code file: {self._code_file_path or 'not set'}."
             ),
             "path": VIRTUAL_PATH,
             "code_file_path": self._code_file_path,
         }
 
     def get_result(self, arguments: dict) -> dict:
-        """Return the version ID created by the last submit_score_code call."""
+        """Return the version ID created by the last submit_score_version call."""
         if self._last_version_id:
             return {"success": True, "version_id": self._last_version_id}
         return {
@@ -108,6 +122,153 @@ class ScoreEditorToolset:
             "version_id": None,
             "message": "No score version has been submitted yet",
         }
+
+    def get_content(self, arguments: dict) -> dict:
+        """Return the current virtual file content for Lua to build system messages."""
+        return {
+            "success": True,
+            "file_content": self._content,
+            "original": self._original,
+            "modified": self._content != self._original,
+            "length": len(self._content),
+        }
+
+    # ------------------------------------------------------------------
+    # Helpers for str_replace error recovery
+    # ------------------------------------------------------------------
+
+    def _try_fix_indentation(self, old_str: str, new_str: str):
+        """
+        Try to fix indentation mismatches between old_str and file content.
+
+        LLMs commonly strip leading whitespace when reproducing multi-line text.
+        If old_str's lines match content lines after stripping, re-indent both
+        old_str and new_str with the correct indentation and return the fixed pair.
+
+        Returns (fixed_old, fixed_new) or None if no fix found.
+        """
+        old_lines = old_str.split("\n")
+        if not old_lines or not old_lines[0].strip():
+            return None
+
+        # Find the first non-empty line of old_str in content (stripped match)
+        first_stripped = old_lines[0].strip()
+        if not first_stripped:
+            return None
+
+        content_lines = self._content.split("\n")
+        for ci, cline in enumerate(content_lines):
+            if cline.strip() == first_stripped:
+                # Found the first line — determine the indent
+                indent = cline[:len(cline) - len(cline.lstrip())]
+
+                # Check if ALL old_str lines match content lines with this indent
+                matched = True
+                for oi, oline in enumerate(old_lines):
+                    content_idx = ci + oi
+                    if content_idx >= len(content_lines):
+                        matched = False
+                        break
+                    # Empty lines (blank) should match blank content lines
+                    if oline.strip() == "" and content_lines[content_idx].strip() == "":
+                        continue
+                    # Non-empty lines: stripped version must match
+                    if oline.strip() != content_lines[content_idx].strip():
+                        matched = False
+                        break
+
+                if matched:
+                    # Re-indent old_str and new_str to match the file
+                    fixed_old_lines = []
+                    for oi, oline in enumerate(old_lines):
+                        if oline.strip() == "":
+                            fixed_old_lines.append(content_lines[ci + oi])
+                        else:
+                            fixed_old_lines.append(indent + oline.lstrip())
+                    fixed_old = "\n".join(fixed_old_lines)
+
+                    # Verify the fixed old_str actually matches
+                    if fixed_old not in self._content:
+                        continue  # Try next match location
+
+                    # Apply the same indent to new_str
+                    new_lines = new_str.split("\n")
+                    fixed_new_lines = []
+                    for nline in new_lines:
+                        if nline.strip() == "":
+                            fixed_new_lines.append(nline)
+                        else:
+                            fixed_new_lines.append(indent + nline.lstrip())
+                    fixed_new = "\n".join(fixed_new_lines)
+
+                    return (fixed_old, fixed_new)
+
+        return None
+
+    def _build_match_error(self, old_str: str) -> str:
+        """
+        Build a diagnostic error message showing the agent what went wrong.
+
+        Instead of a generic "no match found", show the actual content near
+        where the agent was trying to edit so it can see the indentation
+        or other differences.
+        """
+        first_line = old_str.split("\n")[0]
+        first_stripped = first_line.strip()
+        hint_lines = []
+
+        # Try to find the first line (stripped) in content
+        content_lines = self._content.split("\n")
+        match_line = None
+        for i, cline in enumerate(content_lines):
+            if first_stripped and first_stripped in cline:
+                match_line = i
+                break
+
+        if match_line is not None:
+            # Show the actual content around the match
+            start = max(0, match_line - 1)
+            end = min(len(content_lines), match_line + len(old_str.split("\n")) + 2)
+            actual_lines = content_lines[start:end]
+            actual_snippet = "\n".join(f"  {start + j + 1}| {ln}" for j, ln in enumerate(actual_lines))
+
+            # Detect the specific problem
+            actual_first = content_lines[match_line]
+            old_first = old_str.split("\n")[0]
+            if actual_first.strip() == old_first.strip() and actual_first != old_first:
+                indent_actual = len(actual_first) - len(actual_first.lstrip())
+                indent_old = len(old_first) - len(old_first.lstrip())
+                hint_lines.append(
+                    f"INDENTATION MISMATCH: Your old_str lines have "
+                    f"{indent_old}-space indent but the file uses "
+                    f"{indent_actual}-space indent."
+                )
+                hint_lines.append(
+                    "Copy the text exactly as shown below, preserving "
+                    "the leading spaces on each line."
+                )
+            else:
+                hint_lines.append(
+                    "The text you provided doesn't exactly match the file content. "
+                    "Compare your old_str with the actual file content below."
+                )
+
+            hint_lines.append(f"\nActual file content near your match target:\n{actual_snippet}")
+        else:
+            # First line not found at all
+            hint_lines.append(
+                "Error: No match found for old_str in score_config.yaml. "
+                "The text you provided does not appear in the editable file. "
+                "It may have come from another part of your prompt context "
+                "(e.g. guidelines, RCA analysis, or instructions) rather than "
+                "from score_config.yaml itself."
+            )
+            hint_lines.append(
+                "\nUse str_replace_editor(command='view', path='score_config.yaml') "
+                "to re-read the editable file and copy the exact text from there."
+            )
+
+        return "\n".join(hint_lines)
 
     # ------------------------------------------------------------------
     # Agent tools (called by code_editor agent)
@@ -134,6 +295,9 @@ class ScoreEditorToolset:
             )
 
         if command == "view":
+            # Clear any pending edit error — viewing the file is the recovery action
+            self._last_edit_error = None
+
             # Auto-load content on first view if not yet populated
             if not self._content:
                 load_error = self._load_content_from_api()
@@ -153,49 +317,79 @@ class ScoreEditorToolset:
             old_str = arguments.get("old_str")
             new_str = arguments.get("new_str", "")
             if not old_str:
-                return "Error: old_str is required for str_replace command"
+                err = "Error: old_str is required for str_replace command"
+                self._last_edit_error = err
+                return err
+            # Normalize escape sequences — LLM tool args often contain literal
+            # backslash-escapes instead of the actual characters.  \n is the most
+            # common, but \' and \t also occur in Lua code edits.
+            for esc, char in [("\\n", "\n"), ("\\t", "\t"), ("\\'", "'"), ('\\"', '"')]:
+                old_str = old_str.replace(esc, char)
+                new_str = new_str.replace(esc, char)
             if old_str not in self._content:
-                # Provide a helpful snippet of the area around the expected location
-                return (
-                    "Error: No match found for old_str. The exact text (including whitespace "
-                    "and indentation) was not found in the file.\n\n"
-                    "Tip: Use view to re-read the file and copy old_str exactly."
-                )
+                # Try auto-fixing indentation mismatches.
+                # LLMs commonly strip leading whitespace when copying multi-line
+                # text from context. Detect this and re-indent old_str/new_str.
+                fixed = self._try_fix_indentation(old_str, new_str)
+                if fixed:
+                    old_str, new_str = fixed
+                    logger.info(
+                        "str_replace: auto-fixed indentation mismatch "
+                        "(added %d-space indent)",
+                        len(old_str.split("\n")[0]) - len(old_str.split("\n")[0].lstrip()),
+                    )
+                else:
+                    # Build a diagnostic error message the agent can act on
+                    err = self._build_match_error(old_str)
+                    self._last_edit_error = err
+                    return err
             count = self._content.count(old_str)
             if count > 1:
-                return (
+                err = (
                     f"Error: old_str matches {count} locations in the file. "
                     "Provide more surrounding context to make it unique."
                 )
+                self._last_edit_error = err
+                return err
             self._history.append(self._content)
             self._content = self._content.replace(old_str, new_str, 1)
+            self._last_edit_error = None
             return self._format_edit_result("str_replace")
 
         elif command == "insert":
             insert_line = arguments.get("insert_line")
             new_str = arguments.get("new_str", "")
             if insert_line is None:
-                return "Error: insert_line is required for insert command"
+                err = "Error: insert_line is required for insert command"
+                self._last_edit_error = err
+                return err
             if not new_str:
-                return "Error: new_str is required for insert command"
+                err = "Error: new_str is required for insert command"
+                self._last_edit_error = err
+                return err
             self._history.append(self._content)
             lines = self._content.split("\n")
             insert_at = max(0, min(int(insert_line), len(lines)))
             insert_lines = new_str.split("\n")
             lines[insert_at:insert_at] = insert_lines
             self._content = "\n".join(lines)
+            self._last_edit_error = None
             return self._format_edit_result("insert")
 
         elif command == "undo_edit":
             if not self._history:
-                return "Error: No previous edit to undo"
+                err = "Error: No previous edit to undo"
+                self._last_edit_error = err
+                return err
             self._content = self._history.pop()
+            self._last_edit_error = None
             return "Last edit undone.\n\n" + self._format_validation()
 
         elif command == "create":
             new_str = arguments.get("new_str", arguments.get("file_text", ""))
             self._history.append(self._content)
             self._content = new_str
+            self._last_edit_error = None
             return self._format_edit_result("create")
 
         else:
@@ -204,51 +398,49 @@ class ScoreEditorToolset:
                 "Supported: view, str_replace, insert, undo_edit, create"
             )
 
-    async def submit_score_code(self, arguments: dict) -> dict:
+    async def submit_score_version(self, arguments: dict) -> dict:
         """
         Validate and submit the current virtual file as a new score version.
 
-        Supports two edit paths:
-        1. In-memory edits via str_replace_editor (code_editor agent)
-        2. On-disk edits via Lua File.write() (direct Lua editing)
-
-        If in-memory content is unchanged but _code_file_path exists, reads the
-        edited file from disk. This supports the Lua direct-edit path where edits
-        bypass the in-memory virtual file.
+        The score must be modified via str_replace_editor before calling this.
+        Rejects if the content is unchanged from the original to prevent accidentally
+        submitting an unmodified or stale score version.
         """
         version_note = arguments.get("version_note") or None
 
-        # If in-memory content is unchanged (or empty), try reading from disk file
-        # (supports Lua direct file editing path where edits bypass the virtual file)
-        if not self._content or self._content == self._original:
-            import os
-            # Check well-known exchange path first (Lua writes edited YAML here)
-            exchange_path = "/tmp/plexus_score_edit_exchange.yaml"
-            paths_to_try = [exchange_path]
-            if self._code_file_path:
-                paths_to_try.append(self._code_file_path)
-
-            for path in paths_to_try:
-                if os.path.exists(path):
-                    try:
-                        with open(path, "r") as f:
-                            disk_content = f.read()
-                        if disk_content and (not self._original or disk_content != self._original):
-                            logger.info(
-                                "ScoreEditorToolset: loading edited content from disk: %s (%d chars)",
-                                path, len(disk_content),
-                            )
-                            self._content = disk_content
-                            break
-                    except Exception as exc:
-                        logger.warning("Failed to read disk file %s: %s", path, exc)
+        # Guard 1: last edit call returned an error — agent must fix it before submitting
+        if self._last_edit_error:
+            return {
+                "success": False,
+                "error": (
+                    "Cannot submit: the most recent str_replace_editor call returned an error:\n\n"
+                    f"  {self._last_edit_error}\n\n"
+                    "Fix the edit error first:\n"
+                    "  • Call str_replace_editor(command='view', path='score_config.yaml') to re-read "
+                    "the current file.\n"
+                    "  • Copy the exact text you want to replace (including all whitespace/indentation).\n"
+                    "  • Retry str_replace_editor with an exactly-matching old_str.\n"
+                    "  • Then call submit_score_version again."
+                ),
+            }
 
         if not self._content:
             return {
                 "success": False,
                 "error": (
-                    "No score code available. Either make edits using str_replace_editor "
-                    "or write edited YAML to /tmp/plexus_score_edit_exchange.yaml before calling submit_score_code."
+                    "Cannot submit: no score code is loaded. "
+                    "Call str_replace_editor(command='view', path='score_config.yaml') "
+                    "to load the file, make your edit, then call submit_score_version."
+                ),
+            }
+
+        # Guard 2: reject if content is unchanged — edit was a no-op or not yet made
+        if self._original and self._content == self._original:
+            return {
+                "success": False,
+                "error": (
+                    "Cannot submit: the score configuration is unchanged from the original champion version. "
+                    "Use str_replace_editor to make a meaningful change, then call submit_score_version again."
                 ),
             }
 
@@ -262,13 +454,16 @@ class ScoreEditorToolset:
             flags=re.MULTILINE,
         )
 
-        # Validate YAML syntax
+        # Guard 3: validate YAML syntax — agent must fix structure errors before submitting
         errors = self._get_validation_errors()
         if errors:
             error_text = "\n".join(f"  - {e}" for e in errors)
             return {
                 "success": False,
-                "error": f"YAML validation failed. Fix these errors before submitting:\n{error_text}",
+                "error": (
+                    "Cannot submit: YAML validation failed. Fix these errors with "
+                    f"str_replace_editor, then call submit_score_version again:\n{error_text}"
+                ),
             }
 
         note = version_note or (
@@ -320,7 +515,7 @@ class ScoreEditorToolset:
                 }
 
         except Exception as exc:
-            logger.error("ScoreEditorToolset.submit_score_code error: %s", exc)
+            logger.error("ScoreEditorToolset.submit_score_version error: %s", exc)
             return {"success": False, "error": f"Failed to create score version: {exc}"}
 
     # ------------------------------------------------------------------
@@ -349,57 +544,73 @@ class ScoreEditorToolset:
                 },
             )
 
-        try:
-            # Run the async pull in a thread to avoid nested event loop issues
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, _do_pull())
-                result = future.result(timeout=60)
+        import concurrent.futures
+        import time as _time
 
-            # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
-            # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
-            pull_data = None
-            if isinstance(result, dict):
-                for item in result.get("content", []):
-                    if isinstance(item, dict) and item.get("type") == "text":
-                        try:
-                            pull_data = json.loads(item["text"])
-                            break
-                        except (ValueError, TypeError, KeyError):
-                            pass
-                # Also try direct dict fields (non-wrapped response)
-                if pull_data is None:
-                    pull_data = result
+        max_retries = 3
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Run the async pull in a thread to avoid nested event loop issues
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(asyncio.run, _do_pull())
+                    result = future.result(timeout=60)
 
-            if not pull_data or not pull_data.get("success"):
-                return f"plexus_score_pull failed: {result}"
+                # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
+                # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
+                pull_data = None
+                if isinstance(result, dict):
+                    for item in result.get("content", []):
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            try:
+                                pull_data = json.loads(item["text"])
+                                break
+                            except (ValueError, TypeError, KeyError):
+                                pass
+                    # Also try direct dict fields (non-wrapped response)
+                    if pull_data is None:
+                        pull_data = result
 
-            code_file_path = pull_data.get("codeFilePath")
-            if not code_file_path:
-                return f"plexus_score_pull returned no codeFilePath: {pull_data}"
+                if not pull_data or not pull_data.get("success"):
+                    raise RuntimeError(f"plexus_score_pull failed: {result}")
 
-            if not os.path.exists(code_file_path):
-                return f"plexus_score_pull wrote to {code_file_path} but file does not exist"
+                code_file_path = pull_data.get("codeFilePath")
+                if not code_file_path:
+                    raise RuntimeError(f"plexus_score_pull returned no codeFilePath: {pull_data}")
 
-            with open(code_file_path, "r") as f:
-                code = f.read()
+                if not os.path.exists(code_file_path):
+                    raise RuntimeError(f"plexus_score_pull wrote to {code_file_path} but file does not exist")
 
-            if not code:
-                return f"Score code file is empty: {code_file_path}"
+                with open(code_file_path, "r", encoding="utf-8", errors="replace") as f:
+                    code = f.read()
 
-            self._content = code
-            self._original = code
-            self._history = []
-            self._code_file_path = code_file_path
-            logger.info(
-                "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
-                len(code), self._scorecard, self._score, code_file_path,
-            )
-            return None
+                if not code:
+                    raise RuntimeError(f"Score code file is empty: {code_file_path}")
 
-        except Exception as exc:
-            logger.error("ScoreEditorToolset._load_content_from_api error: %s", exc)
-            return str(exc)
+                self._content = code
+                self._original = code
+                self._history = []
+                self._code_file_path = code_file_path
+                logger.info(
+                    "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
+                    len(code), self._scorecard, self._score, code_file_path,
+                )
+                return None
+
+            except Exception as exc:
+                last_error = exc
+                if attempt < max_retries:
+                    logger.warning(
+                        "ScoreEditorToolset._load_content_from_api attempt %d/%d failed: %s, retrying...",
+                        attempt, max_retries, exc,
+                    )
+                    _time.sleep(attempt * 3)
+                else:
+                    logger.error(
+                        "ScoreEditorToolset._load_content_from_api failed after %d attempts: %s",
+                        max_retries, exc,
+                    )
+                    return str(exc)
 
     def _format_edit_result(self, operation: str) -> str:
         validation = self._format_validation()
@@ -493,14 +704,16 @@ class ScoreEditorToolset:
             name="score_editor_setup",
             description=(
                 "Set up the score editor for a new iteration. "
-                "The score YAML is loaded automatically on first view — do NOT pass yaml_content. "
-                "Call this before dispatching the code_editor agent each iteration."
+                "Pass yaml_content (the current score YAML string) to load content directly "
+                "without an API call. Call this before dispatching the code_editor agent."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
                     "scorecard_identifier": {"type": "string", "description": "Scorecard name, key, or ID"},
                     "score_identifier": {"type": "string", "description": "Score name, key, or ID"},
+                    "yaml_content": {"type": "string", "description": "Current score YAML content (direct injection, bypasses async API load)"},
+                    "code_file_path": {"type": "string", "description": "Path to the score YAML file on disk (metadata only)"},
                     "iteration": {"type": "integer", "description": "Current iteration number"},
                     "hypothesis": {"type": "string", "description": "Short hypothesis for the version note (max 200 chars)"},
                     "dry_run": {"type": "boolean", "default": False},
@@ -513,13 +726,24 @@ class ScoreEditorToolset:
 
         transport.register_tool(MCPToolInfo(
             name="score_editor_get_result",
-            description="Return the version ID created by the last submit_score_code call.",
+            description="Return the version ID created by the last submit_score_version call.",
             input_schema={
                 "type": "object",
                 "properties": {},
                 "additionalProperties": False,
             },
             handler=instance.get_result,
+        ))
+
+        transport.register_tool(MCPToolInfo(
+            name="score_editor_get_content",
+            description="Return the current virtual file content and modification status.",
+            input_schema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+            handler=instance.get_content,
         ))
 
         transport.register_tool(MCPToolInfo(
@@ -567,11 +791,10 @@ class ScoreEditorToolset:
         ))
 
         transport.register_tool(MCPToolInfo(
-            name="submit_score_code",
+            name="submit_score_version",
             description=(
                 "Submit the current virtual score file as a new score version. "
-                "Validates YAML syntax first. Errors if the file is unchanged. "
-                "Call done() after this succeeds."
+                "Validates YAML syntax first. Errors if the file is unchanged."
             ),
             input_schema={
                 "type": "object",
@@ -583,11 +806,11 @@ class ScoreEditorToolset:
                 },
                 "additionalProperties": False,
             },
-            handler=instance.submit_score_code,
+            handler=instance.submit_score_version,
         ))
 
         logger.info(
             "ScoreEditorToolset: registered score_editor_setup, score_editor_get_result, "
-            "str_replace_editor, submit_score_code on MCP transport"
+            "score_editor_get_content, str_replace_editor, submit_score_version on MCP transport"
         )
         return instance

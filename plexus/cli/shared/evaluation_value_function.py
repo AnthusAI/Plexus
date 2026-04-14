@@ -67,7 +67,7 @@ def _root_cause_required(evaluation: Dict[str, Any]) -> bool:
 def is_comparable_protocol(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     pa = _extract_parameters(a)
     pb = _extract_parameters(b)
-    fields = ("mode", "days", "max_samples", "sample_seed", "scoreVersionId", "score_id", "scorecard_id")
+    fields = ("mode", "days", "max_items", "sampling_mode", "sample_seed", "scoreVersionId", "score_id", "scorecard_id")
     for field in fields:
         if pa.get(field) != pb.get(field):
             return False

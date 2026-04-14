@@ -146,7 +146,7 @@ export function EvaluationTasksGauges({
       data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
-      title="Evaluations & Score Results"
+      title="Evaluations"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}

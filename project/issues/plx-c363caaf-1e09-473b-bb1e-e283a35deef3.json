@@ -412,10 +412,28 @@
       "author": "ryan",
       "text": "Implemented UX-noise cleanup. Changes: (1) ConversationViewer now detects unauthorized GraphQL errors and flips to a single 'Console unavailable' state, disabling polling/subscriptions/prompt/session-create retries to stop repeated 401 spam. (2) PromptInput now accepts optional legacy onPromptSubmit alias and strips it from form passthrough to prevent Unknown event handler warnings. (3) Dashboard layout avatars no longer reference missing /avatar-*.png or /user-avatar.png assets, eliminating repeated 404 noise. Verification: tsc --noEmit passed; jest suites passed: conversation-viewer-session-routing, conversation-viewer-streaming-updates, console-dashboard.",
       "created_at": "2026-04-01T21:40:58.099397Z"
+    },
+    {
+      "id": "c4a1ca74-7461-41f2-9972-52109a0f7834",
+      "author": "ryan",
+      "text": "Starting CI triage for GitHub PR #158 per user request. Plan: inspect failing Actions logs, reproduce locally, apply minimal fix on the PR branch, and re-run targeted tests before pushing.",
+      "created_at": "2026-04-10T00:16:28.689042Z"
+    },
+    {
+      "id": "34049c58-ae7a-41bf-9cf5-266fc24c0e0d",
+      "author": "ryan",
+      "text": "CI root cause + fix for PR #158: ConversationViewer now renders AutoScrollToBottom from @/components/ai-elements/conversation, but two Jest suites still mocked that module without AutoScrollToBottom export. This made React receive undefined element type and caused Dashboard Unit Tests failures (8 tests). Patch: added AutoScrollToBottom: () => null to mocks in dashboard/components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx and conversation-viewer-session-routing.test.tsx. Validation: 1) cd dashboard && npm run test -- --runInBand components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx components/ui/__tests__/conversation-viewer-session-routing.test.tsx => PASS (8/8). 2) cd dashboard && npm run ci:unit => PASS (51 suites, 418 tests).",
+      "created_at": "2026-04-10T00:17:35.339666Z"
+    },
+    {
+      "id": "271d97db-3e9d-43ce-b6a9-5cd1457237ed",
+      "author": "ryan",
+      "text": "Fix committed and pushed to develop as 266a7f5b8 (PR #158 head). Change is minimal: added missing AutoScrollToBottom export in two Jest conversation module mocks so ConversationViewer no longer receives an undefined component in unit tests. Local CI parity check passed (dashboard npm run ci:unit: 51 suites / 418 tests). GitHub Actions rerun 24219863633 now has Storybook + both Python jobs green; Dashboard Unit Tests is still in_progress at time of this update.",
+      "created_at": "2026-04-10T00:27:02.186702Z"
     }
   ],
   "created_at": "2026-03-28T02:22:59.087615Z",
-  "updated_at": "2026-04-01T21:40:58.099397Z",
+  "updated_at": "2026-04-10T00:27:02.186702Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

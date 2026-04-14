@@ -88,6 +88,7 @@ export interface TaskStatusProps {
   onCommandDisplayChange?: (display: 'show' | 'full') => void
   elapsedSeconds?: number | null
   estimatedRemainingSeconds?: number | null
+  hideElapsedTime?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -135,7 +136,8 @@ export const TaskStatus = React.memo(({
   statusMessageDisplay = 'always',
   onCommandDisplayChange,
   elapsedSeconds,
-  estimatedRemainingSeconds
+  estimatedRemainingSeconds,
+  hideElapsedTime = false
 }: TaskStatusProps) => {
 
   if (stages.length > 0) {
@@ -452,7 +454,7 @@ export const TaskStatus = React.memo(({
             <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
             <span>{preExecutionStatus.message}</span>
           </div>
-        ) : (
+        ) : !hideElapsedTime ? (
           <ProgressBarTiming
             elapsedTime={elapsedTime}
             estimatedTimeRemaining={estimatedTimeRemaining}
@@ -461,7 +463,7 @@ export const TaskStatus = React.memo(({
             startedAt={startedAt}
             completedAt={completedAt}
           />
-        )}
+        ) : null}
         {showStages && (
           <ProgressBar
             progress={progress}
@@ -551,7 +553,7 @@ export const TaskStatus = React.memo(({
           <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
           <span>{preExecutionStatus.message}</span>
         </div>
-      ) : (
+      ) : !hideElapsedTime ? (
         startedAt && (
           <ProgressBarTiming
             elapsedTime={elapsedTime}
@@ -562,7 +564,7 @@ export const TaskStatus = React.memo(({
             completedAt={completedAt}
           />
         )
-      )}
+      ) : null}
       {showStages && (
         <SegmentedProgressBar
           segments={segments}
@@ -612,6 +614,7 @@ export const TaskStatus = React.memo(({
     prevProps.commandDisplay === nextProps.commandDisplay &&
     prevProps.statusMessageDisplay === nextProps.statusMessageDisplay &&
     prevProps.elapsedSeconds === nextProps.elapsedSeconds &&
-    prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds
+    prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds &&
+    prevProps.hideElapsedTime === nextProps.hideElapsedTime
   );
 }); 

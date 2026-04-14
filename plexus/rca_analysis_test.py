@@ -8,6 +8,7 @@ from plexus.rca_analysis import (
     build_misclassification_classification_contract,
     build_misclassification_item_context,
     classify_misclassification_item,
+    normalize_best_evidence_source,
 )
 
 
@@ -123,6 +124,28 @@ def test_build_misclassification_item_context_rejects_unknown_provenance_source(
         assert False, "Expected ValueError for unsupported label provenance source"
     except ValueError as exc:
         assert "Unsupported label_provenance_source" in str(exc)
+
+
+def test_normalize_best_evidence_source_supports_feedback_context_aliases():
+    assert normalize_best_evidence_source("feedback_context") == "edit_comment"
+    assert normalize_best_evidence_source("feedback_comment") == "edit_comment"
+    assert normalize_best_evidence_source("feedback_comments") == "edit_comment"
+    assert normalize_best_evidence_source("feedback_comment_detail") == "edit_comment"
+    assert normalize_best_evidence_source("reviewer_comment") == "edit_comment"
+    assert normalize_best_evidence_source("reviewer_comment_detail") == "edit_comment"
+    assert normalize_best_evidence_source("edit_comment_excerpt") == "edit_comment"
+    assert normalize_best_evidence_source("final_comment_excerpt") == "edit_comment"
+    assert normalize_best_evidence_source("initial_comment_excerpt") == "edit_comment"
+
+
+def test_normalize_best_evidence_source_supports_metadata_and_primary_input_aliases():
+    assert normalize_best_evidence_source("metadata_snapshot_excerpt") == "metadata"
+    assert normalize_best_evidence_source("primary_input_excerpt") == "primary_input"
+
+
+def test_normalize_best_evidence_source_supports_guideline_and_score_context_aliases():
+    assert normalize_best_evidence_source("score_guidelines") == "guidelines"
+    assert normalize_best_evidence_source("score_context") == "score_yaml"
 
 
 def _base_item_context():

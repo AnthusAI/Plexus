@@ -1807,14 +1807,38 @@ class FeedbackAnalysis(BaseReportBlock):
             }
             
             # Add item identifiers if available
-            if hasattr(item, 'item') and item.item and hasattr(item.item, 'identifiers'):
+            if hasattr(item, 'item') and item.item:
+                normalized_identifiers = None
+
+                # Prefer modern itemIdentifiers relationship when present.
+                item_identifiers = getattr(item.item, "item_identifiers", None)
+                if item_identifiers:
+                    normalized_identifiers = [
+                        {
+                            "name": identifier.get("name"),
+                            "value": identifier.get("value"),
+                            "url": identifier.get("url"),
+                        }
+                        for identifier in sorted(item_identifiers, key=lambda x: x.get("position") or 0)
+                        if isinstance(identifier, dict) and identifier.get("name") and identifier.get("value")
+                    ]
+                    if not normalized_identifiers:
+                        normalized_identifiers = None
+
+                # Fall back to legacy identifiers payload.
+                if normalized_identifiers is None and hasattr(item.item, 'identifiers'):
+                    normalized_identifiers = item.item.identifiers
+
                 item_dict["item"] = {
                     "id": item.item.id if hasattr(item.item, 'id') else None,
-                    "identifiers": item.item.identifiers,
+                    "identifiers": normalized_identifiers,
                     "externalId": item.item.externalId if hasattr(item.item, 'externalId') else None,
                 }
                 # Log to confirm we're including identifiers
-                self._log(f"Including item identifiers for feedback item {item.id}: {item.item.identifiers}", level="DEBUG")
+                self._log(
+                    f"Including item identifiers for feedback item {item.id}: {item_dict['item']['identifiers']}",
+                    level="DEBUG"
+                )
             else:
                 # Add a message if identifiers are not available
                 self._log(f"Item identifiers not available for feedback item {item.id}", level="DEBUG")
@@ -1918,6 +1942,14 @@ class FeedbackAnalysis(BaseReportBlock):
                     id
                     identifiers
                     externalId
+                    itemIdentifiers {
+                        items {
+                            name
+                            value
+                            url
+                            position
+                        }
+                    }
                 }
             }
             """

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1134324b-f9fd-46c8-bb45-3db353de7db2",
+  "issue_id": "plx-b092c707-1aa2-496c-9b23-2b28aee012f2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-05T15:36:24.581Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-e7329ba2-5000-4576-8fd0-854b05b7d5ac",
+    "priority": 1,
+    "status": "open",
+    "title": "Bug: dataset-backed accuracy evaluations process only 1 sample despite multi-row parquet datasets"
+  }
+}

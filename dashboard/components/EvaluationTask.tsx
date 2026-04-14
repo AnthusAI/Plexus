@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
+import { ProgressBarTiming } from '@/components/ui/progress-bar-timing'
 import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
@@ -531,10 +532,11 @@ const getStatusMessage = (data: EvaluationTaskData) => {
   return undefined;
 }
 
-const GridContent = React.memo(({ data, extra, isSelected }: { 
-  data: EvaluationTaskData; 
+const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy }: {
+  data: EvaluationTaskData;
   extra?: boolean;
   isSelected?: boolean;
+  baselineAccuracy?: number | null;
 }) => {
 
 
@@ -643,8 +645,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       extra,
       isSelected,
       commandDisplay: 'hide' as const,
-      elapsedSeconds: data.elapsedSeconds,
-      estimatedRemainingSeconds: data.estimatedRemainingSeconds
     };
     
     
@@ -665,22 +665,22 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     data.command,
     extra,
     isSelected,
-    data.elapsedSeconds,
-    data.estimatedRemainingSeconds,
     data.id
   ]);
 
   return (
-    <div className="space-y-2">
-      <TaskStatus 
-        {...taskStatus} 
+    <div className="space-y-2 mt-auto">
+      <TaskStatus
+        {...taskStatus}
+        hideElapsedTime
         key={`${data.id}-${JSON.stringify(stages.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
       />
       {extra && (
-        <EvaluationListAccuracyBar 
+        <EvaluationListAccuracyBar
           progress={progress}
           accuracy={accuracy}
           isSelected={isSelected}
+          baselineAccuracy={baselineAccuracy ?? undefined}
         />
       )}
     </div>
@@ -708,6 +708,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   const otherChanged = (
     prevProps.extra !== nextProps.extra ||
     prevProps.isSelected !== nextProps.isSelected ||
+    prevProps.baselineAccuracy !== nextProps.baselineAccuracy ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults)
   );
 
@@ -1047,7 +1048,7 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
-  const rootCauseData = useMemo(() => {
+  const rootCauseData = useMemo((): RootCauseData | null => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
       const rootCause = params?.root_cause
@@ -1059,6 +1060,37 @@ const DetailContent = React.memo(({
 
   const rootCauseTopics = rootCauseData?.topics ?? null
   const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
+  const rcaCoverage = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (!params || typeof params !== 'object') return null
+      return {
+        status: typeof params.rca_coverage_status === 'string' ? params.rca_coverage_status : null,
+        incorrectItemsTotal: typeof params.incorrect_items_total === 'number' ? params.incorrect_items_total : 0,
+        incorrectItemsWithFeedbackLink: typeof params.incorrect_items_with_feedback_link === 'number'
+          ? params.incorrect_items_with_feedback_link
+          : 0,
+        incorrectItemsWithoutFeedbackLink: typeof params.incorrect_items_without_feedback_link === 'number'
+          ? params.incorrect_items_without_feedback_link
+          : 0,
+      }
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+  const rcaCoverageNote = useMemo(() => {
+    if (!rcaCoverage || !rcaCoverage.status) return null
+    if (rcaCoverage.status === 'partial') {
+      return `RCA analyzed ${rcaCoverage.incorrectItemsWithFeedbackLink}/${rcaCoverage.incorrectItemsTotal} incorrect item(s); ${rcaCoverage.incorrectItemsWithoutFeedbackLink} missing feedback linkage.`
+    }
+    if (rcaCoverage.status === 'none' && rcaCoverage.incorrectItemsTotal > 0) {
+      return `RCA unavailable: 0/${rcaCoverage.incorrectItemsTotal} incorrect item(s) had feedback linkage.`
+    }
+    if (rcaCoverage.status === 'full' && rcaCoverage.incorrectItemsTotal > 0) {
+      return `RCA analyzed ${rcaCoverage.incorrectItemsWithFeedbackLink}/${rcaCoverage.incorrectItemsTotal} incorrect item(s).`
+    }
+    return null
+  }, [rcaCoverage])
   const misclassificationCategoryBreakdown = useMemo(() => {
     const totals = misclassificationAnalysis?.category_totals ?? {}
     const itemClassifications = Array.isArray(misclassificationAnalysis?.item_classifications_all)
@@ -1252,7 +1284,7 @@ const DetailContent = React.memo(({
   return (
     <div
       ref={containerRef}
-      className="w-full p-3 min-w-[300px] h-full overflow-y-auto"
+      className="w-full px-3 pb-3 min-w-[300px]"
     >
       <div className={`overflow-visible ${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
         style={{
@@ -1362,8 +1394,7 @@ const DetailContent = React.memo(({
                     isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
-                    elapsedSeconds={data.elapsedSeconds}
-                    estimatedRemainingSeconds={data.estimatedRemainingSeconds}
+                    hideElapsedTime
                   />
                 </div>
 
@@ -1509,6 +1540,11 @@ const DetailContent = React.memo(({
                         <MessageSquareCode className="w-3.5 h-3.5 text-muted-foreground" />
                       </Button>
                     </div>
+                    {rcaCoverageNote && (
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        {rcaCoverageNote}
+                      </div>
+                    )}
                     {showRootCauseCode ? (
                       <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
                         {JSON.stringify(rootCauseData, null, 2)}
@@ -1934,10 +1970,22 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     isChampion: boolean;
   } | null>(null);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
+  const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
-  
-  
+
+  const evaluationNotes = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (params && typeof params.notes === 'string' && params.notes.trim()) {
+        // Normalize Markdown: remove spaces before closing bold/italic delimiters so that
+        // AI-generated text like "**label: **" renders correctly (CommonMark rejects a
+        // closing delimiter that is preceded by whitespace).
+        return params.notes.trim().replace(/ (\*+)/g, '$1')
+      }
+    } catch { /* ignore */ }
+    return null
+  }, [data.parameters])
 
   // Add more detailed logging for incoming data
 
@@ -2003,8 +2051,9 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   }, [data.parameters])
 
   useEffect(() => {
-    if (!baselineEvaluationId || variant !== 'detail') {
+    if (!baselineEvaluationId) {
       setBaselineMetrics(null);
+      setBaselineAccuracy(null);
       return;
     }
 
@@ -2016,6 +2065,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
             query GetBaselineEvaluation($id: ID!) {
               getEvaluation(id: $id) {
                 id
+                accuracy
                 metrics
               }
             }
@@ -2024,6 +2074,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         });
 
         const baselineEval = (result as any).data?.getEvaluation;
+        setBaselineAccuracy(baselineEval?.accuracy ?? null);
         if (baselineEval?.metrics) {
           try {
             const parsed = parseJsonDeep(baselineEval.metrics);
@@ -2390,87 +2441,41 @@ evaluation:
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
               {variant === 'detail' && (
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2">
                   <FlaskConical className="h-5 w-5 text-muted-foreground" />
                   <span className="text-lg font-semibold text-muted-foreground">{props.task.type}</span>
                 </div>
               )}
-              {props.task.name && (
-                <div className="font-semibold text-sm truncate">{props.task.name}</div>
-              )}
-              {props.task.description && (
-                <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
-                  {props.task.description}
-                </div>
-              )}
-              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
-                  <span className="truncate">{props.task.scorecard}</span>
-                  {variant === 'detail' && taskWithDefaults.scorecardId && (
-                    <Link 
-                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
-                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
+              {/* Grid variant: show all metadata inline in header */}
+              {variant !== 'detail' && (
+                <>
+                  {props.task.name && (
+                    <div className="font-semibold text-sm truncate">{props.task.name}</div>
                   )}
-                </div>
-              )}
-              {props.task.score && props.task.score.trim() !== '' && (
-                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
-                  <span className="truncate">{props.task.score}</span>
-                  {variant === 'detail' &&
-                    taskWithDefaults.scorecardId &&
-                    taskWithDefaults.scoreId &&
-                    taskWithDefaults.scoreVersionId && (
-                      <Link
-                        href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
-                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    )}
-                </div>
-              )}
-              {variant === 'detail' && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Score Version:</span>
-                  {scoreVersionInfo ? (
-                    <>
-                      <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
-                      {scoreVersionInfo.isChampion && (
-                        <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                          Champion
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span>Unavailable</span>
+                  {props.task.description && (
+                    <div className="text-sm text-muted-foreground truncate">
+                      {props.task.description}
+                    </div>
                   )}
-                </div>
-              )}
-              {variant === 'detail' && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Dataset:</span>
-                  {taskWithDefaults.dataSetId ? (
-                    <>
-                      <span className="font-mono truncate max-w-[22rem]">{taskWithDefaults.dataSetId}</span>
-                      <Link
-                        href={`/lab/datasets/${taskWithDefaults.dataSetId}`}
-                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    </>
-                  ) : (
-                    <span>Unavailable</span>
+                  {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                    <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                      <span className="truncate">{props.task.scorecard}</span>
+                    </div>
                   )}
-                </div>
+                  {props.task.score && props.task.score.trim() !== '' && (
+                    <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                      <span className="truncate">{props.task.score}</span>
+                    </div>
+                  )}
+                  <Timestamp time={props.task.time} variant="relative" />
+                  <ProgressBarTiming
+                    startedAt={data.startedAt || (data.task as any)?.startedAt}
+                    completedAt={(data.task as any)?.completedAt}
+                    isInProgress={data.status?.toUpperCase() === 'RUNNING'}
+                    className="text-muted-foreground"
+                  />
+                </>
               )}
-              <Timestamp time={props.task.time} variant="relative" />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
@@ -2533,30 +2538,141 @@ evaluation:
               )}
             </div>
           </div>
+          {variant !== 'detail' && evaluationNotes && (
+            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+              }}>
+                {evaluationNotes}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
       renderContent={(props) => {
-        // Add logging for content rendering decision
+        // Detail variant: metadata section that scrolls with content
+        const detailMetadata = variant === 'detail' ? (
+          <div className="px-4 flex flex-col leading-none">
+            {props.task.name && (
+              <div className="font-semibold text-sm">{props.task.name}</div>
+            )}
+            {props.task.description && (
+              <div className="text-sm text-muted-foreground">
+                {props.task.description}
+              </div>
+            )}
+            {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+              <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                <span className="truncate">{props.task.scorecard}</span>
+                {taskWithDefaults.scorecardId && (
+                  <Link
+                    href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
+                    className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                )}
+              </div>
+            )}
+            {props.task.score && props.task.score.trim() !== '' && (
+              <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                <span className="truncate">{props.task.score}</span>
+                {taskWithDefaults.scorecardId &&
+                  taskWithDefaults.scoreId &&
+                  taskWithDefaults.scoreVersionId && (
+                    <Link
+                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Score Version:</span>
+              {scoreVersionInfo ? (
+                <>
+                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
+                  {scoreVersionInfo.isChampion && (
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                      Champion
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span>Unavailable</span>
+              )}
+            </div>
+            {taskWithDefaults.dataSetId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Dataset:</span>
+                <span className="font-mono truncate max-w-[22rem]">{taskWithDefaults.dataSetId}</span>
+                <Link
+                  href={`/lab/datasets/${taskWithDefaults.dataSetId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {task.data?.cost != null && task.data.cost > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Cost:</span>
+                <span>
+                  ${task.data.cost.toFixed(4)} total
+                  {task.data.processedItems > 0 && (
+                    <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
+                  )}
+                </span>
+              </div>
+            )}
+            <Timestamp time={props.task.time} variant="relative" />
+            <ProgressBarTiming
+              startedAt={data.startedAt || (data.task as any)?.startedAt}
+              completedAt={(data.task as any)?.completedAt}
+              isInProgress={data.status?.toUpperCase() === 'RUNNING'}
+              className="text-muted-foreground"
+            />
+            {evaluationNotes && (
+              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                  p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                  strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                }}>
+                  {evaluationNotes}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        ) : null;
 
         return (
-          <TaskContent {...props} hideTaskStatus={true}>
-            {variant === 'grid' ? (
-              <GridContent data={data} extra={extra} isSelected={isSelected} />
-            ) : (
-              <DetailContent 
-                data={data}
-                isFullWidth={isFullWidth ?? false}
-                metrics={metrics}
-                metricsVariant="detail"
-                selectedScoreResultId={selectedScoreResultId}
-                onSelectScoreResult={onSelectScoreResult}
-                extra={extra}
-                isSelected={isSelected}
-                commandDisplay={commandDisplay}
-                onCommandDisplayChange={setCommandDisplay}
-              />
-            )}
-          </TaskContent>
+          <>
+            {detailMetadata}
+            <TaskContent {...props} hideTaskStatus={true}>
+              {variant === 'grid' ? (
+                <GridContent data={data} extra={extra} isSelected={isSelected} baselineAccuracy={baselineAccuracy} />
+              ) : (
+                <DetailContent
+                  data={data}
+                  isFullWidth={isFullWidth ?? false}
+                  metrics={metrics}
+                  metricsVariant="detail"
+                  selectedScoreResultId={selectedScoreResultId}
+                  onSelectScoreResult={onSelectScoreResult}
+                  extra={extra}
+                  isSelected={isSelected}
+                  commandDisplay={commandDisplay}
+                  onCommandDisplayChange={setCommandDisplay}
+                />
+              )}
+            </TaskContent>
+          </>
         );
       }}
     />

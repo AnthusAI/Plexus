@@ -21,7 +21,8 @@ import NodeMetricsGauges from "./NodeMetricsGauges"
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 type GraphNode = Schema['GraphNode']['type']
 
@@ -81,7 +82,7 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId, scorecardI
       setIsLoading(true)
       setError(null)
       
-      const result = await client.graphql({
+      const result = await getAmplifyClient().graphql({
         query: `
           query ListGraphNodeByProcedureIdAndCreatedAt(
             $procedureId: ID!
@@ -132,7 +133,7 @@ const GraphNodesList: React.FC<GraphNodesListProps> = ({ procedureId, scorecardI
     }
 
     try {
-      await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation DeleteGraphNode($input: DeleteGraphNodeInput!) {
             deleteGraphNode(input: $input) {

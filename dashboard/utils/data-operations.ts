@@ -565,6 +565,28 @@ export async function listRecentEvaluations(
   }
 }
 
+export async function fetchEvaluationById(
+  evaluationId: string
+): Promise<ProcessedEvaluation | null> {
+  try {
+    const client = getClient();
+    const query = `
+      query GetEvaluation($id: ID!) {
+        getEvaluation(id: $id) {
+          ${EVALUATION_FIELDS}
+        }
+      }
+    `;
+    const response = await client.graphql({ query, variables: { id: evaluationId } }) as GraphQLResult<any>;
+    const raw = response?.data?.getEvaluation;
+    if (!raw) return null;
+    return transformEvaluation(raw);
+  } catch (error) {
+    console.error('Error in fetchEvaluationById:', error);
+    return null;
+  }
+}
+
 export function observeRecentEvaluations(
   limit: number = 100,
   accountId: string | null = null,
@@ -580,7 +602,10 @@ export function observeRecentEvaluations(
       try {
         const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore, null);
         
-        evaluations = response.items;
+        // Merge: preserve any items already received via create events during loading
+        const loadedIds = new Set(response.items.map((e: any) => e.id));
+        const pendingCreates = evaluations.filter((e: any) => !loadedIds.has(e.id));
+        evaluations = [...pendingCreates, ...response.items];
         subscriber.next({ items: evaluations, isSynced: true });
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
@@ -594,6 +619,7 @@ export function observeRecentEvaluations(
 
       // Helper function to handle evaluation changes
       const handleEvaluationChange = (evaluation: any, action: 'create' | 'update') => {
+        if (accountId && evaluation.accountId && evaluation.accountId !== accountId) return;
         if (action === 'create') {
           evaluations = [evaluation, ...evaluations];
         } else {

@@ -153,12 +153,11 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   }
 
   return (
-    <div 
+    <div
       className={cn(
         "transition-colors duration-200 flex flex-col h-full rounded-lg w-full max-w-full relative",
         variant === 'grid' ? 'cursor-pointer' : '',
-        effectiveIsSelected ? 'bg-card-selected' : variant === 'grid' ? 'bg-card hover:bg-accent' : 'bg-card',
-        (effectiveIsSelected && variant === 'grid') && "selected-border-rounded"
+        effectiveIsSelected ? 'bg-card-selected' : variant === 'grid' ? 'bg-card hover:bg-accent/50' : 'bg-card',
       )}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
@@ -172,7 +171,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       aria-busy={isLoading}
       aria-disabled={isLoading}
     >
-      <div className="flex-none p-3 w-full max-w-full overflow-hidden relative z-10">
+      <div className="flex-none px-3 pt-3 w-full max-w-full overflow-hidden relative z-10">
         {renderHeader(childProps)}
       </div>
       <div className={cn(
@@ -183,9 +182,9 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
             {onRetry && (
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={onRetry}
                 className="mt-2"
               >

@@ -200,7 +200,7 @@ class FeedbackItemsValidationRule(ValidationRule):
             return messages
         
         # Required fields for FeedbackItems
-        required_fields = ['scorecard', 'score', 'days']
+        required_fields = ['scorecard', 'score']
         
         for field in required_fields:
             if field not in data:
@@ -214,7 +214,7 @@ class FeedbackItemsValidationRule(ValidationRule):
                     context={'field': field}
                 ))
         
-        # Validate days is positive integer
+        # Validate days is positive integer when explicitly provided.
         if 'days' in data:
             days = data['days']
             if not isinstance(days, int) or days <= 0:

@@ -278,6 +278,32 @@ describe('IdentifierDisplay', () => {
       expect(screen.getByLabelText('Expand identifiers')).toBeInTheDocument();
     });
 
+    it('should handle JSON string identifiers in modern value format', () => {
+      const modernIdentifiers = JSON.stringify([
+        { name: 'Call ID', value: 'CALL-123' },
+        { name: 'Account ID', value: 'ACCT-456' }
+      ]);
+
+      render(<IdentifierDisplay identifiers={modernIdentifiers} />);
+
+      expect(screen.getByText('Call ID:')).toBeInTheDocument();
+      expect(screen.getByText('CALL-123')).toBeInTheDocument();
+      expect(screen.getByLabelText('Expand identifiers')).toBeInTheDocument();
+    });
+
+    it('should handle JSON object identifiers map format', () => {
+      const mappedIdentifiers = JSON.stringify({
+        call_id: 'CALL-987',
+        account_id: 'ACCT-654'
+      });
+
+      render(<IdentifierDisplay identifiers={mappedIdentifiers} />);
+
+      expect(screen.getByText('call_id:')).toBeInTheDocument();
+      expect(screen.getByText('CALL-987')).toBeInTheDocument();
+      expect(screen.getByLabelText('Expand identifiers')).toBeInTheDocument();
+    });
+
     it('should handle malformed JSON string gracefully', () => {
       const malformedJson = '{ invalid json ';
 
