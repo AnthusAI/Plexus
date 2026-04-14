@@ -51,15 +51,21 @@ function resolveAmplifyOutputs(): Record<string, any> | null {
     )
   }
 
+  const configuredData = outputs?.data || {}
+  const configuredDefaultAuth = configuredData.default_authorization_type
+  const configuredAuthTypes = Array.isArray(configuredData.authorization_types)
+    ? configuredData.authorization_types
+    : null
+
   return {
     ...(outputs || {}),
     data: {
-      ...(outputs?.data || {}),
+      ...configuredData,
       url: endpointOverride,
       api_key: apiKeyOverride,
       aws_region: resolvedRegion,
-      default_authorization_type: "API_KEY",
-      authorization_types: ["API_KEY"],
+      default_authorization_type: configuredDefaultAuth || "API_KEY",
+      authorization_types: configuredAuthTypes?.length ? configuredAuthTypes : ["API_KEY"],
     },
   }
 }
