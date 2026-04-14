@@ -17,6 +17,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
+import { useInView } from "react-intersection-observer"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -93,6 +94,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   
   const [procedures, setProcedures] = useState<ProcedureWithTask[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [nextToken, setNextToken] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(finalInitialProcedureId)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -104,6 +108,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const lastLoadTimeRef = useRef(0)
+  const procedureTaskMapRef = useRef<Map<string, Task>>(new Map())
+  const { ref: sentinelRef, inView } = useInView({ threshold: 0 })
 
   // All hooks must be at the top before any conditional returns
   const handleSelectProcedure = useCallback((id: string | null) => {
@@ -155,11 +161,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
+            $nextToken: String
           ) {
             listProcedureByAccountIdAndUpdatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
+              nextToken: $nextToken
             ) {
               items {
                 id
@@ -189,10 +197,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         variables: {
           accountId: selectedAccount.id,
           sortDirection: 'DESC',
-          limit: 1000
+          limit: 25,
+          nextToken: null
         }
       })
-      const proceduresData = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
+      const procedureResponse = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt
+      const proceduresData = procedureResponse?.items || []
+      const newNextToken: string | null = procedureResponse?.nextToken ?? null
       
       // Then get tasks related to procedures (via metadata)
       const tasksResult = await getAmplifyClient().graphql({
@@ -272,6 +283,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           // Ignore parsing errors
         }
       })
+      procedureTaskMapRef.current = procedureTaskMap
       
       // Combine procedures with their tasks
       const data = proceduresData.map((procedure: Procedure): ProcedureWithTask => {
@@ -303,27 +315,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         return dateB.getTime() - dateA.getTime()
       }) || []
       
-      // Only update state if data has actually changed
-      setProcedures(prevProcedures => {
-        // Quick comparison: check length first
-        if (prevProcedures.length !== sortedData.length) {
-          return sortedData
-        }
-        
-        // If same length, check if all IDs match in same order
-        const hasChanges = prevProcedures.some((prev, index) => {
-          const current = sortedData[index]
-          return !current || prev.id !== current.id || prev.updatedAt !== current.updatedAt
-        })
-        
-        if (hasChanges) {
-          console.log('Procedures data changed, updating list')
-          return sortedData
-        } else {
-          console.log('No changes detected, keeping previous data')
-          return prevProcedures
-        }
-      })
+      // Always replace with the first page — loadProcedures is a full reset
+      setProcedures(sortedData)
+      setNextToken(newNextToken)
+      setHasMore(!!newNextToken)
     } catch (err) {
       console.error('Error loading procedures:', err)
       setError(err instanceof Error ? err.message : 'Failed to load procedures')
@@ -332,9 +327,84 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     }
   }, [selectedAccount?.id])
 
+  const loadMoreProcedures = useCallback(async () => {
+    if (!selectedAccount?.id || !nextToken || isLoadingMore) return
+    setIsLoadingMore(true)
+    try {
+      const moreResult = await getAmplifyClient().graphql({
+        query: `
+          query ListProcedureByAccountIdAndUpdatedAt(
+            $accountId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+            $nextToken: String
+          ) {
+            listProcedureByAccountIdAndUpdatedAt(
+              accountId: $accountId
+              sortDirection: $sortDirection
+              limit: $limit
+              nextToken: $nextToken
+            ) {
+              items {
+                id
+                name
+                featured
+                code
+                rootNodeId
+                createdAt
+                updatedAt
+                accountId
+                scorecardId
+                scorecard {
+                  id
+                  name
+                }
+                scoreId
+                score {
+                  id
+                  name
+                }
+              }
+              nextToken
+            }
+          }
+        `,
+        variables: {
+          accountId: selectedAccount.id,
+          sortDirection: 'DESC',
+          limit: 25,
+          nextToken
+        }
+      })
+      const moreResponse = (moreResult as any).data?.listProcedureByAccountIdAndUpdatedAt
+      const moreItems: Procedure[] = moreResponse?.items || []
+      const newNextToken: string | null = moreResponse?.nextToken ?? null
+
+      const taskMap = procedureTaskMapRef.current
+      const merged: ProcedureWithTask[] = moreItems.map((procedure) => ({
+        ...procedure,
+        task: taskMap.get(procedure.id) ?? null
+      }))
+
+      setProcedures(prev => [...prev, ...merged])
+      setNextToken(newNextToken)
+      setHasMore(!!newNextToken)
+    } catch (err) {
+      console.error('[procedures] loadMoreProcedures failed', err)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [selectedAccount?.id, nextToken, isLoadingMore])
+
   useEffect(() => {
     loadProcedures()
   }, [loadProcedures])
+
+  useEffect(() => {
+    if (inView && hasMore && !isLoadingMore) {
+      loadMoreProcedures()
+    }
+  }, [inView, hasMore, isLoadingMore, loadMoreProcedures])
 
   // Task monitoring with real-time subscriptions for procedure tasks
   useEffect(() => {
@@ -1002,9 +1072,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                   `}>
                     {procedures.map((procedure) => {
                       const clickHandler = getProcedureClickHandler(procedure.id)
-                      
+
                       return (
-                        <div 
+                        <div
                           key={procedure.id}
                           role="button"
                           tabIndex={0}
@@ -1030,6 +1100,14 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                         </div>
                       )
                     })}
+                  </div>
+                )}
+                {/* Infinite scroll sentinel */}
+                <div ref={sentinelRef} className="h-4" />
+                {isLoadingMore && (
+                  <div className="animate-pulse space-y-3 pb-3">
+                    <div className="h-24 bg-muted rounded-lg" />
+                    <div className="h-24 bg-muted rounded-lg" />
                   </div>
                 )}
               </div>
