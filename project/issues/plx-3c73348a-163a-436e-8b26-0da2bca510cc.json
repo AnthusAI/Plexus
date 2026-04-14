@@ -40,10 +40,16 @@
       "author": "derek.norrbom",
       "text": "Implementation complete in working tree: updated pyproject to tactus ^0.46.0 and lupa 2.7 (required by tactus), regenerated poetry.lock with Poetry 2.3.2 on Python 3.11, and verified with poetry check (warnings only about deprecated poetry metadata fields). Leaving task in_progress until changes are landed.",
       "created_at": "2026-04-14T21:45:54.607102Z"
+    },
+    {
+      "id": "521cd857-1041-46da-9849-17d3617303ad",
+      "author": "derek.norrbom",
+      "text": "Committed changes on feature/update-tactus as aa745e4c and opened PR against develop: https://github.com/AnthusAI/Plexus/pull/166. Task remains in_progress until PR lands.",
+      "created_at": "2026-04-14T21:47:50.515477Z"
     }
   ],
   "created_at": "2026-04-14T21:44:42.101227Z",
-  "updated_at": "2026-04-14T21:45:54.607102Z",
+  "updated_at": "2026-04-14T21:47:50.515477Z",
   "closed_at": null,
   "custom": {}
 }
