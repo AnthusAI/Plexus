@@ -34,10 +34,16 @@
       "author": "derek",
       "text": "Investigated CI failure on PR #164 (Actions job 71329262238). Root cause: conversation-viewer-streaming-updates tests assumed eager list rendering, but ConversationViewer now uses react-virtuoso virtualization. Added deterministic react-virtuoso test mock in conversation-viewer-streaming-updates.test.tsx so message rows render in JSDOM; targeted test now passes (5/5).",
       "created_at": "2026-04-14T19:05:18.391262099Z"
+    },
+    {
+      "id": "3764dd1b-c851-4946-ba2f-ed879e07bfbc",
+      "author": "derek",
+      "text": "Pushed follow-up commit d5852b7a to PR #165 to fix CI unit test regression from virtualization in conversation viewer streaming tests. Verified with dashboard ci:unit: 51 suites / 418 tests passing.",
+      "created_at": "2026-04-14T19:05:57.759888286Z"
     }
   ],
   "created_at": "2026-04-14T18:38:19.054032316Z",
-  "updated_at": "2026-04-14T19:05:18.391262099Z",
+  "updated_at": "2026-04-14T19:05:57.759888286Z",
   "closed_at": null,
   "custom": {}
 }
