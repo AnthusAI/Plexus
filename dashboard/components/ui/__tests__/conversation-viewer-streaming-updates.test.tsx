@@ -3,6 +3,31 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import ConversationViewer from "../conversation-viewer"
 
+jest.mock("react-virtuoso", () => {
+  const React = require("react")
+  const Virtuoso = React.forwardRef(function MockVirtuoso(props: any, ref: any) {
+    const { data = [], itemContent, components, className } = props
+    const Footer = components?.Footer
+
+    React.useImperativeHandle(ref, () => ({
+      scrollToIndex: jest.fn(),
+    }))
+
+    return (
+      <div data-testid="virtuoso-scroller" className={className}>
+        {data.map((row: any, index: number) => (
+          <div key={row?.id ?? index} data-testid="virtuoso-item">
+            {itemContent ? itemContent(index, row) : null}
+          </div>
+        ))}
+        {Footer ? <Footer /> : null}
+      </div>
+    )
+  })
+
+  return { Virtuoso }
+})
+
 const mockChatSessionList = jest.fn()
 const mockChatMessageList = jest.fn()
 const mockChatMessageCreate = jest.fn()
