@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "a81545f7-d1d3-494f-b7ef-5d17eb84454e",
+  "issue_id": "plx-9f1161fd-164f-40a6-82ed-fdd23de43cf3",
+  "event_type": "state_transition",
+  "occurred_at": "2026-04-14T21:44:48.159Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "from_status": "open",
+    "to_status": "closed"
+  }
+}
