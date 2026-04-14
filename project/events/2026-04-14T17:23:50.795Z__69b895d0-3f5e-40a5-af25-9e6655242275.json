@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "69b895d0-3f5e-40a5-af25-9e6655242275",
+  "issue_id": "plx-6978a44a-12e8-4430-bf02-14c6bfcb5f22",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-14T17:23:50.795Z",
+  "actor_id": "derek",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Problem\nProduction score-processing Lambda fails during initialization with  from GraphQL account lookup ().\n\n## Evidence\nLambda stack trace shows failure path in  during  called by .\n\n## Expected\nLambda should authenticate correctly against AppSync and resolve account by key in production.",
+        "to": "## Problem\nProduction score-processing Lambda fails during initialization with UnauthorizedException from GraphQL account lookup (Account.get_by_key).\n\n## Evidence\nLambda stack trace shows failure path in plexus/dashboard/api/client.py during client.execute called by plexus/dashboard/api/models/account.py:get_by_key.\n\n## Expected\nLambda should authenticate correctly against AppSync and resolve account by key in production."
+      }
+    }
+  }
+}
