@@ -6,7 +6,7 @@ import '@testing-library/jest-dom'
 // Create a simplified component that tests just the guidelines logic
 interface GuidelinesTestComponentProps {
   guidelines: string
-  onSave?: (newGuidelines: string) => void
+  onSave?: (newGuidelines: string) => void | Promise<void>
 }
 
 function GuidelinesTestComponent({ guidelines, onSave }: GuidelinesTestComponentProps) {
@@ -25,7 +25,7 @@ function GuidelinesTestComponent({ guidelines, onSave }: GuidelinesTestComponent
     setIsSaving(true)
     try {
       await new Promise(resolve => setTimeout(resolve, 10)) // Simulate async save
-      onSave?.(editValue)
+      await onSave?.(editValue)
       setIsEditing(false)
       setHasChanges(false)
     } finally {
