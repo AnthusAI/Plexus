@@ -206,11 +206,32 @@ export default function ProcedureTask({
         if (state.scorecard_name) setStateScorecardName(state.scorecard_name)
         if (state.score_name) setStateScoreName(state.score_name)
 
-        const fbBaseline = state.feedback_baseline_metrics
-        const accBaseline = state.accuracy_baseline_metrics
         const cycleIterations: any[] = state.iterations || []
 
-        if (!fbBaseline && cycleIterations.length === 0) return
+        // Use immutable initial baseline when available; otherwise infer from first cycle's deltas;
+        // fall back to the mutable baseline (which gets overwritten as cycles complete).
+        const firstCycle = cycleIterations[0]
+        const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
+          ? {
+              alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
+              accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
+              precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
+              recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
+            }
+          : null
+        const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
+          ? {
+              alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
+              accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
+              precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
+              recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
+            }
+          : null
+
+        const fbBaseline  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
+        const accBaseline = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
+
+        if (!fbBaseline && !accBaseline && cycleIterations.length === 0) return
 
         const iterations: IterationData[] = []
 
