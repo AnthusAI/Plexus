@@ -52,10 +52,16 @@
       "author": "derek.norrbom",
       "text": "Fixed CI failure from PR #167 Dashboard Unit Tests: in guidelines-functionality test helper, await onSave during handleSave so loading-state assertion is deterministic. Local run: npm test -- --runInBand components/__tests__/guidelines-functionality.test.tsx (pass).",
       "created_at": "2026-04-14T22:29:46.733922Z"
+    },
+    {
+      "id": "5e04d499-ed9b-46c5-a139-80ec71a50ff5",
+      "author": "derek.norrbom",
+      "text": "Pushed follow-up commits to PR #168 for Dashboard Unit Tests failure from PR #167: c58f0907 (stabilize guidelines saving-state test) and 805fe849 (Kanbus artifacts).",
+      "created_at": "2026-04-14T22:30:02.836770Z"
     }
   ],
   "created_at": "2026-04-14T22:14:47.099327Z",
-  "updated_at": "2026-04-14T22:29:46.733922Z",
+  "updated_at": "2026-04-14T22:30:02.836770Z",
   "closed_at": null,
   "custom": {}
 }
