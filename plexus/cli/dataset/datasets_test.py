@@ -5,7 +5,11 @@ import os
 from types import SimpleNamespace
 import pandas as pd
 
-from plexus.cli.dataset.datasets import dataset, build_associated_dataset_from_feedback_ids
+from plexus.cli.dataset.datasets import (
+    dataset,
+    build_associated_dataset_from_feedback_ids,
+    _persist_dataset_file_reference,
+)
 from plexus.dashboard.api.models.data_source import DataSource
 
 @pytest.fixture
@@ -372,6 +376,7 @@ def test_build_associated_dataset_from_feedback_ids_success(
         {'getScore': {'id': 'score-1', 'championVersionId': 'version-1'}},
         {'createDataSet': {'id': 'dataset-1'}},
         {'updateDataSet': {'id': 'dataset-1', 'file': 'datasets/account-1/dataset-1/dataset.parquet'}},
+        {'getDataSet': {'id': 'dataset-1', 'file': 'datasets/account-1/dataset-1/dataset.parquet', 'attachedFiles': []}},
     ])
 
     result = build_associated_dataset_from_feedback_ids(
@@ -429,4 +434,21 @@ def test_build_associated_dataset_from_feedback_ids_rejects_mismatched_score(
             scorecard_identifier='CMG EDU',
             score_identifier='Branding and Matching',
             feedback_item_ids=['fi-1'],
+        )
+
+
+def test_persist_dataset_file_reference_fails_when_verified_file_missing():
+    mock_client = MagicMock()
+    mock_client.execute = MagicMock(
+        side_effect=[
+            {"updateDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet"}},
+            {"getDataSet": {"id": "dataset-1", "file": None, "attachedFiles": []}},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="DataSet file reference verification failed"):
+        _persist_dataset_file_reference(
+            client=mock_client,
+            dataset_id="dataset-1",
+            s3_key="datasets/account-1/dataset-1/dataset.parquet",
         )

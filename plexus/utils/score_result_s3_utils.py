@@ -171,6 +171,30 @@ def upload_evaluation_artifact_file(evaluation_id, artifact_data, file_name="roo
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
+def download_evaluation_artifact_file(s3_key):
+    """
+    Download an evaluation artifact JSON file from S3 and return parsed JSON.
+
+    Args:
+        s3_key: S3 object key (e.g., 'evaluations/{id}/root_cause.full.json')
+
+    Returns:
+        Parsed JSON object (dict/list), or None if download fails.
+    """
+    bucket_name = get_bucket_name()
+    if not bucket_name or not s3_key:
+        return None
+
+    s3_client = boto3.client('s3')
+    try:
+        response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+        content = response['Body'].read().decode('utf-8')
+        return json.loads(content)
+    except Exception as e:
+        logger.warning(f"Failed to download evaluation artifact s3://{bucket_name}/{s3_key}: {e}")
+        return None
+
+
 def download_score_result_trace_file(s3_path, local_path=None):
     """
     Download a trace file from S3.

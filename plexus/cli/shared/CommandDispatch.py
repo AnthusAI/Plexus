@@ -1080,8 +1080,8 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
             total_items=total_items,
             status_message="Processing items..."
         ),
-        "Finalizing": StageConfig(
-            order=3, 
+        "Analysis": StageConfig(
+            order=3,
             status_message="Computing metrics..."
         )
     }
@@ -1236,19 +1236,19 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             
             # If we've reached total items, advance to finalizing and exit immediately
             if current_item >= total_items:
-                tracker.advance_stage()  # Advance to "Finalizing" stage
+                tracker.advance_stage()  # Advance to "Analyzing" stage
                 break
-            
+
             # Only update API task periodically if we're still processing
             current_time = time.time()
             if current_time - last_api_update >= api_update_interval:
                 tracker.update(current_items=current_item)
                 last_api_update = current_time
-            
+
             # Sleep a tiny amount to allow for API updates and logging
             time.sleep(0.05)
-        
-        # Finalizing stage with just two messages
+
+        # Analyzing stage with just two messages
         finalizing_messages = [
             "Computing metrics...",
             "Generating report..."

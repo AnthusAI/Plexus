@@ -293,6 +293,7 @@ def register_dataset_tools(mcp: FastMCP):
         max_items: int = 100,
         days: Optional[int] = None,
         balance: bool = True,
+        score_version_id: Optional[str] = None,
     ) -> str:
         """
         Build a balanced associated dataset from recent qualifying feedback items.
@@ -307,6 +308,8 @@ def register_dataset_tools(mcp: FastMCP):
         - days: Lookback window in days. If omitted, searches all available feedback history.
         - balance: Apply class balancing via round-robin selection (default: True).
                    Set to False to include more items when feedback is scarce.
+        - score_version_id: Optional specific version to use for class label resolution.
+                            If omitted, uses the champion version.
 
         Returns:
         - JSON payload with dataset_id, rows_written, class_distribution_after,
@@ -320,6 +323,7 @@ def register_dataset_tools(mcp: FastMCP):
                 from plexus.cli.dataset.datasets import create_client
                 from plexus.cli.dataset.curation import build_associated_dataset_from_feedback_window
                 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+                from plexus.cli.evaluation.evaluations import validate_dataset_materialization
             except ImportError as exc:
                 return f"Error: Could not import required modules: {exc}"
 
@@ -340,7 +344,26 @@ def register_dataset_tools(mcp: FastMCP):
                 max_items=max_items,
                 days=days,
                 balance=balance,
+                class_source_score_version_id=score_version_id or None,
             )
+            dataset_id = result.get("dataset_id")
+            dataset_file = result.get("dataset_file") or result.get("s3_key")
+            readiness = validate_dataset_materialization(
+                {
+                    "id": dataset_id,
+                    "file": dataset_file,
+                }
+            )
+            if not readiness.get("is_materialized"):
+                reason = readiness.get("materialization_error") or "unknown"
+                return (
+                    "Error: dataset build completed without a materialized file pointer. "
+                    f"dataset_id={dataset_id} reason={reason}"
+                )
+
+            result["dataset_file"] = dataset_file
+            result["is_materialized"] = True
+            result["materialization_error"] = None
             return json.dumps(result, default=str)
         except Exception as exc:
             logger.error("Error building dataset from feedback window: %s", exc, exc_info=True)
@@ -380,6 +403,7 @@ def register_dataset_tools(mcp: FastMCP):
             try:
                 from plexus.cli.dataset.datasets import create_client
                 from plexus.cli.evaluation.evaluations import get_latest_associated_dataset_for_score
+                from plexus.cli.evaluation.evaluations import validate_dataset_materialization
                 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
             except ImportError as exc:
                 return f"Error: Could not import required modules: {exc}"
@@ -404,6 +428,9 @@ def register_dataset_tools(mcp: FastMCP):
                     "dataset_name": None,
                     "created_at": None,
                     "row_count": None,
+                    "is_materialized": False,
+                    "dataset_file": None,
+                    "materialization_error": None,
                 })
 
             # Try to extract row_count from the DataSourceVersion's build context
@@ -431,12 +458,16 @@ def register_dataset_tools(mcp: FastMCP):
                 except Exception as e:
                     logger.warning("Could not read dataset row_count from DataSourceVersion: %s", e)
 
+            readiness = validate_dataset_materialization(dataset)
             return json.dumps({
                 "has_dataset": True,
                 "dataset_id": dataset.get("id"),
                 "dataset_name": dataset.get("name"),
                 "created_at": dataset.get("createdAt"),
                 "row_count": row_count,
+                "is_materialized": bool(readiness.get("is_materialized")),
+                "dataset_file": readiness.get("dataset_file"),
+                "materialization_error": readiness.get("materialization_error"),
             }, default=str)
         except Exception as exc:
             logger.error("Error checking associated dataset: %s", exc, exc_info=True)

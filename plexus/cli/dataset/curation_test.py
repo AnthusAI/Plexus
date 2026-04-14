@@ -388,6 +388,7 @@ def test_build_associated_dataset_from_feedback_window_persists_stats(
         side_effect=[
             {"createDataSet": {"id": "dataset-1"}},
             {"updateDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet"}},
+            {"getDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet", "attachedFiles": []}},
         ]
     )
 
@@ -533,6 +534,7 @@ def test_build_associated_dataset_from_vetted_feedback_items_persists_diagnostic
         side_effect=[
             {"createDataSet": {"id": "dataset-1"}},
             {"updateDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet"}},
+            {"getDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet", "attachedFiles": []}},
         ]
     )
 

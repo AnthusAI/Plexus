@@ -72,6 +72,7 @@ interface FeedbackContradictionsData {
     score?: string;
     mode?: string;
   };
+  guidelines?: string | null;
   error?: string;
 }
 
@@ -327,6 +328,40 @@ const TopicSection: React.FC<{ topic: Topic; allowInvalidation: boolean; isAlign
   );
 };
 
+// ---- Guidelines section ----------------------------------------------------
+
+const GuidelinesSection: React.FC<{ guidelines: string }> = ({ guidelines }) => {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <div className="mb-2">
+      <div className="flex items-center justify-between py-2">
+        <span className="font-medium text-sm">Guidelines</span>
+      </div>
+      <div className="flex flex-col items-center">
+        <div className="w-full h-px bg-border mb-1" />
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors p-0.5"
+          aria-label={open ? 'Collapse guidelines' : 'Expand guidelines'}
+        >
+          {open
+            ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
+            : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+        </button>
+      </div>
+      {open && (
+        <div className="py-4 prose prose-sm dark:prose-invert max-w-none
+          prose-headings:mt-4 prose-headings:mb-1
+          prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
+          prose-p:my-1 prose-ul:my-1 prose-li:my-0">
+          <ReactMarkdown remarkPlugins={markdownPlugins}>{guidelines}</ReactMarkdown>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ---- Main block component --------------------------------------------------
 
 const CONTEXT_HEADER = `# Feedback Guideline-Vetting Report Output
@@ -428,8 +463,10 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
     selected_items_count = contradictions_found,
     topics = [],
     eligible_count = 0,
+    guidelines,
   } = output;
   const isAlignedMode = mode === 'aligned';
+  const isReadOnly = props.isReadOnly ?? false;
   const contradictionRate = Math.round((contradictions_found / Math.max(total_items_analyzed, 1)) * 100);
   const alignedRate = Math.round((aligned_found / Math.max(total_items_analyzed, 1)) * 100);
 
@@ -446,6 +483,11 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
                 : `${contradictions_found} contradiction${contradictions_found !== 1 ? 's' : ''} found across ${total_items_analyzed} feedback item${total_items_analyzed !== 1 ? 's' : ''}`
               }
             </p>
+            {!isAlignedMode && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Identifies feedback edits that appear to contradict the current score guidelines — so that either the feedback can be marked invalid, or the guidelines can be updated to reflect the correct policy.
+              </p>
+            )}
           </div>
           <Badge
             variant={isAlignedMode ? 'secondary' : (contradictions_found > 0 ? 'destructive' : 'secondary')}
@@ -463,11 +505,13 @@ const FeedbackContradictions: React.FC<ReportBlockProps> = (props) => {
           </p>
         )}
 
+        {guidelines && <GuidelinesSection guidelines={guidelines} />}
+
         {topics.map((topic) => (
           <TopicSection
             key={topic.label}
             topic={topic}
-            allowInvalidation={!isAlignedMode}
+            allowInvalidation={!isAlignedMode && !isReadOnly}
             isAlignedMode={isAlignedMode}
           />
         ))}

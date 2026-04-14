@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react"
 import { getClient } from '@/utils/data-operations'
 import {
+  AutoScrollToBottom,
   Conversation,
   ConversationContent,
   ConversationEmptyState,
@@ -54,6 +55,13 @@ import {
   parseMessageMetadata,
 } from "@/lib/procedure-hitl"
 import { cn } from "@/lib/utils"
+
+const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
+
+const EVALUATION_TOOL_NAMES = new Set([
+  'plexus_evaluation_run',
+  'plexus_evaluation_info',
+])
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -2301,6 +2309,7 @@ function ConversationViewer({
         {/* Messages List */}
         <div className="min-h-0 flex-1">
           <Conversation className="h-full">
+            <AutoScrollToBottom trigger={conversationRows.length} />
             <ConversationContent className="gap-4 px-3 py-3">
               {isAuthUnavailable ? (
                 <ConversationEmptyState
@@ -2385,7 +2394,10 @@ function ConversationViewer({
 
                           {toolViewModel ? (
                             <Tool
-                              defaultOpen={toolViewModel.state === 'output-error'}
+                              defaultOpen={
+                                EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                                toolViewModel.state === 'output-error'
+                              }
                             >
                               <ToolHeader
                                 toolType={toolViewModel.type}
@@ -2397,18 +2409,24 @@ function ConversationViewer({
                                   <ToolInput input={toolViewModel.input} />
                                 )}
                                 {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                                  <ToolOutput
-                                    errorText={toolViewModel.errorText}
-                                    output={
-                                      <div className="font-mono whitespace-pre-wrap break-words">
-                                        {toolViewModel.output === undefined || toolViewModel.output === null
-                                          ? 'No output'
-                                          : typeof toolViewModel.output === 'string'
-                                            ? toolViewModel.output
-                                            : formatJsonWithNewlines(toolViewModel.output)}
-                                      </div>
-                                    }
-                                  />
+                                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                                    <React.Suspense fallback={<div className="p-3 text-sm text-muted-foreground">Loading evaluation...</div>}>
+                                      <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                                    </React.Suspense>
+                                  ) : (
+                                    <ToolOutput
+                                      errorText={toolViewModel.errorText}
+                                      output={
+                                        <div className="font-mono whitespace-pre-wrap break-words">
+                                          {toolViewModel.output === undefined || toolViewModel.output === null
+                                            ? 'No output'
+                                            : typeof toolViewModel.output === 'string'
+                                              ? toolViewModel.output
+                                              : formatJsonWithNewlines(toolViewModel.output)}
+                                        </div>
+                                      }
+                                    />
+                                  )
                                 )}
                               </ToolContent>
                             </Tool>

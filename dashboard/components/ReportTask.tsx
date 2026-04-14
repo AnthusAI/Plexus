@@ -370,7 +370,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           subtitle: !complete ? "Generating..." : undefined,
           // Add any error or warning from the block output if available
           error: blockData.output?.error,
-          warning: blockData.output?.warning
+          warning: blockData.output?.warning,
+          isReadOnly: variant === 'bare'
         };
         
         return (

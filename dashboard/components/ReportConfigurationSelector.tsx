@@ -6,7 +6,8 @@ import { ModelListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
 import { useAccount } from "@/app/contexts/AccountContext"
 
-export const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 export interface ReportConfigurationSelectorProps {
   selectedReportConfiguration: string | null;
@@ -15,14 +16,14 @@ export interface ReportConfigurationSelectorProps {
 }
 
 async function listReportConfigurations(accountId: string): ModelListResult<Schema['ReportConfiguration']['type']> {
-  return listFromModel<Schema['ReportConfiguration']['type']>(
-    client.models.ReportConfiguration,
+  return listFromModel<Schema['ReportConfiguration']['type']}(
+    getAmplifyClient().models.ReportConfiguration,
     { accountId: { eq: accountId } }
   )
 }
 
-const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({ 
-  selectedReportConfiguration, 
+const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({
+  selectedReportConfiguration,
   setSelectedReportConfiguration,
   useMockData = false
 }) => {
@@ -45,19 +46,19 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
         setIsLoading(true)
         if (!accountId) return
         const { data: configModels } = await listReportConfigurations(accountId)
-        
+
         // Sort by updatedAt descending (most recent first)
         const sortedConfigs = configModels.sort((a, b) => {
           const aDate = new Date(a.updatedAt || a.createdAt || '').getTime()
           const bDate = new Date(b.updatedAt || b.createdAt || '').getTime()
           return bDate - aDate // Descending order
         })
-        
+
         const formattedConfigurations = sortedConfigs.map(config => ({
           value: config.id,
           label: config.name || `Config ${config.id.substring(0, 6)}`
         }))
-        
+
         setReportConfigurations(formattedConfigurations)
       } catch (error) {
         console.error('Error fetching report configurations:', error)
@@ -75,7 +76,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Select 
+      <Select
         onValueChange={handleConfigurationChange}
         value={selectedReportConfiguration || "all"}
         disabled={isLoading}

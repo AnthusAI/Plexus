@@ -52,8 +52,8 @@ import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
-import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation } from '@/utils/data-operations'
+import { AmplifyTask, ProcessedTask, ProcessedEvaluation, Evaluation, TaskStageType } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation, fetchEvaluationById } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
@@ -544,6 +544,35 @@ export default function EvaluationsDashboard({
     }
   }, [accountId, selectedScorecard, selectedScore, refetch]);
 
+  // Deep-link support: fetch the selected evaluation by ID if it's not in the loaded list
+  const [deepLinkedEvaluation, setDeepLinkedEvaluation] = useState<ProcessedEvaluation | null>(null)
+  useEffect(() => {
+    if (!selectedEvaluationId || isLoading) return
+    const alreadyLoaded = evaluations.some(e => e.id === selectedEvaluationId)
+    if (alreadyLoaded) {
+      setDeepLinkedEvaluation(null)
+      return
+    }
+    let cancelled = false
+    fetchEvaluationById(selectedEvaluationId).then(result => {
+      if (!cancelled && result) setDeepLinkedEvaluation(result)
+    })
+    return () => { cancelled = true }
+  }, [selectedEvaluationId, isLoading, evaluations])
+
+  // Merge the deep-linked evaluation into the list so rendering and score-result loading work,
+  // then sort by createdAt descending so the grid is always in reverse chronological order.
+  const effectiveEvaluations = useMemo(() => {
+    const base = (!deepLinkedEvaluation || evaluations.some(e => e.id === deepLinkedEvaluation.id))
+      ? evaluations
+      : [deepLinkedEvaluation, ...evaluations]
+    return [...base].sort((a, b) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return bt - at
+    })
+  }, [evaluations, deepLinkedEvaluation])
+
   // Show loading state only on initial load, not when selecting evaluations
   const showLoading = isLoading && !dataHasLoadedOnce;
 
@@ -750,10 +779,8 @@ export default function EvaluationsDashboard({
   // Memoize the renderSelectedTask function to prevent unnecessary re-renders
   const renderSelectedTask = useMemo(() => {
     if (!selectedEvaluationId) return null;
-    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
+    const evaluation = effectiveEvaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
     if (!evaluation) return null;
-
-        // Debug: Log the scoreVersionId
 
     return (
       <TaskDisplay
@@ -778,10 +805,10 @@ export default function EvaluationsDashboard({
         onDelete={handleDelete}
       />
     );
-  }, [selectedEvaluationId, evaluations, isFullWidth, selectedEvaluationScoreResults, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
+  }, [selectedEvaluationId, effectiveEvaluations, isFullWidth, selectedEvaluationScoreResults, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
 
   // Remove client-side filtering logic and use the filtered evaluations directly
-  const filteredEvaluations = evaluations;
+  const filteredEvaluations = effectiveEvaluations;
 
   const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
     if (!selectedEvaluationId || !accountId) return;
@@ -931,7 +958,7 @@ export default function EvaluationsDashboard({
           >
             {/* Left panel - grid content */}
             <motion.div 
-              className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-y-auto overflow-x-hidden`}
               style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
@@ -942,7 +969,7 @@ export default function EvaluationsDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container space-y-3 overflow-visible">
+            <div className="@container space-y-3">
               {/* EvaluationTasksGauges at the top - only show when not in mobile selected evaluation view */}
               {!(selectedEvaluationId && isNarrowViewport) && (
                 <EvaluationTasksGauges />
@@ -961,19 +988,18 @@ export default function EvaluationsDashboard({
                     // Reduced logging
                     
                     return (
-                      <div 
+                      <div
                         key={evaluation.id}
                         role="button"
                         tabIndex={0}
                         onClick={clickHandler}
-                        onClickCapture={clickHandler}
-                        onPointerDownCapture={clickHandler}
                         onKeyDown={(ev) => {
                           if (ev.key === 'Enter' || ev.key === ' ') {
                             ev.preventDefault();
                             clickHandler();
                           }
                         }}
+                        className="touch-manipulation"
                         aria-pressed={evaluation.id === selectedEvaluationId}
                         data-selected={evaluation.id === selectedEvaluationId ? 'true' : 'false'}
                         ref={(el) => {

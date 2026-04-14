@@ -17,7 +17,8 @@ import { toast } from 'sonner'
 import { Editor } from '@monaco-editor/react'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher } from '@/lib/monaco-theme'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Types
 // NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
@@ -256,7 +257,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      const result = await (client.models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
+      const result = await (getAmplifyClient().models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
         accountId: accountId,
       })
 
@@ -294,7 +295,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
         accountId: accountId
       }
 
-      const result = await (client.models.Procedure.create as any)(input as any)
+      const result = await (getAmplifyClient().models.Procedure.create as any)(input as any)
       
       if (result.data) {
         setTemplates(prev => [result.data!, ...prev])
@@ -317,7 +318,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
 
     setIsLoading(true)
     try {
-      await (client.models.Procedure.delete as any)({ id: template.id })
+      await (getAmplifyClient().models.Procedure.delete as any)({ id: template.id })
       setTemplates(prev => prev.filter(t => t.id !== template.id))
       if (selectedTemplate?.id === template.id) {
         setSelectedTemplate(null)

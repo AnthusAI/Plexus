@@ -185,8 +185,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const calculateCoordinates = (angle: number, r: number = radius) => {
-    const x = r * Math.cos(angle - Math.PI / 2)
-    const y = r * Math.sin(angle - Math.PI / 2)
+    // Round to 6 decimal places to avoid SSR/client hydration mismatches
+    // from floating point precision differences
+    const x = Math.round(r * Math.cos(angle - Math.PI / 2) * 1e6) / 1e6
+    const y = Math.round(r * Math.sin(angle - Math.PI / 2) * 1e6) / 1e6
     return { x, y }
   }
 
@@ -364,8 +366,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
         
         const textOffset = radius + 25 - (verticalAdjustment * 10) + (segment.start === 100 ? 3 : 0)
         
-        const textX = textOffset * Math.cos(angle - Math.PI / 2)
-        const textY = textOffset * Math.sin(angle - Math.PI / 2)
+        const textX = Math.round(textOffset * Math.cos(angle - Math.PI / 2) * 1e6) / 1e6
+        const textY = Math.round(textOffset * Math.sin(angle - Math.PI / 2) * 1e6) / 1e6
 
         // Calculate the actual value based on min/max
         let tickValue: number
@@ -424,8 +426,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     
     const textOffset = radius + 25 - (verticalAdjustment * 10)
     
-    const textX = textOffset * Math.cos(angle - Math.PI / 2)
-    const textY = textOffset * Math.sin(angle - Math.PI / 2)
+    const textX = Math.round(textOffset * Math.cos(angle - Math.PI / 2) * 1e6) / 1e6
+    const textY = Math.round(textOffset * Math.sin(angle - Math.PI / 2) * 1e6) / 1e6
 
     // Format decimal values without leading zeros
     const formattedTargetValue = formatDecimalValue(target, decimalPlaces)

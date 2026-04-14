@@ -42,22 +42,22 @@ class TestStageConfigurationSystem:
         # Verify all expected stages are present
         assert "Setup" in configs
         assert "Processing" in configs
-        assert "Finalizing" in configs
-        
+        assert "Analyzing" in configs
+
         # Verify stage ordering
         assert configs["Setup"].order == 1
         assert configs["Processing"].order == 2
-        assert configs["Finalizing"].order == 3
-        
+        assert configs["Analyzing"].order == 3
+
         # Verify progress bar behavior (only Processing should have total_items)
         assert configs["Setup"].total_items is None
         assert configs["Processing"].total_items == 100
-        assert configs["Finalizing"].total_items is None
-        
+        assert configs["Analyzing"].total_items is None
+
         # Verify status messages are set
         assert configs["Setup"].status_message == "Setting up evaluation..."
-        assert configs["Processing"].status_message == "Starting processing..."
-        assert configs["Finalizing"].status_message == "Starting finalization..."
+        assert configs["Processing"].status_message == "Generating predictions..."
+        assert configs["Analyzing"].status_message == "Analyzing results..."
     
     def test_prediction_stage_configs_structure(self):
         """Test prediction stage configuration structure and defaults."""
@@ -85,7 +85,7 @@ class TestStageConfigurationSystem:
         # Should return evaluation configs
         assert "Setup" in configs
         assert "Processing" in configs
-        assert "Finalizing" in configs
+        assert "Analyzing" in configs
         assert configs["Processing"].total_items == 75
         
         # Test case variations
@@ -344,16 +344,16 @@ class TestCommandStageIntegration:
         assert len(tracker._stages) == 3
         assert "Setup" in tracker._stages
         assert "Processing" in tracker._stages
-        assert "Finalizing" in tracker._stages
-        
+        assert "Analyzing" in tracker._stages
+
         # Verify only Processing stage has progress tracking
         setup_stage = tracker._stages["Setup"]
         processing_stage = tracker._stages["Processing"]
-        finalizing_stage = tracker._stages["Finalizing"]
-        
+        analyzing_stage = tracker._stages["Analyzing"]
+
         assert setup_stage.total_items is None
         assert processing_stage.total_items == 200
-        assert finalizing_stage.total_items is None
+        assert analyzing_stage.total_items is None
     
     def test_prediction_workflow_integration(self):
         """Test TaskProgressTracker with prediction stage configs."""

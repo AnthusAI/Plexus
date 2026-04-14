@@ -97,11 +97,17 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
   useEffect(() => {
     const fetchConfiguration = async () => {
       if (isLoadingAccounts) return
+      if (!id) {
+        setError('Missing report configuration ID')
+        setIsLoading(false)
+        return
+      }
       if (!accountId) {
         setError("No account selected")
         setIsLoading(false)
         return
       }
+
       if (id === 'new') {
         setConfiguration({
           id: '',
@@ -145,7 +151,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
   // Set up Monaco theme watcher
   useEffect(() => {
     if (!monacoRef.current) return
-    
+
     const cleanup = setupMonacoThemeWatcher(monacoRef.current)
     return cleanup
   }, [monacoRef.current])
@@ -239,7 +245,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
               setHasChanges(true)
             }}
             className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     focus-visible:ring-0 focus-visible:ring-offset-0
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Configuration Name"
           />
@@ -250,7 +256,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
               setHasChanges(true)
             }}
             className="bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     focus-visible:ring-0 focus-visible:ring-offset-0
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Description (optional)"
           />
@@ -280,4 +286,4 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
       </div>
     </div>
   )
-} 
+}
