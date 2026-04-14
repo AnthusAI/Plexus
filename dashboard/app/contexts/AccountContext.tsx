@@ -10,6 +10,7 @@ import { getClient } from "@/utils/amplify-client"
 import { menuItems } from "@/components/dashboard-layout"
 
 type Account = Schema['Account']['type']
+const LAST_ACCOUNT_STORAGE_KEY = "plexus.lastSelectedAccountId"
 
 interface AccountContextType {
   accounts: Account[]
@@ -26,9 +27,24 @@ const AccountContext = createContext<AccountContextType | undefined>(undefined)
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const { authStatus } = useAuthenticator(context => [context.authStatus])
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
+  const [selectedAccount, setSelectedAccountState] = useState<Account | null>(null)
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true)
   const [visibleMenuItems, setVisibleMenuItems] = useState<typeof menuItems>(menuItems)
+
+  const readStoredAccountId = (): string | null => {
+    if (typeof window === 'undefined') return null
+    const stored = window.localStorage.getItem(LAST_ACCOUNT_STORAGE_KEY)
+    return stored?.trim() || null
+  }
+
+  const writeStoredAccountId = (accountId: string | null) => {
+    if (typeof window === 'undefined') return
+    if (accountId) {
+      window.localStorage.setItem(LAST_ACCOUNT_STORAGE_KEY, accountId)
+      return
+    }
+    window.localStorage.removeItem(LAST_ACCOUNT_STORAGE_KEY)
+  }
 
   const updateVisibleMenuItems = (account: Account | null) => {
     if (account?.settings) {
@@ -46,6 +62,30 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const applySelectedAccount = (account: Account | null) => {
+    setSelectedAccountState(account)
+    writeStoredAccountId(account?.id ?? null)
+    updateVisibleMenuItems(account)
+  }
+
+  const selectPreferredAccount = (availableAccounts: Account[]): Account | null => {
+    if (availableAccounts.length === 0) return null
+
+    const storedAccountId = readStoredAccountId()
+    if (storedAccountId) {
+      const storedAccount = availableAccounts.find(account => account.id === storedAccountId)
+      if (storedAccount) return storedAccount
+    }
+
+    const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY?.trim()
+    if (defaultAccountKey) {
+      const envAccount = availableAccounts.find(account => account.key === defaultAccountKey)
+      if (envAccount) return envAccount
+    }
+
+    return availableAccounts[0]
+  }
+
   const refreshAccount = async () => {
     if (!selectedAccount) return
     try {
@@ -55,8 +95,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       )
       const updatedAccount = accountsData.find(a => a.id === selectedAccount.id)
       if (updatedAccount) {
-        setSelectedAccount(updatedAccount)
-        updateVisibleMenuItems(updatedAccount)
+        applySelectedAccount(updatedAccount)
       }
     } catch (error) {
       console.error('Error refreshing account:', error)
@@ -85,17 +124,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       
       // Reset selected account if it's no longer in the list
       if (selectedAccount && !accountsWithParsedSettings.find(a => a.id === selectedAccount.id)) {
-        const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY
-        const defaultAccount = (defaultAccountKey 
-          ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
-          : null) || accountsWithParsedSettings[0]
+        const defaultAccount = selectPreferredAccount(accountsWithParsedSettings)
         
         if (defaultAccount) {
-          setSelectedAccount(defaultAccount)
-          updateVisibleMenuItems(defaultAccount)
+          applySelectedAccount(defaultAccount)
         } else {
-          setSelectedAccount(null)
-          setVisibleMenuItems(menuItems)
+          applySelectedAccount(null)
         }
       }
     } catch (error) {
@@ -109,7 +143,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (authStatus === 'unauthenticated') {
       setAccounts([])
-      setSelectedAccount(null)
+      setSelectedAccountState(null)
       setVisibleMenuItems(menuItems)
       setIsLoadingAccounts(false)
     }
@@ -146,14 +180,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         
         // Set default account if none is selected
         if (!selectedAccount && accountsWithParsedSettings.length > 0) {
-          const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY
-          const defaultAccount = (defaultAccountKey 
-            ? accountsWithParsedSettings.find(account => account.key === defaultAccountKey)
-            : null) || accountsWithParsedSettings[0]
+          const defaultAccount = selectPreferredAccount(accountsWithParsedSettings)
           
           if (defaultAccount) {
-            setSelectedAccount(defaultAccount)
-            updateVisibleMenuItems(defaultAccount)
+            applySelectedAccount(defaultAccount)
           }
         }
       } catch (error) {
@@ -176,7 +206,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       selectedAccount,
       isLoadingAccounts,
       visibleMenuItems,
-      setSelectedAccount,
+      setSelectedAccount: (account: Account) => applySelectedAccount(account),
       refreshAccount,
       refetchAccounts
     }}>
