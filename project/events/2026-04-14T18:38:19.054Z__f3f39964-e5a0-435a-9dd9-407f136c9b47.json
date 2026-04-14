@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f3f39964-e5a0-435a-9dd9-407f136c9b47",
+  "issue_id": "plx-7e60f108-9b13-4822-9853-0c4916343d9c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-14T18:38:19.054Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Resolve PR #164 CodeQL findings after develop drift"
+  }
+}
