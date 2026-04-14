@@ -97,8 +97,8 @@ class FeedbackContradictions(BaseReportBlock):
             )
         else:
             scorecard_obj = await asyncio.to_thread(
-                Scorecard.get_by_external_id,
-                external_id=str(scorecard_param),
+                Scorecard.get_by_name,
+                name=str(scorecard_param),
                 client=self.api_client,
             )
         if not scorecard_obj:
@@ -396,27 +396,39 @@ class FeedbackContradictions(BaseReportBlock):
         guidelines: Optional[str] = None,
         mode: str = "contradictions",
     ) -> List[Dict[str, Any]]:
-        reasons_text = "\n".join(f"{index + 1}. {item['reason']}" for index, item in enumerate(items))
+        # For large item sets, sample before clustering to avoid LLM producing
+        # near-unique labels (which happens when it gets hundreds of items).
+        # Sample evenly across the sorted list to maintain temporal diversity.
+        MAX_CLUSTERING_SAMPLE = 40
+        if len(items) > MAX_CLUSTERING_SAMPLE:
+            step = len(items) / MAX_CLUSTERING_SAMPLE
+            sample_items = [items[int(i * step)] for i in range(MAX_CLUSTERING_SAMPLE)]
+            self._log(f"Sampling {MAX_CLUSTERING_SAMPLE} of {len(items)} items for topic clustering.")
+        else:
+            sample_items = items
+
+        reasons_text = "\n".join(f"{index + 1}. {item['reason']}" for index, item in enumerate(sample_items))
 
         if mode == "aligned":
             cluster_prompt = (
-                f"Below are {len(items)} descriptions from vetted feedback items that are aligned with the guidelines.\n\n"
+                f"Below are {len(sample_items)} descriptions from vetted feedback items that are aligned with the guidelines.\n\n"
                 f"{reasons_text}\n\n"
-                f"Group these into at most {num_topics} semantically distinct topic clusters.\n"
+                f"Group these into exactly {num_topics} semantically distinct topic clusters.\n"
+                "Every item must get one of the {num_topics} topic labels — do not create more.\n"
                 "Use short labels (3-7 words) describing the behavior/policy area being affirmed. "
                 "Reply ONLY with JSON mapping item number (string) to topic label. "
-                f"The JSON must include exactly {len(items)} keys."
+                f"The JSON must include exactly {len(sample_items)} keys."
             )
         else:
             cluster_prompt = (
-                f"Below are {len(items)} descriptions of individual reviewer corrections.\n\n"
+                f"Below are {len(sample_items)} descriptions of individual reviewer corrections.\n\n"
                 f"{reasons_text}\n\n"
-                f"Group these into at most {num_topics} semantically distinct topic clusters.\n"
-                "Merge items that describe the same specific agent behavior into one cluster. "
-                "Single-item clusters are fine when behavior is distinct.\n\n"
+                f"Group these into exactly {num_topics} semantically distinct topic clusters.\n"
+                f"You MUST use exactly {num_topics} distinct labels — no more, no fewer.\n"
+                "Aggressively merge items that describe the same or closely related policy concern. "
                 "Assign each item a short topic label (3-7 words) naming the policy concern. "
                 "Reply ONLY with JSON mapping item number (string) to topic label. "
-                f"The JSON must include exactly {len(items)} keys."
+                f"The JSON must include exactly {len(sample_items)} keys."
             )
 
         try:
@@ -427,12 +439,33 @@ class FeedbackContradictions(BaseReportBlock):
                 raise ValueError(f"Expected dict from topic clustering LLM, got {type(topic_map).__name__}")
         except Exception as exc:
             self._log(f"Topic clustering LLM call failed: {exc}", level="WARNING")
-            topic_map = {str(index + 1): "Unclustered" for index in range(len(items))}
+            topic_map = {str(index + 1): "Unclustered" for index in range(len(sample_items))}
 
         label_to_items: Dict[str, List[Dict[str, Any]]] = {}
-        for index, item in enumerate(items):
+        # Assign sample items using the LLM topic_map
+        for index, item in enumerate(sample_items):
             label = topic_map.get(str(index + 1), "Other")
             label_to_items.setdefault(label, []).append(item)
+
+        # For non-sample items, assign to the topic whose label has the most word
+        # overlap with the item's reason text. This keeps counts accurate without
+        # another LLM call.
+        if len(items) > len(sample_items):
+            sample_id_set = set(id(item) for item in sample_items)
+            known_labels = list(label_to_items.keys())
+            label_word_sets = {
+                label: set(label.lower().split()) for label in known_labels
+            }
+            for item in items:
+                if id(item) in sample_id_set:
+                    continue
+                reason_words = set(item.get("reason", "").lower().split())
+                best_label = max(
+                    known_labels,
+                    key=lambda lbl: len(label_word_sets[lbl] & reason_words),
+                    default=known_labels[0] if known_labels else "Other",
+                )
+                label_to_items[best_label].append(item)
 
         summary_map: Dict[str, str] = {}
         guideline_quote_map: Dict[str, str] = {}

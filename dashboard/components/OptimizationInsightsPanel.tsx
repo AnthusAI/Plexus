@@ -1,4 +1,6 @@
 import React, { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -36,16 +38,30 @@ interface OptimizationDiagnostic {
 
 // --- CollapsibleText ---
 
+function MarkdownText({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      className="text-sm text-muted-foreground prose prose-sm prose-invert max-w-none
+        prose-headings:text-foreground prose-headings:font-semibold
+        prose-h2:text-base prose-h3:text-sm
+        prose-strong:text-foreground
+        prose-ul:my-1 prose-li:my-0
+        prose-p:my-1"
+    >
+      {text}
+    </ReactMarkdown>
+  )
+}
+
 function CollapsibleText({ text, maxChars = 500 }: { text: string; maxChars?: number }) {
   const [expanded, setExpanded] = useState(false)
   if (!text || text.length <= maxChars) {
-    return <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{text}</p>
+    return <MarkdownText text={text} />
   }
   return (
     <div>
-      <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-        {expanded ? text : text.slice(0, maxChars) + '...'}
-      </p>
+      <MarkdownText text={expanded ? text : text.slice(0, maxChars) + '...'} />
       <button
         onClick={() => setExpanded(!expanded)}
         className="text-xs text-muted-foreground/70 hover:text-foreground mt-1 flex items-center gap-1"
