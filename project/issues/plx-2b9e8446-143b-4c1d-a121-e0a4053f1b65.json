@@ -3,7 +3,7 @@
   "title": "Fix failing security/snyk check on PR #159",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,34 @@
       "author": "ryan",
       "text": "Investigating failing security/snyk status on PR #159 (target develop). Local Snyk integration exists via kbs snyk pull but cannot fetch finding details without SNYK_TOKEN. Branch currently pins langchain-core=0.3.81; proceeding with dependency bump to 0.3.84+ and lock refresh to match Snyk fix direction.",
       "created_at": "2026-04-14T12:19:07.354588Z"
+    },
+    {
+      "id": "b9510cf1-dbc6-4cc5-b45a-13dbe2d44405",
+      "author": "ryan",
+      "text": "User requested immediate PR #159 repair. Proceeding with conflict resolution against develop in an isolated worktree to avoid touching unrelated local changes, then validating and pushing fixes.",
+      "created_at": "2026-04-14T12:24:11.505675Z"
+    },
+    {
+      "id": "707fc174-4ad5-4759-b9e1-8bc90717986e",
+      "author": "ryan",
+      "text": "Resolved PR #159 merge conflicts by merging origin/develop into feature/feedback-alignment-timeline-review and pushing commit 3c1c55848. Conflict files fixed: dashboard/app/lab/reports/[id]/page.tsx, dashboard/app/lab/reports/edit/[id]/page.tsx, dashboard/components/ReportConfigurationSelector.tsx, dashboard/components/report-configuration-edit.tsx, dashboard/package.json. Root cause: head branch diverged from develop in these files. Current checks: Snyk passed (no manifest changes); Actions runs 24398884783 and 24398884819 are in progress for dashboard/python suites.",
+      "created_at": "2026-04-14T12:28:40.726336Z"
+    },
+    {
+      "id": "81b59b82-b121-42f7-ac7f-ca5f4f4be032",
+      "author": "ryan",
+      "text": "Follow-up CI fix after merge resolution: Dashboard Unit Tests failed in both runs 24398884783/24398884819 during TypeScript Type Check with TS1128 in dashboard/components/ReportConfigurationSelector.tsx:23. Root cause was a typo in generic call syntax (listFromModel<...>} instead of listFromModel<...>). Pushed fix commit 45617f7e4 to PR head branch.",
+      "created_at": "2026-04-14T12:32:19.505591Z"
+    },
+    {
+      "id": "b5c1d5cc-aac8-405e-96a2-c224690ca6d4",
+      "author": "ryan",
+      "text": "PR #159 is now conflict-free and green on head sha 45617f7e4. GitHub status: mergeable=CLEAN/MERGEABLE. Checks passed: Dashboard Unit Tests, Dashboard Storybook Tests, Python Tests 3.11/3.12, Snyk. Marking this bug closed.",
+      "created_at": "2026-04-14T12:51:29.094463Z"
     }
   ],
   "created_at": "2026-04-14T12:19:01.494118Z",
-  "updated_at": "2026-04-14T12:19:07.354588Z",
-  "closed_at": null,
+  "updated_at": "2026-04-14T12:51:29.115666Z",
+  "closed_at": "2026-04-14T12:51:29.115666Z",
   "custom": {}
 }
