@@ -725,8 +725,12 @@ def register_evaluation_tools(mcp: FastMCP):
                                 evaluation_type="feedback",
                             )
                             evaluation_id = latest_info.get("id") if latest_info else None
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning(
+                                "Failed to resolve latest feedback evaluation fallback for score %s: %s",
+                                score_name,
+                                exc,
+                            )
 
                     if notes and evaluation_id:
                         _apply_notes_to_evaluation(evaluation_id, notes)
