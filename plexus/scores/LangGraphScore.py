@@ -22,7 +22,7 @@ from langchain_community.callbacks import OpenAICallbackHandler
 
 from langgraph.graph import StateGraph, END
 
-from openai_cost_calculator.openai_cost_calculator import calculate_cost
+import litellm as _litellm
 
 from langchain_core.globals import set_debug, set_verbose
 # Only enable debug for very specific debugging scenarios
@@ -916,12 +916,17 @@ class LangGraphScore(Score, LangChainUser):
         usage = self.get_token_usage()
 
         try:
-            cost_info = calculate_cost(
-                model_name=self.parameters.model_name,
-                input_tokens=usage['prompt_tokens'],
-                output_tokens=usage['completion_tokens']
+            prompt_cost, completion_cost = _litellm.cost_per_token(
+                model=self.parameters.model_name,
+                prompt_tokens=usage['prompt_tokens'],
+                completion_tokens=usage['completion_tokens']
             )
-        except ValueError as e:
+            cost_info = {
+                "input_cost": float(prompt_cost),
+                "output_cost": float(completion_cost),
+                "total_cost": float(prompt_cost + completion_cost),
+            }
+        except Exception as e:
             logging.error(f"Error calculating cost: {str(e)}")
             cost_info = {"input_cost": 0, "output_cost": 0, "total_cost": 0}
 
