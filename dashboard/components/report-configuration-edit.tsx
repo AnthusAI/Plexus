@@ -9,12 +9,12 @@ import { useRouter } from 'next/navigation'
 import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult } from '@aws-amplify/api'
 import { toast } from "sonner"
-import { useAuthenticator } from '@aws-amplify/ui-react'
 import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 import { load as parseYaml, dump as stringifyYaml } from 'js-yaml'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { useAccount } from "@/app/contexts/AccountContext"
 
 // Define types based on Amplify schema
 type ReportConfiguration = {
@@ -72,8 +72,6 @@ const UPDATE_REPORT_CONFIGURATION = `
   }
 `
 
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
-
 const defaultConfiguration = `# Report Configuration
 
 # Add your report blocks here using the following format:
@@ -85,63 +83,31 @@ const defaultConfiguration = `# Report Configuration
 `
 
 export function ReportConfigurationEdit({ id }: { id: string }) {
-  const { user } = useAuthenticator()
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   const router = useRouter()
   const [configuration, setConfiguration] = useState<ReportConfiguration | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [accountId, setAccountId] = useState<string | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const monacoRef = useRef<Monaco | null>(null)
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null)
-
-  // Fetch account ID
-  useEffect(() => {
-    const fetchAccountId = async () => {
-      try {
-        const accountResponse = await getClient().graphql({
-          query: `
-            query ListAccounts($filter: ModelAccountFilterInput) {
-              listAccounts(filter: $filter) {
-                items {
-                  id
-                  key
-                }
-              }
-            }
-          `,
-          variables: {
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }
-        })
-
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const id = accountResponse.data.listAccounts.items[0].id
-          setAccountId(id)
-        } else {
-          console.warn('No account found with key:', ACCOUNT_KEY)
-          setError('No account found')
-          setIsLoading(false)
-        }
-      } catch (err: any) {
-        console.error('Error fetching account:', err)
-        setError(`Error fetching account: ${err.message}`)
-        setIsLoading(false)
-      }
-    }
-    fetchAccountId()
-  }, [])
+  const accountId = selectedAccount?.id || null
 
   // Fetch report configuration
   useEffect(() => {
     const fetchConfiguration = async () => {
+      if (isLoadingAccounts) return
       if (!id) {
         setError('Missing report configuration ID')
         setIsLoading(false)
         return
       }
+      if (!accountId) {
+        setError("No account selected")
+        setIsLoading(false)
+        return
+      }
 
-      if (!accountId) return
       if (id === 'new') {
         setConfiguration({
           id: '',
@@ -180,12 +146,12 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
     }
 
     fetchConfiguration()
-  }, [id, accountId])
+  }, [id, accountId, isLoadingAccounts])
 
   // Set up Monaco theme watcher
   useEffect(() => {
     if (!monacoRef.current) return
-    
+
     const cleanup = setupMonacoThemeWatcher(monacoRef.current)
     return cleanup
   }, [monacoRef.current])
@@ -279,7 +245,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
               setHasChanges(true)
             }}
             className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     focus-visible:ring-0 focus-visible:ring-offset-0
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Configuration Name"
           />
@@ -290,7 +256,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
               setHasChanges(true)
             }}
             className="bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     focus-visible:ring-0 focus-visible:ring-offset-0
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Description (optional)"
           />
@@ -320,4 +286,4 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
       </div>
     </div>
   )
-} 
+}

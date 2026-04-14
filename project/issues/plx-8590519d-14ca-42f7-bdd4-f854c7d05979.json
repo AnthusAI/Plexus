@@ -1,0 +1,37 @@
+{
+  "id": "plx-8590519d-14ca-42f7-bdd4-f854c7d05979",
+  "title": "Fix dashboard account lock to console smoke test",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3b736ba2-dc63-4bb5-b944-2e3086bbeca8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d4bbbd73-6fb0-4b81-a2b6-ed65414fc6ad",
+      "author": "ryan",
+      "text": "Investigating dashboard login/account context. Symptom: user lands in console smoke test account and cannot access expected reports. Checking env-driven account key wiring and account switch behavior.",
+      "created_at": "2026-04-06T22:45:07.901075Z"
+    },
+    {
+      "id": "d7fba42a-f01a-4790-ba46-47bddfe78758",
+      "author": "ryan",
+      "text": "Implemented account-context based report scoping to avoid env-key lock-in. Updated AccountContext to persist last selected account id in localStorage and prefer that over env default on login. Replaced env-key account lookups with useAccount-selected account in report-configurations-dashboard, ReportConfigurationSelector, report-configuration-edit, and task-dispatch ReportConfigurationDialog. Validation: dashboard typecheck run completed successfully once during patch session; eslint invocation in this environment fails due local eslint/ajv tooling mismatch under current Node runtime.",
+      "created_at": "2026-04-06T22:53:43.226956Z"
+    },
+    {
+      "id": "2837b9d3-208c-459a-968e-43da6fed3676",
+      "author": "ryan",
+      "text": "Adjusted local runtime source of truth for GraphQL endpoint: root .env now activates Production Call Criteria PLEXUS_API_URL/API_KEY and comments out staging values. Verified active env host now matches dashboard/amplify_outputs.json host (7ubj23ym...us-west-2). Awaiting user restart confirmation.",
+      "created_at": "2026-04-09T17:36:22.989057Z"
+    }
+  ],
+  "created_at": "2026-04-06T22:45:05.285374Z",
+  "updated_at": "2026-04-09T17:36:22.989057Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -4,6 +4,7 @@ import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { ModelListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
+import { useAccount } from "@/app/contexts/AccountContext"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
@@ -21,73 +22,43 @@ async function listReportConfigurations(accountId: string): ModelListResult<Sche
   )
 }
 
-const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({ 
-  selectedReportConfiguration, 
+const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({
+  selectedReportConfiguration,
   setSelectedReportConfiguration,
   useMockData = false
 }) => {
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   const [reportConfigurations, setReportConfigurations] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
-  const [accountId, setAccountId] = useState<string | null>(null)
-
-  // Fetch account ID first (similar to Reports Dashboard)
-  useEffect(() => {
-    const fetchAccountId = async () => {
-      try {
-        const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
-        const accountResponse = await getAmplifyClient().graphql({
-          query: `
-            query ListAccounts($filter: ModelAccountFilterInput) {
-              listAccounts(filter: $filter) {
-                items {
-                  id
-                  key
-                }
-              }
-            }
-          `,
-          variables: {
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }
-        })
-
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const id = accountResponse.data.listAccounts.items[0].id
-          setAccountId(id)
-        } else {
-        }
-      } catch (err: any) {
-        console.error('Error fetching account:', err)
-      }
-    }
-    
-    if (!useMockData) {
-      fetchAccountId()
-    }
-  }, [useMockData])
+  const accountId = selectedAccount?.id || null
 
   // Fetch report configurations when accountId is available
   useEffect(() => {
-    if (useMockData || !accountId) return
+    if (useMockData) return
+    if (!accountId) {
+      setReportConfigurations([])
+      setIsLoading(isLoadingAccounts)
+      return
+    }
 
     async function fetchReportConfigurations() {
       try {
         setIsLoading(true)
         if (!accountId) return
         const { data: configModels } = await listReportConfigurations(accountId)
-        
+
         // Sort by updatedAt descending (most recent first)
         const sortedConfigs = configModels.sort((a, b) => {
           const aDate = new Date(a.updatedAt || a.createdAt || '').getTime()
           const bDate = new Date(b.updatedAt || b.createdAt || '').getTime()
           return bDate - aDate // Descending order
         })
-        
+
         const formattedConfigurations = sortedConfigs.map(config => ({
           value: config.id,
           label: config.name || `Config ${config.id.substring(0, 6)}`
         }))
-        
+
         setReportConfigurations(formattedConfigurations)
       } catch (error) {
         console.error('Error fetching report configurations:', error)
@@ -97,7 +68,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
     }
 
     fetchReportConfigurations()
-  }, [accountId, useMockData])
+  }, [accountId, isLoadingAccounts, useMockData])
 
   const handleConfigurationChange = (value: string) => {
     setSelectedReportConfiguration(value === "all" ? null : value);
@@ -105,7 +76,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Select 
+      <Select
         onValueChange={handleConfigurationChange}
         value={selectedReportConfiguration || "all"}
         disabled={isLoading}

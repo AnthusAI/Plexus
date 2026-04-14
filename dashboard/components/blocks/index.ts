@@ -13,6 +13,7 @@ export { default as FeedbackAnalysis } from './FeedbackAnalysis';
 export { default as ExplanationAnalysis } from './ExplanationAnalysis';
 export { default as ScorecardReport } from './ScorecardReport';
 export { default as ActionItems } from './ActionItems';
+export { default as FeedbackAlignmentTimeline } from './FeedbackAlignmentTimeline';
 export { BlockRenderer } from './BlockRegistry';
 export type { BlockRendererProps } from './BlockRegistry';
 export { getBlock, hasBlock, getRegisteredBlockTypes } from './BlockRegistry';
