@@ -15,7 +15,7 @@ from ruamel.yaml.scanner import ScannerError
 from ruamel.yaml.parser import ParserError
 from ruamel.yaml.constructor import ConstructorError
 
-from .rules import RuleEngine
+from .rules import RuleEngine, ProcessorValidationRule, ConfidenceConfigurationRule
 from .schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,12 @@ class YamlLinter:
         
         # Initialize validation components
         self.schema_validator = SchemaValidator(domain_schema) if domain_schema else None
-        self.rule_engine = RuleEngine(custom_rules or [])
+        # Always include default structural rules; caller can add more via custom_rules
+        default_rules = [
+            ProcessorValidationRule(),
+            ConfidenceConfigurationRule(),
+        ]
+        self.rule_engine = RuleEngine(default_rules + (custom_rules or []))
         
         # Configure YAML parser for better error reporting
         self.yaml.indent(mapping=2, sequence=4, offset=2)
