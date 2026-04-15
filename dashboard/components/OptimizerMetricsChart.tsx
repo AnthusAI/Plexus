@@ -33,15 +33,26 @@ interface OptimizerMetricsChartProps {
 
 type DatasetView = "feedback" | "accuracy" | "overall"
 
+// Two dataset colors — shape encodes metric type, color encodes dataset
+const FEEDBACK_COLOR    = "var(--chart-1)"
+const REGRESSION_COLOR  = "var(--chart-2)"
+
+function getLineColor(key: string, view: DatasetView): string {
+  if (key.startsWith("overall_fb"))  return FEEDBACK_COLOR
+  if (key.startsWith("overall_acc")) return REGRESSION_COLOR
+  return view === "accuracy" ? REGRESSION_COLOR : FEEDBACK_COLOR
+}
+
+// chartConfig: labels only — colors are resolved dynamically via getLineColor
 const chartConfig: ChartConfig = {
-  alignment:             { label: "Alignment",          color: "var(--chart-1)" },
-  accuracy:              { label: "Accuracy",           color: "var(--chart-2)" },
-  precision:             { label: "Precision",          color: "var(--chart-3)" },
-  recall:                { label: "Recall",             color: "var(--chart-4)" },
-  overall_fb_alignment:  { label: "Feedback Alignment", color: "var(--chart-1)" },
-  overall_fb_accuracy:   { label: "Feedback Accuracy",  color: "var(--chart-2)" },
-  overall_acc_alignment: { label: "Regression Alignment", color: "var(--chart-3)" },
-  overall_acc_accuracy:  { label: "Regression Accuracy",  color: "var(--chart-4)" },
+  alignment:             { label: "Alignment",            color: FEEDBACK_COLOR },
+  accuracy:              { label: "Accuracy",             color: FEEDBACK_COLOR },
+  precision:             { label: "Precision",            color: FEEDBACK_COLOR },
+  recall:                { label: "Recall",               color: FEEDBACK_COLOR },
+  overall_fb_alignment:  { label: "Feedback Alignment",   color: FEEDBACK_COLOR },
+  overall_fb_accuracy:   { label: "Feedback Accuracy",    color: FEEDBACK_COLOR },
+  overall_acc_alignment: { label: "Regression Alignment", color: REGRESSION_COLOR },
+  overall_acc_accuracy:  { label: "Regression Accuracy",  color: REGRESSION_COLOR },
 }
 
 interface ChartDataPoint {
@@ -58,12 +69,17 @@ interface ChartDataPoint {
   overall_acc_accuracy:  number | null
 }
 
-// Shape → dataKey mapping for legend rendering and focus
+// Shape encodes metric type — consistent across all views and both datasets
 type ShapeKind = "circle" | "square" | "triangle" | "diamond"
 const METRIC_SHAPE: Record<string, ShapeKind> = {
-  alignment: "circle", accuracy: "square", precision: "triangle", recall: "diamond",
-  overall_fb_alignment: "circle", overall_fb_accuracy: "square",
-  overall_acc_alignment: "triangle", overall_acc_accuracy: "diamond",
+  alignment:             "circle",
+  accuracy:              "square",
+  precision:             "triangle",
+  recall:                "diamond",
+  overall_fb_alignment:  "circle",
+  overall_fb_accuracy:   "square",
+  overall_acc_alignment: "circle",   // same shape as alignment — color distinguishes dataset
+  overall_acc_accuracy:  "square",   // same shape as accuracy  — color distinguishes dataset
 }
 
 // Metric → axis mapping
@@ -171,7 +187,6 @@ const MetricsTooltip: React.FC<MetricsTooltipProps> = ({ active, payload, datase
   const statusColor = point.skipped ? "text-muted-foreground" : point.accepted ? "text-green-600" : "text-red-600"
 
   const metrics = VIEW_METRICS[datasetView]
-
   const isBaseline = point.cycle === "Baseline"
 
   return (
@@ -188,7 +203,7 @@ const MetricsTooltip: React.FC<MetricsTooltipProps> = ({ active, payload, datase
           const isPct = METRIC_AXIS[key] === "right"
           const shape = METRIC_SHAPE[key]
           const label = chartConfig[key]?.label || key
-          const color = `var(--color-${key})`
+          const color = getLineColor(key, datasetView)
 
           const formatted = val !== null
             ? (isPct ? `${val.toFixed(1)}%` : val.toFixed(4))
@@ -227,8 +242,8 @@ const CustomLegend: React.FC<CustomLegendProps> = ({ datasetView, focusedMetric,
     <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2" style={{ fontSize: 11 }}>
       {metrics.map(key => {
         const shape = METRIC_SHAPE[key]
-        const label = (chartConfig as Record<string, { label: string; color: string }>)[key]?.label || key
-        const color = (chartConfig as Record<string, { label: string; color: string }>)[key]?.color || "currentColor"
+        const label = (chartConfig as Record<string, { label: string }>)[key]?.label || key
+        const color = getLineColor(key, datasetView)
         const dimmed = focusedMetric !== null && focusedMetric !== key
         return (
           <button
@@ -309,7 +324,6 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
 
   const visibleMetrics = VIEW_METRICS[datasetView]
 
-  // Helper: is a metric line visible given view + focus state?
   const isVisible = (key: string) => {
     if (!visibleMetrics.includes(key)) return false
     if (focusedMetric && key !== focusedMetric) return false
@@ -320,7 +334,6 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
     <MetricsTooltip {...props} datasetView={datasetView} baseline={baseline} focusedMetric={focusedMetric} />
   )
 
-  // Build reference lines for baselines of visible metrics
   const referenceLines = visibleMetrics
     .filter(key => isVisible(key) && (baseline as any)[key] != null)
     .map(key => (
@@ -328,23 +341,23 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
         key={`baseline-${key}`}
         yAxisId={METRIC_AXIS[key]}
         y={(baseline as any)[key]}
-        stroke={`var(--color-${key})`}
+        stroke={getLineColor(key, datasetView)}
         strokeOpacity={0.35}
         strokeDasharray="6 4"
         strokeWidth={1.5}
       />
     ))
 
-  // All 8 line definitions — always rendered, visibility controlled by hide/legendType
-  const ALL_LINES: Array<{ key: string; axis: "left" | "right"; shape: ShapeKind; views: DatasetView[] }> = [
-    { key: "alignment",             axis: "left",  shape: "circle",   views: ["feedback", "accuracy"] },
-    { key: "accuracy",              axis: "right", shape: "square",   views: ["feedback", "accuracy"] },
-    { key: "precision",             axis: "right", shape: "triangle", views: ["feedback", "accuracy"] },
-    { key: "recall",                axis: "right", shape: "diamond",  views: ["feedback", "accuracy"] },
-    { key: "overall_fb_alignment",  axis: "left",  shape: "circle",   views: ["overall"] },
-    { key: "overall_fb_accuracy",   axis: "right", shape: "square",   views: ["overall"] },
-    { key: "overall_acc_alignment", axis: "left",  shape: "triangle", views: ["overall"] },
-    { key: "overall_acc_accuracy",  axis: "right", shape: "diamond",  views: ["overall"] },
+  // All 8 line definitions — shape derives from METRIC_SHAPE, color from getLineColor
+  const ALL_LINES: Array<{ key: string; axis: "left" | "right" }> = [
+    { key: "alignment",             axis: "left"  },
+    { key: "accuracy",              axis: "right" },
+    { key: "precision",             axis: "right" },
+    { key: "recall",                axis: "right" },
+    { key: "overall_fb_alignment",  axis: "left"  },
+    { key: "overall_fb_accuracy",   axis: "right" },
+    { key: "overall_acc_alignment", axis: "left"  },
+    { key: "overall_acc_accuracy",  axis: "right" },
   ]
 
   return (
@@ -406,11 +419,12 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
             {/* Baseline reference lines (dashed, low opacity) */}
             {referenceLines}
 
-            {/* Data lines — all 8 always rendered; hide + legendType control visibility */}
-            {ALL_LINES.map(({ key, axis, shape }) => {
+            {/* Data lines — shape = metric type, color = dataset */}
+            {ALL_LINES.map(({ key, axis }) => {
               const visible = isVisible(key)
+              const shape = METRIC_SHAPE[key]
               const DotComp = DOT_COMPONENTS[shape]
-              const color = `var(--color-${key})`
+              const color = getLineColor(key, datasetView)
               return (
                 <Line
                   key={key}

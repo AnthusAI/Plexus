@@ -1,0 +1,40 @@
+{
+  "id": "plx-fd6855ca-3fe8-4be0-ae8a-e7c4c1177115",
+  "title": "Accept and apply CodeQL suggestions for develop->main PR",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "25e74060-7189-4402-8c65-f0abc89a1acf",
+      "author": "ryan",
+      "text": "Committing pending Kanbus issue/event state files from local worktree per request so coworker can continue PR/CI recovery.",
+      "created_at": "2026-04-14T22:15:38.963698Z"
+    },
+    {
+      "id": "a607ebd2-de7a-42af-844d-4679b605615f",
+      "author": "ryan",
+      "text": "Committed pending Kanbus state files on develop:  (chore(project): commit pending Kanbus issue/event updates).",
+      "created_at": "2026-04-14T22:15:45.731951Z"
+    },
+    {
+      "id": "8aca3f36-512d-4c89-94ad-794327e3dfb3",
+      "author": "ryan",
+      "text": "Committed pending Kanbus state files on develop: 8f63c27c4 (chore(project): commit pending Kanbus issue/event updates).",
+      "created_at": "2026-04-14T22:15:51.179792Z"
+    }
+  ],
+  "created_at": "2026-04-14T13:06:37.216868Z",
+  "updated_at": "2026-04-14T22:15:51.179792Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
