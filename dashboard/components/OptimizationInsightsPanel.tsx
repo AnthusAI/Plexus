@@ -9,7 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Stethoscope, ClipboardList } from 'lucide-react'
 
 // --- Types ---
 
@@ -219,6 +219,192 @@ export function CycleInsightsPanel({ insights }: { insights: CycleInsight[] }) {
           )
         })}
       </Accordion>
+    </div>
+  )
+}
+
+// --- EndOfRunReport ---
+
+interface EndOfRunReportSection {
+  summary?: string
+  detail?: string
+  text?: string
+}
+
+interface EndOfRunReportData {
+  diagnosis?: EndOfRunReportSection
+  prescription?: EndOfRunReportSection
+  run_summary?: {
+    cycles?: number
+    accepted?: number
+    rejected?: number
+    skipped?: number
+    success_rate?: number
+    baseline_fb_ac1?: number
+    final_fb_ac1?: number
+    total_fb_improvement?: number
+    total_acc_improvement?: number
+    stop_reason?: string
+  }
+}
+
+function ReportSection({
+  icon,
+  title,
+  summary,
+  detail,
+}: {
+  icon: React.ReactNode
+  title: string
+  summary?: string
+  detail?: string
+}) {
+  const [detailOpen, setDetailOpen] = useState(false)
+  const hasSummary = summary && summary.trim().length > 0
+  const hasDetail = detail && detail.trim().length > 0
+  const fallback = !hasSummary && !hasDetail
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+        {icon}
+        {title}
+      </div>
+
+      {fallback ? (
+        <p className="text-xs text-muted-foreground/50 italic">Not available</p>
+      ) : (
+        <>
+          {hasSummary && (
+            <div className="prose prose-sm prose-invert max-w-none
+              prose-headings:text-foreground prose-headings:font-semibold
+              prose-h2:text-sm prose-h3:text-xs
+              prose-strong:text-foreground
+              prose-ul:my-1 prose-li:my-0.5
+              prose-p:my-1 text-sm text-foreground/90">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary!}</ReactMarkdown>
+            </div>
+          )}
+
+          {hasDetail && (
+            <div>
+              <button
+                onClick={() => setDetailOpen(v => !v)}
+                className="text-xs text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 mt-1"
+              >
+                {detailOpen
+                  ? <><ChevronUp className="h-3 w-3" /> Hide full analysis</>
+                  : <><ChevronDown className="h-3 w-3" /> Show full analysis</>
+                }
+              </button>
+              {detailOpen && (
+                <div className="mt-2 pt-2 border-t border-border/30 prose prose-sm prose-invert max-w-none
+                  prose-headings:text-foreground prose-headings:font-semibold
+                  prose-h2:text-sm prose-h3:xs
+                  prose-strong:text-foreground
+                  prose-ul:my-1 prose-li:my-0.5
+                  prose-p:my-1 text-xs text-muted-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{detail!}</ReactMarkdown>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// Parse a text field that uses ## SUMMARY / ## DETAIL section markers into
+// separate summary and detail strings. This is more reliable than the auto-split
+// `summary`/`detail` fields, which are sometimes cut mid-sentence or mid-heading.
+function parseStructuredText(text: string): [string, string] | null {
+  if (!text) return null
+  const summaryMatch = text.match(/^##\s*SUMMARY\s*\n([\s\S]*?)(?=\n##\s*DETAIL|\s*$)/i)
+  const detailMatch = text.match(/##\s*DETAIL\s*\n([\s\S]*)$/i)
+  if (!summaryMatch && !detailMatch) return null
+  return [
+    summaryMatch ? summaryMatch[1].trim() : '',
+    detailMatch ? detailMatch[1].trim() : '',
+  ]
+}
+
+// Resolve summary/detail for a report section, preferring the structured `text`
+// field when available (avoids mid-heading splits in the auto-split fields).
+function resolveSummaryDetail(section: EndOfRunReportSection | undefined): [string, string] {
+  if (!section) return ['', '']
+  if (section.text) {
+    const parsed = parseStructuredText(section.text)
+    if (parsed) return parsed
+  }
+  return [section.summary || '', section.detail || section.text || '']
+}
+
+export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
+  if (!report) return null
+  const { diagnosis, prescription, run_summary } = report
+  const hasDiagnosis = diagnosis && (diagnosis.summary || diagnosis.detail || diagnosis.text)
+  const hasPrescription = prescription && (prescription.summary || prescription.detail || prescription.text)
+  if (!hasDiagnosis && !hasPrescription) return null
+
+  const [diagSummary, diagDetail] = resolveSummaryDetail(diagnosis)
+  const [prescSummary, prescDetail] = resolveSummaryDetail(prescription)
+
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-muted-foreground">End-of-Run Report</h3>
+        {run_summary && (
+          <div className="flex gap-1.5 flex-wrap">
+            {run_summary.stop_reason && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal capitalize">
+                {run_summary.stop_reason.replace(/_/g, ' ')}
+              </Badge>
+            )}
+            {run_summary.total_fb_improvement != null && (
+              <Badge
+                variant="outline"
+                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_fb_improvement >= 0 ? 'text-green-500' : 'text-red-500'}`}
+              >
+                FB {run_summary.total_fb_improvement >= 0 ? '+' : ''}{run_summary.total_fb_improvement.toFixed(3)}
+              </Badge>
+            )}
+            {run_summary.total_acc_improvement != null && (
+              <Badge
+                variant="outline"
+                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_acc_improvement >= 0 ? 'text-green-500' : 'text-red-500'}`}
+              >
+                ACC {run_summary.total_acc_improvement >= 0 ? '+' : ''}{run_summary.total_acc_improvement.toFixed(3)}
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="@container">
+      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+        {hasDiagnosis && (
+          <div className="rounded-lg border border-border/50 bg-card p-4">
+            <ReportSection
+              icon={<Stethoscope className="h-4 w-4" />}
+              title="Diagnosis"
+              summary={diagSummary}
+              detail={diagDetail}
+            />
+          </div>
+        )}
+        {hasPrescription && (
+          <div className="rounded-lg border border-border/50 bg-card p-4">
+            <ReportSection
+              icon={<ClipboardList className="h-4 w-4" />}
+              title="Prescription"
+              summary={prescSummary}
+              detail={prescDetail}
+            />
+          </div>
+        )}
+      </div>
+      </div>
     </div>
   )
 }

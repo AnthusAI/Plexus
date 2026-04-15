@@ -1163,8 +1163,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         
         {/* Conversation full-screen view - renders when conversation is fullscreen */}
         {selectedProcedureId && isConversationFullscreen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
-            <div className="w-full h-screen bg-background py-6 px-3 overflow-y-auto flex flex-col">
+          <div className="fixed inset-0 z-50 bg-background">
+            <div className="w-full h-screen bg-background py-6 px-3 flex flex-col">
               <div className="flex items-center justify-between mb-4 flex-shrink-0 px-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
@@ -1180,10 +1180,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                   <Shrink className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <ProcedureConversationViewer 
-                  procedureId={selectedProcedureId} 
-                  onSessionCountChange={() => {}} // We don't need to track session count here
+              <div className="flex-1 min-h-0">
+                <ProcedureConversationViewer
+                  procedureId={selectedProcedureId}
+                  onSessionCountChange={() => {}}
                 />
               </div>
             </div>
