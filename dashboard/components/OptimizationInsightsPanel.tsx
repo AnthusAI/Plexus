@@ -315,17 +315,29 @@ function ReportSection({
   )
 }
 
-// If an LLM splits a markdown heading mid-word across summary/detail, the summary
-// ends with a dangling heading line (e.g. "## DE") that renders as a confusing
-// fragment. Strip any trailing heading line from the summary — it belongs in detail.
-function trimTrailingHeading(text: string): string {
-  const lines = text.trimEnd().split('\n')
-  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
-  if (lines.length > 0 && /^#{1,6}\s/.test(lines[lines.length - 1])) {
-    lines.pop()
-    while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
+// Parse a text field that uses ## SUMMARY / ## DETAIL section markers into
+// separate summary and detail strings. This is more reliable than the auto-split
+// `summary`/`detail` fields, which are sometimes cut mid-sentence or mid-heading.
+function parseStructuredText(text: string): [string, string] | null {
+  if (!text) return null
+  const summaryMatch = text.match(/^##\s*SUMMARY\s*\n([\s\S]*?)(?=\n##\s*DETAIL|\s*$)/i)
+  const detailMatch = text.match(/##\s*DETAIL\s*\n([\s\S]*)$/i)
+  if (!summaryMatch && !detailMatch) return null
+  return [
+    summaryMatch ? summaryMatch[1].trim() : '',
+    detailMatch ? detailMatch[1].trim() : '',
+  ]
+}
+
+// Resolve summary/detail for a report section, preferring the structured `text`
+// field when available (avoids mid-heading splits in the auto-split fields).
+function resolveSummaryDetail(section: EndOfRunReportSection | undefined): [string, string] {
+  if (!section) return ['', '']
+  if (section.text) {
+    const parsed = parseStructuredText(section.text)
+    if (parsed) return parsed
   }
-  return lines.join('\n')
+  return [section.summary || '', section.detail || section.text || '']
 }
 
 export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
@@ -335,10 +347,8 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
   const hasPrescription = prescription && (prescription.summary || prescription.detail || prescription.text)
   if (!hasDiagnosis && !hasPrescription) return null
 
-  const diagSummary = trimTrailingHeading(diagnosis?.summary || '')
-  const diagDetail = diagnosis?.detail || diagnosis?.text || ''
-  const prescSummary = trimTrailingHeading(prescription?.summary || '')
-  const prescDetail = prescription?.detail || prescription?.text || ''
+  const [diagSummary, diagDetail] = resolveSummaryDetail(diagnosis)
+  const [prescSummary, prescDetail] = resolveSummaryDetail(prescription)
 
   return (
     <div className="mt-6 space-y-4">
@@ -371,7 +381,7 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4">
         {hasDiagnosis && (
           <div className="rounded-lg border border-border/50 bg-card p-4">
             <ReportSection
