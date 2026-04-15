@@ -1346,257 +1346,257 @@ code: |
     return table.concat(parts, "\n")
   end
 
+  local COOKBOOK_STATIC = [=[
+  === CHANGE COOKBOOK — OPTIONS TO TRY ===
+  
+  IMPORTANT: First scan score_config.yaml above to ensure you are NOT proposing something already there.
+  
+  DIRECTIONAL AWARENESS: The Feedback RCA above is grouped by confusion matrix segment
+  (e.g., 'Predicted: Yes / Actual: No' vs 'Predicted: No / Actual: Yes').
+  Each segment represents a distinct error direction. Fixes for one segment often
+  pull in the OPPOSITE direction from fixes for another. Target ONE segment per hypothesis.
+  
+  CATEGORY A — Incremental prompt fix (low risk, targets the #1 RCA issue):
+    Target the LARGEST category of misclassification from the RCA.
+    PREFERRED (try these first):
+    * Identify a MISSING POLICY: Does the rubric fail to cover a pattern the RCA reveals?
+      Add a rule that defines the correct behavior for that pattern.
+    * Clarify an AMBIGUOUS CRITERION: Is an existing rule unclear about what 'counts'?
+      Sharpen the language so the model applies it consistently.
+    * Tighten language on an existing condition to reduce mis-application.
+    LAST RESORT (few-shot examples):
+    * Only add examples for SPEECH-TO-TEXT ERROR patterns — where a specific name or
+      phrase is consistently mangled phonetically in transcripts. Maximum 2 examples.
+    * DO NOT add examples for general classification edge cases — a policy rule
+      generalizes; an example only helps items that closely resemble it and risks
+      overfitting that hurts the regression (accuracy) dataset.
+    DO NOT add examples for patterns already explicitly handled in the current YAML.
+  
+  CATEGORY B — Bold prompt overhaul (medium risk, high upside):
+    Take a bigger step: attempt changes that could address MULTIPLE top-priority RCA issues at once.
+    * Reorganize the prompt structure to be clearer
+    * Add a decision framework that covers several edge cases
+    * Rewrite a section of the system_message or user_message to eliminate ambiguity
+    Be willing to take more risks here — this is your swing-for-the-fences hypothesis.
+  
+  CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
+    Changes to control flow, data preprocessing, or the model itself.
+  
+    C1. Architecture changes:
+      * Split a single Classifier into multiple graph nodes (extraction + matching)
+      * Add a chain-of-thought step that reasons about ambiguous cases before classifying
+      * New graph nodes use class: Classifier with their own system_message and user_message
+  
+    C1b. Input source — control WHAT text the score receives:
+      The `item:` section of the YAML controls where the score gets its input text from.
+      By default, scores use the item's `text` field directly. But you can switch the input
+      source to `DeepgramInputSource`, which loads the original Deepgram JSON from the item's
+      attached files and makes it available for Deepgram processors to format.
+  
+      DeepgramInputSource — load raw Deepgram transcript data:
+        Extracts the Deepgram JSON attachment from an item's attached files and provides
+        both the raw transcript and the full structured Deepgram metadata (words, sentences,
+        paragraphs, speaker info, timestamps) for downstream processors.
+        Parameters:
+          pattern  (REQUIRED, string) — regex to match the Deepgram JSON filename
+        YAML structure (note: class and options are at the item level, NOT under processors):
+          item:
+            class: DeepgramInputSource
+            options:
+              pattern: ".*deepgram.*\\.json$"
+            processors:
+              - class: DeepgramFormatProcessor
+                parameters:
+                  format: sentences
+                  speaker_labels: true
+  
+      WHY use DeepgramInputSource?
+      The default item.text is a pre-formatted transcript with fixed formatting choices.
+      With DeepgramInputSource + processors, you control:
+        * Text granularity: paragraphs vs. sentences vs. individual words
+        * Speaker filtering: all speakers, agent only (channel 0), or customer only (channel 1)
+        * Time slicing: first N seconds, last N seconds, or a specific time range
+        * Speaker labels: include or strip 'Speaker 0:'/'Speaker 1:' prefixes
+        * Timestamps: include '[X.XXs]' markers for temporal context
+      This is especially valuable when the default transcript is noisy or too long for the LLM.
+  
+    C2. Text preprocessing with the processors pipeline:
+      Scores can preprocess the input text BEFORE it reaches the LLM using the `item.processors` list.
+      This is powerful for long transcripts — trim the text to only the relevant parts.
+      Processors run in order; each transforms the text before the next one sees it.
+  
+      RULES (enforced by YAML validation — submit will be rejected if violated):
+        1. Each entry MUST have a `class` key naming a known processor.
+        2. DO NOT invent processor class names — use ONLY the classes listed below.
+        3. Processors go under `item:`, NOT at the top level or under `data:`.
+        4. RelevantWindowsTranscriptFilter REQUIRES a `keywords` parameter (a YAML list).
+        5. If submit_score_version rejects with a processor error, fix the YAML — do not
+           try to work around it by inventing code or alternative classes.
+  
+      ── GROUP A: Text filtering (most useful for optimization) ──
+  
+      RelevantWindowsTranscriptFilter
+        Extracts only the parts of a long transcript that mention relevant keywords.
+        Dramatically reduces noise so the LLM focuses on what matters.
+        Parameters:
+          keywords     (REQUIRED, list of strings) — terms to search for in each sentence
+          fuzzy_match  (optional, bool, default false) — enable fuzzy string matching
+          fuzzy_threshold (optional, int 0-100, default 80) — minimum similarity score
+          prev_count   (optional, int, default 1) — sentences to include BEFORE a match
+          next_count   (optional, int, default 1) — sentences to include AFTER a match
+        Complete working example:
+          item:
+            processors:
+              - class: RelevantWindowsTranscriptFilter
+                parameters:
+                  keywords: ["repair", "fix", "replace", "broken"]   # REQUIRED
+                  fuzzy_match: true
+                  fuzzy_threshold: 80
+                  prev_count: 2
+                  next_count: 2
+  
+      FilterCustomerOnlyProcessor
+        Keeps only customer/caller speech turns; removes agent/representative lines.
+        No parameters required. Useful when only the customer's words matter for the score.
+  
+      RemoveSpeakerIdentifiersTranscriptFilter
+        Strips speaker labels like 'Agent:', 'Customer:', 'Speaker 1:' from each line.
+        No parameters required. Often combined with FilterCustomerOnlyProcessor.
+  
+      Example — keep only customer speech with labels removed:
+          item:
+            processors:
+              - class: FilterCustomerOnlyProcessor
+              - class: RemoveSpeakerIdentifiersTranscriptFilter
+  
+      ── GROUP B: Text normalization ──
+  
+      ExpandContractionsProcessor
+        Expands contractions: "don't" → "do not", "I'm" → "I am", etc.
+        No parameters. Low risk — useful if the LLM is tripping on contractions.
+  
+      RemoveStopWordsTranscriptFilter
+        Removes common English filler words (the, is, at, etc.).
+        No parameters. Can be aggressive — only use when noise words are hurting classification.
+  
+      ── GROUP C: Speaker label manipulation ──
+  
+      AddUnknownSpeakerIdentifiersTranscriptFilter
+        Replaces all speaker labels with 'Unknown Speaker:'. No parameters.
+  
+      AddEnumeratedSpeakerIdentifiersTranscriptFilter
+        Maps speaker labels to 'Speaker A:', 'Speaker B:', etc. by order of appearance.
+        No parameters. Useful when the original labels are inconsistent or confusing.
+  
+      ── GROUP D: Deepgram processors (require DeepgramInputSource — see C1b above) ──
+      These processors operate on the structured Deepgram JSON in metadata.deepgram.
+      They ONLY work when the score uses `item.class: DeepgramInputSource`.
+      If the score uses plain text (no item.class), these processors will silently pass through.
+  
+      DeepgramFormatProcessor
+        Converts structured Deepgram data into formatted text for the LLM.
+        This is the primary way to control how the transcript looks when it reaches the prompt.
+        Parameters:
+          format         (optional, string, default 'paragraphs')
+                          'paragraphs' — groups sentences into speaker paragraphs, separated by blank lines.
+                                          Most human-readable. Best for full-context analysis.
+                          'sentences'  — one sentence per line, chronological order.
+                                          Better for sentence-level analysis and keyword matching.
+                          'words'      — space-separated words, minimal structure.
+                                          Compact but loses sentence boundaries.
+          speaker_labels  (optional, bool, default false)
+                          Adds 'Speaker 0:' / 'Speaker 1:' prefix to each unit.
+                          In stereo recordings: Speaker 0 = agent, Speaker 1 = customer.
+          include_timestamps (optional, bool, default false)
+                          Adds '[X.XXs]' timestamp to each unit. Useful for temporal analysis.
+          channel         (optional, int, default null — include all channels)
+                          0 = agent channel only, 1 = customer channel only.
+                          null/omitted = merge all channels chronologically.
+        Example — sentences with speaker labels, customer only:
+          item:
+            class: DeepgramInputSource
+            options:
+              pattern: ".*deepgram.*\\.json$"
+            processors:
+              - class: DeepgramFormatProcessor
+                parameters:
+                  format: sentences
+                  speaker_labels: true
+                  channel: 1
+  
+      DeepgramTimeSliceProcessor
+        Filters the Deepgram data to a specific time window BEFORE formatting.
+        Must be placed BEFORE DeepgramFormatProcessor in the pipeline.
+        Parameters:
+          start  (optional, float, default 0.0) — start time in seconds
+          end    (optional, float) — end time in seconds (exclusive)
+          last   (optional, float) — last N seconds of the call (overrides start/end)
+        Example — last 60 seconds of the call, formatted as paragraphs:
+          item:
+            class: DeepgramInputSource
+            options:
+              pattern: ".*deepgram.*\\.json$"
+            processors:
+              - class: DeepgramTimeSliceProcessor
+                parameters:
+                  last: 60
+              - class: DeepgramFormatProcessor
+                parameters:
+                  format: paragraphs
+                  speaker_labels: true
+  
+      PIPELINE ORDER for Deepgram: DeepgramTimeSliceProcessor → DeepgramFormatProcessor → other processors
+      (TimeSlice operates on structured JSON, so it must come before Format converts to text.)
+  
+    C2b. Transcription error / redaction resilience (prompt-level):
+      If the RCA shows misclassifications caused by garbled speech-to-text output or redacted PII,
+      add instructions to the system_message or user_message warning the model that the transcript
+      may contain STT errors or redacted text (e.g., [REDACTED], ***). Instruct the model to infer
+      the likely intended phrase before classifying. This is a low-risk prompt addition.
+      Example addition to system_message:
+        'Note: Transcripts may contain speech-to-text errors (e.g., homophones, truncated words)
+         or redacted personally identifiable information. When you encounter garbled or redacted
+         text, infer the most likely intended meaning from surrounding context before classifying.'
+  
+    C3. Model swap (use sparingly — only when prompt/structure changes have stagnated):
+      First check score_config.yaml above for the current model_name. Then swap to a DIFFERENT model.
+      PREFERRED MODEL: gpt-5.4-nano is the preferred default model. If the score is not already using
+      gpt-5.4-nano, switching to it should be your FIRST model swap hypothesis.
+      Available models (only propose one that is NOT already in use):
+      * gpt-5.4-nano (preferred, fast, cheapest): model_provider: ChatOpenAI, model_name: gpt-5.4-nano, max_tokens: 2000
+      * gpt-5-mini (good value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000
+      * gpt-4o-mini: model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18
+      * gpt-5.4-mini (stronger, more expensive — only if nano + prompt changes are exhausted):
+        model_provider: ChatOpenAI, model_name: gpt-5.4-mini, max_tokens: 2000
+      * gpt-oss-120b via Bedrock: model_provider: BedrockChat, model_name: openai.gpt-oss-120b-1:0
+        (For Bedrock models: remove the temperature field — it is not supported)
+      AVOID unless nothing else works (expensive):
+      * Claude 3.5 Haiku: model_provider: BedrockChat, model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0
+  
+  THINGS YOU CANNOT CHANGE (do NOT propose hypotheses targeting these):
+    - Parser/output normalization logic (parse_final_value, label parsing, case normalization)
+      These are in Python framework code, NOT in score_config.yaml. You cannot edit them.
+    - The classification guidelines — they are for reference only, not editable.
+    - Infrastructure code outside the YAML config file.
+    If the RCA mentions output parsing issues, address them by adjusting the LLM prompt to
+    produce cleaner output, NOT by trying to modify the parser.
+  
+  IMPORTANT: The classification guidelines above are for reference only — they help you understand policy but are not editable.
+  You will edit score_config.yaml (shown between the === markers above).
+  Do NOT rewrite the entire user_message — full rewrites consistently regress.
+  
+  GUIDELINES → PROMPT ALIGNMENT: If classification guidelines exist above, they are the authoritative
+  source of policy for this score. Cross-reference them against the system_message and user_message
+  in score_config.yaml. If the guidelines describe policies, decision criteria, edge cases, or
+  examples that are NOT already reflected in the prompt messages, that is a high-value hypothesis:
+  add the missing policy information to the prompts. The LLM can only follow rules it can see.
+  This is often the single highest-impact change you can make — before trying prompt rewording or
+  model swaps, check whether the prompts actually contain all the decision rules from the guidelines.]=]
+
   -- Build the shared cookbook and constraints section (used by all hypothesis prompts)
   local function build_cookbook_section(opts)
-    local parts = {}
+    local parts = {COOKBOOK_STATIC}
     local cons_failed = opts.consecutive_failed_cycles or 0
-
-    table.insert(parts, "=== CHANGE COOKBOOK — OPTIONS TO TRY ===")
-    table.insert(parts, "")
-    table.insert(parts, "IMPORTANT: First scan score_config.yaml above to ensure you are NOT proposing something already there.")
-    table.insert(parts, "")
-    table.insert(parts, "DIRECTIONAL AWARENESS: The Feedback RCA above is grouped by confusion matrix segment")
-    table.insert(parts, "(e.g., 'Predicted: Yes / Actual: No' vs 'Predicted: No / Actual: Yes').")
-    table.insert(parts, "Each segment represents a distinct error direction. Fixes for one segment often")
-    table.insert(parts, "pull in the OPPOSITE direction from fixes for another. Target ONE segment per hypothesis.")
-    table.insert(parts, "")
-    table.insert(parts, "CATEGORY A — Incremental prompt fix (low risk, targets the #1 RCA issue):")
-    table.insert(parts, "  Target the LARGEST category of misclassification from the RCA.")
-    table.insert(parts, "  PREFERRED (try these first):")
-    table.insert(parts, "  * Identify a MISSING POLICY: Does the rubric fail to cover a pattern the RCA reveals?")
-    table.insert(parts, "    Add a rule that defines the correct behavior for that pattern.")
-    table.insert(parts, "  * Clarify an AMBIGUOUS CRITERION: Is an existing rule unclear about what 'counts'?")
-    table.insert(parts, "    Sharpen the language so the model applies it consistently.")
-    table.insert(parts, "  * Tighten language on an existing condition to reduce mis-application.")
-    table.insert(parts, "  LAST RESORT (few-shot examples):")
-    table.insert(parts, "  * Only add examples for SPEECH-TO-TEXT ERROR patterns — where a specific name or")
-    table.insert(parts, "    phrase is consistently mangled phonetically in transcripts. Maximum 2 examples.")
-    table.insert(parts, "  * DO NOT add examples for general classification edge cases — a policy rule")
-    table.insert(parts, "    generalizes; an example only helps items that closely resemble it and risks")
-    table.insert(parts, "    overfitting that hurts the regression (accuracy) dataset.")
-    table.insert(parts, "  DO NOT add examples for patterns already explicitly handled in the current YAML.")
-    table.insert(parts, "")
-    table.insert(parts, "CATEGORY B — Bold prompt overhaul (medium risk, high upside):")
-    table.insert(parts, "  Take a bigger step: attempt changes that could address MULTIPLE top-priority RCA issues at once.")
-    table.insert(parts, "  * Reorganize the prompt structure to be clearer")
-    table.insert(parts, "  * Add a decision framework that covers several edge cases")
-    table.insert(parts, "  * Rewrite a section of the system_message or user_message to eliminate ambiguity")
-    table.insert(parts, "  Be willing to take more risks here — this is your swing-for-the-fences hypothesis.")
-    table.insert(parts, "")
-    table.insert(parts, "CATEGORY C — Structural / non-prompt change (higher risk, highest upside):")
-    table.insert(parts, "  Changes to control flow, data preprocessing, or the model itself.")
-    table.insert(parts, "")
-    table.insert(parts, "  C1. Architecture changes:")
-    table.insert(parts, "    * Split a single Classifier into multiple graph nodes (extraction + matching)")
-    table.insert(parts, "    * Add a chain-of-thought step that reasons about ambiguous cases before classifying")
-    table.insert(parts, "    * New graph nodes use class: Classifier with their own system_message and user_message")
-    table.insert(parts, "")
-    table.insert(parts, "  C1b. Input source — control WHAT text the score receives:")
-    table.insert(parts, "    The `item:` section of the YAML controls where the score gets its input text from.")
-    table.insert(parts, "    By default, scores use the item's `text` field directly. But you can switch the input")
-    table.insert(parts, "    source to `DeepgramInputSource`, which loads the original Deepgram JSON from the item's")
-    table.insert(parts, "    attached files and makes it available for Deepgram processors to format.")
-    table.insert(parts, "")
-    table.insert(parts, "    DeepgramInputSource — load raw Deepgram transcript data:")
-    table.insert(parts, "      Extracts the Deepgram JSON attachment from an item's attached files and provides")
-    table.insert(parts, "      both the raw transcript and the full structured Deepgram metadata (words, sentences,")
-    table.insert(parts, "      paragraphs, speaker info, timestamps) for downstream processors.")
-    table.insert(parts, "      Parameters:")
-    table.insert(parts, "        pattern  (REQUIRED, string) — regex to match the Deepgram JSON filename")
-    table.insert(parts, "      YAML structure (note: class and options are at the item level, NOT under processors):")
-    table.insert(parts, "        item:")
-    table.insert(parts, "          class: DeepgramInputSource")
-    table.insert(parts, "          options:")
-    table.insert(parts, '            pattern: ".*deepgram.*\\\\.json$"')
-    table.insert(parts, "          processors:")
-    table.insert(parts, "            - class: DeepgramFormatProcessor")
-    table.insert(parts, "              parameters:")
-    table.insert(parts, "                format: sentences")
-    table.insert(parts, "                speaker_labels: true")
-    table.insert(parts, "")
-    table.insert(parts, "    WHY use DeepgramInputSource?")
-    table.insert(parts, "    The default item.text is a pre-formatted transcript with fixed formatting choices.")
-    table.insert(parts, "    With DeepgramInputSource + processors, you control:")
-    table.insert(parts, "      * Text granularity: paragraphs vs. sentences vs. individual words")
-    table.insert(parts, "      * Speaker filtering: all speakers, agent only (channel 0), or customer only (channel 1)")
-    table.insert(parts, "      * Time slicing: first N seconds, last N seconds, or a specific time range")
-    table.insert(parts, "      * Speaker labels: include or strip 'Speaker 0:'/'Speaker 1:' prefixes")
-    table.insert(parts, "      * Timestamps: include '[X.XXs]' markers for temporal context")
-    table.insert(parts, "    This is especially valuable when the default transcript is noisy or too long for the LLM.")
-    table.insert(parts, "")
-    table.insert(parts, "  C2. Text preprocessing with the processors pipeline:")
-    table.insert(parts, "    Scores can preprocess the input text BEFORE it reaches the LLM using the `item.processors` list.")
-    table.insert(parts, "    This is powerful for long transcripts — trim the text to only the relevant parts.")
-    table.insert(parts, "    Processors run in order; each transforms the text before the next one sees it.")
-    table.insert(parts, "")
-    table.insert(parts, "    RULES (enforced by YAML validation — submit will be rejected if violated):")
-    table.insert(parts, "      1. Each entry MUST have a `class` key naming a known processor.")
-    table.insert(parts, "      2. DO NOT invent processor class names — use ONLY the classes listed below.")
-    table.insert(parts, "      3. Processors go under `item:`, NOT at the top level or under `data:`.")
-    table.insert(parts, "      4. RelevantWindowsTranscriptFilter REQUIRES a `keywords` parameter (a YAML list).")
-    table.insert(parts, "      5. If submit_score_version rejects with a processor error, fix the YAML — do not")
-    table.insert(parts, "         try to work around it by inventing code or alternative classes.")
-    table.insert(parts, "")
-    table.insert(parts, "    ── GROUP A: Text filtering (most useful for optimization) ──")
-    table.insert(parts, "")
-    table.insert(parts, "    RelevantWindowsTranscriptFilter")
-    table.insert(parts, "      Extracts only the parts of a long transcript that mention relevant keywords.")
-    table.insert(parts, "      Dramatically reduces noise so the LLM focuses on what matters.")
-    table.insert(parts, "      Parameters:")
-    table.insert(parts, "        keywords     (REQUIRED, list of strings) — terms to search for in each sentence")
-    table.insert(parts, "        fuzzy_match  (optional, bool, default false) — enable fuzzy string matching")
-    table.insert(parts, "        fuzzy_threshold (optional, int 0-100, default 80) — minimum similarity score")
-    table.insert(parts, "        prev_count   (optional, int, default 1) — sentences to include BEFORE a match")
-    table.insert(parts, "        next_count   (optional, int, default 1) — sentences to include AFTER a match")
-    table.insert(parts, "      Complete working example:")
-    table.insert(parts, "        item:")
-    table.insert(parts, "          processors:")
-    table.insert(parts, "            - class: RelevantWindowsTranscriptFilter")
-    table.insert(parts, "              parameters:")
-    table.insert(parts, "                keywords: [\"repair\", \"fix\", \"replace\", \"broken\"]   # REQUIRED")
-    table.insert(parts, "                fuzzy_match: true")
-    table.insert(parts, "                fuzzy_threshold: 80")
-    table.insert(parts, "                prev_count: 2")
-    table.insert(parts, "                next_count: 2")
-    table.insert(parts, "")
-    table.insert(parts, "    FilterCustomerOnlyProcessor")
-    table.insert(parts, "      Keeps only customer/caller speech turns; removes agent/representative lines.")
-    table.insert(parts, "      No parameters required. Useful when only the customer's words matter for the score.")
-    table.insert(parts, "")
-    table.insert(parts, "    RemoveSpeakerIdentifiersTranscriptFilter")
-    table.insert(parts, "      Strips speaker labels like 'Agent:', 'Customer:', 'Speaker 1:' from each line.")
-    table.insert(parts, "      No parameters required. Often combined with FilterCustomerOnlyProcessor.")
-    table.insert(parts, "")
-    table.insert(parts, "    Example — keep only customer speech with labels removed:")
-    table.insert(parts, "        item:")
-    table.insert(parts, "          processors:")
-    table.insert(parts, "            - class: FilterCustomerOnlyProcessor")
-    table.insert(parts, "            - class: RemoveSpeakerIdentifiersTranscriptFilter")
-    table.insert(parts, "")
-    table.insert(parts, "    ── GROUP B: Text normalization ──")
-    table.insert(parts, "")
-    table.insert(parts, "    ExpandContractionsProcessor")
-    table.insert(parts, "      Expands contractions: \"don't\" → \"do not\", \"I'm\" → \"I am\", etc.")
-    table.insert(parts, "      No parameters. Low risk — useful if the LLM is tripping on contractions.")
-    table.insert(parts, "")
-    table.insert(parts, "    RemoveStopWordsTranscriptFilter")
-    table.insert(parts, "      Removes common English filler words (the, is, at, etc.).")
-    table.insert(parts, "      No parameters. Can be aggressive — only use when noise words are hurting classification.")
-    table.insert(parts, "")
-    table.insert(parts, "    ── GROUP C: Speaker label manipulation ──")
-    table.insert(parts, "")
-    table.insert(parts, "    AddUnknownSpeakerIdentifiersTranscriptFilter")
-    table.insert(parts, "      Replaces all speaker labels with 'Unknown Speaker:'. No parameters.")
-    table.insert(parts, "")
-    table.insert(parts, "    AddEnumeratedSpeakerIdentifiersTranscriptFilter")
-    table.insert(parts, "      Maps speaker labels to 'Speaker A:', 'Speaker B:', etc. by order of appearance.")
-    table.insert(parts, "      No parameters. Useful when the original labels are inconsistent or confusing.")
-    table.insert(parts, "")
-    table.insert(parts, "    ── GROUP D: Deepgram processors (require DeepgramInputSource — see C1b above) ──")
-    table.insert(parts, "    These processors operate on the structured Deepgram JSON in metadata.deepgram.")
-    table.insert(parts, "    They ONLY work when the score uses `item.class: DeepgramInputSource`.")
-    table.insert(parts, "    If the score uses plain text (no item.class), these processors will silently pass through.")
-    table.insert(parts, "")
-    table.insert(parts, "    DeepgramFormatProcessor")
-    table.insert(parts, "      Converts structured Deepgram data into formatted text for the LLM.")
-    table.insert(parts, "      This is the primary way to control how the transcript looks when it reaches the prompt.")
-    table.insert(parts, "      Parameters:")
-    table.insert(parts, "        format         (optional, string, default 'paragraphs')")
-    table.insert(parts, "                        'paragraphs' — groups sentences into speaker paragraphs, separated by blank lines.")
-    table.insert(parts, "                                        Most human-readable. Best for full-context analysis.")
-    table.insert(parts, "                        'sentences'  — one sentence per line, chronological order.")
-    table.insert(parts, "                                        Better for sentence-level analysis and keyword matching.")
-    table.insert(parts, "                        'words'      — space-separated words, minimal structure.")
-    table.insert(parts, "                                        Compact but loses sentence boundaries.")
-    table.insert(parts, "        speaker_labels  (optional, bool, default false)")
-    table.insert(parts, "                        Adds 'Speaker 0:' / 'Speaker 1:' prefix to each unit.")
-    table.insert(parts, "                        In stereo recordings: Speaker 0 = agent, Speaker 1 = customer.")
-    table.insert(parts, "        include_timestamps (optional, bool, default false)")
-    table.insert(parts, "                        Adds '[X.XXs]' timestamp to each unit. Useful for temporal analysis.")
-    table.insert(parts, "        channel         (optional, int, default null — include all channels)")
-    table.insert(parts, "                        0 = agent channel only, 1 = customer channel only.")
-    table.insert(parts, "                        null/omitted = merge all channels chronologically.")
-    table.insert(parts, "      Example — sentences with speaker labels, customer only:")
-    table.insert(parts, "        item:")
-    table.insert(parts, "          class: DeepgramInputSource")
-    table.insert(parts, "          options:")
-    table.insert(parts, '            pattern: ".*deepgram.*\\\\.json$"')
-    table.insert(parts, "          processors:")
-    table.insert(parts, "            - class: DeepgramFormatProcessor")
-    table.insert(parts, "              parameters:")
-    table.insert(parts, "                format: sentences")
-    table.insert(parts, "                speaker_labels: true")
-    table.insert(parts, "                channel: 1")
-    table.insert(parts, "")
-    table.insert(parts, "    DeepgramTimeSliceProcessor")
-    table.insert(parts, "      Filters the Deepgram data to a specific time window BEFORE formatting.")
-    table.insert(parts, "      Must be placed BEFORE DeepgramFormatProcessor in the pipeline.")
-    table.insert(parts, "      Parameters:")
-    table.insert(parts, "        start  (optional, float, default 0.0) — start time in seconds")
-    table.insert(parts, "        end    (optional, float) — end time in seconds (exclusive)")
-    table.insert(parts, "        last   (optional, float) — last N seconds of the call (overrides start/end)")
-    table.insert(parts, "      Example — last 60 seconds of the call, formatted as paragraphs:")
-    table.insert(parts, "        item:")
-    table.insert(parts, "          class: DeepgramInputSource")
-    table.insert(parts, "          options:")
-    table.insert(parts, '            pattern: ".*deepgram.*\\\\.json$"')
-    table.insert(parts, "          processors:")
-    table.insert(parts, "            - class: DeepgramTimeSliceProcessor")
-    table.insert(parts, "              parameters:")
-    table.insert(parts, "                last: 60")
-    table.insert(parts, "            - class: DeepgramFormatProcessor")
-    table.insert(parts, "              parameters:")
-    table.insert(parts, "                format: paragraphs")
-    table.insert(parts, "                speaker_labels: true")
-    table.insert(parts, "")
-    table.insert(parts, "    PIPELINE ORDER for Deepgram: DeepgramTimeSliceProcessor → DeepgramFormatProcessor → other processors")
-    table.insert(parts, "    (TimeSlice operates on structured JSON, so it must come before Format converts to text.)")
-    table.insert(parts, "")
-    table.insert(parts, "  C2b. Transcription error / redaction resilience (prompt-level):")
-    table.insert(parts, "    If the RCA shows misclassifications caused by garbled speech-to-text output or redacted PII,")
-    table.insert(parts, "    add instructions to the system_message or user_message warning the model that the transcript")
-    table.insert(parts, "    may contain STT errors or redacted text (e.g., [REDACTED], ***). Instruct the model to infer")
-    table.insert(parts, "    the likely intended phrase before classifying. This is a low-risk prompt addition.")
-    table.insert(parts, "    Example addition to system_message:")
-    table.insert(parts, "      'Note: Transcripts may contain speech-to-text errors (e.g., homophones, truncated words)")
-    table.insert(parts, "       or redacted personally identifiable information. When you encounter garbled or redacted")
-    table.insert(parts, "       text, infer the most likely intended meaning from surrounding context before classifying.'")
-    table.insert(parts, "")
-    table.insert(parts, "  C3. Model swap (use sparingly — only when prompt/structure changes have stagnated):")
-    table.insert(parts, "    First check score_config.yaml above for the current model_name. Then swap to a DIFFERENT model.")
-    table.insert(parts, "    PREFERRED MODEL: gpt-5.4-nano is the preferred default model. If the score is not already using")
-    table.insert(parts, "    gpt-5.4-nano, switching to it should be your FIRST model swap hypothesis.")
-    table.insert(parts, "    Available models (only propose one that is NOT already in use):")
-    table.insert(parts, "    * gpt-5.4-nano (preferred, fast, cheapest): model_provider: ChatOpenAI, model_name: gpt-5.4-nano, max_tokens: 2000")
-    table.insert(parts, "    * gpt-5-mini (good value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000")
-    table.insert(parts, "    * gpt-4o-mini: model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18")
-    table.insert(parts, "    * gpt-5.4-mini (stronger, more expensive — only if nano + prompt changes are exhausted):")
-    table.insert(parts, "      model_provider: ChatOpenAI, model_name: gpt-5.4-mini, max_tokens: 2000")
-    table.insert(parts, "    * gpt-oss-120b via Bedrock: model_provider: BedrockChat, model_name: openai.gpt-oss-120b-1:0")
-    table.insert(parts, "      (For Bedrock models: remove the temperature field — it is not supported)")
-    table.insert(parts, "    AVOID unless nothing else works (expensive):")
-    table.insert(parts, "    * Claude 3.5 Haiku: model_provider: BedrockChat, model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0")
-    table.insert(parts, "")
-    table.insert(parts, "THINGS YOU CANNOT CHANGE (do NOT propose hypotheses targeting these):")
-    table.insert(parts, "  - Parser/output normalization logic (parse_final_value, label parsing, case normalization)")
-    table.insert(parts, "    These are in Python framework code, NOT in score_config.yaml. You cannot edit them.")
-    table.insert(parts, "  - The classification guidelines — they are for reference only, not editable.")
-    table.insert(parts, "  - Infrastructure code outside the YAML config file.")
-    table.insert(parts, "  If the RCA mentions output parsing issues, address them by adjusting the LLM prompt to")
-    table.insert(parts, "  produce cleaner output, NOT by trying to modify the parser.")
-    table.insert(parts, "")
-    table.insert(parts, "IMPORTANT: The classification guidelines above are for reference only — they help you understand policy but are not editable.")
-    table.insert(parts, "You will edit score_config.yaml (shown between the === markers above).")
-    table.insert(parts, "Do NOT rewrite the entire user_message — full rewrites consistently regress.")
-    table.insert(parts, "")
-    table.insert(parts, "GUIDELINES → PROMPT ALIGNMENT: If classification guidelines exist above, they are the authoritative")
-    table.insert(parts, "source of policy for this score. Cross-reference them against the system_message and user_message")
-    table.insert(parts, "in score_config.yaml. If the guidelines describe policies, decision criteria, edge cases, or")
-    table.insert(parts, "examples that are NOT already reflected in the prompt messages, that is a high-value hypothesis:")
-    table.insert(parts, "add the missing policy information to the prompts. The LLM can only follow rules it can see.")
-    table.insert(parts, "This is often the single highest-impact change you can make — before trying prompt rewording or")
-    table.insert(parts, "model swaps, check whether the prompts actually contain all the decision rules from the guidelines.")
-
     if cons_failed >= 4 then
       table.insert(parts, "")
       table.insert(parts, string.format(
@@ -5169,57 +5169,37 @@ code: |
 
     local diag_prompt_parts = {
       "=== END-OF-RUN DIAGNOSTIC ANALYSIS ===\n",
-      "\nYou are analyzing the complete results of an optimization run. Your task is",
-      "\nDIAGNOSIS ONLY -- do not prescribe fixes yet. That comes in the next step.",
-      "\n\nProduce a structured analysis with these EXACT sections:",
-      "\n\n## 1. OPTIMIZATION TRAJECTORY",
-      "\n- Starting metrics (baseline) and ending metrics",
-      "\n- Inflection point: at which cycle did improvements plateau?",
-      "\n- Was the trajectory monotonic, oscillating, or stalled?",
-      "\n\n## 2. DATASET DIVERGENCE",
-      "\nThe optimizer tested every change against TWO datasets:",
-      "\n- Feedback dataset: recent human reviewer corrections (current but noisy)",
-      "\n- Regression dataset: curated ground truth (stable but possibly stale)",
-      "\n\nAnalyze the divergence data above. Key questions:",
-      "\n- Are the datasets moving together or apart across cycles?",
-      "\n- Were there cycles where FB improved but ACC regressed? What changed?",
-      "\n  This indicates either: rubric drift (reviewers apply a newer standard),",
-      "\n  reviewer inconsistency, or overfitting to recent feedback patterns.",
-      "\n- Were there cycles where ACC improved but FB regressed?",
-      "\n  This indicates the change generalizes but conflicts with reviewer expectations.",
-      "\n- Is the regression dataset still representative of the current rubric?",
-      "\n\n## 3. CONTRADICTION ANALYSIS",
-      "\n- How many feedback items are contradictions vs. policy gaps vs. aligned?",
-      "\n- List the top contradiction topics with guideline quotes and exemplars.",
-      "\n- What fraction of remaining errors are attributable to contradictions?",
-      "\n\n## 4. POLICY GAP ANALYSIS",
-      "\n- Which gaps were addressed by accepted hypotheses during the run?",
-      "\n- Which gaps remain unaddressed?",
-      "\n- For each unaddressed gap: what specific behavior do reviewers expect?",
-      "\n\n## 5. RESIDUAL ERROR FORENSICS",
-      "\nExamine the residual error samples above. For EACH item:",
-      "\n- What did the model think the rule was? (from the root cause analysis)",
-      "\n- What did the reviewer think the rule was? (from the evidence/edit comment)",
-      "\n- Classify: (a) guideline contradiction, (b) policy gap, (c) ambiguous",
-      "\n  guideline language, (d) genuine model error, (e) noisy/incorrect label",
-      "\n- What specific policy question would resolve this item?",
-      "\n\n## 6. ERROR CATEGORY EVOLUTION",
-      "\nExamine the RCA category evolution table. Key questions:",
-      "\n- Is score_configuration_problem shrinking? (Should be, if optimization works)",
-      "\n- Is guideline_gap_requires_sme growing as a share? (Expected -- these are",
-      "\n  the errors that remain after fixable ones are addressed)",
-      "\n- What is the current fixable% and what does it imply for the ceiling?",
-      "\n\n## 7. HYPOTHESIS EFFECTIVENESS",
-      "\n- Which categories of changes worked? Which consistently failed?",
-      "\n- Did any category show FB improvement but ACC regression? (rubric drift signal)",
-      "\n\n## 8. CEILING ESTIMATE",
-      "\nSynthesize evidence from: contradictions rate, fixable% from RCA, dataset",
-      "\ndivergence trend, and error category evolution. What is the realistic maximum",
-      "\nAC1 achievable through prompt optimization alone? Cite specific numbers.",
-      "\n\n## 9. BLOCKING FACTORS (ranked by impact)",
-      "\nSpecific factors preventing further improvement, each with evidence.",
-      "\n\nUse specific numbers, item IDs, and AC1 values throughout.",
-      "\nDo not hedge -- state conclusions directly."
+      "\nYou are analyzing the complete results of an optimization run.",
+      "\nDIAGNOSIS ONLY — do not prescribe fixes. That comes in the next step.",
+      "\n\nWrite a concise diagnosis. The entire response must be readable in under 2 minutes.",
+      "\nDo not pad. Do not repeat the same finding in multiple sections.",
+      "\nIf a section has nothing new to add, write one sentence saying so.",
+      "\n\nStructure your output with TWO top-level sections:",
+      "\n\n## SUMMARY",
+      "\n5-7 bullets, one sentence each. Cover: overall trajectory (AC1 deltas, cycles run,",
+      "\nstop reason), where improvements stalled and why, whether the two datasets",
+      "\ndiverged or moved together, the single most important blocking factor, and the",
+      "\nrealistic ceiling estimate with the key number.",
+      "\n\n## DETAIL",
+      "\nFour short sections. Each must be 2-5 sentences — no more.",
+      "\n\n### What happened",
+      "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
+      "\nand the stop reason. Include the key AC1 numbers.",
+      "\n\n### Why it stalled",
+      "\nIdentify the single most important blocking factor. Be specific: name the",
+      "\ncontradiction topic or policy gap, how many items it affects, and what the",
+      "\nconflict is between what the model does and what reviewers expect.",
+      "\nIf the datasets diverged (changes that help FB hurt ACC or vice versa),",
+      "\nexplain what that divergence reveals about the ground truth.",
+      "\n\n### Error patterns",
+      "\nDescribe 2-3 distinct patterns you observed across the residual errors.",
+      "\nFor each pattern (one sentence): what the model does, what reviewers expect,",
+      "\nwhether it is a guideline contradiction, a policy gap, or a noisy label.",
+      "\nDo NOT list individual items. Describe the pattern.",
+      "\n\n### Ceiling",
+      "\nState the realistic maximum AC1 achievable through further optimization,",
+      "\nand the primary reason it cannot go higher. Cite the contradiction rate",
+      "\nor fixable% if available. One or two sentences."
     }
     local diag_prompt = table.concat(diag_prompt_parts, "")
 
@@ -5263,46 +5243,23 @@ code: |
 
     local presc_prompt_parts = {
       "=== END-OF-RUN PRESCRIPTION ===\n",
-      "\nBased on the diagnostic analysis above, produce SPECIFIC, ACTIONABLE prescriptions.",
-      "\nEach prescription must cite evidence from the diagnosis.",
-      "\n\n## FOR SMEs / STAKEHOLDERS",
-      "\n\n### Policy Decisions Required",
-      "\nFor each: formulate the EXACT question an SME needs to answer.",
-      "\nNot 'should we change the guideline?' but:",
-      "\n'When a caller says [X] in context [Y], should the score be [Z]?",
-      "\nCurrently guidelines say [W] but reviewers consistently correct to [V].",
-      "\nEvidence: [N items affected, specific topic/category, edit comments].'",
-      "\n\n### Guideline Changes Needed",
-      "\nFor each: specify the EXACT guideline text to add, modify, or remove.",
-      "\nInclude: current text, proposed text, evidence, items affected, priority (HIGH/MEDIUM/LOW).",
-      "\n\n### Label Reconciliation Needed",
-      "\nFor each contradiction topic: what items should reviewers re-examine?",
-      "\nInclude: topic name, item count, what the conflict is.",
-      "\n\n### Regression Dataset Recommendations",
-      "\nIf feedback and accuracy diverged consistently:",
-      "\n- Are specific items in the regression set reflecting a stale interpretation?",
-      "\n- Should specific items be relabeled to match the current rubric?",
-      "\n- Should new items from recent feedback be added to the regression set?",
-      "\n\n## FOR DEVELOPERS",
-      "\n\n### Score Configuration Changes",
-      "\n- Specific YAML changes to make before the next optimizer run",
-      "\n- Model/architecture considerations (if structural hypotheses were informative)",
-      "\n\n## FOR THE NEXT OPTIMIZER RUN",
-      "\n\n### Focus Areas",
-      "\n- Policy gaps to target first (ranked by item count and expected impact)",
-      "\n- Specific residual error patterns that look fixable",
-      "\n\n### Avoidance List",
-      "\n- Contradiction topics that will waste cycles",
-      "\n- Hypothesis types that consistently failed",
-      "\n- Specific criteria that were changed and reverted multiple times",
-      "\n\n### Configuration Recommendations",
-      "\n- Suggested hint parameter text (based on residual error patterns)",
-      "\n- Whether to use start_version from this run's final accepted version",
-      "\n\nEvery prescription must include:",
-      "\n- EVIDENCE: specific counts, metric values, topic names",
-      "\n- EXPECTED IMPACT: estimated items affected, estimated AC1 improvement",
-      "\n- DECISION-MAKER: who needs to act (SME, developer, reviewer lead)",
-      "\n- URGENCY: must-fix before next run / nice-to-have / long-term"
+      "\nBased on the diagnostic analysis above, produce a short, prioritized action list.",
+      "\nBe specific. Be brief. Every item must be actionable by a real person.",
+      "\nDo not pad. Do not repeat what the diagnosis already said.",
+      "\n\nStructure your output with TWO top-level sections:",
+      "\n\n## SUMMARY",
+      "\n3-5 action items, ranked by urgency. One sentence each.",
+      "\nFormat each as: [WHO]: [WHAT] — [N items / metric evidence].",
+      "\nExample: 'SME: Decide whether implicit affirmatives count as Yes — 22 items blocked on this.'",
+      "\n\n## DETAIL",
+      "\nA flat list of ≤7 actions. For each action:",
+      "\n- One sentence stating exactly what needs to happen and who does it",
+      "\n- One sentence of evidence (item count, AC1 impact, contradiction topic)",
+      "\n- One sentence on urgency: must happen before next run / can wait",
+      "\n\nInclude only actions that are: (1) directly supported by the evidence,",
+      "\n(2) not already captured by a previous action on the list, and",
+      "\n(3) actually likely to unblock the next run or resolve a policy contradiction.",
+      "\nOmit anything speculative or generic."
     }
     local presc_prompt = table.concat(presc_prompt_parts, "")
 
@@ -5313,6 +5270,21 @@ code: |
       prescription_text = "Prescription generation failed: " .. tostring(err)
     end
   end)
+
+  -- Split a diagnosis/prescription text into summary and detail halves.
+  -- The agent is asked to produce "## SUMMARY\n...\n## DETAIL\n..." structure.
+  local function split_summary_detail(text)
+    local idx = text:find("\n## DETAIL\n", 1, true)
+    if idx then
+      local summary = text:sub(1, idx - 1):gsub("^%s*## SUMMARY%s*\n", "")
+      local detail = text:sub(idx + #"\n## DETAIL\n")
+      return summary, detail
+    end
+    return "", text
+  end
+
+  local diag_summary, diag_detail = split_summary_detail(diagnostic_text)
+  local presc_summary, presc_detail = split_summary_detail(prescription_text)
 
   -- Store results
   State.set("end_of_run_report", {
@@ -5330,8 +5302,16 @@ code: |
       total_acc_improvement = total_acc_improvement,
       stop_reason = stop_reason
     },
-    diagnosis = {text = trunc(diagnostic_text, 10000)},
-    prescription = {text = trunc(prescription_text, 10000)},
+    diagnosis = {
+      summary = trunc(diag_summary, 2000),
+      detail  = trunc(diag_detail, 10000),
+      text    = trunc(diagnostic_text, 10000)
+    },
+    prescription = {
+      summary = trunc(presc_summary, 2000),
+      detail  = trunc(presc_detail, 10000),
+      text    = trunc(prescription_text, 10000)
+    },
     evidence = {
       divergence_summary = trunc(divergence_text, 3000),
       rca_evolution = trunc(rca_evolution_text, 3000),
@@ -5341,7 +5321,8 @@ code: |
 
   -- Backward-compatible storage
   State.set("optimization_diagnostic", {
-    text = trunc(diagnostic_text, 10000),
+    text    = trunc(diagnostic_text, 10000),
+    summary = trunc(diag_summary, 2000),
     success_rate = success_rate,
     cycles = #iterations,
     accepted = total_accepted,
@@ -5349,16 +5330,26 @@ code: |
     skipped = total_skipped
   })
 
-  -- Emit to human
+  -- Emit to human: summary first, then truncated detail
+  local diag_display = has_text(diag_summary)
+    and ("=== DIAGNOSIS SUMMARY ===\n\n" .. diag_summary
+         .. "\n\n=== DIAGNOSIS DETAIL (truncated) ===\n\n" .. trunc(diag_detail, 3000))
+    or trunc(diagnostic_text, 4000)
+
   Human.notify({message = "\n" .. string.rep("=", 60)
     .. "\n=== END-OF-RUN DIAGNOSIS ===\n"
     .. string.rep("=", 60) .. "\n\n"
-    .. trunc(diagnostic_text, 4000), level = "info"})
+    .. diag_display, level = "info"})
+
+  local presc_display = has_text(presc_summary)
+    and ("=== PRESCRIPTION SUMMARY ===\n\n" .. presc_summary
+         .. "\n\n=== PRESCRIPTION DETAIL (truncated) ===\n\n" .. trunc(presc_detail, 3000))
+    or trunc(prescription_text, 4000)
 
   Human.notify({message = "\n" .. string.rep("=", 60)
     .. "\n=== END-OF-RUN PRESCRIPTION ===\n"
     .. string.rep("=", 60) .. "\n\n"
-    .. trunc(prescription_text, 4000), level = "info"})
+    .. presc_display, level = "info"})
 
   return {
     success = true,
