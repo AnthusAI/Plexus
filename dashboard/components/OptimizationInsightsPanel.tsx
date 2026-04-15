@@ -381,7 +381,8 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="@container">
+      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         {hasDiagnosis && (
           <div className="rounded-lg border border-border/50 bg-card p-4">
             <ReportSection
@@ -402,6 +403,7 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
             />
           </div>
         )}
+      </div>
       </div>
     </div>
   )
