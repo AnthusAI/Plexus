@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAccount } from '@/app/contexts/AccountContext'
-import { graphqlRequest } from '@/utils/amplify-client'
+import { graphqlRequest, formatAmplifyError } from '@/utils/amplify-client'
 import type { Schema } from '../amplify/data/resource'
 
 // Unified metrics data structure
@@ -175,7 +175,7 @@ async function queryAggregatedMetrics(
     // Return all records (including incomplete ones for rolling window calculations)
     return items
   } catch (error) {
-    console.error(`Error querying AggregatedMetrics for ${recordType}:`, error)
+    console.error(`Error querying AggregatedMetrics for ${recordType}:`, formatAmplifyError(error))
     // Return empty array on error instead of throwing - allows graceful degradation
     return []
   }
