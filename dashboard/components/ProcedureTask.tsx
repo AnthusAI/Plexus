@@ -25,6 +25,7 @@ import {
 import Editor from "@monaco-editor/react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
+import { formatAmplifyError } from "@/utils/amplify-client"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
@@ -36,7 +37,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
-import { OptimizationDiagnosticBanner } from "./OptimizationInsightsPanel"
+import { EndOfRunReport } from "./OptimizationInsightsPanel"
 import { OptimizerMetricsChartSkeleton, CycleHistoryTableSkeleton } from "./loading-skeleton"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
@@ -183,6 +184,7 @@ export default function ProcedureTask({
   const [stateScoreName, setStateScoreName] = useState<string>('')
   const [cycleInsights, setCycleInsights] = useState<any[]>([])
   const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
+  const [endOfRunReport, setEndOfRunReport] = useState<any>(null)
   const [iterationDetails, setIterationDetails] = useState<Map<number, any>>(new Map())
   const [expandedVersionRows, setExpandedVersionRows] = useState<Set<number>>(new Set())
 
@@ -285,6 +287,7 @@ export default function ProcedureTask({
 
         if (state.cycle_insights) setCycleInsights(state.cycle_insights)
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
+        if (state.end_of_run_report) setEndOfRunReport(state.end_of_run_report)
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
           if (it.exploration_results || it.done_reason || it.synthesis_reasoning || it.dual_synthesis) {
@@ -336,7 +339,7 @@ export default function ProcedureTask({
 
         applyState(state)
       } catch (e) {
-        console.error('[ProcedureTask] Failed to fetch optimizer metrics:', e)
+        console.error('[ProcedureTask] Failed to fetch optimizer metrics:', formatAmplifyError(e))
       } finally {
         setIsLoadingProcedureState(false)
       }
@@ -715,10 +718,6 @@ export default function ProcedureTask({
             </AccordionItem>
           </Accordion>
 
-          {/* Optimization Diagnostic Banner - shown when optimizer is stuck */}
-          {optimizationDiagnostic && (
-            <OptimizationDiagnosticBanner diagnostic={optimizationDiagnostic} />
-          )}
 
           {/* Optimizer Metrics Chart - skeleton while loading, chart when data arrives */}
           {isLoadingProcedureState ? (
@@ -991,6 +990,9 @@ export default function ProcedureTask({
             </div>
           ) : null}
 
+          {/* End-of-run diagnosis and prescription */}
+          {endOfRunReport && <EndOfRunReport report={endOfRunReport} />}
+
           {/* Procedure Conversation section */}
           <div className="mt-6">
             <div className="space-y-4">
@@ -1011,9 +1013,9 @@ export default function ProcedureTask({
                   <Expand className="h-4 w-4" />
                 </Button>
               </div>
-              <div>
-                <ProcedureConversationViewer 
-                  procedureId={procedure.id} 
+              <div className="h-[600px]">
+                <ProcedureConversationViewer
+                  procedureId={procedure.id}
                   onSessionCountChange={setSessionCount}
                   onFullscreenChange={handleConversationFullscreenChange}
                 />
