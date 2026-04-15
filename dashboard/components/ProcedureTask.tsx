@@ -25,6 +25,7 @@ import {
 import Editor from "@monaco-editor/react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
+import { formatAmplifyError } from "@/utils/amplify-client"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
@@ -338,7 +339,7 @@ export default function ProcedureTask({
 
         applyState(state)
       } catch (e) {
-        console.error('[ProcedureTask] Failed to fetch optimizer metrics:', e)
+        console.error('[ProcedureTask] Failed to fetch optimizer metrics:', formatAmplifyError(e))
       } finally {
         setIsLoadingProcedureState(false)
       }
