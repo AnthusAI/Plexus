@@ -297,6 +297,12 @@ class TestFeedbackEvaluation:
         root_cause = params["root_cause"]
         assert root_cause["output_compacted"] is True
         assert root_cause["output_attachment"] == "evaluations/eval-789/root_cause.full.json"
+        # misclassification_analysis summary must be present in the compact payload so the
+        # dashboard category breakdown and downstream consumers (optimizer, Universal Code) can
+        # read it without fetching the full S3 attachment.
+        assert "misclassification_analysis" in root_cause
+        # item_classifications_all is the large per-item array; it must NOT be in DynamoDB.
+        assert "item_classifications_all" not in root_cause["misclassification_analysis"]
 
     @pytest.mark.asyncio
     async def test_run_evaluation_fails_when_rca_attachment_upload_fails(self, mock_api_client, mock_feedback_items):
@@ -947,4 +953,133 @@ class TestFeedbackEvaluation:
             original_explanations={},
         )
 
-        assert result == {}
+
+class TestCompactRootCauseForParameters:
+    """Unit tests for FeedbackEvaluation._compact_root_cause_for_parameters."""
+
+    ATTACHMENT = "evaluations/eval-1/root_cause.full.json"
+
+    def _make_full_payload(self, **overrides):
+        payload = {
+            "overall_explanation": "explanation text",
+            "overall_improvement_suggestion": "suggestion text",
+            "topics": [{"topic_id": "t1", "label": "Topic A", "member_count": 3}],
+            "misclassification_analysis": {
+                "category_totals": {
+                    "score_configuration_problem": 4,
+                    "information_gap": 2,
+                    "guideline_gap_requires_sme": 1,
+                    "mechanical_malfunction": 0,
+                },
+                "category_shares": {
+                    "score_configuration_problem": 0.571,
+                    "information_gap": 0.286,
+                    "guideline_gap_requires_sme": 0.143,
+                    "mechanical_malfunction": 0.0,
+                },
+                "overall_assessment": {
+                    "total_items": 7,
+                    "predominant_category": "score_configuration_problem",
+                    "score_fix_candidate_items": 4,
+                },
+                "primary_next_action": {
+                    "action": "score_configuration_optimization",
+                    "confidence": "medium",
+                    "reasons": ["Score-configuration problems remain the most actionable fix surface."],
+                },
+                "optimization_applicability": {
+                    "status": "applicable",
+                    "reason": "Misclassification mix supports direct score-configuration optimization.",
+                },
+                "mechanical_subtype_totals": {},
+                "evaluation_red_flags": [],
+                "category_diagnostics": {},
+                "category_summaries": {
+                    "score_configuration_problem": {
+                        "category_summary_text": "4 item(s) classified as score configuration problem.",
+                        "top_patterns": [],
+                        "representative_evidence": [],
+                        "item_count": 4,
+                    }
+                },
+                "topic_category_breakdown": [],
+                "max_category_summary_items_used": 20,
+                "item_classifications_all": [
+                    {"item_id": "item-1", "primary_category": "score_configuration_problem"},
+                    {"item_id": "item-2", "primary_category": "information_gap"},
+                ],
+            },
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_pointer_fields_always_present(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        assert result["output_compacted"] is True
+        assert result["output_attachment"] == self.ATTACHMENT
+
+    def test_narrative_fields_preserved(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        assert result["overall_explanation"] == "explanation text"
+        assert result["overall_improvement_suggestion"] == "suggestion text"
+
+    def test_misclassification_analysis_included(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        assert "misclassification_analysis" in result
+
+    def test_item_classifications_all_excluded(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        assert "item_classifications_all" not in result["misclassification_analysis"]
+
+    def test_category_totals_preserved(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        totals = result["misclassification_analysis"]["category_totals"]
+        assert totals["score_configuration_problem"] == 4
+        assert totals["information_gap"] == 2
+
+    def test_overall_assessment_preserved(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        overall = result["misclassification_analysis"]["overall_assessment"]
+        assert overall["total_items"] == 7
+        assert overall["predominant_category"] == "score_configuration_problem"
+
+    def test_primary_next_action_preserved(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        action = result["misclassification_analysis"]["primary_next_action"]
+        assert action["action"] == "score_configuration_optimization"
+        assert action["confidence"] == "medium"
+
+    def test_optimization_applicability_preserved(self):
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(
+            self._make_full_payload(), self.ATTACHMENT
+        )
+        applicability = result["misclassification_analysis"]["optimization_applicability"]
+        assert applicability["status"] == "applicable"
+
+    def test_missing_misclassification_analysis_is_tolerated(self):
+        payload = self._make_full_payload()
+        del payload["misclassification_analysis"]
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(payload, self.ATTACHMENT)
+        assert "misclassification_analysis" not in result
+
+    def test_raises_on_non_dict_payload(self):
+        with pytest.raises(ValueError, match="root_cause_payload must be a dictionary"):
+            FeedbackEvaluation._compact_root_cause_for_parameters("not a dict", self.ATTACHMENT)
+
+    def test_raises_on_missing_attachment(self):
+        with pytest.raises(ValueError, match="output_attachment is required"):
+            FeedbackEvaluation._compact_root_cause_for_parameters(self._make_full_payload(), "")
