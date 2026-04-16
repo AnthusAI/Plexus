@@ -4935,8 +4935,18 @@ code: |
         -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
         -- Stored in State (survives history compaction).
         local cur = iterations[#iterations]
-        local diag_summary = syn_text:match("## DIAGNOSIS SUMMARY\n(.-)\n##")
-        local presc_summary = syn_text:match("## PRESCRIPTION SUMMARY\n(.-)\n##")
+        -- Extract multi-line section content up to the next ## heading.
+        -- Lua's "." does not match newlines, so string.find is used instead of pattern matching.
+        local function extract_heading_section(text, heading)
+          local search = heading .. "\n"
+          local _, hdr_end = text:find(search, 1, true)
+          if not hdr_end then return "" end
+          local next_hdr = text:find("\n## ", hdr_end + 1)
+          local content = next_hdr and text:sub(hdr_end + 1, next_hdr - 1) or text:sub(hdr_end + 1)
+          return (content:match("^(.-)%s*$") or content)
+        end
+        local diag_summary = extract_heading_section(syn_text, "## DIAGNOSIS SUMMARY")
+        local presc_summary = extract_heading_section(syn_text, "## PRESCRIPTION SUMMARY")
         local insight_entry = {
           cycle = cycle,
           analysis = trunc(syn_text, 30000),  -- Full report for dashboard; planning uses prescription_summary
