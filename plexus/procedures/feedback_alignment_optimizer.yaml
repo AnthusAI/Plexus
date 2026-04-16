@@ -4692,239 +4692,6 @@ code: |
           tostring(last_accepted_version_id)
         ), level = "info"})
 
-        -- ================================================================
-        -- PER-CYCLE REPORT: diagnosis + prescription + planning analysis
-        -- Runs after EVERY cycle (including cycle 1 and the final cycle).
-        -- Produces a structured report for the user, then planning notes
-        -- for hypothesis generation in the next cycle.
-        -- ================================================================
-        if #iterations > 0 then
-          Human.notify({message = string.format(
-            "Cycle %d — generating per-cycle report...", cycle), level = "info"})
-
-          local syn = {}
-
-          -- ---- Structured report instructions (output first) ----
-          table.insert(syn, string.format(
-            "You must produce output in exactly two parts in this order:\n\n"
-            .. "=== CYCLE %d REPORT ===\n\n"
-            .. "## DIAGNOSIS SUMMARY\n"
-            .. "(3-5 bullets. What did this cycle reveal? What worked, what failed, why?\n"
-            .. " What error patterns are still present? What is the realistic AC1 ceiling and why?)\n\n"
-            .. "## DIAGNOSIS DETAIL\n"
-            .. "### What happened\n"
-            .. "(metrics this cycle vs baseline, hypotheses tested, which ones ran)\n"
-            .. "### Why hypotheses worked or failed\n"
-            .. "(for each: was the premise correct? implementation off? inconclusive?)\n"
-            .. "### Error patterns still present\n"
-            .. "(2-3 concrete patterns in the residual FP/FN errors with example item counts)\n"
-            .. "### Ceiling estimate\n"
-            .. "(%% contradictions in current feedback window, max achievable AC1, what blocks further gains)\n\n"
-            .. "## PRESCRIPTION SUMMARY\n"
-            .. "(2-4 actions ranked by urgency. Format: [WHO]: [WHAT] — [evidence/impact])\n\n"
-            .. "## PRESCRIPTION DETAIL\n"
-            .. "(≤5 actions. For each: who does it, what exactly, evidence count or AC1 impact,\n"
-            .. " urgency: must-do-before-next-cycle / can-wait / needs-SME-decision)\n\n"
-            .. "=== PLANNING ANALYSIS ===\n"
-            .. "(everything after this header is your reasoning for generating hypotheses"
-            .. " in the next cycle — only present if another cycle will run)\n\n",
-            cycle))
-
-          -- ---- Cycle history ----
-          table.insert(syn, string.format(
-            "=== CYCLE %d — LESSONS LEARNED ===\n", cycle))
-          table.insert(syn,
-            "Review ALL cycles so far, then write the report above.\n")
-
-          for _, prev in ipairs(iterations) do
-            local status = prev.accepted and "ACCEPTED" or "REJECTED"
-            local fb_d = prev.feedback_deltas and prev.feedback_deltas.alignment or 0
-            table.insert(syn, string.format("--- Cycle %d (%s, FB AC1 %+.3f) ---",
-              prev.iteration, status, fb_d))
-            if prev.exploration_results and type(prev.exploration_results) == "table" then
-              for _, r in ipairs(prev.exploration_results) do
-                local r_fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
-                local r_acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
-                local hyp_label = r.hypothesis
-                  and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
-                  or ("Hypothesis " .. tostring(r.index))
-                table.insert(syn, string.format(
-                  "  %d. %s\n     Implemented: %s\n     FB AC1 %+.3f   ACC AC1 %+.3f  %s\n",
-                  r.index, hyp_label, r.done_reason or "(no note)",
-                  r_fb_d, r_acc_d, r.succeeded and "SUCCEEDED" or "FAILED"))
-              end
-            end
-          end
-
-          -- Include accumulated insights from prior cycle reports
-          local prior_insights = State.get("cycle_insights") or {}
-          if #prior_insights > 0 then
-            table.insert(syn, "\n=== PRIOR CYCLE REPORTS (your analysis from previous cycles) ===")
-            for _, ci in ipairs(prior_insights) do
-              table.insert(syn, string.format("\nCycle %d analysis:\n%s", ci.cycle, ci.analysis or ""))
-            end
-          end
-
-          -- Stagnation diagnostic: when consecutive failures hit, prompt for structural diagnosis
-          if consecutive_failed_cycles >= 3 then
-            table.insert(syn, string.format(
-              "\n⚠ WARNING: %d consecutive cycles have failed to improve.\n\n"
-              .. "PLATEAU DIAGNOSIS REQUIRED. The most common reason for a sustained plateau is "
-              .. "CONTRADICTORY FEEDBACK LABELS — human reviewers disagree, so one wave of labels says "
-              .. "policy is A and another wave says policy is the opposite of A. When this happens, "
-              .. "ANY prompt change that aligns with one group will misalign with the other. "
-              .. "This is NOT solvable with more prompt engineering.\n\n"
-              .. "Before proposing new approaches, explicitly diagnose:\n"
-              .. "1. CONTRADICTORY LABELS: Are there feedback items that directly contradict each other "
-              .. "about what the correct classification should be for similar scenarios? If so, name them. "
-              .. "This is the #1 cause of plateaus and must be identified before continuing.\n"
-              .. "2. POLICY GAPS EXHAUSTED: Have all obvious missing or ambiguous policies already been "
-              .. "addressed? If so, there may be no more prompt-level wins available.\n"
-              .. "3. STRUCTURAL: Wrong model, missing preprocessing, or inherent task ambiguity?\n"
-              .. "4. TACTICAL: Is there still untried policy clarification territory?\n\n"
-              .. "If the diagnosis is contradictory labels or exhausted policy space, say so clearly "
-              .. "rather than proposing another prompt tweak that cannot possibly help.\n",
-              consecutive_failed_cycles))
-          end
-
-          table.insert(syn, "\n\nFor the PLANNING ANALYSIS section, reason through each hypothesis:\n")
-          table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
-          table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
-          table.insert(syn, "  - CLASSIFY: Is this approach (a) fundamentally wrong — the premise was flawed,\n")
-          table.insert(syn, "    (b) directionally right but implementation was off — worth refining, or\n")
-          table.insert(syn, "    (c) inconclusive — too small an effect to learn from?\n")
-          table.insert(syn, "  - What does this tell us about what this score's evaluation data actually rewards?\n")
-          table.insert(syn, "  - POLICY AUDIT: Are there still missing or ambiguous policies in the rubric that\n")
-          table.insert(syn, "    the RCA reveals? Policy gaps are the highest-value target. List any you see.\n")
-          table.insert(syn, "  - CONTRADICTIONS: Do any feedback items contradict each other about what the\n")
-          table.insert(syn, "    correct label should be for similar scenarios? If so, describe the contradiction.\n")
-          table.insert(syn, "    Contradictory labels are the most common cause of plateaus — naming them is more\n")
-          table.insert(syn, "    useful than trying yet another prompt change that cannot resolve them.\n")
-          table.insert(syn, "  - FEW-SHOT EXAMPLES: Did any hypothesis rely primarily on adding examples?\n")
-          table.insert(syn, "    If so, reflect on whether a policy rule would have been more durable.\n")
-          table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
-          table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
-          table.insert(syn, "  - If dual synthesis was used: which strategy (A=cycle-focused, B=arc-focused) worked better and why?\n")
-
-          -- Contradiction audit: wire the landscape data into synthesis reasoning
-          local known_contra = State.get("known_contradictions")
-          if known_contra and (known_contra.contradictions_found or 0) > 0 then
-            table.insert(syn, string.format(
-              "\nCONTRADICTION AUDIT — %d contradiction items detected in the current feedback window:\n",
-              known_contra.contradictions_found))
-            table.insert(syn, "  1. For each accepted cycle so far: did it target a POLICY GAP (could succeed)\n")
-            table.insert(syn, "     or a GUIDELINE CONTRADICTION (cannot succeed via prompt editing)?\n")
-            table.insert(syn, "     Policy gap fixes should produce durable gains. Contradiction-targeting fixes\n")
-            table.insert(syn, "     may show short-term gains that regress when evaluated on new feedback.\n")
-            table.insert(syn, "  2. Are any hypotheses you would consider for the next cycle targeting items\n")
-            table.insert(syn, "     in the contradiction topics listed in the CONTRADICTION LANDSCAPE above?\n")
-            table.insert(syn, "     If so, flag this explicitly — those hypotheses cannot reliably succeed.\n")
-            table.insert(syn, "  3. Has the contradiction rate changed since the run started, or is it stable?\n")
-            table.insert(syn, "     A rising contradiction rate may indicate the score's guidelines have become\n")
-            table.insert(syn, "     inconsistent with current reviewer behavior.\n")
-            if known_contra.policy_gap_count and known_contra.policy_gap_count > 0 then
-              table.insert(syn, string.format(
-                "  NOTE: %d of the contradiction items are POLICY GAPS — these CAN be addressed\n"
-                .. "  by adding explicit guideline rules. Focus on these first.\n",
-                known_contra.policy_gap_count))
-            end
-          end
-
-          table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
-          table.insert(syn,
-            "The CYCLE REPORT section will be shown to the user immediately after this cycle.\n"
-            .. "The PLANNING ANALYSIS will shape hypotheses for cycle "
-            .. tostring(cycle + 1) .. " and will be preserved for future cycles.")
-
-          guard_context_budget(code_editor)
-          local syn_ok, syn_err = safe_editor_call(table.concat(syn, ""), nil)
-          if not syn_ok then
-            diag(string.format("CODE_EDITOR FAILED in per-cycle report: %s", tostring(syn_err)))
-          end
-          local syn_text = code_editor.output or "(cycle report complete)"
-          Human.notify({message = syn_text, level = "info"})
-
-          -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
-          -- Stored in State (survives history compaction).
-          local cur = iterations[#iterations]
-          local diag_summary = syn_text:match("## DIAGNOSIS SUMMARY\n(.-)\n##")
-          local presc_summary = syn_text:match("## PRESCRIPTION SUMMARY\n(.-)\n##")
-          local insight_entry = {
-            cycle = cycle,
-            analysis = trunc(syn_text, 30000),  -- Full report for dashboard; planning uses prescription_summary
-            diagnosis_summary = trunc(diag_summary or "", 1000),
-            prescription_summary = trunc(presc_summary or "", 1000),
-            synthesis_strategy_selected = cur and cur.synthesis_strategy or nil,
-            dual_synthesis_comparison = cur and cur.dual_synthesis or nil
-          }
-          if cur and cur.exploration_results and type(cur.exploration_results) == "table" then
-            insight_entry.hypotheses_tested = {}
-            for _, r in ipairs(cur.exploration_results) do
-              table.insert(insight_entry.hypotheses_tested, {
-                name = r.hypothesis and r.hypothesis.name or ("Hypothesis " .. tostring(r.index)),
-                description = trunc(r.done_reason or "", 2000),
-                fb_delta = r.fb_deltas and r.fb_deltas.alignment or 0,
-                acc_delta = r.acc_deltas and r.acc_deltas.alignment or 0,
-                succeeded = r.succeeded or false
-              })
-            end
-          end
-          local cycle_insights = State.get("cycle_insights") or {}
-          table.insert(cycle_insights, insight_entry)
-          State.set("cycle_insights", cycle_insights)
-          diag(string.format("Cycle %d report stored (%d chars, %d hypotheses)",
-            cycle, #(syn_text or ""), insight_entry.hypotheses_tested and #insight_entry.hypotheses_tested or 0))
-
-          -- Generate procedure-level summary (one paragraph each for diagnosis and prescription).
-          -- This gives the user a top-level view without drilling into individual cycles.
-          diag("Generating procedure-level summary...")
-          local summary_parts = {}
-          table.insert(summary_parts, "You are summarizing the current state of an optimization run.\n")
-          table.insert(summary_parts, string.format("Completed cycles: %d of %d\n", cycle, params.max_iterations or 3))
-          -- Gather all cycle prescriptions and diagnoses
-          local all_insights = State.get("cycle_insights") or {}
-          for _, ci in ipairs(all_insights) do
-            table.insert(summary_parts, string.format("--- Cycle %d ---", ci.cycle))
-            if ci.diagnosis_summary and ci.diagnosis_summary ~= "" then
-              table.insert(summary_parts, "Diagnosis: " .. ci.diagnosis_summary)
-            end
-            if ci.prescription_summary and ci.prescription_summary ~= "" then
-              table.insert(summary_parts, "Prescription: " .. ci.prescription_summary)
-            end
-            table.insert(summary_parts, "")
-          end
-          table.insert(summary_parts, "Write exactly two sections:\n")
-          table.insert(summary_parts, "## DIAGNOSIS")
-          table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the overall diagnosis across ALL cycles so far.")
-          table.insert(summary_parts, "What has the optimization learned? What patterns are confirmed? What is blocking further gains?")
-          table.insert(summary_parts, "Do NOT list per-cycle results — synthesize them into a coherent narrative.\n")
-          table.insert(summary_parts, "## PRESCRIPTION")
-          table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the most important actions needed.")
-          table.insert(summary_parts, "Combine and prioritize across all cycles. Who needs to do what, and why?")
-          table.insert(summary_parts, "Focus on what matters NOW, not everything that was ever suggested.\n")
-          table.insert(summary_parts, "Keep each section to ONE paragraph. No bullet points. No sub-headers.")
-
-          Tool.reset()
-          code_editor.clear_history()
-          guard_context_budget(code_editor)
-          local sum_ok, sum_err = safe_editor_call(table.concat(summary_parts, "\n"), nil)
-          if sum_ok then
-            local sum_text = code_editor.output or ""
-            local sum_diag = sum_text:match("## DIAGNOSIS\n(.-)\n## PRESCRIPTION")
-            local sum_presc = sum_text:match("## PRESCRIPTION\n(.*)")
-            State.set("procedure_summary", {
-              diagnosis = trunc(sum_diag or "", 2000),
-              prescription = trunc(sum_presc or "", 2000),
-              updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-              cycle = cycle
-            })
-            diag(string.format("Procedure summary updated (diag=%d, presc=%d chars)",
-              #(sum_diag or ""), #(sum_presc or "")))
-          else
-            diag(string.format("Procedure summary generation failed: %s", tostring(sum_err)))
-          end
-        end
-
         -- Update running state for next cycle
         if accept then
           consecutive_failed_cycles = 0  -- reset whenever we carry forward (even neutral)
@@ -5010,6 +4777,241 @@ code: |
 
         diag(string.format("Cycle %d complete, entering next iteration", cycle))
       end  -- end of if final_version_id (synthesis produced a version to evaluate)
+
+
+      -- ================================================================
+      -- PER-CYCLE REPORT: diagnosis + prescription + planning analysis
+      -- Runs after EVERY cycle where hypotheses were submitted and evaluated,
+      -- including cycles where all hypotheses failed (no synthesis produced).
+      -- Produces a structured report for the user, then planning notes
+      -- for hypothesis generation in the next cycle.
+      -- ================================================================
+      if #iterations > 0 then
+        Human.notify({message = string.format(
+          "Cycle %d — generating per-cycle report...", cycle), level = "info"})
+
+        local syn = {}
+
+        -- ---- Structured report instructions (output first) ----
+        table.insert(syn, string.format(
+          "You must produce output in exactly two parts in this order:\n\n"
+          .. "=== CYCLE %d REPORT ===\n\n"
+          .. "## DIAGNOSIS SUMMARY\n"
+          .. "(3-5 bullets. What did this cycle reveal? What worked, what failed, why?\n"
+          .. " What error patterns are still present? What is the realistic AC1 ceiling and why?)\n\n"
+          .. "## DIAGNOSIS DETAIL\n"
+          .. "### What happened\n"
+          .. "(metrics this cycle vs baseline, hypotheses tested, which ones ran)\n"
+          .. "### Why hypotheses worked or failed\n"
+          .. "(for each: was the premise correct? implementation off? inconclusive?)\n"
+          .. "### Error patterns still present\n"
+          .. "(2-3 concrete patterns in the residual FP/FN errors with example item counts)\n"
+          .. "### Ceiling estimate\n"
+          .. "(%% contradictions in current feedback window, max achievable AC1, what blocks further gains)\n\n"
+          .. "## PRESCRIPTION SUMMARY\n"
+          .. "(2-4 actions ranked by urgency. Format: [WHO]: [WHAT] — [evidence/impact])\n\n"
+          .. "## PRESCRIPTION DETAIL\n"
+          .. "(≤5 actions. For each: who does it, what exactly, evidence count or AC1 impact,\n"
+          .. " urgency: must-do-before-next-cycle / can-wait / needs-SME-decision)\n\n"
+          .. "=== PLANNING ANALYSIS ===\n"
+          .. "(everything after this header is your reasoning for generating hypotheses"
+          .. " in the next cycle — only present if another cycle will run)\n\n",
+          cycle))
+
+        -- ---- Cycle history ----
+        table.insert(syn, string.format(
+          "=== CYCLE %d — LESSONS LEARNED ===\n", cycle))
+        table.insert(syn,
+          "Review ALL cycles so far, then write the report above.\n")
+
+        for _, prev in ipairs(iterations) do
+          local status = prev.accepted and "ACCEPTED" or "REJECTED"
+          local fb_d = prev.feedback_deltas and prev.feedback_deltas.alignment or 0
+          table.insert(syn, string.format("--- Cycle %d (%s, FB AC1 %+.3f) ---",
+            prev.iteration, status, fb_d))
+          if prev.exploration_results and type(prev.exploration_results) == "table" then
+            for _, r in ipairs(prev.exploration_results) do
+              local r_fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
+              local r_acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
+              local hyp_label = r.hypothesis
+                and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
+                or ("Hypothesis " .. tostring(r.index))
+              table.insert(syn, string.format(
+                "  %d. %s\n     Implemented: %s\n     FB AC1 %+.3f   ACC AC1 %+.3f  %s\n",
+                r.index, hyp_label, r.done_reason or "(no note)",
+                r_fb_d, r_acc_d, r.succeeded and "SUCCEEDED" or "FAILED"))
+            end
+          end
+        end
+
+        -- Include accumulated insights from prior cycle reports
+        local prior_insights = State.get("cycle_insights") or {}
+        if #prior_insights > 0 then
+          table.insert(syn, "\n=== PRIOR CYCLE REPORTS (your analysis from previous cycles) ===")
+          for _, ci in ipairs(prior_insights) do
+            table.insert(syn, string.format("\nCycle %d analysis:\n%s", ci.cycle, ci.analysis or ""))
+          end
+        end
+
+        -- Stagnation diagnostic: when consecutive failures hit, prompt for structural diagnosis
+        if consecutive_failed_cycles >= 3 then
+          table.insert(syn, string.format(
+            "\n⚠ WARNING: %d consecutive cycles have failed to improve.\n\n"
+            .. "PLATEAU DIAGNOSIS REQUIRED. The most common reason for a sustained plateau is "
+            .. "CONTRADICTORY FEEDBACK LABELS — human reviewers disagree, so one wave of labels says "
+            .. "policy is A and another wave says policy is the opposite of A. When this happens, "
+            .. "ANY prompt change that aligns with one group will misalign with the other. "
+            .. "This is NOT solvable with more prompt engineering.\n\n"
+            .. "Before proposing new approaches, explicitly diagnose:\n"
+            .. "1. CONTRADICTORY LABELS: Are there feedback items that directly contradict each other "
+            .. "about what the correct classification should be for similar scenarios? If so, name them. "
+            .. "This is the #1 cause of plateaus and must be identified before continuing.\n"
+            .. "2. POLICY GAPS EXHAUSTED: Have all obvious missing or ambiguous policies already been "
+            .. "addressed? If so, there may be no more prompt-level wins available.\n"
+            .. "3. STRUCTURAL: Wrong model, missing preprocessing, or inherent task ambiguity?\n"
+            .. "4. TACTICAL: Is there still untried policy clarification territory?\n\n"
+            .. "If the diagnosis is contradictory labels or exhausted policy space, say so clearly "
+            .. "rather than proposing another prompt tweak that cannot possibly help.\n",
+            consecutive_failed_cycles))
+        end
+
+        table.insert(syn, "\n\nFor the PLANNING ANALYSIS section, reason through each hypothesis:\n")
+        table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
+        table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
+        table.insert(syn, "  - CLASSIFY: Is this approach (a) fundamentally wrong — the premise was flawed,\n")
+        table.insert(syn, "    (b) directionally right but implementation was off — worth refining, or\n")
+        table.insert(syn, "    (c) inconclusive — too small an effect to learn from?\n")
+        table.insert(syn, "  - What does this tell us about what this score's evaluation data actually rewards?\n")
+        table.insert(syn, "  - POLICY AUDIT: Are there still missing or ambiguous policies in the rubric that\n")
+        table.insert(syn, "    the RCA reveals? Policy gaps are the highest-value target. List any you see.\n")
+        table.insert(syn, "  - CONTRADICTIONS: Do any feedback items contradict each other about what the\n")
+        table.insert(syn, "    correct label should be for similar scenarios? If so, describe the contradiction.\n")
+        table.insert(syn, "    Contradictory labels are the most common cause of plateaus — naming them is more\n")
+        table.insert(syn, "    useful than trying yet another prompt change that cannot resolve them.\n")
+        table.insert(syn, "  - FEW-SHOT EXAMPLES: Did any hypothesis rely primarily on adding examples?\n")
+        table.insert(syn, "    If so, reflect on whether a policy rule would have been more durable.\n")
+        table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
+        table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
+        table.insert(syn, "  - If dual synthesis was used: which strategy (A=cycle-focused, B=arc-focused) worked better and why?\n")
+
+        -- Contradiction audit: wire the landscape data into synthesis reasoning
+        local known_contra = State.get("known_contradictions")
+        if known_contra and (known_contra.contradictions_found or 0) > 0 then
+          table.insert(syn, string.format(
+            "\nCONTRADICTION AUDIT — %d contradiction items detected in the current feedback window:\n",
+            known_contra.contradictions_found))
+          table.insert(syn, "  1. For each accepted cycle so far: did it target a POLICY GAP (could succeed)\n")
+          table.insert(syn, "     or a GUIDELINE CONTRADICTION (cannot succeed via prompt editing)?\n")
+          table.insert(syn, "     Policy gap fixes should produce durable gains. Contradiction-targeting fixes\n")
+          table.insert(syn, "     may show short-term gains that regress when evaluated on new feedback.\n")
+          table.insert(syn, "  2. Are any hypotheses you would consider for the next cycle targeting items\n")
+          table.insert(syn, "     in the contradiction topics listed in the CONTRADICTION LANDSCAPE above?\n")
+          table.insert(syn, "     If so, flag this explicitly — those hypotheses cannot reliably succeed.\n")
+          table.insert(syn, "  3. Has the contradiction rate changed since the run started, or is it stable?\n")
+          table.insert(syn, "     A rising contradiction rate may indicate the score's guidelines have become\n")
+          table.insert(syn, "     inconsistent with current reviewer behavior.\n")
+          if known_contra.policy_gap_count and known_contra.policy_gap_count > 0 then
+            table.insert(syn, string.format(
+              "  NOTE: %d of the contradiction items are POLICY GAPS — these CAN be addressed\n"
+              .. "  by adding explicit guideline rules. Focus on these first.\n",
+              known_contra.policy_gap_count))
+          end
+        end
+
+        table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
+        table.insert(syn,
+          "The CYCLE REPORT section will be shown to the user immediately after this cycle.\n"
+          .. "The PLANNING ANALYSIS will shape hypotheses for cycle "
+          .. tostring(cycle + 1) .. " and will be preserved for future cycles.")
+
+        guard_context_budget(code_editor)
+        local syn_ok, syn_err = safe_editor_call(table.concat(syn, ""), nil)
+        if not syn_ok then
+          diag(string.format("CODE_EDITOR FAILED in per-cycle report: %s", tostring(syn_err)))
+        end
+        local syn_text = code_editor.output or "(cycle report complete)"
+        Human.notify({message = syn_text, level = "info"})
+
+        -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
+        -- Stored in State (survives history compaction).
+        local cur = iterations[#iterations]
+        local diag_summary = syn_text:match("## DIAGNOSIS SUMMARY\n(.-)\n##")
+        local presc_summary = syn_text:match("## PRESCRIPTION SUMMARY\n(.-)\n##")
+        local insight_entry = {
+          cycle = cycle,
+          analysis = trunc(syn_text, 30000),  -- Full report for dashboard; planning uses prescription_summary
+          diagnosis_summary = trunc(diag_summary or "", 1000),
+          prescription_summary = trunc(presc_summary or "", 1000),
+          synthesis_strategy_selected = cur and cur.synthesis_strategy or nil,
+          dual_synthesis_comparison = cur and cur.dual_synthesis or nil
+        }
+        if cur and cur.exploration_results and type(cur.exploration_results) == "table" then
+          insight_entry.hypotheses_tested = {}
+          for _, r in ipairs(cur.exploration_results) do
+            table.insert(insight_entry.hypotheses_tested, {
+              name = r.hypothesis and r.hypothesis.name or ("Hypothesis " .. tostring(r.index)),
+              description = trunc(r.done_reason or "", 2000),
+              fb_delta = r.fb_deltas and r.fb_deltas.alignment or 0,
+              acc_delta = r.acc_deltas and r.acc_deltas.alignment or 0,
+              succeeded = r.succeeded or false
+            })
+          end
+        end
+        local cycle_insights = State.get("cycle_insights") or {}
+        table.insert(cycle_insights, insight_entry)
+        State.set("cycle_insights", cycle_insights)
+        diag(string.format("Cycle %d report stored (%d chars, %d hypotheses)",
+          cycle, #(syn_text or ""), insight_entry.hypotheses_tested and #insight_entry.hypotheses_tested or 0))
+
+        -- Generate procedure-level summary (one paragraph each for diagnosis and prescription).
+        -- This gives the user a top-level view without drilling into individual cycles.
+        diag("Generating procedure-level summary...")
+        local summary_parts = {}
+        table.insert(summary_parts, "You are summarizing the current state of an optimization run.\n")
+        table.insert(summary_parts, string.format("Completed cycles: %d of %d\n", cycle, params.max_iterations or 3))
+        -- Gather all cycle prescriptions and diagnoses
+        local all_insights = State.get("cycle_insights") or {}
+        for _, ci in ipairs(all_insights) do
+          table.insert(summary_parts, string.format("--- Cycle %d ---", ci.cycle))
+          if ci.diagnosis_summary and ci.diagnosis_summary ~= "" then
+            table.insert(summary_parts, "Diagnosis: " .. ci.diagnosis_summary)
+          end
+          if ci.prescription_summary and ci.prescription_summary ~= "" then
+            table.insert(summary_parts, "Prescription: " .. ci.prescription_summary)
+          end
+          table.insert(summary_parts, "")
+        end
+        table.insert(summary_parts, "Write exactly two sections:\n")
+        table.insert(summary_parts, "## DIAGNOSIS")
+        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the overall diagnosis across ALL cycles so far.")
+        table.insert(summary_parts, "What has the optimization learned? What patterns are confirmed? What is blocking further gains?")
+        table.insert(summary_parts, "Do NOT list per-cycle results — synthesize them into a coherent narrative.\n")
+        table.insert(summary_parts, "## PRESCRIPTION")
+        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the most important actions needed.")
+        table.insert(summary_parts, "Combine and prioritize across all cycles. Who needs to do what, and why?")
+        table.insert(summary_parts, "Focus on what matters NOW, not everything that was ever suggested.\n")
+        table.insert(summary_parts, "Keep each section to ONE paragraph. No bullet points. No sub-headers.")
+
+        Tool.reset()
+        code_editor.clear_history()
+        guard_context_budget(code_editor)
+        local sum_ok, sum_err = safe_editor_call(table.concat(summary_parts, "\n"), nil)
+        if sum_ok then
+          local sum_text = code_editor.output or ""
+          local sum_diag = sum_text:match("## DIAGNOSIS\n(.-)\n## PRESCRIPTION")
+          local sum_presc = sum_text:match("## PRESCRIPTION\n(.*)")
+          State.set("procedure_summary", {
+            diagnosis = trunc(sum_diag or "", 2000),
+            prescription = trunc(sum_presc or "", 2000),
+            updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            cycle = cycle
+          })
+          diag(string.format("Procedure summary updated (diag=%d, presc=%d chars)",
+            #(sum_diag or ""), #(sum_presc or "")))
+        else
+          diag(string.format("Procedure summary generation failed: %s", tostring(sum_err)))
+        end
+      end
     end  -- end of else (submitted_versions > 0)
     end)  -- end of pcall wrapper
     if not cycle_ok then
