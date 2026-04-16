@@ -24,6 +24,7 @@ def register_docs_tool(mcp: FastMCP):
         - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
         - feedback-alignment: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
         - dataset-yaml-format: Complete guide to dataset YAML configuration format for data sources
+        - optimizer-cookbook: Optimization strategies and change categories for the feedback alignment optimizer (prompt fixes, structural changes, processor options, model swaps)
         """
         old_stdout = sys.stdout
         temp_stdout = StringIO()
@@ -34,6 +35,7 @@ def register_docs_tool(mcp: FastMCP):
                 "score-yaml-format": "score-yaml-format.md",
                 "feedback-alignment": "feedback-alignment.md",
                 "dataset-yaml-format": "dataset-yaml-format.md",
+                "optimizer-cookbook": "optimizer-cookbook.md",
             }
 
             if filename not in valid_files:
