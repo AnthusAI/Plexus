@@ -1,0 +1,43 @@
+{
+  "id": "plx-cd9743ec-6814-400e-87b0-6171ecca47c9",
+  "title": "Bump tactus to v0.46.1 in pyproject and score processor lambda",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "02a12c2e-ee75-41e7-9be3-452b96decb50",
+      "author": "derek",
+      "text": "Starting implementation: bump tactus to 0.46.1 in pyproject + score-processor-lambda requirements, regenerate poetry.lock, then run lambda container smoke tests.",
+      "created_at": "2026-04-16T16:28:31.650116653Z"
+    },
+    {
+      "id": "a56fc678-10a4-4968-975b-f73259aefe3c",
+      "author": "derek",
+      "text": "Edits complete: pyproject and score-processor-lambda requirements now pin tactus 0.46.1; poetry.lock regenerated. Next running score-processor-lambda container smoke test via make test-smoke.",
+      "created_at": "2026-04-16T16:28:51.354865531Z"
+    },
+    {
+      "id": "741bb94e-2c33-41cb-ba3b-4dbffdbafd6e",
+      "author": "derek",
+      "text": "Validation update: make: Entering directory '/home/derek/projects/Plexus/score-processor-lambda'\nBuilding Docker image...\ncd .. && docker buildx build \\\n\t--platform linux/amd64 \\\n\t--load \\\n\t-f score-processor-lambda/Dockerfile \\\n\t-t score-processor-lambda:latest \\\n\t.\n✓ Image built: score-processor-lambda:latest\nRunning smoke test in container...\ndocker run --rm \\\n\t-v /home/derek/projects/Plexus/tests/smoke_test.py:/var/task/smoke_test.py \\\n\t--entrypoint python \\\n\tscore-processor-lambda:latest \\\n\tsmoke_test.py\nmake: Leaving directory '/home/derek/projects/Plexus/score-processor-lambda' built image but smoke step failed due path expansion ( resolving to repo root). Re-ran smoke test manually with explicit mount to ; container smoke suite passed (10 passed, 0 failed) and confirmed tactus 0.46.1 inside image.",
+      "created_at": "2026-04-16T16:32:44.995879196Z"
+    },
+    {
+      "id": "a414a8d3-fd0a-4a93-8cb6-1978809994f0",
+      "author": "derek",
+      "text": "Validation update: make -C score-processor-lambda test-smoke built image but smoke step failed due path expansion in Makefile ($(PWD)/tests/smoke_test.py resolving to repo root). Re-ran smoke test manually with explicit mount to score-processor-lambda/tests/smoke_test.py; container smoke suite passed (10 passed, 0 failed) and confirmed tactus 0.46.1 inside image.",
+      "created_at": "2026-04-16T16:32:50.771376019Z"
+    }
+  ],
+  "created_at": "2026-04-16T16:28:25.800221659Z",
+  "updated_at": "2026-04-16T16:32:50.771376019Z",
+  "closed_at": null,
+  "custom": {}
+}
