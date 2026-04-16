@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4be26843-79cc-4d5d-92ca-a937542122ef",
+  "issue_id": "plx-cd9743ec-6814-400e-87b0-6171ecca47c9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-16T16:28:25.800Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+    "priority": 2,
+    "status": "open",
+    "title": "Bump tactus to v0.46.1 in pyproject and score processor lambda"
+  }
+}
