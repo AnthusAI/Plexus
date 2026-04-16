@@ -31,16 +31,29 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   exact temporal order, making it unambiguous which "Yes" followed which school pitch.
   See C1b.1 below for the full YAML snippet.
 
-▶ LONG/NOISY TRANSCRIPT SIGNAL → consider C2 hypothesis (RelevantWindowsTranscriptFilter):
+▶ KEYWORD-FOCUSED SCORE SIGNAL → consider C2 hypothesis (RelevantWindowsTranscriptFilter):
 
-  Add this as one of your hypotheses if:
-  - The transcripts are long (>2000 words) and the score only cares about a small section
-  - The RCA shows the LLM getting confused by irrelevant parts of the call
-  - The rubric is about a specific topic (repairs, disclosures, school pitches, etc.)
-    that appears in only part of a long transcript
+  Add this as one of your hypotheses if ALL of the following are true:
+  - The score's classification decision revolves around whether specific words or
+    phrases appear in the transcript (e.g., a required disclosure, a specific offer,
+    a key question the agent must ask)
+  - The transcripts are long (many turns) and the relevant content is a small fraction
+  - The RCA shows the LLM missing or misidentifying relevant content amid unrelated text
 
-  The filter extracts only the transcript windows around keywords you specify, greatly
-  reducing noise without losing the relevant content. See C2 below for YAML details.
+  The filter extracts only the transcript lines that contain your target keywords,
+  plus a configurable window of surrounding lines for context. Removed sections are
+  replaced with "..." so the LLM understands the transcript is abbreviated.
+
+  WHY THIS HELPS: Long transcripts push relevant content deep into the LLM's context
+  where attention degrades. Trimming to keyword windows keeps the decision-relevant
+  text front and center, and also reduces cost and latency.
+
+  WHEN TO USE: Most effective when the score asks "did the agent mention X?" — where
+  X maps cleanly to a small vocabulary (specific product words, required phrases,
+  topic keywords). Less effective when the relevant content is diffuse or doesn't
+  cluster around predictable keywords.
+
+  See C2 below for full YAML syntax and parameter reference.
 
 ▶ PHONETIC TRANSCRIPTION ERROR SIGNAL → mandatory Category A hypothesis (fuzzy-matching rule):
 
@@ -186,6 +199,23 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     This is powerful for long transcripts — trim the text to only the relevant parts.
     Processors run in order; each transforms the text before the next one sees it.
 
+    WHEN TO TRY THIS:
+    The keyword-window approach (RelevantWindowsTranscriptFilter) is a solid Category C
+    hypothesis when:
+      - The score is explicitly about whether a specific topic was discussed (a required
+        question, a product offer, a disclosure, a safety check, etc.)
+      - The topic maps to a clear keyword vocabulary (synonyms, related terms)
+      - Transcripts are long and the relevant content occupies only a small portion
+
+    EXAMPLE: A score that checks whether the agent offered warranty protection.
+    Most of the call is unrelated; the warranty topic clusters around words like
+    "warranty", "coverage", "protect", "plan", "extend". Filtering to windows around
+    those words dramatically reduces noise while keeping the relevant exchange intact.
+
+    The filter replaces omitted sections with "..." so the LLM understands the
+    transcript has been abbreviated. The LLM sees context before and after each
+    matching window (controlled by prev_count and next_count).
+
     RULES (enforced by YAML validation — submit will be rejected if violated):
       1. Each entry MUST have a `class` key naming a known processor.
       2. DO NOT invent processor class names — use ONLY the classes listed below.
@@ -197,20 +227,30 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     ── GROUP A: Text filtering (most useful for optimization) ──
 
     RelevantWindowsTranscriptFilter
-      Extracts only the parts of a long transcript that mention relevant keywords.
-      Dramatically reduces noise so the LLM focuses on what matters.
+      Extracts only the transcript lines containing target keywords, plus surrounding
+      context lines. Omitted sections are replaced with "..." markers.
       Parameters:
-        keywords     (REQUIRED, list of strings) — terms to search for in each sentence
-        fuzzy_match  (optional, bool, default false) — enable fuzzy string matching
+        keywords       (REQUIRED, list of strings) — terms to search for in each line
+        fuzzy_match    (optional, bool, default false) — enable fuzzy string matching
         fuzzy_threshold (optional, int 0-100, default 80) — minimum similarity score
-        prev_count   (optional, int, default 1) — sentences to include BEFORE a match
-        next_count   (optional, int, default 1) — sentences to include AFTER a match
-      Complete working example:
+        case_sensitive (optional, bool, default false) — case-sensitive keyword matching
+        prev_count     (optional, int, default 1) — lines to include BEFORE each match
+        next_count     (optional, int, default 1) — lines to include AFTER each match
+        window_unit    (optional, string, default 'sentences') — unit for context window:
+                         'sentences' — include N surrounding lines (default, most useful)
+                         'words'     — include N surrounding words
+                         'characters' — include N surrounding characters
+
+      When to use fuzzy_match: Enable it when keywords may be phonetically transcribed
+      (e.g., a brand name mangled in speech-to-text). Use a threshold of 75-85 to
+      catch variants without too many false matches.
+
+      Complete working example — warranty offer check:
         item:
           processors:
             - class: RelevantWindowsTranscriptFilter
               parameters:
-                keywords: ["repair", "fix", "replace", "broken"]   # REQUIRED
+                keywords: ["warranty", "coverage", "protection plan", "extend", "protect"]
                 fuzzy_match: true
                 fuzzy_threshold: 80
                 prev_count: 2
