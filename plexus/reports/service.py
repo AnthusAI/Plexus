@@ -511,7 +511,7 @@ def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) 
     )
     if existing:
         _programmatic_config_id_cache = existing.id
-        return existing.id
+        return _programmatic_config_id_cache
 
     rc = ReportConfiguration.create(
         client=client,
@@ -521,8 +521,8 @@ def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) 
         description="Auto-created sentinel for programmatic cached report blocks",
     )
     _programmatic_config_id_cache = rc.id
-    logger.info("Created programmatic ReportConfiguration %s", rc.id)
-    return rc.id
+    logger.info("Created programmatic ReportConfiguration %s", _programmatic_config_id_cache)
+    return _programmatic_config_id_cache
 
 
 def _persist_block_result(
