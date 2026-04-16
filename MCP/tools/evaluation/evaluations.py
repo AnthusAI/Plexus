@@ -1002,6 +1002,125 @@ def register_evaluation_tools(mcp: FastMCP):
             return json.dumps({"error": str(e)})
 
     @mcp.tool()
+    async def plexus_evaluation_find_recent(
+        score_version_id: str,
+        evaluation_type: str,
+        max_age_hours: float = 24.0,
+        min_items: int = 0,
+    ) -> str:
+        """Find the most recent completed evaluation for a score version and type.
+
+        Searches for an existing Evaluation record matching the given score version ID and
+        evaluation type that was created within the specified time window.  Returns the same
+        data shape as plexus_evaluation_run with an added ``_from_cache: true`` flag when
+        found, or ``{"found": false}`` when no match exists.
+
+        Parameters:
+        - score_version_id: Score version ID to search for (e.g. the champion version).
+        - evaluation_type: Evaluation type — "feedback" or "accuracy".
+        - max_age_hours: Only consider evaluations created within this many hours (default: 24).
+        - min_items: Minimum number of items the evaluation must have processed (default: 0).
+        """
+        import json as _json
+        from datetime import datetime, timezone, timedelta
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            from plexus.Evaluation import Evaluation
+
+            client = PlexusDashboardClient()
+
+            query = """
+            query FindRecentEvalByVersion($scoreVersionId: String!, $limit: Int) {
+              listEvaluationByScoreVersionIdAndCreatedAt(
+                scoreVersionId: $scoreVersionId
+                sortDirection: DESC
+                limit: $limit
+              ) {
+                items { id type status scoreVersionId totalItems createdAt }
+              }
+            }
+            """
+            result = client.execute(query, {"scoreVersionId": score_version_id, "limit": 20})
+            items = (
+                (result.get("listEvaluationByScoreVersionIdAndCreatedAt") or {})
+                .get("items", [])
+            )
+
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+
+            for item in items:
+                if item.get("status") != "COMPLETED":
+                    continue
+                if item.get("type", "").lower() != evaluation_type.lower():
+                    continue
+                total = item.get("totalItems") or 0
+                if total < min_items:
+                    continue
+                created_raw = item.get("createdAt")
+                if not created_raw:
+                    continue
+                try:
+                    if isinstance(created_raw, str):
+                        created_at = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+                    else:
+                        created_at = created_raw
+                    if created_at.tzinfo is None:
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                    if created_at < cutoff:
+                        continue
+                except Exception:
+                    continue
+
+                # Found a match — fetch full info
+                eval_id = item["id"]
+                try:
+                    eval_info = Evaluation.get_evaluation_info(eval_id)
+                except Exception as exc:
+                    logger.warning(
+                        "plexus_evaluation_find_recent: get_evaluation_info failed for %s: %s",
+                        eval_id, exc
+                    )
+                    continue
+
+                payload: Dict[str, Any] = {
+                    "_from_cache": True,
+                    "evaluation_id": eval_id,
+                    "id": eval_id,
+                    "type": eval_info.get("type"),
+                    "status": eval_info.get("status"),
+                    "scorecard": eval_info.get("scorecard_name") or eval_info.get("scorecard_id"),
+                    "score": eval_info.get("score_name") or eval_info.get("score_id"),
+                    "score_version_id": eval_info.get("score_version_id"),
+                    "total_items": eval_info.get("total_items"),
+                    "processed_items": eval_info.get("processed_items"),
+                    "metrics": eval_info.get("metrics"),
+                    "accuracy": eval_info.get("accuracy"),
+                    "confusionMatrix": eval_info.get("confusion_matrix"),
+                    "predictedClassDistribution": eval_info.get("predicted_class_distribution"),
+                    "datasetClassDistribution": eval_info.get("dataset_class_distribution"),
+                    "baselineEvaluationId": eval_info.get("baseline_evaluation_id"),
+                    "cost": eval_info.get("cost"),
+                    "started_at": eval_info.get("started_at"),
+                    "created_at": eval_info.get("created_at"),
+                    "updated_at": eval_info.get("updated_at"),
+                }
+                root_cause = eval_info.get("root_cause")
+                if root_cause:
+                    payload["root_cause"] = root_cause
+                misclass = eval_info.get("misclassification_analysis")
+                if misclass:
+                    payload["misclassification_analysis"] = misclass
+
+                return _json.dumps(payload)
+
+            return _json.dumps({"found": False})
+
+        except Exception as exc:
+            logger.error("plexus_evaluation_find_recent failed: %s", exc, exc_info=True)
+            return _json.dumps({"error": str(exc)})
+
+    @mcp.tool()
     async def plexus_evaluation_score_result_find(
         evaluation_id: str,
         predicted_value: Optional[str] = None,
