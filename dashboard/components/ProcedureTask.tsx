@@ -999,17 +999,24 @@ export default function ProcedureTask({
                                 {(() => {
                                   const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
                                   if (!insight) return null
-                                  const hasDiag = insight.diagnosis_summary && insight.diagnosis_summary.trim().length > 0
-                                  const hasPresc = insight.prescription_summary && insight.prescription_summary.trim().length > 0
-                                  // Parse detail sections from full analysis if available
+                                  // Parse all sections from full analysis — handles cases where
+                                  // stored summaries are empty (e.g. older runs with regex bug).
+                                  let diagSummary = insight.diagnosis_summary || ''
+                                  let prescSummary = insight.prescription_summary || ''
                                   let diagDetail = ''
                                   let prescDetail = ''
                                   if (insight.analysis) {
+                                    const diagSummaryMatch = insight.analysis.match(/## DIAGNOSIS SUMMARY\n([\s\S]*?)(?=\n## DIAGNOSIS DETAIL|\n## PRESCRIPTION|\s*$)/)
+                                    if (diagSummaryMatch && !diagSummary.trim()) diagSummary = diagSummaryMatch[1].trim()
+                                    const prescSummaryMatch = insight.analysis.match(/## PRESCRIPTION SUMMARY\n([\s\S]*?)(?=\n## PRESCRIPTION DETAIL|\n===|\s*$)/)
+                                    if (prescSummaryMatch && !prescSummary.trim()) prescSummary = prescSummaryMatch[1].trim()
                                     const diagDetailMatch = insight.analysis.match(/## DIAGNOSIS DETAIL\n([\s\S]*?)(?=\n## PRESCRIPTION|\s*$)/)
                                     if (diagDetailMatch) diagDetail = diagDetailMatch[1].trim()
                                     const prescDetailMatch = insight.analysis.match(/## PRESCRIPTION DETAIL\n([\s\S]*?)(?=\n===|\s*$)/)
                                     if (prescDetailMatch) prescDetail = prescDetailMatch[1].trim()
                                   }
+                                  const hasDiag = diagSummary.trim().length > 0
+                                  const hasPresc = prescSummary.trim().length > 0
                                   if (hasDiag || hasPresc) {
                                     return (
                                       <div className="@container mt-1">
@@ -1019,7 +1026,7 @@ export default function ProcedureTask({
                                               <ReportSection
                                                 icon={<Stethoscope className="h-3.5 w-3.5" />}
                                                 title="Diagnosis"
-                                                summary={insight.diagnosis_summary}
+                                                summary={diagSummary}
                                                 detail={diagDetail}
                                               />
                                             </div>
@@ -1029,7 +1036,7 @@ export default function ProcedureTask({
                                               <ReportSection
                                                 icon={<ClipboardList className="h-3.5 w-3.5" />}
                                                 title="Prescription"
-                                                summary={insight.prescription_summary}
+                                                summary={prescSummary}
                                                 detail={prescDetail}
                                               />
                                             </div>
