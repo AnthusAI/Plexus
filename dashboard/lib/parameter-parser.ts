@@ -52,8 +52,12 @@ function normalizeParameterDefinition(name: string, raw: any): ParameterDefiniti
  */
 export function parseParametersFromYaml(yamlContent: string): ParameterDefinition[] {
   try {
-    // Check for YAML frontmatter (parameters section before ---)
-    if (yamlContent.includes('---')) {
+    // Check for YAML frontmatter: only split on --- when the document starts with ---
+    // (Jekyll/Hugo style). Tactus YAMLs are full YAML documents and may contain ---
+    // inside block scalars (e.g. Lua string literals), so splitting on any occurrence
+    // would truncate the YAML mid-value and cause parse errors.
+    const trimmed = yamlContent.trimStart()
+    if (trimmed.startsWith('---')) {
       const parts = yamlContent.split('---')
       if (parts.length >= 2) {
         // First part is the frontmatter
@@ -70,8 +74,8 @@ export function parseParametersFromYaml(yamlContent: string): ParameterDefinitio
         }
       }
     }
-    
-    // Fallback: try to parse the whole thing
+
+    // Parse the full YAML document
     const config = yaml.load(yamlContent) as ParameterConfig & { params?: Record<string, any> }
     if (Array.isArray(config?.parameters)) {
       return config.parameters
