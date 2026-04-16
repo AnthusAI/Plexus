@@ -21,9 +21,11 @@ interface HypothesisTested {
   succeeded: boolean
 }
 
-interface CycleInsight {
+export interface CycleInsight {
   cycle: number
   analysis: string
+  diagnosis_summary?: string
+  prescription_summary?: string
   hypotheses_tested?: HypothesisTested[]
 }
 
@@ -248,7 +250,7 @@ interface EndOfRunReportData {
   }
 }
 
-function ReportSection({
+export function ReportSection({
   icon,
   title,
   summary,

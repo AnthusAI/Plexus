@@ -712,14 +712,29 @@ code: |
     table.insert(parts, "")
 
     -- Accumulated insights from prior lessons-learned phases
+    -- Inject structured prescriptions + diagnosis summaries, NOT the full 20K-char report.
+    -- Full report lives in ci.analysis for dashboard display; planning only needs actionable signals.
     local cycle_insights = State.get("cycle_insights") or {}
     if #cycle_insights > 0 then
       table.insert(parts, "=== ACCUMULATED INSIGHTS ===")
-      table.insert(parts, "Agent analysis from prior cycles (most recent first):\n")
+      table.insert(parts, "Structured findings from prior cycles (most recent first):\n")
       for i = #cycle_insights, 1, -1 do
         local ci = cycle_insights[i]
-        table.insert(parts, string.format("--- Cycle %d Analysis ---", ci.cycle))
-        table.insert(parts, ci.analysis or "(no analysis)")
+        table.insert(parts, string.format("--- Cycle %d ---", ci.cycle))
+        if ci.prescription_summary and ci.prescription_summary ~= "" then
+          table.insert(parts, "Prescription: " .. ci.prescription_summary)
+        end
+        if ci.diagnosis_summary and ci.diagnosis_summary ~= "" then
+          table.insert(parts, "Diagnosis: " .. ci.diagnosis_summary)
+        end
+        -- Compact hypothesis results (already in version history, but useful grouped by cycle)
+        if ci.hypotheses_tested and type(ci.hypotheses_tested) == "table" then
+          for _, h in ipairs(ci.hypotheses_tested) do
+            table.insert(parts, string.format("  %s: FB %+.3f  ACC %+.3f  %s",
+              h.name, h.fb_delta or 0, h.acc_delta or 0,
+              h.succeeded and "SUCCEEDED" or "FAILED"))
+          end
+        end
         table.insert(parts, "")
       end
     end
@@ -984,7 +999,8 @@ code: |
     -- Contradiction landscape — injected before guidelines so agent sees the ceiling
     -- before reading the score config. Updated every cycle.
     local known_contra = State.get("known_contradictions")
-    if known_contra and has_text(known_contra.summary) then
+    local known_contra_code_repr = State.get("known_contradictions_code_repr")
+    if known_contra and (has_text(known_contra.summary) or known_contra_code_repr) then
       local kc = known_contra
       local total_items = kc.total_items_analyzed or 0
       local contra_found = kc.contradictions_found or 0
@@ -1009,7 +1025,14 @@ code: |
       end
 
       table.insert(parts, "")
-      table.insert(parts, kc.summary)
+      if known_contra_code_repr then
+        -- Inject the actual code representation (comment header + JSON) that the FC block produces.
+        -- This gives the agent full voting metadata, topic details, and exemplars.
+        table.insert(parts, known_contra_code_repr)
+        Human.notify({message = "  [FC context] Injecting code repr: " .. string.sub(known_contra_code_repr, 1, 400) .. "...", level = "debug"})
+      else
+        table.insert(parts, kc.summary)
+      end
       table.insert(parts, "")
       table.insert(parts, "IMPLICATION: Hypotheses targeting contradiction items are unlikely to succeed.")
       table.insert(parts, "Target policy gaps and ambiguous guidelines instead for reliable gains.")
@@ -1663,6 +1686,31 @@ code: |
       end
     end
 
+    -- Extract durable negative learnings from structured cycle insights.
+    -- The badly_regressed list above uses -0.03 threshold from raw exploration results;
+    -- this adds a stricter -0.05 "banned" tier with hypothesis names for clearer signaling.
+    local insights = State.get("cycle_insights") or {}
+    if #insights > 0 then
+      local banned_directions = {}
+      for _, ci in ipairs(insights) do
+        if ci.hypotheses_tested and type(ci.hypotheses_tested) == "table" then
+          for _, h in ipairs(ci.hypotheses_tested) do
+            if not h.succeeded and ((h.fb_delta or 0) < -0.05 or (h.acc_delta or 0) < -0.05) then
+              table.insert(banned_directions, string.format(
+                "  - Cycle %d: '%s' (FB %+.3f ACC %+.3f) — STRONGLY REGRESSED",
+                ci.cycle, h.name, h.fb_delta or 0, h.acc_delta or 0))
+            end
+          end
+        end
+      end
+      if #banned_directions > 0 then
+        table.insert(parts, "")
+        table.insert(parts, "BANNED DIRECTIONS — approaches that strongly regressed (> -0.05 on either metric):")
+        for _, line in ipairs(banned_directions) do table.insert(parts, line) end
+        table.insert(parts, "Do not try variations of these. The data has spoken.")
+      end
+    end
+
     -- Escalating warning based on prior accuracy regressions
     local acc_rejections = opts.consecutive_acc_rejections or 0
     if acc_rejections >= 2 then
@@ -2093,193 +2141,17 @@ code: |
   end
   File.write(diag_path, "")  -- clear at start
 
-  -- Run fresh baselines for any that weren't resumed
-  if not feedback_baseline_id or (not accuracy_baseline_id and not resume_acc) then
-    local batch_items = {}
-    if not accuracy_baseline_id then
-      table.insert(batch_items, {
-        scorecard_name  = params.scorecard,
-        score_name      = params.score,
-        evaluation_type = "accuracy",
-        dataset_id      = dataset_id,
-        n_samples       = params.max_samples or 100,
-        version         = champion_version_id,
-        notes           = "Baseline: deterministic accuracy dataset for " .. score_name
-      })
-    end
-    if not feedback_baseline_id then
-      table.insert(batch_items, {
-        scorecard_name     = params.scorecard,
-        score_name         = params.score,
-        evaluation_type    = "feedback",
-        version            = champion_version_id,
-        days               = params.days,
-        max_feedback_items = params.max_samples or 100,
-        sampling_mode      = "newest",
-        wait               = true,
-        notes              = "Baseline: recent feedback alignment dataset for " .. score_name
-      })
-    end
-
-    Human.notify({
-      message = string.format("Running %d fresh baseline evaluation(s) for %s...", #batch_items, score_name),
-      level = "info"
-    })
-
-    local baseline_batch = call_plexus_tool("plexus_evaluation_run", {batch = batch_items})
-
-    -- Parse results — map back to accuracy/feedback based on what we requested
-    local batch_idx = 1
-    if not accuracy_baseline_id then
-      local acc_result = baseline_batch and baseline_batch[batch_idx]
-      if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
-        accuracy_baseline         = acc_result
-        accuracy_baseline_id      = acc_result.id or acc_result.evaluation_id
-        accuracy_baseline_metrics = extract_metrics(acc_result)
-        accuracy_baseline_rca     = enrich_rca(acc_result.root_cause or {})
-        accuracy_available        = true
-        Human.notify({message = string.format(
-          "Accuracy baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-          accuracy_baseline_metrics.alignment,
-          accuracy_baseline_metrics.accuracy,
-          accuracy_baseline_metrics.precision,
-          accuracy_baseline_metrics.recall
-        ), level = "info"})
-        diag(string.format("Accuracy baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-          tostring(accuracy_baseline_id),
-          accuracy_baseline_metrics.alignment, accuracy_baseline_metrics.accuracy,
-          accuracy_baseline_metrics.precision, accuracy_baseline_metrics.recall))
-      else
-        local err_msg = (acc_result and acc_result.error) or "no result"
-        Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(err_msg), level = "warning"})
-      end
-      batch_idx = batch_idx + 1
-    end
-
-    if not feedback_baseline_id then
-      local fb_result = baseline_batch and baseline_batch[batch_idx]
-      if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
-        return {
-          success = false,
-          status  = "error",
-          message = "Failed to run baseline feedback evaluation: " .. tostring(fb_result and fb_result.error or "no result")
-        }
-      end
-      feedback_baseline_id      = fb_result.id or fb_result.evaluation_id
-      feedback_baseline_metrics = extract_metrics(fb_result)
-      feedback_baseline_rca     = enrich_rca(fb_result.root_cause or {})
-      Human.notify({message = string.format(
-        "Feedback baseline: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-        feedback_baseline_metrics.alignment,
-        feedback_baseline_metrics.accuracy,
-        feedback_baseline_metrics.precision,
-        feedback_baseline_metrics.recall
-      ), level = "info"})
-      diag(string.format("Feedback baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-        tostring(feedback_baseline_id),
-        feedback_baseline_metrics.alignment, feedback_baseline_metrics.accuracy,
-        feedback_baseline_metrics.precision, feedback_baseline_metrics.recall))
-    end
-  end
-
-  -- Store both baselines in state
-  State.set("accuracy_baseline_id",      accuracy_baseline_id)
-  State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
-  State.set("feedback_baseline_id",      feedback_baseline_id)
-  State.set("feedback_baseline_metrics", feedback_baseline_metrics)
-  -- Immutable copies for dashboard display — never overwritten on acceptance
-  -- (the non-initial keys are updated each accepted cycle for agent context)
-  if State.get("feedback_initial_baseline_metrics") == nil then
-    State.set("feedback_initial_baseline_metrics", feedback_baseline_metrics)
-  end
-  if State.get("accuracy_initial_baseline_metrics") == nil then
-    State.set("accuracy_initial_baseline_metrics", accuracy_baseline_metrics)
-  end
-  State.set("baseline_version_id",       champion_version_id)
-  State.set("scorecard_id",    scorecard_id)
-  State.set("score_id",        score_id)
-  State.set("scorecard_name",  scorecard_name)
-  State.set("score_name",      score_name)
-  State.set("iterations",    {})
-  -- Store RCA for the coding agent's first iteration (slimmed to avoid DynamoDB 400KB limit)
-  State.set("last_accuracy_rca", slim_rca_for_state(accuracy_baseline_rca))
-  State.set("last_feedback_rca", slim_rca_for_state(feedback_baseline_rca))
-
-  -- Fetch smoke test items from the regression dataset (accuracy baseline eval).
-  -- Using items from the actual regression dataset ensures they are EDU items
-  -- with real school metadata, so the LLM path is exercised during smoke tests.
-  if accuracy_baseline_id then
-    local ids = {}
-    -- Sample at three spread offsets to get variety across the dataset
-    -- Use small offsets since some evals have 50+ items; avoid going past end
-    for _, offset in ipairs({0, 15, 30}) do
-      local ok, res = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
-        evaluation_id = accuracy_baseline_id,
-        limit         = 1,
-        offset        = offset
-      })
-      -- Tool returns {"score_results": [...], "pagination": {...}, ...}
-      local sr = res and res.score_results
-      if ok and sr and type(sr) == "table" and sr[1] and sr[1].item_id then
-        ids[#ids+1] = sr[1].item_id
-      end
-    end
-    if #ids > 0 then
-      smoke_test_item_ids = table.concat(ids, ",")
-      Human.notify({message = string.format(
-        "Smoke test items from regression dataset (%d): %s", #ids, smoke_test_item_ids),
-        level = "info"})
-    else
-      Human.notify({message = "WARNING: could not fetch smoke test items from baseline eval — smoke tests will be skipped",
-        level = "warning"})
-    end
-  else
-    Human.notify({message = "WARNING: no accuracy baseline available — smoke tests will be skipped",
-      level = "warning"})
-  end
-
-  -- Early exit: if feedback alignment is already perfect or no RCA data
-  local fb_rca_topics = (type(feedback_baseline_rca) == "table" and feedback_baseline_rca.topics) or {}
-  local has_fb_rca = type(fb_rca_topics) == "table" and #fb_rca_topics > 0
-  local acc_perfect = not accuracy_available or (accuracy_baseline_metrics and accuracy_baseline_metrics.alignment >= 0.99)
-  if feedback_baseline_metrics.alignment >= 0.99 and acc_perfect then
-    local reason = "Both baselines already at 99%+ alignment — nothing to optimize."
-    Human.notify({message = reason, level = "info"})
-    return {
-      success = true,
-      status = "converged",
-      message = reason,
-      accuracy_baseline_id = accuracy_baseline_id,
-      feedback_baseline_id = feedback_baseline_id,
-      iterations = {},
-      feedback_improvement = 0,
-      accuracy_improvement = 0,
-      scorecard_id = scorecard_id,
-      score_id = score_id
-    }
-  end
-
-
-  -- ================================================================
-  -- Exploration / Synthesis Optimization Cycles
-  -- Exploration: Probe independent fixes for different RCA categories
-  -- Synthesis:   Combine successful Exploration fixes into one version
-  -- ================================================================
-  Stage.set("exploration")
-
-  local stop_reason = nil
-  local iterations = {}
-  local last_accepted_version_id = champion_version_id
-  local last_accepted_fb_metrics = feedback_baseline_metrics
-  local last_accepted_acc_metrics = accuracy_baseline_metrics
-  local consecutive_failed_cycles = 0  -- plateau detection
-
   -- Helper: run FeedbackContradictions report and cache result in State.
-  -- Called before cycle 1 and refreshed every 3 cycles so the agent always
-  -- sees an up-to-date picture of structural/label-contradiction issues.
-  local function refresh_known_contradictions(current_cycle)
+  -- Supports background=true for fire-and-forget dispatch; a later call with
+  -- background=false (default) blocks until the background thread completes.
+  local function refresh_known_contradictions(current_cycle, opts)
+    opts = opts or {}
+    local ttl = opts.ttl_hours or 24
+    local fresh = opts.fresh or false
+    local bg = opts.background or false
     Human.notify({message = string.format(
-      "Refreshing contradictions landscape (cycle %d)...", current_cycle), level = "info"})
+      "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s, bg=%s)...",
+      current_cycle, ttl, tostring(fresh), tostring(bg)), level = "info"})
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
@@ -2289,22 +2161,44 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 100,
         num_topics = 8
-      }
+      },
+      cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
+      ttl_hours = ttl,
+      fresh = fresh,
+      background = bg
     })
-    if not ok or not report_result or not report_result.output then
-      Human.notify({message = "  Contradictions report failed or returned no output", level = "warning"})
+    if not ok or not report_result then
+      Human.notify({message = "  Contradictions report failed", level = "warning"})
+      return
+    end
+    -- Background dispatch returns status="dispatched" — results will be collected later
+    if report_result.status == "dispatched" or report_result.status == "already_dispatched" then
+      Human.notify({message = "  Contradictions report dispatched in background — will consume results later", level = "info"})
+      return
+    end
+    if not report_result.output then
+      Human.notify({message = "  Contradictions report returned no output", level = "warning"})
       return
     end
 
     local out = report_result.output
     -- The FeedbackContradictions report returns a string (comment header + JSON),
     -- not a table. Detect this and parse the JSON portion.
+    local code_repr = nil  -- will hold the "# header\n{JSON}" code representation for agent context
     if type(out) == "string" then
       local json_start = string.find(out, "%s*{")
       if json_start then
+        local comment_header = string.sub(out, 1, json_start - 1)
         local json_str = string.sub(out, json_start)
         local parsed, parse_err = safe_decode(json_str)
         if parsed and type(parsed) == "table" then
+          -- Build code repr: comment header + JSON with guidelines field stripped (it's large and
+          -- already present in the agent's context as the score guidelines).
+          parsed.guidelines = nil
+          local ok_enc, encoded = pcall(function() return Json.encode(parsed) end)
+          if ok_enc and encoded then
+            code_repr = comment_header .. encoded
+          end
           out = parsed
         else
           Human.notify({message = "  Contradictions report: failed to parse JSON output: " .. tostring(parse_err), level = "warning"})
@@ -2413,13 +2307,245 @@ code: |
       topics = topics_structured,
       summary = table.concat(summary_parts, "")
     })
+    if code_repr then
+      State.set("known_contradictions_code_repr", code_repr)
+      Human.notify({message = string.format(
+        "  Stored FC code repr (%d chars, guidelines stripped)", #code_repr), level = "debug"})
+    end
     Human.notify({message = string.format(
       "  Contradictions landscape: %d items | %d contradictions, %d policy gaps, %d topics",
       total_items, contradictions_found, policy_gap_count, #topics), level = "info"})
   end
 
-  -- Run upfront before cycle 1
-  pcall(refresh_known_contradictions, 0)
+  -- Dispatch contradictions analysis in background — it runs concurrently with
+  -- baseline evaluations.  Results are consumed (blocking) after baselines finish.
+  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = true})
+
+  -- Try to reuse recent completed evaluations before running fresh baselines
+  local n_samples = params.max_samples or 100
+  if not accuracy_baseline_id and champion_version_id then
+    local ok_acc, found_acc = pcall(call_plexus_tool, "plexus_evaluation_find_recent", {
+      score_version_id = champion_version_id,
+      evaluation_type  = "accuracy",
+      max_age_hours    = 168,  -- 7 days: accuracy uses a fixed dataset, valid across restarts
+      min_items        = math.floor(n_samples * 0.8),  -- allow ~20% smaller sample counts
+    })
+    if ok_acc and found_acc and not found_acc.error and (found_acc.evaluation_id or found_acc.id) then
+      accuracy_baseline_id      = found_acc.evaluation_id or found_acc.id
+      accuracy_baseline_metrics = extract_metrics(found_acc)
+      accuracy_baseline_rca     = enrich_rca(found_acc.root_cause or {})
+      accuracy_available        = true
+      Human.notify({message = string.format(
+        "Accuracy baseline (reusing recent): AC1=%.3f, Accuracy=%.3f",
+        accuracy_baseline_metrics.alignment, accuracy_baseline_metrics.accuracy
+      ), level = "info"})
+    end
+  end
+  if not feedback_baseline_id and champion_version_id then
+    local ok_fb, found_fb = pcall(call_plexus_tool, "plexus_evaluation_find_recent", {
+      score_version_id = champion_version_id,
+      evaluation_type  = "feedback",
+      max_age_hours    = 24,
+      min_items        = n_samples,
+    })
+    if ok_fb and found_fb and not found_fb.error and (found_fb.evaluation_id or found_fb.id) then
+      feedback_baseline_id      = found_fb.evaluation_id or found_fb.id
+      feedback_baseline_metrics = extract_metrics(found_fb)
+      feedback_baseline_rca     = enrich_rca(found_fb.root_cause or {})
+      Human.notify({message = string.format(
+        "Feedback baseline (reusing recent): AC1=%.3f, Accuracy=%.3f",
+        feedback_baseline_metrics.alignment, feedback_baseline_metrics.accuracy
+      ), level = "info"})
+    end
+  end
+
+  -- Run fresh baselines for any that weren't found above
+  if not feedback_baseline_id or (not accuracy_baseline_id and not resume_acc) then
+    local batch_items = {}
+    if not accuracy_baseline_id then
+      table.insert(batch_items, {
+        scorecard_name  = params.scorecard,
+        score_name      = params.score,
+        evaluation_type = "accuracy",
+        dataset_id      = dataset_id,
+        n_samples       = params.max_samples or 100,
+        version         = champion_version_id,
+        notes           = "Baseline: deterministic accuracy dataset for " .. score_name,
+      })
+    end
+    if not feedback_baseline_id then
+      table.insert(batch_items, {
+        scorecard_name     = params.scorecard,
+        score_name         = params.score,
+        evaluation_type    = "feedback",
+        version            = champion_version_id,
+        days               = params.days,
+        max_feedback_items = params.max_samples or 100,
+        sampling_mode      = "newest",
+        wait               = true,
+        notes              = "Baseline: recent feedback alignment dataset for " .. score_name,
+      })
+    end
+
+    Human.notify({
+      message = string.format("Running %d fresh baseline evaluation(s) for %s...", #batch_items, score_name),
+      level = "info"
+    })
+
+    local baseline_batch = call_plexus_tool("plexus_evaluation_run", {batch = batch_items})
+
+    -- Parse results — map back to accuracy/feedback based on what we requested
+    local batch_idx = 1
+    if not accuracy_baseline_id then
+      local acc_result = baseline_batch and baseline_batch[batch_idx]
+      if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
+        accuracy_baseline         = acc_result
+        accuracy_baseline_id      = acc_result.id or acc_result.evaluation_id
+        accuracy_baseline_metrics = extract_metrics(acc_result)
+        accuracy_baseline_rca     = enrich_rca(acc_result.root_cause or {})
+        accuracy_available        = true
+        local acc_cache_label = acc_result._from_cache and " (cached)" or ""
+        Human.notify({message = string.format(
+          "Accuracy baseline%s: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          acc_cache_label,
+          accuracy_baseline_metrics.alignment,
+          accuracy_baseline_metrics.accuracy,
+          accuracy_baseline_metrics.precision,
+          accuracy_baseline_metrics.recall
+        ), level = "info"})
+        diag(string.format("Accuracy baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          tostring(accuracy_baseline_id),
+          accuracy_baseline_metrics.alignment, accuracy_baseline_metrics.accuracy,
+          accuracy_baseline_metrics.precision, accuracy_baseline_metrics.recall))
+      else
+        local err_msg = (acc_result and acc_result.error) or "no result"
+        Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(err_msg), level = "warning"})
+      end
+      batch_idx = batch_idx + 1
+    end
+
+    if not feedback_baseline_id then
+      local fb_result = baseline_batch and baseline_batch[batch_idx]
+      if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
+        return {
+          success = false,
+          status  = "error",
+          message = "Failed to run baseline feedback evaluation: " .. tostring(fb_result and fb_result.error or "no result")
+        }
+      end
+      feedback_baseline_id      = fb_result.id or fb_result.evaluation_id
+      feedback_baseline_metrics = extract_metrics(fb_result)
+      feedback_baseline_rca     = enrich_rca(fb_result.root_cause or {})
+      local fb_cache_label = fb_result._from_cache and " (cached)" or ""
+      Human.notify({message = string.format(
+        "Feedback baseline%s: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        fb_cache_label,
+        feedback_baseline_metrics.alignment,
+        feedback_baseline_metrics.accuracy,
+        feedback_baseline_metrics.precision,
+        feedback_baseline_metrics.recall
+      ), level = "info"})
+      diag(string.format("Feedback baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        tostring(feedback_baseline_id),
+        feedback_baseline_metrics.alignment, feedback_baseline_metrics.accuracy,
+        feedback_baseline_metrics.precision, feedback_baseline_metrics.recall))
+    end
+  end
+
+  -- Store both baselines in state
+  State.set("accuracy_baseline_id",      accuracy_baseline_id)
+  State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
+  State.set("feedback_baseline_id",      feedback_baseline_id)
+  State.set("feedback_baseline_metrics", feedback_baseline_metrics)
+  -- Immutable copies for dashboard display — never overwritten on acceptance
+  -- (the non-initial keys are updated each accepted cycle for agent context)
+  if State.get("feedback_initial_baseline_metrics") == nil then
+    State.set("feedback_initial_baseline_metrics", feedback_baseline_metrics)
+  end
+  if State.get("accuracy_initial_baseline_metrics") == nil then
+    State.set("accuracy_initial_baseline_metrics", accuracy_baseline_metrics)
+  end
+  State.set("baseline_version_id",       champion_version_id)
+  State.set("scorecard_id",    scorecard_id)
+  State.set("score_id",        score_id)
+  State.set("scorecard_name",  scorecard_name)
+  State.set("score_name",      score_name)
+  State.set("iterations",    {})
+  -- Store RCA for the coding agent's first iteration (slimmed to avoid DynamoDB 400KB limit)
+  State.set("last_accuracy_rca", slim_rca_for_state(accuracy_baseline_rca))
+  State.set("last_feedback_rca", slim_rca_for_state(feedback_baseline_rca))
+
+  -- Consume feedback contradictions results (blocks until background dispatch finishes)
+  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = false})
+
+  -- Fetch smoke test items from the regression dataset (accuracy baseline eval).
+  -- Using items from the actual regression dataset ensures they are EDU items
+  -- with real school metadata, so the LLM path is exercised during smoke tests.
+  if accuracy_baseline_id then
+    local ids = {}
+    -- Sample at three spread offsets to get variety across the dataset
+    -- Use small offsets since some evals have 50+ items; avoid going past end
+    for _, offset in ipairs({0, 15, 30}) do
+      local ok, res = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
+        evaluation_id = accuracy_baseline_id,
+        limit         = 1,
+        offset        = offset
+      })
+      -- Tool returns {"score_results": [...], "pagination": {...}, ...}
+      local sr = res and res.score_results
+      if ok and sr and type(sr) == "table" and sr[1] and sr[1].item_id then
+        ids[#ids+1] = sr[1].item_id
+      end
+    end
+    if #ids > 0 then
+      smoke_test_item_ids = table.concat(ids, ",")
+      Human.notify({message = string.format(
+        "Smoke test items from regression dataset (%d): %s", #ids, smoke_test_item_ids),
+        level = "info"})
+    else
+      Human.notify({message = "WARNING: could not fetch smoke test items from baseline eval — smoke tests will be skipped",
+        level = "warning"})
+    end
+  else
+    Human.notify({message = "WARNING: no accuracy baseline available — smoke tests will be skipped",
+      level = "warning"})
+  end
+
+  -- Early exit: if feedback alignment is already perfect or no RCA data
+  local fb_rca_topics = (type(feedback_baseline_rca) == "table" and feedback_baseline_rca.topics) or {}
+  local has_fb_rca = type(fb_rca_topics) == "table" and #fb_rca_topics > 0
+  local acc_perfect = not accuracy_available or (accuracy_baseline_metrics and accuracy_baseline_metrics.alignment >= 0.99)
+  if feedback_baseline_metrics.alignment >= 0.99 and acc_perfect then
+    local reason = "Both baselines already at 99%+ alignment — nothing to optimize."
+    Human.notify({message = reason, level = "info"})
+    return {
+      success = true,
+      status = "converged",
+      message = reason,
+      accuracy_baseline_id = accuracy_baseline_id,
+      feedback_baseline_id = feedback_baseline_id,
+      iterations = {},
+      feedback_improvement = 0,
+      accuracy_improvement = 0,
+      scorecard_id = scorecard_id,
+      score_id = score_id
+    }
+  end
+
+
+  -- ================================================================
+  -- Exploration / Synthesis Optimization Cycles
+  -- Exploration: Probe independent fixes for different RCA categories
+  -- Synthesis:   Combine successful Exploration fixes into one version
+  -- ================================================================
+  Stage.set("exploration")
+
+  local stop_reason = nil
+  local iterations = {}
+  local last_accepted_version_id = champion_version_id
+  local last_accepted_fb_metrics = feedback_baseline_metrics
+  local last_accepted_acc_metrics = accuracy_baseline_metrics
+  local consecutive_failed_cycles = 0  -- plateau detection
 
   -- ================================================================
   -- LLM error recovery and context management helpers
@@ -2684,155 +2810,6 @@ code: |
     end
 
     -- ================================================================
-    -- SYNTHESIS (cycle 2+): reason explicitly about what was learned
-    -- ================================================================
-    if cycle > 1 and #iterations > 0 then
-      Human.notify({message = string.format(
-        "Cycle %d — Synthesis: reasoning about lessons from cycles 1-%d...",
-        cycle, cycle - 1), level = "info"})
-
-      local syn = {}
-      table.insert(syn, string.format(
-        "=== LESSONS LEARNED: Cycles 1-%d ===\n", cycle - 1))
-      table.insert(syn,
-        "Before proposing new hypotheses, analyze what we've learned across ALL prior cycles.\n")
-
-      -- Show ALL prior cycles, not just the last one
-      for _, prev in ipairs(iterations) do
-        local status = prev.accepted and "ACCEPTED" or "REJECTED"
-        local fb_d = prev.feedback_deltas and prev.feedback_deltas.alignment or 0
-        table.insert(syn, string.format("--- Cycle %d (%s, FB AC1 %+.3f) ---",
-          prev.iteration, status, fb_d))
-        if prev.exploration_results and type(prev.exploration_results) == "table" then
-          for _, r in ipairs(prev.exploration_results) do
-            local r_fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
-            local r_acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
-            local hyp_label = r.hypothesis
-              and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
-              or ("Hypothesis " .. tostring(r.index))
-            table.insert(syn, string.format(
-              "  %d. %s\n     Implemented: %s\n     FB AC1 %+.3f   ACC AC1 %+.3f  %s\n",
-              r.index, hyp_label, r.done_reason or "(no note)",
-              r_fb_d, r_acc_d, r.succeeded and "SUCCEEDED" or "FAILED"))
-          end
-        end
-      end
-
-      -- Include accumulated insights from prior lessons-learned phases
-      local prior_insights = State.get("cycle_insights") or {}
-      if #prior_insights > 0 then
-        table.insert(syn, "\n=== PRIOR ANALYSIS (your reasoning from previous cycles) ===")
-        for _, ci in ipairs(prior_insights) do
-          table.insert(syn, string.format("\nCycle %d analysis:\n%s", ci.cycle, ci.analysis or ""))
-        end
-      end
-
-      -- Stagnation diagnostic: when consecutive failures hit, prompt for structural diagnosis
-      if consecutive_failed_cycles >= 3 then
-        table.insert(syn, string.format(
-          "\n⚠ WARNING: %d consecutive cycles have failed to improve.\n\n"
-          .. "PLATEAU DIAGNOSIS REQUIRED. The most common reason for a sustained plateau is "
-          .. "CONTRADICTORY FEEDBACK LABELS — human reviewers disagree, so one wave of labels says "
-          .. "policy is A and another wave says policy is the opposite of A. When this happens, "
-          .. "ANY prompt change that aligns with one group will misalign with the other. "
-          .. "This is NOT solvable with more prompt engineering.\n\n"
-          .. "Before proposing new approaches, explicitly diagnose:\n"
-          .. "1. CONTRADICTORY LABELS: Are there feedback items that directly contradict each other "
-          .. "about what the correct classification should be for similar scenarios? If so, name them. "
-          .. "This is the #1 cause of plateaus and must be identified before continuing.\n"
-          .. "2. POLICY GAPS EXHAUSTED: Have all obvious missing or ambiguous policies already been "
-          .. "addressed? If so, there may be no more prompt-level wins available.\n"
-          .. "3. STRUCTURAL: Wrong model, missing preprocessing, or inherent task ambiguity?\n"
-          .. "4. TACTICAL: Is there still untried policy clarification territory?\n\n"
-          .. "If the diagnosis is contradictory labels or exhausted policy space, say so clearly "
-          .. "rather than proposing another prompt tweak that cannot possibly help.\n",
-          consecutive_failed_cycles))
-      end
-
-      table.insert(syn, "\n\nNow synthesize everything above. For each hypothesis across ALL cycles, reason through:\n")
-      table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
-      table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
-      table.insert(syn, "  - CLASSIFY: Is this approach (a) fundamentally wrong — the premise was flawed,\n")
-      table.insert(syn, "    (b) directionally right but implementation was off — worth refining, or\n")
-      table.insert(syn, "    (c) inconclusive — too small an effect to learn from?\n")
-      table.insert(syn, "  - What does this tell us about what this score's evaluation data actually rewards?\n")
-      table.insert(syn, "  - POLICY AUDIT: Are there still missing or ambiguous policies in the rubric that\n")
-      table.insert(syn, "    the RCA reveals? Policy gaps are the highest-value target. List any you see.\n")
-      table.insert(syn, "  - CONTRADICTIONS: Do any feedback items contradict each other about what the\n")
-      table.insert(syn, "    correct label should be for similar scenarios? If so, describe the contradiction.\n")
-      table.insert(syn, "    Contradictory labels are the most common cause of plateaus — naming them is more\n")
-      table.insert(syn, "    useful than trying yet another prompt change that cannot resolve them.\n")
-      table.insert(syn, "  - FEW-SHOT EXAMPLES: Did any hypothesis rely primarily on adding examples?\n")
-      table.insert(syn, "    If so, reflect on whether a policy rule would have been more durable.\n")
-      table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
-      table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
-      table.insert(syn, "  - If dual synthesis was used: which strategy (A=cycle-focused, B=arc-focused) worked better and why?\n")
-
-      -- Contradiction audit: wire the landscape data into synthesis reasoning
-      local known_contra = State.get("known_contradictions")
-      if known_contra and (known_contra.contradictions_found or 0) > 0 then
-        table.insert(syn, string.format(
-          "\nCONTRADICTION AUDIT — %d contradiction items detected in the current feedback window:\n",
-          known_contra.contradictions_found))
-        table.insert(syn, "  1. For each accepted cycle so far: did it target a POLICY GAP (could succeed)\n")
-        table.insert(syn, "     or a GUIDELINE CONTRADICTION (cannot succeed via prompt editing)?\n")
-        table.insert(syn, "     Policy gap fixes should produce durable gains. Contradiction-targeting fixes\n")
-        table.insert(syn, "     may show short-term gains that regress when evaluated on new feedback.\n")
-        table.insert(syn, "  2. Are any hypotheses you would consider for the next cycle targeting items\n")
-        table.insert(syn, "     in the contradiction topics listed in the CONTRADICTION LANDSCAPE above?\n")
-        table.insert(syn, "     If so, flag this explicitly — those hypotheses cannot reliably succeed.\n")
-        table.insert(syn, "  3. Has the contradiction rate changed since the run started, or is it stable?\n")
-        table.insert(syn, "     A rising contradiction rate may indicate the score's guidelines have become\n")
-        table.insert(syn, "     inconsistent with current reviewer behavior.\n")
-        if known_contra.policy_gap_count and known_contra.policy_gap_count > 0 then
-          table.insert(syn, string.format(
-            "  NOTE: %d of the contradiction items are POLICY GAPS — these CAN be addressed\n"
-            .. "  by adding explicit guideline rules. Focus on these first.\n",
-            known_contra.policy_gap_count))
-        end
-      end
-
-      table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
-      table.insert(syn, "This reasoning will directly shape your hypotheses for cycle "
-        .. tostring(cycle) .. " and will be preserved for future cycles.")
-
-      guard_context_budget(code_editor)
-      local syn_ok, syn_err = safe_editor_call(table.concat(syn, ""), nil)
-      if not syn_ok then
-        diag(string.format("CODE_EDITOR FAILED in prior-cycle synthesis: %s", tostring(syn_err)))
-      end
-      local syn_text = code_editor.output or "(synthesis complete)"
-      Human.notify({message = "  Synthesis:\n" .. syn_text, level = "info"})
-
-      -- Persist the agent's lessons-learned reasoning so future cycles can see it.
-      -- This survives history compaction because it's stored in State, not conversation.
-      local prev = iterations[#iterations]
-      local insight_entry = {
-        cycle = cycle - 1,
-        analysis = trunc(syn_text, 5000),
-        synthesis_strategy_selected = prev and prev.synthesis_strategy or nil,
-        dual_synthesis_comparison = prev and prev.dual_synthesis or nil
-      }
-      if prev and prev.exploration_results and type(prev.exploration_results) == "table" then
-        insight_entry.hypotheses_tested = {}
-        for _, r in ipairs(prev.exploration_results) do
-          table.insert(insight_entry.hypotheses_tested, {
-            name = r.hypothesis and r.hypothesis.name or ("Hypothesis " .. tostring(r.index)),
-            description = trunc(r.done_reason or "", 2000),
-            fb_delta = r.fb_deltas and r.fb_deltas.alignment or 0,
-            acc_delta = r.acc_deltas and r.acc_deltas.alignment or 0,
-            succeeded = r.succeeded or false
-          })
-        end
-      end
-      local cycle_insights = State.get("cycle_insights") or {}
-      table.insert(cycle_insights, insight_entry)
-      State.set("cycle_insights", cycle_insights)
-      diag(string.format("Cycle %d insight stored (%d chars, %d hypotheses)",
-        cycle - 1, #(syn_text or ""), insight_entry.hypotheses_tested and #insight_entry.hypotheses_tested or 0))
-    end
-
-    -- ================================================================
     -- PHASE 1: Planning — sequential hypothesis generation
     -- Each hypothesis is generated in a separate LLM call with a focused
     -- objective. Each call sees previously proposed hypotheses to avoid
@@ -2842,9 +2819,6 @@ code: |
     Human.notify({message = string.format(
       "Cycle %d — Planning: generating hypotheses sequentially...", cycle
     ), level = "info"})
-
-    -- Refresh contradictions landscape every cycle (new feedback arrives continuously)
-    pcall(refresh_known_contradictions, cycle)
 
     -- Build base planning context (RCA + metrics + guidelines + score config)
     local planning_inject = build_planning_context({
@@ -2882,8 +2856,25 @@ code: |
     -- Adapt slot count based on consecutive failures to increase conservatism.
     -- "structural" slot (model swap, architecture, preprocessing) is included on cycle 1
     -- and again every 4 cycles thereafter, so long as we're not in failure/conservatism mode.
+    -- Skip structural if a model swap already succeeded in a prior cycle.
     local hyp_slots
     local include_structural = (consecutive_failed_cycles == 0) and (cycle == 1 or cycle % 3 == 0)
+    if include_structural and cycle > 1 then
+      local prior_insights = State.get("cycle_insights") or {}
+      for _, ci in ipairs(prior_insights) do
+        if ci.hypotheses_tested and type(ci.hypotheses_tested) == "table" then
+          for _, h in ipairs(ci.hypotheses_tested) do
+            if h.succeeded and h.name and h.name:lower():find("model") then
+              include_structural = false
+              Human.notify({message = string.format(
+                "  Skipping structural slot — model swap already succeeded in cycle %d", ci.cycle), level = "info"})
+              break
+            end
+          end
+        end
+        if not include_structural then break end
+      end
+    end
     if consecutive_failed_cycles >= 4 then
       -- Ultra-conservative: single small hypothesis only
       hyp_slots = {"feedback_incremental"}
@@ -2912,67 +2903,80 @@ code: |
       Human.notify({message = string.format(
         "  Generating hypothesis %d/%d (%s)...", slot_idx, #hyp_slots, slot_name), level = "info"})
 
-      -- Build the focused prompt for this slot
-      local hyp_prompt = build_hypothesis_prompt(slot_name, hypotheses, {
-        consecutive_failed_cycles = consecutive_failed_cycles
-      })
+      local slot_ok, slot_err = pcall(function()
+        -- Build the focused prompt for this slot
+        local hyp_prompt = build_hypothesis_prompt(slot_name, hypotheses, {
+          consecutive_failed_cycles = consecutive_failed_cycles
+        })
 
-      -- Full prompt = base context + cookbook + focused task
-      local full_prompt = planning_inject .. "\n\n" .. cookbook .. "\n\n" .. hyp_prompt
+        -- Full prompt = base context + cookbook + focused task
+        local full_prompt = planning_inject .. "\n\n" .. cookbook .. "\n\n" .. hyp_prompt
 
-      -- Each hypothesis generation gets a fresh conversation to avoid confusion
-      Tool.reset()
-      code_editor.clear_history()
-      guard_context_budget(code_editor)
+        -- Each hypothesis generation gets a fresh conversation to avoid confusion
+        Tool.reset()
+        code_editor.clear_history()
+        guard_context_budget(code_editor)
 
-      local plan_ok, plan_err = safe_editor_call(full_prompt, {
-        file_content = current_code,
-        task_description = full_prompt
-      })
+        local plan_ok, plan_err = safe_editor_call(full_prompt, {
+          file_content = current_code,
+          task_description = full_prompt
+        })
 
-      if not plan_ok then
-        diag(string.format("Hyp slot %d (%s) FAILED: %s", slot_idx, slot_name, tostring(plan_err)))
-        Human.notify({message = string.format(
-          "    Slot %d (%s) failed: %s", slot_idx, slot_name, trunc(tostring(plan_err), 100)), level = "error"})
-      else
-        local response = code_editor.output or ""
-        local parsed = parse_hypotheses(response)
-
-        if #parsed > 0 then
-          -- Take the first parsed hypothesis and re-index it
-          local hyp = parsed[1]
-          hyp.index = #hypotheses + 1
-          hyp.slot = slot_name
-          table.insert(hypotheses, hyp)
-          diag(string.format("  Hyp %d (%s): %s — %s",
-            hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
+        if not plan_ok then
+          diag(string.format("Hyp slot %d (%s) FAILED: %s", slot_idx, slot_name, tostring(plan_err)))
           Human.notify({message = string.format(
-            "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+            "    Slot %d (%s) failed: %s", slot_idx, slot_name, trunc(tostring(plan_err), 100)), level = "error"})
         else
-          -- Retry once with a nudge
-          diag(string.format("Hyp slot %d (%s) produced no parseable hypothesis, retrying...", slot_idx, slot_name))
-          guard_context_budget(code_editor)
-          local retry_ok, _ = safe_editor_call(
-            "I need exactly ONE hypothesis on a single numbered line. Example:\n"
-            .. string.format("%d. Fix something: Description of what to change and why", #hypotheses + 1),
-            {file_content = current_code, task_description = full_prompt}
-          )
-          if retry_ok then
-            local retry_parsed = parse_hypotheses(code_editor.output or "")
-            if #retry_parsed > 0 then
-              local hyp = retry_parsed[1]
-              hyp.index = #hypotheses + 1
-              hyp.slot = slot_name
-              table.insert(hypotheses, hyp)
-              diag(string.format("  Hyp %d (%s, retry): %s — %s",
-                hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
-              Human.notify({message = string.format(
-                "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
-            else
-              diag(string.format("Hyp slot %d (%s) failed after retry — no hypothesis", slot_idx, slot_name))
+          local response = code_editor.output or ""
+          local parsed = parse_hypotheses(response)
+
+          if #parsed > 0 then
+            -- Take the first parsed hypothesis and re-index it
+            local hyp = parsed[1]
+            hyp.index = #hypotheses + 1
+            hyp.slot = slot_name
+            table.insert(hypotheses, hyp)
+            diag(string.format("  Hyp %d (%s): %s — %s",
+              hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
+            Human.notify({message = string.format(
+              "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+          else
+            -- Retry once with a nudge
+            diag(string.format("Hyp slot %d (%s) produced no parseable hypothesis, retrying...", slot_idx, slot_name))
+            guard_context_budget(code_editor)
+            local retry_ok, _ = safe_editor_call(
+              "I need exactly ONE hypothesis on a single numbered line. Example:\n"
+              .. string.format("%d. Fix something: Description of what to change and why", #hypotheses + 1),
+              {file_content = current_code, task_description = full_prompt}
+            )
+            if retry_ok then
+              local retry_parsed = parse_hypotheses(code_editor.output or "")
+              if #retry_parsed > 0 then
+                local hyp = retry_parsed[1]
+                hyp.index = #hypotheses + 1
+                hyp.slot = slot_name
+                table.insert(hypotheses, hyp)
+                diag(string.format("  Hyp %d (%s, retry): %s — %s",
+                  hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
+                Human.notify({message = string.format(
+                  "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+              else
+                diag(string.format("Hyp slot %d (%s) failed after retry — no hypothesis", slot_idx, slot_name))
+              end
             end
           end
         end
+      end)
+
+      if not slot_ok then
+        -- Encoding errors (e.g. UnicodeDecodeError from lupa), OOM, or other unexpected
+        -- failures that bypassed safe_editor_call's pcall.  Log and continue — losing one
+        -- slot should not skip the whole cycle.
+        diag(string.format("Hyp slot %d (%s) unexpected error: %s", slot_idx, slot_name, trunc(tostring(slot_err), 300)))
+        Human.notify({message = string.format(
+          "    Slot %d (%s) unexpected error (skipped): %s",
+          slot_idx, slot_name, trunc(tostring(slot_err), 200)), level = "warning"})
+        code_editor.clear_history()
       end
     end
 
@@ -4338,7 +4342,6 @@ code: |
             accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
             feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
             accepted = false,
-            skip_reason = "synthesis_failed_no_hypothesis_success",
             num_candidates = #submitted_versions,
             exploration_results = submitted_versions
           }
@@ -4774,6 +4777,241 @@ code: |
 
         diag(string.format("Cycle %d complete, entering next iteration", cycle))
       end  -- end of if final_version_id (synthesis produced a version to evaluate)
+
+
+      -- ================================================================
+      -- PER-CYCLE REPORT: diagnosis + prescription + planning analysis
+      -- Runs after EVERY cycle where hypotheses were submitted and evaluated,
+      -- including cycles where all hypotheses failed (no synthesis produced).
+      -- Produces a structured report for the user, then planning notes
+      -- for hypothesis generation in the next cycle.
+      -- ================================================================
+      if #iterations > 0 then
+        Human.notify({message = string.format(
+          "Cycle %d — generating per-cycle report...", cycle), level = "info"})
+
+        local syn = {}
+
+        -- ---- Structured report instructions (output first) ----
+        table.insert(syn, string.format(
+          "You must produce output in exactly two parts in this order:\n\n"
+          .. "=== CYCLE %d REPORT ===\n\n"
+          .. "## DIAGNOSIS SUMMARY\n"
+          .. "(3-5 bullets. What did this cycle reveal? What worked, what failed, why?\n"
+          .. " What error patterns are still present? What is the realistic AC1 ceiling and why?)\n\n"
+          .. "## DIAGNOSIS DETAIL\n"
+          .. "### What happened\n"
+          .. "(metrics this cycle vs baseline, hypotheses tested, which ones ran)\n"
+          .. "### Why hypotheses worked or failed\n"
+          .. "(for each: was the premise correct? implementation off? inconclusive?)\n"
+          .. "### Error patterns still present\n"
+          .. "(2-3 concrete patterns in the residual FP/FN errors with example item counts)\n"
+          .. "### Ceiling estimate\n"
+          .. "(%% contradictions in current feedback window, max achievable AC1, what blocks further gains)\n\n"
+          .. "## PRESCRIPTION SUMMARY\n"
+          .. "(2-4 actions ranked by urgency. Format: [WHO]: [WHAT] — [evidence/impact])\n\n"
+          .. "## PRESCRIPTION DETAIL\n"
+          .. "(≤5 actions. For each: who does it, what exactly, evidence count or AC1 impact,\n"
+          .. " urgency: must-do-before-next-cycle / can-wait / needs-SME-decision)\n\n"
+          .. "=== PLANNING ANALYSIS ===\n"
+          .. "(everything after this header is your reasoning for generating hypotheses"
+          .. " in the next cycle — only present if another cycle will run)\n\n",
+          cycle))
+
+        -- ---- Cycle history ----
+        table.insert(syn, string.format(
+          "=== CYCLE %d — LESSONS LEARNED ===\n", cycle))
+        table.insert(syn,
+          "Review ALL cycles so far, then write the report above.\n")
+
+        for _, prev in ipairs(iterations) do
+          local status = prev.accepted and "ACCEPTED" or "REJECTED"
+          local fb_d = prev.feedback_deltas and prev.feedback_deltas.alignment or 0
+          table.insert(syn, string.format("--- Cycle %d (%s, FB AC1 %+.3f) ---",
+            prev.iteration, status, fb_d))
+          if prev.exploration_results and type(prev.exploration_results) == "table" then
+            for _, r in ipairs(prev.exploration_results) do
+              local r_fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
+              local r_acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
+              local hyp_label = r.hypothesis
+                and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
+                or ("Hypothesis " .. tostring(r.index))
+              table.insert(syn, string.format(
+                "  %d. %s\n     Implemented: %s\n     FB AC1 %+.3f   ACC AC1 %+.3f  %s\n",
+                r.index, hyp_label, r.done_reason or "(no note)",
+                r_fb_d, r_acc_d, r.succeeded and "SUCCEEDED" or "FAILED"))
+            end
+          end
+        end
+
+        -- Include accumulated insights from prior cycle reports
+        local prior_insights = State.get("cycle_insights") or {}
+        if #prior_insights > 0 then
+          table.insert(syn, "\n=== PRIOR CYCLE REPORTS (your analysis from previous cycles) ===")
+          for _, ci in ipairs(prior_insights) do
+            table.insert(syn, string.format("\nCycle %d analysis:\n%s", ci.cycle, ci.analysis or ""))
+          end
+        end
+
+        -- Stagnation diagnostic: when consecutive failures hit, prompt for structural diagnosis
+        if consecutive_failed_cycles >= 3 then
+          table.insert(syn, string.format(
+            "\n⚠ WARNING: %d consecutive cycles have failed to improve.\n\n"
+            .. "PLATEAU DIAGNOSIS REQUIRED. The most common reason for a sustained plateau is "
+            .. "CONTRADICTORY FEEDBACK LABELS — human reviewers disagree, so one wave of labels says "
+            .. "policy is A and another wave says policy is the opposite of A. When this happens, "
+            .. "ANY prompt change that aligns with one group will misalign with the other. "
+            .. "This is NOT solvable with more prompt engineering.\n\n"
+            .. "Before proposing new approaches, explicitly diagnose:\n"
+            .. "1. CONTRADICTORY LABELS: Are there feedback items that directly contradict each other "
+            .. "about what the correct classification should be for similar scenarios? If so, name them. "
+            .. "This is the #1 cause of plateaus and must be identified before continuing.\n"
+            .. "2. POLICY GAPS EXHAUSTED: Have all obvious missing or ambiguous policies already been "
+            .. "addressed? If so, there may be no more prompt-level wins available.\n"
+            .. "3. STRUCTURAL: Wrong model, missing preprocessing, or inherent task ambiguity?\n"
+            .. "4. TACTICAL: Is there still untried policy clarification territory?\n\n"
+            .. "If the diagnosis is contradictory labels or exhausted policy space, say so clearly "
+            .. "rather than proposing another prompt tweak that cannot possibly help.\n",
+            consecutive_failed_cycles))
+        end
+
+        table.insert(syn, "\n\nFor the PLANNING ANALYSIS section, reason through each hypothesis:\n")
+        table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
+        table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
+        table.insert(syn, "  - CLASSIFY: Is this approach (a) fundamentally wrong — the premise was flawed,\n")
+        table.insert(syn, "    (b) directionally right but implementation was off — worth refining, or\n")
+        table.insert(syn, "    (c) inconclusive — too small an effect to learn from?\n")
+        table.insert(syn, "  - What does this tell us about what this score's evaluation data actually rewards?\n")
+        table.insert(syn, "  - POLICY AUDIT: Are there still missing or ambiguous policies in the rubric that\n")
+        table.insert(syn, "    the RCA reveals? Policy gaps are the highest-value target. List any you see.\n")
+        table.insert(syn, "  - CONTRADICTIONS: Do any feedback items contradict each other about what the\n")
+        table.insert(syn, "    correct label should be for similar scenarios? If so, describe the contradiction.\n")
+        table.insert(syn, "    Contradictory labels are the most common cause of plateaus — naming them is more\n")
+        table.insert(syn, "    useful than trying yet another prompt change that cannot resolve them.\n")
+        table.insert(syn, "  - FEW-SHOT EXAMPLES: Did any hypothesis rely primarily on adding examples?\n")
+        table.insert(syn, "    If so, reflect on whether a policy rule would have been more durable.\n")
+        table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
+        table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
+        table.insert(syn, "  - If dual synthesis was used: which strategy (A=cycle-focused, B=arc-focused) worked better and why?\n")
+
+        -- Contradiction audit: wire the landscape data into synthesis reasoning
+        local known_contra = State.get("known_contradictions")
+        if known_contra and (known_contra.contradictions_found or 0) > 0 then
+          table.insert(syn, string.format(
+            "\nCONTRADICTION AUDIT — %d contradiction items detected in the current feedback window:\n",
+            known_contra.contradictions_found))
+          table.insert(syn, "  1. For each accepted cycle so far: did it target a POLICY GAP (could succeed)\n")
+          table.insert(syn, "     or a GUIDELINE CONTRADICTION (cannot succeed via prompt editing)?\n")
+          table.insert(syn, "     Policy gap fixes should produce durable gains. Contradiction-targeting fixes\n")
+          table.insert(syn, "     may show short-term gains that regress when evaluated on new feedback.\n")
+          table.insert(syn, "  2. Are any hypotheses you would consider for the next cycle targeting items\n")
+          table.insert(syn, "     in the contradiction topics listed in the CONTRADICTION LANDSCAPE above?\n")
+          table.insert(syn, "     If so, flag this explicitly — those hypotheses cannot reliably succeed.\n")
+          table.insert(syn, "  3. Has the contradiction rate changed since the run started, or is it stable?\n")
+          table.insert(syn, "     A rising contradiction rate may indicate the score's guidelines have become\n")
+          table.insert(syn, "     inconsistent with current reviewer behavior.\n")
+          if known_contra.policy_gap_count and known_contra.policy_gap_count > 0 then
+            table.insert(syn, string.format(
+              "  NOTE: %d of the contradiction items are POLICY GAPS — these CAN be addressed\n"
+              .. "  by adding explicit guideline rules. Focus on these first.\n",
+              known_contra.policy_gap_count))
+          end
+        end
+
+        table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
+        table.insert(syn,
+          "The CYCLE REPORT section will be shown to the user immediately after this cycle.\n"
+          .. "The PLANNING ANALYSIS will shape hypotheses for cycle "
+          .. tostring(cycle + 1) .. " and will be preserved for future cycles.")
+
+        guard_context_budget(code_editor)
+        local syn_ok, syn_err = safe_editor_call(table.concat(syn, ""), nil)
+        if not syn_ok then
+          diag(string.format("CODE_EDITOR FAILED in per-cycle report: %s", tostring(syn_err)))
+        end
+        local syn_text = code_editor.output or "(cycle report complete)"
+        Human.notify({message = syn_text, level = "info"})
+
+        -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
+        -- Stored in State (survives history compaction).
+        local cur = iterations[#iterations]
+        local diag_summary = syn_text:match("## DIAGNOSIS SUMMARY\n(.-)\n##")
+        local presc_summary = syn_text:match("## PRESCRIPTION SUMMARY\n(.-)\n##")
+        local insight_entry = {
+          cycle = cycle,
+          analysis = trunc(syn_text, 30000),  -- Full report for dashboard; planning uses prescription_summary
+          diagnosis_summary = trunc(diag_summary or "", 1000),
+          prescription_summary = trunc(presc_summary or "", 1000),
+          synthesis_strategy_selected = cur and cur.synthesis_strategy or nil,
+          dual_synthesis_comparison = cur and cur.dual_synthesis or nil
+        }
+        if cur and cur.exploration_results and type(cur.exploration_results) == "table" then
+          insight_entry.hypotheses_tested = {}
+          for _, r in ipairs(cur.exploration_results) do
+            table.insert(insight_entry.hypotheses_tested, {
+              name = r.hypothesis and r.hypothesis.name or ("Hypothesis " .. tostring(r.index)),
+              description = trunc(r.done_reason or "", 2000),
+              fb_delta = r.fb_deltas and r.fb_deltas.alignment or 0,
+              acc_delta = r.acc_deltas and r.acc_deltas.alignment or 0,
+              succeeded = r.succeeded or false
+            })
+          end
+        end
+        local cycle_insights = State.get("cycle_insights") or {}
+        table.insert(cycle_insights, insight_entry)
+        State.set("cycle_insights", cycle_insights)
+        diag(string.format("Cycle %d report stored (%d chars, %d hypotheses)",
+          cycle, #(syn_text or ""), insight_entry.hypotheses_tested and #insight_entry.hypotheses_tested or 0))
+
+        -- Generate procedure-level summary (one paragraph each for diagnosis and prescription).
+        -- This gives the user a top-level view without drilling into individual cycles.
+        diag("Generating procedure-level summary...")
+        local summary_parts = {}
+        table.insert(summary_parts, "You are summarizing the current state of an optimization run.\n")
+        table.insert(summary_parts, string.format("Completed cycles: %d of %d\n", cycle, params.max_iterations or 3))
+        -- Gather all cycle prescriptions and diagnoses
+        local all_insights = State.get("cycle_insights") or {}
+        for _, ci in ipairs(all_insights) do
+          table.insert(summary_parts, string.format("--- Cycle %d ---", ci.cycle))
+          if ci.diagnosis_summary and ci.diagnosis_summary ~= "" then
+            table.insert(summary_parts, "Diagnosis: " .. ci.diagnosis_summary)
+          end
+          if ci.prescription_summary and ci.prescription_summary ~= "" then
+            table.insert(summary_parts, "Prescription: " .. ci.prescription_summary)
+          end
+          table.insert(summary_parts, "")
+        end
+        table.insert(summary_parts, "Write exactly two sections:\n")
+        table.insert(summary_parts, "## DIAGNOSIS")
+        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the overall diagnosis across ALL cycles so far.")
+        table.insert(summary_parts, "What has the optimization learned? What patterns are confirmed? What is blocking further gains?")
+        table.insert(summary_parts, "Do NOT list per-cycle results — synthesize them into a coherent narrative.\n")
+        table.insert(summary_parts, "## PRESCRIPTION")
+        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the most important actions needed.")
+        table.insert(summary_parts, "Combine and prioritize across all cycles. Who needs to do what, and why?")
+        table.insert(summary_parts, "Focus on what matters NOW, not everything that was ever suggested.\n")
+        table.insert(summary_parts, "Keep each section to ONE paragraph. No bullet points. No sub-headers.")
+
+        Tool.reset()
+        code_editor.clear_history()
+        guard_context_budget(code_editor)
+        local sum_ok, sum_err = safe_editor_call(table.concat(summary_parts, "\n"), nil)
+        if sum_ok then
+          local sum_text = code_editor.output or ""
+          local sum_diag = sum_text:match("## DIAGNOSIS\n(.-)\n## PRESCRIPTION")
+          local sum_presc = sum_text:match("## PRESCRIPTION\n(.*)")
+          State.set("procedure_summary", {
+            diagnosis = trunc(sum_diag or "", 2000),
+            prescription = trunc(sum_presc or "", 2000),
+            updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            cycle = cycle
+          })
+          diag(string.format("Procedure summary updated (diag=%d, presc=%d chars)",
+            #(sum_diag or ""), #(sum_presc or "")))
+        else
+          diag(string.format("Procedure summary generation failed: %s", tostring(sum_err)))
+        end
+      end
     end  -- end of else (submitted_versions > 0)
     end)  -- end of pcall wrapper
     if not cycle_ok then
@@ -4886,7 +5124,10 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 400,
         num_topics = 12
-      }
+      },
+      cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name,
+      ttl_hours = 4,
+      fresh = false
     })
     if ok and report_result and report_result.output then
       local out = report_result.output

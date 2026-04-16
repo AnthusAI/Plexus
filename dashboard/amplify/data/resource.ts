@@ -640,7 +640,7 @@ const schema = a.schema({
             output: a.string(), // Generated report output (original markdown template)
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
-            reportConfigurationId: a.string().required(),
+            reportConfigurationId: a.string(),
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),

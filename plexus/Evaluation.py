@@ -3128,8 +3128,9 @@ class FeedbackEvaluation(Evaluation):
     def _compact_root_cause_for_parameters(cls, root_cause_payload: dict, output_attachment: str) -> dict:
         """Build minimal RCA for DynamoDB parameters. Full data lives in S3.
 
-        Keeps only top-level narrative fields needed by the dashboard UI.
-        All detailed data (item classifications, etc.) is in the S3 attachment.
+        Keeps top-level narrative fields, a compact topic list, and the full
+        misclassification_analysis summary (all fields except item_classifications_all,
+        which is the large per-item array that already lives in the S3 attachment).
         """
         if not isinstance(root_cause_payload, dict):
             raise ValueError("root_cause_payload must be a dictionary")
@@ -3154,6 +3155,16 @@ class FeedbackEvaluation(Evaluation):
                 for topic in raw_topics
                 if isinstance(topic, dict)
             ]
+
+        # Keep misclassification_analysis summary for the dashboard category breakdown
+        # and for downstream consumers (optimizer agent, Universal Code).
+        # Exclude item_classifications_all — it is large and lives only in the S3 attachment.
+        raw_misclassification = root_cause_payload.get("misclassification_analysis")
+        if isinstance(raw_misclassification, dict):
+            compact_payload["misclassification_analysis"] = {
+                k: v for k, v in raw_misclassification.items()
+                if k != "item_classifications_all"
+            }
 
         return compact_payload
 

@@ -88,19 +88,7 @@ class FeedbackContradictions(BaseReportBlock):
         self._log(f"Mode: {mode}")
 
         self._log(f"Resolving scorecard: {scorecard_param}")
-        is_uuid = len(str(scorecard_param)) > 20 and "-" in str(scorecard_param)
-        if is_uuid:
-            scorecard_obj = await asyncio.to_thread(
-                Scorecard.get_by_id,
-                id=str(scorecard_param),
-                client=self.api_client,
-            )
-        else:
-            scorecard_obj = await asyncio.to_thread(
-                Scorecard.get_by_name,
-                name=str(scorecard_param),
-                client=self.api_client,
-            )
+        scorecard_obj = await self._resolve_scorecard(str(scorecard_param))
         if not scorecard_obj:
             raise ValueError(f"Scorecard not found: {scorecard_param}")
         self._log(f"Scorecard: '{scorecard_obj.name}' ({scorecard_obj.id})")
@@ -297,30 +285,54 @@ class FeedbackContradictions(BaseReportBlock):
         formatted_output = context_header + json.dumps(output, indent=2, ensure_ascii=False)
         return formatted_output, "\n".join(self._orm.log_messages)
 
+    async def _resolve_scorecard(self, scorecard_param: str) -> Optional[Any]:
+        """Resolve a scorecard by ID, key, name, or externalId using existing model methods."""
+        is_uuid = len(scorecard_param) > 20 and "-" in scorecard_param
+        for lookup in (
+            [lambda p: asyncio.to_thread(Scorecard.get_by_id, id=p, client=self.api_client)]
+            if is_uuid
+            else [
+                lambda p: asyncio.to_thread(Scorecard.list_by_key, key=p, client=self.api_client),
+                lambda p: asyncio.to_thread(Scorecard.list_by_name, name=p, client=self.api_client),
+                lambda p: asyncio.to_thread(Scorecard.list_by_external_id, external_id=p, client=self.api_client),
+            ]
+        ):
+            try:
+                result = await lookup(scorecard_param)
+                if result:
+                    return result
+            except Exception as exc:  # lookup method not supported or lookup failed; try next
+                logger.debug("Scorecard lookup failed for %r: %s", scorecard_param, exc)
+        return None
+
     async def _resolve_score(self, score_param: str, scorecard_id: str) -> Optional[Any]:
+        """Resolve a score by ID, name, key, or externalId using existing model methods."""
         is_uuid_like = (
             len(score_param) == 36
             and score_param.count("-") == 4
             and all(char in "0123456789abcdefABCDEF-" for char in score_param)
         )
         if is_uuid_like:
-            score_obj = await asyncio.to_thread(Score.get_by_id, id=score_param, client=self.api_client)
-            scorecard_link = getattr(score_obj, "scorecardId", None) or getattr(score_obj, "scorecard_id", None)
-            if score_obj and scorecard_link == scorecard_id:
-                return score_obj
+            try:
+                score_obj = await asyncio.to_thread(Score.get_by_id, id=score_param, client=self.api_client)
+                scorecard_link = getattr(score_obj, "scorecardId", None) or getattr(score_obj, "scorecard_id", None)
+                if score_obj and scorecard_link == scorecard_id:
+                    return score_obj
+            except Exception as exc:  # ID lookup failed; fall through to name/key lookups
+                logger.debug("Score UUID lookup failed for %r: %s", score_param, exc)
 
-        scores = await feedback_utils.fetch_scores_for_scorecard(self.api_client, scorecard_id)
-        for score in scores:
-            if (
-                score["plexus_score_name"].lower() == score_param.lower()
-                or score.get("cc_question_id", "") == score_param
-                or score["plexus_score_id"] == score_param
-            ):
-                return await asyncio.to_thread(
-                    Score.get_by_id,
-                    id=score["plexus_score_id"],
-                    client=self.api_client,
-                )
+        for lookup in [
+            lambda p: asyncio.to_thread(Score.get_by_name, name=p, scorecard_id=scorecard_id, client=self.api_client),
+            lambda p: asyncio.to_thread(Score.get_by_key, key=p, scorecard_id=scorecard_id, client=self.api_client),
+            lambda p: asyncio.to_thread(Score.get_by_external_id, external_id=p, scorecard_id=scorecard_id, client=self.api_client),
+        ]:
+            try:
+                result = await lookup(score_param)
+                if result:
+                    return result
+            except Exception as exc:  # lookup method not supported or lookup failed; try next
+                logger.debug("Score lookup failed for %r: %s", score_param, exc)
+
         return None
 
     async def _fetch_guidelines(self, score_id: str) -> Optional[str]:
