@@ -3,7 +3,7 @@
   "title": "Bump tactus to v0.46.1 in pyproject and score processor lambda",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -34,10 +34,16 @@
       "author": "derek",
       "text": "Validation update: make -C score-processor-lambda test-smoke built image but smoke step failed due path expansion in Makefile ($(PWD)/tests/smoke_test.py resolving to repo root). Re-ran smoke test manually with explicit mount to score-processor-lambda/tests/smoke_test.py; container smoke suite passed (10 passed, 0 failed) and confirmed tactus 0.46.1 inside image.",
       "created_at": "2026-04-16T16:32:50.771376019Z"
+    },
+    {
+      "id": "8587dd7d-7b3a-4c35-9afb-4936ee29da12",
+      "author": "derek",
+      "text": "Completed. Updated tactus to 0.46.1 in pyproject.toml and score-processor-lambda/requirements.txt, regenerated poetry.lock, and validated lambda container imports/runtime with manual smoke execution (10 passed, 0 failed). Commit: a4f9519d on fix/plx-cd9743-tactus-0-46-1. GitHub Actions CI/CD Pipeline run 24522023640 passed.",
+      "created_at": "2026-04-16T16:44:30.222791653Z"
     }
   ],
   "created_at": "2026-04-16T16:28:25.800221659Z",
-  "updated_at": "2026-04-16T16:32:50.771376019Z",
-  "closed_at": null,
+  "updated_at": "2026-04-16T16:44:30.234377481Z",
+  "closed_at": "2026-04-16T16:44:30.234377481Z",
   "custom": {}
 }
