@@ -459,6 +459,7 @@ class EmbeddedMCPServer:
                 logger.debug(f"Added MCP directory to path: {mcp_dir}")
             
             from tools.util.think import register_think_tool
+            from tools.util.docs import register_docs_tool
             from tools.scorecard.scorecards import register_scorecard_tools
             from tools.score.scores import register_score_tools
             from tools.score.guidelines import register_guidelines_tools
@@ -653,6 +654,7 @@ class EmbeddedMCPServer:
             # Register selected tool sets
             available_tools = {
                 "think": lambda: register_think_tool(tool_capture),
+                "documentation": lambda: register_docs_tool(tool_capture),
                 "scorecard": lambda: register_scorecard_tools(tool_capture),
                 "score": lambda: (register_score_tools(tool_capture), register_guidelines_tools(tool_capture)),
                 "guidelines": lambda: register_guidelines_tools(tool_capture),
