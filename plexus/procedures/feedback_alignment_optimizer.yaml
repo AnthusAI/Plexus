@@ -2319,7 +2319,7 @@ code: |
 
   -- Dispatch contradictions analysis in background — it runs concurrently with
   -- baseline evaluations.  Results are consumed (blocking) after baselines finish.
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 24, background = true})
+  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = true})
 
   -- Try to reuse recent completed evaluations before running fresh baselines
   local n_samples = params.max_samples or 100
@@ -2327,8 +2327,8 @@ code: |
     local ok_acc, found_acc = pcall(call_plexus_tool, "plexus_evaluation_find_recent", {
       score_version_id = champion_version_id,
       evaluation_type  = "accuracy",
-      max_age_hours    = 24,
-      min_items        = n_samples,
+      max_age_hours    = 168,  -- 7 days: accuracy uses a fixed dataset, valid across restarts
+      min_items        = math.floor(n_samples * 0.8),  -- allow ~20% smaller sample counts
     })
     if ok_acc and found_acc and not found_acc.error and (found_acc.evaluation_id or found_acc.id) then
       accuracy_baseline_id      = found_acc.evaluation_id or found_acc.id
@@ -2476,7 +2476,7 @@ code: |
   State.set("last_feedback_rca", slim_rca_for_state(feedback_baseline_rca))
 
   -- Consume feedback contradictions results (blocks until background dispatch finishes)
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 24, background = false})
+  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = false})
 
   -- Fetch smoke test items from the regression dataset (accuracy baseline eval).
   -- Using items from the actual regression dataset ensures they are EDU items
