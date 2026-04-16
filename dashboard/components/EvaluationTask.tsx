@@ -2176,7 +2176,44 @@ evaluation:
   # Class Distribution
   dataset_balanced: ${evaluationData.isDatasetClassDistributionBalanced || false}
   predicted_balanced: ${evaluationData.isPredictedClassDistributionBalanced || false}
-
+${(() => {
+    try {
+      const params = parseJsonDeep(evaluationData.parameters) as Record<string, unknown> | null
+      const rc = params?.root_cause as Record<string, unknown> | null
+      const ma = rc?.misclassification_analysis as Record<string, unknown> | null
+      if (!ma) return ''
+      const totals = ma.category_totals as Record<string, number> | null
+      const overall = ma.overall_assessment as Record<string, unknown> | null
+      const nextAction = ma.primary_next_action as Record<string, unknown> | null
+      const applicability = ma.optimization_applicability as Record<string, unknown> | null
+      const mechanicalTotals = ma.mechanical_subtype_totals as Record<string, number> | null
+      if (!totals) return ''
+      const categoryLines = Object.entries(totals)
+        .map(([k, v]) => `      ${k}: ${v}`)
+        .join('\n')
+      const mechanicalLines = mechanicalTotals && Object.keys(mechanicalTotals).length > 0
+        ? '\n    mechanical_subtype_totals:\n' + Object.entries(mechanicalTotals).map(([k, v]) => `      ${k}: ${v}`).join('\n')
+        : ''
+      return `
+  # Misclassification Analysis
+  misclassification_analysis:
+    category_totals:
+${categoryLines}${mechanicalLines}
+    overall_assessment:
+      total_items: ${overall?.total_items ?? 0}
+      predominant_category: "${overall?.predominant_category ?? ''}"
+      score_fix_candidate_items: ${overall?.score_fix_candidate_items ?? 0}
+    primary_next_action:
+      action: "${(nextAction?.action as string) ?? ''}"
+      confidence: "${(nextAction?.confidence as string) ?? ''}"
+    optimization_applicability:
+      status: "${(applicability?.status as string) ?? ''}"
+      reason: "${(applicability?.reason as string) ?? ''}"
+`
+    } catch {
+      return ''
+    }
+  })()}
 # Context: This YAML contains evaluation results and metrics for analysis by humans, AI models, and other systems.
 # Usage: Can be used for reporting, monitoring, or further automated analysis.
 `;

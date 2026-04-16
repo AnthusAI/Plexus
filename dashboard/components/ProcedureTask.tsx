@@ -3,7 +3,7 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -37,7 +37,8 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
-import { EndOfRunReport } from "./OptimizationInsightsPanel"
+import { EndOfRunReport, ReportSection } from "./OptimizationInsightsPanel"
+import { CollapsibleText } from "./ui/message-utils"
 import { OptimizerMetricsChartSkeleton, CycleHistoryTableSkeleton } from "./loading-skeleton"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
@@ -185,6 +186,7 @@ export default function ProcedureTask({
   const [cycleInsights, setCycleInsights] = useState<any[]>([])
   const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
   const [endOfRunReport, setEndOfRunReport] = useState<any>(null)
+  const [procedureSummary, setProcedureSummary] = useState<{ diagnosis?: string; prescription?: string; cycle?: number } | null>(null)
   const [iterationDetails, setIterationDetails] = useState<Map<number, any>>(new Map())
   const [expandedVersionRows, setExpandedVersionRows] = useState<Set<number>>(new Set())
 
@@ -288,6 +290,7 @@ export default function ProcedureTask({
         if (state.cycle_insights) setCycleInsights(state.cycle_insights)
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
         if (state.end_of_run_report) setEndOfRunReport(state.end_of_run_report)
+        if (state.procedure_summary) setProcedureSummary(state.procedure_summary)
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
           if (it.exploration_results || it.done_reason || it.synthesis_reasoning || it.dual_synthesis) {
@@ -417,7 +420,7 @@ export default function ProcedureTask({
         setLoadedYaml(procedureData.code)
       }
     } catch (error) {
-      console.error('Error loading procedure YAML:', error)
+      console.error('Error loading procedure YAML:', formatAmplifyError(error))
       toast.error('Failed to load procedure configuration')
     } finally {
       setIsLoadingYaml(false)
@@ -726,6 +729,32 @@ export default function ProcedureTask({
             <OptimizerMetricsChart iterations={optimizerIterations} />
           ) : null}
 
+          {/* Procedure-level summary — updated after each cycle */}
+          {procedureSummary && (procedureSummary.diagnosis || procedureSummary.prescription) && (
+            <div className="mt-4 @container">
+              <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2">
+                {procedureSummary.diagnosis && procedureSummary.diagnosis.trim() && (
+                  <div className="rounded-lg border border-border/50 bg-card p-3">
+                    <ReportSection
+                      icon={<Stethoscope className="h-3.5 w-3.5" />}
+                      title="Diagnosis"
+                      summary={procedureSummary.diagnosis}
+                    />
+                  </div>
+                )}
+                {procedureSummary.prescription && procedureSummary.prescription.trim() && (
+                  <div className="rounded-lg border border-border/50 bg-card p-3">
+                    <ReportSection
+                      icon={<ClipboardList className="h-3.5 w-3.5" />}
+                      title="Prescription"
+                      summary={procedureSummary.prescription}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Cycles table - skeleton while loading, table when data arrives */}
           {isLoadingProcedureState ? (
             <CycleHistoryTableSkeleton />
@@ -969,11 +998,56 @@ export default function ProcedureTask({
                                 )}
                                 {(() => {
                                   const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
-                                  return insight?.analysis ? (
+                                  if (!insight) return null
+                                  const hasDiag = insight.diagnosis_summary && insight.diagnosis_summary.trim().length > 0
+                                  const hasPresc = insight.prescription_summary && insight.prescription_summary.trim().length > 0
+                                  // Parse detail sections from full analysis if available
+                                  let diagDetail = ''
+                                  let prescDetail = ''
+                                  if (insight.analysis) {
+                                    const diagDetailMatch = insight.analysis.match(/## DIAGNOSIS DETAIL\n([\s\S]*?)(?=\n## PRESCRIPTION|\s*$)/)
+                                    if (diagDetailMatch) diagDetail = diagDetailMatch[1].trim()
+                                    const prescDetailMatch = insight.analysis.match(/## PRESCRIPTION DETAIL\n([\s\S]*?)(?=\n===|\s*$)/)
+                                    if (prescDetailMatch) prescDetail = prescDetailMatch[1].trim()
+                                  }
+                                  if (hasDiag || hasPresc) {
+                                    return (
+                                      <div className="@container mt-1">
+                                        <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2">
+                                          {hasDiag && (
+                                            <div className="rounded-lg border border-border/50 bg-card p-3">
+                                              <ReportSection
+                                                icon={<Stethoscope className="h-3.5 w-3.5" />}
+                                                title="Diagnosis"
+                                                summary={insight.diagnosis_summary}
+                                                detail={diagDetail}
+                                              />
+                                            </div>
+                                          )}
+                                          {hasPresc && (
+                                            <div className="rounded-lg border border-border/50 bg-card p-3">
+                                              <ReportSection
+                                                icon={<ClipboardList className="h-3.5 w-3.5" />}
+                                                title="Prescription"
+                                                summary={insight.prescription_summary}
+                                                detail={prescDetail}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  // Fallback: show full analysis text when structured fields not available
+                                  return insight.analysis ? (
                                     <div>
                                       <span className="text-muted-foreground/70 text-xs block mb-1">Cycle analysis:</span>
-                                      <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{insight.analysis}</ReactMarkdown>
+                                      <div className="text-xs text-muted-foreground">
+                                        <CollapsibleText
+                                          content={insight.analysis}
+                                          maxLines={40}
+                                          className="whitespace-pre-wrap break-words text-xs text-muted-foreground"
+                                        />
                                       </div>
                                     </div>
                                   ) : null
