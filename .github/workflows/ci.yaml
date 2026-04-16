@@ -205,7 +205,7 @@ jobs:
             --image-scanning-configuration scanOnPush=true >/dev/null
 
       - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@376925c9d111252e87ae59691e5a442dd100ef6a  # v2
 
       - name: Build and push console worker image
         shell: bash
