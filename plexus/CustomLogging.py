@@ -47,6 +47,17 @@ def _get_aws_credentials():
     
     return access_key, secret_key, region, is_configured
 
+
+def _cloudwatch_logging_enabled():
+    """
+    Return True when CloudWatch log shipping is enabled.
+
+    Local/dev runs can disable watchtower delays while still using AWS creds for
+    data/API access by setting PLEXUS_DISABLE_CLOUDWATCH_LOGS=1.
+    """
+    disable = os.getenv("PLEXUS_DISABLE_CLOUDWATCH_LOGS", "").strip().lower()
+    return disable not in {"1", "true", "yes", "on"}
+
 def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
     """
     Configure the 'plexus' named logger (NOT the root logger).
@@ -88,8 +99,9 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME):
     # Check AWS credentials
     _, _, region, is_configured = _get_aws_credentials()
 
-    # Only add CloudWatch handler if AWS credentials are available
-    if is_configured:
+    # Only add CloudWatch handler if AWS credentials are available and log
+    # shipping is explicitly enabled.
+    if is_configured and _cloudwatch_logging_enabled():
         try:
             log_stream_name = f"plexus-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
             cloudwatch_handler = watchtower.CloudWatchLogHandler(
