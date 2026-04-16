@@ -42,6 +42,22 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   The filter extracts only the transcript windows around keywords you specify, greatly
   reducing noise without losing the relevant content. See C2 below for YAML details.
 
+▶ PHONETIC TRANSCRIPTION ERROR SIGNAL → mandatory Category A hypothesis (fuzzy-matching rule):
+
+  Add this hypothesis if the score evaluates proper nouns that are likely to be
+  transcribed as phonetically similar common words. This is extremely common for:
+  - School names (e.g., "Fortis College" → "forty's college", "forty college")
+  - Company/product names (e.g., "Plexus" → "plexis", "flexus")
+  - Program names with uncommon terms (e.g., "Gerontology" → "gynecology")
+  - Acronyms that expand into longer phrases ("HVAC" → "heating and cooling")
+  - Any proper noun that sounds like a common word when spoken aloud
+
+  If the RCA shows false negatives where the human says the agent DID mention a school
+  or product but the LLM said it didn't, the most likely cause is a transcription
+  variant the prompt doesn't recognize. The fix is a Category A rule in the system_message
+  or user_message instructing the LLM to accept phonetically similar variants, with
+  explicit examples of the known substitution patterns visible in the transcripts.
+
 ▶ STALE MODEL SIGNAL → mandatory C3 model-swap hypothesis (gpt-5.4-nano):
 
   Add this hypothesis if score_config.yaml contains model_name: gpt-4o-mini or any
