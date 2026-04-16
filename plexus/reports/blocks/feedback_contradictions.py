@@ -301,8 +301,8 @@ class FeedbackContradictions(BaseReportBlock):
                 result = await lookup(scorecard_param)
                 if result:
                     return result
-            except Exception:
-                pass
+            except Exception as exc:  # lookup method not supported or lookup failed; try next
+                logger.debug("Scorecard lookup failed for %r: %s", scorecard_param, exc)
         return None
 
     async def _resolve_score(self, score_param: str, scorecard_id: str) -> Optional[Any]:
@@ -318,8 +318,8 @@ class FeedbackContradictions(BaseReportBlock):
                 scorecard_link = getattr(score_obj, "scorecardId", None) or getattr(score_obj, "scorecard_id", None)
                 if score_obj and scorecard_link == scorecard_id:
                     return score_obj
-            except Exception:
-                pass
+            except Exception as exc:  # ID lookup failed; fall through to name/key lookups
+                logger.debug("Score UUID lookup failed for %r: %s", score_param, exc)
 
         for lookup in [
             lambda p: asyncio.to_thread(Score.get_by_name, name=p, scorecard_id=scorecard_id, client=self.api_client),
@@ -330,8 +330,8 @@ class FeedbackContradictions(BaseReportBlock):
                 result = await lookup(score_param)
                 if result:
                     return result
-            except Exception:
-                pass
+            except Exception as exc:  # lookup method not supported or lookup failed; try next
+                logger.debug("Score lookup failed for %r: %s", score_param, exc)
 
         return None
 
