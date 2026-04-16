@@ -1,6 +1,54 @@
 === CHANGE COOKBOOK — OPTIONS TO TRY ===
 
-IMPORTANT: First scan score_config.yaml above to ensure you are NOT proposing something already there.
+─────────────────────────────────────────────────────────────────────────────────
+SCAN FIRST — MANDATORY PATTERN CHECK (do this before generating any hypotheses):
+─────────────────────────────────────────────────────────────────────────────────
+
+Before proposing any hypotheses, scan score_config.yaml for the patterns below.
+When a pattern matches, you MUST include the indicated hypothesis in your candidate
+set — even if you also include Category A or B hypotheses.
+These structural changes are often the highest-leverage option available, and
+prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
+
+▶ WORD-LEVEL TIMING SIGNAL → mandatory C1b.1 hypothesis (DeepgramInputSource + words + timestamps):
+
+  Add this hypothesis if the score config contains ANY of the following:
+  - language like "each [X] requires its own individual affirmative response"
+  - language like "cannot group multiple [X] together for a single response"
+  - language like "individual" + "affirmative" + "each" in proximity
+  - any rubric requiring knowledge of WHICH short response ("Yes", "I agree", etc.)
+    followed WHICH specific item in a list (school, product, disclosure, offer, etc.)
+  - any rubric checking sequential per-item acknowledgment or per-item consent
+  - any rubric involving interruptions, crosstalk, or overlap between speakers
+  - any rubric that asks whether a speaker finished before another speaker started
+
+  WHY THIS MATTERS: The default `text` transcript is produced at sentence/paragraph
+  level. Short responses like "Yes" or "I agree" get repositioned by the sentence-
+  grouping algorithm — they may appear adjacent to the WRONG list item in the text.
+  Prompt fixes that say "be careful which Yes goes with which school" CANNOT work if
+  the transcript doesn't show the correct temporal order to begin with.
+  Word-level Deepgram format (format: words + include_timestamps: true) preserves
+  exact temporal order, making it unambiguous which "Yes" followed which school pitch.
+  See C1b.1 below for the full YAML snippet.
+
+▶ LONG/NOISY TRANSCRIPT SIGNAL → consider C2 hypothesis (RelevantWindowsTranscriptFilter):
+
+  Add this as one of your hypotheses if:
+  - The transcripts are long (>2000 words) and the score only cares about a small section
+  - The RCA shows the LLM getting confused by irrelevant parts of the call
+  - The rubric is about a specific topic (repairs, disclosures, school pitches, etc.)
+    that appears in only part of a long transcript
+
+  The filter extracts only the transcript windows around keywords you specify, greatly
+  reducing noise without losing the relevant content. See C2 below for YAML details.
+
+▶ STALE MODEL SIGNAL → mandatory C3 model-swap hypothesis (gpt-5.4-nano):
+
+  Add this hypothesis if score_config.yaml contains model_name: gpt-4o-mini or any
+  model that is NOT gpt-5.4-nano or newer. Switching to gpt-5.4-nano is cheap and
+  often produces meaningful accuracy gains. See C3 below.
+
+─────────────────────────────────────────────────────────────────────────────────
 
 DIRECTIONAL AWARENESS: The Feedback RCA above is grouped by confusion matrix segment
 (e.g., 'Predicted: Yes / Actual: No' vs 'Predicted: No / Actual: Yes').
