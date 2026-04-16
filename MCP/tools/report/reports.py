@@ -462,7 +462,11 @@ def register_report_tools(mcp: FastMCP):
         config_id: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
         block_class: Optional[str] = None,
-        block_config: Optional[Dict[str, Any]] = None
+        block_config: Optional[Dict[str, Any]] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = None,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False
     ) -> Union[str, Dict[str, Any]]:
         """
         Generate a report or run a single report block.
@@ -480,6 +484,10 @@ def register_report_tools(mcp: FastMCP):
         - parameters: Dictionary of parameters for the report
         - block_class: Name of a report block class to run in isolation (e.g., "FeedbackContradictions")
         - block_config: Configuration dict for the block (e.g., scorecard, score, mode, days)
+        - cache_key: Deterministic key for caching the block result as a Report record. When provided with ttl_hours, returns cached results if fresh enough.
+        - ttl_hours: Cache time-to-live in hours. If a cached result exists within this window, it is returned without re-running the block.
+        - fresh: If true, ignore cache and force re-run (result is still cached for future calls).
+        - background: If true, dispatch the block execution in a background thread and return immediately. A subsequent call with the same cache_key (and background=false) will wait for the result.
 
         Provide either config_id (full report) or block_class (single block), not both.
         """
@@ -524,25 +532,53 @@ def register_report_tools(mcp: FastMCP):
             if block_class:
                 logger.info(f"[MCP] Running single report block: {block_class} with config: {block_config}")
                 try:
-                    block_def = {
-                        "class_name": block_class,
-                        "config": block_config or {},
-                        "block_name": block_class
-                    }
-                    report_params = {"account_id": account_id}
-                    output_data, log_output, resolved_dataset_id = _instantiate_and_run_block(
-                        block_def=block_def,
-                        report_params=report_params,
-                        api_client=client
-                    )
-                    if output_data is not None:
-                        logger.info(f"[MCP] Block {block_class} completed successfully")
+                    # Use cached execution when cache_key or ttl_hours is provided
+                    if cache_key is not None or ttl_hours is not None or background:
+                        from plexus.reports.service import run_block_cached
+                        output_data, log_output, was_cached = run_block_cached(
+                            block_class=block_class,
+                            block_config=block_config or {},
+                            account_id=account_id,
+                            client=client,
+                            cache_key=cache_key,
+                            ttl_hours=ttl_hours if ttl_hours is not None else 24,
+                            fresh=fresh or False,
+                            background=background or False,
+                        )
+                    else:
+                        block_def = {
+                            "class_name": block_class,
+                            "config": block_config or {},
+                            "block_name": block_class
+                        }
+                        report_params = {"account_id": account_id}
+                        output_data, log_output, resolved_dataset_id = _instantiate_and_run_block(
+                            block_def=block_def,
+                            report_params=report_params,
+                            api_client=client
+                        )
+                        was_cached = False
+
+                    # Background dispatch returns a dict with status key
+                    if isinstance(output_data, dict) and output_data.get("status") in ("dispatched", "already_dispatched"):
+                        logger.info(f"[MCP] Block {block_class} dispatched in background")
                         return {
+                            "status": output_data["status"],
+                            "cache_key": output_data.get("cache_key"),
+                            "message": f"Block {block_class} dispatched to background thread"
+                        }
+
+                    if output_data is not None:
+                        logger.info(f"[MCP] Block {block_class} completed successfully (cached={was_cached})")
+                        result = {
                             "status": "success",
                             "output": output_data,
                             "log": log_output,
                             "message": f"Block {block_class} executed successfully"
                         }
+                        if was_cached:
+                            result["cached"] = True
+                        return result
                     else:
                         logger.error(f"[MCP] Block {block_class} failed: {log_output}")
                         return {

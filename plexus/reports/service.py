@@ -1,5 +1,6 @@
 import importlib
 import logging
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 import json
 from datetime import datetime, timezone # Added datetime
@@ -53,7 +54,9 @@ ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT = os.environ.get(
 
 def _normalize_output_for_storage(output_payload: Any) -> Optional[str]:
     """
-    Normalize block output payload to a JSON string for durable storage/attachments.
+    Normalize block output payload to a string for durable storage/attachments.
+
+    Strings are stored as-is (no double-encoding). Dicts/lists are JSON-dumped.
     """
     if output_payload is None:
         return None
@@ -486,6 +489,330 @@ def _instantiate_and_run_block(
         logger.exception(f"{error_msg}")
         # Return None for JSON output and the error message as the log string
         return None, f"{error_msg}\nDetails:\n{detailed_error}", None
+
+_PROGRAMMATIC_CONFIG_NAME = "__programmatic_blocks__"
+_programmatic_config_id_cache: Optional[str] = None
+
+# In-process tracking for background block dispatches.
+# Maps cache_key → (threading.Event, output_data, log_string).
+# The Event is set when the background thread finishes.
+_background_tasks: Dict[str, Tuple[threading.Event, Optional[Any], Optional[str]]] = {}
+_background_lock = threading.Lock()
+
+
+def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) -> str:
+    """Get or create a sentinel ReportConfiguration for programmatic block results."""
+    global _programmatic_config_id_cache
+    if _programmatic_config_id_cache:
+        return _programmatic_config_id_cache
+
+    existing = ReportConfiguration.get_by_name(
+        _PROGRAMMATIC_CONFIG_NAME, account_id, client
+    )
+    if existing:
+        _programmatic_config_id_cache = existing.id
+        return existing.id
+
+    rc = ReportConfiguration.create(
+        client=client,
+        name=_PROGRAMMATIC_CONFIG_NAME,
+        accountId=account_id,
+        configuration="{}",
+        description="Auto-created sentinel for programmatic cached report blocks",
+    )
+    _programmatic_config_id_cache = rc.id
+    logger.info("Created programmatic ReportConfiguration %s", rc.id)
+    return rc.id
+
+
+def _persist_block_result(
+    cache_key: str,
+    block_class: str,
+    block_config: dict,
+    output_data: Any,
+    log_output: Optional[str],
+    account_id: str,
+    client: PlexusDashboardClient,
+) -> None:
+    """Persist a block result as Report + ReportBlock records."""
+    config_id = _get_programmatic_config_id(account_id, client)
+
+    task = Task.create(
+        client=client,
+        type="ReportBlock",
+        target=cache_key,
+        command="run_block_cached",
+        accountId=account_id,
+        status="completed",
+        dispatchStatus="COMPLETED",
+    )
+
+    report = Report.create(
+        client=client,
+        accountId=account_id,
+        taskId=task.id,
+        name=cache_key,
+        reportConfigurationId=config_id,
+        parameters=block_config,
+    )
+
+    # Derive a human-readable display name from the class name
+    # e.g. "FeedbackContradictions" → "Feedback Contradictions"
+    display_name = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', block_class)
+
+    # Build the markdown block template that the dashboard's customCodeBlockRenderer
+    # expects. Report.output must contain ```block ... ``` syntax so ReportTask.tsx
+    # can find the matching ReportBlock and render the FC component correctly.
+    block_yaml = yaml.dump(block_config, default_flow_style=False).strip()
+    report_output = (
+        f'```block name="{display_name}"\n'
+        f'class: {block_class}\n'
+        f'{block_yaml}\n'
+        '```'
+    )
+    report.update(output=report_output)
+
+    # Create the ReportBlock with a placeholder; then compact via S3 so the
+    # dashboard can render it correctly (S3 attachment + compact inline envelope).
+    rb = ReportBlock.create(
+        client=client,
+        reportId=report.id,
+        position=0,
+        type=block_class,
+        name=display_name,
+        output="{}",  # placeholder — updated below
+        log=log_output,
+    )
+
+    compact_output_json, _, output_path = _persist_output_artifact_and_compact_if_needed(
+        report_block_id=rb.id,
+        output_payload=output_data,
+        existing_details_files_list=[],
+        log_prefix="[run_block_cached]",
+    )
+
+    block_output = compact_output_json if compact_output_json is not None else json.dumps(output_data, ensure_ascii=False)
+    update_input: dict = {"id": rb.id, "output": block_output}
+    if output_path:
+        update_input["attachedFiles"] = [output_path]
+    mutation = """
+    mutation UpdateReportBlock($input: UpdateReportBlockInput!) {
+        updateReportBlock(input: $input) { id output attachedFiles }
+    }
+    """
+    client.execute(mutation, {"input": update_input})
+
+    logger.info("Cached block result as Report %s (block %s)", report.id, rb.id)
+
+
+def _fetch_first_block_output(report_id: str, client: PlexusDashboardClient) -> Optional[Any]:
+    """Fetch block data from the first ReportBlock of a report.
+
+    Used by _check_db_cache when Report.output is a markdown block template
+    (new format) rather than raw JSON (old format).
+    """
+    query = """
+    query GetReportBlocks($id: ID!) {
+      getReport(id: $id) { reportBlocks { items { output } } }
+    }
+    """
+    try:
+        result = client.execute(query, {"id": report_id})
+        items = ((result.get("getReport") or {})
+                 .get("reportBlocks", {})
+                 .get("items", []))
+        if not items:
+            return None
+        block_output = items[0].get("output", "")
+        if not block_output:
+            return None
+        if not isinstance(block_output, str):
+            return block_output
+        parsed = json.loads(block_output)
+        if isinstance(parsed, dict) and parsed.get("output_compacted") and S3_UTILS_AVAILABLE:
+            attachment = parsed.get("output_attachment", "")
+            if attachment:
+                from plexus.reports.s3_utils import download_report_block_file
+                content, _ = download_report_block_file(attachment)
+                if not content:
+                    return None
+                try:
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    # S3 file may contain raw block output (not JSON-wrapped) from an
+                    # older persist path — return it as-is; callers accept either type.
+                    logger.debug(
+                        "Block output S3 file is not JSON (report %s, attachment %s); "
+                        "returning raw content",
+                        report_id,
+                        attachment,
+                    )
+                    return content
+        return parsed
+    except Exception as exc:
+        logger.warning("Failed to fetch block output for report %s: %s", report_id, exc)
+        return None
+
+
+def _check_db_cache(
+    cache_key: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+    ttl_hours: float,
+) -> Optional[Any]:
+    """Check database cache for a report block result.  Returns output_data or None.
+
+    Reads from Report.output, which stores the raw block data (not the compact
+    S3-attachment envelope stored in ReportBlock.output for dashboard rendering).
+    """
+    from datetime import timedelta
+
+    existing = Report.get_by_name(cache_key, account_id, client)
+    if not existing or not existing.createdAt:
+        return None
+    age = datetime.now(timezone.utc) - existing.createdAt
+    if age >= timedelta(hours=ttl_hours):
+        return None
+    output_raw = existing.output
+    if not output_raw:
+        return None
+    if isinstance(output_raw, str):
+        stripped = output_raw.strip()
+        # Markdown block template (new format) — actual data is in the ReportBlock
+        if not stripped.startswith('{') and not stripped.startswith('['):
+            return _fetch_first_block_output(existing.id, client)
+        try:
+            parsed = json.loads(output_raw)
+            return parsed
+        except json.JSONDecodeError:
+            return output_raw
+    return output_raw
+
+
+def run_block_cached(
+    block_class: str,
+    block_config: dict,
+    account_id: str,
+    client: PlexusDashboardClient,
+    cache_key: Optional[str] = None,
+    ttl_hours: float = 24,
+    fresh: bool = False,
+    background: bool = False,
+) -> Tuple[Optional[Any], Optional[str], bool]:
+    """Run a report block, returning cached results when available.
+
+    Creates a Report + ReportBlock record to persist the result.  On subsequent
+    calls with the same *cache_key* within *ttl_hours*, returns the stored
+    output without re-running the block.
+
+    When *background* is True and the cache misses, the block is dispatched to
+    a daemon thread and this function returns immediately with
+    ``({"status": "dispatched", "cache_key": cache_key}, None, False)``.
+    A later call with the same *cache_key* and ``background=False`` (the default)
+    will wait for the background thread to finish and return its results.
+
+    Returns (output_data, log_string, was_cached).
+    """
+    if cache_key is None:
+        config_str = json.dumps(block_config, sort_keys=True)
+        cache_key = f"cache:{block_class}:{config_str}"
+
+    # --- Check database cache ---
+    if not fresh:
+        try:
+            cached = _check_db_cache(cache_key, account_id, client, ttl_hours)
+            if cached is not None:
+                logger.info("Cache HIT for %s (ttl=%sh)", cache_key, ttl_hours)
+                return cached, None, True
+        except Exception as exc:
+            logger.warning("Cache lookup failed for %s: %s", cache_key, exc)
+
+    # --- Check in-process background task ---
+    with _background_lock:
+        bg = _background_tasks.get(cache_key)
+
+    if bg is not None:
+        event, _, _ = bg
+        if background:
+            # Already dispatched — don't start a second one
+            logger.info("Background task already dispatched for %s", cache_key)
+            return {"status": "already_dispatched", "cache_key": cache_key}, None, False
+        # Foreground caller: wait for the background thread to finish
+        logger.info("Waiting for background task %s to complete…", cache_key)
+        event.wait(timeout=600)  # 10 min max
+        with _background_lock:
+            bg = _background_tasks.pop(cache_key, None)
+        if bg and bg[0].is_set() and bg[1] is not None:
+            logger.info("Background task %s completed — returning results", cache_key)
+            return bg[1], bg[2], True
+        logger.warning("Background task %s timed out or failed — running synchronously", cache_key)
+
+    # --- Background dispatch mode ---
+    if background:
+        event = threading.Event()
+        with _background_lock:
+            _background_tasks[cache_key] = (event, None, None)
+
+        def _run():
+            try:
+                block_def = {
+                    "class_name": block_class,
+                    "config": block_config,
+                    "block_name": block_class,
+                }
+                report_params = {"account_id": account_id}
+                output_data, log_output, _ = _instantiate_and_run_block(
+                    block_def=block_def,
+                    report_params=report_params,
+                    api_client=client,
+                )
+                with _background_lock:
+                    _background_tasks[cache_key] = (event, output_data, log_output)
+                if output_data is not None:
+                    _persist_block_result(
+                        cache_key, block_class, block_config,
+                        output_data, log_output, account_id, client,
+                    )
+            except Exception as exc:
+                logger.exception("Background block %s failed: %s", cache_key, exc)
+                with _background_lock:
+                    _background_tasks[cache_key] = (event, None, str(exc))
+            finally:
+                event.set()
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        logger.info("Dispatched background block %s", cache_key)
+        return {"status": "dispatched", "cache_key": cache_key}, None, False
+
+    # --- Synchronous execution (cache miss, no background) ---
+    logger.info("Cache MISS for %s — running block %s", cache_key, block_class)
+    block_def = {
+        "class_name": block_class,
+        "config": block_config,
+        "block_name": block_class,
+    }
+    report_params = {"account_id": account_id}
+    output_data, log_output, resolved_dataset_id = _instantiate_and_run_block(
+        block_def=block_def,
+        report_params=report_params,
+        api_client=client,
+    )
+
+    if output_data is None:
+        return None, log_output, False
+
+    # --- Persist as Report + ReportBlock ---
+    try:
+        _persist_block_result(
+            cache_key, block_class, block_config,
+            output_data, log_output, account_id, client,
+        )
+    except Exception as exc:
+        logger.warning("Failed to cache block result: %s", exc)
+
+    return output_data, log_output, False
+
 
 # --- End Block Processing Logic ---
 
