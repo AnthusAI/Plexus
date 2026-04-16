@@ -575,6 +575,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             elif key in ('score', 'score_id'):
                 score_identifier_for_create = str(val)
         # 2. --set params take precedence
+        parsed_set_params: dict = {}
         if set_params:
             for param in set_params:
                 if '=' in param:
@@ -585,6 +586,17 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                         scorecard_identifier_for_create = v
                     elif k in ('score', 'score_id') and v:
                         score_identifier_for_create = v
+                    parsed_set_params[k] = v
+
+        # Inject --set param values into YAML params so they are persisted in the
+        # stored procedure code (the same way the dashboard does it at creation time).
+        if parsed_set_params and isinstance(config, dict) and 'params' in config:
+            yaml_params_def = config.get('params', {})
+            if isinstance(yaml_params_def, dict):
+                for k, v in parsed_set_params.items():
+                    if k in yaml_params_def and isinstance(yaml_params_def[k], dict):
+                        yaml_params_def[k]['value'] = v
+                yaml_config = yaml_lib.dump(config, allow_unicode=True, default_flow_style=False)
 
         console.print("Creating procedure from YAML...")
         result = service.create_procedure(

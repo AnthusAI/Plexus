@@ -140,10 +140,28 @@ class PlexusStorageAdapter:
                     logger.warning("Procedure metadata was not valid JSON; defaulting to empty object")
                     raw_metadata = {}
 
+            def _load_s3_field(raw_value: Any, field_name: str, default: Any) -> Any:
+                """Return field value, downloading from S3 if it's an offloaded pointer."""
+                if isinstance(raw_value, dict) and '_s3_key' in raw_value:
+                    try:
+                        s3 = boto3.client('s3')
+                        obj = s3.get_object(Bucket=_S3_BUCKET, Key=raw_value['_s3_key'])
+                        loaded = json.loads(obj['Body'].read().decode('utf-8'))
+                        logger.info("Loaded %s from S3: %s/%s", field_name, _S3_BUCKET, raw_value['_s3_key'])
+                        return loaded
+                    except (ClientError, json.JSONDecodeError) as s3_err:
+                        logger.error("Failed to load %s from S3: %s — using default", field_name, s3_err)
+                        return default
+                return raw_value if raw_value is not None else default
+
+            # Load checkpoints — may be offloaded to S3 for large procedures
+            raw_checkpoints = raw_metadata.get('checkpoints', {})
+            checkpoints_dict = _load_s3_field(raw_checkpoints, 'checkpoints', {})
+
             # Convert checkpoint data to execution_log
             execution_log = []
             position = 0
-            for name, ckpt_data in raw_metadata.get('checkpoints', {}).items():
+            for name, ckpt_data in checkpoints_dict.items():
                 execution_log.append(CheckpointEntry(
                     position=position,
                     type='checkpoint',
@@ -152,17 +170,9 @@ class PlexusStorageAdapter:
                 ))
                 position += 1
 
-            # Load state — may be offloaded to S3 for large procedures
-            state_data = raw_metadata.get('state', {})
-            if isinstance(state_data, dict) and '_s3_key' in state_data:
-                try:
-                    s3 = boto3.client('s3')
-                    obj = s3.get_object(Bucket=_S3_BUCKET, Key=state_data['_s3_key'])
-                    state_data = json.loads(obj['Body'].read().decode('utf-8'))
-                    logger.info("Loaded state from S3: %s/%s", _S3_BUCKET, state_data.get('_s3_key', ''))
-                except (ClientError, json.JSONDecodeError) as s3_err:
-                    logger.error("Failed to load state from S3: %s — using empty state", s3_err)
-                    state_data = {}
+            # Load state and lua_state — may be offloaded to S3 for large procedures
+            state_data = _load_s3_field(raw_metadata.get('state', {}), 'state', {})
+            lua_state_data = _load_s3_field(raw_metadata.get('lua_state', {}), 'lua_state', {})
 
             # Create metadata object
             metadata = ProcedureMetadata(
@@ -170,7 +180,7 @@ class PlexusStorageAdapter:
                 execution_log=execution_log,
                 replay_index=raw_metadata.get('replay_index', 0),  # Default to 0 if not set
                 state=state_data,
-                lua_state=raw_metadata.get('lua_state', {}),
+                lua_state=lua_state_data,
                 status=procedure_data.get('status') or 'RUNNING',
                 waiting_on_message_id=procedure_data.get('waitingOnMessageId')
             )
@@ -234,28 +244,45 @@ class PlexusStorageAdapter:
 
             serialized = json.dumps(metadata_json)
 
-            # If metadata exceeds DynamoDB threshold, offload state to S3
+            # If metadata exceeds DynamoDB threshold, offload large fields to S3
+            # Cascade: state → lua_state → checkpoints, stopping once it fits.
             if len(serialized) > _S3_THRESHOLD:
-                s3_key = f"procedures/{metadata.procedure_id}/state.json"
-                state_json = json.dumps(metadata.state)
-                try:
-                    s3 = boto3.client('s3')
-                    s3.put_object(
-                        Bucket=_S3_BUCKET,
-                        Key=s3_key,
-                        Body=state_json.encode('utf-8'),
-                        ContentType='application/json'
-                    )
-                    logger.info(
-                        "Offloaded %d bytes of state to S3: %s/%s",
-                        len(state_json), _S3_BUCKET, s3_key
-                    )
-                    # Replace state with S3 reference in metadata
-                    metadata_json['state'] = {'_s3_key': s3_key}
+                s3 = boto3.client('s3')
+                pid = metadata.procedure_id
+
+                def _offload(field_name: str, payload: Any, s3_path: str) -> None:
+                    payload_json = json.dumps(payload)
+                    try:
+                        s3.put_object(
+                            Bucket=_S3_BUCKET,
+                            Key=s3_path,
+                            Body=payload_json.encode('utf-8'),
+                            ContentType='application/json',
+                        )
+                        logger.info(
+                            "Offloaded %d bytes of %s to S3: %s/%s",
+                            len(payload_json), field_name, _S3_BUCKET, s3_path,
+                        )
+                    except ClientError as s3_err:
+                        logger.error("Failed to offload %s to S3: %s", field_name, s3_err)
+                        raise
+
+                # 1. Offload state
+                _offload('state', metadata.state, f"procedures/{pid}/state.json")
+                metadata_json['state'] = {'_s3_key': f"procedures/{pid}/state.json"}
+                serialized = json.dumps(metadata_json)
+
+                # 2. If still too large, offload lua_state
+                if len(serialized) > _S3_THRESHOLD:
+                    _offload('lua_state', metadata.lua_state, f"procedures/{pid}/lua_state.json")
+                    metadata_json['lua_state'] = {'_s3_key': f"procedures/{pid}/lua_state.json"}
                     serialized = json.dumps(metadata_json)
-                except ClientError as s3_err:
-                    logger.error("Failed to offload state to S3: %s", s3_err)
-                    raise
+
+                # 3. If still too large, offload checkpoints
+                if len(serialized) > _S3_THRESHOLD:
+                    _offload('checkpoints', checkpoints_dict, f"procedures/{pid}/checkpoints.json")
+                    metadata_json['checkpoints'] = {'_s3_key': f"procedures/{pid}/checkpoints.json"}
+                    serialized = json.dumps(metadata_json)
 
             self.client.execute(mutation, {
                 'id': metadata.procedure_id,
