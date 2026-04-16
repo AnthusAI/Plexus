@@ -108,6 +108,11 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     following concepts, this is a high-value hypothesis — try it early:
       - "interrupted", "cut off", "talked over", "interjected"
       - "acknowledged each", "confirmed each item", "went through the list", "covered all items"
+      - "each [item] requires its own [response/confirmation]" — individual per-item affirmation
+      - Scores that check whether a RESPONSE was for a SPECIFIC item vs. grouped items
+        (e.g., "each school requires its own individual affirmative response" — the LLM needs
+         to know which "Yes" came after which pitch, and sentence-level grouping obscures this
+         by repositioning short responses away from the pitches they actually followed)
       - "before [speaker] finished", "while [speaker] was still talking"
       - "overlapping speech", "simultaneous", "both speaking at once"
       - Any temporal relationship between speaker turns that depends on knowing WHEN words occurred
