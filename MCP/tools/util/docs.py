@@ -43,9 +43,9 @@ def register_docs_tool(mcp: FastMCP):
                 return f"Error: Invalid filename '{filename}'. Valid options are: {available}"
 
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            mcp_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-            plexus_dir = os.path.dirname(mcp_dir)
-            docs_dir = os.path.join(plexus_dir, "plexus", "docs")
+            # Navigate: util/ -> tools/ -> MCP/ -> project_root/
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+            docs_dir = os.path.join(project_root, "plexus", "docs")
             file_path = os.path.join(docs_dir, valid_files[filename])
 
             logger.info(f"Reading documentation file: {file_path}")
