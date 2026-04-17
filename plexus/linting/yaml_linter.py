@@ -15,7 +15,7 @@ from ruamel.yaml.scanner import ScannerError
 from ruamel.yaml.parser import ParserError
 from ruamel.yaml.constructor import ConstructorError
 
-from .rules import RuleEngine, ProcessorValidationRule, ConfidenceConfigurationRule
+from .rules import RuleEngine, ProcessorValidationRule, ConfidenceConfigurationRule, DeepgramInputSourcePlacementRule
 from .schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
@@ -141,6 +141,7 @@ class YamlLinter:
         default_rules = [
             ProcessorValidationRule(),
             ConfidenceConfigurationRule(),
+            DeepgramInputSourcePlacementRule(),
         ]
         self.rule_engine = RuleEngine(default_rules + (custom_rules or []))
         

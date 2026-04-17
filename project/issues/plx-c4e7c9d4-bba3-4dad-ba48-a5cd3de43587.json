@@ -34,10 +34,16 @@
       "author": "ryan",
       "text": "## Optimizer cognition slides created\n\nAdded four Excalidraw slides in documentation/diagrams/optimizer-multi-agent-procedure/:\n- From Judgment to Reflection to Learning.excalidraw\n- Cognition.excalidraw\n- Meta-cognition.excalidraw\n- Meta-learning.excalidraw\n\nValidation completed:\n- jq JSON parse passes for all 4 files\n- all slide bounds are within a consistent 1600x900 canvas\n- terminology is consistent across summary and detail slides",
       "created_at": "2026-04-16T16:50:49.696857Z"
+    },
+    {
+      "id": "3b5393e6-7158-4496-89a7-a2342805d5c4",
+      "author": "ryan",
+      "text": "## Building custom Cognition slide\n\nDesigning a bespoke cognition slide rather than reusing the old generic detail-slide template.\n\nPlanned content:\n- stream of transcript items\n- scorecard + score evaluation layer\n- per-item prediction outputs with value and explanation\n- feedback edits shown only on some items to establish that feedback is intermittent rather than universal\n\nThis slide will stay on the task-judgment step and avoid drifting into RCA or optimization-cycle detail.",
+      "created_at": "2026-04-16T17:59:55.301082Z"
     }
   ],
   "created_at": "2026-04-16T16:40:05.681970Z",
-  "updated_at": "2026-04-16T16:50:49.696857Z",
+  "updated_at": "2026-04-16T17:59:55.301082Z",
   "closed_at": null,
   "custom": {}
 }
