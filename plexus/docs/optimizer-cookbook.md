@@ -10,7 +10,14 @@ set — even if you also include Category A or B hypotheses.
 These structural changes are often the highest-leverage option available, and
 prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
 
-▶ WORD-LEVEL TIMING SIGNAL → mandatory C1b.1 hypothesis (DeepgramInputSource + words + timestamps):
+▶ STALE MODEL SIGNAL → mandatory C3 model-swap hypothesis — CHECK THIS FIRST:
+
+  Add a model-swap hypothesis (highest priority, lowest risk) if score_config.yaml
+  contains model_name: gpt-4o-mini or any model that is NOT gpt-5.4-nano or newer.
+  This is the cheapest, fastest structural win — 2 lines of YAML, often meaningful gains.
+  If the score is already on gpt-5.4-nano, skip this signal. See C3 below.
+
+▶ WORD-LEVEL TIMING SIGNAL → mandatory C1e.1 hypothesis (DeepgramInputSource + format: words):
 
   Add this hypothesis if the score config contains ANY of the following:
   - language like "each [X] requires its own individual affirmative response"
@@ -27,9 +34,9 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   grouping algorithm — they may appear adjacent to the WRONG list item in the text.
   Prompt fixes that say "be careful which Yes goes with which school" CANNOT work if
   the transcript doesn't show the correct temporal order to begin with.
-  Word-level Deepgram format (format: words + include_timestamps: true) preserves
-  exact temporal order, making it unambiguous which "Yes" followed which school pitch.
-  See C1b.1 below for the full YAML snippet.
+  Word-level Deepgram format (format: words) preserves exact temporal order, making
+  it unambiguous which "Yes" followed which school pitch.
+  See C1e.1 below for the full YAML snippet.
 
 ▶ KEYWORD-FOCUSED SCORE SIGNAL → consider C2 hypothesis (RelevantWindowsTranscriptFilter):
 
@@ -71,12 +78,6 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   or user_message instructing the LLM to accept phonetically similar variants, with
   explicit examples of the known substitution patterns visible in the transcripts.
 
-▶ STALE MODEL SIGNAL → mandatory C3 model-swap hypothesis (gpt-5.4-nano):
-
-  Add this hypothesis if score_config.yaml contains model_name: gpt-4o-mini or any
-  model that is NOT gpt-5.4-nano or newer. Switching to gpt-5.4-nano is cheap and
-  often produces meaningful accuracy gains. See C3 below.
-
 ─────────────────────────────────────────────────────────────────────────────────
 
 DIRECTIONAL AWARENESS: The Feedback RCA above is grouped by confusion matrix segment
@@ -109,13 +110,53 @@ CATEGORY B — Bold prompt overhaul (medium risk, high upside):
 
 CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
   Changes to control flow, data preprocessing, or the model itself.
+  This is ALWAYS slot 4 — every cycle gets one structural hypothesis.
+  Pick the most promising option from C1–C4 below that has NOT already been tried.
 
-  C1. Architecture changes:
-    * Split a single Classifier into multiple graph nodes (extraction + matching)
-    * Add a chain-of-thought step that reasons about ambiguous cases before classifying
-    * New graph nodes use class: Classifier with their own system_message and user_message
+  C1. Architecture — decomposing the decision into multiple LLM calls:
 
-  C1b. Input source — control WHAT text the score receives:
+    The most powerful structural lever is breaking a complicated single prompt into
+    multiple focused LLM calls, each responsible for one clear sub-question.
+
+    C1a. Decompose into sequential per-element calls:
+      When a score evaluates multiple independent elements (e.g., check each school,
+      each required disclosure, each list item), a single LLM call that sees everything
+      at once often gets confused. Instead, loop over the elements and make one LLM call
+      per element, then aggregate. This mirrors what a human reviewer would do.
+      Already present in TactusScore YAML as a Lua `for` loop calling `Agent{...}`.
+
+    C1b. Add an N/A gate as a separate first call:
+      When the score has a "Not Applicable" or "N/A" class in addition to Yes/No, a
+      single combined prompt must simultaneously reason about applicability AND the
+      actual decision, which confuses the model. The fix is a two-pass approach:
+        Pass 1 — Applicability gate: "Is this call in scope for this check at all?"
+                  If Not Applicable → return N/A immediately (cheap, fast).
+        Pass 2 — The real decision: only runs if pass 1 says "yes, this is applicable."
+      This is especially valuable when N/A cases are common and easy to detect early.
+      Example structure:
+        local gate_agent = Agent { provider = "openai", model = "gpt-5.4-nano",
+          system_prompt = "Is this call subject to [X] at all? Answer APPLICABLE or NOT_APPLICABLE." }
+        local gate = gate_agent({ message = input.text })
+        if gate.output:find("NOT_APPLICABLE") then
+          return { value = "N/A", explanation = "Out of scope: " .. gate.output }
+        end
+        -- ... then run the real decision agent ...
+
+    C1c. Add a chain-of-thought extraction step before the final classifier:
+      If the decision requires finding specific evidence in a long transcript before
+      judging it, split into:
+        Step 1 — Extraction: "List every instance of X in this transcript."
+        Step 2 — Classification: "Given these instances, was the requirement met?"
+      This lets each step focus on one thing and produces more reliable evidence extraction.
+
+    C1d. Split into parallel per-criterion calls (for multi-criteria scores):
+      If a score checks 3–5 independent criteria (e.g., branding = school name +
+      program + modality + location + affirmative), consider one LLM call per criterion
+      rather than asking a single prompt to check all criteria simultaneously.
+      Any single criterion failure → overall No. All pass → Yes.
+      Tradeoff: more API calls but each is faster, cheaper per call, and more accurate.
+
+  C1e. Input source — control WHAT text the score receives:
     The `item:` section of the YAML controls where the score gets its input text from.
     By default, scores use the item's `text` field directly. But you can switch the input
     source to `DeepgramInputSource`, which loads the original Deepgram JSON from the item's
@@ -148,7 +189,7 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
       * Timestamps: include '[X.XXs]' markers for temporal context
     This is especially valuable when the default transcript is noisy or too long for the LLM.
 
-  C1b.1 — When the rubric involves PRECISE WORD TIMING — upgrade to word-level format:
+  C1e.1 — When the rubric involves PRECISE WORD TIMING — upgrade to word-level format:
 
     If the score must decide based on WHEN words were spoken relative to each other —
     for example:
@@ -166,11 +207,36 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     sequential. The "sentences" format is designed for readability — it sacrifices timing
     fidelity to produce clean sentence boundaries.
 
-    SOLUTION: Use DeepgramInputSource with format: words + include_timestamps: true.
-    This preserves each word's exact start/end time and speaker label, giving the LLM
-    the information it needs to reason about timing:
+    SOLUTION: Use DeepgramInputSource with format: words.
+    This preserves each word's exact sequential position and speaker label, giving the
+    LLM the information it needs to reason about who said what and in what order.
 
-      item:
+    DO NOT add include_timestamps: true by default. Timestamps add tokens that are
+    noise to the LLM unless the rubric specifically requires knowing actual clock times
+    (e.g., "did this happen within the first 60 seconds of the call?"). For sequential-
+    ordering questions — who responded to what — the word sequence itself is sufficient.
+    Extra tokens = extra cost + extra distraction with no benefit.
+
+    ⚠ STRUCTURE WARNING — common mistake that will be caught by YAML validation:
+    DeepgramInputSource goes in a TOP-LEVEL `item:` section. It does NOT go under
+    `data:`, under `tactus_code:`, or anywhere else. The `data:` section is for the
+    dataset source only (e.g. CallCriteriaDBCache or FeedbackItems).
+
+    WRONG (will fail validation with PROCESSOR_UNDER_DATA error):
+      data:
+        class: CallCriteriaDBCache
+        ...
+        input_source:            # ← WRONG: not a valid key under data:
+          class: DeepgramInputSource
+          ...
+
+    CORRECT — add a new top-level `item:` section alongside `data:`:
+      data:
+        class: CallCriteriaDBCache
+        searches:
+          ...
+
+      item:                      # ← NEW top-level section (same indent level as data:)
         class: DeepgramInputSource
         options:
           pattern: ".*deepgram.*\\.json$"
@@ -179,7 +245,7 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
             parameters:
               format: words
               speaker_labels: true
-              include_timestamps: true
+              # include_timestamps: true  ← only add if rubric requires clock-time judgements
 
     WHEN TO TRY THIS: If the score's rubric or classification guidelines mention any of the
     following concepts, this is a high-value hypothesis — try it early:
@@ -289,7 +355,7 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
       Maps speaker labels to 'Speaker A:', 'Speaker B:', etc. by order of appearance.
       No parameters. Useful when the original labels are inconsistent or confusing.
 
-    ── GROUP D: Deepgram processors (require DeepgramInputSource — see C1b above) ──
+    ── GROUP D: Deepgram processors (require DeepgramInputSource — see C1e above) ──
     These processors operate on the structured Deepgram JSON in metadata.deepgram.
     They ONLY work when the score uses `item.class: DeepgramInputSource`.
     If the score uses plain text (no item.class), these processors will silently pass through.
@@ -309,7 +375,12 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
                         Adds 'Speaker 0:' / 'Speaker 1:' prefix to each unit.
                         In stereo recordings: Speaker 0 = agent, Speaker 1 = customer.
         include_timestamps (optional, bool, default false)
-                        Adds '[X.XXs]' timestamp to each unit. Useful for temporal analysis.
+                        Adds '[X.XXs]' timestamp to each unit.
+                        ⚠ DO NOT enable this unless the rubric requires actual clock-time
+                        judgements (e.g., "did X happen within the first 60 seconds?").
+                        For sequential-ordering questions (which response followed which
+                        item), the word order alone is sufficient — timestamps add tokens
+                        that cost money and distract the LLM with irrelevant numbers.
         channel         (optional, int, default null — include all channels)
                         0 = agent channel only, 1 = customer channel only.
                         null/omitted = merge all channels chronologically.
@@ -374,6 +445,36 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     AVOID unless nothing else works (expensive):
     * Claude 3.5 Haiku: model_provider: BedrockChat, model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0
 
+  C4. Full rewrite — nuclear option (only when iterations have plateaued):
+    ⚠ DO NOT use this in the first 2–3 cycles. It is a last resort.
+
+    WHEN TO USE: You have run 3 or more cycles, tried structural and prompt changes,
+    and accuracy/feedback metrics are stuck — improvements in one area keep regressing
+    another, or every hypothesis produces near-zero net change. When the score feels
+    like it has accumulated too many band-aids and is fighting itself, the right move
+    is to discard everything from `tactus_code:` onward and write it fresh.
+
+    WHAT "full rewrite" means:
+      - Keep ONLY the header metadata (name, key, id, description, class, model settings,
+        valid_classes, max_tokens, output: section, and data: section)
+      - DELETE everything in `tactus_code:` and write it from scratch
+      - Base the new implementation entirely on the classification guidelines and the
+        confusion matrix evidence — not on what was there before
+      - Choose the cleanest architecture for the problem (single call, multi-call,
+        N/A gate, etc.) without trying to preserve any prior structure
+
+    WHY: Scores that were implemented long ago or that have been iteratively patched
+    can accumulate contradictions, dead code, and structural assumptions that no longer
+    fit the rubric. Incremental editing cannot fix a fundamentally wrong architecture —
+    it just adds more complexity on top of the same broken foundation. Starting from
+    scratch with a clean implementation based on current guidelines is often the
+    highest-leverage move after a plateau.
+
+    HOW: Write the new `tactus_code:` in one edit using `str_replace_editor` to
+    replace the entire block. Do not carry forward any of the old code. Build it as
+    if you are implementing the score for the first time, using only the guidelines
+    and the confusion matrix to guide the design.
+
 THINGS YOU CANNOT CHANGE (do NOT propose hypotheses targeting these):
   - Parser/output normalization logic (parse_final_value, label parsing, case normalization)
     These are in Python framework code, NOT in score_config.yaml. You cannot edit them.
@@ -384,7 +485,9 @@ THINGS YOU CANNOT CHANGE (do NOT propose hypotheses targeting these):
 
 IMPORTANT: The classification guidelines above are for reference only — they help you understand policy but are not editable.
 You will edit score_config.yaml (shown between the === markers above).
-Do NOT rewrite the entire user_message — full rewrites consistently regress.
+Do NOT rewrite the entire user_message as a Category A or B hypothesis — full prompt rewrites
+consistently regress. The only time a full rewrite is appropriate is as a Category C / C4
+structural hypothesis after multiple cycles have plateaued (see C4 above).
 
 GUIDELINES → PROMPT ALIGNMENT: If classification guidelines exist above, they are the authoritative
 source of policy for this score. Cross-reference them against the system_message and user_message
