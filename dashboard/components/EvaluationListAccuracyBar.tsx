@@ -7,6 +7,7 @@ interface EvaluationListAccuracyBarProps {
   isFocused?: boolean
   isSelected?: boolean
   baselineAccuracy?: number
+  currentBaselineAccuracy?: number
 }
 
 export function EvaluationListAccuracyBar({
@@ -14,7 +15,8 @@ export function EvaluationListAccuracyBar({
   accuracy,
   isFocused = false,
   isSelected = false,
-  baselineAccuracy
+  baselineAccuracy,
+  currentBaselineAccuracy
 }: EvaluationListAccuracyBarProps) {
   const formattedAccuracy = accuracy >= 98
     ? Math.round(accuracy * 10) / 10
@@ -26,6 +28,9 @@ export function EvaluationListAccuracyBar({
   const falseWidth = 100 - trueWidth
   const clampedBaseline = baselineAccuracy != null
     ? Math.min(Math.max(baselineAccuracy, 0), 100)
+    : null
+  const clampedCurrentBaseline = currentBaselineAccuracy != null
+    ? Math.min(Math.max(currentBaselineAccuracy, 0), 100)
     : null
 
   return (
@@ -82,8 +87,14 @@ export function EvaluationListAccuracyBar({
           )}
           {clampedBaseline != null && (
             <div
-              className="absolute top-0 h-full w-[2px] bg-muted-foreground"
+              className="absolute top-0 h-full w-[2px] bg-muted-foreground/50"
               style={{ left: `${clampedBaseline}%` }}
+            />
+          )}
+          {clampedCurrentBaseline != null && (
+            <div
+              className="absolute top-0 h-full w-[2px] bg-muted-foreground"
+              style={{ left: `${clampedCurrentBaseline}%` }}
             />
           )}
         </>

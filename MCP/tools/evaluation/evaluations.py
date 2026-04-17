@@ -117,6 +117,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     "created_at": evaluation_info['created_at'],
                     "updated_at": evaluation_info['updated_at'],
                     "baseline_evaluation_id": evaluation_info.get('baseline_evaluation_id'),
+                    "current_baseline_evaluation_id": evaluation_info.get('current_baseline_evaluation_id'),
                 }
 
                 parameters = evaluation_info.get("parameters")
@@ -338,6 +339,7 @@ def register_evaluation_tools(mcp: FastMCP):
         allow_no_labels: bool = False,
         concurrency: int = 5,
         baseline: Optional[str] = None,
+        current_baseline: Optional[str] = None,
         wait: bool = True,
         dataset_id: Optional[str] = None,
         use_score_associated_dataset: bool = False,
@@ -368,9 +370,12 @@ def register_evaluation_tools(mcp: FastMCP):
                           When True, creates score results and predicted class distribution
                           but skips accuracy metrics
         - concurrency: Max parallel evaluations when running bulk (all-scores) feedback mode (default: 5)
-        - baseline: Evaluation ID to use as baseline for comparison (optional). When provided,
+        - baseline: Evaluation ID to use as original baseline for comparison (optional). When provided,
                     the new evaluation record stores this ID so the dashboard can display
                     before-and-after gauges showing the change from the baseline metrics.
+        - current_baseline: Evaluation ID for the current (latest accepted) baseline (optional).
+                    Used for dual-baseline display in the optimizer dashboard — shows both
+                    original baseline and current baseline markers on the accuracy bar.
         - wait: For feedback evaluations — if True (default), block until evaluation + RCA complete
                 and return full results. If False, dispatch in background and return immediately
                 with the evaluation ID only.
@@ -545,6 +550,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     d: Optional[int],
                     ver: Optional[str],
                     bl: Optional[str] = None,
+                    cur_bl: Optional[str] = None,
                     max_fb_items: Optional[int] = None,
                     sampling: str = "newest",
                     seed: Optional[int] = None,
@@ -560,6 +566,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         cmd += ["--version", ver]
                     if bl:
                         cmd += ["--baseline", bl]
+                    if cur_bl:
+                        cmd += ["--current-baseline", cur_bl]
                     if max_fb_items is not None:
                         cmd += ["--max-items", str(max_fb_items)]
                     cmd += ["--sampling-mode", sampling]
@@ -622,6 +630,7 @@ def register_evaluation_tools(mcp: FastMCP):
                             days,
                             resolved_version,
                             baseline,
+                            current_baseline,
                             max_feedback_items,
                             normalized_sampling_mode,
                             sample_seed,
@@ -684,6 +693,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         fb_args.extend(['--version', resolved_version])
                     if baseline:
                         fb_args.extend(['--baseline', baseline])
+                    if current_baseline:
+                        fb_args.extend(['--current-baseline', current_baseline])
                     if sample_seed is not None:
                         fb_args.extend(['--sample-seed', str(sample_seed)])
                     if notes:
@@ -768,6 +779,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         "predictedClassDistribution": eval_info.get('predicted_class_distribution'),
                         "datasetClassDistribution": eval_info.get('dataset_class_distribution'),
                         "baselineEvaluationId": eval_info.get('baseline_evaluation_id'),
+                        "currentBaselineEvaluationId": eval_info.get('current_baseline_evaluation_id'),
                         "cost": eval_info.get('cost'),
                         "started_at": eval_info.get('started_at'),
                         "created_at": eval_info.get('created_at'),
@@ -801,6 +813,7 @@ def register_evaluation_tools(mcp: FastMCP):
                                 sn,
                                 days,
                                 cv,
+                                None,
                                 None,
                                 max_feedback_items,
                                 normalized_sampling_mode,
@@ -912,6 +925,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 if baseline:
                     args.extend(['--baseline', baseline])
 
+                if current_baseline:
+                    args.extend(['--current-baseline', current_baseline])
+
                 if dataset_id:
                     args.extend(['--dataset-id', dataset_id])
 
@@ -987,6 +1003,7 @@ def register_evaluation_tools(mcp: FastMCP):
                 'predictedClassDistribution': eval_info.get('predicted_class_distribution'),  # snake_case in source
                 'datasetClassDistribution': eval_info.get('dataset_class_distribution'),  # snake_case in source
                 'baselineEvaluationId': eval_info.get('baseline_evaluation_id'),
+                'currentBaselineEvaluationId': eval_info.get('current_baseline_evaluation_id'),
                 'root_cause': eval_info.get('root_cause'),
                 'misclassification_analysis': eval_info.get('misclassification_analysis'),
                 'dashboard_url': f"https://app.plexusanalytics.com/evaluations/{eval_id}" if eval_id else None
@@ -1100,6 +1117,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     "predictedClassDistribution": eval_info.get("predicted_class_distribution"),
                     "datasetClassDistribution": eval_info.get("dataset_class_distribution"),
                     "baselineEvaluationId": eval_info.get("baseline_evaluation_id"),
+                    "currentBaselineEvaluationId": eval_info.get("current_baseline_evaluation_id"),
                     "cost": eval_info.get("cost"),
                     "started_at": eval_info.get("started_at"),
                     "created_at": eval_info.get("created_at"),
