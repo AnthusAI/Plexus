@@ -1546,6 +1546,84 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
+    async def plexus_score_set_champion(
+        score_id: str,
+        version_id: str
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Promotes a specific score version to champion (sets it as the active deployed version).
+
+        Parameters:
+        - score_id: The ID of the score
+        - version_id: The version ID to promote to champion
+
+        Returns:
+        - Confirmation with the new championVersionId
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+
+        try:
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}"
+
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            if not api_url or not api_key:
+                return "Error: Missing API credentials."
+
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    sys.stdout = saved_stdout
+            except Exception as e:
+                return f"Error creating dashboard client: {str(e)}"
+
+            if not client:
+                return "Error: Could not create dashboard client."
+
+            mutation = """
+            mutation UpdateScore($input: UpdateScoreInput!) {
+                updateScore(input: $input) {
+                    id
+                    championVersionId
+                }
+            }
+            """
+            try:
+                result = client.execute(mutation, {'input': {
+                    'id': score_id,
+                    'championVersionId': version_id
+                }})
+                if result and 'updateScore' in result:
+                    updated = result['updateScore']
+                    return {
+                        "success": True,
+                        "scoreId": updated['id'],
+                        "championVersionId": updated['championVersionId']
+                    }
+                else:
+                    return f"Error: Failed to set champion: {result}"
+            except Exception as e:
+                return f"Error setting champion: {str(e)}"
+
+        except Exception as e:
+            logger.error(f"Error in plexus_score_set_champion: {str(e)}", exc_info=True)
+            return f"Error: {str(e)}"
+        finally:
+            captured = temp_stdout.getvalue()
+            if captured:
+                logger.warning(f"Captured unexpected stdout during plexus_score_set_champion: {captured}")
+            sys.stdout = old_stdout
+
+    @mcp.tool()
     async def plexus_score_delete(
         score_id: str,
         confirm: bool = False
