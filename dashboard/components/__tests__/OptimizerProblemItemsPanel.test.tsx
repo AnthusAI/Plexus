@@ -29,11 +29,11 @@ describe('OptimizerProblemItemsPanel', () => {
 
     const pill = screen
       .getAllByText('Persistent')
-      .find((el) => (el as HTMLElement).className.includes('bg-red-500/15')) as HTMLElement | undefined
+      .find((el) => (el as HTMLElement).className.includes('bg-false')) as HTMLElement | undefined
 
     expect(pill).toBeDefined()
     expect(pill!.className).toContain('border-0')
-    expect(pill!.className).toContain('bg-red-500/15')
-    expect(pill!.className).toContain('dark:text-red-400')
+    expect(pill!.className).toContain('bg-false')
+    expect(pill!.className).toContain('text-primary-foreground')
   })
 })
