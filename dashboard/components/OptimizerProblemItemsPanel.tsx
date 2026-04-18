@@ -45,26 +45,26 @@ const PATTERN_CONFIG: Record<
 > = {
   PERSISTENT: {
     label: 'Persistent',
-    labelClass: 'text-red-700 dark:text-red-400',
-    pillClass: 'bg-red-500/15 text-red-700 dark:text-red-400',
+    labelClass: 'text-false',
+    pillClass: 'bg-false text-primary-foreground',
     description: 'Wrong in the same confusion segment 3+ cycles, never corrected',
   },
   OSCILLATING: {
     label: 'Oscillating',
-    labelClass: 'text-amber-700 dark:text-amber-400',
-    pillClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+    labelClass: 'text-warning',
+    pillClass: 'bg-warning text-primary-foreground',
     description: 'Flips between correct and wrong — borderline or policy-unstable',
   },
   FLIP_FLOP: {
     label: 'Flip-flop',
-    labelClass: 'text-orange-700 dark:text-orange-400',
-    pillClass: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
+    labelClass: 'text-warning',
+    pillClass: 'bg-warning text-primary-foreground',
     description: 'Wrong multiple cycles in different error directions',
   },
   LATE_EMERGING: {
     label: 'Late-emerging',
-    labelClass: 'text-blue-700 dark:text-blue-400',
-    pillClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
+    labelClass: 'text-info',
+    pillClass: 'bg-info text-primary-foreground',
     description: 'Appeared correctly early, regressed in later cycles',
   },
 }
@@ -246,12 +246,12 @@ export function OptimizerProblemItemsPanel({
             {totalCount} items
           </Badge>
           {persistentCount > 0 && (
-            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-false text-primary-foreground">
               {persistentCount} persistent
             </Badge>
           )}
           {oscillatingCount > 0 && (
-            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-amber-500/15 text-amber-700 dark:text-amber-400">
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-warning text-primary-foreground">
               {oscillatingCount} oscillating
             </Badge>
           )}

@@ -836,15 +836,15 @@ export default function ProcedureTask({
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap">
                             {row.isBaseline ? (
-                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-slate-500/15 text-slate-700 dark:text-slate-300">Baseline</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-neutral text-primary-foreground">Baseline</Badge>
                             ) : row.skipReason ? (
-                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-amber-500/15 text-amber-700 dark:text-amber-400">Skipped</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-warning text-primary-foreground">Skipped</Badge>
                             ) : row.disqualified ? (
-                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">Disqualified</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-false text-primary-foreground">Disqualified</Badge>
                             ) : row.accepted ? (
-                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-green-500/15 text-green-700 dark:text-green-400">Accepted</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-true text-primary-foreground">Accepted</Badge>
                             ) : (
-                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">Rejected</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-false text-primary-foreground">Rejected</Badge>
                             )}
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
@@ -923,9 +923,9 @@ export default function ProcedureTask({
                                                 {er.hypothesis?.name || `Hypothesis ${er.index}`}
                                               </span>
                                               {er.succeeded ? (
-                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-green-500/15 text-green-700 dark:text-green-400">Pass</Badge>
+                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-true text-primary-foreground">Pass</Badge>
                                               ) : (
-                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-red-500/15 text-red-700 dark:text-red-400">Fail</Badge>
+                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-false text-primary-foreground">Fail</Badge>
                                               )}
                                               <span className="whitespace-nowrap flex-shrink-0">
                                                 <span className="text-muted-foreground/60 mr-1">FB</span>
