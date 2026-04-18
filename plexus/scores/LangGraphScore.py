@@ -25,6 +25,21 @@ from langgraph.graph import StateGraph, END
 import litellm as _litellm
 
 from langchain_core.globals import set_debug, set_verbose
+
+# Patch langchain_core's restricted Jinja2 sandbox to allow dict attribute access.
+# langchain_core >=0.3.81 introduced _RestrictedSandboxedEnvironment which blocks
+# attribute access like {{metadata.schools}} or {{school.degree_of_interest}} in
+# Jinja2 templates. LangGraphScore YAML configs rely on this for metadata traversal.
+# We restore the standard SandboxedEnvironment behavior for getattr only.
+try:
+    import langchain_core.prompts.string as _lc_string_mod
+    if hasattr(_lc_string_mod, '_RestrictedSandboxedEnvironment'):
+        from jinja2 import Environment as _Jinja2Env
+        _lc_string_mod._RestrictedSandboxedEnvironment = _Jinja2Env
+        logging.info("Patched langchain_core Jinja2 sandbox to use unrestricted Environment")
+except Exception as _patch_err:
+    logging.warning(f"Could not patch langchain Jinja2 sandbox: {_patch_err}")
+
 # Only enable debug for very specific debugging scenarios
 debug_mode = os.getenv('LANGCHAIN_DEBUG', '').lower() in ['true', '1', 'yes']
 if debug_mode:

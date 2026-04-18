@@ -220,6 +220,7 @@ def register_procedure_tools(mcp):
                 "success": True,
                 "procedure": {
                     "id": info.procedure.id,
+                    "status": getattr(info.procedure, 'status', None),
                     "featured": info.procedure.featured,
                     "created_at": info.procedure.createdAt.isoformat(),
                     "updated_at": info.procedure.updatedAt.isoformat(),
