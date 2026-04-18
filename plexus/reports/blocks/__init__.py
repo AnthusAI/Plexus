@@ -12,6 +12,7 @@ from .feedback_contradictions import FeedbackContradictions
 from .feedback_alignment_timeline import FeedbackAlignmentTimeline
 from .overturn_rate import OverturnRate
 from .acceptance_rate import AcceptanceRate
+from .recent_feedback import RecentFeedback
 
 __all__ = [
     "BaseReportBlock",
@@ -26,4 +27,5 @@ __all__ = [
     "FeedbackAlignmentTimeline",
     "OverturnRate",
     "AcceptanceRate",
+    "RecentFeedback",
 ]
