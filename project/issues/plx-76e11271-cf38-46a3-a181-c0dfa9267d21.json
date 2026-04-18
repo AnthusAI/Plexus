@@ -166,10 +166,16 @@
       "author": "ryan",
       "text": "Done: changed per-bucket AC1 gauge title to 'Alignment' in dashboard/components/blocks/FeedbackAlignmentTimeline.tsx. Validation: cd dashboard && npx tsc --noEmit passed.",
       "created_at": "2026-04-10T19:08:26.588786Z"
+    },
+    {
+      "id": "812e4253-7ad0-4158-a2be-68706ae4eb97",
+      "author": "ryan",
+      "text": "Pushed commit 4ba5990e to feature/feedback-alignment-timeline-review, CI run 24261093233 passed (storybook, dashboard unit tests, python 3.11/3.12), and PR to develop is open at https://github.com/AnthusAI/Plexus/pull/159.",
+      "created_at": "2026-04-10T19:58:13.274386Z"
     }
   ],
   "created_at": "2026-04-09T18:42:25.218868Z",
-  "updated_at": "2026-04-10T19:08:26.588786Z",
+  "updated_at": "2026-04-10T19:58:13.274386Z",
   "closed_at": null,
   "custom": {}
 }
