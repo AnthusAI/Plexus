@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -30,7 +31,10 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
     - scorecard only: all scores on the scorecard
     - scorecard + score/score_id: single-score mode
 
-    Bucket policy supports trailing complete windows and calendar-aligned complete windows.
+    Time window modes:
+    - Explicit window via start_date + end_date (inclusive day boundaries for date-only values)
+    - Relative window via days (trailing window ending at now)
+    - Default legacy mode: complete historical buckets from now using bucket_type + bucket_count
     """
 
     DEFAULT_NAME = "Feedback Alignment Timeline"
@@ -44,6 +48,7 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
     }
     CALENDAR_BUCKET_TYPES = {"calendar_day", "calendar_week", "calendar_biweek", "calendar_month"}
     WEEK_START_INDEX = {"monday": 0, "sunday": 6}
+    DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self.log_messages = []
@@ -68,6 +73,21 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             bucket_count = int(self.config.get("bucket_count", 12))
             timezone_name = str(self.config.get("timezone", "UTC")).strip()
             week_start = str(self.config.get("week_start", "monday")).strip().lower()
+            start_date_input = (
+                self.config.get("start_date")
+                or self.params.get("start_date")
+                or self.params.get("param_start_date")
+            )
+            end_date_input = (
+                self.config.get("end_date")
+                or self.params.get("end_date")
+                or self.params.get("param_end_date")
+            )
+            days_input = (
+                self.config.get("days")
+                or self.params.get("days")
+                or self.params.get("param_days")
+            )
 
             if bucket_type not in self.TRAILING_BUCKET_DAYS and bucket_type not in self.CALENDAR_BUCKET_TYPES:
                 supported = sorted(list(self.TRAILING_BUCKET_DAYS.keys()) + list(self.CALENDAR_BUCKET_TYPES))
@@ -85,20 +105,70 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 raise ValueError(f"Invalid timezone '{timezone_name}': {exc}") from exc
 
             now_local = self._now_utc().astimezone(tzinfo)
-            buckets = self._build_buckets(
-                now_local=now_local,
-                bucket_type=bucket_type,
-                bucket_count=bucket_count,
-                week_start=week_start,
-            )
+            explicit_window = False
+            range_start_local: Optional[datetime] = None
+            range_end_local_exclusive: Optional[datetime] = None
+
+            if (start_date_input and not end_date_input) or (end_date_input and not start_date_input):
+                raise ValueError("Both 'start_date' and 'end_date' are required when specifying an explicit range.")
+            if days_input is not None and start_date_input and end_date_input:
+                raise ValueError("Use either 'days' or 'start_date'+'end_date', not both.")
+
+            if start_date_input and end_date_input:
+                explicit_window = True
+                range_start_local = self._parse_window_boundary(
+                    value=start_date_input,
+                    tzinfo=tzinfo,
+                    is_end=False,
+                )
+                range_end_local_exclusive = self._parse_window_boundary(
+                    value=end_date_input,
+                    tzinfo=tzinfo,
+                    is_end=True,
+                )
+            elif days_input is not None:
+                days = self._parse_positive_int(days_input, "days")
+                explicit_window = True
+                range_end_local_exclusive = now_local
+                range_start_local = (now_local - timedelta(days=days)).replace(
+                    hour=0,
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
+
+            if explicit_window:
+                assert range_start_local is not None and range_end_local_exclusive is not None
+                if range_end_local_exclusive <= range_start_local:
+                    raise ValueError("'end_date' must be after 'start_date'.")
+                buckets = self._build_buckets_for_explicit_window(
+                    start_local=range_start_local,
+                    end_local_exclusive=range_end_local_exclusive,
+                    bucket_type=bucket_type,
+                    week_start=week_start,
+                )
+            else:
+                buckets = self._build_buckets(
+                    now_local=now_local,
+                    bucket_type=bucket_type,
+                    bucket_count=bucket_count,
+                    week_start=week_start,
+                )
             if not buckets:
                 raise ValueError("No time buckets were generated.")
 
-            range_start_utc = buckets[0].start_local.astimezone(timezone.utc)
-            # Query end is inclusive in FeedbackItem utility query; subtract 1 microsecond to stay inside last bucket.
-            range_end_query_utc = (
-                buckets[-1].end_local.astimezone(timezone.utc) - timedelta(microseconds=1)
-            )
+            if explicit_window:
+                # Query end is inclusive in FeedbackItem utility query; subtract 1 microsecond from exclusive end.
+                range_start_utc = range_start_local.astimezone(timezone.utc)
+                range_end_query_utc = (
+                    range_end_local_exclusive.astimezone(timezone.utc) - timedelta(microseconds=1)
+                )
+            else:
+                range_start_utc = buckets[0].start_local.astimezone(timezone.utc)
+                # Query end is inclusive in FeedbackItem utility query; subtract 1 microsecond to stay inside last bucket.
+                range_end_query_utc = (
+                    buckets[-1].end_local.astimezone(timezone.utc) - timedelta(microseconds=1)
+                )
 
             scorecard = await self._resolve_scorecard(str(scorecard_identifier))
             scores_to_analyze = await self._resolve_scores_for_mode(
@@ -114,10 +184,11 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                     "scorecard_name": scorecard.name,
                     "bucket_policy": {
                         "bucket_type": bucket_type,
-                        "bucket_count": bucket_count,
+                        "bucket_count": len(buckets),
                         "timezone": timezone_name,
                         "week_start": week_start,
-                        "complete_only": True,
+                        "complete_only": not explicit_window,
+                        "window_mode": "explicit_range" if explicit_window else "complete_trailing",
                     },
                     "buckets": self._serialize_buckets(buckets),
                     "overall": {"score_id": "overall", "score_name": "Overall", "points": []},
@@ -187,10 +258,11 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 "scorecard_name": scorecard.name,
                 "bucket_policy": {
                     "bucket_type": bucket_type,
-                    "bucket_count": bucket_count,
+                    "bucket_count": len(buckets),
                     "timezone": timezone_name,
                     "week_start": week_start,
-                    "complete_only": True,
+                    "complete_only": not explicit_window,
+                    "window_mode": "explicit_range" if explicit_window else "complete_trailing",
                 },
                 "buckets": self._serialize_buckets(buckets),
                 "overall": {
@@ -206,7 +278,7 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 "total_feedback_items_retrieved": total_feedback_items_retrieved,
                 "message": (
                     f"Processed {len(score_series)} score(s) across "
-                    f"{len(buckets)} complete bucket(s)."
+                    f"{len(buckets)} {'explicit' if explicit_window else 'complete'} bucket(s)."
                 ),
             }
 
@@ -370,6 +442,149 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         import asyncio
 
         return await asyncio.to_thread(fn, *args, **kwargs)
+
+    def _parse_positive_int(self, raw_value: Any, field_name: str) -> int:
+        try:
+            value = int(raw_value)
+        except Exception as exc:
+            raise ValueError(f"'{field_name}' must be a positive integer.") from exc
+        if value <= 0:
+            raise ValueError(f"'{field_name}' must be a positive integer.")
+        return value
+
+    def _parse_window_boundary(self, value: Any, tzinfo: ZoneInfo, *, is_end: bool) -> datetime:
+        value_str = str(value).strip()
+        is_date_only = bool(self.DATE_ONLY_RE.match(value_str))
+
+        try:
+            if is_date_only:
+                parsed = datetime.strptime(value_str, "%Y-%m-%d")
+            else:
+                parsed = datetime.fromisoformat(value_str)
+        except Exception as exc:
+            raise ValueError(
+                f"Invalid {'end_date' if is_end else 'start_date'} '{value_str}'. "
+                "Use YYYY-MM-DD or ISO8601 datetime."
+            ) from exc
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=tzinfo)
+        else:
+            parsed = parsed.astimezone(tzinfo)
+
+        if is_date_only:
+            if is_end:
+                return parsed.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            return parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        return parsed
+
+    def _build_buckets_for_explicit_window(
+        self,
+        *,
+        start_local: datetime,
+        end_local_exclusive: datetime,
+        bucket_type: str,
+        week_start: str,
+    ) -> List[_TimeBucket]:
+        buckets: List[_TimeBucket] = []
+
+        if bucket_type in self.TRAILING_BUCKET_DAYS:
+            duration = timedelta(days=self.TRAILING_BUCKET_DAYS[bucket_type])
+            cursor = start_local
+            while cursor < end_local_exclusive:
+                bucket_end = min(cursor + duration, end_local_exclusive)
+                buckets.append(
+                    _TimeBucket(
+                        start_local=cursor,
+                        end_local=bucket_end,
+                        label=cursor.strftime("%Y-%m-%d"),
+                    )
+                )
+                cursor = bucket_end
+            return buckets
+
+        if bucket_type == "calendar_day":
+            cursor = start_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            duration = timedelta(days=1)
+            while cursor < end_local_exclusive:
+                period_end = cursor + duration
+                bucket_start = max(cursor, start_local)
+                bucket_end = min(period_end, end_local_exclusive)
+                if bucket_start < bucket_end:
+                    buckets.append(
+                        _TimeBucket(
+                            start_local=bucket_start,
+                            end_local=bucket_end,
+                            label=cursor.strftime("%Y-%m-%d"),
+                        )
+                    )
+                cursor = period_end
+            return buckets
+
+        if bucket_type == "calendar_week":
+            week_start_index = self.WEEK_START_INDEX[week_start]
+            day_anchor = start_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            offset = (day_anchor.weekday() - week_start_index) % 7
+            cursor = day_anchor - timedelta(days=offset)
+            duration = timedelta(days=7)
+            while cursor < end_local_exclusive:
+                period_end = cursor + duration
+                bucket_start = max(cursor, start_local)
+                bucket_end = min(period_end, end_local_exclusive)
+                if bucket_start < bucket_end:
+                    buckets.append(
+                        _TimeBucket(
+                            start_local=bucket_start,
+                            end_local=bucket_end,
+                            label=cursor.strftime("%Y-%m-%d"),
+                        )
+                    )
+                cursor = period_end
+            return buckets
+
+        if bucket_type == "calendar_biweek":
+            week_start_index = self.WEEK_START_INDEX[week_start]
+            day_anchor = start_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            offset = (day_anchor.weekday() - week_start_index) % 7
+            current_week_start = day_anchor - timedelta(days=offset)
+            epoch = day_anchor.replace(year=1970, month=1, day=5 if week_start == "monday" else 4)
+            weeks_since_epoch = int((current_week_start - epoch).days // 7)
+            cursor = epoch + timedelta(weeks=(weeks_since_epoch // 2) * 2)
+            duration = timedelta(days=14)
+            while cursor < end_local_exclusive:
+                period_end = cursor + duration
+                bucket_start = max(cursor, start_local)
+                bucket_end = min(period_end, end_local_exclusive)
+                if bucket_start < bucket_end:
+                    buckets.append(
+                        _TimeBucket(
+                            start_local=bucket_start,
+                            end_local=bucket_end,
+                            label=cursor.strftime("%Y-%m-%d"),
+                        )
+                    )
+                cursor = period_end
+            return buckets
+
+        if bucket_type == "calendar_month":
+            cursor = start_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            while cursor < end_local_exclusive:
+                period_end = self._shift_months(cursor, 1)
+                bucket_start = max(cursor, start_local)
+                bucket_end = min(period_end, end_local_exclusive)
+                if bucket_start < bucket_end:
+                    buckets.append(
+                        _TimeBucket(
+                            start_local=bucket_start,
+                            end_local=bucket_end,
+                            label=cursor.strftime("%Y-%m"),
+                        )
+                    )
+                cursor = period_end
+            return buckets
+
+        raise ValueError(f"Unhandled bucket_type '{bucket_type}'.")
 
     def _build_buckets(
         self,

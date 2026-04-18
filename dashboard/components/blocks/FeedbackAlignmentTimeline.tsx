@@ -45,6 +45,7 @@ interface FeedbackAlignmentTimelineData {
     timezone?: string;
     week_start?: string;
     complete_only?: boolean;
+    window_mode?: "complete_trailing" | "explicit_range";
   };
   overall?: AlignmentSeries;
   scores?: AlignmentSeries[];
@@ -336,6 +337,9 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
   const hasRenderableAc1Points = renderableAc1Points.length > 0;
   const canDrawConnectingLine = renderableAc1Points.length > 1;
   const hasSeriesSelector = !isSingleScoreMode && scores.length > 0;
+  const isExplicitWindow =
+    data.bucket_policy?.window_mode === "explicit_range" || data.bucket_policy?.complete_only === false;
+  const bucketCadenceLabel = isExplicitWindow ? "includes partial periods" : "complete periods only";
   const accuracyGaugeSegments = React.useMemo(
     () => GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds({})),
     []
@@ -361,7 +365,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
             <div>
               <strong className="text-foreground">Buckets:</strong>{" "}
               {isLoadingCompactedOutput ? "loading..." : data.bucket_policy?.bucket_count ?? chartData.length} x{" "}
-              {data.bucket_policy?.bucket_type || "trailing_7d"} (complete periods only)
+              {data.bucket_policy?.bucket_type || "trailing_7d"} ({bucketCadenceLabel})
             </div>
           </div>
 
@@ -386,8 +390,10 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
         </div>
 
         <p className="text-sm text-muted-foreground">
-          This report shows how feedback alignment changes over complete historical buckets for the selected
-          series, using Gwet&apos;s AC1 as the primary trend metric.
+          This report shows how feedback alignment changes over time for the selected series, using Gwet&apos;s AC1
+          as the primary trend metric. {isExplicitWindow
+            ? "The selected range may include partial leading or trailing buckets."
+            : "Buckets are complete historical periods ending before the current period."}
         </p>
 
         {data.message && <p className="text-xs text-muted-foreground">{data.message}</p>}

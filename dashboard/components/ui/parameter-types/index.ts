@@ -1,10 +1,8 @@
 export { TextParameter } from './TextParameter'
+export { DateParameter } from './DateParameter'
 export { NumberParameter } from './NumberParameter'
 export { BooleanParameter } from './BooleanParameter'
 export { SelectParameter } from './SelectParameter'
 export { ScorecardSelectParameter } from './ScorecardSelectParameter'
 export { ScoreSelectParameter } from './ScoreSelectParameter'
 export { ScoreVersionSelectParameter } from './ScoreVersionSelectParameter'
-
-
-
