@@ -480,12 +480,13 @@ class LuaDSLRuntime:
             from langchain_core.tools import tool
 
             @tool
-            def done(reason: str, success: bool = True) -> str:
+            def done(reason: str, success: bool = True, decision: str = "") -> str:
                 """Signal completion of the task.
 
                 Args:
                     reason: Brief explanation of completion
                     success: True if completed successfully
+                    decision: Optional decision value (e.g. 'abort', 'continue', 'keep', 'revert')
 
                 Returns:
                     Acknowledgment message

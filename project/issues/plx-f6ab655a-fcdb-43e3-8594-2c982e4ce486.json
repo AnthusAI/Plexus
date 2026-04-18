@@ -1,0 +1,31 @@
+{
+  "id": "plx-f6ab655a-fcdb-43e3-8594-2c982e4ce486",
+  "title": "Implement authenticated optimizer state loading in ProcedureTask",
+  "description": "Replace apiKey GraphQL + /api/procedure-state proxy path with authenticated Amplify GraphQL and Amplify Storage downloadData for procedures/* state in ProcedureTask.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4075722b-7d3f-478e-a741-d78d468a42d8",
+      "author": "ryan",
+      "text": "Started implementation. Plan: remove apiKey mode and proxy route from ProcedureTask optimizer state fetch, load offloaded state using Amplify Storage downloadData from reportBlockDetails/procedures/*, update storage access rules, add/adjust unit tests for no proxy usage and no apiKey auth mode.",
+      "created_at": "2026-04-17T21:32:24.460092Z"
+    },
+    {
+      "id": "5bc4a277-5580-4de5-8349-f466ea1f1922",
+      "author": "ryan",
+      "text": "Implemented changes on branch bugfix/procedures-optimizer-authenticated-amplify:\n- ProcedureTask metadata fetch no longer sets authMode=apiKey\n- ProcedureTask now hydrates _s3_key state via Amplify Storage downloadData from reportBlockDetails bucket\n- Added procedures/* authenticated storage access rule\n- Removed Next API proxy route /api/procedure-state/[id]\n- Added regression test components/__tests__/ProcedureTask.optimizer-auth.test.tsx covering no apiKey/no proxy and S3-key hydration path\n\nValidation:\n- PASS: npm test -- --runInBand components/__tests__/ProcedureTask.optimizer-auth.test.tsx\n- BLOCKED ENV: npm run typecheck did not complete in this environment after extended runtime\n- BLOCKED ENV: npx eslint ... failed with repo/toolchain AJV/ESLint initialization error unrelated to this change",
+      "created_at": "2026-04-17T21:39:07.402668Z"
+    }
+  ],
+  "created_at": "2026-04-17T21:32:20.573576Z",
+  "updated_at": "2026-04-17T21:39:07.402668Z",
+  "closed_at": null,
+  "custom": {}
+}
