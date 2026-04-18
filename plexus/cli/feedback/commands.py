@@ -14,6 +14,7 @@ from plexus.cli.feedback.feedback_commands import purge_all_feedback as purge_co
 from plexus.cli.feedback.feedback_info import feedback_info as info_command
 from plexus.cli.feedback.feedback_search import find_feedback as find_command
 from plexus.cli.feedback.feedback_summary import feedback_summary as summary_command
+from plexus.cli.feedback.feedback_report import report as report_command
 
 logger = logging.getLogger(__name__)
 
@@ -27,3 +28,4 @@ feedback.add_command(summary_command, name="summary")  # Add summary first - it 
 feedback.add_command(find_command, name="find")
 feedback.add_command(info_command, name="info")
 feedback.add_command(purge_command, name="purge")
+feedback.add_command(report_command, name="report")
