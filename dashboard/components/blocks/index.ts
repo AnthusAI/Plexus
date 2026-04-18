@@ -16,6 +16,7 @@ export { default as ActionItems } from './ActionItems';
 export { default as FeedbackAlignmentTimeline } from './FeedbackAlignmentTimeline';
 export { default as OverturnRate } from './OverturnRate';
 export { default as AcceptanceRate } from './AcceptanceRate';
+export { default as RecentFeedback } from './RecentFeedback';
 export { BlockRenderer } from './BlockRegistry';
 export type { BlockRendererProps } from './BlockRegistry';
 export { getBlock, hasBlock, getRegisteredBlockTypes } from './BlockRegistry';

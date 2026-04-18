@@ -267,6 +267,8 @@ class FeedbackRatesBase(BaseReportBlock):
                         itemId
                         initialAnswerValue
                         finalAnswerValue
+                        editCommentValue
+                        finalCommentValue
                         isInvalid
                         editedAt
                         createdAt
