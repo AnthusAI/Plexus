@@ -2335,9 +2335,10 @@ code: |
   })
 
   local min_dataset_rows = params.max_samples
+  local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
   local dataset_adequate = dataset_check and dataset_check.has_dataset
     and dataset_check.is_materialized
-    and dataset_check.row_count and dataset_check.row_count >= min_dataset_rows
+    and dataset_check.row_count and dataset_check.row_count >= min_acceptable
 
   if dataset_adequate then
     dataset_id = dataset_check.dataset_id
@@ -2371,7 +2372,6 @@ code: |
       build_result = nil
     end
 
-    local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
     if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
       dataset_id = build_result.dataset_id
       Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
