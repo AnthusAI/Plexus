@@ -72,11 +72,28 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   - Acronyms that expand into longer phrases ("HVAC" → "heating and cooling")
   - Any proper noun that sounds like a common word when spoken aloud
 
-  If the RCA shows false negatives where the human says the agent DID mention a school
-  or product but the LLM said it didn't, the most likely cause is a transcription
-  variant the prompt doesn't recognize. The fix is a Category A rule in the system_message
-  or user_message instructing the LLM to accept phonetically similar variants, with
-  explicit examples of the known substitution patterns visible in the transcripts.
+  DEGREE LEVEL ABBREVIATIONS are a second major phonetic error class — look for this
+  whenever the score checks whether an agent stated a degree level. Degree abbreviations
+  are short, vowel-light words that STT engines routinely garble into common English
+  words. Known substitution patterns that appear repeatedly in Agent Branding-style scores:
+  - "BS" / "B.S." → "essay", "yes", "YES", "guest", "be as"
+  - "BACHELOR'S" / "BACHELORS" → "that says", "matress", "masters" (false cognate)
+  - "AS" / "A.S." → "is", "as" (correctly transcribed but ignored by model)
+  - "AAS" / "A.A.S." → "as", "aas" (not recognized as a degree abbreviation)
+  - "DIPLOMA" → "browman", "diploma" (correctly transcribed but not credited)
+  - "BBA" → "bba", "be ba" (not recognized without explicit rule)
+
+  If the RCA shows false negatives where the human says the agent DID mention a degree
+  level but the transcript doesn't show a recognizable degree word, this is almost always
+  the cause. The fix has two parts:
+  1. Add a prompt rule explicitly telling the model that degree abbreviations are
+     frequently garbled by STT and instructing it to infer degree level from phonetically
+     similar tokens near the program name.
+  2. Add 1-2 few-shot examples showing a garbled abbreviation being correctly credited
+     (e.g., transcript says "essay in nursing", model should recognize "essay" ≈ "AS").
+  The fix is a Category A rule in the system_message or user_message instructing the LLM
+  to accept phonetically similar variants, with explicit examples of known substitution
+  patterns visible in the transcripts.
 
 ─────────────────────────────────────────────────────────────────────────────────
 

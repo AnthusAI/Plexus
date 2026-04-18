@@ -224,6 +224,20 @@ agents:
       4. STT/transcription error resilience (only if RCA shows consistent garbling)
       5. Few-shot examples (last resort, max 2-3 per scenario, only for STT errors)
 
+      EXECUTION ERRORS — how to detect and handle them:
+      When an evaluation shows "EXECUTION ERRORS: N items produced value=ERROR", the
+      score code is crashing at runtime. This is NOT a policy problem. Symptoms:
+      - AC1 severely negative (−0.5 or worse) with no policy explanation
+      - "ERROR" appears as a predicted class in the confusion matrix
+      - The EXECUTION ERRORS banner is shown in the evaluation context
+      What to do:
+      1. STOP trying policy changes. They cannot fix a code crash.
+      2. Identify the most recent structural change (new class, changed node type,
+         new preprocessing step, dated model name snapshot) and REVERT it.
+      3. If the current file already looks clean, remove the last added structural
+         element and submit for evaluation to confirm the crash is gone.
+      4. Only return to policy work once the error rate drops to zero.
+
       EDIT SAFETY — ranked:
       SAFEST: Sharpen existing criteria with specific language
       SAFE: Add or clarify a policy rule that the RCA shows is missing or ambiguous
@@ -253,6 +267,9 @@ agents:
       just made to a score configuration. Decide: keep or revert.
 
       Decision rules:
+      - If the evaluation shows an EXECUTION ERROR banner (error_rate > 0 or AC1 severely
+        negative with ERROR class in confusion matrix): call done(decision="revert") — this
+        is a code crash, not a policy problem. The change introduced a bug.
       - If accuracy delta is worse than -0.03: call done(decision="revert") — accuracy
         regression this large is not acceptable, even if feedback improved.
       - If feedback delta is negative AND accuracy delta is <= 0: call done(decision="revert")
@@ -415,6 +432,21 @@ code: |
     local pred_dist = eval_result.predictedClassDistribution or eval_result.predicted_class_distribution
     if type(pred_dist) == "table" then
       result.predicted_distribution = pred_dist
+      -- Detect execution errors: "ERROR" appearing as a predicted class means the score
+      -- code crashed at runtime, NOT a policy mismatch. Surface this explicitly.
+      local error_count = 0
+      local total_predicted = 0
+      for _, d in ipairs(pred_dist) do
+        if type(d) == "table" then
+          local cnt = d.count or 0
+          total_predicted = total_predicted + cnt
+          if type(d.label) == "string" and d.label:upper() == "ERROR" then
+            error_count = cnt
+          end
+        end
+      end
+      result.error_count = error_count
+      result.error_rate = total_predicted > 0 and (error_count / total_predicted) or 0
     end
     local actual_dist = eval_result.datasetClassDistribution or eval_result.dataset_class_distribution
     if type(actual_dist) == "table" then
@@ -447,6 +479,13 @@ code: |
           table.insert(lines, line)
         end
       end
+    end
+    -- Execution error banner — must appear before class distribution so it's unmissable
+    if (m.error_rate or 0) > 0 then
+      table.insert(lines, string.format(
+        "  *** EXECUTION ERRORS: %d items (%.0f%%) produced value=ERROR — this is a CODE BUG, not a policy problem ***",
+        m.error_count or 0, (m.error_rate or 0) * 100))
+      table.insert(lines, "  *** Do NOT try policy changes to fix this. Revert the structural change that caused the errors. ***")
     end
     -- Class distributions
     if m.predicted_distribution and m.actual_distribution then
@@ -2296,9 +2335,10 @@ code: |
   })
 
   local min_dataset_rows = params.max_samples
+  local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
   local dataset_adequate = dataset_check and dataset_check.has_dataset
     and dataset_check.is_materialized
-    and dataset_check.row_count and dataset_check.row_count >= min_dataset_rows
+    and dataset_check.row_count and dataset_check.row_count >= min_acceptable
 
   if dataset_adequate then
     dataset_id = dataset_check.dataset_id
@@ -2319,7 +2359,7 @@ code: |
       message = string.format("Building balanced regression dataset (%d items)...", min_dataset_rows),
       level = "info"
     })
-    local build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
+    local build_ok, build_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
       scorecard = params.scorecard,
       score = params.score,
       max_items = min_dataset_rows,
@@ -2327,8 +2367,11 @@ code: |
       balance = true,
       score_version_id = params.start_version
     })
+    if not build_ok then
+      Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
+      build_result = nil
+    end
 
-    local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
     if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
       dataset_id = build_result.dataset_id
       Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
@@ -2337,7 +2380,7 @@ code: |
       local rows_so_far = (build_result and build_result.rows_written) or 0
       Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
 
-      build_result = call_plexus_tool("plexus_dataset_build_from_feedback_window", {
+      local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
         scorecard = params.scorecard,
         score = params.score,
         max_items = min_dataset_rows,
@@ -2345,6 +2388,7 @@ code: |
         balance = false,
         score_version_id = params.start_version
       })
+      local build_result = unbal_ok and unbal_result or nil
 
       if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
         dataset_id = build_result.dataset_id
@@ -5860,8 +5904,10 @@ code: |
           diag(string.format("Early stop advisor crashed: %s — continuing run", tostring(es_err)))
         else
           local es_done = Tool.last_call("done")
-          local es_decision = es_done and es_done.args and es_done.args.decision or "continue"
-          local es_reason = es_done and es_done.args and es_done.args.reason or "(no reason given)"
+          local ok_esd, es_decision = pcall(function() return es_done and es_done.args and es_done.args.decision or "continue" end)
+          es_decision = (ok_esd and es_decision) or "continue"
+          local ok_esr, es_reason = pcall(function() return es_done and es_done.args and es_done.args.reason or "(no reason given)" end)
+          es_reason = (ok_esr and es_reason) or "(no reason given)"
           if es_decision == "abort" then
             Human.notify({message = string.format(
               "Early stopping: %s", es_reason), level = "warning"})
@@ -6490,6 +6536,37 @@ code: |
     .. string.rep("=", 60) .. "\n\n"
     .. presc_display, level = "info"})
 
+  -- ========================================================================
+  -- CHAMPION PROMOTION
+  -- If we improved on the champion, promote the winning version to champion.
+  -- ========================================================================
+  local promoted_to_champion = false
+  if last_accepted_version_id and last_accepted_version_id ~= champion_version_id and not params.dry_run then
+    Human.notify({message = string.format(
+      "Promoting winning version %s to champion (was: %s)...",
+      last_accepted_version_id, tostring(champion_version_id)
+    ), level = "info"})
+    local promo_ok, promo_result = pcall(call_plexus_tool, "plexus_score_set_champion", {
+      score_id   = score_id,
+      version_id = last_accepted_version_id
+    })
+    if promo_ok and promo_result and not promo_result.error then
+      promoted_to_champion = true
+      Human.notify({message = string.format(
+        "Champion promoted: version %s is now champion for score %s",
+        last_accepted_version_id, score_id
+      ), level = "info"})
+    else
+      local err_msg = (promo_result and promo_result.error) or tostring(promo_result)
+      Human.notify({message = string.format(
+        "WARNING: Champion promotion failed — %s. Manually run: plexus_score_set_champion(score_id=%s, version_id=%s)",
+        err_msg, score_id, last_accepted_version_id
+      ), level = "warning"})
+    end
+  elseif last_accepted_version_id == champion_version_id then
+    Human.notify({message = "No improvement over champion — champion unchanged.", level = "info"})
+  end
+
   return {
     success = true,
     status = stop_reason,
@@ -6506,5 +6583,7 @@ code: |
     scorecard_id = scorecard_id,
     score_id = score_id,
     diagnosis = diagnostic_text,
-    prescription = prescription_text
+    prescription = prescription_text,
+    promoted_to_champion = promoted_to_champion,
+    winning_version_id = last_accepted_version_id
   }
