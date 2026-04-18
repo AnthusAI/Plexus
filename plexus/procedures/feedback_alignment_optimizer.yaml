@@ -6536,6 +6536,37 @@ code: |
     .. string.rep("=", 60) .. "\n\n"
     .. presc_display, level = "info"})
 
+  -- ========================================================================
+  -- CHAMPION PROMOTION
+  -- If we improved on the champion, promote the winning version to champion.
+  -- ========================================================================
+  local promoted_to_champion = false
+  if last_accepted_version_id and last_accepted_version_id ~= champion_version_id and not params.dry_run then
+    Human.notify({message = string.format(
+      "Promoting winning version %s to champion (was: %s)...",
+      last_accepted_version_id, tostring(champion_version_id)
+    ), level = "info"})
+    local promo_ok, promo_result = pcall(call_plexus_tool, "plexus_score_set_champion", {
+      score_id   = score_id,
+      version_id = last_accepted_version_id
+    })
+    if promo_ok and promo_result and not promo_result.error then
+      promoted_to_champion = true
+      Human.notify({message = string.format(
+        "Champion promoted: version %s is now champion for score %s",
+        last_accepted_version_id, score_id
+      ), level = "info"})
+    else
+      local err_msg = (promo_result and promo_result.error) or tostring(promo_result)
+      Human.notify({message = string.format(
+        "WARNING: Champion promotion failed — %s. Manually run: plexus_score_set_champion(score_id=%s, version_id=%s)",
+        err_msg, score_id, last_accepted_version_id
+      ), level = "warning"})
+    end
+  elseif last_accepted_version_id == champion_version_id then
+    Human.notify({message = "No improvement over champion — champion unchanged.", level = "info"})
+  end
+
   return {
     success = true,
     status = stop_reason,
@@ -6552,5 +6583,7 @@ code: |
     scorecard_id = scorecard_id,
     score_id = score_id,
     diagnosis = diagnostic_text,
-    prescription = prescription_text
+    prescription = prescription_text,
+    promoted_to_champion = promoted_to_champion,
+    winning_version_id = last_accepted_version_id
   }
