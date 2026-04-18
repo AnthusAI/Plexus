@@ -435,3 +435,52 @@ def volume(
         }
 
     _print_result(title="FeedbackVolume", result=result, output_format=output_format, include_log=include_log)
+
+
+@report.command(name="acceptance-rate-timeline")
+@click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
+@click.option("--score", required=False, help="Optional score identifier (id or external id).")
+@click.option("--bucket-type", default="trailing_7d", show_default=True)
+@click.option("--bucket-count", type=int, default=12, show_default=True)
+@click.option("--days", type=int, required=False, help="Trailing window in days.")
+@click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
+@click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
+@click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
+@click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
+@click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
+@click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
+@click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
+@click.option("--include-log", is_flag=True, help="Include report block log output.")
+def acceptance_rate_timeline(
+    scorecard: str,
+    score: Optional[str],
+    bucket_type: str,
+    bucket_count: int,
+    days: Optional[int],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    cache_key: Optional[str],
+    ttl_hours: float,
+    fresh: bool,
+    account_identifier: Optional[str],
+    output_format: str,
+    include_log: bool,
+) -> None:
+    """Run the AcceptanceRateTimeline report block (score-result acceptance over time)."""
+    result = run_feedback_report_block(
+        block_class="AcceptanceRateTimeline",
+        scorecard=scorecard,
+        score=score,
+        days=_coerce_optional_int(days, "days"),
+        start_date=start_date,
+        end_date=end_date,
+        account_identifier=account_identifier,
+        cache_key=cache_key,
+        ttl_hours=ttl_hours,
+        fresh=fresh,
+        extra_config={
+            "bucket_type": bucket_type,
+            "bucket_count": bucket_count,
+        },
+    )
+    _print_result(title="AcceptanceRateTimeline", result=result, output_format=output_format, include_log=include_log)
