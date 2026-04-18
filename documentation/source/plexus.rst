@@ -38,7 +38,6 @@ Submodules
    plexus.ScoreResult_test
    plexus.Score_test
    plexus.Scorecard
-   plexus.ScorecardReport
    plexus.ScorecardResults
    plexus.ScorecardResultsAnalysis
    plexus.ScorecardResultsAnalysis_test
