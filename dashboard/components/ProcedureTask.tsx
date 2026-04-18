@@ -36,6 +36,7 @@ import * as yaml from 'js-yaml'
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
+import { downloadData } from "aws-amplify/storage"
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
 import { EndOfRunReport, ReportSection } from "./OptimizationInsightsPanel"
 import { CollapsibleText } from "./ui/message-utils"
@@ -312,29 +313,34 @@ export default function ProcedureTask({
 
     const fetchMetrics = async () => {
       try {
-        // Step 1: fetch metadata via Amplify client — no server env vars needed
+        // Step 1: fetch metadata via authenticated Amplify GraphQL
         const result = await (getAmplifyClient() as any).graphql({
           query: `query GetProcedureMetadata($id: ID!) {
             getProcedure(id: $id) { metadata }
           }`,
           variables: { id: procedure.id },
-          authMode: 'apiKey',
         })
         const raw = result?.data?.getProcedure?.metadata
         if (!raw) return
 
         const metadata = typeof raw === 'string' ? JSON.parse(raw) : raw
-        let state = metadata?.state || {}
+        // Prefer the lightweight dashboard projection (tens of KB) over the
+        // full runtime state (can exceed 10 MB due to exploration_results/RCA).
+        let stateRef = metadata?.dashboard_state || metadata?.state || {}
 
-        // Step 2: if state was offloaded to S3, fetch via server route (S3-only)
-        if (state._s3_key) {
-          const s3Res = await fetch(
-            `/api/procedure-state/${procedure.id}?s3key=${encodeURIComponent(state._s3_key)}`
-          )
-          if (s3Res.ok) {
-            const { state: fullState } = await s3Res.json()
-            state = fullState
+        // Step 2: if state was offloaded to S3, fetch directly with authenticated Amplify Storage
+        let state: any = stateRef
+        if (stateRef._s3_key) {
+          const stateKey = String(stateRef._s3_key)
+          if (!stateKey.startsWith('procedures/') && !stateKey.startsWith('reportblocks/')) {
+            throw new Error(`Unexpected optimizer state key path: ${stateKey}`)
           }
+          const downloadResult = await downloadData({
+            path: stateKey,
+            options: { bucket: 'reportBlockDetails' as any },
+          }).result
+          const fullStateRaw = await downloadResult.body.text()
+          state = JSON.parse(fullStateRaw)
         }
 
         // Cache the raw state for stale-while-revalidate on next open

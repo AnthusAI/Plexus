@@ -1,0 +1,18 @@
+{
+  "id": "plx-c8418f80-4545-409b-970e-a668258d4d18",
+  "title": "As a signed-in operator, optimizer charts load via Amplify authenticated GraphQL + Storage",
+  "description": "Feature: Procedures optimizer metrics auth\nScenario: Signed-in user opens optimizer procedure with inline metadata state\nGiven an authenticated dashboard session\nWhen the user opens a procedure detail with optimizer metadata in Procedure.metadata.state\nThen optimizer charts load without API key auth mode\n\nScenario: Signed-in user opens optimizer procedure with offloaded state\nGiven an authenticated dashboard session\nAnd Procedure.metadata.state contains _s3_key under procedures/*\nWhen the user opens procedure detail\nThen state is loaded via Amplify Storage authenticated access\nAnd optimizer charts render from the hydrated state\n\nScenario: No proxy fallback\nGiven procedure detail view\nWhen optimizer state is requested\nThen the app does not call /api/procedure-state",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-17T21:32:20.573538Z",
+  "updated_at": "2026-04-17T21:39:07.403331Z",
+  "closed_at": null,
+  "custom": {}
+}
