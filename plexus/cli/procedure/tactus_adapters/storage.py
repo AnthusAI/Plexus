@@ -9,7 +9,7 @@ All procedure data (state, lua_state, checkpoints) lives in S3 attachments.
 import logging
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import boto3
@@ -77,6 +77,43 @@ _DASHBOARD_DROP_TOPLEVEL = frozenset({
     'item_recurrence', 'known_contradictions',
 })
 
+# Recurrence patterns that are surfaced in the dashboard projection.
+# "EMERGING" is excluded — it's noise at this stage.
+_NOTABLE_RECURRENCE_PATTERNS = frozenset({
+    'PERSISTENT', 'OSCILLATING', 'FLIP_FLOP', 'LATE_EMERGING',
+})
+
+
+def _build_notable_item_recurrence(tracker: Any) -> Optional[Dict[str, Any]]:
+    """Return a compact subset of item_recurrence for the dashboard projection.
+
+    Filters to notable patterns only (not EMERGING), caps per_cycle history
+    to the 5 most recent entries, and caps the total to 30 items sorted by
+    wrong_count descending.  Returns None if there are no notable items.
+    """
+    if not isinstance(tracker, dict) or not tracker:
+        return None
+
+    notable: List[tuple] = []
+    for item_id, entry in tracker.items():
+        if not isinstance(entry, dict):
+            continue
+        if entry.get('pattern') not in _NOTABLE_RECURRENCE_PATTERNS:
+            continue
+        # Keep only the 5 most recent per_cycle entries.
+        per_cycle = entry.get('per_cycle') or []
+        if isinstance(per_cycle, list) and len(per_cycle) > 5:
+            per_cycle = per_cycle[-5:]
+        trimmed = {**entry, 'per_cycle': per_cycle}
+        notable.append((item_id, trimmed, entry.get('wrong_count', 0)))
+
+    if not notable:
+        return None
+
+    # Sort by wrong_count descending, cap at 30.
+    notable.sort(key=lambda t: t[2], reverse=True)
+    return {item_id: entry for item_id, entry, _ in notable[:30]}
+
 
 def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
     """Build a lightweight copy of the optimizer state for the dashboard.
@@ -101,6 +138,12 @@ def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
             ]
         else:
             out[key] = value
+
+    # Add filtered notable item recurrence (PERSISTENT/OSCILLATING/FLIP_FLOP/LATE_EMERGING).
+    notable = _build_notable_item_recurrence(full_state.get('item_recurrence') or {})
+    if notable:
+        out['notable_item_recurrence'] = notable
+
     return out
 
 
