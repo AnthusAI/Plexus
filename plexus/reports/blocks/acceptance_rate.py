@@ -14,6 +14,8 @@ class AcceptanceRate(FeedbackRatesBase):
 
     DEFAULT_DESCRIPTION = "Score result acceptance metrics"
 
+    DEFAULT_MAX_ITEMS = 200
+
     def _coerce_bool(self, value: Any, *, default: bool = False) -> bool:
         if value is None:
             return default
@@ -35,6 +37,14 @@ class AcceptanceRate(FeedbackRatesBase):
                 self._get_param("include_item_acceptance_rate"),
                 default=False,
             )
+            max_items_raw = self._get_param("max_items")
+            max_items = (
+                int(max_items_raw)
+                if max_items_raw is not None and str(max_items_raw).strip() != ""
+                else self.DEFAULT_MAX_ITEMS
+            )
+            if max_items < 0:
+                raise ValueError("'max_items' must be >= 0.")
             dataset = await self._prepare_rate_dataset()
             items: List[Dict[str, Any]] = []
             accepted_items = 0
@@ -67,6 +77,12 @@ class AcceptanceRate(FeedbackRatesBase):
                 if include_item_acceptance_rate:
                     item_output["item_accepted"] = not item_corrected
                 items.append(item_output)
+
+            items_total = len(items)
+            if max_items == 0:
+                items_out: List[Dict[str, Any]] = []
+            else:
+                items_out = items[:max_items]
 
             totals = dataset["totals"]
             total_items = totals["total_items"]
@@ -107,7 +123,11 @@ class AcceptanceRate(FeedbackRatesBase):
                 "distinct_score_ids": dataset["distinct_score_ids"],
                 "date_range": dataset["date_range"],
                 "summary": summary,
-                "items": items,
+                "items": items_out,
+                "max_items": max_items,
+                "items_total": items_total,
+                "items_returned": len(items_out),
+                "items_truncated": len(items_out) < items_total,
                 "raw_counts": dataset["raw_counts"],
             }
             return output, self._get_log_string()

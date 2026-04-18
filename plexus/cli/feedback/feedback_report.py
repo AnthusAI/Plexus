@@ -67,6 +67,7 @@ def report() -> None:
 @report.command(name="correction-rate")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
+@click.option("--max-items", type=int, default=200, show_default=True)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -80,6 +81,7 @@ def report() -> None:
 def correction_rate(
     scorecard: str,
     score: Optional[str],
+    max_items: int,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -99,6 +101,7 @@ def correction_rate(
         days=_coerce_optional_int(days, "days"),
         start_date=start_date,
         end_date=end_date,
+        extra_config={"max_items": max_items},
         account_identifier=account_identifier,
         cache_key=cache_key,
         ttl_hours=ttl_hours,
@@ -116,6 +119,7 @@ def correction_rate(
     is_flag=True,
     help="Include item-level acceptance metrics (default: score-result-only).",
 )
+@click.option("--max-items", type=int, default=200, show_default=True)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -130,6 +134,7 @@ def acceptance_rate(
     scorecard: str,
     score: Optional[str],
     include_item_acceptance_rate: bool,
+    max_items: int,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -149,7 +154,10 @@ def acceptance_rate(
         days=_coerce_optional_int(days, "days"),
         start_date=start_date,
         end_date=end_date,
-        extra_config={"include_item_acceptance_rate": include_item_acceptance_rate},
+        extra_config={
+            "include_item_acceptance_rate": include_item_acceptance_rate,
+            "max_items": max_items,
+        },
         account_identifier=account_identifier,
         cache_key=cache_key,
         ttl_hours=ttl_hours,
