@@ -74,7 +74,7 @@ export default function FeedbackAlignmentTimelinePage() {
           <Badge variant="secondary">Trend</Badge>
         </div>
         <p className="text-lg text-muted-foreground">
-          Tracks feedback alignment change over time using complete historical buckets.
+          Tracks feedback alignment change over time using bucketed windows.
           Plots AC1 as a horizontal time-series, supports overall/per-score trends, and includes an expandable
           per-bucket details section with AC1/Accuracy gauges and raw agreement bars.
         </p>
@@ -90,10 +90,19 @@ export default function FeedbackAlignmentTimelinePage() {
 scorecard: "1438"
 # Optional: analyze one score only
 # score: "1438_1"
+
+# Window mode A (default): complete historical buckets
 bucket_type: calendar_week
 bucket_count: 12
 timezone: UTC
-week_start: monday`}</code></pre>
+week_start: monday
+
+# Window mode B: explicit range (date-only values are inclusive)
+# start_date: "2026-01-01"
+# end_date: "2026-03-31"
+
+# Window mode C: trailing days ending now
+# days: 30`}</code></pre>
         </CardContent>
       </Card>
 
@@ -104,7 +113,7 @@ week_start: monday`}</code></pre>
         <CardContent className="text-sm text-muted-foreground space-y-1">
           <p>`trailing_1d`, `trailing_7d`, `trailing_14d`, `trailing_30d`</p>
           <p>`calendar_day`, `calendar_week`, `calendar_biweek`, `calendar_month`</p>
-          <p>All policies include complete previous periods only.</p>
+          <p>Default mode uses complete previous periods only; explicit ranges may include partial buckets.</p>
         </CardContent>
       </Card>
 

@@ -8,6 +8,7 @@ This module provides functions for:
 """
 
 import yaml
+from datetime import date
 from typing import Dict, Any, List, Optional
 from jinja2 import StrictUndefined, TemplateError
 import logging
@@ -15,6 +16,18 @@ import logging
 from plexus.utils.text_template import render_text_template
 
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_date_string(value: Any) -> bool:
+    """Return True when value is a YYYY-MM-DD date string."""
+    if not isinstance(value, str):
+        return False
+
+    try:
+        date.fromisoformat(value)
+        return True
+    except ValueError:
+        return False
 
 
 def extract_parameters_from_config(configuration: str) -> tuple[List[Dict[str, Any]], str]:
@@ -119,7 +132,11 @@ def validate_parameter_value(param_def: Dict[str, Any], value: Any) -> tuple[boo
             valid_values = [opt['value'] if isinstance(opt, dict) else opt for opt in options]
             if value not in valid_values:
                 return False, f"Parameter '{param_name}' must be one of: {', '.join(map(str, valid_values))}"
-    
+
+    elif param_type == 'date':
+        if not _is_valid_date_string(value):
+            return False, f"Parameter '{param_name}' must be a valid date in YYYY-MM-DD format"
+
     # All other types (text, date, etc.) - just check it's not empty if required
     return True, None
 

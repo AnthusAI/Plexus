@@ -263,6 +263,50 @@ describe('ConfigurableParametersDialog', () => {
     expect(screen.getByText('Country')).toBeInTheDocument()
   })
 
+  it('should render date parameters with a date input', () => {
+    const parameters: ParameterDefinition[] = [
+      { name: 'start_date', label: 'Start Date', type: 'date', required: true }
+    ]
+
+    render(
+      <ConfigurableParametersDialog
+        open={true}
+        onOpenChange={() => {}}
+        title="Test Dialog"
+        parameters={parameters}
+        onSubmit={() => {}}
+      />
+    )
+
+    expect(screen.getByLabelText(/Start Date/)).toHaveAttribute('type', 'date')
+  })
+
+  it('should submit date parameters', async () => {
+    const parameters: ParameterDefinition[] = [
+      { name: 'start_date', label: 'Start Date', type: 'date', required: true }
+    ]
+
+    const onSubmit = jest.fn()
+
+    render(
+      <ConfigurableParametersDialog
+        open={true}
+        onOpenChange={() => {}}
+        title="Test Dialog"
+        parameters={parameters}
+        onSubmit={onSubmit}
+      />
+    )
+
+    const input = screen.getByLabelText(/Start Date/)
+    fireEvent.change(input, { target: { value: '2026-04-18' } })
+    fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith({ start_date: '2026-04-18' })
+    })
+  })
+
   it('should clear dependent fields when dependency changes', async () => {
     const parameters: ParameterDefinition[] = [
       { name: 'parent', label: 'Parent', type: 'text' },

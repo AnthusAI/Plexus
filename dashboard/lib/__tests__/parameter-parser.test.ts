@@ -120,6 +120,20 @@ params:
       expect(result[2].type).toBe('boolean')
       expect(result[2].default).toBe(false)
     })
+
+    it('should parse date parameters from params mapping format', () => {
+      const yaml = `
+params:
+  start_date:
+    type: date
+    required: true
+`
+      const result = parseParametersFromYaml(yaml)
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('start_date')
+      expect(result[0].type).toBe('date')
+      expect(result[0].required).toBe(true)
+    })
   })
 
   describe('hasParameters', () => {
@@ -222,6 +236,19 @@ parameters:
       const result = validateParameters({ brief: 'hello' }, definitions)
       expect(result.valid).toBe(true)
     })
+
+    it('should validate date parameters', () => {
+      const definitions: ParameterDefinition[] = [
+        { name: 'start_date', label: 'Start Date', type: 'date', required: true }
+      ]
+
+      const invalidResult = validateParameters({ start_date: '2026-02-30' }, definitions)
+      expect(invalidResult.valid).toBe(false)
+      expect(invalidResult.errors[0].message).toContain('YYYY-MM-DD')
+
+      const validResult = validateParameters({ start_date: '2026-02-28' }, definitions)
+      expect(validResult.valid).toBe(true)
+    })
   })
 
   describe('getDefaultValues', () => {
@@ -240,13 +267,15 @@ parameters:
       const definitions: ParameterDefinition[] = [
         { name: 'text_field', label: 'Text', type: 'text' },
         { name: 'number_field', label: 'Number', type: 'number' },
-        { name: 'bool_field', label: 'Boolean', type: 'boolean' }
+        { name: 'bool_field', label: 'Boolean', type: 'boolean' },
+        { name: 'date_field', label: 'Date', type: 'date' }
       ]
       
       const result = getDefaultValues(definitions)
       expect(result.text_field).toBe('')
       expect(result.number_field).toBe(0)
       expect(result.bool_field).toBe(false)
+      expect(result.date_field).toBe('')
     })
 
     it('should use min value for numbers when specified', () => {

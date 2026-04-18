@@ -105,7 +105,7 @@ export default function ReportBlocksPage() {
                 </div>
               </div>
               <CardDescription className="text-base leading-relaxed">
-                Visualizes change in feedback alignment over complete trailing or calendar-aligned time buckets
+                Visualizes change in feedback alignment over trailing, calendar, or explicit historical windows
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -118,7 +118,7 @@ export default function ReportBlocksPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Complete-period buckets only
+                    Explicit date ranges or trailing windows
                   </li>
                   <li className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
@@ -134,6 +134,72 @@ export default function ReportBlocksPage() {
                     <DocButton>View Documentation →</DocButton>
                   </Link>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-xl">OverturnRate</CardTitle>
+                  <Badge className="mt-1">Feedback Metrics</Badge>
+                </div>
+              </div>
+              <CardDescription className="text-base leading-relaxed">
+                Measures how often feedback changed the original score result value per item and across the corpus
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm text-foreground">Key Features:</h4>
+                <ul className="grid grid-cols-1 gap-1 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
+                    Corpus-level overturn rate
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
+                    Per-item overturn breakdown
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
+                    Supports scorecard-level and score-level scopes
+                  </li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-xl">AcceptanceRate</CardTitle>
+                  <Badge className="mt-1">Feedback Metrics</Badge>
+                </div>
+              </div>
+              <CardDescription className="text-base leading-relaxed">
+                Tracks acceptance as the complement of overturn, including item-level and score-result-level rates
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm text-foreground">Key Features:</h4>
+                <ul className="grid grid-cols-1 gap-1 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
+                    Item acceptance and overturn counts
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
+                    Score-result acceptance rate
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
+                    Same time-range selectors as other feedback blocks
+                  </li>
+                </ul>
               </div>
             </CardContent>
           </Card>

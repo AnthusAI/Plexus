@@ -6,6 +6,7 @@ import type { ParameterDefinition, ParameterValue } from '@/types/parameters'
 type ParameterValues = ParameterValue
 import {
   TextParameter,
+  DateParameter,
   NumberParameter,
   BooleanParameter,
   SelectParameter,
@@ -91,7 +92,7 @@ export function ConfigurableParametersForm({
         const scoreId = scoreParam ? parameterValues[scoreParam.name] : undefined
         return <ScoreVersionSelectParameter {...commonProps} scoreId={scoreId} />
       case 'date':
-        return <TextParameter {...commonProps} />
+        return <DateParameter {...commonProps} />
       default:
         return <TextParameter {...commonProps} />
     }
@@ -111,4 +112,3 @@ export function ConfigurableParametersForm({
     </div>
   )
 }
-

@@ -7,6 +7,19 @@ import { ParameterConfig, ParameterDefinition } from '@/types/parameters'
 
 type RawParameterType = 'string' | 'text' | 'number' | 'boolean' | 'select' | string
 
+function isValidDateValue(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false
+  }
+
+  const parsed = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) {
+    return false
+  }
+
+  return parsed.toISOString().slice(0, 10) === value
+}
+
 function toTitleCase(value: string): string {
   return value
     .replace(/[_-]+/g, ' ')
@@ -20,6 +33,7 @@ function normalizeParameterType(type: RawParameterType): ParameterDefinition['ty
   if (type === 'number') return 'number'
   if (type === 'boolean') return 'boolean'
   if (type === 'select') return 'select'
+  if (type === 'date') return 'date'
   return 'text'
 }
 
@@ -157,6 +171,15 @@ export function validateParameters(
             errors.push({
               parameter: def.name,
               message: `${def.label} has an invalid value`
+            })
+          }
+          break
+
+        case 'date':
+          if (typeof value !== 'string' || !isValidDateValue(value)) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} must be a valid date in YYYY-MM-DD format`
             })
           }
           break
