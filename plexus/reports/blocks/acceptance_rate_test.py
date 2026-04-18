@@ -113,19 +113,54 @@ async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_ap
 
 
 @pytest.mark.asyncio
-async def test_feedback_items_window_query_omits_sort_direction(mock_api_client):
+async def test_feedback_items_window_fans_out_by_score_ids_and_dedupes(mock_api_client):
     block = AcceptanceRate(
         config={"scorecard": "sc-1", "days": 1},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
 
-    captured: dict = {}
+    seen_score_ids = []
 
     def _execute(query, variables):
-        captured["query"] = query
-        captured["variables"] = variables
-        return {"listFeedbackItems": {"items": [], "nextToken": None}}
+        score_id = variables["compositeCondition"]["between"][0]["scoreId"]
+        seen_score_ids.append(score_id)
+        if score_id == "score-1":
+            return {
+                "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt": {
+                    "items": [
+                        {
+                            "id": "fi-dup",
+                            "itemId": "item-a",
+                            "scoreId": "score-1",
+                            "editedAt": "2026-04-01T10:00:00+00:00",
+                            "isInvalid": False,
+                        }
+                    ],
+                    "nextToken": None,
+                }
+            }
+        return {
+            "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt": {
+                "items": [
+                    {
+                        "id": "fi-dup",
+                        "itemId": "item-a",
+                        "scoreId": "score-2",
+                        "editedAt": "2026-04-01T11:00:00+00:00",
+                        "isInvalid": False,
+                    },
+                    {
+                        "id": "fi-2",
+                        "itemId": "item-b",
+                        "scoreId": "score-2",
+                        "editedAt": "2026-04-01T12:00:00+00:00",
+                        "isInvalid": False,
+                    },
+                ],
+                "nextToken": None,
+            }
+        }
 
     mock_api_client.execute.side_effect = _execute
 
@@ -135,11 +170,13 @@ async def test_feedback_items_window_query_omits_sort_direction(mock_api_client)
         start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
         end_date=datetime(2026, 4, 2, tzinfo=timezone.utc),
         score_id=None,
+        score_ids=["score-1", "score-2", "score-1"],
     )
 
-    assert items == []
-    assert "sortDirection" not in captured["query"]
-    assert captured["variables"]["filter"]["scorecardId"] == {"eq": "sc-1"}
+    assert sorted(seen_score_ids) == ["score-1", "score-2"]
+    assert sorted(item["id"] for item in items) == ["fi-2", "fi-dup"]
+    deduped = next(item for item in items if item["id"] == "fi-dup")
+    assert deduped["scoreId"] == "score-2"
 
 
 @pytest.mark.asyncio
