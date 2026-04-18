@@ -26,6 +26,10 @@ interface CorrectionRateData {
   report_type?: string;
   block_title?: string;
   block_description?: string;
+  max_items?: number;
+  items_total?: number;
+  items_returned?: number;
+  items_truncated?: boolean;
   scorecard_name?: string;
   score_name?: string | null;
   date_range?: {
@@ -136,6 +140,9 @@ const CorrectionRate: React.FC<ReportBlockProps> = (props) => {
         <div className="text-sm text-muted-foreground">
           {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
           {output.score_name ? ` • Score: ${output.score_name}` : null}
+          {output.items_truncated
+            ? ` • Showing ${output.items_returned ?? items.length} of ${output.items_total ?? "?"} items`
+            : null}
         </div>
 
         <div className="overflow-x-auto rounded-md border">
@@ -143,7 +150,7 @@ const CorrectionRate: React.FC<ReportBlockProps> = (props) => {
             <thead className="bg-muted/40">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Item</th>
-                <th className="px-3 py-2 text-right font-medium">Score Results</th>
+                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Score Results</th>
                 <th className="px-3 py-2 text-right font-medium">Corrected</th>
                 <th className="px-3 py-2 text-right font-medium">Uncorrected</th>
                 <th className="px-3 py-2 text-right font-medium">Correction Rate</th>
