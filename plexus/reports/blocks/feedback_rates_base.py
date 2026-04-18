@@ -241,8 +241,9 @@ class FeedbackRatesBase(BaseReportBlock):
         start_date: datetime,
         end_date: datetime,
         score_id: Optional[str],
+        score_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        if score_id:
+        async def _fetch_for_score(target_score_id: str) -> List[Dict[str, Any]]:
             query_name = "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"
             query = f"""
             query ListFeedbackItemsByCompositeEditedAt(
@@ -275,54 +276,23 @@ class FeedbackRatesBase(BaseReportBlock):
                 }}
             }}
             """
-        else:
-            query_name = "listFeedbackItems"
-            query = f"""
-            query ListFeedbackItemsWindow(
-                $filter: ModelFeedbackItemFilterInput,
-                $limit: Int,
-                $nextToken: String
-            ) {{
-                {query_name}(
-                    filter: $filter,
-                    limit: $limit,
-                    nextToken: $nextToken
-                ) {{
-                    items {{
-                        id
-                        scorecardId
-                        scoreId
-                        itemId
-                        initialAnswerValue
-                        finalAnswerValue
-                        isInvalid
-                        editedAt
-                        createdAt
-                        updatedAt
-                    }}
-                    nextToken
-                }}
-            }}
-            """
+            score_items: List[Dict[str, Any]] = []
+            next_token: Optional[str] = None
+            seen_tokens: set[str] = set()
 
-        all_items: List[Dict[str, Any]] = []
-        next_token: Optional[str] = None
-        seen_tokens: set[str] = set()
-
-        while True:
-            if score_id:
+            while True:
                 variables = {
                     "accountId": str(account_id),
                     "compositeCondition": {
                         "between": [
                             {
                                 "scorecardId": str(scorecard_id),
-                                "scoreId": str(score_id),
+                                "scoreId": str(target_score_id),
                                 "editedAt": start_date.isoformat(),
                             },
                             {
                                 "scorecardId": str(scorecard_id),
-                                "scoreId": str(score_id),
+                                "scoreId": str(target_score_id),
                                 "editedAt": end_date.isoformat(),
                             },
                         ]
@@ -331,38 +301,79 @@ class FeedbackRatesBase(BaseReportBlock):
                     "limit": 500,
                     "nextToken": next_token,
                 }
-            else:
-                variables = {
-                    "filter": {
-                        "accountId": {"eq": str(account_id)},
-                        "scorecardId": {"eq": str(scorecard_id)},
-                        "editedAt": {"between": [start_date.isoformat(), end_date.isoformat()]},
-                    },
-                    "limit": 500,
-                    "nextToken": next_token,
-                }
-            self._log(
-                f"Fetching feedback page (score={'yes' if score_id else 'no'}, "
-                f"nextToken={'set' if next_token else 'none'})"
-            )
-            response = await asyncio.to_thread(self.api_client.execute, query, variables)
-            payload = response.get(query_name) or {}
-            items = payload.get("items") or []
-            if items:
-                all_items.extend(items)
+                self._log(
+                    f"Fetching feedback page (score_id={target_score_id}, "
+                    f"nextToken={'set' if next_token else 'none'})"
+                )
+                response = await asyncio.to_thread(self.api_client.execute, query, variables)
+                payload = response.get(query_name) or {}
+                items = payload.get("items") or []
+                if items:
+                    score_items.extend(items)
 
-            next_token = payload.get("nextToken")
-            self._log(
-                f"Feedback page returned {len(items)} items, "
-                f"nextToken={'set' if next_token else 'none'}"
-            )
-            if not next_token:
-                break
-            if next_token in seen_tokens:
-                self._log("Detected repeated pagination token for feedback items; stopping pagination.", level="WARNING")
-                break
-            seen_tokens.add(next_token)
+                next_token = payload.get("nextToken")
+                self._log(
+                    f"Feedback page returned {len(items)} items for score_id={target_score_id}, "
+                    f"nextToken={'set' if next_token else 'none'}"
+                )
+                if not next_token:
+                    break
+                if next_token in seen_tokens:
+                    self._log(
+                        f"Detected repeated pagination token for feedback items (score_id={target_score_id}); "
+                        "stopping pagination.",
+                        level="WARNING",
+                    )
+                    break
+                seen_tokens.add(next_token)
 
+            return score_items
+
+        if score_id:
+            return await _fetch_for_score(str(score_id))
+
+        normalized_score_ids = sorted(
+            {
+                str(sid).strip()
+                for sid in (score_ids or [])
+                if str(sid).strip()
+            }
+        )
+        if not normalized_score_ids:
+            self._log("No score IDs available for scorecard-wide feedback fetch; skipping feedback query.")
+            return []
+
+        semaphore = asyncio.Semaphore(6)
+
+        async def _bounded_fetch(target_score_id: str) -> List[Dict[str, Any]]:
+            async with semaphore:
+                return await _fetch_for_score(target_score_id)
+
+        self._log(
+            f"Fetching scorecard-wide feedback via composite index fanout across {len(normalized_score_ids)} scores."
+        )
+        grouped_results = await asyncio.gather(*[_bounded_fetch(sid) for sid in normalized_score_ids])
+
+        merged_by_id: Dict[str, Dict[str, Any]] = {}
+        for score_items in grouped_results:
+            for item in score_items:
+                item_id = str(item.get("id") or "").strip()
+                if not item_id:
+                    continue
+                existing = merged_by_id.get(item_id)
+                if existing is None:
+                    merged_by_id[item_id] = item
+                    continue
+                existing_ts = self._to_dt(existing.get("editedAt") or existing.get("updatedAt") or existing.get("createdAt"))
+                current_ts = self._to_dt(item.get("editedAt") or item.get("updatedAt") or item.get("createdAt"))
+                if current_ts >= existing_ts:
+                    merged_by_id[item_id] = item
+
+        all_items = list(merged_by_id.values())
+        self._log(
+            f"Merged scorecard-wide feedback results to {len(all_items)} unique feedback items "
+            f"from {sum(len(items) for items in grouped_results)} raw records."
+        )
         return all_items
 
     async def _prepare_rate_dataset(self) -> Dict[str, Any]:
@@ -417,6 +428,13 @@ class FeedbackRatesBase(BaseReportBlock):
                 }
 
         filtered_results = list(latest_results_by_key.values())
+        distinct_score_ids = sorted(
+            {
+                str(result.get("scoreId"))
+                for result in filtered_results
+                if str(result.get("scoreId") or "").strip()
+            }
+        )
         self._log(
             f"Fetching feedback items window for scorecard={scorecard.id} "
             f"score={resolved_score_id or 'all'} start={start_date.isoformat()} end={end_date.isoformat()}"
@@ -427,6 +445,7 @@ class FeedbackRatesBase(BaseReportBlock):
             start_date=start_date,
             end_date=end_date,
             score_id=resolved_score_id,
+            score_ids=None if resolved_score_id else distinct_score_ids,
         )
         self._log(f"Fetched {len(feedback_items)} raw feedback items in window")
 
@@ -500,13 +519,6 @@ class FeedbackRatesBase(BaseReportBlock):
             total = item["total_score_results"]
             item["overturn_rate"] = (item["overturned_score_results"] / total) if total else 0.0
 
-        distinct_score_ids = sorted(
-            {
-                str(result.get("scoreId"))
-                for result in filtered_results
-                if str(result.get("scoreId") or "").strip()
-            }
-        )
         total_score_results = len(filtered_results)
         total_items = len(items)
 
