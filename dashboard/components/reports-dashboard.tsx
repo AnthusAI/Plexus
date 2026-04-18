@@ -43,6 +43,7 @@ type ReportConfiguration = Schema['ReportConfiguration']['type'];
 type ReportDisplayData = {
   id: string;
   name?: string | null;
+  subtitle?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   output?: string | null;
@@ -449,6 +450,19 @@ const formatReportDisplayName = (name: string | null | undefined): string | null
   return name;
 };
 
+const parseReportParameters = (raw: any): Record<string, any> | null => {
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object") return raw as any;
+  return null;
+};
+
 // Transformation function
 function transformReportData(report: Report): ReportDisplayData | null {
   if (!report) return null;
@@ -490,11 +504,20 @@ function transformReportData(report: Report): ReportDisplayData | null {
   }
   
   // Final fallbacks if we still don't have a name
-  reportName = formatReportDisplayName(reportName) || (configInfo?.name) || `Report ${report.id.substring(0, 6)}`;
+  const params = parseReportParameters((report as any).parameters);
+  const displayTitle = params?._display_title ? String(params._display_title) : null;
+  const displaySubtitle = params?._display_subtitle ? String(params._display_subtitle) : null;
+
+  reportName =
+    displayTitle ||
+    formatReportDisplayName(reportName) ||
+    (configInfo?.name) ||
+    `Report ${report.id.substring(0, 6)}`;
 
   const transformed = {
     id: report.id,
     name: reportName,
+    subtitle: displaySubtitle,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
     output: report.output || null,
@@ -1125,6 +1148,7 @@ export default function ReportsDashboard({
 
     // Ensure we have a valid display name for the report
     const displayName = report.name || 'Report';
+    const displaySubtitle = report.subtitle || report.reportConfiguration?.description;
 
     // Generate a unique key that changes whenever blocks are updated
     const reportKey = `${report.id}-${selectedReportBlocks?.length || 0}-${Date.now()}`;
@@ -1144,8 +1168,8 @@ export default function ReportsDashboard({
             id: report.id,
             title: displayName,
             name: displayName,
-            configName: report.reportConfiguration?.name,
-            configDescription: report.reportConfiguration?.description,
+            configName: displayName,
+            configDescription: displaySubtitle,
             createdAt: report.createdAt,
             updatedAt: report.updatedAt,
             output: report.output,
@@ -1342,6 +1366,7 @@ export default function ReportsDashboard({
                           
                           // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
                           const displayName = String(report.name || 'Report');
+                          const displaySubtitle = report.subtitle ? String(report.subtitle) : '';
                                           
                           // The ReportTask component uses configName as the primary display name
                           // We need to pass the report name both as title and as configName to ensure it displays correctly
@@ -1359,7 +1384,7 @@ export default function ReportsDashboard({
                               name: displayName,   // Backup
                               // CRITICAL FIX: ReportTask uses configName as primary display field
                               configName: displayName,  // This is what ReportTask actually displays
-                              configDescription: report.reportConfiguration?.description,
+                              configDescription: displaySubtitle || report.reportConfiguration?.description,
                               createdAt: report.createdAt,
                               updatedAt: report.updatedAt
                             },
