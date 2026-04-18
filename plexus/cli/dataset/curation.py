@@ -346,6 +346,16 @@ def _resolve_score_final_classes_from_yaml_details(
                 "score_version_id": resolved_score_version_id,
             }
 
+        if final_node.get("class") == "YesOrNoClassifier":
+            add_class("Yes")
+            add_class("No")
+        if valid_classes:
+            return {
+                "classes": valid_classes,
+                "source": "graph[-1].class=YesOrNoClassifier",
+                "score_version_id": resolved_score_version_id,
+            }
+
         if final_node.get("class") == "LogicalClassifier":
             code_text = final_node.get("code")
             if isinstance(code_text, str) and code_text.strip():
@@ -364,7 +374,7 @@ def _resolve_score_final_classes_from_yaml_details(
             f"score {score_id} (version {resolved_score_version_id}). "
             "Checked: valid_classes, parameters.validation.value.valid_classes, classes[].name, "
             "graph[-1].valid_classes, graph[-1].conditions[].output.value, "
-            "graph[-1].LogicalClassifier.code."
+            "graph[-1].class=YesOrNoClassifier, graph[-1].LogicalClassifier.code."
         )
     return {
         "classes": valid_classes,
