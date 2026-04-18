@@ -426,6 +426,29 @@ const getNestedProperty = (obj: any, path: string[], defaultValue: any = null) =
   }, obj);
 };
 
+const LEGACY_PROGRAMMATIC_CONFIG_NAME = "__programmatic_blocks__";
+
+const humanizeBlockClass = (name: string): string =>
+  name.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+
+const formatConfigDisplayName = (name: string | null | undefined): string | null => {
+  if (!name) return null;
+  if (name === LEGACY_PROGRAMMATIC_CONFIG_NAME) return "Programmatic Reports";
+  return name;
+};
+
+const formatReportDisplayName = (name: string | null | undefined): string | null => {
+  if (!name) return null;
+  if (name.startsWith("cache:")) {
+    const match = name.match(/^cache:([^:]+):/);
+    if (match?.[1]) {
+      return `${humanizeBlockClass(match[1])} (Programmatic)`;
+    }
+    return "Programmatic Report";
+  }
+  return name;
+};
+
 // Transformation function
 function transformReportData(report: Report): ReportDisplayData | null {
   if (!report) return null;
@@ -438,13 +461,13 @@ function transformReportData(report: Report): ReportDisplayData | null {
   if (configData && typeof configData === 'object') {
     // Try to get properties from the object directly or from data property if it exists
     const id = getNestedProperty(configData, ['id'], '') || getNestedProperty(configData, ['data', 'id'], '');
-    const name = getNestedProperty(configData, ['name'], null) || getNestedProperty(configData, ['data', 'name'], null);
+    const rawName = getNestedProperty(configData, ['name'], null) || getNestedProperty(configData, ['data', 'name'], null);
     const description = getNestedProperty(configData, ['description'], null) || getNestedProperty(configData, ['data', 'description'], null);
     
     if (id) {
       configInfo = {
         id: id,
-        name: name,
+        name: formatConfigDisplayName(rawName),
         description: description
       };
     }
@@ -467,7 +490,7 @@ function transformReportData(report: Report): ReportDisplayData | null {
   }
   
   // Final fallbacks if we still don't have a name
-  reportName = reportName || (configInfo?.name) || `Report ${report.id.substring(0, 6)}`;
+  reportName = formatReportDisplayName(reportName) || (configInfo?.name) || `Report ${report.id.substring(0, 6)}`;
 
   const transformed = {
     id: report.id,
