@@ -19,17 +19,17 @@ class AcceptanceRate(FeedbackRatesBase):
             dataset = await self._prepare_rate_dataset()
             items: List[Dict[str, Any]] = []
             accepted_items = 0
-            overturned_items = 0
+            corrected_items = 0
 
             for row in dataset["items"]:
-                item_overturned = row["overturned_score_results"] > 0
-                if item_overturned:
-                    overturned_items += 1
+                item_corrected = row["corrected_score_results"] > 0
+                if item_corrected:
+                    corrected_items += 1
                 else:
                     accepted_items += 1
 
                 item_total = row["total_score_results"]
-                item_accepted_score_results = row["upheld_score_results"]
+                item_accepted_score_results = row["uncorrected_score_results"]
                 item_score_result_acceptance_rate = (
                     item_accepted_score_results / item_total if item_total else 0.0
                 )
@@ -37,10 +37,10 @@ class AcceptanceRate(FeedbackRatesBase):
                 items.append(
                     {
                         "item_id": row["item_id"],
-                        "item_accepted": not item_overturned,
+                        "item_accepted": not item_corrected,
                         "total_score_results": item_total,
                         "accepted_score_results": item_accepted_score_results,
-                        "overturned_score_results": row["overturned_score_results"],
+                        "corrected_score_results": row["corrected_score_results"],
                         "score_result_acceptance_rate": item_score_result_acceptance_rate,
                         "score_results": row["score_results"],
                     }
@@ -49,15 +49,15 @@ class AcceptanceRate(FeedbackRatesBase):
             totals = dataset["totals"]
             total_items = totals["total_items"]
             total_score_results = totals["total_score_results"]
-            accepted_score_results = totals["upheld_score_results"]
+            accepted_score_results = totals["uncorrected_score_results"]
             summary = {
                 "total_items": total_items,
                 "accepted_items": accepted_items,
-                "overturned_items": overturned_items,
+                "corrected_items": corrected_items,
                 "item_acceptance_rate": (accepted_items / total_items) if total_items else 0.0,
                 "total_score_results": total_score_results,
                 "accepted_score_results": accepted_score_results,
-                "overturned_score_results": totals["overturned_score_results"],
+                "corrected_score_results": totals["corrected_score_results"],
                 "score_result_acceptance_rate": (
                     accepted_score_results / total_score_results if total_score_results else 0.0
                 ),

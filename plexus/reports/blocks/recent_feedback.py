@@ -77,7 +77,7 @@ class RecentFeedback(FeedbackRatesBase):
 
             rows: List[Dict[str, Any]] = []
             invalid_count = 0
-            overturned_count = 0
+            corrected_count = 0
             distinct_item_ids: set[str] = set()
             distinct_score_ids: set[str] = set()
 
@@ -87,7 +87,7 @@ class RecentFeedback(FeedbackRatesBase):
                 initial_value = item.get("initialAnswerValue")
                 final_value = item.get("finalAnswerValue")
                 is_invalid = bool(item.get("isInvalid"))
-                overturned = (
+                corrected = (
                     final_value is not None
                     and initial_value is not None
                     and str(final_value) != str(initial_value)
@@ -99,8 +99,8 @@ class RecentFeedback(FeedbackRatesBase):
                     distinct_score_ids.add(score_id)
                 if is_invalid:
                     invalid_count += 1
-                if overturned:
-                    overturned_count += 1
+                if corrected:
+                    corrected_count += 1
 
                 rows.append(
                     {
@@ -110,7 +110,7 @@ class RecentFeedback(FeedbackRatesBase):
                         "score_name": score_name_by_id.get(score_id),
                         "initial_value": initial_value,
                         "final_value": final_value,
-                        "overturned": overturned,
+                        "corrected": corrected,
                         "is_invalid": is_invalid,
                         "edited_at": item.get("editedAt"),
                         "edit_comment": item.get("editCommentValue")
@@ -119,7 +119,7 @@ class RecentFeedback(FeedbackRatesBase):
                 )
 
             total_feedback_items = len(rows)
-            upheld_count = total_feedback_items - overturned_count
+            agreed_count = total_feedback_items - corrected_count
             output = {
                 "report_type": "recent_feedback",
                 "block_title": self.DEFAULT_NAME,
@@ -136,8 +136,8 @@ class RecentFeedback(FeedbackRatesBase):
                 },
                 "summary": {
                     "total_feedback_items": total_feedback_items,
-                    "overturned_feedback_items": overturned_count,
-                    "upheld_feedback_items": upheld_count,
+                    "corrected_feedback_items": corrected_count,
+                    "agreed_feedback_items": agreed_count,
                     "invalid_feedback_items": invalid_count,
                     "distinct_items_count": len(distinct_item_ids),
                     "distinct_score_count": len(distinct_score_ids),

@@ -14,7 +14,7 @@ export { default as ExplanationAnalysis } from './ExplanationAnalysis';
 export { default as ScorecardReport } from './ScorecardReport';
 export { default as ActionItems } from './ActionItems';
 export { default as FeedbackAlignmentTimeline } from './FeedbackAlignmentTimeline';
-export { default as OverturnRate } from './OverturnRate';
+export { default as CorrectionRate } from './CorrectionRate';
 export { default as AcceptanceRate } from './AcceptanceRate';
 export { default as RecentFeedback } from './RecentFeedback';
 export { BlockRenderer } from './BlockRegistry';

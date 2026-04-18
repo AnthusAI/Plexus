@@ -9,11 +9,11 @@ import ReportBlock, { ReportBlockProps } from "./ReportBlock";
 interface AcceptanceSummary {
   total_items: number;
   accepted_items: number;
-  overturned_items: number;
+  corrected_items: number;
   item_acceptance_rate: number;
   total_score_results: number;
   accepted_score_results: number;
-  overturned_score_results: number;
+  corrected_score_results: number;
   score_result_acceptance_rate: number;
 }
 
@@ -22,7 +22,7 @@ interface AcceptanceItem {
   item_accepted: boolean;
   total_score_results: number;
   accepted_score_results: number;
-  overturned_score_results: number;
+  corrected_score_results: number;
   score_result_acceptance_rate: number;
 }
 
@@ -154,7 +154,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                 <th className="px-3 py-2 text-right font-medium">Accepted?</th>
                 <th className="px-3 py-2 text-right font-medium">Score Results</th>
                 <th className="px-3 py-2 text-right font-medium">Accepted</th>
-                <th className="px-3 py-2 text-right font-medium">Overturned</th>
+                <th className="px-3 py-2 text-right font-medium">Corrected</th>
                 <th className="px-3 py-2 text-right font-medium">Acceptance Rate</th>
               </tr>
             </thead>
@@ -172,7 +172,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                     <td className="px-3 py-2 text-right">{item.item_accepted ? "Yes" : "No"}</td>
                     <td className="px-3 py-2 text-right">{item.total_score_results}</td>
                     <td className="px-3 py-2 text-right">{item.accepted_score_results}</td>
-                    <td className="px-3 py-2 text-right">{item.overturned_score_results}</td>
+                    <td className="px-3 py-2 text-right">{item.corrected_score_results}</td>
                     <td className="px-3 py-2 text-right">
                       {formatPercent(item.score_result_acceptance_rate)}
                     </td>

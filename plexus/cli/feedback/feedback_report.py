@@ -64,7 +64,7 @@ def report() -> None:
     """Run core feedback reports directly from code-defined block classes."""
 
 
-@report.command(name="overturn-rate")
+@report.command(name="correction-rate")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
@@ -77,7 +77,7 @@ def report() -> None:
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
-def overturn_rate(
+def correction_rate(
     scorecard: str,
     score: Optional[str],
     days: Optional[int],
@@ -91,9 +91,9 @@ def overturn_rate(
     output_format: str,
     include_log: bool,
 ) -> None:
-    """Run the OverturnRate report block."""
+    """Run the CorrectionRate report block."""
     result = run_feedback_report_block(
-        block_class="OverturnRate",
+        block_class="CorrectionRate",
         scorecard=scorecard,
         score=score,
         days=_coerce_optional_int(days, "days"),
@@ -105,7 +105,7 @@ def overturn_rate(
         fresh=fresh,
         background=background,
     )
-    _print_result(title="OverturnRate", result=result, output_format=output_format, include_log=include_log)
+    _print_result(title="CorrectionRate", result=result, output_format=output_format, include_log=include_log)
 
 
 @report.command(name="acceptance-rate")

@@ -8,8 +8,8 @@ import ReportBlock, { ReportBlockProps } from "./ReportBlock";
 
 interface RecentFeedbackSummary {
   total_feedback_items: number;
-  overturned_feedback_items: number;
-  upheld_feedback_items: number;
+  corrected_feedback_items: number;
+  agreed_feedback_items: number;
   invalid_feedback_items: number;
   distinct_items_count: number;
   distinct_score_count: number;
@@ -22,7 +22,7 @@ interface RecentFeedbackItem {
   score_name?: string;
   initial_value?: string | null;
   final_value?: string | null;
-  overturned: boolean;
+  corrected: boolean;
   is_invalid: boolean;
   edited_at?: string | null;
   edit_comment?: string | null;
@@ -117,8 +117,8 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
             <div className="text-xl font-semibold">{summary?.total_feedback_items ?? 0}</div>
           </div>
           <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Overturned</div>
-            <div className="text-xl font-semibold">{summary?.overturned_feedback_items ?? 0}</div>
+            <div className="text-xs text-muted-foreground">Corrected</div>
+            <div className="text-xl font-semibold">{summary?.corrected_feedback_items ?? 0}</div>
           </div>
           <div className="rounded-md border p-3">
             <div className="text-xs text-muted-foreground">Distinct Items</div>
@@ -144,7 +144,7 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
                 <th className="px-3 py-2 text-left font-medium">Score</th>
                 <th className="px-3 py-2 text-right font-medium">Initial</th>
                 <th className="px-3 py-2 text-right font-medium">Final</th>
-                <th className="px-3 py-2 text-right font-medium">Overturned</th>
+                <th className="px-3 py-2 text-right font-medium">Corrected</th>
                 <th className="px-3 py-2 text-right font-medium">Invalid</th>
               </tr>
             </thead>
@@ -167,7 +167,7 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
                     </td>
                     <td className="px-3 py-2 text-right">{item.initial_value ?? "N/A"}</td>
                     <td className="px-3 py-2 text-right">{item.final_value ?? "N/A"}</td>
-                    <td className="px-3 py-2 text-right">{item.overturned ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 text-right">{item.corrected ? "Yes" : "No"}</td>
                     <td className="px-3 py-2 text-right">{item.is_invalid ? "Yes" : "No"}</td>
                   </tr>
                 ))
