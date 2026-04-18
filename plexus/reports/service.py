@@ -3,6 +3,7 @@ import logging
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 import json
+import hashlib
 from datetime import datetime, timezone # Added datetime
 import traceback # Added for error details
 import re
@@ -490,7 +491,7 @@ def _instantiate_and_run_block(
         # Return None for JSON output and the error message as the log string
         return None, f"{error_msg}\nDetails:\n{detailed_error}", None
 
-_PROGRAMMATIC_CONFIG_NAME = "__programmatic_blocks__"
+_PROGRAMMATIC_CONFIG_NAME = "Programmatic Reports"
 _programmatic_config_id_cache: Optional[str] = None
 
 # In-process tracking for background block dispatches.
@@ -523,6 +524,51 @@ def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) 
     _programmatic_config_id_cache = rc.id
     logger.info("Created programmatic ReportConfiguration %s", _programmatic_config_id_cache)
     return _programmatic_config_id_cache
+
+
+def _humanize_block_class(block_class: str) -> str:
+    """Convert block class name to human-friendly title."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", block_class).strip()
+
+
+def _build_default_cache_key(block_class: str, block_config: Dict[str, Any]) -> str:
+    """
+    Build a deterministic but readable cache key for programmatic blocks.
+    """
+    block_title = _humanize_block_class(block_class)
+    parts: List[str] = [block_title]
+
+    scorecard = str(block_config.get("scorecard") or "").strip()
+    score = str(block_config.get("score") or block_config.get("score_id") or "").strip()
+    start_date = str(block_config.get("start_date") or "").strip()
+    end_date = str(block_config.get("end_date") or "").strip()
+    days = block_config.get("days")
+    mode = str(block_config.get("mode") or "").strip()
+    bucket_type = str(block_config.get("bucket_type") or "").strip()
+    bucket_count = block_config.get("bucket_count")
+
+    if scorecard:
+        parts.append(f"Scorecard {scorecard}")
+    if score:
+        parts.append(f"Score {score}")
+
+    if start_date and end_date:
+        parts.append(f"{start_date} to {end_date}")
+    elif days is not None:
+        parts.append(f"Last {days} days")
+
+    if mode:
+        parts.append(f"Mode {mode}")
+    if bucket_type:
+        if bucket_count is not None:
+            parts.append(f"{bucket_type} x {bucket_count}")
+        else:
+            parts.append(bucket_type)
+
+    config_str = json.dumps(block_config, sort_keys=True, separators=(",", ":"))
+    config_fingerprint = hashlib.sha1(config_str.encode("utf-8")).hexdigest()[:10]
+    parts.append(f"cfg {config_fingerprint}")
+    return " | ".join(parts)
 
 
 def _persist_block_result(
@@ -714,8 +760,7 @@ def run_block_cached(
     Returns (output_data, log_string, was_cached).
     """
     if cache_key is None:
-        config_str = json.dumps(block_config, sort_keys=True)
-        cache_key = f"cache:{block_class}:{config_str}"
+        cache_key = _build_default_cache_key(block_class, block_config)
 
     # --- Check database cache ---
     if not fresh:
