@@ -16,7 +16,12 @@ def mock_api_client():
 @pytest.mark.asyncio
 async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_api_client):
     block = AcceptanceRate(
-        config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        config={
+            "scorecard": "sc-1",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "include_item_acceptance_rate": True,
+        },
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
@@ -121,6 +126,52 @@ async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_ap
     assert items["item-b"]["item_accepted"] is True
     assert items["item-a"]["feedback_items_total"] == 3
     assert items["item-a"]["feedback_items_valid"] == 3
+
+
+@pytest.mark.asyncio
+async def test_acceptance_rate_default_is_score_result_only(mock_api_client):
+    block = AcceptanceRate(
+        config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    scorecard = MagicMock(id="sc-1", name="Test Scorecard")
+    score_results = [
+        {
+            "id": "sr-1",
+            "itemId": "item-a",
+            "scoreId": "score-1",
+            "value": "yes",
+            "type": "prediction",
+            "status": "COMPLETED",
+            "code": "200",
+            "evaluationId": None,
+            "updatedAt": "2026-04-10T10:00:00+00:00",
+            "score": {"id": "score-1", "name": "Score 1"},
+        },
+    ]
+    feedback_items = []
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_fetch_score_results_window", new=AsyncMock(return_value=score_results)),
+        patch.object(block, "_fetch_feedback_items_window", new=AsyncMock(return_value=feedback_items)),
+    ):
+        output, _ = await block.generate()
+
+    assert output["include_item_acceptance_rate"] is False
+
+    summary = output["summary"]
+    assert "item_acceptance_rate" not in summary
+    assert "accepted_items" not in summary
+    assert summary["total_score_results"] == 1
+    assert summary["accepted_score_results"] == 1
+    assert summary["corrected_score_results"] == 0
+    assert summary["score_result_acceptance_rate"] == 1.0
+
+    assert output["items"][0]["item_id"] == "item-a"
+    assert "item_accepted" not in output["items"][0]
 
 
 @pytest.mark.asyncio
