@@ -471,8 +471,8 @@ class FeedbackRatesBase(BaseReportBlock):
             )
 
         per_item: Dict[str, Dict[str, Any]] = {}
-        overturned_total = 0
-        upheld_total = 0
+        corrected_total = 0
+        uncorrected_total = 0
 
         for result in filtered_results:
             item_id = str(result.get("itemId"))
@@ -482,27 +482,27 @@ class FeedbackRatesBase(BaseReportBlock):
             predicted_value = str(result.get("value"))
             final_value = feedback.get("finalAnswerValue") if feedback else None
 
-            overturned = final_value is not None and str(final_value) != predicted_value
-            if overturned:
-                overturned_total += 1
+            corrected = final_value is not None and str(final_value) != predicted_value
+            if corrected:
+                corrected_total += 1
             else:
-                upheld_total += 1
+                uncorrected_total += 1
 
             item_bucket = per_item.setdefault(
                 item_id,
                 {
                     "item_id": item_id,
                     "total_score_results": 0,
-                    "overturned_score_results": 0,
-                    "upheld_score_results": 0,
+                    "corrected_score_results": 0,
+                    "uncorrected_score_results": 0,
                     "score_results": [],
                 },
             )
             item_bucket["total_score_results"] += 1
-            if overturned:
-                item_bucket["overturned_score_results"] += 1
+            if corrected:
+                item_bucket["corrected_score_results"] += 1
             else:
-                item_bucket["upheld_score_results"] += 1
+                item_bucket["uncorrected_score_results"] += 1
 
             item_bucket["score_results"].append(
                 {
@@ -512,14 +512,14 @@ class FeedbackRatesBase(BaseReportBlock):
                     "predicted_value": predicted_value,
                     "feedback_initial_value": feedback.get("initialAnswerValue") if feedback else None,
                     "feedback_final_value": final_value,
-                    "overturned": overturned,
+                    "corrected": corrected,
                 }
             )
 
         items = sorted(per_item.values(), key=lambda row: row["item_id"])
         for item in items:
             total = item["total_score_results"]
-            item["overturn_rate"] = (item["overturned_score_results"] / total) if total else 0.0
+            item["correction_rate"] = (item["corrected_score_results"] / total) if total else 0.0
 
         total_score_results = len(filtered_results)
         total_items = len(items)
@@ -539,9 +539,9 @@ class FeedbackRatesBase(BaseReportBlock):
                 "total_items": total_items,
                 "total_score_results": total_score_results,
                 "distinct_score_count": len(distinct_score_ids),
-                "overturned_score_results": overturned_total,
-                "upheld_score_results": upheld_total,
-                "corpus_overturn_rate": (overturned_total / total_score_results) if total_score_results else 0.0,
+                "corrected_score_results": corrected_total,
+                "uncorrected_score_results": uncorrected_total,
+                "corpus_correction_rate": (corrected_total / total_score_results) if total_score_results else 0.0,
             },
             "items": items,
             "raw_counts": {
