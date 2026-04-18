@@ -61,6 +61,49 @@ def _lua_to_serializable(value: Any) -> Any:
         return str(value)
 
 
+# Fields kept per iteration entry in the lightweight dashboard state.
+_DASHBOARD_ITERATION_FIELDS = frozenset({
+    'iteration', 'score_version_id',
+    'feedback_metrics', 'accuracy_metrics',
+    'feedback_deltas', 'accuracy_deltas',
+    'accepted', 'skip_reason', 'disqualified',
+    'done_reason', 'synthesis_strategy', 'synthesis_reasoning', 'dual_synthesis',
+    'feedback_evaluation_id', 'accuracy_evaluation_id',
+})
+
+# Top-level state fields dropped from the dashboard projection.
+_DASHBOARD_DROP_TOPLEVEL = frozenset({
+    'last_accuracy_rca', 'last_feedback_rca',
+    'item_recurrence', 'known_contradictions',
+})
+
+
+def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a lightweight copy of the optimizer state for the dashboard.
+
+    The full state can exceed 10 MB because each iteration's
+    ``exploration_results`` embeds hypothesis details, transcripts, and
+    evaluation data.  The dashboard only needs scalar metrics, deltas,
+    and small summary fields — this projection keeps the file under ~50 KB.
+    """
+    if not isinstance(full_state, dict):
+        return full_state
+
+    out: Dict[str, Any] = {}
+    for key, value in full_state.items():
+        if key in _DASHBOARD_DROP_TOPLEVEL:
+            continue
+        if key == 'iterations' and isinstance(value, list):
+            out['iterations'] = [
+                {k: v for k, v in it.items() if k in _DASHBOARD_ITERATION_FIELDS}
+                for it in value
+                if isinstance(it, dict)
+            ]
+        else:
+            out[key] = value
+    return out
+
+
 class PlexusStorageAdapter:
     """
     Implements Tactus StorageBackend protocol using Plexus GraphQL.
@@ -263,6 +306,18 @@ class PlexusStorageAdapter:
 
             _store_attachment('state', metadata.state, f"procedures/{pid}/state.json")
             metadata_json['state'] = {'_s3_key': f"procedures/{pid}/state.json"}
+
+            # Write dashboard projection under reportblocks/ prefix — the
+            # Cognito authenticated role has read access to reportblocks/*
+            # but NOT procedures/* (IAM policy not deployed for that path).
+            dashboard_state = _build_dashboard_state(metadata.state or {})
+            _store_attachment(
+                'dashboard_state', dashboard_state,
+                f"reportblocks/procedures/{pid}/dashboard_state.json",
+            )
+            metadata_json['dashboard_state'] = {
+                '_s3_key': f"reportblocks/procedures/{pid}/dashboard_state.json"
+            }
 
             _store_attachment('lua_state', metadata.lua_state, f"procedures/{pid}/lua_state.json")
             metadata_json['lua_state'] = {'_s3_key': f"procedures/{pid}/lua_state.json"}
