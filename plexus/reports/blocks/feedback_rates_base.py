@@ -461,8 +461,13 @@ class FeedbackRatesBase(BaseReportBlock):
             key = (item_id, score_id)
             grouped_feedback.setdefault(key, []).append(item)
 
+        feedback_stats_by_key: Dict[Tuple[str, str], Dict[str, int]] = {}
         for key, group in grouped_feedback.items():
             valid_group = [entry for entry in group if not entry.get("isInvalid")]
+            feedback_stats_by_key[key] = {
+                "total": len(group),
+                "valid": len(valid_group),
+            }
             if not valid_group:
                 continue
             feedback_by_key[key] = max(
@@ -479,6 +484,7 @@ class FeedbackRatesBase(BaseReportBlock):
             score_id = str(result.get("scoreId"))
             key = (item_id, score_id)
             feedback = feedback_by_key.get(key)
+            feedback_stats = feedback_stats_by_key.get(key) or {"total": 0, "valid": 0}
             predicted_value = str(result.get("value"))
             final_value = feedback.get("finalAnswerValue") if feedback else None
 
@@ -495,6 +501,9 @@ class FeedbackRatesBase(BaseReportBlock):
                     "total_score_results": 0,
                     "corrected_score_results": 0,
                     "uncorrected_score_results": 0,
+                    "feedback_items_total": 0,
+                    "feedback_items_valid": 0,
+                    "feedback_scores_with_feedback": set(),
                     "score_results": [],
                 },
             )
@@ -503,6 +512,10 @@ class FeedbackRatesBase(BaseReportBlock):
                 item_bucket["corrected_score_results"] += 1
             else:
                 item_bucket["uncorrected_score_results"] += 1
+            item_bucket["feedback_items_total"] += int(feedback_stats.get("total") or 0)
+            item_bucket["feedback_items_valid"] += int(feedback_stats.get("valid") or 0)
+            if int(feedback_stats.get("total") or 0) > 0:
+                item_bucket["feedback_scores_with_feedback"].add(score_id)
 
             item_bucket["score_results"].append(
                 {
@@ -510,6 +523,8 @@ class FeedbackRatesBase(BaseReportBlock):
                     "score_id": score_id,
                     "score_name": ((result.get("score") or {}).get("name") if isinstance(result.get("score"), dict) else None),
                     "predicted_value": predicted_value,
+                    "feedback_items_total": int(feedback_stats.get("total") or 0),
+                    "feedback_items_valid": int(feedback_stats.get("valid") or 0),
                     "feedback_initial_value": feedback.get("initialAnswerValue") if feedback else None,
                     "feedback_final_value": final_value,
                     "corrected": corrected,
@@ -520,6 +535,13 @@ class FeedbackRatesBase(BaseReportBlock):
         for item in items:
             total = item["total_score_results"]
             item["correction_rate"] = (item["corrected_score_results"] / total) if total else 0.0
+            feedback_scores = item.get("feedback_scores_with_feedback") or set()
+            if isinstance(feedback_scores, set):
+                item["feedback_scores_with_feedback_count"] = len(feedback_scores)
+                item["feedback_scores_with_feedback"] = sorted(feedback_scores)
+            else:
+                item["feedback_scores_with_feedback_count"] = 0
+                item["feedback_scores_with_feedback"] = []
 
         total_score_results = len(filtered_results)
         total_items = len(items)

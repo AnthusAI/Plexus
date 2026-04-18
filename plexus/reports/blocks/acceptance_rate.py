@@ -41,6 +41,9 @@ class AcceptanceRate(FeedbackRatesBase):
                         "total_score_results": item_total,
                         "accepted_score_results": item_accepted_score_results,
                         "corrected_score_results": row["corrected_score_results"],
+                        "feedback_items_total": row.get("feedback_items_total", 0),
+                        "feedback_items_valid": row.get("feedback_items_valid", 0),
+                        "feedback_scores_with_feedback_count": row.get("feedback_scores_with_feedback_count", 0),
                         "score_result_acceptance_rate": item_score_result_acceptance_rate,
                         "score_results": row["score_results"],
                     }
