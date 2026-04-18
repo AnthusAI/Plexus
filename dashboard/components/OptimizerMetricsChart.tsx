@@ -374,7 +374,7 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
                 key={view}
                 variant={datasetView === view ? "default" : "ghost"}
                 size="sm"
-                className="h-5 text-[10px] px-1.5"
+                className="h-4 text-[9px] px-1.5"
                 onClick={() => handleDatasetToggle(view)}
               >
                 {view.charAt(0).toUpperCase() + view.slice(1)}
