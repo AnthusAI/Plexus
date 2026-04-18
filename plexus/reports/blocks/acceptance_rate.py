@@ -11,11 +11,30 @@ class AcceptanceRate(FeedbackRatesBase):
     """
 
     DEFAULT_NAME = "Acceptance Rate"
-    DEFAULT_DESCRIPTION = "Item-level and score-result-level acceptance metrics"
+
+    DEFAULT_DESCRIPTION = "Score result acceptance metrics"
+
+    def _coerce_bool(self, value: Any, *, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "t", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "f", "no", "n", "off"}:
+            return False
+        return default
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self.log_messages = []
         try:
+            include_item_acceptance_rate = self._coerce_bool(
+                self._get_param("include_item_acceptance_rate"),
+                default=False,
+            )
             dataset = await self._prepare_rate_dataset()
             items: List[Dict[str, Any]] = []
             accepted_items = 0
@@ -34,30 +53,26 @@ class AcceptanceRate(FeedbackRatesBase):
                     item_accepted_score_results / item_total if item_total else 0.0
                 )
 
-                items.append(
-                    {
-                        "item_id": row["item_id"],
-                        "item_accepted": not item_corrected,
-                        "total_score_results": item_total,
-                        "accepted_score_results": item_accepted_score_results,
-                        "corrected_score_results": row["corrected_score_results"],
-                        "feedback_items_total": row.get("feedback_items_total", 0),
-                        "feedback_items_valid": row.get("feedback_items_valid", 0),
-                        "feedback_scores_with_feedback_count": row.get("feedback_scores_with_feedback_count", 0),
-                        "score_result_acceptance_rate": item_score_result_acceptance_rate,
-                        "score_results": row["score_results"],
-                    }
-                )
+                item_output: Dict[str, Any] = {
+                    "item_id": row["item_id"],
+                    "total_score_results": item_total,
+                    "accepted_score_results": item_accepted_score_results,
+                    "corrected_score_results": row["corrected_score_results"],
+                    "feedback_items_total": row.get("feedback_items_total", 0),
+                    "feedback_items_valid": row.get("feedback_items_valid", 0),
+                    "feedback_scores_with_feedback_count": row.get("feedback_scores_with_feedback_count", 0),
+                    "score_result_acceptance_rate": item_score_result_acceptance_rate,
+                    "score_results": row["score_results"],
+                }
+                if include_item_acceptance_rate:
+                    item_output["item_accepted"] = not item_corrected
+                items.append(item_output)
 
             totals = dataset["totals"]
             total_items = totals["total_items"]
             total_score_results = totals["total_score_results"]
             accepted_score_results = totals["uncorrected_score_results"]
-            summary = {
-                "total_items": total_items,
-                "accepted_items": accepted_items,
-                "corrected_items": corrected_items,
-                "item_acceptance_rate": (accepted_items / total_items) if total_items else 0.0,
+            summary: Dict[str, Any] = {
                 "total_score_results": total_score_results,
                 "accepted_score_results": accepted_score_results,
                 "corrected_score_results": totals["corrected_score_results"],
@@ -65,11 +80,25 @@ class AcceptanceRate(FeedbackRatesBase):
                     accepted_score_results / total_score_results if total_score_results else 0.0
                 ),
             }
+            if include_item_acceptance_rate:
+                summary.update(
+                    {
+                        "total_items": total_items,
+                        "accepted_items": accepted_items,
+                        "corrected_items": corrected_items,
+                        "item_acceptance_rate": (accepted_items / total_items) if total_items else 0.0,
+                    }
+                )
 
             output = {
                 "report_type": "acceptance_rate",
                 "block_title": self.DEFAULT_NAME,
-                "block_description": self.DEFAULT_DESCRIPTION,
+                "block_description": (
+                    "Item-level and score-result-level acceptance metrics"
+                    if include_item_acceptance_rate
+                    else self.DEFAULT_DESCRIPTION
+                ),
+                "include_item_acceptance_rate": include_item_acceptance_rate,
                 "scope": dataset["scope"],
                 "scorecard_id": dataset["scorecard_id"],
                 "scorecard_name": dataset["scorecard_name"],

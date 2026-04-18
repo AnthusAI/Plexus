@@ -7,19 +7,18 @@ import { parseOutputString } from "@/lib/utils";
 import ReportBlock, { ReportBlockProps } from "./ReportBlock";
 
 interface AcceptanceSummary {
-  total_items: number;
-  accepted_items: number;
-  corrected_items: number;
-  item_acceptance_rate: number;
   total_score_results: number;
   accepted_score_results: number;
   corrected_score_results: number;
   score_result_acceptance_rate: number;
+  total_items?: number;
+  accepted_items?: number;
+  corrected_items?: number;
+  item_acceptance_rate?: number;
 }
 
 interface AcceptanceItem {
   item_id: string;
-  item_accepted: boolean;
   total_score_results: number;
   accepted_score_results: number;
   corrected_score_results: number;
@@ -27,12 +26,14 @@ interface AcceptanceItem {
   feedback_items_valid?: number;
   feedback_scores_with_feedback_count?: number;
   score_result_acceptance_rate: number;
+  item_accepted?: boolean;
 }
 
 interface AcceptanceRateData {
   report_type?: string;
   block_title?: string;
   block_description?: string;
+  include_item_acceptance_rate?: boolean;
   scorecard_name?: string;
   score_name?: string | null;
   date_range?: {
@@ -103,6 +104,8 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const summary = output.summary;
   const items = Array.isArray(output.items) ? output.items : [];
+  const showItemAcceptance =
+    output.include_item_acceptance_rate ?? summary?.item_acceptance_rate !== undefined;
   const title =
     props.name && !props.name.startsWith("block_")
       ? props.name
@@ -120,23 +123,27 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
     >
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Item Acceptance Rate</div>
-            <div className="text-xl font-semibold">{formatPercent(summary?.item_acceptance_rate)}</div>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Score-Result Acceptance Rate</div>
+          {showItemAcceptance ? (
+            <div className="rounded-md bg-card p-3">
+              <div className="text-xs text-muted-foreground">Item Acceptance Rate</div>
+              <div className="text-xl font-semibold">{formatPercent(summary?.item_acceptance_rate)}</div>
+            </div>
+          ) : null}
+          <div className="rounded-md bg-card p-3">
+            <div className="text-xs text-muted-foreground">Score Result Acceptance Rate</div>
             <div className="text-xl font-semibold">
               {formatPercent(summary?.score_result_acceptance_rate)}
             </div>
           </div>
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Accepted Items</div>
-            <div className="text-xl font-semibold">
-              {(summary?.accepted_items ?? 0)} / {(summary?.total_items ?? 0)}
+          {showItemAcceptance ? (
+            <div className="rounded-md bg-card p-3">
+              <div className="text-xs text-muted-foreground">Accepted Items</div>
+              <div className="text-xl font-semibold">
+                {(summary?.accepted_items ?? 0)} / {(summary?.total_items ?? 0)}
+              </div>
             </div>
-          </div>
-          <div className="rounded-md border p-3">
+          ) : null}
+          <div className="rounded-md bg-card p-3">
             <div className="text-xs text-muted-foreground">Accepted Score Results</div>
             <div className="text-xl font-semibold">
               {(summary?.accepted_score_results ?? 0)} / {(summary?.total_score_results ?? 0)}
@@ -149,31 +156,41 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
           {output.score_name ? ` • Score: ${output.score_name}` : null}
         </div>
 
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto rounded-md bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-muted/40">
+            <thead className="bg-card-selected">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Item</th>
-                <th className="px-3 py-2 text-right font-medium">Accepted?</th>
+                {showItemAcceptance ? (
+                  <th className="px-3 py-2 text-right font-medium">Accepted?</th>
+                ) : null}
                 <th className="px-3 py-2 text-right font-medium">Feedback Edits</th>
                 <th className="px-3 py-2 text-right font-medium">Score Results</th>
                 <th className="px-3 py-2 text-right font-medium">Accepted</th>
                 <th className="px-3 py-2 text-right font-medium">Corrected</th>
-                <th className="px-3 py-2 text-right font-medium">Acceptance Rate</th>
+                <th className="px-3 py-2 text-right font-medium">Score Result Acceptance Rate</th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                  <td
+                    colSpan={showItemAcceptance ? 7 : 6}
+                    className="px-3 py-6 text-center text-muted-foreground"
+                  >
                     No score results matched the requested filters.
                   </td>
                 </tr>
               ) : (
-                items.map((item) => (
-                  <tr key={item.item_id} className="border-t">
+                items.map((item, index) => (
+                  <tr
+                    key={item.item_id}
+                    className={index % 2 === 0 ? "bg-card" : "bg-card-selected/60"}
+                  >
                     <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
-                    <td className="px-3 py-2 text-right">{item.item_accepted ? "Yes" : "No"}</td>
+                    {showItemAcceptance ? (
+                      <td className="px-3 py-2 text-right">{item.item_accepted ? "Yes" : "No"}</td>
+                    ) : null}
                     <td className="px-3 py-2 text-right">
                       {(item.feedback_items_valid ?? 0)}/{(item.feedback_items_total ?? 0)}
                     </td>
