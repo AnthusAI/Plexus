@@ -67,6 +67,10 @@
   --false-selected: hsl(var(--red-7));
   --neutral: hsl(var(--mauve-6));
   --neutral-selected: hsl(var(--mauve-7));
+  --warning: hsl(var(--amber-6));
+  --warning-selected: hsl(var(--amber-7));
+  --info: hsl(var(--indigo-6));
+  --info-selected: hsl(var(--indigo-7));
   --gauge-background: hsl(var(--mauve-2));
   --gauge-inviable: hsl(var(--mauve-6));
   --gauge-converging: hsl(var(--green-3));
@@ -145,6 +149,10 @@
   --false-selected: hsl(var(--red-7));
   --neutral: hsl(var(--mauve-6));
   --neutral-selected: hsl(var(--mauve-7));
+  --warning: hsl(var(--amber-6));
+  --warning-selected: hsl(var(--amber-7));
+  --info: hsl(var(--indigo-6));
+  --info-selected: hsl(var(--indigo-7));
   --gauge-background: hsl(var(--mauve-2));
   --gauge-inviable: hsl(var(--mauve-6));
   --gauge-converging: hsl(var(--green-6));

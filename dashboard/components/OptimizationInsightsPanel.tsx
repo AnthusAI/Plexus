@@ -82,11 +82,13 @@ function CollapsibleText({ text, maxChars = 500 }: { text: string; maxChars?: nu
 
 function DeltaValue({ value }: { value: number }) {
   if (value == null) return <span className="text-muted-foreground">—</span>
-  const color = value >= 0 ? 'text-green-500' : 'text-red-500'
   return (
-    <span className={`${color} tabular-nums`}>
+    <Badge
+      variant="pill"
+      className={`px-1 py-0 font-normal tabular-nums ${value >= 0 ? 'bg-true text-primary-foreground' : 'bg-false text-primary-foreground'}`}
+    >
       {value >= 0 ? '+' : ''}{value.toFixed(3)}
-    </span>
+    </Badge>
   )
 }
 
@@ -111,9 +113,9 @@ function HypothesisRow({ hyp }: { hyp: HypothesisTested }) {
           {hyp.name}
         </span>
         {hyp.succeeded ? (
-          <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-green-500/15 text-green-700 dark:text-green-400">Pass</Badge>
+          <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-true text-primary-foreground">Pass</Badge>
         ) : (
-          <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-red-500/15 text-red-700 dark:text-red-400">Fail</Badge>
+          <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-false text-primary-foreground">Fail</Badge>
         )}
         <span className="whitespace-nowrap flex-shrink-0">
           <span className="text-muted-foreground/60 mr-1">FB</span>
@@ -147,18 +149,18 @@ export function OptimizationDiagnosticBanner({ diagnostic }: { diagnostic: Optim
           <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal">
             {diagnostic.cycles} cycles
           </Badge>
-          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-green-500/15 text-green-700 dark:text-green-400">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-true text-primary-foreground">
             {diagnostic.accepted} accepted
           </Badge>
-          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-false text-primary-foreground">
             {diagnostic.rejected} rejected
           </Badge>
           {diagnostic.skipped > 0 && (
-            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-amber-500/15 text-amber-700 dark:text-amber-400">
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-warning text-primary-foreground">
               {diagnostic.skipped} skipped
             </Badge>
           )}
-          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-blue-500/15 text-blue-700 dark:text-blue-400">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-info text-primary-foreground">
             {(diagnostic.success_rate * 100).toFixed(0)}% success
           </Badge>
         </div>
@@ -195,7 +197,7 @@ export function CycleInsightsPanel({ insights }: { insights: CycleInsight[] }) {
                   {total > 0 && (
                     <Badge
                       variant="pill"
-                      className={`text-xs px-1.5 py-0 font-normal ${succeeded > 0 ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'}`}
+                      className={`text-xs px-1.5 py-0 font-normal ${succeeded > 0 ? 'bg-true text-primary-foreground' : 'bg-warning text-primary-foreground'}`}
                     >
                       {succeeded}/{total} succeeded
                     </Badge>
@@ -366,7 +368,7 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
             {run_summary.total_fb_improvement != null && (
               <Badge
                 variant="pill"
-                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_fb_improvement >= 0 ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-red-500/15 text-red-700 dark:text-red-400'}`}
+                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_fb_improvement >= 0 ? 'bg-true text-primary-foreground' : 'bg-false text-primary-foreground'}`}
               >
                 FB {run_summary.total_fb_improvement >= 0 ? '+' : ''}{run_summary.total_fb_improvement.toFixed(3)}
               </Badge>
@@ -374,7 +376,7 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
             {run_summary.total_acc_improvement != null && (
               <Badge
                 variant="pill"
-                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_acc_improvement >= 0 ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-red-500/15 text-red-700 dark:text-red-400'}`}
+                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_acc_improvement >= 0 ? 'bg-true text-primary-foreground' : 'bg-false text-primary-foreground'}`}
               >
                 ACC {run_summary.total_acc_improvement >= 0 ? '+' : ''}{run_summary.total_acc_improvement.toFixed(3)}
               </Badge>
