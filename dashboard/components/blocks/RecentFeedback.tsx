@@ -1,0 +1,183 @@
+"use client";
+
+import React from "react";
+import { downloadData } from "aws-amplify/storage";
+
+import { parseOutputString } from "@/lib/utils";
+import ReportBlock, { ReportBlockProps } from "./ReportBlock";
+
+interface RecentFeedbackSummary {
+  total_feedback_items: number;
+  overturned_feedback_items: number;
+  upheld_feedback_items: number;
+  invalid_feedback_items: number;
+  distinct_items_count: number;
+  distinct_score_count: number;
+}
+
+interface RecentFeedbackItem {
+  feedback_item_id: string;
+  item_id: string;
+  score_id: string;
+  score_name?: string;
+  initial_value?: string | null;
+  final_value?: string | null;
+  overturned: boolean;
+  is_invalid: boolean;
+  edited_at?: string | null;
+  edit_comment?: string | null;
+}
+
+interface RecentFeedbackData {
+  report_type?: string;
+  block_title?: string;
+  block_description?: string;
+  scorecard_name?: string;
+  score_name?: string | null;
+  date_range?: {
+    start: string;
+    end: string;
+  };
+  summary?: RecentFeedbackSummary;
+  items?: RecentFeedbackItem[];
+  error?: string;
+  warning?: string;
+  output_compacted?: boolean;
+  output_attachment?: string;
+}
+
+const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
+  const [loadedOutput, setLoadedOutput] = React.useState<RecentFeedbackData | null>(null);
+  const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
+
+  let parsedOutput: RecentFeedbackData = {};
+  try {
+    parsedOutput =
+      typeof props.output === "string"
+        ? (parseOutputString(props.output) as RecentFeedbackData)
+        : ((props.output || {}) as RecentFeedbackData);
+  } catch {
+    parsedOutput = {};
+  }
+
+  React.useEffect(() => {
+    if (!parsedOutput.output_compacted || !parsedOutput.output_attachment || loadedOutput) {
+      return;
+    }
+
+    let cancelled = false;
+    setAttachmentLoadError(null);
+
+    (async () => {
+      try {
+        const result = await downloadData({
+          path: parsedOutput.output_attachment!,
+          options: { bucket: "reportBlockDetails" as any },
+        }).result;
+        const text = await result.body.text();
+        if (!cancelled) {
+          setLoadedOutput(parseOutputString(text) as RecentFeedbackData);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAttachmentLoadError(
+            error instanceof Error ? error.message : "Failed to load compacted output attachment."
+          );
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedOutput, parsedOutput.output_attachment, parsedOutput.output_compacted]);
+
+  const output = loadedOutput ?? parsedOutput;
+  const summary = output.summary;
+  const items = Array.isArray(output.items) ? output.items : [];
+  const title =
+    props.name && !props.name.startsWith("block_")
+      ? props.name
+      : output.block_title || "Recent Feedback";
+
+  return (
+    <ReportBlock
+      {...props}
+      output={output as any}
+      title={title}
+      subtitle={output.block_description}
+      error={attachmentLoadError || output.error}
+      warning={output.warning}
+      dateRange={output.date_range}
+    >
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Feedback Items</div>
+            <div className="text-xl font-semibold">{summary?.total_feedback_items ?? 0}</div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Overturned</div>
+            <div className="text-xl font-semibold">{summary?.overturned_feedback_items ?? 0}</div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Distinct Items</div>
+            <div className="text-xl font-semibold">{summary?.distinct_items_count ?? 0}</div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Distinct Scores</div>
+            <div className="text-xl font-semibold">{summary?.distinct_score_count ?? 0}</div>
+          </div>
+        </div>
+
+        <div className="text-sm text-muted-foreground">
+          {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
+          {output.score_name ? ` • Score: ${output.score_name}` : null}
+        </div>
+
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Edited At</th>
+                <th className="px-3 py-2 text-left font-medium">Item</th>
+                <th className="px-3 py-2 text-left font-medium">Score</th>
+                <th className="px-3 py-2 text-right font-medium">Initial</th>
+                <th className="px-3 py-2 text-right font-medium">Final</th>
+                <th className="px-3 py-2 text-right font-medium">Overturned</th>
+                <th className="px-3 py-2 text-right font-medium">Invalid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                    No feedback items matched the requested filters.
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => (
+                  <tr key={item.feedback_item_id} className="border-t">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {item.edited_at ? new Date(item.edited_at).toLocaleString() : "N/A"}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
+                    <td className="px-3 py-2">
+                      {item.score_name || <span className="font-mono text-xs">{item.score_id}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right">{item.initial_value ?? "N/A"}</td>
+                    <td className="px-3 py-2 text-right">{item.final_value ?? "N/A"}</td>
+                    <td className="px-3 py-2 text-right">{item.overturned ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 text-right">{item.is_invalid ? "Yes" : "No"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ReportBlock>
+  );
+};
+
+export default RecentFeedback;
