@@ -71,6 +71,15 @@ async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_ap
             "editedAt": "2026-04-11T10:00:00+00:00",
         },
         {
+            "id": "fi-1b",
+            "itemId": "item-a",
+            "scoreId": "score-1",
+            "initialAnswerValue": "yes",
+            "finalAnswerValue": "yes",
+            "isInvalid": False,
+            "editedAt": "2026-04-11T09:00:00+00:00",
+        },
+        {
             "id": "fi-2",
             "itemId": "item-a",
             "scoreId": "score-2",
@@ -110,6 +119,8 @@ async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_ap
     items = {item["item_id"]: item for item in output["items"]}
     assert items["item-a"]["item_accepted"] is False
     assert items["item-b"]["item_accepted"] is True
+    assert items["item-a"]["feedback_items_total"] == 3
+    assert items["item-a"]["feedback_items_valid"] == 3
 
 
 @pytest.mark.asyncio

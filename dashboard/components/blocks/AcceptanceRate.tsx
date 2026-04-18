@@ -23,6 +23,9 @@ interface AcceptanceItem {
   total_score_results: number;
   accepted_score_results: number;
   corrected_score_results: number;
+  feedback_items_total?: number;
+  feedback_items_valid?: number;
+  feedback_scores_with_feedback_count?: number;
   score_result_acceptance_rate: number;
 }
 
@@ -152,6 +155,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Item</th>
                 <th className="px-3 py-2 text-right font-medium">Accepted?</th>
+                <th className="px-3 py-2 text-right font-medium">Feedback Edits</th>
                 <th className="px-3 py-2 text-right font-medium">Score Results</th>
                 <th className="px-3 py-2 text-right font-medium">Accepted</th>
                 <th className="px-3 py-2 text-right font-medium">Corrected</th>
@@ -161,7 +165,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
                     No score results matched the requested filters.
                   </td>
                 </tr>
@@ -170,6 +174,9 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                   <tr key={item.item_id} className="border-t">
                     <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
                     <td className="px-3 py-2 text-right">{item.item_accepted ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 text-right">
+                      {(item.feedback_items_valid ?? 0)}/{(item.feedback_items_total ?? 0)}
+                    </td>
                     <td className="px-3 py-2 text-right">{item.total_score_results}</td>
                     <td className="px-3 py-2 text-right">{item.accepted_score_results}</td>
                     <td className="px-3 py-2 text-right">{item.corrected_score_results}</td>
