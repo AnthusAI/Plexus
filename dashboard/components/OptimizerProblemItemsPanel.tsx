@@ -39,18 +39,41 @@ export interface NotableItemRecurrence {
 
 // --- Pattern styling ---
 
-const PATTERN_CONFIG: Record<RecurrencePattern, { label: string; color: string; description: string }> = {
-  PERSISTENT:    { label: 'Persistent',     color: 'text-red-400',    description: 'Wrong in the same confusion segment 3+ cycles, never corrected' },
-  OSCILLATING:   { label: 'Oscillating',    color: 'text-yellow-400', description: 'Flips between correct and wrong — borderline or policy-unstable' },
-  FLIP_FLOP:     { label: 'Flip-flop',      color: 'text-orange-400', description: 'Wrong multiple cycles in different error directions' },
-  LATE_EMERGING: { label: 'Late-emerging',  color: 'text-blue-400',   description: 'Appeared correctly early, regressed in later cycles' },
+const PATTERN_CONFIG: Record<
+  RecurrencePattern,
+  { label: string; labelClass: string; pillClass: string; description: string }
+> = {
+  PERSISTENT: {
+    label: 'Persistent',
+    labelClass: 'text-red-700 dark:text-red-400',
+    pillClass: 'bg-red-500/15 text-red-700 dark:text-red-400',
+    description: 'Wrong in the same confusion segment 3+ cycles, never corrected',
+  },
+  OSCILLATING: {
+    label: 'Oscillating',
+    labelClass: 'text-amber-700 dark:text-amber-400',
+    pillClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+    description: 'Flips between correct and wrong — borderline or policy-unstable',
+  },
+  FLIP_FLOP: {
+    label: 'Flip-flop',
+    labelClass: 'text-orange-700 dark:text-orange-400',
+    pillClass: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
+    description: 'Wrong multiple cycles in different error directions',
+  },
+  LATE_EMERGING: {
+    label: 'Late-emerging',
+    labelClass: 'text-blue-700 dark:text-blue-400',
+    pillClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
+    description: 'Appeared correctly early, regressed in later cycles',
+  },
 }
 
 function PatternBadge({ pattern }: { pattern: RecurrencePattern }) {
   const cfg = PATTERN_CONFIG[pattern]
   if (!cfg) return null
   return (
-    <Badge variant="outline" className={`text-xs px-1.5 py-0 font-normal ${cfg.color} border-current`}>
+    <Badge variant="pill" className={`text-xs px-1.5 py-0 font-normal ${cfg.pillClass}`}>
       {cfg.label}
     </Badge>
   )
@@ -166,8 +189,8 @@ function PatternGroup({
   return (
     <div className="mb-4">
       <div className="flex items-center gap-2 mb-2">
-        <span className={`text-xs font-semibold ${cfg.color}`}>{cfg.label}</span>
-        <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+        <span className={`text-xs font-semibold ${cfg.labelClass}`}>{cfg.label}</span>
+        <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal">
           {items.length}
         </Badge>
       </div>
@@ -219,16 +242,16 @@ export function OptimizerProblemItemsPanel({
           <h3 className="text-sm font-semibold text-muted-foreground">Problem Item Tracker</h3>
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal">
             {totalCount} items
           </Badge>
           {persistentCount > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal text-red-400 border-red-400/40">
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">
               {persistentCount} persistent
             </Badge>
           )}
           {oscillatingCount > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal text-yellow-400 border-yellow-400/40">
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-amber-500/15 text-amber-700 dark:text-amber-400">
               {oscillatingCount} oscillating
             </Badge>
           )}
