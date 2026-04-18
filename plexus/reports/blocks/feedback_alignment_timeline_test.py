@@ -187,6 +187,112 @@ async def test_generate_with_invalid_bucket_type_returns_error(mock_api_client):
 
 
 @pytest.mark.asyncio
+async def test_generate_with_explicit_date_range_uses_requested_window(mock_api_client):
+    block = FeedbackAlignmentTimeline(
+        config={
+            "scorecard": "sc-1",
+            "bucket_type": "calendar_day",
+            "bucket_count": 12,  # Explicit date windows should not rely on this value.
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-02",
+            "timezone": "UTC",
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    scorecard = MagicMock(id="sc-1", name="Test Scorecard")
+    score_items = [
+        _make_feedback_item(
+            item_id="fi-1",
+            initial="yes",
+            final="yes",
+            edited_at=datetime(2026, 4, 1, 10, 0, tzinfo=timezone.utc),
+        ),
+        _make_feedback_item(
+            item_id="fi-2",
+            initial="yes",
+            final="no",
+            edited_at=datetime(2026, 4, 2, 11, 0, tzinfo=timezone.utc),
+        ),
+    ]
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_feedback_items_for_score", new=AsyncMock(return_value=score_items)) as fetch_mock,
+    ):
+        output, _ = await block.generate()
+
+    assert output["bucket_policy"]["window_mode"] == "explicit_range"
+    assert output["bucket_policy"]["complete_only"] is False
+    assert output["bucket_policy"]["bucket_count"] == 2
+    assert len(output["scores"][0]["points"]) == 2
+    assert output["scores"][0]["points"][0]["item_count"] == 1
+    assert output["scores"][0]["points"][1]["item_count"] == 1
+
+    call_kwargs = fetch_mock.await_args.kwargs
+    assert call_kwargs["start_date"] == datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc)
+    assert call_kwargs["end_date"] == datetime(2026, 4, 2, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_generate_with_days_window_uses_explicit_mode(mock_api_client):
+    block = FeedbackAlignmentTimeline(
+        config={
+            "scorecard": "sc-1",
+            "bucket_type": "calendar_day",
+            "days": 2,
+            "timezone": "UTC",
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    fixed_now = datetime(2026, 4, 6, 12, 0, tzinfo=timezone.utc)
+    scorecard = MagicMock(id="sc-1", name="Test Scorecard")
+
+    with (
+        patch.object(block, "_now_utc", return_value=fixed_now),
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_feedback_items_for_score", new=AsyncMock(return_value=[])),
+    ):
+        output, _ = await block.generate()
+
+    assert output["bucket_policy"]["window_mode"] == "explicit_range"
+    assert output["bucket_policy"]["complete_only"] is False
+    assert output["bucket_policy"]["bucket_count"] == 3
+    assert output["date_range"]["start"] == "2026-04-04T00:00:00+00:00"
+    assert output["date_range"]["end"] == "2026-04-06T12:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_generate_with_partial_explicit_range_returns_error(mock_api_client):
+    block = FeedbackAlignmentTimeline(
+        config={
+            "scorecard": "sc-1",
+            "start_date": "2026-04-01",
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    output, _ = await block.generate()
+
+    assert "error" in output
+    assert "Both 'start_date' and 'end_date'" in output["error"]
+
+
+@pytest.mark.asyncio
 async def test_resolve_scores_for_mode_uuid_checks_section_scorecard_membership(mock_api_client):
     block = FeedbackAlignmentTimeline(
         config={"scorecard": "sc-1"},

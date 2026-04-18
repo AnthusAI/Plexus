@@ -159,6 +159,24 @@ class TestParameterValidation:
         is_valid, error = validate_parameter_value(param_def, 'c')
         assert is_valid is False
         assert 'must be one of' in error.lower()
+
+    def test_validate_date_valid(self):
+        """Test date validation accepts valid YYYY-MM-DD values."""
+        param_def = {'name': 'start_date', 'type': 'date'}
+
+        is_valid, error = validate_parameter_value(param_def, '2026-04-18')
+
+        assert is_valid is True
+        assert error is None
+
+    def test_validate_date_invalid(self):
+        """Test date validation rejects invalid calendar dates."""
+        param_def = {'name': 'start_date', 'type': 'date'}
+
+        is_valid, error = validate_parameter_value(param_def, '2026-02-30')
+
+        assert is_valid is False
+        assert 'yyyy-mm-dd' in error.lower()
     
     def test_validate_all_parameters_success(self):
         """Test validating multiple parameters successfully."""
@@ -292,6 +310,12 @@ class TestParameterHelpers:
         
         assert normalize_parameter_value(param_def, 'hello') == 'hello'
         assert normalize_parameter_value(param_def, 123) == '123'
+
+    def test_normalize_date(self):
+        """Test normalizing date parameter preserves the date string."""
+        param_def = {'name': 'start_date', 'type': 'date'}
+
+        assert normalize_parameter_value(param_def, '2026-04-18') == '2026-04-18'
 
 
 class TestParameterEnrichment:
@@ -515,4 +539,3 @@ class TestParameterEnrichment:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
-

@@ -8,9 +8,56 @@ import json
 import logging
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
+import yaml
 from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
+
+
+def _format_report_tool_output(result: Dict[str, Any], output_format: str) -> str:
+    fmt = str(output_format or "json").strip().lower()
+    if fmt == "yaml":
+        return yaml.safe_dump(result, sort_keys=False, allow_unicode=True)
+    return json.dumps(result, indent=2, default=str)
+
+
+def _run_direct_feedback_report(
+    *,
+    block_class: str,
+    scorecard_name: str,
+    score_name: Optional[str] = None,
+    days: Optional[Union[int, float, str]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    cache_key: Optional[str] = None,
+    ttl_hours: Optional[float] = 24,
+    fresh: Optional[bool] = False,
+    background: Optional[bool] = False,
+    extra_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    from plexus.cli.feedback.report_runner import run_feedback_report_block
+
+    days_value: Optional[int] = None
+    if days is not None:
+        try:
+            days_value = int(float(str(days)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid days value: {days}") from exc
+
+    ttl_value = float(ttl_hours) if ttl_hours is not None else 24.0
+    return run_feedback_report_block(
+        block_class=block_class,
+        scorecard=scorecard_name,
+        score=score_name,
+        days=days_value,
+        start_date=start_date,
+        end_date=end_date,
+        cache_key=cache_key,
+        ttl_hours=ttl_value,
+        fresh=bool(fresh),
+        background=bool(background),
+        extra_config=extra_config,
+    )
 
 
 async def _get_paginated_feedback_with_items(
@@ -517,3 +564,234 @@ def register_feedback_tools(mcp: FastMCP):
             import json
             return json.dumps({"error": f"Failed to search feedback: {str(e)}"})
 
+    @mcp.tool()
+    async def plexus_feedback_report_overturn_rate(
+        scorecard_name: str,
+        score_name: Optional[str] = None,
+        days: Optional[Union[int, float, str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = 24,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False,
+        output_format: str = "json",
+    ) -> str:
+        """Run OverturnRate directly (no report configuration template required)."""
+        try:
+            result = _run_direct_feedback_report(
+                block_class="OverturnRate",
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                cache_key=cache_key,
+                ttl_hours=ttl_hours,
+                fresh=fresh,
+                background=background,
+            )
+            return _format_report_tool_output(result, output_format)
+        except Exception as e:
+            logger.error(f"Error in plexus_feedback_report_overturn_rate: {e}", exc_info=True)
+            return _format_report_tool_output({"status": "error", "error": str(e)}, output_format)
+
+    @mcp.tool()
+    async def plexus_feedback_report_acceptance_rate(
+        scorecard_name: str,
+        score_name: Optional[str] = None,
+        days: Optional[Union[int, float, str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = 24,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False,
+        output_format: str = "json",
+    ) -> str:
+        """Run AcceptanceRate directly (no report configuration template required)."""
+        try:
+            result = _run_direct_feedback_report(
+                block_class="AcceptanceRate",
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                cache_key=cache_key,
+                ttl_hours=ttl_hours,
+                fresh=fresh,
+                background=background,
+            )
+            return _format_report_tool_output(result, output_format)
+        except Exception as e:
+            logger.error(f"Error in plexus_feedback_report_acceptance_rate: {e}", exc_info=True)
+            return _format_report_tool_output({"status": "error", "error": str(e)}, output_format)
+
+    @mcp.tool()
+    async def plexus_feedback_report_contradictions(
+        scorecard_name: str,
+        score_name: str,
+        mode: str = "contradictions",
+        max_feedback_items: int = 400,
+        num_topics: int = 8,
+        max_concurrent: int = 20,
+        days: Optional[Union[int, float, str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = 24,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False,
+        output_format: str = "json",
+    ) -> str:
+        """Run FeedbackContradictions directly (no report configuration template required)."""
+        try:
+            if mode not in {"contradictions", "aligned"}:
+                raise ValueError("mode must be 'contradictions' or 'aligned'.")
+
+            result = _run_direct_feedback_report(
+                block_class="FeedbackContradictions",
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                cache_key=cache_key,
+                ttl_hours=ttl_hours,
+                fresh=fresh,
+                background=background,
+                extra_config={
+                    "mode": mode,
+                    "max_feedback_items": int(max_feedback_items),
+                    "num_topics": int(num_topics),
+                    "max_concurrent": int(max_concurrent),
+                },
+            )
+            return _format_report_tool_output(result, output_format)
+        except Exception as e:
+            logger.error(f"Error in plexus_feedback_report_contradictions: {e}", exc_info=True)
+            return _format_report_tool_output({"status": "error", "error": str(e)}, output_format)
+
+    @mcp.tool()
+    async def plexus_feedback_report_analysis(
+        scorecard_name: str,
+        score_name: Optional[str] = None,
+        days: Optional[Union[int, float, str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = 24,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False,
+        output_format: str = "json",
+    ) -> str:
+        """Run FeedbackAnalysis directly (no report configuration template required)."""
+        try:
+            result = _run_direct_feedback_report(
+                block_class="FeedbackAnalysis",
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                cache_key=cache_key,
+                ttl_hours=ttl_hours,
+                fresh=fresh,
+                background=background,
+            )
+            return _format_report_tool_output(result, output_format)
+        except Exception as e:
+            logger.error(f"Error in plexus_feedback_report_analysis: {e}", exc_info=True)
+            return _format_report_tool_output({"status": "error", "error": str(e)}, output_format)
+
+    @mcp.tool()
+    async def plexus_feedback_report_timeline(
+        scorecard_name: str,
+        score_name: Optional[str] = None,
+        bucket_type: str = "trailing_7d",
+        bucket_count: int = 12,
+        timezone_name: str = "UTC",
+        week_start: str = "monday",
+        days: Optional[Union[int, float, str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = 24,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False,
+        output_format: str = "json",
+    ) -> str:
+        """Run FeedbackAlignmentTimeline directly (no report configuration template required)."""
+        try:
+            result = _run_direct_feedback_report(
+                block_class="FeedbackAlignmentTimeline",
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                cache_key=cache_key,
+                ttl_hours=ttl_hours,
+                fresh=fresh,
+                background=background,
+                extra_config={
+                    "bucket_type": str(bucket_type),
+                    "bucket_count": int(bucket_count),
+                    "timezone": str(timezone_name),
+                    "week_start": str(week_start),
+                },
+            )
+            return _format_report_tool_output(result, output_format)
+        except Exception as e:
+            logger.error(f"Error in plexus_feedback_report_timeline: {e}", exc_info=True)
+            return _format_report_tool_output({"status": "error", "error": str(e)}, output_format)
+
+    @mcp.tool()
+    async def plexus_feedback_report_volume(
+        scorecard_name: str,
+        score_name: Optional[str] = None,
+        bucket_type: str = "trailing_7d",
+        bucket_count: int = 12,
+        timezone_name: str = "UTC",
+        week_start: str = "monday",
+        days: Optional[Union[int, float, str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        ttl_hours: Optional[float] = 24,
+        fresh: Optional[bool] = False,
+        background: Optional[bool] = False,
+        output_format: str = "json",
+    ) -> str:
+        """Run timeline and return a volume-focused feedback payload."""
+        try:
+            from plexus.cli.feedback.report_runner import summarize_timeline_feedback_volume
+
+            result = _run_direct_feedback_report(
+                block_class="FeedbackAlignmentTimeline",
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                cache_key=cache_key,
+                ttl_hours=ttl_hours,
+                fresh=fresh,
+                background=background,
+                extra_config={
+                    "bucket_type": str(bucket_type),
+                    "bucket_count": int(bucket_count),
+                    "timezone": str(timezone_name),
+                    "week_start": str(week_start),
+                },
+            )
+            if result.get("status") == "success":
+                result = {
+                    **result,
+                    "output": summarize_timeline_feedback_volume(result["output"]),
+                }
+            return _format_report_tool_output(result, output_format)
+        except Exception as e:
+            logger.error(f"Error in plexus_feedback_report_volume: {e}", exc_info=True)
+            return _format_report_tool_output({"status": "error", "error": str(e)}, output_format)

@@ -16,6 +16,7 @@ import { ParameterDefinition, ParameterValue } from '@/types/parameters'
 import { validateParameters, getDefaultValues } from '@/lib/parameter-parser'
 import {
   TextParameter,
+  DateParameter,
   NumberParameter,
   BooleanParameter,
   SelectParameter,
@@ -138,6 +139,9 @@ export function ConfigurableParametersDialog({
         const scoreId = param.depends_on ? values[param.depends_on] : undefined
         return <ScoreVersionSelectParameter key={param.name} definition={param} value={value} onChange={onChange} scoreId={scoreId} error={error} />
 
+      case 'date':
+        return <DateParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
+
       default:
         return (
           <Alert key={param.name} variant="destructive">
@@ -155,7 +159,10 @@ export function ConfigurableParametersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        {...(!description ? { 'aria-describedby': undefined } : {})}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
@@ -200,5 +207,3 @@ export function ConfigurableParametersDialog({
     </Dialog>
   )
 }
-
-

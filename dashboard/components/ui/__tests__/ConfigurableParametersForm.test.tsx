@@ -88,6 +88,28 @@ describe('ConfigurableParametersForm', () => {
     expect(input).toHaveAttribute('max', '100')
   })
 
+  it('renders date parameter', () => {
+    const parameters: ParameterDefinition[] = [
+      {
+        name: 'start_date',
+        label: 'Start Date',
+        type: 'date',
+        required: true
+      }
+    ]
+
+    render(
+      <ConfigurableParametersForm
+        parameters={parameters}
+        values={{}}
+        onChange={mockOnChange}
+      />
+    )
+
+    const input = screen.getByLabelText(/Start Date/)
+    expect(input).toHaveAttribute('type', 'date')
+  })
+
   it('renders boolean parameter', () => {
     const parameters: ParameterDefinition[] = [
       {
@@ -216,6 +238,33 @@ describe('ConfigurableParametersForm', () => {
     expect(mockOnChange).toHaveBeenCalledWith(
       expect.objectContaining({ enable_debug: true })
     )
+  })
+
+  it('calls onChange when date input changes', async () => {
+    const user = userEvent.setup()
+    const parameters: ParameterDefinition[] = [
+      {
+        name: 'start_date',
+        label: 'Start Date',
+        type: 'date',
+        required: true
+      }
+    ]
+
+    render(
+      <ConfigurableParametersForm
+        parameters={parameters}
+        values={{}}
+        onChange={mockOnChange}
+      />
+    )
+
+    const input = screen.getByLabelText(/Start Date/)
+    fireEvent.change(input, { target: { value: '2026-04-01' } })
+
+    expect(mockOnChange).toHaveBeenCalled()
+    const lastCall = mockOnChange.mock.calls[mockOnChange.mock.calls.length - 1]
+    expect(lastCall[0]).toHaveProperty('start_date', '2026-04-01')
   })
 
   it('displays error messages', () => {
@@ -378,4 +427,3 @@ describe('ConfigurableParametersForm', () => {
     expect(input.value).toBe('Existing Project')
   })
 })
-
