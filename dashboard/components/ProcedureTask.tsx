@@ -836,15 +836,15 @@ export default function ProcedureTask({
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap">
                             {row.isBaseline ? (
-                              <Badge variant="outline" className="text-xs px-1 py-0">Baseline</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-slate-500/15 text-slate-700 dark:text-slate-300">Baseline</Badge>
                             ) : row.skipReason ? (
-                              <Badge variant="secondary" className="text-xs px-1 py-0">Skipped</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-amber-500/15 text-amber-700 dark:text-amber-400">Skipped</Badge>
                             ) : row.disqualified ? (
-                              <Badge variant="destructive" className="text-xs px-1 py-0">Disqualified</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">Disqualified</Badge>
                             ) : row.accepted ? (
-                              <Badge className="text-xs px-1 py-0">Accepted</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-green-500/15 text-green-700 dark:text-green-400">Accepted</Badge>
                             ) : (
-                              <Badge variant="secondary" className="text-xs px-1 py-0">Rejected</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-red-500/15 text-red-700 dark:text-red-400">Rejected</Badge>
                             )}
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
@@ -923,9 +923,9 @@ export default function ProcedureTask({
                                                 {er.hypothesis?.name || `Hypothesis ${er.index}`}
                                               </span>
                                               {er.succeeded ? (
-                                                <Badge className="text-xs px-1 py-0 flex-shrink-0">Pass</Badge>
+                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-green-500/15 text-green-700 dark:text-green-400">Pass</Badge>
                                               ) : (
-                                                <Badge variant="secondary" className="text-xs px-1 py-0 flex-shrink-0">Fail</Badge>
+                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-red-500/15 text-red-700 dark:text-red-400">Fail</Badge>
                                               )}
                                               <span className="whitespace-nowrap flex-shrink-0">
                                                 <span className="text-muted-foreground/60 mr-1">FB</span>
