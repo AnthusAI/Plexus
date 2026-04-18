@@ -100,11 +100,11 @@ async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_ap
     summary = output["summary"]
     assert summary["total_items"] == 2
     assert summary["accepted_items"] == 1
-    assert summary["overturned_items"] == 1
+    assert summary["corrected_items"] == 1
     assert summary["item_acceptance_rate"] == 0.5
     assert summary["total_score_results"] == 3
     assert summary["accepted_score_results"] == 2
-    assert summary["overturned_score_results"] == 1
+    assert summary["corrected_score_results"] == 1
     assert summary["score_result_acceptance_rate"] == pytest.approx(2 / 3)
 
     items = {item["item_id"]: item for item in output["items"]}

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from plexus.reports.blocks.overturn_rate import OverturnRate
+from plexus.reports.blocks.correction_rate import CorrectionRate
 
 
 @pytest.fixture
@@ -14,8 +14,8 @@ def mock_api_client():
 
 
 @pytest.mark.asyncio
-async def test_overturn_rate_computes_item_and_corpus_rates(mock_api_client):
-    block = OverturnRate(
+async def test_correction_rate_computes_item_and_corpus_rates(mock_api_client):
+    block = CorrectionRate(
         config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
@@ -100,18 +100,18 @@ async def test_overturn_rate_computes_item_and_corpus_rates(mock_api_client):
     summary = output["summary"]
     assert summary["total_items"] == 2
     assert summary["total_score_results"] == 3
-    assert summary["overturned_score_results"] == 1
-    assert summary["upheld_score_results"] == 2
-    assert summary["corpus_overturn_rate"] == pytest.approx(1 / 3)
+    assert summary["corrected_score_results"] == 1
+    assert summary["uncorrected_score_results"] == 2
+    assert summary["corpus_correction_rate"] == pytest.approx(1 / 3)
 
     items = {item["item_id"]: item for item in output["items"]}
-    assert items["item-a"]["overturn_rate"] == pytest.approx(0.5)
-    assert items["item-b"]["overturn_rate"] == 0.0
+    assert items["item-a"]["correction_rate"] == pytest.approx(0.5)
+    assert items["item-b"]["correction_rate"] == 0.0
 
 
 @pytest.mark.asyncio
 async def test_score_results_window_applies_optional_score_filter(mock_api_client):
-    block = OverturnRate(
+    block = CorrectionRate(
         config={"scorecard": "sc-1", "days": 1},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
@@ -142,7 +142,7 @@ async def test_score_results_window_applies_optional_score_filter(mock_api_clien
 
 @pytest.mark.asyncio
 async def test_same_day_explicit_range_is_allowed(mock_api_client):
-    block = OverturnRate(
+    block = CorrectionRate(
         config={"scorecard": "sc-1", "start_date": "2026-04-08", "end_date": "2026-04-08"},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,

@@ -37,7 +37,7 @@ def test_run_feedback_report_block_success(mock_create_client, mock_resolve_acco
     mock_run_block_cached.return_value = ({"summary": {"total_items": 10}}, "log-lines", False)
 
     result = run_feedback_report_block(
-        block_class="OverturnRate",
+        block_class="CorrectionRate",
         scorecard="sc-1",
         score="score-1",
         days=30,

@@ -10,7 +10,7 @@ from .vector_topic_memory import VectorTopicMemory
 from .action_items_block import ActionItems
 from .feedback_contradictions import FeedbackContradictions
 from .feedback_alignment_timeline import FeedbackAlignmentTimeline
-from .overturn_rate import OverturnRate
+from .correction_rate import CorrectionRate
 from .acceptance_rate import AcceptanceRate
 from .recent_feedback import RecentFeedback
 
@@ -25,7 +25,7 @@ __all__ = [
     "ActionItems",
     "FeedbackContradictions",
     "FeedbackAlignmentTimeline",
-    "OverturnRate",
+    "CorrectionRate",
     "AcceptanceRate",
     "RecentFeedback",
 ]

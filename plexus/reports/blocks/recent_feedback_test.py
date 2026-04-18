@@ -65,7 +65,7 @@ async def test_recent_feedback_lists_items_and_summary(mock_api_client):
     assert output["report_type"] == "recent_feedback"
     assert output["scope"] == "scorecard_all_scores"
     assert output["summary"]["total_feedback_items"] == 2
-    assert output["summary"]["overturned_feedback_items"] == 1
+    assert output["summary"]["corrected_feedback_items"] == 1
     assert output["summary"]["invalid_feedback_items"] == 1
     assert output["summary"]["distinct_items_count"] == 2
     assert output["summary"]["distinct_score_count"] == 2
