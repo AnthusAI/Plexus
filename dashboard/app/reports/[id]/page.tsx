@@ -19,6 +19,27 @@ import { format, parseISO } from 'date-fns';
 import { Timestamp } from '@/components/ui/timestamp';
 import { Spinner } from '@/components/ui/spinner';
 
+const LEGACY_PROGRAMMATIC_CONFIG_NAME = "__programmatic_blocks__";
+
+const humanizeBlockClass = (name: string): string =>
+  name.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+
+const formatConfigDisplayName = (name?: string | null): string | null => {
+  if (!name) return null;
+  if (name === LEGACY_PROGRAMMATIC_CONFIG_NAME) return "Programmatic Reports";
+  return name;
+};
+
+const formatReportDisplayName = (name?: string | null): string | null => {
+  if (!name) return null;
+  if (name.startsWith("cache:")) {
+    const match = name.match(/^cache:([^:]+):/);
+    if (match?.[1]) return `${humanizeBlockClass(match[1])} (Programmatic)`;
+    return "Programmatic Report";
+  }
+  return name;
+};
+
 // Share link data type
 type ShareLinkData = {
   token: string;
@@ -404,8 +425,10 @@ export function PublicReport({
     }) || [];
     
     // Ensure we have a valid display name
-    const displayName = report.name || 
-      (config?.name ? `${config.name}` : `Report ${report.id.substring(0, 6)}`);
+    const configDisplayName = formatConfigDisplayName(config?.name || null);
+    const displayName =
+      formatReportDisplayName(report.name || null) ||
+      (configDisplayName ? `${configDisplayName}` : `Report ${report.id.substring(0, 6)}`);
     
     // Format stages for display
     const stages = [];
@@ -456,7 +479,7 @@ export function PublicReport({
                 id: report.id,
                 title: displayName,
                 name: displayName,
-                configName: config?.name || displayName,
+                configName: configDisplayName || displayName,
                 configDescription: config?.description,
                 createdAt: report.createdAt,
                 updatedAt: report.updatedAt,
