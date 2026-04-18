@@ -571,6 +571,72 @@ def _build_default_cache_key(block_class: str, block_config: Dict[str, Any]) -> 
     return " | ".join(parts)
 
 
+def _format_date_window_for_display(block_config: Dict[str, Any], output_data: Any) -> Optional[str]:
+    start = str(block_config.get("start_date") or "").strip()
+    end = str(block_config.get("end_date") or "").strip()
+    days = block_config.get("days")
+
+    if start and end:
+        return f"{start} to {end}"
+    if days is not None:
+        return f"Last {days} days"
+
+    if isinstance(output_data, dict):
+        date_range = output_data.get("date_range")
+        if isinstance(date_range, dict):
+            start_raw = str(date_range.get("start") or "").strip()
+            end_raw = str(date_range.get("end") or "").strip()
+            if start_raw and end_raw:
+                return f"{start_raw} to {end_raw}"
+    return None
+
+
+def _derive_programmatic_display_strings(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    output_data: Any,
+) -> Tuple[str, Optional[str]]:
+    """
+    Derive a readable title/subtitle pair for programmatic reports.
+
+    Keep cache_key for caching, but store human-friendly display strings in parameters
+    so the dashboard doesn't have to show long cache identifiers in the report list.
+    """
+    block_title = _humanize_block_class(block_class)
+
+    scorecard_name: Optional[str] = None
+    score_name: Optional[str] = None
+    scope: Optional[str] = None
+    if isinstance(output_data, dict):
+        scorecard_name = output_data.get("scorecard_name") or None
+        score_name = output_data.get("score_name") or None
+        scope = output_data.get("scope") or None
+
+    title_parts: List[str] = [block_title]
+    if scorecard_name:
+        title_parts.append(str(scorecard_name).strip())
+    if score_name:
+        title_parts.append(str(score_name).strip())
+    elif scope == "scorecard_all_scores":
+        title_parts.append("All Scores")
+
+    title = " - ".join([part for part in title_parts if part])
+
+    window_str = _format_date_window_for_display(block_config, output_data)
+    subtitle_parts: List[str] = []
+    if window_str:
+        subtitle_parts.append(window_str)
+
+    config_str = json.dumps(block_config, sort_keys=True, separators=(",", ":"))
+    config_fingerprint = hashlib.sha1(config_str.encode("utf-8")).hexdigest()[:10]
+    subtitle_parts.append(f"cfg {config_fingerprint}")
+
+    subtitle = " | ".join([part for part in subtitle_parts if part]) or None
+    return title, subtitle
+
+
 def _persist_block_result(
     cache_key: str,
     block_class: str,
@@ -582,6 +648,12 @@ def _persist_block_result(
 ) -> None:
     """Persist a block result as Report + ReportBlock records."""
     config_id = _get_programmatic_config_id(account_id, client)
+    display_title, display_subtitle = _derive_programmatic_display_strings(
+        cache_key=cache_key,
+        block_class=block_class,
+        block_config=block_config or {},
+        output_data=output_data,
+    )
 
     task = Task.create(
         client=client,
@@ -599,7 +671,12 @@ def _persist_block_result(
         taskId=task.id,
         name=cache_key,
         reportConfigurationId=config_id,
-        parameters=block_config,
+        parameters={
+            **(block_config or {}),
+            "_cache_key": cache_key,
+            "_display_title": display_title,
+            "_display_subtitle": display_subtitle,
+        },
     )
 
     # Derive a human-readable display name from the class name
