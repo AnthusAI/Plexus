@@ -39,6 +39,7 @@ import remarkBreaks from "remark-breaks"
 import { downloadData } from "aws-amplify/storage"
 import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
 import { EndOfRunReport, ReportSection } from "./OptimizationInsightsPanel"
+import { OptimizerProblemItemsPanel, type NotableItemRecurrence } from "./OptimizerProblemItemsPanel"
 import { CollapsibleText } from "./ui/message-utils"
 import { OptimizerMetricsChartSkeleton, CycleHistoryTableSkeleton } from "./loading-skeleton"
 
@@ -188,6 +189,7 @@ export default function ProcedureTask({
   const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
   const [endOfRunReport, setEndOfRunReport] = useState<any>(null)
   const [procedureSummary, setProcedureSummary] = useState<{ diagnosis?: string; prescription?: string; cycle?: number } | null>(null)
+  const [notableItemRecurrence, setNotableItemRecurrence] = useState<NotableItemRecurrence | null>(null)
   const [iterationDetails, setIterationDetails] = useState<Map<number, any>>(new Map())
   const [expandedVersionRows, setExpandedVersionRows] = useState<Set<number>>(new Set())
 
@@ -292,6 +294,7 @@ export default function ProcedureTask({
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
         if (state.end_of_run_report) setEndOfRunReport(state.end_of_run_report)
         if (state.procedure_summary) setProcedureSummary(state.procedure_summary)
+        if (state.notable_item_recurrence) setNotableItemRecurrence(state.notable_item_recurrence)
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
           if (it.exploration_results || it.done_reason || it.synthesis_reasoning || it.dual_synthesis) {
@@ -1076,6 +1079,11 @@ export default function ProcedureTask({
               </table>
             </div>
           ) : null}
+
+          {/* Problem item tracker — items with recurrent misclassifications */}
+          {notableItemRecurrence && (
+            <OptimizerProblemItemsPanel notableItems={notableItemRecurrence} />
+          )}
 
           {/* End-of-run diagnosis and prescription */}
           {endOfRunReport && <EndOfRunReport report={endOfRunReport} />}
