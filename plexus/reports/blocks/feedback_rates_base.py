@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
+import time
 
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
@@ -17,6 +18,9 @@ class FeedbackRatesBase(BaseReportBlock):
     """
 
     DEFAULT_DAYS = 30
+    DEFAULT_FETCH_SHARD_DAYS = 30
+    DEFAULT_FETCH_SHARD_CONCURRENCY = 4
+    DEFAULT_FETCH_MAX_INFLIGHT_PROCESS = 8
 
     def _get_param(self, name: str) -> Any:
         return self.config.get(name) or self.params.get(name) or self.params.get(f"param_{name}")
@@ -78,6 +82,35 @@ class FeedbackRatesBase(BaseReportBlock):
         if not account_id:
             raise ValueError("Could not resolve account_id.")
         return str(account_id)
+
+    def _resolve_fetch_options(self) -> Tuple[int, int, int]:
+        shard_days_raw = self._get_param("fetch_shard_days")
+        shard_concurrency_raw = self._get_param("fetch_shard_concurrency")
+        max_inflight_raw = self._get_param("fetch_max_inflight_process")
+
+        shard_days = (
+            int(shard_days_raw)
+            if shard_days_raw is not None and str(shard_days_raw).strip() != ""
+            else self.DEFAULT_FETCH_SHARD_DAYS
+        )
+        shard_concurrency = (
+            int(shard_concurrency_raw)
+            if shard_concurrency_raw is not None and str(shard_concurrency_raw).strip() != ""
+            else self.DEFAULT_FETCH_SHARD_CONCURRENCY
+        )
+        max_inflight_process = (
+            int(max_inflight_raw)
+            if max_inflight_raw is not None and str(max_inflight_raw).strip() != ""
+            else self.DEFAULT_FETCH_MAX_INFLIGHT_PROCESS
+        )
+
+        if shard_days <= 0:
+            raise ValueError("'fetch_shard_days' must be a positive integer.")
+        if shard_concurrency <= 0:
+            raise ValueError("'fetch_shard_concurrency' must be a positive integer.")
+        if max_inflight_process <= 0:
+            raise ValueError("'fetch_max_inflight_process' must be a positive integer.")
+        return shard_days, shard_concurrency, max_inflight_process
 
     def _to_dt(self, value: Any) -> datetime:
         if isinstance(value, datetime):
@@ -168,7 +201,105 @@ class FeedbackRatesBase(BaseReportBlock):
         end_date: datetime,
         score_id: Optional[str],
     ) -> List[Dict[str, Any]]:
-        all_results: List[Dict[str, Any]] = []
+        shard_days, shard_concurrency, max_inflight_process = self._resolve_fetch_options()
+        shards = self._build_time_shards(start_date=start_date, end_date=end_date, shard_days=shard_days)
+        if not shards:
+            return []
+        shard_count = len(shards)
+
+        self._log(
+            "Fetching score results with sharded scan "
+            f"(shards={shard_count}, shard_days={shard_days}, "
+            f"shard_concurrency={shard_concurrency}, max_inflight_process={max_inflight_process})"
+        )
+
+        started = time.perf_counter()
+        semaphore = asyncio.Semaphore(shard_concurrency)
+        shard_results: List[List[Dict[str, Any]]] = [[] for _ in range(shard_count)]
+
+        async def _run_shard(shard_index: int, shard_start: datetime, shard_end: datetime) -> None:
+            async with semaphore:
+                shard_started = time.perf_counter()
+                rows = await self._fetch_score_results_shard(
+                    account_id=account_id,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    shard_start=shard_start,
+                    shard_end=shard_end,
+                    shard_index=shard_index,
+                    shard_count=shard_count,
+                    max_inflight_process=max_inflight_process,
+                )
+                shard_results[shard_index] = rows
+                self._log(
+                    f"[score-results] shard {shard_index + 1}/{shard_count} "
+                    f"completed rows={len(rows)} elapsed={time.perf_counter() - shard_started:.2f}s"
+                )
+
+        await asyncio.gather(
+            *[
+                _run_shard(shard_index=idx, shard_start=window[0], shard_end=window[1])
+                for idx, window in enumerate(shards)
+            ]
+        )
+
+        merged_rows: List[Dict[str, Any]] = []
+        for rows in shard_results:
+            if rows:
+                merged_rows.extend(rows)
+
+        deduped_rows = self._dedupe_score_results_by_id(merged_rows)
+        self._log(
+            "[score-results] complete "
+            f"(raw_kept={len(merged_rows)}, deduped={len(deduped_rows)}, "
+            f"elapsed={time.perf_counter() - started:.2f}s)"
+        )
+        return deduped_rows
+
+    def _build_time_shards(
+        self,
+        *,
+        start_date: datetime,
+        end_date: datetime,
+        shard_days: int,
+    ) -> List[Tuple[datetime, datetime]]:
+        if end_date <= start_date:
+            return []
+        shards: List[Tuple[datetime, datetime]] = []
+        cursor = start_date
+        while cursor < end_date:
+            shard_end = min(cursor + timedelta(days=shard_days), end_date)
+            shards.append((cursor, shard_end))
+            cursor = shard_end
+        return shards
+
+    async def _filter_score_results_page(
+        self,
+        *,
+        raw_items: List[Dict[str, Any]],
+        account_id: str,
+        scorecard_id: str,
+    ) -> List[Dict[str, Any]]:
+        return [
+            item
+            for item in raw_items
+            if str(item.get("accountId") or "") == str(account_id)
+            and str(item.get("scorecardId") or "") == str(scorecard_id)
+        ]
+
+    async def _fetch_score_results_shard(
+        self,
+        *,
+        account_id: str,
+        scorecard_id: str,
+        score_id: Optional[str],
+        shard_start: datetime,
+        shard_end: datetime,
+        shard_index: int,
+        shard_count: int,
+        max_inflight_process: int,
+    ) -> List[Dict[str, Any]]:
+        kept_rows: List[Dict[str, Any]] = []
         next_token: Optional[str] = None
         seen_tokens: set[str] = set()
         query_name = "listScoreResultByScorecardIdAndUpdatedAt"
@@ -206,6 +337,21 @@ class FeedbackRatesBase(BaseReportBlock):
                         id
                         name
                     }}
+                    item {{
+                        id
+                        externalId
+                        createdAt
+                        updatedAt
+                        identifiers
+                        itemIdentifiers {{
+                            items {{
+                                name
+                                value
+                                url
+                                position
+                            }}
+                        }}
+                    }}
                 }}
                 nextToken
             }}
@@ -213,11 +359,27 @@ class FeedbackRatesBase(BaseReportBlock):
         """
 
         page_num = 0
+        raw_total = 0
+        kept_total = 0
+        process_queue: List[Tuple[int, asyncio.Task[List[Dict[str, Any]]], int]] = []
+
+        async def _drain_oldest() -> None:
+            nonlocal kept_total
+            queued_page_num, task, queued_raw_count = process_queue.pop(0)
+            filtered_items = await task
+            kept_total += len(filtered_items)
+            if filtered_items:
+                kept_rows.extend(filtered_items)
+            self._log(
+                f"[score-results] shard {shard_index + 1}/{shard_count} processed page "
+                f"{queued_page_num} kept={len(filtered_items)} raw={queued_raw_count}"
+            )
+
         while True:
             variables: Dict[str, Any] = {
                 "scorecardId": str(scorecard_id),
-                "startTime": start_date.isoformat(),
-                "endTime": end_date.isoformat(),
+                "startTime": shard_start.isoformat(),
+                "endTime": shard_end.isoformat(),
                 "limit": 500,
                 "nextToken": next_token,
             }
@@ -228,38 +390,87 @@ class FeedbackRatesBase(BaseReportBlock):
 
             page_num += 1
             self._log(
-                f"Fetching score results page {page_num} "
+                f"[score-results] shard {shard_index + 1}/{shard_count} fetch page {page_num} "
                 f"(nextToken={'set' if next_token else 'none'})"
             )
             try:
                 response = await asyncio.to_thread(self.api_client.execute, query, variables)
             except Exception as exc:
-                self._log(f"ERROR fetching score results page {page_num}: {exc}", level="ERROR")
+                self._log(
+                    f"[score-results] ERROR shard {shard_index + 1}/{shard_count} "
+                    f"fetch page {page_num}: {exc}",
+                    level="ERROR",
+                )
                 break
             payload = response.get(query_name) or {}
             raw_items = payload.get("items") or []
-            items = [
-                item
-                for item in raw_items
-                if str(item.get("accountId") or "") == str(account_id)
-                and str(item.get("scorecardId") or "") == str(scorecard_id)
-            ]
-            if items:
-                all_results.extend(items)
+            raw_count = len(raw_items)
+            raw_total += raw_count
+            process_queue.append(
+                (
+                    page_num,
+                    asyncio.create_task(
+                        self._filter_score_results_page(
+                            raw_items=raw_items,
+                            account_id=account_id,
+                            scorecard_id=scorecard_id,
+                        )
+                    ),
+                    raw_count,
+                )
+            )
+            while len(process_queue) >= max_inflight_process:
+                await _drain_oldest()
 
             next_token = payload.get("nextToken")
             self._log(
-                f"Score results page {page_num} returned {len(items)} items "
-                f"(raw {len(raw_items)}), nextToken={'set' if next_token else 'none'}"
+                f"[score-results] shard {shard_index + 1}/{shard_count} fetched page {page_num} "
+                f"raw={raw_count}, nextToken={'set' if next_token else 'none'}"
             )
             if not next_token:
                 break
             if next_token in seen_tokens:
-                self._log("Detected repeated pagination token for score results; stopping pagination.", level="WARNING")
+                self._log(
+                    f"[score-results] shard {shard_index + 1}/{shard_count} "
+                    "detected repeated pagination token; stopping pagination.",
+                    level="WARNING",
+                )
                 break
             seen_tokens.add(next_token)
 
-        return all_results
+        while process_queue:
+            await _drain_oldest()
+
+        self._log(
+            f"[score-results] shard {shard_index + 1}/{shard_count} summary "
+            f"(pages={page_num}, kept={kept_total}, raw={raw_total})"
+        )
+        return kept_rows
+
+    def _dedupe_score_results_by_id(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        latest_by_id: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            row_id = str(row.get("id") or "").strip()
+            if not row_id:
+                continue
+            existing = latest_by_id.get(row_id)
+            if existing is None:
+                latest_by_id[row_id] = row
+                continue
+            row_ts = self._to_dt(row.get("updatedAt") or row.get("createdAt"))
+            existing_ts = self._to_dt(existing.get("updatedAt") or existing.get("createdAt"))
+            if row_ts >= existing_ts:
+                latest_by_id[row_id] = row
+
+        deduped_rows = list(latest_by_id.values())
+        deduped_rows.sort(
+            key=lambda row: (
+                self._to_dt(row.get("updatedAt") or row.get("createdAt")),
+                str(row.get("id") or ""),
+            ),
+            reverse=True,
+        )
+        return deduped_rows
 
     async def _fetch_feedback_items_window(
         self,
@@ -492,9 +703,16 @@ class FeedbackRatesBase(BaseReportBlock):
         feedback_stats_by_key: Dict[Tuple[str, str], Dict[str, int]] = {}
         for key, group in grouped_feedback.items():
             valid_group = [entry for entry in group if not entry.get("isInvalid")]
+            changed_valid_group = [
+                entry
+                for entry in valid_group
+                if entry.get("finalAnswerValue") is not None
+                and str(entry.get("finalAnswerValue")) != str(entry.get("initialAnswerValue"))
+            ]
             feedback_stats_by_key[key] = {
                 "total": len(group),
                 "valid": len(valid_group),
+                "changed": len(changed_valid_group),
             }
             if not valid_group:
                 continue
@@ -526,11 +744,16 @@ class FeedbackRatesBase(BaseReportBlock):
                 item_id,
                 {
                     "item_id": item_id,
+                    "item_external_id": None,
+                    "item_created_at": None,
+                    "item_updated_at": None,
+                    "item_identifiers": None,
                     "total_score_results": 0,
                     "corrected_score_results": 0,
                     "uncorrected_score_results": 0,
                     "feedback_items_total": 0,
                     "feedback_items_valid": 0,
+                    "feedback_items_changed": 0,
                     "feedback_scores_with_feedback": set(),
                     "score_results": [],
                 },
@@ -542,8 +765,36 @@ class FeedbackRatesBase(BaseReportBlock):
                 item_bucket["uncorrected_score_results"] += 1
             item_bucket["feedback_items_total"] += int(feedback_stats.get("total") or 0)
             item_bucket["feedback_items_valid"] += int(feedback_stats.get("valid") or 0)
+            item_bucket["feedback_items_changed"] += int(feedback_stats.get("changed") or 0)
             if int(feedback_stats.get("total") or 0) > 0:
                 item_bucket["feedback_scores_with_feedback"].add(score_id)
+
+            item_obj = result.get("item") if isinstance(result.get("item"), dict) else None
+            if item_obj:
+                if item_bucket.get("item_external_id") is None:
+                    item_bucket["item_external_id"] = item_obj.get("externalId")
+                item_created_at = item_obj.get("createdAt")
+                if item_created_at and item_bucket.get("item_created_at") is None:
+                    item_bucket["item_created_at"] = item_created_at
+                item_updated_at = item_obj.get("updatedAt")
+                if item_updated_at:
+                    existing_item_updated_at = item_bucket.get("item_updated_at")
+                    if (
+                        existing_item_updated_at is None
+                        or self._to_dt(item_updated_at) > self._to_dt(existing_item_updated_at)
+                    ):
+                        item_bucket["item_updated_at"] = item_updated_at
+                if item_bucket.get("item_identifiers") is None:
+                    item_identifiers_payload = None
+                    item_identifiers_conn = item_obj.get("itemIdentifiers")
+                    if isinstance(item_identifiers_conn, dict):
+                        item_identifiers_payload = item_identifiers_conn.get("items")
+                    if item_identifiers_payload:
+                        item_bucket["item_identifiers"] = item_identifiers_payload
+                    else:
+                        legacy_identifiers = item_obj.get("identifiers")
+                        if legacy_identifiers:
+                            item_bucket["item_identifiers"] = legacy_identifiers
 
             item_bucket["score_results"].append(
                 {
@@ -553,6 +804,7 @@ class FeedbackRatesBase(BaseReportBlock):
                     "predicted_value": predicted_value,
                     "feedback_items_total": int(feedback_stats.get("total") or 0),
                     "feedback_items_valid": int(feedback_stats.get("valid") or 0),
+                    "feedback_items_changed": int(feedback_stats.get("changed") or 0),
                     "feedback_initial_value": feedback.get("initialAnswerValue") if feedback else None,
                     "feedback_final_value": final_value,
                     "corrected": corrected,
@@ -573,6 +825,18 @@ class FeedbackRatesBase(BaseReportBlock):
 
         total_score_results = len(filtered_results)
         total_items = len(items)
+        total_feedback_items = sum(stats["total"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+        total_feedback_items_valid = (
+            sum(stats["valid"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+        )
+        total_feedback_items_changed = (
+            sum(stats["changed"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+        )
+        score_results_with_feedback = (
+            sum(1 for stats in feedback_stats_by_key.values() if int(stats.get("total") or 0) > 0)
+            if feedback_stats_by_key
+            else 0
+        )
 
         return {
             "scope": "single_score" if resolved_score_id else "scorecard_all_scores",
@@ -592,6 +856,10 @@ class FeedbackRatesBase(BaseReportBlock):
                 "corrected_score_results": corrected_total,
                 "uncorrected_score_results": uncorrected_total,
                 "corpus_correction_rate": (corrected_total / total_score_results) if total_score_results else 0.0,
+                "feedback_items_total": total_feedback_items,
+                "feedback_items_valid": total_feedback_items_valid,
+                "feedback_items_changed": total_feedback_items_changed,
+                "score_results_with_feedback": score_results_with_feedback,
             },
             "items": items,
             "raw_counts": {

@@ -19,6 +19,7 @@ interface AcceptanceTimelinePoint {
   score_result_acceptance_rate: number;
   feedback_items_total: number;
   feedback_items_valid: number;
+  feedback_items_changed: number;
   score_results_with_feedback: number;
 }
 
@@ -39,6 +40,16 @@ interface AcceptanceRateTimelineData {
     timezone?: string;
   };
   points?: AcceptanceTimelinePoint[];
+  summary?: {
+    total_score_results: number;
+    accepted_score_results: number;
+    corrected_score_results: number;
+    score_result_acceptance_rate: number;
+    feedback_items_total: number;
+    feedback_items_valid: number;
+    feedback_items_changed: number;
+    score_results_with_feedback: number;
+  };
   message?: string;
   warning?: string;
   error?: string;
@@ -82,6 +93,7 @@ const TimelineTooltip: React.FC<any> = ({ active, payload }) => {
       <div>
         Feedback edits: {point.feedback_items_valid}/{point.feedback_items_total}
       </div>
+      <div>Value-changing edits: {point.feedback_items_changed}</div>
       <div>Score results with any feedback: {point.score_results_with_feedback}</div>
     </div>
   );
@@ -131,6 +143,7 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
 
   const output = loadedOutput ?? parsedOutput;
   const points = Array.isArray(output.points) ? output.points : [];
+  const summary = output.summary;
   const title =
     props.name && !props.name.startsWith("block_")
       ? props.name
@@ -152,10 +165,41 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
       dateRange={output.date_range}
     >
       <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md bg-card p-3">
+            <div className="text-xs text-muted-foreground">Score-Result Acceptance Rate</div>
+            <div className="text-xl font-semibold">
+              {formatPercent(summary?.score_result_acceptance_rate)}
+            </div>
+          </div>
+          <div className="rounded-md bg-card p-3">
+            <div className="text-xs text-muted-foreground">Accepted Score Results</div>
+            <div className="text-xl font-semibold">
+              {(summary?.accepted_score_results ?? 0)} / {(summary?.total_score_results ?? 0)}
+            </div>
+          </div>
+          <div className="rounded-md bg-card p-3">
+            <div className="text-xs text-muted-foreground">Feedback Edits</div>
+            <div className="text-xl font-semibold">{summary?.feedback_items_total ?? 0}</div>
+            <div className="text-xs text-muted-foreground">
+              Valid: {summary?.feedback_items_valid ?? 0}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Value changed: {summary?.feedback_items_changed ?? 0}
+            </div>
+          </div>
+          <div className="rounded-md bg-card p-3">
+            <div className="text-xs text-muted-foreground">Score Results With Feedback</div>
+            <div className="text-xl font-semibold">{summary?.score_results_with_feedback ?? 0}</div>
+          </div>
+        </div>
+
         <div className="text-sm text-muted-foreground">
           {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
           {output.score_name ? ` • Score: ${output.score_name}` : null}
           {output.bucket_policy?.bucket_type ? ` • Buckets: ${output.bucket_policy.bucket_type}` : null}
+          {summary ? ` • Feedback edits: ${summary.feedback_items_valid ?? 0}/${summary.feedback_items_total ?? 0}` : null}
+          {summary ? ` • Value-changing edits: ${summary.feedback_items_changed ?? 0}` : null}
         </div>
 
         <div className="rounded-md bg-card p-3">
@@ -189,4 +233,3 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
 (AcceptanceRateTimeline as BlockComponent).blockClass = "AcceptanceRateTimeline";
 
 export default AcceptanceRateTimeline;
-

@@ -108,12 +108,21 @@ def run_programmatic_block(payload_base64: str) -> None:
 @report.command(name="correction-rate")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
-@click.option("--max-items", type=int, default=200, show_default=True)
+@click.option(
+    "--max-items",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Maximum item rows in output. Use 0 for no cap.",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
+@click.option("--fetch-shard-days", type=int, default=30, show_default=True, help="Shard size in days for score-result window fetch.")
+@click.option("--fetch-shard-concurrency", type=int, default=4, show_default=True, help="Max concurrent score-result shards.")
+@click.option("--fetch-max-inflight-process", type=int, default=8, show_default=True, help="Max in-flight page processing tasks per shard.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
 @click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
@@ -128,6 +137,9 @@ def correction_rate(
     end_date: Optional[str],
     cache_key: Optional[str],
     ttl_hours: float,
+    fetch_shard_days: int,
+    fetch_shard_concurrency: int,
+    fetch_max_inflight_process: int,
     fresh: bool,
     background: bool,
     account_identifier: Optional[str],
@@ -160,12 +172,21 @@ def correction_rate(
     is_flag=True,
     help="Include item-level acceptance metrics (default: score-result-only).",
 )
-@click.option("--max-items", type=int, default=200, show_default=True)
+@click.option(
+    "--max-items",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Maximum item rows in output. Use 0 for no cap.",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
+@click.option("--fetch-shard-days", type=int, default=30, show_default=True, help="Shard size in days for score-result window fetch.")
+@click.option("--fetch-shard-concurrency", type=int, default=4, show_default=True, help="Max concurrent score-result shards.")
+@click.option("--fetch-max-inflight-process", type=int, default=8, show_default=True, help="Max in-flight page processing tasks per shard.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
 @click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
@@ -181,6 +202,9 @@ def acceptance_rate(
     end_date: Optional[str],
     cache_key: Optional[str],
     ttl_hours: float,
+    fetch_shard_days: int,
+    fetch_shard_concurrency: int,
+    fetch_max_inflight_process: int,
     fresh: bool,
     background: bool,
     account_identifier: Optional[str],
@@ -198,6 +222,9 @@ def acceptance_rate(
         extra_config={
             "include_item_acceptance_rate": include_item_acceptance_rate,
             "max_items": max_items,
+            "fetch_shard_days": fetch_shard_days,
+            "fetch_shard_concurrency": fetch_shard_concurrency,
+            "fetch_max_inflight_process": fetch_max_inflight_process,
         },
         account_identifier=account_identifier,
         cache_key=cache_key,
@@ -496,6 +523,9 @@ def volume(
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
+@click.option("--fetch-shard-days", type=int, default=30, show_default=True, help="Shard size in days for score-result window fetch.")
+@click.option("--fetch-shard-concurrency", type=int, default=4, show_default=True, help="Max concurrent score-result shards.")
+@click.option("--fetch-max-inflight-process", type=int, default=8, show_default=True, help="Max in-flight page processing tasks per shard.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
@@ -510,6 +540,9 @@ def acceptance_rate_timeline(
     end_date: Optional[str],
     cache_key: Optional[str],
     ttl_hours: float,
+    fetch_shard_days: int,
+    fetch_shard_concurrency: int,
+    fetch_max_inflight_process: int,
     fresh: bool,
     account_identifier: Optional[str],
     output_format: str,
@@ -530,6 +563,9 @@ def acceptance_rate_timeline(
         extra_config={
             "bucket_type": bucket_type,
             "bucket_count": bucket_count,
+            "fetch_shard_days": fetch_shard_days,
+            "fetch_shard_concurrency": fetch_shard_concurrency,
+            "fetch_max_inflight_process": fetch_max_inflight_process,
         },
     )
     _print_result(title="AcceptanceRateTimeline", result=result, output_format=output_format, include_log=include_log)
