@@ -2282,6 +2282,19 @@ code: |
     return table.concat(parts, "\n")
   end
 
+  -- Diagnostic logger that bypasses broken Python logging by writing directly to file.
+  -- Defined early so it is available in both fresh-run and continuation paths.
+  local diag_path = "optimizer_diag.log"
+  pcall(function() diag_path = os.getenv("PLEXUS_DIAG_LOG") or diag_path end)
+  local function diag(msg)
+    local ts = os.date("%Y-%m-%d %H:%M:%S")
+    local line = string.format("[%s] %s\n", ts, msg)
+    local existing = ""
+    pcall(function() existing = File.read(diag_path) end)
+    File.write(diag_path, existing .. line)
+    Human.notify({message = msg, level = "info"})
+  end
+
   -- Phase A: Setup & Baseline
   Stage.set("setup")
   Stage.progress(0, params.max_iterations)  -- show total cycle count from the start
@@ -2323,237 +2336,32 @@ code: |
 
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
-  -- Dataset adequacy check: ensure a deterministic regression dataset exists.
-  -- The accuracy evaluation uses this fixed dataset across all iterations.
-  -- The feedback evaluation separately uses the newest items.
-  Human.notify({message = "Checking for existing associated regression dataset...", level = "info"})
-  local dataset_id = nil
-
-  local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
-    scorecard = params.scorecard,
-    score = params.score
-  })
-
-  local min_dataset_rows = params.max_samples
-  local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
-  local dataset_adequate = dataset_check and dataset_check.has_dataset
-    and dataset_check.is_materialized
-    and dataset_check.row_count and dataset_check.row_count >= min_acceptable
-
-  if dataset_adequate then
-    dataset_id = dataset_check.dataset_id
-    Human.notify({message = "Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)", level = "info"})
-  else
-    -- Need to create a dataset
-    if dataset_check and dataset_check.has_dataset then
-      Human.notify({message = string.format(
-        "Existing dataset has %d rows but need %d, creating new one...",
-        dataset_check.row_count or 0, min_dataset_rows
-      ), level = "info"})
-    else
-      Human.notify({message = "No associated dataset found, creating one...", level = "info"})
-    end
-
-    -- Tier 1: Try balanced dataset with requested sample size
-    Human.notify({
-      message = string.format("Building balanced regression dataset (%d items)...", min_dataset_rows),
-      level = "info"
-    })
-    local build_ok, build_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
-      scorecard = params.scorecard,
-      score = params.score,
-      max_items = min_dataset_rows,
-      days = params.days,
-      balance = true,
-      score_version_id = params.start_version
-    })
-    if not build_ok then
-      Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
-      build_result = nil
-    end
-
-    if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
-      dataset_id = build_result.dataset_id
-      Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
-    else
-      -- Tier 2: Try unbalanced (relax balancing to get more items)
-      local rows_so_far = (build_result and build_result.rows_written) or 0
-      Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
-
-      local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
-        scorecard = params.scorecard,
-        score = params.score,
-        max_items = min_dataset_rows,
-        days = params.days,
-        balance = false,
-        score_version_id = params.start_version
-      })
-      local build_result = unbal_ok and unbal_result or nil
-
-      if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
-        dataset_id = build_result.dataset_id
-        Human.notify({message = "Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
-      else
-        -- Abort: not enough feedback data
-        local final_rows = (build_result and build_result.rows_written) or 0
-        return {
-          success = false,
-          status = "error",
-          message = string.format(
-            "Insufficient feedback data to build a regression dataset. Only %d items available (need %d, minimum %d). " ..
-            "Collect more feedback for score '%s' before running the optimizer.",
-            final_rows, min_dataset_rows, min_acceptable, score_name
-          )
-        }
-      end
-    end
-  end
-
-  State.set("dataset_id", dataset_id)
-  Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
-
-  -- smoke_test_item_ids is populated after the accuracy baseline is known (see below)
-  local smoke_test_item_ids = nil
-
-  -- Pull starting version (champion or specified start_version)
-  local pull_args = {
-    scorecard_identifier = params.scorecard,
-    score_identifier = params.score
-  }
-  if has_text(params.start_version) then
-    pull_args.version_id = params.start_version
-    Human.notify({message = "Pulling specified start version: " .. params.start_version, level = "info"})
-  else
-    Human.notify({message = "Pulling champion score version...", level = "info"})
-  end
-  local initial_pull = call_plexus_tool("plexus_score_pull", pull_args)
-  if not initial_pull or not initial_pull.success then
-    return {
-      success = false,
-      status = "error",
-      message = "Failed to pull initial score configuration"
-    }
-  end
-  local champion_version_id = initial_pull.versionId
-  local current_code_path = initial_pull.codeFilePath
-  local current_code = File.read(current_code_path)
-  local current_guidelines = ""
-  if initial_pull.guidelinesFilePath then
-    local g = File.read(initial_pull.guidelinesFilePath)
-    if has_text(g) then current_guidelines = g end
-  end
-  Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
-
-  -- Dual baseline evaluations — run new ones or reuse from a previous run
-  Stage.set("baseline")
-
-  local accuracy_baseline         = nil
-  local accuracy_baseline_id      = nil
+  -- ================================================================
+  -- Pre-declare variables shared between fresh-run and continuation paths.
+  -- (Lua 5.4 goto cannot jump into the scope of a local, so all locals that
+  -- are used after ::start_cycling:: must be declared before the goto.)
+  -- ================================================================
+  local dataset_id              = nil
+  local smoke_test_item_ids     = nil
+  local champion_version_id     = nil
+  local accuracy_baseline       = nil
+  local accuracy_baseline_id    = nil
   local accuracy_baseline_metrics = nil
-  local accuracy_baseline_rca     = {}
-  local accuracy_available        = false
-  local feedback_baseline_id      = nil
+  local accuracy_baseline_rca   = {}
+  local accuracy_available      = false
+  local feedback_baseline_id    = nil
   local feedback_baseline_metrics = nil
-  local feedback_baseline_rca     = {}
-
-  local resume_acc = has_text(params.resume_accuracy_eval) and params.resume_accuracy_eval or nil
-  local resume_fb  = has_text(params.resume_feedback_eval) and params.resume_feedback_eval or nil
-
-  if resume_acc or resume_fb then
-    -- Resume mode: reuse existing baseline evaluations
-    Human.notify({message = "Resuming from existing baseline evaluations...", level = "info"})
-
-    -- Helper: warn (but don't fail) if resumed eval's version differs from starting version.
-    -- The user explicitly chose to resume with these baselines, so trust them.
-    local function validate_eval_version(eval_info, eval_type, eval_id)
-      local eval_version = eval_info.score_version_id or eval_info.scoreVersionId
-      if eval_version and eval_version ~= champion_version_id then
-        Human.notify({message = string.format(
-          "Note: %s baseline %s was run on version %s but starting version is %s. "
-          .. "Using it as the reference baseline anyway.",
-          eval_type, eval_id, eval_version, champion_version_id
-        ), level = "warning"})
-      end
-      return true, nil
-    end
-
-    if resume_acc then
-      Human.notify({message = "Fetching accuracy baseline: " .. resume_acc, level = "info"})
-      local acc_info = call_plexus_tool("plexus_evaluation_info", {
-        evaluation_id = resume_acc,
-        output_format = "json"
-      })
-      if acc_info and not acc_info.error then
-        local valid, err = validate_eval_version(acc_info, "Accuracy", resume_acc)
-        if not valid then
-          return {success = false, status = "error", message = err}
-        end
-        accuracy_baseline_id      = resume_acc
-        accuracy_baseline_metrics = extract_metrics(acc_info)
-        accuracy_baseline_rca     = enrich_rca(acc_info.root_cause or {})
-        accuracy_available        = true
-        Human.notify({message = string.format(
-          "Accuracy baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-          accuracy_baseline_metrics.alignment,
-          accuracy_baseline_metrics.accuracy,
-          accuracy_baseline_metrics.precision,
-          accuracy_baseline_metrics.recall
-        ), level = "info"})
-      else
-        Human.notify({message = "Failed to resume accuracy baseline: " .. tostring(acc_info and acc_info.error or "not found"), level = "warning"})
-      end
-    end
-
-    if resume_fb then
-      Human.notify({message = "Fetching feedback baseline: " .. resume_fb, level = "info"})
-      local fb_info = call_plexus_tool("plexus_evaluation_info", {
-        evaluation_id = resume_fb,
-        output_format = "json"
-      })
-      if not fb_info or fb_info.error then
-        return {
-          success = false,
-          status  = "error",
-          message = "Failed to resume feedback baseline " .. resume_fb .. ": " .. tostring(fb_info and fb_info.error or "not found")
-        }
-      end
-      -- Skip version validation for feedback evals — they use the champion version
-      -- at the time of evaluation, which may differ from the starting version.
-      feedback_baseline_id      = resume_fb
-      feedback_baseline_metrics = extract_metrics(fb_info)
-      feedback_baseline_rca     = enrich_rca(fb_info.root_cause or {})
-      Human.notify({message = string.format(
-        "Feedback baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-        feedback_baseline_metrics.alignment,
-        feedback_baseline_metrics.accuracy,
-        feedback_baseline_metrics.precision,
-        feedback_baseline_metrics.recall
-      ), level = "info"})
-    end
-
-    -- If feedback baseline not resumed, must run it
-    if not resume_fb then
-      Human.notify({message = "No feedback baseline to resume — running fresh...", level = "info"})
-    end
-  end
-
-  -- Diagnostic logger that bypasses broken Python logging by writing directly to file
-  local diag_path = "optimizer_diag.log"
-  pcall(function() diag_path = os.getenv("PLEXUS_DIAG_LOG") or diag_path end)
-  local function diag(msg)
-    local ts = os.date("%Y-%m-%d %H:%M:%S")
-    local line = string.format("[%s] %s\n", ts, msg)
-    -- Append by reading existing content
-    local existing = ""
-    pcall(function() existing = File.read(diag_path) end)
-    File.write(diag_path, existing .. line)
-    Human.notify({message = msg, level = "info"})
-  end
-  File.write(diag_path, "")  -- clear at start
+  local feedback_baseline_rca   = {}
+  -- current score config — set by init or continuation, used in cycle loop
+  local current_code_path    = nil
+  local current_code         = nil
+  local current_guidelines   = nil
 
   -- Helper: run FeedbackContradictions report and cache result in State.
   -- Supports background=true for fire-and-forget dispatch; a later call with
   -- background=false (default) blocks until the background thread completes.
+  -- Defined here (after scorecard_name/score_name) so it is available in both
+  -- fresh-run and continuation paths.
   local function refresh_known_contradictions(current_cycle, opts)
     opts = opts or {}
     local ttl = opts.ttl_hours or 24
@@ -2726,6 +2534,268 @@ code: |
       "  Contradictions landscape: %d items | %d contradictions, %d policy gaps, %d topics",
       total_items, contradictions_found, policy_gap_count, #topics), level = "info"})
   end
+
+  -- ================================================================
+  -- Continuation detection: if this procedure has prior iterations,
+  -- skip expensive dataset build + baseline evals and resume cycling.
+  -- ================================================================
+  local _prior_iters = State.get("iterations")
+  local is_continuation = type(_prior_iters) == "table" and #_prior_iters > 0
+  if is_continuation then
+    local n = #_prior_iters
+    Human.notify({message = string.format(
+      "CONTINUATION MODE: Found %d prior cycles — resuming from cycle %d.", n, n), level = "info"})
+    File.write(diag_path, "")  -- clear diag log for continuation run
+    diag(string.format("=== CONTINUATION: %d prior cycles ===", n))
+
+    -- Restore all init-phase variables from durable State
+    dataset_id              = State.get("dataset_id")
+    champion_version_id     = State.get("last_accepted_version_id") or State.get("baseline_version_id")
+    accuracy_baseline_id    = State.get("last_accepted_acc_eval_id") or State.get("accuracy_baseline_id")
+    accuracy_baseline_metrics = State.get("last_accepted_acc_metrics") or State.get("accuracy_baseline_metrics")
+    feedback_baseline_id    = State.get("last_accepted_fb_eval_id") or State.get("feedback_baseline_id")
+    feedback_baseline_metrics = State.get("last_accepted_fb_metrics") or State.get("feedback_baseline_metrics")
+    accuracy_baseline_rca   = State.get("last_accuracy_rca") or {}
+    feedback_baseline_rca   = State.get("last_feedback_rca") or {}
+    accuracy_available      = accuracy_baseline_metrics ~= nil
+    smoke_test_item_ids     = State.get("smoke_test_item_ids")
+
+    -- Re-pull current config from last accepted version
+    do
+      local _cont_pull = call_plexus_tool("plexus_score_pull", {
+        scorecard_identifier = params.scorecard,
+        score_identifier = params.score,
+        version_id = champion_version_id
+      })
+      if _cont_pull and _cont_pull.success then
+        current_code_path = _cont_pull.codeFilePath
+        current_code = File.read(current_code_path)
+        if _cont_pull.guidelinesFilePath then
+          local _g = File.read(_cont_pull.guidelinesFilePath)
+          if has_text(_g) then current_guidelines = _g end
+        end
+      end
+    end
+
+    if has_text(params.hint) then
+      Human.notify({message = "Continuation hint: " .. params.hint, level = "info"})
+    end
+  end  -- end is_continuation block — fall through to ::start_cycling::
+
+  -- ================================================================
+  -- (Fresh run) Phase A — skipped when is_continuation == true
+  -- ================================================================
+  if not is_continuation then
+  File.write(diag_path, "")  -- clear diag log for fresh run
+
+  -- Dataset adequacy check: ensure a deterministic regression dataset exists.
+  -- The accuracy evaluation uses this fixed dataset across all iterations.
+  -- The feedback evaluation separately uses the newest items.
+  Human.notify({message = "Checking for existing associated regression dataset...", level = "info"})
+  -- dataset_id is pre-declared above the continuation check
+
+  local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
+    scorecard = params.scorecard,
+    score = params.score
+  })
+
+  local min_dataset_rows = params.max_samples
+  local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
+  local dataset_adequate = dataset_check and dataset_check.has_dataset
+    and dataset_check.is_materialized
+    and dataset_check.row_count and dataset_check.row_count >= min_acceptable
+
+  if dataset_adequate then
+    dataset_id = dataset_check.dataset_id
+    Human.notify({message = "Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)", level = "info"})
+  else
+    -- Need to create a dataset
+    if dataset_check and dataset_check.has_dataset then
+      Human.notify({message = string.format(
+        "Existing dataset has %d rows but need %d, creating new one...",
+        dataset_check.row_count or 0, min_dataset_rows
+      ), level = "info"})
+    else
+      Human.notify({message = "No associated dataset found, creating one...", level = "info"})
+    end
+
+    -- Tier 1: Try balanced dataset with requested sample size
+    Human.notify({
+      message = string.format("Building balanced regression dataset (%d items)...", min_dataset_rows),
+      level = "info"
+    })
+    local build_ok, build_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
+      scorecard = params.scorecard,
+      score = params.score,
+      max_items = min_dataset_rows,
+      days = params.days,
+      balance = true,
+      score_version_id = params.start_version
+    })
+    if not build_ok then
+      Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
+      build_result = nil
+    end
+
+    if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
+      dataset_id = build_result.dataset_id
+      Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
+    else
+      -- Tier 2: Try unbalanced (relax balancing to get more items)
+      local rows_so_far = (build_result and build_result.rows_written) or 0
+      Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
+
+      local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
+        scorecard = params.scorecard,
+        score = params.score,
+        max_items = min_dataset_rows,
+        days = params.days,
+        balance = false,
+        score_version_id = params.start_version
+      })
+      local build_result = unbal_ok and unbal_result or nil
+
+      if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
+        dataset_id = build_result.dataset_id
+        Human.notify({message = "Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
+      else
+        -- Abort: not enough feedback data
+        local final_rows = (build_result and build_result.rows_written) or 0
+        return {
+          success = false,
+          status = "error",
+          message = string.format(
+            "Insufficient feedback data to build a regression dataset. Only %d items available (need %d, minimum %d). " ..
+            "Collect more feedback for score '%s' before running the optimizer.",
+            final_rows, min_dataset_rows, min_acceptable, score_name
+          )
+        }
+      end
+    end
+  end
+
+  State.set("dataset_id", dataset_id)
+  Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
+
+  -- smoke_test_item_ids is pre-declared above the continuation check; populated below.
+
+  -- Pull starting version (champion or specified start_version)
+  local pull_args = {
+    scorecard_identifier = params.scorecard,
+    score_identifier = params.score
+  }
+  if has_text(params.start_version) then
+    pull_args.version_id = params.start_version
+    Human.notify({message = "Pulling specified start version: " .. params.start_version, level = "info"})
+  else
+    Human.notify({message = "Pulling champion score version...", level = "info"})
+  end
+  local initial_pull = call_plexus_tool("plexus_score_pull", pull_args)
+  if not initial_pull or not initial_pull.success then
+    return {
+      success = false,
+      status = "error",
+      message = "Failed to pull initial score configuration"
+    }
+  end
+  -- champion_version_id and baseline variables are pre-declared above the continuation check
+  champion_version_id = initial_pull.versionId
+  current_code_path = initial_pull.codeFilePath
+  current_code = File.read(current_code_path)
+  current_guidelines = ""
+  if initial_pull.guidelinesFilePath then
+    local g = File.read(initial_pull.guidelinesFilePath)
+    if has_text(g) then current_guidelines = g end
+  end
+  Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
+
+  -- Dual baseline evaluations — run new ones or reuse from a previous run
+  Stage.set("baseline")
+  -- (accuracy_baseline, accuracy_baseline_id/metrics/rca, accuracy_available,
+  --  feedback_baseline_id/metrics/rca are all pre-declared above the continuation check)
+
+  local resume_acc = has_text(params.resume_accuracy_eval) and params.resume_accuracy_eval or nil
+  local resume_fb  = has_text(params.resume_feedback_eval) and params.resume_feedback_eval or nil
+
+  if resume_acc or resume_fb then
+    -- Resume mode: reuse existing baseline evaluations
+    Human.notify({message = "Resuming from existing baseline evaluations...", level = "info"})
+
+    -- Helper: warn (but don't fail) if resumed eval's version differs from starting version.
+    -- The user explicitly chose to resume with these baselines, so trust them.
+    local function validate_eval_version(eval_info, eval_type, eval_id)
+      local eval_version = eval_info.score_version_id or eval_info.scoreVersionId
+      if eval_version and eval_version ~= champion_version_id then
+        Human.notify({message = string.format(
+          "Note: %s baseline %s was run on version %s but starting version is %s. "
+          .. "Using it as the reference baseline anyway.",
+          eval_type, eval_id, eval_version, champion_version_id
+        ), level = "warning"})
+      end
+      return true, nil
+    end
+
+    if resume_acc then
+      Human.notify({message = "Fetching accuracy baseline: " .. resume_acc, level = "info"})
+      local acc_info = call_plexus_tool("plexus_evaluation_info", {
+        evaluation_id = resume_acc,
+        output_format = "json"
+      })
+      if acc_info and not acc_info.error then
+        local valid, err = validate_eval_version(acc_info, "Accuracy", resume_acc)
+        if not valid then
+          return {success = false, status = "error", message = err}
+        end
+        accuracy_baseline_id      = resume_acc
+        accuracy_baseline_metrics = extract_metrics(acc_info)
+        accuracy_baseline_rca     = enrich_rca(acc_info.root_cause or {})
+        accuracy_available        = true
+        Human.notify({message = string.format(
+          "Accuracy baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          accuracy_baseline_metrics.alignment,
+          accuracy_baseline_metrics.accuracy,
+          accuracy_baseline_metrics.precision,
+          accuracy_baseline_metrics.recall
+        ), level = "info"})
+      else
+        Human.notify({message = "Failed to resume accuracy baseline: " .. tostring(acc_info and acc_info.error or "not found"), level = "warning"})
+      end
+    end
+
+    if resume_fb then
+      Human.notify({message = "Fetching feedback baseline: " .. resume_fb, level = "info"})
+      local fb_info = call_plexus_tool("plexus_evaluation_info", {
+        evaluation_id = resume_fb,
+        output_format = "json"
+      })
+      if not fb_info or fb_info.error then
+        return {
+          success = false,
+          status  = "error",
+          message = "Failed to resume feedback baseline " .. resume_fb .. ": " .. tostring(fb_info and fb_info.error or "not found")
+        }
+      end
+      -- Skip version validation for feedback evals — they use the champion version
+      -- at the time of evaluation, which may differ from the starting version.
+      feedback_baseline_id      = resume_fb
+      feedback_baseline_metrics = extract_metrics(fb_info)
+      feedback_baseline_rca     = enrich_rca(fb_info.root_cause or {})
+      Human.notify({message = string.format(
+        "Feedback baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        feedback_baseline_metrics.alignment,
+        feedback_baseline_metrics.accuracy,
+        feedback_baseline_metrics.precision,
+        feedback_baseline_metrics.recall
+      ), level = "info"})
+    end
+
+    -- If feedback baseline not resumed, must run it
+    if not resume_fb then
+      Human.notify({message = "No feedback baseline to resume — running fresh...", level = "info"})
+    end
+  end
+
+  -- (diag and refresh_known_contradictions are defined earlier, before continuation check)
 
   -- Dispatch contradictions analysis in background — it runs concurrently with
   -- baseline evaluations.  Results are consumed (blocking) after baselines finish.
@@ -2920,6 +2990,8 @@ code: |
     Human.notify({message = "WARNING: no accuracy baseline available — smoke tests will be skipped",
       level = "warning"})
   end
+  -- Persist so continuation runs can restore it
+  State.set("smoke_test_item_ids", smoke_test_item_ids)
 
   -- Early exit: if feedback alignment is already perfect or no RCA data
   local fb_rca_topics = (type(feedback_baseline_rca) == "table" and feedback_baseline_rca.topics) or {}
@@ -2941,24 +3013,48 @@ code: |
       score_id = score_id
     }
   end
+  end  -- end of `if not is_continuation then` fresh-run init block
 
 
+  ::start_cycling::
   -- ================================================================
   -- Exploration / Synthesis Optimization Cycles
   -- Exploration: Probe independent fixes for different RCA categories
   -- Synthesis:   Combine successful Exploration fixes into one version
+  -- Both fresh-run and continuation paths converge here.
   -- ================================================================
   Stage.set("exploration")
 
   local stop_reason = nil
-  local iterations = {}
-  local last_accepted_version_id = champion_version_id
-  local last_accepted_fb_metrics = feedback_baseline_metrics
-  local last_accepted_acc_metrics = accuracy_baseline_metrics
-  local last_accepted_fb_eval_id = feedback_baseline_id
-  local last_accepted_acc_eval_id = accuracy_baseline_id
-  local consecutive_failed_cycles = 0  -- plateau detection
-  local consecutive_stagnant_cycles = 0  -- early stopping: rejected OR carried (no significant improvement)
+  -- For fresh run: State.get returns {} (set just above).
+  -- For continuation: State.get returns the prior accumulated iterations.
+  local iterations = State.get("iterations") or {}
+  -- Derive last-accepted state from accumulated iterations (works for both paths):
+  local _last_accepted_v = champion_version_id
+  local _last_accepted_fb_m = feedback_baseline_metrics
+  local _last_accepted_fb_eid = feedback_baseline_id
+  local _last_accepted_acc_m = accuracy_baseline_metrics
+  local _last_accepted_acc_eid = accuracy_baseline_id
+  -- Scan iterations in reverse to find the most recent accepted/carried cycle
+  -- (accepted=true for ACCEPTED; carried cycles also have accepted=true with decision="CARRIED")
+  for i = #iterations, 1, -1 do
+    local it = iterations[i]
+    if it.accepted and it.score_version_id then
+      _last_accepted_v = it.score_version_id
+      if it.feedback_metrics      then _last_accepted_fb_m   = it.feedback_metrics      end
+      if it.feedback_evaluation_id  then _last_accepted_fb_eid = it.feedback_evaluation_id  end
+      if it.accuracy_metrics      then _last_accepted_acc_m  = it.accuracy_metrics      end
+      if it.accuracy_evaluation_id  then _last_accepted_acc_eid = it.accuracy_evaluation_id  end
+      break
+    end
+  end
+  local last_accepted_version_id = _last_accepted_v
+  local last_accepted_fb_metrics = _last_accepted_fb_m
+  local last_accepted_acc_metrics = _last_accepted_acc_m
+  local last_accepted_fb_eval_id = _last_accepted_fb_eid
+  local last_accepted_acc_eval_id = _last_accepted_acc_eid
+  local consecutive_failed_cycles = 0  -- plateau detection (reset on continuation — user is explicitly asking for more)
+  local consecutive_stagnant_cycles = 0  -- early stopping (reset on continuation)
 
   -- ================================================================
   -- LLM error recovery and context management helpers
@@ -3158,7 +3254,10 @@ code: |
   end
 
   local max_cycles = params.max_iterations
-  local cycle = 0
+  local cycle = #iterations  -- 0 for fresh run; N for continuation (resumes from where prior run left off)
+  -- Track last mailbox read time for message injection (Phase 4)
+  local _last_mailbox_ts = State.get("last_mailbox_check") or ""
+
   while cycle < max_cycles do
     cycle = cycle + 1
     local cycle_ok, cycle_err = pcall(function()
@@ -3167,6 +3266,34 @@ code: |
       "═══ Cycle %d/%d ═══", cycle, max_cycles), level = "info"})
     State.set("current_iteration", cycle)
     Stage.progress(cycle, max_cycles)
+
+    -- Phase 4: Mailbox check — pick up any user messages injected via conversation viewer
+    do
+      local _proc_id = State.get("_procedure_id")
+      if _proc_id then
+        local _ok, _msgs = pcall(call_plexus_tool, "plexus_procedure_chat_messages", {
+          procedure_id = _proc_id,
+          limit = 20
+        })
+        if _ok and type(_msgs) == "table" then
+          local _new_msgs = {}
+          for _, m in ipairs(_msgs) do
+            if m.role == "USER" and (m.humanInteraction == "CHAT" or m.interactionType == "CHAT")
+               and (m.createdAt or "") > _last_mailbox_ts then
+              table.insert(_new_msgs, m.content or "")
+            end
+          end
+          if #_new_msgs > 0 then
+            local _injected = table.concat(_new_msgs, "\n---\n")
+            params.hint = ((params.hint or "") ~= "" and (params.hint .. "\n\n") or "")
+              .. "[User guidance injected mid-run]: " .. _injected
+            Human.notify({message = "Received " .. #_new_msgs .. " user message(s) via chat: " .. _injected, level = "info"})
+          end
+        end
+        _last_mailbox_ts = os.date("!%Y-%m-%dT%H:%M:%SZ")
+        State.set("last_mailbox_check", _last_mailbox_ts)
+      end
+    end
 
     -- Pull the last accepted version as starting point for this cycle
     local score_pull = call_plexus_tool("plexus_score_pull", {
@@ -5179,6 +5306,12 @@ code: |
             if accuracy_available and b_acc_eval_id then
               last_accepted_acc_eval_id = b_acc_eval_id
             end
+            -- Persist so a continuation run can restore the last-accepted state
+            State.set("last_accepted_version_id",  last_accepted_version_id)
+            State.set("last_accepted_fb_metrics",  last_accepted_fb_metrics)
+            State.set("last_accepted_fb_eval_id",  last_accepted_fb_eval_id)
+            State.set("last_accepted_acc_metrics", last_accepted_acc_metrics)
+            State.set("last_accepted_acc_eval_id", last_accepted_acc_eval_id)
           end
           diag(string.format(
             "Cycle %d %s (version=%s): FB AC1=%.3f (%+.3f vs original), ACC AC1=%.3f (%+.3f vs original) — %s",
