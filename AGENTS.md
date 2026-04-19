@@ -10,6 +10,7 @@ How: See CONTRIBUTING_AGENT.md for the Kanbus workflow, hierarchy, status rules,
 Performance: Prefer kbs (Rust) when available; kanbus (Python) is equivalent but slower.
 Warning: Editing project/ directly is a sin against The Way. Do not read or write anything in project/; work only through Kanbus.
 Architecture rule: NEVER EVER add 'fallback' logic for ANYTHING unless the user EXPLICITLY says to do that. Never add additional complexity that creates additional ways to do things. There should be one correct way to do everything. Do not add layers of complexity for backward compatibility. Our goal is to make ONE WAY work. Do not add fallbacks.
+Report persistence policy: ReportBlock output must always be stored as S3 file attachments. DynamoDB `ReportBlock.output` is metadata-only (`output_compacted` envelope + attachment pointer), never full report payload.
 
 ## SOP compliance
 

@@ -99,6 +99,20 @@ def _resolve_local_dispatch_timeout_seconds() -> int:
     return timeout
 
 
+def _build_local_run_args(task: Task) -> list[str]:
+    """
+    Build the local subprocess argv for a claimed task.
+
+    Programmatic report block tasks should run via `python -m plexus.cli` so
+    dispatcher execution uses the current workspace code instead of any older
+    `plexus` console script on PATH.
+    """
+    split_command = shlex.split(task.command or "")
+    if (task.type or "") == "ProgrammaticReportBlock":
+        return [sys.executable, "-m", "plexus.cli", *split_command]
+    return ["plexus", *split_command]
+
+
 def _validate_celery_requirements() -> None:
     required = [
         "AWS_ACCESS_KEY_ID",
@@ -821,7 +835,7 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                     logging.info(f"Dispatched task {task.id} to Celery task {celery_task.id}")
                 else:
                     started_at = datetime.datetime.now(timezone.utc).isoformat()
-                    run_args = ["plexus"] + shlex.split(task.command)
+                    run_args = _build_local_run_args(task)
                     metadata = _normalize_metadata(task.metadata)
                     metadata["dispatch_mode"] = "local"
                     metadata["local_command"] = " ".join(run_args)

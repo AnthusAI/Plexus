@@ -124,6 +124,14 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
                 )
                 points.append(metrics)
 
+            total_score_results = sum(point["total_score_results"] for point in points)
+            accepted_score_results = sum(point["accepted_score_results"] for point in points)
+            corrected_score_results = sum(point["corrected_score_results"] for point in points)
+            feedback_items_total = sum(point["feedback_items_total"] for point in points)
+            feedback_items_valid = sum(point["feedback_items_valid"] for point in points)
+            feedback_items_changed = sum(point["feedback_items_changed"] for point in points)
+            score_results_with_feedback = sum(point["score_results_with_feedback"] for point in points)
+
             output: Dict[str, Any] = {
                 "report_type": "acceptance_rate_timeline",
                 "block_title": self.DEFAULT_NAME,
@@ -152,6 +160,18 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
                 "date_range": {
                     "start": range_start.isoformat(),
                     "end": range_end.isoformat(),
+                },
+                "summary": {
+                    "total_score_results": total_score_results,
+                    "accepted_score_results": accepted_score_results,
+                    "corrected_score_results": corrected_score_results,
+                    "score_result_acceptance_rate": (
+                        accepted_score_results / total_score_results if total_score_results else 0.0
+                    ),
+                    "feedback_items_total": feedback_items_total,
+                    "feedback_items_valid": feedback_items_valid,
+                    "feedback_items_changed": feedback_items_changed,
+                    "score_results_with_feedback": score_results_with_feedback,
                 },
                 "raw_counts": {
                     "raw_score_results_scanned": len(raw_score_results),
@@ -254,7 +274,17 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
         feedback_stats_by_key: Dict[Tuple[str, str], Dict[str, int]] = {}
         for key, group in grouped_feedback.items():
             valid_group = [entry for entry in group if not entry.get("isInvalid")]
-            feedback_stats_by_key[key] = {"total": len(group), "valid": len(valid_group)}
+            changed_valid_group = [
+                entry
+                for entry in valid_group
+                if entry.get("finalAnswerValue") is not None
+                and str(entry.get("finalAnswerValue")) != str(entry.get("initialAnswerValue"))
+            ]
+            feedback_stats_by_key[key] = {
+                "total": len(group),
+                "valid": len(valid_group),
+                "changed": len(changed_valid_group),
+            }
             if not valid_group:
                 continue
             feedback_by_key[key] = max(
@@ -281,11 +311,14 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
             else:
                 accepted_score_results += 1
 
-        total_score_results = len(filtered_results)
-        score_result_acceptance_rate = (accepted_score_results / total_score_results) if total_score_results else 0.0
+            total_score_results = len(filtered_results)
+            score_result_acceptance_rate = (accepted_score_results / total_score_results) if total_score_results else 0.0
 
-        feedback_items_total = sum(stats["total"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
-        feedback_items_valid = sum(stats["valid"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+            feedback_items_total = sum(stats["total"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+            feedback_items_valid = sum(stats["valid"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+            feedback_items_changed = (
+                sum(stats["changed"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+            )
 
         return {
             "bucket_index": bucket_index,
@@ -298,6 +331,6 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
             "score_result_acceptance_rate": score_result_acceptance_rate,
             "feedback_items_total": feedback_items_total,
             "feedback_items_valid": feedback_items_valid,
+            "feedback_items_changed": feedback_items_changed,
             "score_results_with_feedback": score_results_with_feedback,
         }
-
