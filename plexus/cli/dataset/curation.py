@@ -349,7 +349,6 @@ def _resolve_score_final_classes_from_yaml_details(
         if final_node.get("class") == "YesOrNoClassifier":
             add_class("Yes")
             add_class("No")
-        if valid_classes:
             return {
                 "classes": valid_classes,
                 "source": "graph[-1].class=YesOrNoClassifier",

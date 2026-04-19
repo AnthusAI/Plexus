@@ -1,0 +1,31 @@
+{
+  "id": "plx-1e3075c3-0d88-4d75-958b-ff0c4658fe04",
+  "title": "Address remaining PR #179 github-code-quality suggestions",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "97f1d828-2364-4496-bd33-6d2d2254a4d9",
+      "author": "ryan",
+      "text": "Working PR #179 code-quality bot feedback. Will detect the one already manually fixed and apply minimal patches for the remaining suggestions, then run targeted validation and update PR #179.",
+      "created_at": "2026-04-19T20:35:28.846516Z"
+    },
+    {
+      "id": "ca9bfde4-d2d4-4bda-a2ff-67d6a00157e1",
+      "author": "ryan",
+      "text": "Applied remaining three github-code-quality suggestions from PR #179: removed unused json import, removed unused processed_text local, and simplified YesOrNoClassifier return path to remove unreachable branch. Validation: pytest plexus/rca_analysis_test.py and pytest plexus/cli/dataset/curation_test.py.",
+      "created_at": "2026-04-19T20:36:54.417837Z"
+    }
+  ],
+  "created_at": "2026-04-19T20:35:25.007598Z",
+  "updated_at": "2026-04-19T20:36:54.417837Z",
+  "closed_at": null,
+  "custom": {}
+}
