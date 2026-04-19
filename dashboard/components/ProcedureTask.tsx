@@ -253,6 +253,8 @@ export default function ProcedureTask({
       }
       if (state.scorecard_name) setStateScorecardName(state.scorecard_name)
       if (state.score_name) setStateScoreName(state.score_name)
+      // Costs should stream even before baseline metrics exist.
+      setProcedureCosts(state.costs ?? null)
 
       const cycleIterations: any[] = state.iterations || []
 
@@ -369,7 +371,6 @@ export default function ProcedureTask({
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
         if (state.end_of_run_report) setEndOfRunReport(state.end_of_run_report)
         if (state.procedure_summary) setProcedureSummary(state.procedure_summary)
-        setProcedureCosts(state.costs ?? null)
         if (state.notable_item_recurrence) setNotableItemRecurrence(state.notable_item_recurrence)
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
