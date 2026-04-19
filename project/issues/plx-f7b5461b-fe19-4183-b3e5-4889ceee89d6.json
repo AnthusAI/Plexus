@@ -1,0 +1,25 @@
+{
+  "id": "plx-f7b5461b-fe19-4183-b3e5-4889ceee89d6",
+  "title": "Implement optimizer score docs reorganization and terminology cleanup",
+  "description": "Implement the approved documentation reorganization for optimizer-facing score docs. Replace placeholder docs, restructure score-yaml-format around reusable techniques, make optimizer-cookbook heuristic-only, normalize MCP docs registration around a shared catalog, and remove FP/FN shorthand from optimizer-facing text.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8f3e110b-ca24-4571-b008-4bf64f654def",
+      "author": "ryan",
+      "text": "## Work started\n\nStarted implementation of the optimizer score docs reorganization and terminology cleanup.\n\nImmediate steps:\n- inspect existing in-worktree changes in target docs and optimizer YAML\n- replace placeholder docs with canonical content\n- normalize MCP docs registry around a shared catalog\n- remove optimizer-facing FP/FN shorthand in favor of explicit predicted/actual segment wording\n- run targeted tests and push the branch for CI verification",
+      "created_at": "2026-04-19T15:17:41.412640Z"
+    }
+  ],
+  "created_at": "2026-04-19T15:17:24.504545Z",
+  "updated_at": "2026-04-19T15:17:41.414538Z",
+  "closed_at": null,
+  "custom": {}
+}

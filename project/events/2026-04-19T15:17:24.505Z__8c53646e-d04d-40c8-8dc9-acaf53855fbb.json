@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8c53646e-d04d-40c8-8dc9-acaf53855fbb",
+  "issue_id": "plx-f7b5461b-fe19-4183-b3e5-4889ceee89d6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T15:17:24.505Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the approved documentation reorganization for optimizer-facing score docs. Replace placeholder docs, restructure score-yaml-format around reusable techniques, make optimizer-cookbook heuristic-only, normalize MCP docs registration around a shared catalog, and remove FP/FN shorthand from optimizer-facing text.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement optimizer score docs reorganization and terminology cleanup"
+  }
+}
