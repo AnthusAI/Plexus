@@ -374,7 +374,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
                 key={view.value}
                 variant={datasetView === view.value ? "default" : "ghost"}
                 size="sm"
-                className="h-6 text-xs px-2"
+                className="h-6 text-sm px-2"
                 onClick={() => handleDatasetToggle(view.value)}
               >
                 {view.label}
