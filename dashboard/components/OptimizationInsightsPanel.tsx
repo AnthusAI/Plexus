@@ -82,11 +82,13 @@ function CollapsibleText({ text, maxChars = 500 }: { text: string; maxChars?: nu
 
 function DeltaValue({ value }: { value: number }) {
   if (value == null) return <span className="text-muted-foreground">—</span>
-  const color = value >= 0 ? 'text-green-500' : 'text-red-500'
   return (
-    <span className={`${color} tabular-nums`}>
+    <Badge
+      variant="pill"
+      className={`px-1 py-0 font-normal tabular-nums ${value >= 0 ? 'bg-true text-primary-foreground' : 'bg-false text-primary-foreground'}`}
+    >
       {value >= 0 ? '+' : ''}{value.toFixed(3)}
-    </span>
+    </Badge>
   )
 }
 
@@ -111,9 +113,9 @@ function HypothesisRow({ hyp }: { hyp: HypothesisTested }) {
           {hyp.name}
         </span>
         {hyp.succeeded ? (
-          <Badge className="text-xs px-1 py-0 flex-shrink-0">Pass</Badge>
+          <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-true text-primary-foreground">Pass</Badge>
         ) : (
-          <Badge variant="secondary" className="text-xs px-1 py-0 flex-shrink-0">Fail</Badge>
+          <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-false text-primary-foreground">Fail</Badge>
         )}
         <span className="whitespace-nowrap flex-shrink-0">
           <span className="text-muted-foreground/60 mr-1">FB</span>
@@ -144,21 +146,21 @@ export function OptimizationDiagnosticBanner({ diagnostic }: { diagnostic: Optim
       <AlertTitle className="flex items-center gap-2 flex-wrap">
         Optimization Diagnostic
         <div className="flex gap-1.5 flex-wrap">
-          <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal">
             {diagnostic.cycles} cycles
           </Badge>
-          <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-true text-primary-foreground">
             {diagnostic.accepted} accepted
           </Badge>
-          <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-false text-primary-foreground">
             {diagnostic.rejected} rejected
           </Badge>
           {diagnostic.skipped > 0 && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-warning text-primary-foreground">
               {diagnostic.skipped} skipped
             </Badge>
           )}
-          <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal">
+          <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-info text-primary-foreground">
             {(diagnostic.success_rate * 100).toFixed(0)}% success
           </Badge>
         </div>
@@ -194,8 +196,8 @@ export function CycleInsightsPanel({ insights }: { insights: CycleInsight[] }) {
                   <span className="font-medium text-muted-foreground">Cycle {insight.cycle}</span>
                   {total > 0 && (
                     <Badge
-                      variant={succeeded > 0 ? 'default' : 'secondary'}
-                      className="text-xs px-1.5 py-0 font-normal"
+                      variant="pill"
+                      className={`text-xs px-1.5 py-0 font-normal ${succeeded > 0 ? 'bg-true text-primary-foreground' : 'bg-warning text-primary-foreground'}`}
                     >
                       {succeeded}/{total} succeeded
                     </Badge>
@@ -370,22 +372,22 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
         {run_summary && (
           <div className="flex gap-1.5 flex-wrap">
             {run_summary.stop_reason && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 font-normal capitalize">
+              <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal capitalize">
                 {run_summary.stop_reason.replace(/_/g, ' ')}
               </Badge>
             )}
             {run_summary.total_fb_improvement != null && (
               <Badge
-                variant="outline"
-                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_fb_improvement >= 0 ? 'text-green-500' : 'text-red-500'}`}
+                variant="pill"
+                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_fb_improvement >= 0 ? 'bg-true text-primary-foreground' : 'bg-false text-primary-foreground'}`}
               >
                 FB {run_summary.total_fb_improvement >= 0 ? '+' : ''}{run_summary.total_fb_improvement.toFixed(3)}
               </Badge>
             )}
             {run_summary.total_acc_improvement != null && (
               <Badge
-                variant="outline"
-                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_acc_improvement >= 0 ? 'text-green-500' : 'text-red-500'}`}
+                variant="pill"
+                className={`text-xs px-1.5 py-0 font-normal ${run_summary.total_acc_improvement >= 0 ? 'bg-true text-primary-foreground' : 'bg-false text-primary-foreground'}`}
               >
                 ACC {run_summary.total_acc_improvement >= 0 ? '+' : ''}{run_summary.total_acc_improvement.toFixed(3)}
               </Badge>

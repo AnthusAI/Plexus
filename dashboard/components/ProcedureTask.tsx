@@ -1156,15 +1156,15 @@ export default function ProcedureTask({
                           </td>
                           <td className="px-1 py-0.5 whitespace-nowrap">
                             {row.isBaseline ? (
-                              <Badge variant="outline" className="text-xs px-1 py-0">Baseline</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-neutral text-primary-foreground">Baseline</Badge>
                             ) : row.skipReason ? (
-                              <Badge variant="secondary" className="text-xs px-1 py-0">Skipped</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-warning text-primary-foreground">Skipped</Badge>
                             ) : row.disqualified ? (
-                              <Badge variant="destructive" className="text-xs px-1 py-0">Disqualified</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-false text-primary-foreground">Disqualified</Badge>
                             ) : row.accepted ? (
-                              <Badge className="text-xs px-1 py-0">Accepted</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-true text-primary-foreground">Accepted</Badge>
                             ) : (
-                              <Badge variant="secondary" className="text-xs px-1 py-0">Rejected</Badge>
+                              <Badge variant="pill" className="text-xs px-1 py-0 font-normal bg-false text-primary-foreground">Rejected</Badge>
                             )}
                           </td>
                           {isOverallCyclesView ? (
@@ -1269,9 +1269,9 @@ export default function ProcedureTask({
                                                 {er.hypothesis?.name || `Hypothesis ${er.index}`}
                                               </span>
                                               {er.succeeded ? (
-                                                <Badge className="text-xs px-1 py-0 flex-shrink-0">Pass</Badge>
+                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-true text-primary-foreground">Pass</Badge>
                                               ) : (
-                                                <Badge variant="secondary" className="text-xs px-1 py-0 flex-shrink-0">Fail</Badge>
+                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-false text-primary-foreground">Fail</Badge>
                                               )}
                                               <span className="whitespace-nowrap flex-shrink-0">
                                                 <span className="text-muted-foreground/60 mr-1">Recent</span>

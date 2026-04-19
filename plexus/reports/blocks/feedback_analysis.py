@@ -16,6 +16,7 @@ from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
 from . import feedback_utils
+from .identifier_utils import looks_like_uuid
 from .reinforcement_helpers import fetch_item_identifiers
 
 logger = logging.getLogger(__name__)
@@ -142,27 +143,37 @@ class FeedbackAnalysis(BaseReportBlock):
             # --- 2. Resolve Plexus Scorecard ---
             self._log(f"Resolving Plexus Scorecard for parameter: {cc_scorecard_id_param}...")
             try:
-                # Try to determine if this is a UUID or external ID
-                # UUIDs are typically 36 characters with dashes (e.g., "f4076c72-e74b-4eaf-afd6-d4f61c9f0142")
-                # External IDs are typically shorter numeric strings (e.g., "97")
-                is_uuid = len(str(cc_scorecard_id_param)) > 20 and '-' in str(cc_scorecard_id_param)
+                scorecard_identifier = str(cc_scorecard_id_param)
+                plexus_scorecard_obj = None
 
-                if is_uuid:
-                    # Try to fetch by ID (UUID)
-                    self._log(f"Parameter appears to be a UUID, fetching by ID...")
-                    plexus_scorecard_obj = await asyncio.to_thread(
-                        Scorecard.get_by_id,
-                        id=str(cc_scorecard_id_param),
-                        client=self.api_client
-                    )
-                else:
-                    # Try to fetch by external ID
-                    self._log(f"Parameter appears to be an external ID, fetching by external_id...")
-                    plexus_scorecard_obj = await asyncio.to_thread(
-                        Scorecard.get_by_external_id,
-                        external_id=str(cc_scorecard_id_param),
-                        client=self.api_client
-                    )
+                if looks_like_uuid(scorecard_identifier):
+                    self._log("Parameter appears to be a UUID, fetching by ID...")
+                    try:
+                        plexus_scorecard_obj = await asyncio.to_thread(
+                            Scorecard.get_by_id,
+                            id=scorecard_identifier,
+                            client=self.api_client
+                        )
+                    except Exception:
+                        plexus_scorecard_obj = None
+
+                if not plexus_scorecard_obj:
+                    for label, lookup, kwargs in [
+                        ("key", Scorecard.get_by_key, {"key": scorecard_identifier}),
+                        ("name", Scorecard.get_by_name, {"name": scorecard_identifier}),
+                        ("external_id", Scorecard.get_by_external_id, {"external_id": scorecard_identifier}),
+                    ]:
+                        self._log(f"Trying scorecard lookup by {label}...")
+                        try:
+                            plexus_scorecard_obj = await asyncio.to_thread(
+                                lookup,
+                                client=self.api_client,
+                                **kwargs,
+                            )
+                            if plexus_scorecard_obj:
+                                break
+                        except Exception:
+                            continue
 
                 if not plexus_scorecard_obj:
                     msg = f"Plexus Scorecard not found for parameter: {cc_scorecard_id_param}"
@@ -179,12 +190,8 @@ class FeedbackAnalysis(BaseReportBlock):
             if cc_question_id_param:
                 self._log(f"Looking up specific Plexus Score for identifier: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
                 try:
-                    # Accept either Plexus score UUID or external ID (e.g. Call Criteria question ID)
-                    is_uuid_like = (
-                        len(cc_question_id_param) == 36
-                        and cc_question_id_param.count("-") == 4
-                        and all(c in "0123456789abcdefABCDEF-" for c in cc_question_id_param)
-                    )
+                    # Accept Plexus score UUID, name, key, or external ID.
+                    is_uuid_like = looks_like_uuid(cc_question_id_param)
                     if is_uuid_like:
                         plexus_score_obj = await asyncio.to_thread(
                             Score.get_by_id,
@@ -198,12 +205,22 @@ class FeedbackAnalysis(BaseReportBlock):
                             )
                             plexus_score_obj = None
                     else:
-                        plexus_score_obj = await asyncio.to_thread(
-                            Score.get_by_external_id,
-                            external_id=str(cc_question_id_param),
-                            scorecard_id=plexus_scorecard_obj.id,
-                            client=self.api_client
-                        )
+                        plexus_score_obj = None
+                        for lookup, kwargs in [
+                            (Score.get_by_name, {"name": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
+                            (Score.get_by_key, {"key": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
+                            (Score.get_by_external_id, {"external_id": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
+                        ]:
+                            try:
+                                plexus_score_obj = await asyncio.to_thread(
+                                    lookup,
+                                    client=self.api_client,
+                                    **kwargs,
+                                )
+                                if plexus_score_obj:
+                                    break
+                            except Exception:
+                                continue
                     if plexus_score_obj:
                         scores_to_process.append({
                             'plexus_score_id': plexus_score_obj.id,

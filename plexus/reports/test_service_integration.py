@@ -174,9 +174,11 @@ class TestGenerateReportCore:
     @patch('plexus.reports.service.Report.create')
     @patch('plexus.reports.service._parse_report_configuration')
     @patch('plexus.reports.service.ReportBlock.create')
+    @patch('plexus.reports.service.ReportBlock.get_by_id')
     @patch('plexus.reports.service._instantiate_and_run_block')
-    @patch('plexus.reports.service._persist_output_artifact_and_compact_if_needed')
-    def test_generate_report_core_success(self, mock_persist, mock_run_block, mock_block_create, mock_parse,
+    @patch('plexus.reports.service._persist_log_artifact_if_present')
+    @patch('plexus.reports.service._persist_output_artifact_and_compact')
+    def test_generate_report_core_success(self, mock_persist, mock_log_persist, mock_run_block, mock_block_get, mock_block_create, mock_parse,
                                          mock_report_create, mock_load_config):
         """Test successful core report generation."""
         # Setup mocks
@@ -214,12 +216,16 @@ class TestGenerateReportCore:
         mock_block = MagicMock()
         mock_block.id = "block-123"
         mock_block_create.return_value = mock_block
+        mock_block_state = MagicMock()
+        mock_block_state.attachedFiles = []
+        mock_block_get.return_value = mock_block_state
         
         # Mock block execution
         mock_run_block.return_value = ({"result": "success"}, "Block executed", "dataset-123")
 
         # Mock S3 artifact persistence
         mock_persist.return_value = ('{"result": "success"}', [], None)
+        mock_log_persist.return_value = ("See log.txt in attachedFiles.", [], "reportblocks/block-123/log.txt")
         
         # Execute function
         report_id, error = _generate_report_core(
@@ -320,8 +326,11 @@ class TestGenerateReportCore:
     @patch('plexus.reports.service.Report.create')
     @patch('plexus.reports.service._parse_report_configuration')
     @patch('plexus.reports.service.ReportBlock.create')
+    @patch('plexus.reports.service.ReportBlock.get_by_id')
     @patch('plexus.reports.service._instantiate_and_run_block')
-    def test_generate_report_core_block_execution_failure(self, mock_run_block, mock_block_create, 
+    @patch('plexus.reports.service._persist_log_artifact_if_present')
+    @patch('plexus.reports.service._persist_output_artifact_and_compact')
+    def test_generate_report_core_block_execution_failure(self, mock_persist, mock_log_persist, mock_run_block, mock_block_get, mock_block_create, 
                                                          mock_parse, mock_report_create, mock_load_config):
         """Test core function when block execution fails."""
         # Setup mocks
@@ -358,6 +367,11 @@ class TestGenerateReportCore:
         mock_block = MagicMock()
         mock_block.id = "block-123"
         mock_block_create.return_value = mock_block
+        mock_block_state = MagicMock()
+        mock_block_state.attachedFiles = []
+        mock_block_get.return_value = mock_block_state
+        mock_log_persist.return_value = ("See log.txt in attachedFiles.", [], "reportblocks/block-123/log.txt")
+        mock_persist.return_value = ('{"output_compacted": true}', [], "reportblocks/block-123/output.json")
         
         # Mock block execution failure
         mock_run_block.return_value = (None, "Block execution failed", None)

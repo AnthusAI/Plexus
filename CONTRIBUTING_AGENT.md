@@ -39,6 +39,8 @@ Operational discipline: use the minimum commands needed. To inspect work, run `k
 
 Editing project/ directly is hacking the data and is a sin against The Way. Do not read or write anything inside project/. Do not inspect issue JSON with tools like cat or jq. All work must pass through Kanbus.
 
+Report persistence is single-path: full ReportBlock output/log content goes to S3 attachments. DynamoDB `ReportBlock.output` must only store a compact metadata envelope with an attachment pointer. Do not add inline-output fallbacks.
+
 ## The Order of Being
 
 All work is structured.

@@ -128,6 +128,14 @@ module.exports = {
                     DEFAULT: 'var(--neutral)',
                     selected: 'var(--neutral-selected)'
                 },
+                warning: {
+                    DEFAULT: 'var(--warning)',
+                    selected: 'var(--warning-selected)'
+                },
+                info: {
+                    DEFAULT: 'var(--info)',
+                    selected: 'var(--info-selected)'
+                },
                 'progress-background': 'var(--progress-background)',
                 'progress-background-selected': 'var(--progress-background-selected)',
                 'gauge-background': 'var(--gauge-background)',

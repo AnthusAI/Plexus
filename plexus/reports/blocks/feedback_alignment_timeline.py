@@ -13,6 +13,7 @@ from plexus.dashboard.api.models.scorecard import Scorecard
 
 from . import feedback_utils
 from .base import BaseReportBlock
+from .identifier_utils import looks_like_uuid
 
 
 @dataclass(frozen=True)
@@ -227,19 +228,28 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         return datetime.now(timezone.utc)
 
     async def _resolve_scorecard(self, scorecard_identifier: str) -> Scorecard:
-        is_uuid_like = len(scorecard_identifier) > 20 and "-" in scorecard_identifier
-        if is_uuid_like:
-            scorecard = await self._to_thread(
-                Scorecard.get_by_id,
-                id=scorecard_identifier,
-                client=self.api_client,
-            )
-        else:
-            scorecard = await self._to_thread(
-                Scorecard.get_by_external_id,
-                external_id=scorecard_identifier,
-                client=self.api_client,
-            )
+        scorecard = None
+        if looks_like_uuid(scorecard_identifier):
+            try:
+                scorecard = await self._to_thread(
+                    Scorecard.get_by_id,
+                    id=scorecard_identifier,
+                    client=self.api_client,
+                )
+            except Exception:
+                scorecard = None
+        if not scorecard:
+            for lookup, kwargs in [
+                (Scorecard.get_by_key, {"key": scorecard_identifier}),
+                (Scorecard.get_by_name, {"name": scorecard_identifier}),
+                (Scorecard.get_by_external_id, {"external_id": scorecard_identifier}),
+            ]:
+                try:
+                    scorecard = await self._to_thread(lookup, client=self.api_client, **kwargs)
+                    if scorecard:
+                        break
+                except Exception:
+                    continue
         if not scorecard:
             raise ValueError(f"Scorecard not found for identifier '{scorecard_identifier}'.")
         return scorecard
@@ -250,11 +260,7 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         score_identifier: Optional[str],
     ) -> List[Dict[str, str]]:
         if score_identifier:
-            is_uuid_like = (
-                len(score_identifier) == 36
-                and score_identifier.count("-") == 4
-                and all(ch in "0123456789abcdefABCDEF-" for ch in score_identifier)
-            )
+            is_uuid_like = looks_like_uuid(score_identifier)
             if is_uuid_like:
                 score = await self._to_thread(
                     Score.get_by_id,
@@ -268,12 +274,18 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                             f"Score '{score_identifier}' does not belong to scorecard '{scorecard_id}'."
                         )
             else:
-                score = await self._to_thread(
-                    Score.get_by_external_id,
-                    external_id=score_identifier,
-                    scorecard_id=scorecard_id,
-                    client=self.api_client,
-                )
+                score = None
+                for lookup, kwargs in [
+                    (Score.get_by_name, {"name": score_identifier, "scorecard_id": scorecard_id}),
+                    (Score.get_by_key, {"key": score_identifier, "scorecard_id": scorecard_id}),
+                    (Score.get_by_external_id, {"external_id": score_identifier, "scorecard_id": scorecard_id}),
+                ]:
+                    try:
+                        score = await self._to_thread(lookup, client=self.api_client, **kwargs)
+                        if score:
+                            break
+                    except Exception:
+                        continue
             if not score:
                 raise ValueError(
                     f"Score not found for identifier '{score_identifier}' on scorecard '{scorecard_id}'."
