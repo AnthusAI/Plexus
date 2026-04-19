@@ -41,10 +41,15 @@ code: |-
     Transcript:
     {{ text }}
     ]]
-  }
+}
 ```
 
-Keep `valid_classes` aligned with the Lua-side classes.
+Keep `valid_classes` aligned with the Lua-side classes. Treat class strings as an
+exact contract: `YES` / `NO` is different from `Yes` / `No` if the score YAML says
+so.
+
+Existing champions still use `tactus_code:` in some older scores. Read it as the
+same Tactus DSL, but prefer `code:` for new or substantially refactored work.
 
 ## Preferred Style: `ClassifyProcedure`
 
@@ -57,6 +62,8 @@ Rules:
 - `system_message` is static text.
 - `user_message` is the dynamic Jinja2 template.
 - Use `code:`, not `tactus_code:`.
+- If you need dynamic per-entity system text or custom parse logic, drop to raw
+  `Procedure`.
 
 Variables available in `user_message` typically include:
 
@@ -233,6 +240,10 @@ code: |-
 
 Use this pattern for per-school, per-medication, per-offer, or per-disclosure checks.
 
+Production scores often wrap this with helper functions to normalize metadata keys,
+build per-entity prompt text, or parse custom result formats. That is the right
+place to absorb metadata messiness rather than pushing it into one giant prompt.
+
 ## Recipe: Deterministic Aggregation Without Another LLM Call
 
 If the rule is already deterministic, keep it in Lua. Common examples:
@@ -281,6 +292,25 @@ multiple calls in the same score.
 Use an `Agent` only when the score truly needs tool-using or multi-turn behavior.
 Most scores do not. A standard classifier is easier to optimize and easier to test.
 
+Older champions also use `Agent` directly for single-turn calls when they want to
+construct dynamic system prompts manually or parse the final line themselves. That
+is real deployed code, but it should be the exception rather than the default.
+
+## Legacy Deployed Tactus Patterns
+
+Production scores still include older Tactus styles that the optimizer needs to
+understand when reading champion code:
+
+- `tactus_code:` instead of `code:`
+- raw `Procedure` blocks with helper functions like `get_field` or `fill_template`
+- direct `Agent` calls plus manual output parsing
+- early return on the first failing entity instead of collecting all failures
+
+These are legacy forms of the same core ideas: metadata normalization, per-entity
+loops, deterministic aggregation, and explicit parse control. Do not copy them
+into fresh work unless the score genuinely needs that level of control, but do not
+pretend they do not exist.
+
 ## Metadata, Results, and Templates
 
 In `ClassifyProcedure`, put dynamic content in `user_message`, not in
@@ -291,6 +321,8 @@ Typical patterns:
 - list schools from `metadata.schools`
 - include prior score results from `results[...]`
 - render only the fields the classifier actually needs
+- parse or normalize messy metadata in Lua before classification when the prompt
+  would otherwise need to read raw JSON or mixed-key blobs
 
 If a dynamic list is simple and read-only, Jinja2 in `user_message` is enough. If
 the list needs iteration plus decision logic, use raw Lua in `Procedure`.
