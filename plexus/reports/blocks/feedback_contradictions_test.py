@@ -15,6 +15,33 @@ class _DummyClient:
         return {}
 
 
+@pytest.mark.asyncio
+async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
+    block = FeedbackContradictions(
+        config={"scorecard": "Prime - EDU 3rd Party", "score": "Agent Branding"},
+        params={},
+        api_client=_DummyClient(),
+    )
+
+    monkeypatch.setattr(
+        "plexus.reports.blocks.feedback_contradictions.Scorecard.list_by_key",
+        lambda key, client: None,
+    )
+    monkeypatch.setattr(
+        "plexus.reports.blocks.feedback_contradictions.Scorecard.list_by_name",
+        lambda name, client: SimpleNamespace(id="scorecard-1", name=name),
+    )
+    monkeypatch.setattr(
+        "plexus.reports.blocks.feedback_contradictions.Scorecard.list_by_external_id",
+        lambda external_id, client: None,
+    )
+
+    resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+
+    assert resolved is not None
+    assert resolved.name == "Prime - EDU 3rd Party"
+
+
 def _parse_output(payload: str):
     json_text = '\n'.join(line for line in payload.split('\n') if not line.startswith('#'))
     return json.loads(json_text)
