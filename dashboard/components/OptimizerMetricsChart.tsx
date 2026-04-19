@@ -227,7 +227,7 @@ const MetricsTooltip: React.FC<MetricsTooltipProps> = ({ active, payload, datase
   const isBaseline = point.cycle === "Baseline"
 
   return (
-    <div className="rounded-md border bg-background p-3 shadow-lg text-xs space-y-1">
+    <div className="rounded-md bg-background/95 p-3 shadow-lg text-xs space-y-1">
       <div className="font-medium flex items-center justify-between gap-4">
         <span>{point.cycle}</span>
         <span className={statusColor}>{status}</span>
@@ -399,7 +399,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
   ]
 
   return (
-    <div className="mb-4">
+    <div className="mt-4 mb-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
