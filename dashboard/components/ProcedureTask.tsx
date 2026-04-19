@@ -1153,16 +1153,20 @@ export default function ProcedureTask({
               <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cost Breakdown</h3>
               <div className="grid grid-cols-1 gap-2 @lg:grid-cols-3 text-xs">
                 <div className="rounded p-2 bg-background">
-                  <div className="text-muted-foreground/70 mb-1">Evaluation</div>
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <div className="text-muted-foreground/70">Evaluation</div>
+                    <div className="text-right text-muted-foreground/70">Runs: {evaluationEntryCount}</div>
+                  </div>
                   <div className="font-medium">Incurred: {formatCurrency(evaluationIncurred)}</div>
                   <div className="text-muted-foreground">Reused: {formatCurrency(evaluationReused)}</div>
                   <div className="text-muted-foreground">Total: {formatCurrency(evaluationTotal)}</div>
-                  <div className="text-muted-foreground/70 mt-1">Runs: {evaluationEntryCount}</div>
                 </div>
                 <div className="rounded p-2 bg-background">
-                  <div className="text-muted-foreground/70 mb-1">Optimization Inference</div>
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <div className="text-muted-foreground/70">Optimization Inference</div>
+                    <div className="text-right text-muted-foreground/70">LLM calls: {inferenceEntryCount}</div>
+                  </div>
                   <div className="font-medium">Total: {formatCurrency(inferenceTotal)}</div>
-                  <div className="text-muted-foreground/70 mt-1">LLM calls: {inferenceEntryCount}</div>
                 </div>
                 <div className="rounded p-2 bg-background">
                   <div className="text-muted-foreground/70 mb-1">Procedure Total</div>
