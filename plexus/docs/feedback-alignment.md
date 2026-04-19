@@ -1,311 +1,263 @@
-# Iterative Feedback Alignment for Score Configuration Optimization
+# Feedback Alignment Workflow
 
-Systematic process for improving score configurations using human feedback data and prediction testing.
+This document is for optimizer agents and score editors who are improving a score
+against human feedback. Follow this process in order. The workflow is baseline-first
+and local-first: measure the current behavior, investigate the right segment, edit
+locally, and re-evaluate on the same baseline before considering any release step.
 
-## Process Overview
+## Terminology Policy
 
-1. **Performance Analysis**: Get baseline metrics and identify primary error patterns
-2. **Baseline Evaluation (LOCAL ONLY)**: Run a full baseline evaluation using a dataset aligned to your feedback items
-3. **Error Investigation**: Examine specific failure cases and human corrections  
-4. **Prediction Testing (LOCAL ONLY)**: Test current configuration on problematic items
-5. **Configuration Optimization**: Iterate based on analysis results, re-evaluating after each change
+Do not use legacy positive/negative error shorthand or any two-letter abbreviation
+that depends on an implied "positive class".
 
-## MCP Tools (Start Here)
+Use:
 
-Use MCP tools for token-efficient structured output:
-- `get_plexus_documentation`: Always open this doc before starting alignment
-- `think`: Required planning step; enforces baseline-first workflow
-- `plexus_feedback_analysis`: Performance metrics and error patterns
-- `plexus_feedback_find`: Specific feedback items with human corrections
-- `plexus_predict`: Test predictions against known ground-truth (LOCAL YAML mode)
-- `run_plexus_evaluation`: Run evaluations (LOCAL mode) for baseline and post-change comparisons
+- `P"No"->A"Yes"` for cases where the model predicted `"No"` but the actual label was `"Yes"`
+- `P"Yes"->A"No"` for cases where the model predicted `"Yes"` but the actual label was `"No"`
 
-**CRITICAL**: Always use sub-agents (Task tool) for `plexus_feedback_find` and `plexus_item_info` calls that return full transcripts! These tools return large amounts of text that will consume your context window if run in the main conversation. Use specialized agents like `plexus-alignment-analyzer` to process this data efficiently.
+Use the full prose form when clarity matters more than compactness.
 
-## Phase 1: Performance Analysis
+## Start Here
 
-Get comprehensive performance summary:
+Open the relevant docs before editing:
 
+- `score-concepts`
+- `score-yaml-format`
+- `score-yaml-langgraph` or `score-yaml-tactusscore`
+- `optimizer-cookbook`
+
+Then run the required planning step with `think` so the baseline-first workflow is
+explicit in the session.
+
+## Ground Rules
+
+- Pull the current champion YAML locally before editing.
+- Do not push a new score version during feedback-alignment iteration.
+- Do not promote champion during feedback-alignment iteration.
+- Keep evaluations local by using the YAML-backed score configuration.
+- Compare against the same baseline dataset or associated dataset whenever possible.
+
+## Phase 1: Pull the Current Score and Establish Context
+
+Use `plexus_score_pull` to get the current champion YAML and guidelines locally.
+
+Example:
+
+```text
+plexus_score_pull(
+    scorecard_identifier="Quality Assurance v1.0",
+    score_identifier="Compliance Check"
+)
 ```
+
+Read the current score carefully before proposing changes:
+
+- What score class is it?
+- Is the score already decomposed?
+- Does it mix applicability with the core Yes/No decision?
+- Does it already use input shaping or processors?
+- Is the issue likely prompt-level, structural, or transcript-format related?
+
+## Phase 2: Build the Baseline
+
+### 1. Inspect recent feedback
+
+Start with `plexus_feedback_analysis` to get the confusion matrix, AC1, and category
+summary.
+
+```text
 plexus_feedback_analysis(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
-    days=14,
-    output_format="json"
-)
-```
-
- Prioritize Gwet's AC1 (agreement) over raw accuracy for alignment decisions. Focus on confusion matrix to identify:
-## Phase 2: Baseline Evaluation (LOCAL ONLY) — Do this BEFORE editing YAML
-
-Establish a quantitative baseline before changing any YAML so improvements are measurable and attributable.
-
-1) Prepare a dataset that mirrors the feedback items you will optimize against (see Dataset section below).
-
-2) Run a baseline evaluation in LOCAL mode. IMPORTANT: Always set an absolute override folder to your local scorecards directory.
-
-```
-run_plexus_evaluation(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",      # optional; evaluate a single score if desired
-    n_samples=200,                       # or omit to use dataset size
-    remote=False,                        # LOCAL ONLY
-    yaml=True,                           # load from local YAML
-    ctx={"override_folder":"/home/<user>/projects/Plexus/scorecards"}
-)
-```
-
-Record AC1, accuracy, and confusion matrix as your baseline.
-
-Note: Do not push or promote versions during this phase; iterate strictly on local YAML.
-- False positives: AI over-detecting
-- False negatives: AI missing violations
-- Primary error pattern for investigation
-
-## Phase 3: Error Investigation
-
-Examine primary error pattern from Phase 1:
-
-```
-# For false negatives (AI missed violations) - paginated results
-# ALWAYS use sub-agents for this - it returns full transcripts!
-Task(
-    subagent_type="plexus-alignment-analyzer",
-    description="Analyze false negative feedback",
-    prompt="Find and analyze false negative feedback items where AI missed violations. Use plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='No', final_value='Yes', limit=5, days=14. Focus on edit comments and transcript patterns."
-)
-```
-
-Results include full item details nested within each feedback edit, eliminating need for separate item_info calls.
-Analyze `edit_comment` fields and `item_details.text` for configuration gaps. Look for patterns in missed behaviors.
-
-**Version Mismatch Warning**: The score results that led to the feedback in production were likely generated by a DIFFERENT version than your current local configuration. You can learn from the feedback edits and edit comments about what the correct score result should be, but you cannot directly learn what's wrong with your current configuration since it wasn't the one that generated the original production score results.
-
-Use pagination for larger datasets:
-```
-# Get next page using next_page_start_id from previous response
-# ALWAYS use sub-agents for this - it returns full transcripts!
-Task(
-    subagent_type="plexus-alignment-analyzer",
-    description="Get next page of false negative feedback",
-    prompt="Continue analyzing false negative feedback using plexus_feedback_find pagination with next_page_start_id='feedback_item_123'. Same parameters as before."
-)
-```
-
-Examine secondary error pattern:
-
-```
-# For false positives (AI over-detected)
-# ALWAYS use sub-agents for this - it returns full transcripts!
-Task(
-    subagent_type="plexus-alignment-analyzer",
-    description="Analyze false positive feedback",
-    prompt="Find and analyze false positive feedback items where AI over-detected violations. Use plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='Yes', final_value='No', limit=5, days=14. Focus on edit comments and transcript patterns."
-)
-```
-
-## Phase 4: Prediction Testing (LOCAL ONLY)
-
-Test current configuration on items with known ground-truth:
-
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check", 
-    item_id="88ed6e27-b5ae-4641-b024-d47f4c6ba631",
-    output_format="yaml",
-    include_input=true,
-    yaml_only=true                # LOCAL YAML ONLY
-)
-```
-
-Test multiple related items:
-
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    item_ids="item1,item2,item3,item4,item5",
-    output_format="yaml",
-    yaml_only=true                # LOCAL YAML ONLY
-)
-```
-
-Compare predictions against feedback ground-truth labels.
-
-## Phase 5: Configuration Optimization
-
-**False Negatives**: Add specific violation patterns, lower thresholds, include examples from edit comments
-**False Positives**: Add exceptions, refine criteria, raise thresholds, include counterexamples
-
-Test configuration changes:
-
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    item_ids="known_problematic_items", 
-    output_format="yaml"
-)
-```
-
-## Dataset Setup (Align to Feedback)
-
-Use a dataset that represents the same distribution as your feedback items to ensure evaluation reflects alignment targets. See `dataset-yaml-format.md` for full schema. Example minimal dataset YAML:
-
-```yaml
-name: Feedback-Aligned Dataset
-source:
-  type: FeedbackItems
-  scorecard: 1438                # your scorecard ID
-  score: "Compliance Check"      # your score name
-  days: 30
-  limit: 500
-  balance: false                 # or true if you want class balancing
-transformations: []
-metadata:
-  purpose: baseline-evaluation
-```
-
-FeedbackItems dataset (score YAML-style fields):
-
-```yaml
-class: FeedbackItems
-scorecard: 1438
-score: "Medication Review"
-days: 30
-limit: 100
-limit_per_cell: 50
-balance: false
-```
-
-Load or refresh dataset as needed with the dataset loader (LOCAL context):
-
-```
-plexus_dataset_load(
-    source_identifier="Feedback-Aligned Dataset",
-    fresh=true
-)
-```
-
-## Complete Workflow
-
-### 1. Baseline Summary
-```
-plexus_feedback_analysis(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check", 
     days=30,
     output_format="json"
 )
 ```
 
-### 2. Investigation
-```
-# ALWAYS use sub-agents for feedback investigation - it returns full transcripts!
-Task(
-    subagent_type="plexus-alignment-analyzer",
-    description="Investigate feedback patterns",
-    prompt="Analyze feedback patterns using plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='No', final_value='Yes', limit=5, days=30. Focus on edit comments and transcript patterns to identify configuration gaps."
-)
-```
+### 2. Investigate both main segments explicitly
 
-### 3. Baseline Evaluation (LOCAL ONLY) — With override_folder
-```
-run_plexus_evaluation(
+Inspect recent items from each direction separately.
+
+Examples:
+
+```text
+plexus_feedback_find(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
-    remote=False,
-    yaml=True,
-    ctx={"override_folder":"/home/<user>/projects/Plexus/scorecards"}
+    initial_value="No",
+    final_value="Yes",
+    limit=5,
+    days=30
 )
 ```
 
-### 4. Testing (LOCAL ONLY)
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0", 
+That query targets the `P"No"->A"Yes"` segment.
+
+```text
+plexus_feedback_find(
+    scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
-    item_ids="problematic_item_ids_from_feedback",
+    initial_value="Yes",
+    final_value="No",
+    limit=5,
+    days=30
+)
+```
+
+That query targets the `P"Yes"->A"No"` segment.
+
+Do not blur the two directions together when forming a hypothesis.
+
+### 3. Lock down a repeatable evaluation dataset
+
+Prefer a deterministic dataset over random spot checks.
+
+Recommended sequence:
+
+1. Check whether the score already has an associated dataset:
+
+```text
+plexus_dataset_check_associated(
+    scorecard="Quality Assurance v1.0",
+    score="Compliance Check"
+)
+```
+
+2. If not, build one from recent feedback:
+
+```text
+plexus_dataset_build_from_feedback_window(
+    scorecard="Quality Assurance v1.0",
+    score="Compliance Check",
+    days=30,
+    max_items=200
+)
+```
+
+### 4. Run the local baseline evaluation
+
+Use `plexus_evaluation_run` with local YAML loading so the evaluation reads the
+working copy.
+
+```text
+plexus_evaluation_run(
+    scorecard_name="Quality Assurance v1.0",
+    score_name="Compliance Check",
+    evaluation_type="accuracy",
+    use_score_associated_dataset=true,
+    yaml=true,
+    notes="Baseline before local feedback-alignment edits"
+)
+```
+
+Record:
+
+- AC1
+- accuracy
+- confusion matrix
+- any dominant segment such as `P"No"->A"Yes"` or `P"Yes"->A"No"`
+
+## Phase 3: Diagnose the Failure Mode
+
+Use the baseline and the sampled feedback items to classify the problem:
+
+- missing or ambiguous policy
+- applicability mixed into the main decision
+- evidence not being found reliably
+- transcript representation hiding local order
+- STT or phonetic confusion
+- final aggregation logic too fuzzy or too LLM-driven
+
+This is where `optimizer-cookbook` helps. Choose the smallest change that addresses
+the root cause rather than the loudest symptom.
+
+## Phase 4: Edit Locally
+
+Make targeted local changes only.
+
+Common move types:
+
+- prompt clarification
+- explicit applicability gate
+- extraction before final judgment
+- split by criterion or entity
+- deterministic aggregation
+- transcript processor or input-source changes
+- narrow STT-rescue rules for phonetic terms
+
+Implementation references:
+
+- `score-yaml-langgraph` for LangGraph recipes
+- `score-yaml-tactusscore` for Tactus recipes
+
+## Phase 5: Sanity Check With Local Predictions
+
+Use `plexus_predict` against the same problematic items you inspected from feedback.
+
+```text
+plexus_predict(
+    scorecard_name="Quality Assurance v1.0",
+    score_name="Compliance Check",
+    item_ids="item1,item2,item3",
+    yaml=true,
     output_format="yaml",
     include_input=true
 )
 ```
 
-### 5. Optimization
-- Modify configuration based on analysis
-- Deploy new version
-- Test on same items
+Use this to confirm that the edited score now behaves differently on the exact cases
+you targeted.
 
-### 6. Validation (LOCAL ONLY)
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check", 
-    item_ids="same_test_items",
-    output_format="yaml"
-)
-```
+## Phase 6: Re-run the Same Baseline Evaluation
 
-### 7. Impact Measurement
-```
-plexus_feedback_analysis(
+Re-run the same evaluation setup you used for the baseline. Do not switch datasets
+or sampling strategy between before and after.
+
+```text
+plexus_evaluation_run(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
-    days=7,
-    output_format="json"
+    evaluation_type="accuracy",
+    use_score_associated_dataset=true,
+    yaml=true,
+    notes="Post-edit comparison on same baseline dataset"
 )
 ```
 
-## Advanced Techniques
+Ask:
 
-**Pattern Discovery**: Larger samples for systemic analysis
-```
-# ALWAYS use sub-agents for pattern discovery - it returns full transcripts!
-Task(
-    subagent_type="plexus-alignment-analyzer",
-    description="Discover systemic patterns",
-    prompt="Perform systemic pattern analysis using plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', limit=10, days=30, prioritize_edit_comments=true. Look for common themes in edit comments and transcript patterns."
-)
-```
+- Did AC1 improve?
+- Did the targeted segment improve?
+- Did the opposite segment get worse?
+- Did the change improve only the sampled items, or the broader regression set too?
 
-**A/B Testing**: Compare baseline vs modified configurations on same test items
+## Practical Interpretation Rules
 
-**Pagination for Large Datasets**: Use pagination to analyze large volumes of feedback
-```
-# Get multiple pages of feedback items - ALWAYS use sub-agents!
-Task(
-    subagent_type="plexus-alignment-analyzer",
-    description="Paginated feedback analysis",
-    prompt="Analyze feedback across multiple pages using plexus_feedback_find pagination. Start with first page, then continue pagination as needed to build comprehensive analysis."
-)
-```
+- If the targeted segment improves and the opposite segment stays stable, keep the
+  change and continue iterating.
+- If the targeted segment improves but the opposite segment degrades sharply, the
+  change probably overfit one direction.
+- If the evaluation is flat but local spot checks look better, the fix may be too
+  narrow or the dataset may reveal a second-order regression.
+- If the score still fails because it cannot see the right evidence, change the
+  input shape or structure before adding more prompt prose.
 
-**Nested Item Details**: Each feedback result includes full item information
-- `item_details.text`: Original call transcript or document text
-- `item_details.external_id`: External system identifier  
-- `item_details.identifiers`: Additional identifying information
-- Eliminates need for separate `plexus_item_info` calls
+## What Not to Do
 
-**Continuous Monitoring**: Weekly performance tracking
-```
-plexus_feedback_analysis(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    days=7, 
-    output_format="json"
-)
-```
+- Do not edit YAML before capturing a baseline.
+- Do not mix both main error directions into one hypothesis.
+- Do not use release actions during local optimization.
+- Do not add large few-shot sets when the real issue is structure or transcript shape.
+- Do not treat `NA` as just another class if it is really an applicability question.
 
-## Implementation Notes
+## Final Rule
 
-- Start with summary analysis, follow confusion matrix recommendations
-- Run a LOCAL baseline evaluation before any edits; use the same dataset for post-change comparison
-- Prioritize improving Gwet's AC1 (agreement) while monitoring accuracy and class balance
-- Use feedback items as ground-truth labels for validation
-- Test before/after configuration changes in LOCAL YAML mode (yaml_only / yaml=True)
-- Focus on edit comments for root cause analysis
-- Maintain test sets for regression testing
-- Measure improvement with AC1, confusion matrix shifts, and stability across segments
-- **ALWAYS use sub-agents** for `plexus_feedback_find` and `plexus_item_info` to avoid context overflow
-- **Version Mismatch**: Production feedback was generated by different score versions than your local config - learn from edit patterns and comments, not from attempting to debug the original score logic
+Feedback alignment is not "read a few bad items and tweak the prompt." It is:
+
+1. baseline
+2. segment-specific diagnosis
+3. local edit
+4. local prediction sanity check
+5. same-baseline re-evaluation
+
+Only after that should a human decide whether the change is ready to be pushed.
