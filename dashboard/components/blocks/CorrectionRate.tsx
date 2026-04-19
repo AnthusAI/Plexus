@@ -52,6 +52,8 @@ const formatPercent = (value: number | undefined): string => {
   return `${(value * 100).toFixed(2)}%`;
 };
 
+const AUTO_SHOW_ROWS_THRESHOLD = 200;
+
 const CorrectionRate: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<CorrectionRateData | null>(null);
   const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
@@ -101,6 +103,12 @@ const CorrectionRate: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const summary = output.summary;
   const items = Array.isArray(output.items) ? output.items : [];
+  const [showRows, setShowRows] = React.useState(items.length <= AUTO_SHOW_ROWS_THRESHOLD);
+
+  React.useEffect(() => {
+    setShowRows(items.length <= AUTO_SHOW_ROWS_THRESHOLD);
+  }, [items.length]);
+
   const {
     visibleRows,
     visibleCount,
@@ -155,53 +163,71 @@ const CorrectionRate: React.FC<ReportBlockProps> = (props) => {
           {totalCount > 0 ? ` • Rendering ${visibleCount} of ${totalCount} rows` : null}
         </div>
 
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Item</th>
-                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Score Results</th>
-                <th className="px-3 py-2 text-right font-medium">Corrected</th>
-                <th className="px-3 py-2 text-right font-medium">Uncorrected</th>
-                <th className="px-3 py-2 text-right font-medium">Correction Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                    No score results matched the requested filters.
-                  </td>
-                </tr>
-              ) : (
-                visibleRows.map((item) => (
-                  <tr key={item.item_id} className="border-t">
-                    <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
-                    <td className="px-3 py-2 text-right">{item.total_score_results}</td>
-                    <td className="px-3 py-2 text-right">{item.corrected_score_results}</td>
-                    <td className="px-3 py-2 text-right">{item.uncorrected_score_results}</td>
-                    <td className="px-3 py-2 text-right">{formatPercent(item.correction_rate)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {items.length > 0 ? (
-          <div className="flex items-center justify-between gap-3">
-            <div ref={sentinelRef} className="h-1 w-1" aria-hidden="true" />
-            {hasMore ? (
-              <button
-                type="button"
-                onClick={loadMore}
-                className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
-              >
-                Load more rows ({visibleCount}/{totalCount})
-              </button>
-            ) : (
-              <span className="text-xs text-muted-foreground">All rows loaded ({totalCount})</span>
-            )}
+        {items.length > AUTO_SHOW_ROWS_THRESHOLD && !showRows ? (
+          <div className="rounded-md border bg-card p-4">
+            <div className="text-sm text-muted-foreground">
+              Item rows are hidden by default for large results.
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRows(true)}
+              className="mt-3 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+            >
+              Show item rows ({items.length})
+            </button>
           </div>
+        ) : null}
+        {showRows ? (
+          <>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Item</th>
+                    <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Score Results</th>
+                    <th className="px-3 py-2 text-right font-medium">Corrected</th>
+                    <th className="px-3 py-2 text-right font-medium">Uncorrected</th>
+                    <th className="px-3 py-2 text-right font-medium">Correction Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                        No score results matched the requested filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleRows.map((item) => (
+                      <tr key={item.item_id} className="border-t">
+                        <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
+                        <td className="px-3 py-2 text-right">{item.total_score_results}</td>
+                        <td className="px-3 py-2 text-right">{item.corrected_score_results}</td>
+                        <td className="px-3 py-2 text-right">{item.uncorrected_score_results}</td>
+                        <td className="px-3 py-2 text-right">{formatPercent(item.correction_rate)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {items.length > 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <div ref={sentinelRef} className="h-1 w-1" aria-hidden="true" />
+                {hasMore ? (
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+                  >
+                    Load more rows ({visibleCount}/{totalCount})
+                  </button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">All rows loaded ({totalCount})</span>
+                )}
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
     </ReportBlock>
