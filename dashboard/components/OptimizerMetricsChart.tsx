@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import { ChartContainer } from "@/components/ui/chart"
 import { CartesianGrid, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
@@ -129,6 +129,48 @@ function ShapeIcon({ shape, color, size = 10 }: { shape: ShapeKind; color: strin
     case "triangle": return <svg width={s} height={s}><polygon points={`${h},1 ${s - 0.5},${s - 1} 0.5,${s - 1}`} fill={color} /></svg>
     case "diamond": return <svg width={s} height={s}><polygon points={`${h},0 ${s},${h} ${h},${s} 0,${h}`} fill={color} /></svg>
   }
+}
+
+interface AxisTickProps {
+  x?: number
+  y?: number
+  payload?: { value: number }
+}
+
+const LeftAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
+  const value = payload?.value
+  if (typeof value !== "number") return null
+
+  return (
+    <g>
+      <text x={x - 8} y={y} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={11} dy="0.35em">
+        {value.toFixed(1)}
+      </text>
+      {value === -1 && (
+        <text x={x - 8} y={y + 16} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={10}>
+          AC1
+        </text>
+      )}
+    </g>
+  )
+}
+
+const RightAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
+  const value = payload?.value
+  if (typeof value !== "number") return null
+
+  return (
+    <g>
+      <text x={x + 8} y={y} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={11} dy="0.35em">
+        {value}%
+      </text>
+      {value === 0 && (
+        <text x={x + 8} y={y + 16} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={10}>
+          Acc
+        </text>
+      )}
+    </g>
+  )
 }
 
 interface BaselineValues {
@@ -269,31 +311,9 @@ const CustomLegend: React.FC<CustomLegendProps> = ({ datasetView, focusedMetric,
 export default function OptimizerMetricsChart({ iterations, datasetView: controlledDatasetView, onDatasetViewChange }: OptimizerMetricsChartProps) {
   const [uncontrolledDatasetView, setUncontrolledDatasetView] = useState<DatasetView>("overall")
   const [focusedMetric, setFocusedMetric] = useState<string | null>(null)
-  const chartWrapperRef = useRef<HTMLDivElement | null>(null)
-  const [isNarrowChart, setIsNarrowChart] = useState(false)
 
   const datasetView = controlledDatasetView ?? uncontrolledDatasetView
   const hasRegressionData = useMemo(() => iterations.some(it => it.regression_metrics), [iterations])
-
-  useEffect(() => {
-    const node = chartWrapperRef.current
-    if (!node) return
-
-    const setFromWidth = (width: number) => setIsNarrowChart(width < 760)
-    setFromWidth(node.clientWidth)
-
-    if (typeof ResizeObserver === "undefined") {
-      if (typeof window !== "undefined") setFromWidth(window.innerWidth)
-      return
-    }
-
-    const observer = new ResizeObserver(entries => {
-      const width = entries[0]?.contentRect.width
-      if (typeof width === "number") setFromWidth(width)
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
 
   const baseline = useMemo(() => extractBaseline(iterations), [iterations])
 
@@ -406,9 +426,9 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
         )}
       </div>
 
-      <div ref={chartWrapperRef} className="rounded-md bg-card p-3">
+      <div className="rounded-md bg-card p-2">
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
-          <LineChart data={chartData} margin={{ top: 8, right: 48, left: 0, bottom: 4 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 52, left: 20, bottom: 16 }}>
             <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
             <XAxis
               dataKey="cycle"
@@ -416,9 +436,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               interval={0}
-              angle={isNarrowChart ? -45 : 0}
-              textAnchor={isNarrowChart ? "end" : "middle"}
-              height={isNarrowChart ? 46 : undefined}
+              padding={{ left: 28, right: 28 }}
             />
             <YAxis
               yAxisId="left"
@@ -427,10 +445,8 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-              tickFormatter={(v: number) => v.toFixed(1)}
-              tickMargin={8}
-              width={40}
-              label={{ value: "AC1", position: "insideBottomLeft", offset: -2, fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
+              tick={<LeftAxisTick />}
+              width={52}
             />
             <YAxis
               yAxisId="right"
@@ -440,10 +456,8 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-              tickFormatter={(v: number) => `${v}%`}
-              tickMargin={8}
-              width={44}
-              label={{ value: "Acc", position: "insideBottomRight", offset: -2, fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
+              tick={<RightAxisTick />}
+              width={56}
             />
             <Tooltip content={renderTooltip} />
 
