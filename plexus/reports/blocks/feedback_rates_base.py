@@ -748,6 +748,7 @@ class FeedbackRatesBase(BaseReportBlock):
                     "item_created_at": None,
                     "item_updated_at": None,
                     "item_identifiers": None,
+                    "latest_activity_at": None,
                     "total_score_results": 0,
                     "corrected_score_results": 0,
                     "uncorrected_score_results": 0,
@@ -769,6 +770,15 @@ class FeedbackRatesBase(BaseReportBlock):
             if int(feedback_stats.get("total") or 0) > 0:
                 item_bucket["feedback_scores_with_feedback"].add(score_id)
 
+            result_activity_at = result.get("updatedAt") or result.get("createdAt")
+            if result_activity_at:
+                existing_activity_at = item_bucket.get("latest_activity_at")
+                if (
+                    existing_activity_at is None
+                    or self._to_dt(result_activity_at) > self._to_dt(existing_activity_at)
+                ):
+                    item_bucket["latest_activity_at"] = result_activity_at
+
             item_obj = result.get("item") if isinstance(result.get("item"), dict) else None
             if item_obj:
                 if item_bucket.get("item_external_id") is None:
@@ -784,6 +794,12 @@ class FeedbackRatesBase(BaseReportBlock):
                         or self._to_dt(item_updated_at) > self._to_dt(existing_item_updated_at)
                     ):
                         item_bucket["item_updated_at"] = item_updated_at
+                    existing_activity_at = item_bucket.get("latest_activity_at")
+                    if (
+                        existing_activity_at is None
+                        or self._to_dt(item_updated_at) > self._to_dt(existing_activity_at)
+                    ):
+                        item_bucket["latest_activity_at"] = item_updated_at
                 if item_bucket.get("item_identifiers") is None:
                     item_identifiers_payload = None
                     item_identifiers_conn = item_obj.get("itemIdentifiers")
@@ -811,7 +827,14 @@ class FeedbackRatesBase(BaseReportBlock):
                 }
             )
 
-        items = sorted(per_item.values(), key=lambda row: row["item_id"])
+        items = sorted(
+            per_item.values(),
+            key=lambda row: (
+                self._to_dt(row.get("latest_activity_at") or row.get("item_updated_at") or row.get("item_created_at")),
+                str(row.get("item_id") or ""),
+            ),
+            reverse=True,
+        )
         for item in items:
             total = item["total_score_results"]
             item["correction_rate"] = (item["corrected_score_results"] / total) if total else 0.0
