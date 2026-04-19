@@ -5617,23 +5617,36 @@ code: |
         table.insert(syn, string.format(
           "You must produce output in exactly two parts in this order:\n\n"
           .. "=== CYCLE %d REPORT ===\n\n"
-          .. "## DIAGNOSIS SUMMARY\n"
-          .. "(3-5 bullets. What did this cycle reveal? What worked, what failed, why?\n"
-          .. " What error patterns are still present? What is the realistic AC1 ceiling and why?)\n\n"
-          .. "## DIAGNOSIS DETAIL\n"
+          .. "## EXECUTIVE SUMMARY\n"
+          .. "4-6 sentences of plain English prose. No headers, no bullets. Write for any audience —\n"
+          .. "someone who has never seen a confusion matrix should understand it. Cover: what improved\n"
+          .. "(or didn't) this cycle, what the main blocker is, and what decisions or actions are needed.\n"
+          .. "Include the key AC1 numbers. Copy-pasteable into an email or Slack message.\n\n"
+          .. "## LAB REPORT\n"
+          .. "Technical analysis for operators and the next optimizer run. Structure:\n"
           .. "### What happened\n"
-          .. "(metrics this cycle vs baseline, hypotheses tested, which ones ran)\n"
+          .. "(metrics this cycle vs baseline, hypotheses tested, outcomes)\n"
           .. "### Why hypotheses worked or failed\n"
           .. "(for each: was the premise correct? implementation off? inconclusive?)\n"
           .. "### Error patterns still present\n"
-          .. "(2-3 concrete patterns in the residual FP/FN errors with example item counts)\n"
-          .. "### Ceiling estimate\n"
-          .. "(%% contradictions in current feedback window, max achievable AC1, what blocks further gains)\n\n"
-          .. "## PRESCRIPTION SUMMARY\n"
-          .. "(2-4 actions ranked by urgency. Format: [WHO]: [WHAT] — [evidence/impact])\n\n"
-          .. "## PRESCRIPTION DETAIL\n"
-          .. "(≤5 actions. For each: who does it, what exactly, evidence count or AC1 impact,\n"
-          .. " urgency: must-do-before-next-cycle / can-wait / needs-SME-decision)\n\n"
+          .. "(2-3 concrete FP/FN patterns with example item counts)\n"
+          .. "### Ceiling analysis\n"
+          .. "(%% contradictions, max achievable AC1, what blocks further prompt-level gains)\n"
+          .. "### Next lab actions\n"
+          .. "(≤5 actions that operators or the next optimizer run can take WITHOUT SME input.\n"
+          .. " For each: what exactly, evidence count or AC1 impact, urgency)\n"
+          .. "### Suspected low-quality feedback labels\n"
+          .. "(specific items where the label appears incorrect or contradictory — cite item IDs\n"
+          .. " or patterns; these need human review before the next run)\n\n"
+          .. "## SME AGENDA\n"
+          .. "Meeting agenda for domain experts. No jargon. No AC1 numbers. No technical detail.\n"
+          .. "Each item is a DECISION TO MAKE, formatted as:\n"
+          .. "  **[Short title]**\n"
+          .. "  Question: [Plain-English question the SME needs to answer]\n"
+          .. "  Example: AI said [X], reviewer marked [Y] — here's what happened: [1-2 sentences]\n"
+          .. "  Options: (a) [option] (b) [option] (c) [option if applicable]\n"
+          .. "  Impact: Resolving this affects ~N disputed reviews\n\n"
+          .. "Only include items that require a human policy decision — not items the AI can fix alone.\n\n"
           .. "=== PLANNING ANALYSIS ===\n"
           .. "(everything after this header is your reasoning for generating hypotheses"
           .. " in the next cycle — only present if another cycle will run)\n\n",
@@ -5751,11 +5764,7 @@ code: |
           diag(string.format("CODE_EDITOR FAILED in per-cycle report: %s", tostring(syn_err)))
         end
         local syn_text = code_editor.output or "(cycle report complete)"
-        Human.notify({message = syn_text, level = "info"})
 
-        -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
-        -- Stored in State (survives history compaction).
-        local cur = iterations[#iterations]
         -- Extract multi-line section content up to the next ## heading.
         -- Lua's "." does not match newlines, so string.find is used instead of pattern matching.
         local function extract_heading_section(text, heading)
@@ -5766,11 +5775,40 @@ code: |
           local content = next_hdr and text:sub(hdr_end + 1, next_hdr - 1) or text:sub(hdr_end + 1)
           return (content:match("^(.-)%s*$") or content)
         end
-        local diag_summary = extract_heading_section(syn_text, "## DIAGNOSIS SUMMARY")
-        local presc_summary = extract_heading_section(syn_text, "## PRESCRIPTION SUMMARY")
+        local exec_summary  = extract_heading_section(syn_text, "## EXECUTIVE SUMMARY")
+        local lab_report    = extract_heading_section(syn_text, "## LAB REPORT")
+        local sme_agenda    = extract_heading_section(syn_text, "## SME AGENDA")
+        -- Backward-compat internal fields: map to new sections
+        local diag_summary  = exec_summary
+        local presc_summary = extract_heading_section(lab_report ~= "" and syn_text or "", "### Next lab actions")
+
+        -- Display three separate notifications — one per audience
+        if has_text(exec_summary) then
+          Human.notify({message = string.format(
+            "=== Cycle %d — Executive Summary ===\n\n%s", cycle, exec_summary), level = "info"})
+        end
+        if has_text(lab_report) then
+          Human.notify({message = string.format(
+            "=== Cycle %d — Lab Report ===\n\n%s", cycle, lab_report), level = "info"})
+        end
+        if has_text(sme_agenda) then
+          Human.notify({message = string.format(
+            "=== Cycle %d — SME Agenda ===\n\n%s", cycle, sme_agenda), level = "info"})
+        end
+        if not has_text(exec_summary) and not has_text(lab_report) then
+          -- Fallback: display raw output if sections weren't found
+          Human.notify({message = syn_text, level = "info"})
+        end
+
+        -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
+        -- Stored in State (survives history compaction).
+        local cur = iterations[#iterations]
         local insight_entry = {
           cycle = cycle,
           analysis = syn_text,
+          executive_summary = exec_summary or "",
+          lab_report = lab_report or "",
+          sme_agenda = sme_agenda or "",
           diagnosis_summary = diag_summary or "",
           prescription_summary = presc_summary or "",
           synthesis_strategy_selected = cur and cur.synthesis_strategy or nil,
