@@ -13,9 +13,10 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
 ▶ STALE MODEL SIGNAL → mandatory C3 model-swap hypothesis — CHECK THIS FIRST:
 
   Add a model-swap hypothesis (highest priority, lowest risk) if score_config.yaml
-  contains model_name: gpt-4o-mini or any model that is NOT gpt-5.4-nano or newer.
+  contains model_name: gpt-4o-mini.
   This is the cheapest, fastest structural win — 2 lines of YAML, often meaningful gains.
-  If the score is already on gpt-5.4-nano, skip this signal. See C3 below.
+  If the score is already on gpt-5.4-nano or gpt-5-mini, check accumulated_lessons for
+  prior model swap results before proposing another swap. See C3 below.
 
 ▶ WORD-LEVEL TIMING SIGNAL → mandatory C1e.1 hypothesis (DeepgramInputSource + format: words):
 
@@ -178,6 +179,13 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     By default, scores use the item's `text` field directly. But you can switch the input
     source to `DeepgramInputSource`, which loads the original Deepgram JSON from the item's
     attached files and makes it available for Deepgram processors to format.
+
+    ⚠ PREREQUISITE: Before proposing a DeepgramInputSource hypothesis, confirm that the
+    items in the evaluation dataset actually have Deepgram JSON attachments (attachedFiles).
+    If they do not, the score will fail at runtime with an attachment-not-found error.
+    Check the planning context for any note about Deepgram data availability, or look at
+    the smoke test results from prior DeepgramInputSource attempts in this run.
+    If prior cycles show DeepgramInputSource smoke test failures, do NOT retry it.
 
     DeepgramInputSource — load raw Deepgram transcript data:
       Extracts the Deepgram JSON attachment from an item's attached files and provides
@@ -449,11 +457,13 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
 
   C3. Model swap (use sparingly — only when prompt/structure changes have stagnated):
     First check score_config.yaml above for the current model_name. Then swap to a DIFFERENT model.
-    PREFERRED MODEL: gpt-5.4-nano is the preferred default model. If the score is not already using
-    gpt-5.4-nano, switching to it should be your FIRST model swap hypothesis.
-    Available models (only propose one that is NOT already in use):
-    * gpt-5.4-nano (preferred, fast, cheapest): model_provider: ChatOpenAI, model_name: gpt-5.4-nano, max_tokens: 2000
-    * gpt-5-mini (good value): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000
+    MODEL SELECTION: Model preference is score-specific. Check accumulated_lessons for any
+    prior model swap results for this score — if a model has already been tested and regressed,
+    do NOT retry it. If no prior model data exists, start with gpt-5-mini (good balance of
+    capability and cost). Only try gpt-5.4-nano if gpt-5-mini has already been tested.
+    Available models (only propose one that is NOT already in use AND NOT already failed):
+    * gpt-5-mini (good value, capable): model_provider: ChatOpenAI, model_name: gpt-5-mini, max_tokens: 2000
+    * gpt-5.4-nano (fast, cheapest): model_provider: ChatOpenAI, model_name: gpt-5.4-nano, max_tokens: 2000
     * gpt-4o-mini: model_provider: ChatOpenAI, model_name: gpt-4o-mini-2024-07-18
     * gpt-5.4-mini (stronger, more expensive — only if nano + prompt changes are exhausted):
       model_provider: ChatOpenAI, model_name: gpt-5.4-mini, max_tokens: 2000
