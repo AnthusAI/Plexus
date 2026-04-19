@@ -251,7 +251,8 @@ class PlexusStorageAdapter:
                     position=position,
                     type='checkpoint',
                     result={'name': name, 'data': ckpt_data.get('result')},
-                    timestamp=datetime.fromisoformat(ckpt_data.get('completed_at'))
+                    timestamp=datetime.fromisoformat(ckpt_data.get('completed_at')),
+                    run_id=ckpt_data.get('run_id'),  # None for old checkpoints — won't match new run_id
                 ))
                 position += 1
 
@@ -293,11 +294,14 @@ class PlexusStorageAdapter:
         for checkpoint in metadata.execution_log:
             if checkpoint.type == 'checkpoint' and isinstance(checkpoint.result, dict):
                 name = checkpoint.result.get('name', f'checkpoint_{checkpoint.position}')
-                checkpoints_dict[name] = {
+                entry: dict = {
                     'name': name,
                     'result': checkpoint.result.get('data'),
-                    'completed_at': checkpoint.timestamp.isoformat()
+                    'completed_at': checkpoint.timestamp.isoformat(),
                 }
+                if checkpoint.run_id is not None:
+                    entry['run_id'] = checkpoint.run_id
+                checkpoints_dict[name] = entry
 
         # Build metadata JSON
         metadata_json = {
