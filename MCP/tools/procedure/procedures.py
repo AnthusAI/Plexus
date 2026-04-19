@@ -732,8 +732,120 @@ def register_procedure_tools(mcp):
                 "error": f"Failed to get chat messages: {str(e)}"
             }
     
+    # ------------------------------------------------------------------ #
+    # Continue / Branch tools                                             #
+    # ------------------------------------------------------------------ #
+
+    class ProcedureContinueRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="ID of the completed procedure to continue")]
+        additional_cycles: Annotated[int, Field(description="Number of additional optimizer cycles to run", ge=1)] = 3
+        hint: Annotated[Optional[str], Field(description="Optional instructions to guide the continuation run")] = None
+
+    @mcp.tool()
+    async def plexus_procedure_continue(request: ProcedureContinueRequest) -> Dict[str, Any]:
+        """Continue a completed optimizer procedure for additional cycles.
+
+        Updates the procedure's max_iterations param, clears Tactus replay
+        checkpoints (preserving accumulated State such as iterations, baselines,
+        and dataset), then re-dispatches the procedure.  The optimizer detects
+        prior iterations and skips expensive dataset/baseline initialization,
+        resuming from cycle N+1.
+
+        Use this after a procedure reaches its max_iterations limit and you want
+        to run more cycles, optionally with a new hint.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.procedure.continuation_service import prepare_continuation
+            from plexus.cli.procedure.service import ProcedureService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            info = prepare_continuation(
+                client,
+                request.procedure_id,
+                request.additional_cycles,
+                request.hint,
+            )
+
+            service = ProcedureService(client)
+            run_result = await service.run_experiment(request.procedure_id)
+
+            return {
+                "success": True,
+                "status": run_result.get('status', 'dispatched'),
+                "procedure_id": request.procedure_id,
+                "task_id": run_result.get('task_id'),
+                "completed_cycles": info['completed_cycles'],
+                "additional_cycles": info['additional_cycles'],
+                "new_max_iterations": info['new_max_iterations'],
+                "hint_applied": info['hint_applied'],
+            }
+        except Exception as e:
+            logger.error(f"Error continuing procedure: {e}")
+            return {"success": False, "error": str(e)}
+
+    class ProcedureBranchRequest(BaseModel):
+        source_procedure_id: Annotated[str, Field(description="ID of the source procedure to branch from")]
+        cycle: Annotated[int, Field(description="Branch from after this cycle number (1-based)", ge=1)]
+        additional_cycles: Annotated[int, Field(description="Number of cycles to run in the branch", ge=1)] = 3
+        hint: Annotated[Optional[str], Field(description="Optional instructions for the branch run")] = None
+        name: Annotated[Optional[str], Field(description="Name for the new branch procedure")] = None
+
+    @mcp.tool()
+    async def plexus_procedure_branch(request: ProcedureBranchRequest) -> Dict[str, Any]:
+        """Branch a procedure from cycle N into a new procedure.
+
+        Creates a new procedure whose State is a copy of the source procedure
+        truncated to cycle N, then dispatches it.  The optimizer detects the N
+        prior cycles and runs additional cycles from cycle N+1 with a fresh
+        exploration — no dataset rebuild or baseline re-evaluation.
+
+        Use this to explore a different optimization direction starting from an
+        earlier point in the source run, without modifying the source procedure.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.procedure.continuation_service import prepare_branch
+            from plexus.cli.procedure.service import ProcedureService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            info = prepare_branch(
+                client,
+                request.source_procedure_id,
+                request.cycle,
+                request.additional_cycles,
+                request.hint,
+                request.name,
+            )
+
+            target_id = info['target_id']
+            service = ProcedureService(client)
+            run_result = await service.run_experiment(target_id)
+
+            return {
+                "success": True,
+                "status": run_result.get('status', 'dispatched'),
+                "source_procedure_id": request.source_procedure_id,
+                "target_procedure_id": target_id,
+                "target_name": info['target_name'],
+                "task_id": run_result.get('task_id'),
+                "branched_from_cycle": request.cycle,
+                "additional_cycles": info['additional_cycles'],
+                "new_max_iterations": info['new_max_iterations'],
+                "hint_applied": info['hint_applied'],
+            }
+        except Exception as e:
+            logger.error(f"Error branching procedure: {e}")
+            return {"success": False, "error": str(e)}
+
     # Register the stop tool
     from .stop import register_stop_tool
     register_stop_tool(mcp)
-    
+
     logger.info("Registered procedure management tools")
