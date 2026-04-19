@@ -619,10 +619,23 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }
 
   // Helper function to create Task with stages for a procedure
-  const createTaskWithStagesForProcedure = async (procedureId: string, accountId: string) => {
+  const createTaskWithStagesForProcedure = async (
+    procedureId: string,
+    accountId: string,
+    runParameters?: Record<string, any>,
+  ) => {
     console.log('[createTaskWithStagesForProcedure] Starting for procedure:', procedureId, 'account:', accountId)
     
     // Create Task
+    const metadata: Record<string, any> = {
+      type: 'Procedure',
+      procedure_id: procedureId,
+      task_type: 'Procedure',
+    }
+    if (runParameters && Object.keys(runParameters).length > 0) {
+      metadata.run_parameters = runParameters
+    }
+
     const taskInput = {
       accountId: accountId,
       type: 'Procedure',
@@ -631,11 +644,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       command: `procedure run ${procedureId}`,
       description: `Procedure workflow for ${procedureId}`,
       dispatchStatus: 'PENDING',
-      metadata: JSON.stringify({
-        type: 'Procedure',
-        procedure_id: procedureId,
-        task_type: 'Procedure'
-      })
+      metadata: JSON.stringify(metadata)
     }
 
     const taskResult = await getAmplifyClient().graphql({
@@ -822,7 +831,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         let createdTask = null
         try {
           console.log('Creating Task with stages for procedure:', newProcedure.id)
-          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id)
+          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id, parameters)
           console.log('✓ Task and stages created:', createdTask)
         } catch (taskError) {
           console.error('Failed to create Task for procedure:', taskError)
