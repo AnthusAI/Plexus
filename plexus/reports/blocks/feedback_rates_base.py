@@ -8,6 +8,7 @@ from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 
 from .base import BaseReportBlock
+from .identifier_utils import looks_like_uuid
 
 
 class FeedbackRatesBase(BaseReportBlock):
@@ -103,42 +104,55 @@ class FeedbackRatesBase(BaseReportBlock):
         )
 
     async def _resolve_scorecard(self, scorecard_identifier: str) -> Scorecard:
-        is_uuid_like = len(scorecard_identifier) > 20 and "-" in scorecard_identifier
-        if is_uuid_like:
-            scorecard = await asyncio.to_thread(
-                Scorecard.get_by_id,
-                id=scorecard_identifier,
-                client=self.api_client,
-            )
-        else:
-            scorecard = await asyncio.to_thread(
-                Scorecard.get_by_external_id,
-                external_id=scorecard_identifier,
-                client=self.api_client,
-            )
+        scorecard = None
+        if looks_like_uuid(scorecard_identifier):
+            try:
+                scorecard = await asyncio.to_thread(
+                    Scorecard.get_by_id,
+                    id=scorecard_identifier,
+                    client=self.api_client,
+                )
+            except Exception:
+                scorecard = None
+        if not scorecard:
+            for lookup, kwargs in [
+                (Scorecard.get_by_key, {"key": scorecard_identifier}),
+                (Scorecard.get_by_name, {"name": scorecard_identifier}),
+                (Scorecard.get_by_external_id, {"external_id": scorecard_identifier}),
+            ]:
+                try:
+                    scorecard = await asyncio.to_thread(lookup, client=self.api_client, **kwargs)
+                    if scorecard:
+                        break
+                except Exception:
+                    continue
         if not scorecard:
             raise ValueError(f"Scorecard not found for identifier '{scorecard_identifier}'.")
         return scorecard
 
     async def _resolve_score(self, score_identifier: str, scorecard_id: str) -> Score:
-        is_uuid_like = (
-            len(score_identifier) == 36
-            and score_identifier.count("-") == 4
-            and all(ch in "0123456789abcdefABCDEF-" for ch in score_identifier)
-        )
-        if is_uuid_like:
-            score = await asyncio.to_thread(
-                Score.get_by_id,
-                id=score_identifier,
-                client=self.api_client,
-            )
-        else:
-            score = await asyncio.to_thread(
-                Score.get_by_external_id,
-                external_id=score_identifier,
-                scorecard_id=scorecard_id,
-                client=self.api_client,
-            )
+        score = None
+        if looks_like_uuid(score_identifier):
+            try:
+                score = await asyncio.to_thread(
+                    Score.get_by_id,
+                    id=score_identifier,
+                    client=self.api_client,
+                )
+            except Exception:
+                score = None
+        if not score:
+            for lookup, kwargs in [
+                (Score.get_by_name, {"name": score_identifier, "scorecard_id": scorecard_id}),
+                (Score.get_by_key, {"key": score_identifier, "scorecard_id": scorecard_id}),
+                (Score.get_by_external_id, {"external_id": score_identifier, "scorecard_id": scorecard_id}),
+            ]:
+                try:
+                    score = await asyncio.to_thread(lookup, client=self.api_client, **kwargs)
+                    if score:
+                        break
+                except Exception:
+                    continue
         if not score:
             raise ValueError(
                 f"Score not found for identifier '{score_identifier}' on scorecard '{scorecard_id}'."
@@ -171,6 +185,7 @@ class FeedbackRatesBase(BaseReportBlock):
                 scorecardId: $scorecardId,
                 updatedAt: {{ between: [$startTime, $endTime] }},
                 filter: $filter,
+                sortDirection: DESC,
                 limit: $limit,
                 nextToken: $nextToken
             ) {{
@@ -197,21 +212,30 @@ class FeedbackRatesBase(BaseReportBlock):
         }}
         """
 
+        page_num = 0
         while True:
-            filter_input: Dict[str, Any] = {"accountId": {"eq": str(account_id)}}
-            if score_id:
-                filter_input["scoreId"] = {"eq": str(score_id)}
-
             variables: Dict[str, Any] = {
                 "scorecardId": str(scorecard_id),
                 "startTime": start_date.isoformat(),
                 "endTime": end_date.isoformat(),
-                "filter": filter_input,
                 "limit": 500,
                 "nextToken": next_token,
             }
+            filter_input: Dict[str, Any] = {"accountId": {"eq": str(account_id)}}
+            if score_id:
+                filter_input["scoreId"] = {"eq": str(score_id)}
+            variables["filter"] = filter_input
 
-            response = await asyncio.to_thread(self.api_client.execute, query, variables)
+            page_num += 1
+            self._log(
+                f"Fetching score results page {page_num} "
+                f"(nextToken={'set' if next_token else 'none'})"
+            )
+            try:
+                response = await asyncio.to_thread(self.api_client.execute, query, variables)
+            except Exception as exc:
+                self._log(f"ERROR fetching score results page {page_num}: {exc}", level="ERROR")
+                break
             payload = response.get(query_name) or {}
             raw_items = payload.get("items") or []
             items = [
@@ -224,6 +248,10 @@ class FeedbackRatesBase(BaseReportBlock):
                 all_results.extend(items)
 
             next_token = payload.get("nextToken")
+            self._log(
+                f"Score results page {page_num} returned {len(items)} items "
+                f"(raw {len(raw_items)}), nextToken={'set' if next_token else 'none'}"
+            )
             if not next_token:
                 break
             if next_token in seen_tokens:
