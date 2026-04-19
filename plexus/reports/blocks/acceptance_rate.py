@@ -14,7 +14,8 @@ class AcceptanceRate(FeedbackRatesBase):
 
     DEFAULT_DESCRIPTION = "Score result acceptance metrics"
 
-    DEFAULT_MAX_ITEMS = 200
+    # 0 means "no cap" in CLI/config and is normalized to unlimited here.
+    DEFAULT_MAX_ITEMS = 0
 
     def _coerce_bool(self, value: Any, *, default: bool = False) -> bool:
         if value is None:
@@ -65,6 +66,10 @@ class AcceptanceRate(FeedbackRatesBase):
 
                 item_output: Dict[str, Any] = {
                     "item_id": row["item_id"],
+                    "item_external_id": row.get("item_external_id"),
+                    "item_created_at": row.get("item_created_at"),
+                    "item_updated_at": row.get("item_updated_at"),
+                    "item_identifiers": row.get("item_identifiers"),
                     "total_score_results": item_total,
                     "accepted_score_results": item_accepted_score_results,
                     "corrected_score_results": row["corrected_score_results"],
@@ -80,7 +85,7 @@ class AcceptanceRate(FeedbackRatesBase):
 
             items_total = len(items)
             if max_items == 0:
-                items_out: List[Dict[str, Any]] = []
+                items_out = items
             else:
                 items_out = items[:max_items]
 
@@ -95,6 +100,10 @@ class AcceptanceRate(FeedbackRatesBase):
                 "score_result_acceptance_rate": (
                     accepted_score_results / total_score_results if total_score_results else 0.0
                 ),
+                "feedback_items_total": totals.get("feedback_items_total", 0),
+                "feedback_items_valid": totals.get("feedback_items_valid", 0),
+                "feedback_items_changed": totals.get("feedback_items_changed", 0),
+                "score_results_with_feedback": totals.get("score_results_with_feedback", 0),
             }
             if include_item_acceptance_rate:
                 summary.update(

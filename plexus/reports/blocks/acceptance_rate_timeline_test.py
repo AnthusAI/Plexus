@@ -100,4 +100,14 @@ async def test_acceptance_rate_timeline_buckets_and_counts(mock_api_client):
     assert points[1]["score_result_acceptance_rate"] == 0.0
     assert points[1]["feedback_items_total"] == 1
     assert points[1]["feedback_items_valid"] == 1
+    assert points[1]["feedback_items_changed"] == 1
 
+    summary = output["summary"]
+    assert summary["total_score_results"] == 2
+    assert summary["accepted_score_results"] == 1
+    assert summary["corrected_score_results"] == 1
+    assert summary["score_result_acceptance_rate"] == 0.5
+    assert summary["feedback_items_total"] == 1
+    assert summary["feedback_items_valid"] == 1
+    assert summary["feedback_items_changed"] == 1
+    assert summary["score_results_with_feedback"] == 1
