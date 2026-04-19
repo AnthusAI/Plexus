@@ -22,9 +22,13 @@ def register_docs_tool(mcp: FastMCP):
 
         Valid filenames:
         - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
+        - score-concepts: High-level conceptual overview of score structure, applicable to all score class types
+        - score-yaml-langgraph: LangGraphScore-specific YAML reference — node types, graph structure, classifiers, extractors, conditions
+        - score-yaml-tactusscore: TactusScore-specific YAML reference — Lua DSL syntax, procedures, model directives
         - feedback-alignment: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
         - dataset-yaml-format: Complete guide to dataset YAML configuration format for data sources
         - optimizer-cookbook: Optimization strategies and change categories for the feedback alignment optimizer (prompt fixes, structural changes, processor options, model swaps)
+        - optimizer-procedures: Complete reference for the Feedback Alignment Optimizer procedure — how to trigger, monitor, interpret results, continue/branch, and act on findings
         """
         old_stdout = sys.stdout
         temp_stdout = StringIO()
@@ -33,9 +37,13 @@ def register_docs_tool(mcp: FastMCP):
         try:
             valid_files = {
                 "score-yaml-format": "score-yaml-format.md",
+                "score-concepts": "score-concepts.md",
+                "score-yaml-langgraph": "score-yaml-langgraph.md",
+                "score-yaml-tactusscore": "score-yaml-tactusscore.md",
                 "feedback-alignment": "feedback-alignment.md",
                 "dataset-yaml-format": "dataset-yaml-format.md",
                 "optimizer-cookbook": "optimizer-cookbook.md",
+                "optimizer-procedures": "optimizer-procedures.md",
             }
 
             if filename not in valid_files:
