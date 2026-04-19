@@ -2015,6 +2015,14 @@ code: |
     COOKBOOK_STATIC = result
   end
 
+  -- Load high-level score concepts doc (injected into planning context)
+  local SCORE_CONCEPTS_DOC = ""
+  pcall(function()
+    local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
+      {filename = "score-concepts"}, {raw_string = true, max_retries = 1})
+    if ok and has_text(result) then SCORE_CONCEPTS_DOC = result end
+  end)
+
   -- Build the shared cookbook and constraints section (used by all hypothesis prompts)
   local function build_cookbook_section(opts)
     local parts = {COOKBOOK_STATIC}
@@ -2178,12 +2186,23 @@ code: |
       table.insert(parts, "OBJECTIVE: Structural / non-prompt change (Category C — see cookbook)")
       table.insert(parts, "This slot is ALWAYS the 4th hypothesis. It must be a structural change,")
       table.insert(parts, "not a prompt rewrite. Pick the most promising option from the cookbook's")
-      table.insert(parts, "Category C section. Priority order (try earlier options first):")
-      table.insert(parts, "  - C3:  Model swap — FIRST PRIORITY if NOT already using gpt-5.4-nano, try it now")
-      table.insert(parts, "  - C1e: Input source — switch to DeepgramInputSource (word-level or sentence format)")
-      table.insert(parts, "  - C2:  Preprocessing — add/tune RelevantWindowsTranscriptFilter to trim input")
-      table.insert(parts, "  - C1a: Architecture — decompose into multiple LLM calls, add N/A gate, add CoT node")
-      table.insert(parts, "  - C4:  Full rewrite — if prior cycles have plateaued, start from scratch")
+      table.insert(parts, "Category C section.")
+      table.insert(parts, "")
+      table.insert(parts, "DYNAMIC PRIORITY: Do NOT blindly follow a fixed order. Instead:")
+      table.insert(parts, "  1. Check accumulated_lessons (in your planning context) for any structural")
+      table.insert(parts, "     approaches already tried in this run and their outcomes.")
+      table.insert(parts, "  2. Do NOT re-propose any structural approach that has already FAILED in this run.")
+      table.insert(parts, "  3. Pick from approaches not yet tried, in this approximate priority order:")
+      table.insert(parts, "     - C3:  Model swap — try a different model (check accumulated_lessons first).")
+      table.insert(parts, "            Model preference is score-specific. If gpt-5-mini succeeded before, try it.")
+      table.insert(parts, "            If gpt-5.4-nano succeeded before, try it. Avoid repeating a failed model swap.")
+      table.insert(parts, "     - C1e: Input source — DeepgramInputSource (sentence format preferred).")
+      table.insert(parts, "            ⚠ PREREQUISITE: Only propose if items have Deepgram JSON attachments.")
+      table.insert(parts, "            If prior cycles show DeepgramInputSource smoke test failures, do NOT retry.")
+      table.insert(parts, "     - C2:  Preprocessing — add/tune RelevantWindowsTranscriptFilter to trim input.")
+      table.insert(parts, "     - C1a: Architecture — decompose into multiple LLM calls, add N/A gate, add CoT node.")
+      table.insert(parts, "     - C4:  Full rewrite — if prior cycles have plateaued, start from scratch.")
+      table.insert(parts, "")
       table.insert(parts, "Check score_config.yaml to avoid proposing something already in place.")
       table.insert(parts, "Do NOT propose a prompt-only change for this slot — that is what slots 1-3 are for.")
     end
@@ -2702,6 +2721,22 @@ code: |
   champion_version_id = initial_pull.versionId
   current_code_path = initial_pull.codeFilePath
   current_code = File.read(current_code_path)
+
+  -- Detect score class and load class-specific YAML format doc
+  local score_class = (current_code:match("\nclass:%s*(%S+)")
+                    or current_code:match("^class:%s*(%S+)")
+                    or "LangGraphScore")
+  local score_class_doc_key = (score_class == "TactusScore")
+    and "score-yaml-tactusscore" or "score-yaml-langgraph"
+  local SCORE_CLASS_DOC = ""
+  pcall(function()
+    local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
+      {filename = score_class_doc_key}, {raw_string = true, max_retries = 1})
+    if ok and has_text(result) then SCORE_CLASS_DOC = result end
+  end)
+  Human.notify({message = string.format(
+    "  Score class: %s — loaded doc: %s", score_class, score_class_doc_key), level = "info"})
+
   current_guidelines = ""
   if initial_pull.guidelinesFilePath then
     local g = File.read(initial_pull.guidelinesFilePath)
@@ -3409,10 +3444,13 @@ code: |
         "  Conservatism mode: %d consecutive failures — single hypothesis only",
         consecutive_failed_cycles), level = "warning"})
     elseif consecutive_failed_cycles >= 2 then
-      -- Conservative: 2 hypotheses (incremental + one fix), Category A only
-      hyp_slots = {"feedback_incremental", "accuracy_fix"}
+      -- Conservative: 2 hypotheses (incremental + structural).
+      -- After multiple prompt-level failures, a structural change is often the breakthrough needed.
+      -- Keeping the structural slot here means the agent can try a model swap or architecture change
+      -- instead of yet another prompt tweak that follows the same failure pattern.
+      hyp_slots = {"feedback_incremental", "structural"}
       Human.notify({message = string.format(
-        "  Conservatism mode: %d consecutive failures — reduced to 2 hypotheses, Category A only",
+        "  Conservatism mode: %d consecutive failures — reduced to 2 hypotheses (incremental + structural)",
         consecutive_failed_cycles), level = "warning"})
     else
       -- Normal: 4 hypotheses, structural always occupies slot 4
@@ -3434,8 +3472,11 @@ code: |
           consecutive_failed_cycles = consecutive_failed_cycles
         })
 
-        -- Full prompt = base context + cookbook + focused task
-        local full_prompt = planning_inject .. "\n\n" .. cookbook .. "\n\n" .. hyp_prompt
+        -- Full prompt = base context + cookbook + score concepts doc + focused task
+        local concepts_inject = has_text(SCORE_CONCEPTS_DOC)
+          and ("\n\n=== SCORE FORMAT CONCEPTS ===\n" .. SCORE_CONCEPTS_DOC .. "\n=== END SCORE FORMAT CONCEPTS ===")
+          or ""
+        local full_prompt = planning_inject .. "\n\n" .. cookbook .. concepts_inject .. "\n\n" .. hyp_prompt
 
         -- Each hypothesis generation gets a fresh conversation to avoid confusion
         Tool.reset()
@@ -3575,6 +3616,16 @@ code: |
       -- Each hypothesis gets a completely fresh context.
       Tool.reset()
       code_editor.clear_history()
+
+      -- Inject class-specific YAML format reference for the editor agent
+      if has_text(SCORE_CLASS_DOC) then
+        code_editor.history:add({
+          role = "system",
+          content = string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
+            .. SCORE_CLASS_DOC
+            .. "\n=== END SCORE YAML FORMAT REFERENCE ==="
+        })
+      end
 
       -- Inner ReAct loop for this hypothesis.
       -- Failed str_replace attempts do NOT count as logical steps — the LLM gets
@@ -4136,6 +4187,16 @@ code: |
         })
 
         code_editor.clear_history()
+
+        -- Inject class-specific YAML format reference for the editor agent
+        if has_text(SCORE_CLASS_DOC) then
+          code_editor.history:add({
+            role = "system",
+            content = string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
+              .. SCORE_CLASS_DOC
+              .. "\n=== END SCORE YAML FORMAT REFERENCE ==="
+          })
+        end
         -- Inject ALL prior cycles' synthesis reasoning + accumulated lessons
         do
           local prior_insights = State.get("cycle_insights") or {}
@@ -6375,234 +6436,274 @@ code: |
     hypothesis_eff_text = build_hypothesis_effectiveness_summary(iterations)
   end)
 
-  -- Phase 1: Diagnosis (agent call)
-  Human.notify({message = "  Phase 1: Generating diagnosis...", level = "info"})
-  local diagnostic_text = "(diagnosis not available)"
-  pcall(function()
-    code_editor.clear_history()
-
-    -- Assemble all evidence into diagnostic context
-    local ctx_parts = {}
-    table.insert(ctx_parts, "=== RUN SUMMARY ===")
-    table.insert(ctx_parts, string.format("Cycles: %d | Accepted: %d | Rejected: %d | Skipped: %d | Success rate: %.0f%%",
+  -- Build the shared full-context block used by Phase 1 (Executive Summary) and Phase 2 (Lab Report).
+  local full_ctx_parts = {}
+  do
+    table.insert(full_ctx_parts, "=== RUN SUMMARY ===")
+    table.insert(full_ctx_parts, string.format("Cycles: %d | Accepted: %d | Rejected: %d | Skipped: %d | Success rate: %.0f%%",
       #iterations, total_accepted, total_rejected, total_skipped, success_rate * 100))
-    table.insert(ctx_parts, string.format("Baseline FB AC1: %.3f | Final FB AC1: %.3f | Total FB improvement: %+.4f",
+    table.insert(full_ctx_parts, string.format("Baseline FB AC1: %.3f | Final FB AC1: %.3f | Total FB improvement: %+.4f",
       feedback_baseline_metrics.alignment or 0,
       last_accepted and last_accepted.feedback_metrics and last_accepted.feedback_metrics.alignment or feedback_baseline_metrics.alignment or 0,
       total_fb_improvement))
     if accuracy_baseline_metrics then
-      table.insert(ctx_parts, string.format("Baseline ACC AC1: %.3f | Final ACC AC1: %.3f | Total ACC improvement: %+.4f",
+      table.insert(full_ctx_parts, string.format("Baseline ACC AC1: %.3f | Final ACC AC1: %.3f | Total ACC improvement: %+.4f",
         accuracy_baseline_metrics.alignment or 0,
         last_accepted and last_accepted.accuracy_metrics and last_accepted.accuracy_metrics.alignment or accuracy_baseline_metrics.alignment or 0,
         total_acc_improvement))
     end
-    table.insert(ctx_parts, "")
+    table.insert(full_ctx_parts, "")
 
-    -- Version history
     local history_text = build_version_history(iterations, baseline_version_id, feedback_baseline_metrics, accuracy_baseline_metrics, last_accepted_version_id)
     if has_text(history_text) then
-      table.insert(ctx_parts, "=== CYCLE HISTORY ===")
-      table.insert(ctx_parts, trunc(history_text, 5000))
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, "=== CYCLE HISTORY ===")
+      table.insert(full_ctx_parts, trunc(history_text, 5000))
+      table.insert(full_ctx_parts, "")
     end
 
-    -- Divergence analysis
     if has_text(divergence_text) then
-      table.insert(ctx_parts, divergence_text)
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, divergence_text)
+      table.insert(full_ctx_parts, "")
     end
 
-    -- Contradictions landscape
     local kc = State.get("known_contradictions")
     if kc and has_text(kc.summary) then
-      table.insert(ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
+      table.insert(full_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
       local total_kc = kc.total_items_analyzed or 0
       local contra_kc = kc.contradictions_found or 0
       if total_kc > 0 and contra_kc > 0 then
         local ceiling = math.max(0, (total_kc - contra_kc) / total_kc - 0.05)
-        table.insert(ctx_parts, string.format(
+        table.insert(full_ctx_parts, string.format(
           "OPTIMIZATION CEILING: With %d contradictions in %d items (%.0f%%), ceiling ~%.2f",
           contra_kc, total_kc, contra_kc / total_kc * 100, ceiling))
       end
-      table.insert(ctx_parts, kc.summary)
-      table.insert(ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, kc.summary)
+      table.insert(full_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
+      table.insert(full_ctx_parts, "")
     end
 
-    -- RCA category evolution
     if has_text(rca_evolution_text) then
-      table.insert(ctx_parts, rca_evolution_text)
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, rca_evolution_text)
+      table.insert(full_ctx_parts, "")
     end
 
-    -- Residual error samples
     if has_text(residual_errors_text) then
-      table.insert(ctx_parts, residual_errors_text)
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, residual_errors_text)
+      table.insert(full_ctx_parts, "")
     end
 
-    -- Hypothesis effectiveness
     if has_text(hypothesis_eff_text) then
-      table.insert(ctx_parts, hypothesis_eff_text)
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, hypothesis_eff_text)
+      table.insert(full_ctx_parts, "")
     end
 
-    -- Cycle insights (agent's own synthesis across cycles)
     local insights = State.get("cycle_insights")
     if insights and type(insights) == "table" and #insights > 0 then
-      table.insert(ctx_parts, "=== AGENT SYNTHESIS ACROSS CYCLES (most recent first) ===")
+      table.insert(full_ctx_parts, "=== AGENT SYNTHESIS ACROSS CYCLES (most recent first) ===")
       for i = #insights, math.max(1, #insights - 4), -1 do
         local ins = insights[i]
         if ins and has_text(ins.analysis) then
-          table.insert(ctx_parts, string.format("--- Cycle %d Analysis ---", ins.cycle or i))
-          table.insert(ctx_parts, trunc(ins.analysis, 2000))
+          table.insert(full_ctx_parts, string.format("--- Cycle %d Analysis ---", ins.cycle or i))
+          table.insert(full_ctx_parts, trunc(ins.analysis, 2000))
         end
       end
-      table.insert(ctx_parts, "=== END CYCLE INSIGHTS ===")
-      table.insert(ctx_parts, "")
+      table.insert(full_ctx_parts, "=== END CYCLE INSIGHTS ===")
+      table.insert(full_ctx_parts, "")
     end
+  end
+  local full_ctx = table.concat(full_ctx_parts, "\n")
 
-    -- Inject context as system message, then task as user message
-    code_editor.history:add({role = "system", content = table.concat(ctx_parts, "\n")})
+  -- Phase 1: Executive Summary (plain-English, for any audience)
+  Human.notify({message = "  Phase 1: Generating executive summary...", level = "info"})
+  local executive_summary_text = "(executive summary not available)"
+  pcall(function()
+    code_editor.clear_history()
+    code_editor.history:add({role = "system", content = full_ctx})
 
-    local diag_prompt_parts = {
-      "=== END-OF-RUN DIAGNOSTIC ANALYSIS ===\n",
-      "\nYou are analyzing the complete results of an optimization run.",
-      "\nDIAGNOSIS ONLY — do not prescribe fixes. That comes in the next step.",
-      "\n\nWrite a concise diagnosis. The entire response must be readable in under 2 minutes.",
+    local exec_prompt = table.concat({
+      "=== END-OF-RUN EXECUTIVE SUMMARY ===\n",
+      "\nYou are writing a brief executive summary of an optimization run for any audience",
+      "\n— technical or non-technical. Write exactly 4-6 sentences.",
+      "\nNo markdown headers. No bullet points. Flowing prose.",
+      "\nThis should be copy-paste ready for a brief email to stakeholders.",
+      "\n\nCover in this order:",
+      "\n1. Starting point and ending point (use 'agreement' not 'AC1'; give the numbers).",
+      "\n2. How many cycles ran and what the overall trajectory was.",
+      "\n3. The single main reason we cannot improve further (specific, not generic).",
+      "\n4. What decisions or clarifications are needed from subject-matter experts to unblock next steps.",
+      "\n\nWrite nothing else. Just the 4-6 sentences."
+    }, "")
+
+    guard_context_budget(code_editor)
+    local ok, err = safe_editor_call(exec_prompt, nil)
+    executive_summary_text = code_editor.output or "(no executive summary generated)"
+    if not ok then
+      executive_summary_text = "Executive summary generation failed: " .. tostring(err)
+    end
+  end)
+
+  -- Phase 2: Lab Report (technical, for operators and the next optimizer run)
+  Human.notify({message = "  Phase 2: Generating lab report...", level = "info"})
+  local lab_report_text = "(lab report not available)"
+  pcall(function()
+    code_editor.clear_history()
+    code_editor.history:add({role = "system", content = full_ctx})
+
+    local lab_prompt = table.concat({
+      "=== END-OF-RUN LAB REPORT ===\n",
+      "\nYou are writing a technical report for operators and AI agents who will work on",
+      "\nthis score next. This document feeds the next optimization run as prior_run_prescription.",
+      "\nInclude ONLY actions that lab operators or AI agents can take without SME input.",
+      "\n\nWrite a complete technical analysis. Readable in under 3 minutes.",
       "\nDo not pad. Do not repeat the same finding in multiple sections.",
-      "\nIf a section has nothing new to add, write one sentence saying so.",
-      "\n\nStructure your output with TWO top-level sections:",
+      "\n\nStructure your output with THREE top-level sections:",
       "\n\n## SUMMARY",
       "\n5-7 bullets, one sentence each. Cover: overall trajectory (AC1 deltas, cycles run,",
       "\nstop reason), where improvements stalled and why, whether the two datasets",
-      "\ndiverged or moved together, the single most important blocking factor, and the",
-      "\nrealistic ceiling estimate with the key number.",
-      "\n\n## DETAIL",
+      "\ndiverged or moved together, the single most important technical blocking factor,",
+      "\nand the realistic ceiling estimate.",
+      "\n\n## ANALYSIS",
       "\nFour short sections. Each must be 2-5 sentences — no more.",
       "\n\n### What happened",
       "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
       "\nand the stop reason. Include the key AC1 numbers.",
       "\n\n### Why it stalled",
-      "\nIdentify the single most important blocking factor. Be specific: name the",
+      "\nIdentify the single most important technical blocking factor. Be specific: name the",
       "\ncontradiction topic or policy gap, how many items it affects, and what the",
       "\nconflict is between what the model does and what reviewers expect.",
-      "\nIf the datasets diverged (changes that help FB hurt ACC or vice versa),",
-      "\nexplain what that divergence reveals about the ground truth.",
+      "\nIf the datasets diverged, explain what that reveals about the ground truth.",
       "\n\n### Error patterns",
-      "\nDescribe 2-3 distinct patterns you observed across the residual errors.",
+      "\nDescribe 2-3 distinct patterns across the residual errors.",
       "\nFor each pattern (one sentence): what the model does, what reviewers expect,",
       "\nwhether it is a guideline contradiction, a policy gap, or a noisy label.",
       "\nDo NOT list individual items. Describe the pattern.",
       "\n\n### Ceiling",
       "\nState the realistic maximum AC1 achievable through further optimization,",
       "\nand the primary reason it cannot go higher. Cite the contradiction rate",
-      "\nor fixable% if available. One or two sentences."
-    }
-    local diag_prompt = table.concat(diag_prompt_parts, "")
+      "\nor fixable% if available. One or two sentences.",
+      "\n\n## NEXT ACTIONS (LAB ONLY)",
+      "\nActions that lab operators or AI agents can take without SME input.",
+      "\nInclude ONLY things under lab control: prompt engineering, model swaps,",
+      "\narchitecture changes, data quality fixes.",
+      "\nDo NOT include anything requiring a policy decision — those go in the SME Agenda.",
+      "\nFormat each as: [PRIORITY] [WHAT]: [evidence/rationale]",
+      "\nCap at 5 items. No padding.",
+      "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
+      "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
+      "\nList them here. For each item:",
+      "\n  Item ID | Human label | Model prediction | Pattern | Why suspected | Confidence",
+      "\nGroup by theme if multiple items share the same root cause.",
+      "\nPay special attention to OSCILLATING items — these reveal contradictory norms, not prompt issues.",
+      "\nIf no items were identified, write: (No suspected low-quality labels identified in this run.)"
+    }, "")
+
+    -- Also include the feedback landscape diagnostic for label analysis
+    local kc = State.get("known_contradictions")
+    if kc and has_text(kc.summary) then
+      code_editor.history:add({role = "system", content =
+        "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. kc.summary
+        .. "\n=== END CONTRADICTION DETAILS ==="})
+    end
+    local final_diag = State.get("feedback_landscape_diagnostic")
+    if final_diag and has_text(final_diag.full_report) then
+      code_editor.history:add({role = "system", content =
+        "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
+        .. string.format("(Generated from %d cycles; %d notable items)\n",
+            final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0)
+        .. final_diag.full_report
+        .. "\n=== END FEEDBACK LANDSCAPE DIAGNOSTIC ==="})
+    end
 
     guard_context_budget(code_editor)
-    local ok, err = safe_editor_call(diag_prompt, nil)
-    diagnostic_text = code_editor.output or "(no diagnosis generated)"
+    local ok, err = safe_editor_call(lab_prompt, nil)
+    lab_report_text = code_editor.output or "(no lab report generated)"
     if not ok then
-      diagnostic_text = "Diagnostic generation failed: " .. tostring(err)
+      lab_report_text = "Lab report generation failed: " .. tostring(err)
     end
   end)
 
-  -- Phase 2: Prescription (agent call)
-  Human.notify({message = "  Phase 2: Generating prescription...", level = "info"})
-  local prescription_text = "(prescription not available)"
+  -- Phase 3: SME Agenda (decision-formatted meeting agenda for stakeholders)
+  Human.notify({message = "  Phase 3: Generating SME agenda...", level = "info"})
+  local sme_agenda_text = "(SME agenda not available)"
   pcall(function()
     code_editor.clear_history()
 
-    -- Feed diagnosis + raw evidence to prescription agent
-    local presc_ctx_parts = {}
-    table.insert(presc_ctx_parts, "=== DIAGNOSTIC ANALYSIS (from Phase 1) ===")
-    table.insert(presc_ctx_parts, trunc(diagnostic_text, 8000))
-    table.insert(presc_ctx_parts, "=== END DIAGNOSTIC ===")
-    table.insert(presc_ctx_parts, "")
+    -- SME Agenda gets: executive summary + lab report + contradiction details + feedback landscape
+    local sme_ctx_parts = {}
+    table.insert(sme_ctx_parts, "=== EXECUTIVE SUMMARY ===")
+    table.insert(sme_ctx_parts, executive_summary_text)
+    table.insert(sme_ctx_parts, "=== END EXECUTIVE SUMMARY ===")
+    table.insert(sme_ctx_parts, "")
 
-    -- Include contradiction exemplars for specific references
+    table.insert(sme_ctx_parts, "=== LAB REPORT ===")
+    table.insert(sme_ctx_parts, trunc(lab_report_text, 6000))
+    table.insert(sme_ctx_parts, "=== END LAB REPORT ===")
+    table.insert(sme_ctx_parts, "")
+
     local kc = State.get("known_contradictions")
     if kc and has_text(kc.summary) then
-      table.insert(presc_ctx_parts, "=== CONTRADICTION DETAILS ===")
-      table.insert(presc_ctx_parts, kc.summary)
-      table.insert(presc_ctx_parts, "=== END CONTRADICTION DETAILS ===")
-      table.insert(presc_ctx_parts, "")
+      table.insert(sme_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
+      table.insert(sme_ctx_parts, kc.summary)
+      table.insert(sme_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
+      table.insert(sme_ctx_parts, "")
     end
 
-    -- Include the full feedback landscape diagnostic — the crown jewel of the end-of-run report
     local final_diag = State.get("feedback_landscape_diagnostic")
     if final_diag and has_text(final_diag.full_report) then
-      table.insert(presc_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC (cross-cycle item recurrence analysis) ===")
-      table.insert(presc_ctx_parts, string.format("(Generated from %d cycles of item recurrence tracking; %d notable items)",
-        final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0))
-      table.insert(presc_ctx_parts, final_diag.full_report)
-      table.insert(presc_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
-      table.insert(presc_ctx_parts, "")
+      table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
+      table.insert(sme_ctx_parts, final_diag.full_report)
+      table.insert(sme_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
+      table.insert(sme_ctx_parts, "")
     end
 
-    -- Include residual errors for specific item references
     if has_text(residual_errors_text) then
-      table.insert(presc_ctx_parts, residual_errors_text)
-      table.insert(presc_ctx_parts, "")
+      table.insert(sme_ctx_parts, residual_errors_text)
+      table.insert(sme_ctx_parts, "")
     end
 
-    code_editor.history:add({role = "system", content = table.concat(presc_ctx_parts, "\n")})
+    code_editor.history:add({role = "system", content = table.concat(sme_ctx_parts, "\n")})
 
-    local presc_prompt_parts = {
-      "=== END-OF-RUN PRESCRIPTION ===\n",
-      "\nBased on the diagnostic analysis above, produce a short, prioritized action list.",
-      "\nBe specific. Be brief. Every item must be actionable by a real person.",
-      "\nDo not pad. Do not repeat what the diagnosis already said.",
-      "\n\nStructure your output with THREE top-level sections:",
-      "\n\n## SUMMARY",
-      "\n3-5 action items, ranked by urgency. One sentence each.",
-      "\nFormat each as: [WHO]: [WHAT] — [N items / metric evidence].",
-      "\nExample: 'SME: Decide whether implicit affirmatives count as Yes — 22 items blocked on this.'",
-      "\n\n## DETAIL",
-      "\nA flat list of ≤7 actions. For each action:",
-      "\n- One sentence stating exactly what needs to happen and who does it",
-      "\n- One sentence of evidence (item count, AC1 impact, contradiction topic)",
-      "\n- One sentence on urgency: must happen before next run / can wait",
-      "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
-      "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
-      "\nList them here in a reviewable format. For each item:",
-      "\n  Item ID | Human label | Model prediction | Pattern | Why suspected | Confidence",
-      "\nGroup by theme if multiple items share the same root cause.",
-      "\nPay special attention to OSCILLATING items — these are whack-a-mole: fixing one group",
-      "\nbreaks the other. They reveal contradictory norms in the feedback, not prompt issues.",
-      "\nThese should be reviewed by a human for possible invalidation.",
-      "\nIf no items were identified, write: (No suspected low-quality labels identified in this run.)",
-      "\n\nInclude only actions that are: (1) directly supported by the evidence,",
-      "\n(2) not already captured by a previous action on the list, and",
-      "\n(3) actually likely to unblock the next run or resolve a policy contradiction.",
-      "\nOmit anything speculative or generic."
-    }
-    local presc_prompt = table.concat(presc_prompt_parts, "")
+    -- Extract score name for the agenda header if available
+    local score_name_for_agenda = score_id or "Score"
+    pcall(function()
+      local sn = State.get("score_name")
+      if has_text(sn) then score_name_for_agenda = sn end
+    end)
+
+    local sme_prompt = table.concat({
+      "=== STAKEHOLDER MEETING AGENDA ===\n",
+      "\nYou are writing a meeting agenda for subject-matter experts (SMEs) — the people",
+      "\nwho write the rubric, handle the calls, and know the domain.",
+      "\nThey are NOT engineers. They do not know what AC1 is. They do not care about YAML.",
+      "\n\nYour job: give them a list of DECISIONS they need to make, formatted as agenda items.",
+      "\n\nRules:",
+      "\n- Each item is a question to answer, not a finding to read.",
+      "\n- Include: what the question is, why it matters (in plain language), concrete examples.",
+      "\n- Prioritize by how many items the decision would unblock.",
+      "\n- Maximum 5 agenda items — pick the most important ones.",
+      "\n- Use plain English throughout.",
+      "\n- Do NOT include anything the lab can fix without SME input.",
+      "\n- Do NOT explain what agreement or AC1 means.",
+      "\n- Do NOT summarize the optimization run — the agenda is action-only.",
+      "\n\nStructure your output exactly as follows:",
+      string.format("\n\n## FOR YOUR NEXT MEETING: %s Quality Review", score_name_for_agenda),
+      "\n\n### Agenda Item 1: [A plain-English question]",
+      "\n**Why this matters:** [1-2 sentences on impact, in plain language]",
+      "\n**Examples:** [2-3 specific examples — describe what the system said vs. what the reviewer said, without IDs]",
+      "\n**Options:** [2-4 concrete options for them to choose from]",
+      "\n**Resolves:** [N] disputed reviews",
+      "\n\n[Repeat the Agenda Item structure for each item, up to 5 total]",
+      "\n\n## Background",
+      "\n[1-2 sentences only: overall performance trend in plain language]"
+    }, "")
 
     guard_context_budget(code_editor)
-    local ok, err = safe_editor_call(presc_prompt, nil)
-    prescription_text = code_editor.output or "(no prescription generated)"
+    local ok, err = safe_editor_call(sme_prompt, nil)
+    sme_agenda_text = code_editor.output or "(no SME agenda generated)"
     if not ok then
-      prescription_text = "Prescription generation failed: " .. tostring(err)
+      sme_agenda_text = "SME agenda generation failed: " .. tostring(err)
     end
   end)
-
-  -- Split a diagnosis/prescription text into summary and detail halves.
-  -- The agent is asked to produce "## SUMMARY\n...\n## DETAIL\n..." structure.
-  local function split_summary_detail(text)
-    local idx = text:find("\n## DETAIL\n", 1, true)
-    if idx then
-      local summary = text:sub(1, idx - 1):gsub("^%s*## SUMMARY%s*\n", "")
-      local detail = text:sub(idx + #"\n## DETAIL\n")
-      return summary, detail
-    end
-    return "", text
-  end
-
-  local diag_summary, diag_detail = split_summary_detail(diagnostic_text)
-  local presc_summary, presc_detail = split_summary_detail(prescription_text)
 
   -- Store results
   State.set("end_of_run_report", {
@@ -6620,15 +6721,14 @@ code: |
       total_acc_improvement = total_acc_improvement,
       stop_reason = stop_reason
     },
-    diagnosis = {
-      summary = diag_summary,
-      detail  = diag_detail,
-      text    = diagnostic_text
+    executive_summary = {
+      text = executive_summary_text
     },
-    prescription = {
-      summary = presc_summary,
-      detail  = presc_detail,
-      text    = prescription_text
+    lab_report = {
+      text = lab_report_text
+    },
+    sme_agenda = {
+      text = sme_agenda_text
     },
     evidence = {
       divergence_summary = divergence_text,
@@ -6637,10 +6737,10 @@ code: |
     }
   })
 
-  -- Backward-compatible storage
+  -- Backward-compatible storage (lab_report serves as prior_run_prescription for next run)
   State.set("optimization_diagnostic", {
-    text    = diagnostic_text,
-    summary = diag_summary,
+    text    = lab_report_text,
+    summary = executive_summary_text,
     success_rate = success_rate,
     cycles = #iterations,
     accepted = total_accepted,
@@ -6648,26 +6748,21 @@ code: |
     skipped = total_skipped
   })
 
-  -- Emit to human: summary first, then truncated detail
-  local diag_display = has_text(diag_summary)
-    and ("=== DIAGNOSIS SUMMARY ===\n\n" .. diag_summary
-         .. "\n\n=== DIAGNOSIS DETAIL (truncated) ===\n\n" .. trunc(diag_detail, 3000))
-    or trunc(diagnostic_text, 4000)
+  -- Emit all three outputs to human
+  Human.notify({message = "\n" .. string.rep("=", 60)
+    .. "\n=== EXECUTIVE SUMMARY ===\n"
+    .. string.rep("=", 60) .. "\n\n"
+    .. executive_summary_text, level = "info"})
 
   Human.notify({message = "\n" .. string.rep("=", 60)
-    .. "\n=== END-OF-RUN DIAGNOSIS ===\n"
+    .. "\n=== LAB REPORT ===\n"
     .. string.rep("=", 60) .. "\n\n"
-    .. diag_display, level = "info"})
-
-  local presc_display = has_text(presc_summary)
-    and ("=== PRESCRIPTION SUMMARY ===\n\n" .. presc_summary
-         .. "\n\n=== PRESCRIPTION DETAIL (truncated) ===\n\n" .. trunc(presc_detail, 3000))
-    or trunc(prescription_text, 4000)
+    .. trunc(lab_report_text, 5000), level = "info"})
 
   Human.notify({message = "\n" .. string.rep("=", 60)
-    .. "\n=== END-OF-RUN PRESCRIPTION ===\n"
+    .. "\n=== SME AGENDA ===\n"
     .. string.rep("=", 60) .. "\n\n"
-    .. presc_display, level = "info"})
+    .. sme_agenda_text, level = "info"})
 
   -- ========================================================================
   -- CHAMPION PROMOTION
@@ -6715,8 +6810,9 @@ code: |
     accuracy_improvement = total_acc_improvement,
     scorecard_id = scorecard_id,
     score_id = score_id,
-    diagnosis = diagnostic_text,
-    prescription = prescription_text,
+    executive_summary = executive_summary_text,
+    lab_report = lab_report_text,
+    sme_agenda = sme_agenda_text,
     promoted_to_champion = promoted_to_champion,
     winning_version_id = last_accepted_version_id
   }
