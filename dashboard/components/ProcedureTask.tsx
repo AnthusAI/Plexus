@@ -520,6 +520,8 @@ export default function ProcedureTask({
 
   // How many completed optimizer cycles the procedure has run
   const completedCycleCount = optimizerIterations.filter(it => it.iteration > 0).length
+  const canContinueOptimization =
+    completedCycleCount > 0 && procedure.task?.status !== 'RUNNING'
 
   const formatMetricValue = (value?: number | null) =>
     value != null ? value.toFixed(3) : '—'
@@ -791,8 +793,8 @@ export default function ProcedureTask({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {/* Continue — only shown when the procedure has completed optimizer cycles */}
-        {procedure.task?.status === 'COMPLETED' && completedCycleCount > 0 && (
+        {/* Continue — available after any completed cycle unless a run is currently active */}
+        {canContinueOptimization && (
           <>
             <DropdownMenuItem onClick={() => setShowContinueDialog(true)}>
               <PlayCircle className="mr-2 h-4 w-4" />
