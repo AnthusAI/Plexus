@@ -29,6 +29,10 @@ def register_docs_tool(mcp: FastMCP):
         - dataset-yaml-format: Complete guide to dataset YAML configuration format for data sources
         - optimizer-cookbook: Optimization strategies and change categories for the feedback alignment optimizer (prompt fixes, structural changes, processor options, model swaps)
         - optimizer-procedures: Complete reference for the Feedback Alignment Optimizer procedure — how to trigger, monitor, interpret results, continue/branch, and act on findings
+        - optimizer-objective-alignment: Guidance for the default alignment optimization objective (maximize AC1 agreement)
+        - optimizer-objective-precision: Guidance for precision and precision_safe optimization objectives (reduce false positives)
+        - optimizer-objective-recall: Guidance for recall and recall_safe optimization objectives (reduce false negatives)
+        - optimizer-objective-cost: Guidance for cost_efficiency optimization objective (maximize agreement per dollar)
         """
         old_stdout = sys.stdout
         temp_stdout = StringIO()
@@ -44,6 +48,10 @@ def register_docs_tool(mcp: FastMCP):
                 "dataset-yaml-format": "dataset-yaml-format.md",
                 "optimizer-cookbook": "optimizer-cookbook.md",
                 "optimizer-procedures": "optimizer-procedures.md",
+                "optimizer-objective-alignment": "optimizer-objective-alignment.md",
+                "optimizer-objective-precision": "optimizer-objective-precision.md",
+                "optimizer-objective-recall": "optimizer-objective-recall.md",
+                "optimizer-objective-cost": "optimizer-objective-cost.md",
             }
 
             if filename not in valid_files:
