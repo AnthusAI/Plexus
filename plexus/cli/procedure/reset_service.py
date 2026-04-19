@@ -210,6 +210,8 @@ def clone_state_for_branch(
 
     # Clear mailbox watermark so the branch doesn't skip injected messages
     source_state.pop('last_mailbox_check', None)
+    # Cost ledgers are run-specific and must restart fresh in branch procedures.
+    source_state.pop('costs', None)
 
     # _procedure_id will be overwritten by procedure_executor before the run,
     # but clear it now so the target doesn't accidentally poll the source mailbox.

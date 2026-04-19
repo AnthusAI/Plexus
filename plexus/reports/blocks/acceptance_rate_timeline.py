@@ -311,14 +311,11 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
             else:
                 accepted_score_results += 1
 
-            total_score_results = len(filtered_results)
-            score_result_acceptance_rate = (accepted_score_results / total_score_results) if total_score_results else 0.0
-
-            feedback_items_total = sum(stats["total"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
-            feedback_items_valid = sum(stats["valid"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
-            feedback_items_changed = (
-                sum(stats["changed"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
-            )
+        total_score_results = len(filtered_results)
+        score_result_acceptance_rate = (accepted_score_results / total_score_results) if total_score_results else 0.0
+        feedback_items_total = sum(stats["total"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+        feedback_items_valid = sum(stats["valid"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
+        feedback_items_changed = sum(stats["changed"] for stats in feedback_stats_by_key.values()) if feedback_stats_by_key else 0
 
         return {
             "bucket_index": bucket_index,

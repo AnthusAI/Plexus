@@ -478,6 +478,101 @@ code: |
     return nil
   end
 
+  local function normalize_eval_type(eval_result, fallback_eval_type)
+    if type(eval_result) ~= "table" then
+      return fallback_eval_type or "unknown"
+    end
+    local eval_type = eval_result.evaluation_type or eval_result.type or fallback_eval_type
+    if type(eval_type) ~= "string" or eval_type == "" then
+      return "unknown"
+    end
+    return eval_type
+  end
+
+  local function ensure_cost_ledger()
+    local costs = State.get("costs")
+    if type(costs) ~= "table" then costs = {} end
+
+    local evaluation = costs.evaluation
+    if type(evaluation) ~= "table" then evaluation = {} end
+    if type(evaluation.entries) ~= "table" then evaluation.entries = {} end
+    if type(evaluation.seen_ids) ~= "table" then evaluation.seen_ids = {} end
+    evaluation.incurred_total = tonumber(evaluation.incurred_total) or 0
+    evaluation.reused_total = tonumber(evaluation.reused_total) or 0
+    evaluation.total = tonumber(evaluation.total) or (evaluation.incurred_total + evaluation.reused_total)
+
+    costs.evaluation = evaluation
+    if type(costs.totals) ~= "table" then costs.totals = {} end
+    if type(costs.inference) ~= "table" then costs.inference = {} end
+    return costs, evaluation
+  end
+
+  local function record_evaluation_cost(eval_result, source_label, fallback_eval_type)
+    if type(eval_result) ~= "table" then return end
+
+    local evaluation_id = tostring(eval_result.evaluation_id or eval_result.id or "")
+    if evaluation_id == "" then return end
+
+    local cost = tonumber(eval_result.cost)
+    if not cost or cost < 0 then return end
+
+    local costs, evaluation = ensure_cost_ledger()
+    if evaluation.seen_ids[evaluation_id] then return end
+
+    local processed_items = tonumber(eval_result.processed_items or eval_result.processedItems)
+    local cost_per_item = nil
+    if processed_items and processed_items > 0 then
+      cost_per_item = cost / processed_items
+    end
+
+    local reused = eval_result._from_cache == true
+    table.insert(evaluation.entries, {
+      evaluation_id = evaluation_id,
+      evaluation_type = normalize_eval_type(eval_result, fallback_eval_type),
+      source = source_label or "unspecified",
+      reused = reused,
+      cost = cost,
+      processed_items = processed_items,
+      cost_per_item = cost_per_item,
+      score_version_id = eval_result.score_version_id or eval_result.scoreVersionId,
+      recorded_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    })
+
+    evaluation.seen_ids[evaluation_id] = true
+    if reused then
+      evaluation.reused_total = (tonumber(evaluation.reused_total) or 0) + cost
+    else
+      evaluation.incurred_total = (tonumber(evaluation.incurred_total) or 0) + cost
+    end
+    evaluation.total = (tonumber(evaluation.incurred_total) or 0) + (tonumber(evaluation.reused_total) or 0)
+    costs.evaluation = evaluation
+
+    local inference_total = 0
+    if type(costs.inference) == "table" then
+      inference_total = tonumber(costs.inference.total) or 0
+    end
+
+    costs.totals.evaluation = {
+      incurred = tonumber(evaluation.incurred_total) or 0,
+      reused = tonumber(evaluation.reused_total) or 0,
+      total = tonumber(evaluation.total) or 0,
+    }
+    costs.totals.inference = { total = inference_total }
+    costs.totals.overall = {
+      incurred = (tonumber(evaluation.incurred_total) or 0) + inference_total,
+      total = (tonumber(evaluation.total) or 0) + inference_total,
+    }
+
+    State.set("costs", costs)
+  end
+
+  local function record_evaluation_batch_costs(results, source_label)
+    if type(results) ~= "table" then return end
+    for _, eval_result in ipairs(results) do
+      record_evaluation_cost(eval_result, source_label, nil)
+    end
+  end
+
   -- Render confusion matrix + class distributions as readable text
   local function render_confusion_context(m)
     local lines = {}
@@ -2959,6 +3054,7 @@ code: |
         output_format = "json"
       })
       if acc_info and not acc_info.error then
+        record_evaluation_cost(acc_info, "resume_regression_baseline", "accuracy")
         local valid, err = validate_eval_version(acc_info, "Regression", resume_regression)
         if not valid then
           return {success = false, status = "error", message = err}
@@ -2993,6 +3089,7 @@ code: |
           message = "Failed to resume recent baseline " .. resume_recent .. ": " .. tostring(fb_info and fb_info.error or "not found")
         }
       end
+      record_evaluation_cost(fb_info, "resume_recent_baseline", "feedback")
       -- Skip version validation for recent evals — they use the champion version
       -- at the time of evaluation, which may differ from the starting version.
       recent_baseline_id      = resume_recent
@@ -3030,6 +3127,7 @@ code: |
       min_items        = math.floor(n_samples * 0.8),  -- allow ~20% smaller sample counts
     })
     if ok_acc and found_acc and not found_acc.error and (found_acc.evaluation_id or found_acc.id) then
+      record_evaluation_cost(found_acc, "find_recent_regression_baseline", "accuracy")
       regression_baseline_id      = found_acc.evaluation_id or found_acc.id
       regression_baseline_metrics = extract_metrics(found_acc)
       regression_baseline_cost_per_item = extract_cost_per_item(found_acc)
@@ -3049,6 +3147,7 @@ code: |
       min_items        = math.floor(n_samples * 0.8),  -- same 20% tolerance as accuracy
     })
     if ok_fb and found_fb and not found_fb.error and (found_fb.evaluation_id or found_fb.id) then
+      record_evaluation_cost(found_fb, "find_recent_feedback_baseline", "feedback")
       recent_baseline_id      = found_fb.evaluation_id or found_fb.id
       recent_baseline_metrics = extract_metrics(found_fb)
       recent_baseline_cost_per_item = extract_cost_per_item(found_fb)
@@ -3094,6 +3193,7 @@ code: |
     })
 
     local baseline_batch = call_plexus_tool("plexus_evaluation_run", {batch = batch_items})
+    record_evaluation_batch_costs(baseline_batch, "fresh_baselines")
 
     -- Parse results — map back to regression/recent based on what we requested
     local batch_idx = 1
@@ -4297,6 +4397,7 @@ code: |
 
       diag(string.format("Dispatching hypothesis eval batch (%d evals)", #batch))
       local batch_results = call_plexus_tool("plexus_evaluation_run", {batch = batch})
+      record_evaluation_batch_costs(batch_results, string.format("cycle_%d_hypothesis_batch", cycle))
       diag(string.format("Hypothesis eval batch returned (%d results)", batch_results and #batch_results or 0))
 
       -- Parse results
@@ -5134,6 +5235,7 @@ code: |
           #strategy_versions, #eval_batch), level = "info"})
 
         local eval_results = call_plexus_tool("plexus_evaluation_run", {batch = eval_batch})
+        record_evaluation_batch_costs(eval_results, string.format("cycle_%d_strategy_batch", cycle))
         diag("Strategy eval batch returned")
 
         -- Extract metrics for each strategy version
@@ -5386,6 +5488,7 @@ code: |
           })
 
           local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
+          record_evaluation_batch_costs(b_results, string.format("cycle_%d_final_synthesis_eval", cycle))
           diag("Synthesis eval batch returned")
 
           local b_evals_per = regression_available and 2 or 1
