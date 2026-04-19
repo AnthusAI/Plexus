@@ -441,6 +441,48 @@ export default function ProcedureTask({
     }
   }, [variant, procedure.id, procedure.task?.status])
 
+  const getRunParametersFromTaskMetadata = useCallback((): ParameterValue => {
+    try {
+      const rawMetadata = procedure.task?.metadata
+      if (!rawMetadata) return {}
+      const metadata = typeof rawMetadata === 'string' ? JSON.parse(rawMetadata) : rawMetadata
+      const runParameters = metadata?.run_parameters
+      if (runParameters && typeof runParameters === 'object' && !Array.isArray(runParameters)) {
+        return runParameters as ParameterValue
+      }
+    } catch {
+      // Ignore malformed metadata and fall back to YAML-derived values.
+    }
+    return {}
+  }, [procedure.task?.metadata])
+
+  const extractRunParametersFromYaml = useCallback((yamlContent: string): ParameterValue => {
+    try {
+      const parsed = yaml.load(yamlContent) as any
+      const values: ParameterValue = {}
+
+      if (parsed?.parameters && Array.isArray(parsed.parameters)) {
+        parsed.parameters.forEach((param: any) => {
+          if (!param || typeof param !== 'object' || !param.name) return
+          if (param.value !== undefined) values[param.name] = param.value
+          else if (param.default !== undefined) values[param.name] = param.default
+        })
+      }
+
+      if (parsed?.params && typeof parsed.params === 'object') {
+        Object.entries(parsed.params).forEach(([name, paramDef]: [string, any]) => {
+          if (!paramDef || typeof paramDef !== 'object') return
+          if (paramDef.value !== undefined) values[name] = paramDef.value
+          else if (paramDef.default !== undefined) values[name] = paramDef.default
+        })
+      }
+
+      return values
+    } catch {
+      return {}
+    }
+  }, [])
+
   // Parse parameters from YAML whenever it changes
   useEffect(() => {
     if (loadedYaml) {
@@ -452,35 +494,43 @@ export default function ProcedureTask({
         // Extract values from the YAML
         const config = yaml.load(loadedYaml) as any
         console.log('[ProcedureTask] YAML config:', config)
+        const values: ParameterValue = {}
         if (config && config.parameters && Array.isArray(config.parameters)) {
-          const values: ParameterValue = {}
           config.parameters.forEach((param: any) => {
             if (param.value !== undefined) {
               values[param.name] = param.value
+            } else if (param.default !== undefined) {
+              values[param.name] = param.default
             }
           })
-          console.log('[ProcedureTask] Parameter values:', values)
-          setParameterValues(values)
         } else if (config && config.params && typeof config.params === 'object') {
-          const values: ParameterValue = {}
           Object.entries(config.params).forEach(([name, paramDef]: [string, any]) => {
             if (paramDef && typeof paramDef === 'object' && paramDef.value !== undefined) {
               values[name] = paramDef.value
+            } else if (paramDef && typeof paramDef === 'object' && paramDef.default !== undefined) {
+              values[name] = paramDef.default
             }
           })
-          console.log('[ProcedureTask] Parameter values from params mapping:', values)
-          setParameterValues(values)
-        } else {
-          console.log('[ProcedureTask] No parameters array found in config')
-          setParameterValues({})
         }
+
+        // Ensure parser defaults are present when no explicit value exists.
+        parsedParams.forEach((param) => {
+          if (values[param.name] === undefined && param.default !== undefined) {
+            values[param.name] = param.default
+          }
+        })
+
+        const runParameters = getRunParametersFromTaskMetadata()
+        const mergedValues = { ...values, ...runParameters }
+        console.log('[ProcedureTask] Parameter values (YAML + run metadata):', mergedValues)
+        setParameterValues(mergedValues)
       } catch (error) {
         console.error('Error parsing parameters:', error)
         setParameters([])
         setParameterValues({})
       }
     }
-  }, [loadedYaml])
+  }, [loadedYaml, getRunParametersFromTaskMetadata])
 
   const loadProcedureYaml = async () => {
     if (!procedure.id) return
@@ -555,9 +605,16 @@ export default function ProcedureTask({
   const cyclesExpandedColSpan = isOverallCyclesView ? 14 : 8
 
   // ---- Shared helpers for creating a Task and dispatching a procedure run ----
-  const createTaskWithStages = async (procedureId: string) => {
+  const createTaskWithStages = async (procedureId: string, runParameters?: ParameterValue) => {
     const accountId = (procedure as any).accountId
     if (!accountId) throw new Error('No accountId on procedure')
+    const metadata: Record<string, any> = {
+      type: 'Procedure',
+      procedure_id: procedureId,
+    }
+    if (runParameters && Object.keys(runParameters).length > 0) {
+      metadata.run_parameters = runParameters
+    }
     const taskResult = await getAmplifyClient().graphql({
       query: `
         mutation CreateTask($input: CreateTaskInput!) {
@@ -573,7 +630,7 @@ export default function ProcedureTask({
           command: `procedure run ${procedureId}`,
           description: `Procedure workflow for ${procedureId}`,
           dispatchStatus: 'PENDING',
-          metadata: JSON.stringify({ type: 'Procedure', procedure_id: procedureId })
+          metadata: JSON.stringify(metadata)
         }
       }
     })
@@ -634,7 +691,8 @@ export default function ProcedureTask({
       await updateProcedureYaml(procedure.id, updatedYaml)
       setLoadedYaml(updatedYaml)
 
-      const task = await createTaskWithStages(procedure.id)
+      const runParameters = extractRunParametersFromYaml(updatedYaml)
+      const task = await createTaskWithStages(procedure.id, runParameters)
       const resp = await fetch('/api/console/procedure-continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -711,7 +769,8 @@ export default function ProcedureTask({
       }
 
       // Create task and dispatch
-      const task = await createTaskWithStages(newProcedure.id)
+      const runParameters = extractRunParametersFromYaml(branchYaml)
+      const task = await createTaskWithStages(newProcedure.id, runParameters)
       const runResp = await fetch('/api/console/procedure-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
