@@ -5,6 +5,7 @@ import { downloadData } from "aws-amplify/storage";
 
 import { parseOutputString } from "@/lib/utils";
 import ReportBlock, { ReportBlockProps } from "./ReportBlock";
+import { useIncrementalRows } from "./useIncrementalRows";
 
 interface RecentFeedbackSummary {
   total_feedback_items: number;
@@ -95,6 +96,14 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const summary = output.summary;
   const items = Array.isArray(output.items) ? output.items : [];
+  const {
+    visibleRows,
+    visibleCount,
+    totalCount,
+    hasMore,
+    loadMore,
+    sentinelRef,
+  } = useIncrementalRows(items, { initialCount: 100, pageSize: 100 });
   const title =
     props.name && !props.name.startsWith("block_")
       ? props.name
@@ -133,6 +142,7 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
         <div className="text-sm text-muted-foreground">
           {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
           {output.score_name ? ` • Score: ${output.score_name}` : null}
+          {totalCount > 0 ? ` • Rendering ${visibleCount} of ${totalCount} rows` : null}
         </div>
 
         <div className="overflow-x-auto rounded-md border">
@@ -156,7 +166,7 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
                   </td>
                 </tr>
               ) : (
-                items.map((item) => (
+                visibleRows.map((item) => (
                   <tr key={item.feedback_item_id} className="border-t">
                     <td className="px-3 py-2 whitespace-nowrap">
                       {item.edited_at ? new Date(item.edited_at).toLocaleString() : "N/A"}
@@ -175,6 +185,22 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
             </tbody>
           </table>
         </div>
+        {items.length > 0 ? (
+          <div className="flex items-center justify-between gap-3">
+            <div ref={sentinelRef} className="h-1 w-1" aria-hidden="true" />
+            {hasMore ? (
+              <button
+                type="button"
+                onClick={loadMore}
+                className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+              >
+                Load more rows ({visibleCount}/{totalCount})
+              </button>
+            ) : (
+              <span className="text-xs text-muted-foreground">All rows loaded ({totalCount})</span>
+            )}
+          </div>
+        ) : null}
       </div>
     </ReportBlock>
   );
