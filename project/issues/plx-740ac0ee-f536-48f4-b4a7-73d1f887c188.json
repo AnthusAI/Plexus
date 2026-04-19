@@ -1,0 +1,18 @@
+{
+  "id": "plx-740ac0ee-f536-48f4-b4a7-73d1f887c188",
+  "title": "Track optimizer run costs with evaluation vs inference breakdown",
+  "description": "## User Story As an optimizer operator I want each procedure run to report incurred evaluation spend separately from optimizer inference spend So that I can understand total run cost and where money is being spent  ## Behavior Spec (Gherkin) Feature: Optimizer run cost accounting Scenario: Run records both evaluation and inference costs Given an optimizer procedure run executes evaluations and LLM inference When the run completes Then procedure state includes a cost summary with evaluation incurred cost and optimization inference cost And total incurred cost equals evaluation incurred cost plus optimization inference cost  Scenario: Reused evaluations are not counted as incurred spend Given the optimizer reuses a cached or explicitly resumed evaluation When cost summary is computed Then referenced evaluation cost is visible And incurred evaluation cost contribution for that reused evaluation is zero  Scenario: Branch starts with fresh cost accounting Given a branch procedure is created from a source procedure When the branch run starts Then the branch does not inherit source procedure cost totals  Scenario: Continue preserves cost accounting Given a procedure is continued for additional cycles When continuation runs Then previous run cost totals are preserved And new invocation costs are added without double counting",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-19T21:07:20.046345Z",
+  "updated_at": "2026-04-19T21:07:27.997307Z",
+  "closed_at": null,
+  "custom": {}
+}

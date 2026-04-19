@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c8b1a427-2351-4165-bb0b-1d1cd0b0126f",
+  "issue_id": "plx-faa41570-d5e1-482d-ae26-1786f96a72e3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T21:07:30.685Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement state-level cost accounting (evaluation incurred/referenced + inference by agent/model), branch/continue semantics, and ProcedureTask UI rendering from canonical state.costs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement optimizer procedure cost ledger and UI breakdown"
+  }
+}

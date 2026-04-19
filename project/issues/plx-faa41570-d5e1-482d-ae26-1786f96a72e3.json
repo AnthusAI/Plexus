@@ -1,0 +1,25 @@
+{
+  "id": "plx-faa41570-d5e1-482d-ae26-1786f96a72e3",
+  "title": "Implement optimizer procedure cost ledger and UI breakdown",
+  "description": "Implement state-level cost accounting (evaluation incurred/referenced + inference by agent/model), branch/continue semantics, and ProcedureTask UI rendering from canonical state.costs.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5a9fc5f3-5b5e-4e32-a3f7-cdfca0de0829",
+      "author": "ryan",
+      "text": "Implemented canonical procedure cost ledger plumbing: persisted inference CostEvents into state.costs, added evaluation cost ledger recording across baseline/hypothesis/strategy/synthesis eval paths, cleared costs on branch clone, and added ProcedureTask cost breakdown UI. Added tests for inference-cost persistence and branch clone cost reset; targeted pytest suite passing.",
+      "created_at": "2026-04-19T21:12:13.216577Z"
+    }
+  ],
+  "created_at": "2026-04-19T21:07:30.685196Z",
+  "updated_at": "2026-04-19T21:12:13.216577Z",
+  "closed_at": null,
+  "custom": {}
+}
