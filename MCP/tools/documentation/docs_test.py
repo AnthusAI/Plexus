@@ -26,6 +26,23 @@ TARGET_DOC_KEYS = (
     "score-yaml-langgraph",
     "score-yaml-tactusscore",
 )
+REAL_WORLD_DOC_MARKERS = {
+    "score-yaml-format": (
+        "Metadata-Derived Extraction and Normalization",
+        "FeedbackItems",
+        "CallCriteriaDBCache",
+    ),
+    "score-yaml-langgraph": (
+        "YesOrNoClassifier",
+        "parse_from_start",
+        "edge.output",
+    ),
+    "score-yaml-tactusscore": (
+        "tactus_code:",
+        "YES",
+        "Legacy Deployed Tactus Patterns",
+    ),
+}
 OPTIMIZER_FACING_FILES = (
     PROJECT_ROOT / "plexus/docs/feedback-alignment.md",
     PROJECT_ROOT / "plexus/docs/optimizer-cookbook.md",
@@ -102,6 +119,13 @@ def test_target_docs_are_not_empty_or_placeholder():
         text = Path(get_doc_path(key)).read_text(encoding="utf-8")
         assert "PLACEHOLDER" not in text
         assert len(text.split()) > 120
+
+
+def test_score_docs_cover_real_world_patterns():
+    for key, markers in REAL_WORLD_DOC_MARKERS.items():
+        text = Path(get_doc_path(key)).read_text(encoding="utf-8")
+        for marker in markers:
+            assert marker in text, f"Missing real-world marker {marker!r} in {key}"
 
 
 def test_optimizer_facing_files_reject_legacy_error_shorthand():

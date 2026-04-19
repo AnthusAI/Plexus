@@ -34,6 +34,11 @@ item:
     - class: RelevantWindowsTranscriptFilter
       parameters:
         keywords: ["consent", "agree"]
+data:
+  class: FeedbackItems
+  scorecard: Example Scorecard
+  score: Example Score
+  days: 14
 output:
   value: classification
   explanation: explanation
@@ -50,15 +55,22 @@ Questions to answer first:
 
 - Is the business decision truly binary?
 - Is there a real `NA` or "not scored" state?
+- Do the labels need to be `"Yes"` / `"No"`, `"YES"` / `"NO"`, or some other
+  exact strings?
+- Will the final `output:` expose only `value`, or also `explanation` and maybe
+  `confidence`?
 - Should the score emit `confidence`, or is `value` plus `explanation` enough?
 - What explanation format will downstream users or tooling need?
 
 Guidance:
 
 - Keep `valid_classes` tight and business-meaningful.
+- Treat label text and casing as part of the contract.
 - Do not overload a binary classifier with hidden third states.
 - If `NA` means "out of scope", treat that as an applicability question, not just a
   third answer choice.
+- Only map the final fields downstream workflows actually need. Some production
+  scores expose `value` only; others also map `explanation`.
 
 ## Decompose Overloaded Decisions
 
@@ -115,6 +127,35 @@ Implementation guidance:
 
 - fixed, small fan-out can still fit in `LangGraphScore`
 - variable-length iteration usually belongs in `TactusScore`
+
+## Pattern: Metadata-Derived Extraction and Normalization
+
+Not all decomposition starts from transcript evidence. Many scores first need to
+turn messy metadata into a smaller set of canonical facts before the main
+classifier can reason cleanly.
+
+Use this when:
+
+- metadata contains serialized JSON or mixed key names
+- program titles need to be split into normalized level and name fields
+- the classifier only needs one small metadata fact such as enrollment type,
+  portal family, or applicable school subset
+
+Why it helps:
+
+- the main classifier stops wasting tokens on raw metadata cleanup
+- templating becomes simpler because later prompts receive explicit fields
+- deterministic steps can parse JSON or normalize keys once instead of repeating
+  the same work inside every prompt
+
+Typical normalized outputs:
+
+- parsed enums or booleans derived from `metadata.other_data`
+- canonical program levels and program names derived from metadata titles
+- per-entity facts aliased into later steps
+
+This is different from transcript evidence extraction. The shared idea is still the
+same: normalize first, then ask the business question.
 
 ## Pattern: Extract Evidence Before the Final Judgment
 
@@ -239,6 +280,19 @@ Use these deliberately:
 - speaker filtering when only one side of the conversation matters
 
 Keep processor strategy in the YAML layer, not buried in prompt instructions.
+
+## Shared YAML Feature: `item:` vs `data:`
+
+`item:` controls the text representation the score sees. `data:` controls how local
+evaluations, smoke tests, and feedback-driven workflows pull examples.
+
+Common shared `data:` patterns include:
+
+- `FeedbackItems` for recent review-corrected slices
+- `CallCriteriaDBCache` with `queries:` or `searches:` for curated datasets
+
+These are score-YAML concerns, not subclass-specific LangGraph or Tactus concerns.
+Keep them documented at the umbrella layer.
 
 ## Pattern: STT / Phonetic Robustness
 

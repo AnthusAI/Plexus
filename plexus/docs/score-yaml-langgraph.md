@@ -50,11 +50,36 @@ output:
 Use `Classifier` for new LLM classification nodes. Do not introduce new
 `YesOrNoClassifier` or `MultiClassClassifier` usage in fresh work.
 
+Production champions still contain legacy `YesOrNoClassifier` and
+`MultiClassClassifier` nodes, sometimes paired with `completion_template` and custom
+parse behavior. Treat them as older classifier forms when auditing existing scores,
+not as the preferred pattern for new work.
+
 ### Nodes Are Independent
 
 Each node is its own LLM call. A node only knows what you put in its prompt and
 what you alias from prior state. Do not assume later nodes inherit earlier prompt
 context.
+
+### Template Explicit State
+
+LangGraph prompts can template state in both `system_message` and `user_message`.
+Deployed scores use `text`, `metadata`, aliased state variables such as
+`enrollment_type`, extractor outputs, and `results[...]`.
+
+Keep templates simple:
+
+- alias normalized values into named state keys through `edge.output` or
+  branch-level `output`
+- use direct variable access and filters such as `| default("SRX")`
+- avoid assuming Python-style methods will work inside the template sandbox
+
+### Score Defaults Can Be Overridden Per Node
+
+Top-level model and parse settings are only defaults. Individual nodes may
+override `model_provider`, `model_name`, `model_region`, `reasoning_effort`,
+`verbosity`, or `parse_from_start` when one step needs a different model or parse
+strategy from the rest of the graph.
 
 ### Route Explicitly
 
@@ -160,6 +185,52 @@ graph:
 ```
 
 This pattern helps when long transcripts hide the relevant local exchange.
+
+Not all extraction is transcript extraction. Production scores also use `Extractor`
+nodes over `metadata.schools` to derive normalized program levels and program
+names before the main classifier. When the output format is tightly constrained,
+`trust_model_output: true` can be appropriate for these helper extractors.
+
+## Recipe: Normalize Metadata Into State Before Classification
+
+Use `LogicalClassifier` when the normalization step is deterministic, or
+`Extractor` when the normalization itself still needs LLM help. The point is to
+turn messy metadata into a small, named state value before the main classifier.
+
+```yaml
+graph:
+  - name: normalize_enrollment_type
+    class: LogicalClassifier
+    code: |
+      def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
+          import json
+
+          other_data = input.metadata.get("other_data", "{}")
+          parsed = json.loads(other_data) if isinstance(other_data, str) else (other_data or {})
+          enrollment_type = "SPM" if parsed.get("SPMEnrollment") else "SRX"
+          return Score.Result(
+              parameters=parameters,
+              value=enrollment_type,
+              metadata={"enrollment_type": enrollment_type},
+          )
+    edge:
+      node: classify
+      output:
+        enrollment_type: enrollment_type
+
+  - name: classify
+    class: Classifier
+    valid_classes: ["Yes", "No"]
+    system_message: |
+      {% set enrollment_type = enrollment_type | default("SRX") %}
+      Evaluate this transcript using the {{ enrollment_type }} ruleset.
+    user_message: |
+      Transcript:
+      {{text}}
+```
+
+Use this when the classifier would otherwise need to parse raw JSON, mixed-key
+metadata, or long metadata titles inside the prompt itself.
 
 ## Recipe: Split by Criterion, Then Aggregate Programmatically
 
@@ -296,6 +367,21 @@ Guidance:
 - Use `RelevantWindowsTranscriptFilter` when the decision revolves around a small
   vocabulary in a long transcript.
 - Keep processor strategy in the score YAML layer, not inside node prompts.
+
+## Output Mapping and Parse Controls
+
+`output:` is explicit at both node and score levels.
+
+- Node-level `output` maps `classification`, `explanation`, `extracted_text`, or
+  computed metadata into named state keys.
+- `conditions[].output` and `edge.output` are the normal way to alias values into
+  later prompts.
+- Final score-level `output` can expose only `value`, or both `value` and
+  `explanation`.
+
+`parse_from_start` can be set at the score level or per node. Use per-node
+overrides when one node returns label-first output, uses a `completion_template`,
+or otherwise needs different parse behavior from the rest of the graph.
 
 ## Helpful Node Choices
 

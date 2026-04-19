@@ -15,8 +15,9 @@ that run against the same item or transcript.
 
 ### Score
 
-A score is one evaluative judgment. Most scores are classifiers that return a
-`value` such as `"Yes"`, `"No"`, or `"NA"`, plus an `explanation`.
+A score is one evaluative judgment. Most scores are classifiers that at minimum
+return a `value` such as `"Yes"`, `"No"`, or `"NA"`. Many scores also expose an
+`explanation`.
 
 ### Score Version
 
@@ -41,14 +42,19 @@ Every score is effectively a function over shared inputs:
 
 Every score should produce a consistent output contract:
 
-- `value`: the final class label
-- `explanation`: brief evidence-oriented reasoning for the final class
+- `value`: the final class label, with exact spelling and casing treated as part
+  of the business contract
+- `explanation`: optional but common evidence-oriented reasoning for the final
+  class
 - `confidence`: optional secondary signal when the implementation supports it
 
 The optimizer should treat the output contract as part of the score design, not as
 an afterthought. If a score really has three business states, the contract should
 say so. If the business question is truly binary, keep the core classifier binary
 and handle side conditions separately.
+
+Final `output:` mapping is explicit. Some production scores expose only `value`,
+while others also map `explanation` and intermediate fields.
 
 ## Dependencies and Composition
 
