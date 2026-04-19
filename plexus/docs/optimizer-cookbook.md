@@ -89,7 +89,26 @@ Preferred fixes:
 - `RelevantWindowsTranscriptFilter`
 - a tighter local transcript slice
 
-### 5. Precise timing or local ordering
+### 5. Raw metadata is doing too much work
+
+If the main classifier is spending a lot of tokens parsing metadata instead of
+making the business judgment, include a metadata-normalization hypothesis.
+
+Look for:
+
+- raw JSON blobs in `metadata`
+- repeated prompt rules that restate how to derive program names or levels from
+  metadata titles
+- nested or mixed-key metadata structures that are hard to reference directly
+
+Preferred fixes:
+
+- parse or normalize metadata before the main classifier
+- alias the canonical values into later prompts
+- extract program levels, names, or enrollment types once instead of re-parsing
+  them in every decision step
+
+### 6. Precise timing or local ordering
 
 If the business rule depends on exactly which response followed which item, include
 a word-level transcript hypothesis.
@@ -108,7 +127,7 @@ Preferred fix:
 Do not try to solve this purely with prompt wording if the underlying transcript
 format does not preserve the required local order.
 
-### 6. STT / phonetic confusion
+### 7. STT / phonetic confusion
 
 If the score depends on names, degree abbreviations, or jargon that are commonly
 mistranscribed, include a phonetic-robustness hypothesis.
