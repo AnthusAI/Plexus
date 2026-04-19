@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -215,6 +216,28 @@ async def test_resolve_scores_for_mode_uuid_checks_section_scorecard_membership(
         )
 
     assert output == [{"score_id": "score-1", "score_name": "Score 1"}]
+
+
+@pytest.mark.asyncio
+async def test_resolve_scorecard_accepts_hyphenated_name(mock_api_client):
+    block = FeedbackAlignmentTimeline(
+        config={"scorecard": "Prime - EDU 3rd Party"},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    with (
+        patch("plexus.reports.blocks.feedback_alignment_timeline.Scorecard.get_by_key", return_value=None),
+        patch(
+            "plexus.reports.blocks.feedback_alignment_timeline.Scorecard.get_by_name",
+            return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
+        ),
+        patch("plexus.reports.blocks.feedback_alignment_timeline.Scorecard.get_by_external_id", return_value=None),
+    ):
+        resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+
+    assert resolved.id == "sc-1"
+    assert resolved.name == "Prime - EDU 3rd Party"
 
 
 @pytest.mark.asyncio
