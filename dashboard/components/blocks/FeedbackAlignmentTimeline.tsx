@@ -252,8 +252,9 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
 
   const renderAc1Dot = React.useCallback(
     (dotProps: any) => {
-      const hiddenDot = <circle cx={0} cy={0} r={0} fill="transparent" stroke="none" />;
       const point = dotProps?.payload as AlignmentPoint | undefined;
+      const dotKey = `ac1-dot-${point?.bucket_index ?? "na"}-${dotProps?.index ?? "na"}-${dotProps?.cx ?? "na"}-${dotProps?.cy ?? "na"}`;
+      const hiddenDot = <circle key={dotKey} cx={0} cy={0} r={0} fill="transparent" stroke="none" />;
       if (!point || point.ac1 === null || point.ac1 === undefined) {
         return hiddenDot;
       }
@@ -268,6 +269,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
       }
       return (
         <circle
+          key={dotKey}
           cx={cx}
           cy={cy}
           r={radius}
@@ -283,8 +285,9 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
 
   const renderActiveAc1Dot = React.useCallback(
     (dotProps: any) => {
-      const hiddenDot = <circle cx={0} cy={0} r={0} fill="transparent" stroke="none" />;
       const point = dotProps?.payload as AlignmentPoint | undefined;
+      const dotKey = `ac1-active-dot-${point?.bucket_index ?? "na"}-${dotProps?.index ?? "na"}-${dotProps?.cx ?? "na"}-${dotProps?.cy ?? "na"}`;
+      const hiddenDot = <circle key={dotKey} cx={0} cy={0} r={0} fill="transparent" stroke="none" />;
       if (!point || point.ac1 === null || point.ac1 === undefined) {
         return hiddenDot;
       }
@@ -296,6 +299,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
       const radius = getDotRadius(point.item_count) + 1.5;
       return (
         <circle
+          key={dotKey}
           cx={cx}
           cy={cy}
           r={radius}
