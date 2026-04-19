@@ -57,15 +57,15 @@ params:
     required: false
     description: "Score version ID to start from instead of the champion version. Useful for continuing optimization from a previous result."
 
-  resume_accuracy_eval:
+  resume_regression_eval:
     type: string
     required: false
-    description: "Evaluation ID of a previous accuracy baseline to reuse. Skips running a new accuracy baseline. Must match the start_version (or champion if not specified)."
+    description: "Evaluation ID of a previous regression baseline to reuse. Skips running a new regression baseline. Must match the start_version (or champion if not specified)."
 
-  resume_feedback_eval:
+  resume_recent_eval:
     type: string
     required: false
-    description: "Evaluation ID of a previous feedback baseline to reuse. Skips running a new feedback baseline. Must match the start_version (or champion if not specified)."
+    description: "Evaluation ID of a previous recent baseline to reuse. Skips running a new recent baseline. Must match the start_version (or champion if not specified)."
 
   dry_run:
     type: boolean
@@ -102,11 +102,11 @@ outputs:
     type: string
     required: true
 
-  accuracy_baseline_id:
+  regression_baseline_id:
     type: string
     required: false
 
-  feedback_baseline_id:
+  recent_baseline_id:
     type: string
     required: false
 
@@ -117,17 +117,17 @@ outputs:
   iterations:
     type: array
     required: false
-    description: "Array of iteration results with dual accuracy/feedback metrics and deltas"
+    description: "Array of iteration results with dual recent/regression metrics and deltas"
 
-  feedback_improvement:
+  recent_improvement:
     type: number
     required: false
-    description: "Total feedback AC1 improvement from baseline"
+    description: "Total recent AC1 improvement from baseline"
 
-  accuracy_improvement:
+  regression_improvement:
     type: number
     required: false
-    description: "Total accuracy AC1 improvement from baseline"
+    description: "Total regression AC1 improvement from baseline"
 
   diagnosis:
     type: string
@@ -181,10 +181,10 @@ agents:
       avoid repeating approaches that didn't work and to build on approaches that did.
 
       TWO DATASETS:
-      1. ACCURACY: Regression dataset. Measures overall correctness.
-      2. FEEDBACK: Human-reviewed items from the last 90 days.
+      1. REGRESSION: Deterministic regression dataset (accuracy eval type). Measures overall correctness.
+      2. RECENT: Human-reviewed recent items (feedback eval type).
       Both matter. Improving one while not significantly hurting the other is a win.
-      A hypothesis that improves accuracy by +0.3 but nudges feedback by -0.02 is
+      A hypothesis that improves regression by +0.3 but nudges recent by -0.02 is
       still useful signal — note what it implies for the next hypothesis.
 
       TOOLS:
@@ -428,6 +428,12 @@ code: |
       precision = safe_get_metric(metrics, "Precision") or 0,
       recall = safe_get_metric(metrics, "Recall") or 0
     }
+    result.cost = tonumber(eval_result.cost)
+    result.processed_items = tonumber(eval_result.processed_items or eval_result.processedItems)
+    result.total_items = tonumber(eval_result.total_items or eval_result.totalItems)
+    if result.cost and result.processed_items and result.processed_items > 0 then
+      result.cost_per_item = result.cost / result.processed_items
+    end
     -- Capture confusion matrix and class distributions for planning context
     local cm = eval_result.confusionMatrix or eval_result.confusion_matrix
     if type(cm) == "table" then
@@ -458,6 +464,18 @@ code: |
       result.actual_distribution = actual_dist
     end
     return result
+  end
+
+  local function extract_cost_per_item(eval_result)
+    if type(eval_result) ~= "table" then
+      return nil
+    end
+    local cost = tonumber(eval_result.cost)
+    local processed_items = tonumber(eval_result.processed_items or eval_result.processedItems)
+    if cost and processed_items and processed_items > 0 then
+      return cost / processed_items
+    end
+    return nil
   end
 
   -- Render confusion matrix + class distributions as readable text
@@ -597,22 +615,22 @@ code: |
       if iter.skip_reason then
         status_str = "SKIPPED"
       elseif iter.accepted then
-        local fb_d = iter.feedback_deltas and iter.feedback_deltas.alignment or 0
+        local fb_d = iter.recent_deltas and iter.recent_deltas.alignment or 0
         status_str = fb_d > 0.005 and "ACCEPTED" or "CARRIED"
       else
         status_str = "REJECTED"
       end
-      local fb_ac1 = iter.feedback_metrics and string.format("%.3f", iter.feedback_metrics.alignment) or "N/A"
-      local acc_ac1 = iter.accuracy_metrics and string.format("%.3f", iter.accuracy_metrics.alignment) or "N/A"
-      local fb_delta = iter.feedback_deltas and string.format("%+.3f", iter.feedback_deltas.alignment) or ""
-      local acc_delta = iter.accuracy_deltas and string.format("%+.3f", iter.accuracy_deltas.alignment) or ""
+      local fb_ac1 = iter.recent_metrics and string.format("%.3f", iter.recent_metrics.alignment) or "N/A"
+      local acc_ac1 = iter.regression_metrics and string.format("%.3f", iter.regression_metrics.alignment) or "N/A"
+      local fb_delta = iter.recent_deltas and string.format("%+.3f", iter.recent_deltas.alignment) or ""
+      local acc_delta = iter.regression_deltas and string.format("%+.3f", iter.regression_deltas.alignment) or ""
 
       local note = ""
       if iter.skip_reason then
         note = "  (" .. iter.skip_reason .. ")"
       elseif iter.disqualification_reason then
         note = "  (DISQUALIFIED: " .. iter.disqualification_reason .. ")"
-      elseif not iter.accepted and iter.accuracy_deltas and iter.accuracy_deltas.alignment < -0.02 then
+      elseif not iter.accepted and iter.regression_deltas and iter.regression_deltas.alignment < -0.02 then
         note = "  (accuracy regressed — do not retry)"
       elseif not iter.accepted then
         note = "  (feedback regressed — do not retry)"
@@ -835,7 +853,7 @@ code: |
           correct_count     = 0,
           segment           = cur.segment,
           segment_stable    = true,
-          feedback_label    = cur.correct,
+          recent_label    = cur.correct,
           model_prediction  = cur.predicted,
           per_cycle         = {pc_entry},
           pattern           = "EMERGING",
@@ -988,7 +1006,7 @@ code: |
         end
         table.insert(parts, string.format(
           "  %s: label=%s, %dx wrong, %dx correct, trajectory=[%s]",
-          p.id, e.feedback_label or "?", e.wrong_count or 0, e.correct_count or 0,
+          p.id, e.recent_label or "?", e.wrong_count or 0, e.correct_count or 0,
           table.concat(trajectory, " → ")))
       end
     end
@@ -1000,7 +1018,7 @@ code: |
         local last_hyp = last_pc and last_pc.hypothesis and (" [" .. last_pc.hypothesis .. "]") or ""
         table.insert(parts, string.format(
           "  %s: label=%s model=%s, cycles %d-%d (%dx)%s, last_rationale=%s",
-          p.id, e.feedback_label, e.model_prediction,
+          p.id, e.recent_label, e.model_prediction,
           e.first_cycle, e.last_cycle, e.wrong_count or 0, last_hyp,
           trunc(last_pc and last_pc.rationale or "", 70)))
       end
@@ -1019,7 +1037,7 @@ code: |
       for _, p in ipairs(late_emerg) do
         local e = p.entry
         table.insert(parts, string.format("  %s: first cycle %d, label=%s model=%s",
-          p.id, e.first_cycle, e.feedback_label, e.model_prediction))
+          p.id, e.first_cycle, e.recent_label, e.model_prediction))
       end
     end
     return table.concat(parts, "\n")
@@ -1078,7 +1096,7 @@ code: |
       local e = p.entry
       table.insert(dp, string.format("Item %s — Pattern: %s", p.id, e.pattern))
       table.insert(dp, string.format("  Human label: %s | Model prediction: %s | First seen: cycle %d | Wrong: %d | Correct: %d",
-        e.feedback_label, e.model_prediction, e.first_cycle, e.wrong_count or 0, e.correct_count or 0))
+        e.recent_label, e.model_prediction, e.first_cycle, e.wrong_count or 0, e.correct_count or 0))
       if e.per_cycle and #e.per_cycle > 0 then
         table.insert(dp, "  Per-cycle history (hypothesis tested → outcome → RCA rationale):")
         for _, pc in ipairs(e.per_cycle) do
@@ -1281,17 +1299,17 @@ code: |
 
     -- Evaluation results
     table.insert(parts, "=== CURRENT EVALUATION RESULTS ===")
-    local fb_m = opts.feedback_metrics
+    local fb_m = opts.recent_metrics
     if fb_m then
       table.insert(parts, string.format("Feedback: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
         fb_m.alignment, fb_m.accuracy, fb_m.precision, fb_m.recall))
       local cm_lines = render_confusion_context(fb_m)
       for _, line in ipairs(cm_lines) do table.insert(parts, line) end
       -- Compact error-direction breakdown derived from RCA items
-      if opts.feedback_rca and type(opts.feedback_rca) == "table"
-         and type(opts.feedback_rca._all_item_classifications) == "table" then
+      if opts.recent_rca and type(opts.recent_rca) == "table"
+         and type(opts.recent_rca._all_item_classifications) == "table" then
         local segs, _ = build_confusion_segments(
-          opts.feedback_rca._all_item_classifications, fb_m.confusion_labels)
+          opts.recent_rca._all_item_classifications, fb_m.confusion_labels)
         if #segs > 0 then
           table.insert(parts, "  Error direction breakdown:")
           for _, seg in ipairs(segs) do
@@ -1300,9 +1318,9 @@ code: |
         end
       end
     end
-    if opts.feedback_rca then
+    if opts.recent_rca then
       table.insert(parts, "Feedback RCA:")
-      local rca = opts.feedback_rca
+      local rca = opts.recent_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
           table.insert(parts, "Summary: " .. tostring(rca.overall_explanation))
@@ -1347,7 +1365,7 @@ code: |
           local total_items = #rca._all_item_classifications
           local segments, _ = build_confusion_segments(
             rca._all_item_classifications,
-            opts.feedback_metrics and opts.feedback_metrics.confusion_labels)
+            opts.recent_metrics and opts.recent_metrics.confusion_labels)
 
           -- Build per-segment category metadata from category_hierarchy (for summary/patterns/topics)
           local cat_meta = {}  -- category_key -> cat table from hierarchy
@@ -1478,11 +1496,11 @@ code: |
     -- Seeing real transcripts helps hypothesis generation the same way it helps humans
     -- doing manual optimization: the model can reason about WHY a classification failed
     -- by reading what the score actually saw, not just RCA summaries and evidence quotes.
-    if opts.feedback_rca and type(opts.feedback_rca._all_item_classifications) == "table"
-       and #opts.feedback_rca._all_item_classifications > 0 then
+    if opts.recent_rca and type(opts.recent_rca._all_item_classifications) == "table"
+       and #opts.recent_rca._all_item_classifications > 0 then
       local segs_for_tx, _ = build_confusion_segments(
-        opts.feedback_rca._all_item_classifications,
-        opts.feedback_metrics and opts.feedback_metrics.confusion_labels)
+        opts.recent_rca._all_item_classifications,
+        opts.recent_metrics and opts.recent_metrics.confusion_labels)
 
       -- One item per segment (the first one with an item_id), up to 3 total
       local transcript_candidates = {}
@@ -1539,16 +1557,16 @@ code: |
 
     table.insert(parts, "")
 
-    local acc_m = opts.accuracy_metrics
+    local acc_m = opts.regression_metrics
     if acc_m then
       table.insert(parts, string.format("Accuracy: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
         acc_m.alignment, acc_m.accuracy, acc_m.precision, acc_m.recall))
       local cm_lines = render_confusion_context(acc_m)
       for _, line in ipairs(cm_lines) do table.insert(parts, line) end
     end
-    if opts.accuracy_rca then
+    if opts.regression_rca then
       table.insert(parts, "Accuracy RCA (deterministic dataset — improve this too, not just avoid regression):")
-      local rca = opts.accuracy_rca
+      local rca = opts.regression_rca
       if type(rca) == "table" then
         if rca.overall_explanation then
           table.insert(parts, "Summary: " .. tostring(rca.overall_explanation))
@@ -1646,7 +1664,7 @@ code: |
     end
 
     -- Feedback landscape diagnostic (compact summary — full report in final prescription)
-    local landscape_diag = State.get("feedback_landscape_diagnostic")
+    local landscape_diag = State.get("recent_landscape_diagnostic")
     if landscape_diag and has_text(landscape_diag.compact_summary) then
       table.insert(parts, string.format(
         "=== FEEDBACK LANDSCAPE DIAGNOSTIC (from cycle %d) ===",
@@ -1691,7 +1709,7 @@ code: |
     if opts.iterations then
       for i = #opts.iterations, 1, -1 do
         local it = opts.iterations[i]
-        local acc_d = it.accuracy_deltas and it.accuracy_deltas.alignment or 0
+        local acc_d = it.regression_deltas and it.regression_deltas.alignment or 0
         if not it.accepted and acc_d < -0.02 then
           consecutive_acc_rejections = consecutive_acc_rejections + 1
         else
@@ -1740,8 +1758,8 @@ code: |
       if iter.skip_reason then goto continue_iter end
 
       -- Use the accepted/final version's deltas
-      local fb_d = iter.feedback_deltas and iter.feedback_deltas.alignment or 0
-      local acc_d = iter.accuracy_deltas and iter.accuracy_deltas.alignment or 0
+      local fb_d = iter.recent_deltas and iter.recent_deltas.alignment or 0
+      local acc_d = iter.regression_deltas and iter.regression_deltas.alignment or 0
       local divergence = fb_d - acc_d
       local direction = ""
 
@@ -2095,7 +2113,7 @@ code: |
   -- default alignment wording. Keyed by objective → slot → lines table.
   local SLOT_OBJECTIVE_OVERRIDES = {
     precision_safe = {
-      feedback_incremental = {
+      recent_incremental = {
         "OBJECTIVE: Incremental precision fix — reduce false positives (Category A)",
         "GOAL: Tighten the Yes threshold for edge cases to reduce over-prediction.",
         "Pick the 'Predicted: Yes / Actual: No' confusion matrix segment from the FEEDBACK RCA.",
@@ -2104,7 +2122,7 @@ code: |
         "If not, ADD that rule. If a rule exists but is applied too loosely, SHARPEN it.",
         "SUCCESS CRITERIA: Precision improves without alignment regressing more than 0.02.",
       },
-      feedback_bold = {
+      recent_bold = {
         "OBJECTIVE: Bold precision fix — eliminate a category of false positives (Category A or B)",
         "GOAL: Structurally reduce over-prediction, not just at the margin.",
         "Look for a FAMILY of false positive patterns in the RCA, not just one item.",
@@ -2114,21 +2132,21 @@ code: |
       },
     },
     precision = {
-      feedback_incremental = {
+      recent_incremental = {
         "OBJECTIVE: Incremental precision fix — reduce false positives (Category A)",
         "GOAL: Tighten the Yes threshold. Precision is the PRIMARY metric this run.",
         "Pick the 'Predicted: Yes / Actual: No' segment from the FEEDBACK RCA.",
         "Alignment is a soft constraint — some alignment regression is acceptable if precision gains are clear.",
         "POLICY-FIRST: Add or sharpen rules that prevent over-prediction.",
       },
-      feedback_bold = {
+      recent_bold = {
         "OBJECTIVE: Bold precision fix — eliminate a category of false positives (Category A or B)",
         "GOAL: Maximize precision improvement. Alignment regression up to -0.05 is acceptable.",
         "Look for a FAMILY of false positive patterns. Structural rubric changes are preferred over examples.",
       },
     },
     recall_safe = {
-      feedback_incremental = {
+      recent_incremental = {
         "OBJECTIVE: Incremental recall fix — reduce false negatives (Category A)",
         "GOAL: Widen the Yes threshold for valid edge cases to reduce under-prediction.",
         "Pick the 'Predicted: No / Actual: Yes' confusion matrix segment from the FEEDBACK RCA.",
@@ -2137,7 +2155,7 @@ code: |
         "If not, ADD that rule. If a rule exists but is applied too conservatively, RELAX it.",
         "SUCCESS CRITERIA: Recall improves without alignment regressing more than 0.02.",
       },
-      feedback_bold = {
+      recent_bold = {
         "OBJECTIVE: Bold recall fix — catch a category of missed true positives (Category A or B)",
         "GOAL: Structurally reduce under-prediction, not just at the margin.",
         "Look for a FAMILY of false negative patterns in the RCA.",
@@ -2147,14 +2165,14 @@ code: |
       },
     },
     recall = {
-      feedback_incremental = {
+      recent_incremental = {
         "OBJECTIVE: Incremental recall fix — reduce false negatives (Category A)",
         "GOAL: Widen the Yes threshold. Recall is the PRIMARY metric this run.",
         "Pick the 'Predicted: No / Actual: Yes' segment from the FEEDBACK RCA.",
         "Alignment is a soft constraint — some alignment regression is acceptable if recall gains are clear.",
         "POLICY-FIRST: Add or relax rules that prevent under-prediction.",
       },
-      feedback_bold = {
+      recent_bold = {
         "OBJECTIVE: Bold recall fix — catch a category of missed true positives (Category A or B)",
         "GOAL: Maximize recall improvement. Alignment regression up to -0.05 is acceptable.",
         "Look for a FAMILY of false negative patterns. Structural rubric changes are preferred.",
@@ -2310,7 +2328,7 @@ code: |
       for _, line in ipairs(slot_overrides[slot]) do
         table.insert(parts, line)
       end
-    elseif slot == "feedback_incremental" then
+    elseif slot == "recent_incremental" then
       table.insert(parts, "OBJECTIVE: Incremental feedback fix (Category A)")
       table.insert(parts, "Pick ONE confusion matrix segment from the FEEDBACK RCA above (e.g.,")
       table.insert(parts, "'Predicted: Yes / Actual: No' OR 'Predicted: No / Actual: Yes' — NOT both).")
@@ -2322,7 +2340,7 @@ code: |
       table.insert(parts, "IMPORTANT: Each segment represents a different error direction. Fixing one may shift")
       table.insert(parts, "the other. Focusing on ONE direction is intentional — net improvement is the goal.")
       table.insert(parts, "Prefer the segment with MORE items (fixing the larger error type yields bigger gains).")
-    elseif slot == "feedback_bold" then
+    elseif slot == "recent_bold" then
       table.insert(parts, "OBJECTIVE: Bold feedback fix (Category A or B)")
       table.insert(parts, "Target a DIFFERENT confusion matrix segment than hypothesis 1, OR address the")
       table.insert(parts, "same segment with a structurally different approach.")
@@ -2333,7 +2351,7 @@ code: |
       table.insert(parts, "Also consider: are there contradictory patterns in the feedback that suggest the")
       table.insert(parts, "rubric itself needs a policy decision? If so, name the contradiction explicitly.")
       table.insert(parts, "Be willing to take more risk here — this is your swing-for-the-fences hypothesis.")
-    elseif slot == "accuracy_fix" then
+    elseif slot == "regression_fix" then
       table.insert(parts, "OBJECTIVE: Accuracy dataset fix (Category A or B)")
       table.insert(parts, "Target the top error pattern from the ACCURACY RCA above (the regression dataset),")
       table.insert(parts, "NOT the feedback RCA. The accuracy dataset is a deterministic regression safety net")
@@ -2437,7 +2455,7 @@ code: |
         local dq = ""
         if cand.score and cand.score <= -999 then dq = " (DISQUALIFIED)" end
         local synth_tag = cand.is_synthesis and " [SYNTH]" or ""
-        table.insert(parts, string.format("  Candidate %d%s: FB AC1 %+.3f, ACC AC1 %+.3f%s%s",
+        table.insert(parts, string.format("  Candidate %d%s: Recent AC1 %+.3f, Regression AC1 %+.3f%s%s",
           cand.index, synth_tag,
           cand.fb_deltas and cand.fb_deltas.alignment or 0,
           cand.acc_deltas and cand.acc_deltas.alignment or 0,
@@ -2523,14 +2541,16 @@ code: |
   local dataset_id              = nil
   local smoke_test_item_ids     = nil
   local champion_version_id     = nil
-  local accuracy_baseline       = nil
-  local accuracy_baseline_id    = nil
-  local accuracy_baseline_metrics = nil
-  local accuracy_baseline_rca   = {}
-  local accuracy_available      = false
-  local feedback_baseline_id    = nil
-  local feedback_baseline_metrics = nil
-  local feedback_baseline_rca   = {}
+  local regression_baseline       = nil
+  local regression_baseline_id    = nil
+  local regression_baseline_metrics = nil
+  local regression_baseline_cost_per_item = nil
+  local regression_baseline_rca   = {}
+  local regression_available      = false
+  local recent_baseline_id    = nil
+  local recent_baseline_metrics = nil
+  local recent_baseline_cost_per_item = nil
+  local recent_baseline_rca   = {}
   -- current score config — set by init or continuation, used in cycle loop
   local current_code_path    = nil
   local current_code         = nil
@@ -2730,13 +2750,15 @@ code: |
     -- Restore all init-phase variables from durable State
     dataset_id              = State.get("dataset_id")
     champion_version_id     = State.get("last_accepted_version_id") or State.get("baseline_version_id")
-    accuracy_baseline_id    = State.get("last_accepted_acc_eval_id") or State.get("accuracy_baseline_id")
-    accuracy_baseline_metrics = State.get("last_accepted_acc_metrics") or State.get("accuracy_baseline_metrics")
-    feedback_baseline_id    = State.get("last_accepted_fb_eval_id") or State.get("feedback_baseline_id")
-    feedback_baseline_metrics = State.get("last_accepted_fb_metrics") or State.get("feedback_baseline_metrics")
-    accuracy_baseline_rca   = State.get("last_accuracy_rca") or {}
-    feedback_baseline_rca   = State.get("last_feedback_rca") or {}
-    accuracy_available      = accuracy_baseline_metrics ~= nil
+    regression_baseline_id    = State.get("last_accepted_acc_eval_id") or State.get("regression_baseline_id")
+    regression_baseline_metrics = State.get("last_accepted_acc_metrics") or State.get("regression_baseline_metrics")
+    regression_baseline_cost_per_item = State.get("regression_baseline_cost_per_item")
+    recent_baseline_id    = State.get("last_accepted_fb_eval_id") or State.get("recent_baseline_id")
+    recent_baseline_metrics = State.get("last_accepted_fb_metrics") or State.get("recent_baseline_metrics")
+    recent_baseline_cost_per_item = State.get("recent_baseline_cost_per_item")
+    regression_baseline_rca   = State.get("last_regression_rca") or {}
+    recent_baseline_rca   = State.get("last_recent_rca") or {}
+    regression_available      = regression_baseline_metrics ~= nil
     smoke_test_item_ids     = State.get("smoke_test_item_ids")
 
     -- Re-pull current config from last accepted version
@@ -2906,13 +2928,13 @@ code: |
 
   -- Dual baseline evaluations — run new ones or reuse from a previous run
   Stage.set("baseline")
-  -- (accuracy_baseline, accuracy_baseline_id/metrics/rca, accuracy_available,
-  --  feedback_baseline_id/metrics/rca are all pre-declared above the continuation check)
+  -- (regression_baseline, regression_baseline_id/metrics/rca, regression_available,
+  --  recent_baseline_id/metrics/rca are all pre-declared above the continuation check)
 
-  local resume_acc = has_text(params.resume_accuracy_eval) and params.resume_accuracy_eval or nil
-  local resume_fb  = has_text(params.resume_feedback_eval) and params.resume_feedback_eval or nil
+  local resume_regression = has_text(params.resume_regression_eval) and params.resume_regression_eval or nil
+  local resume_recent  = has_text(params.resume_recent_eval) and params.resume_recent_eval or nil
 
-  if resume_acc or resume_fb then
+  if resume_regression or resume_recent then
     -- Resume mode: reuse existing baseline evaluations
     Human.notify({message = "Resuming from existing baseline evaluations...", level = "info"})
 
@@ -2930,63 +2952,65 @@ code: |
       return true, nil
     end
 
-    if resume_acc then
-      Human.notify({message = "Fetching accuracy baseline: " .. resume_acc, level = "info"})
+    if resume_regression then
+      Human.notify({message = "Fetching regression baseline: " .. resume_regression, level = "info"})
       local acc_info = call_plexus_tool("plexus_evaluation_info", {
-        evaluation_id = resume_acc,
+        evaluation_id = resume_regression,
         output_format = "json"
       })
       if acc_info and not acc_info.error then
-        local valid, err = validate_eval_version(acc_info, "Accuracy", resume_acc)
+        local valid, err = validate_eval_version(acc_info, "Regression", resume_regression)
         if not valid then
           return {success = false, status = "error", message = err}
         end
-        accuracy_baseline_id      = resume_acc
-        accuracy_baseline_metrics = extract_metrics(acc_info)
-        accuracy_baseline_rca     = enrich_rca(acc_info.root_cause or {})
-        accuracy_available        = true
+        regression_baseline_id      = resume_regression
+        regression_baseline_metrics = extract_metrics(acc_info)
+        regression_baseline_cost_per_item = extract_cost_per_item(acc_info)
+        regression_baseline_rca     = enrich_rca(acc_info.root_cause or {})
+        regression_available        = true
         Human.notify({message = string.format(
-          "Accuracy baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-          accuracy_baseline_metrics.alignment,
-          accuracy_baseline_metrics.accuracy,
-          accuracy_baseline_metrics.precision,
-          accuracy_baseline_metrics.recall
+          "Regression baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          regression_baseline_metrics.alignment,
+          regression_baseline_metrics.accuracy,
+          regression_baseline_metrics.precision,
+          regression_baseline_metrics.recall
         ), level = "info"})
       else
-        Human.notify({message = "Failed to resume accuracy baseline: " .. tostring(acc_info and acc_info.error or "not found"), level = "warning"})
+        Human.notify({message = "Failed to resume regression baseline: " .. tostring(acc_info and acc_info.error or "not found"), level = "warning"})
       end
     end
 
-    if resume_fb then
-      Human.notify({message = "Fetching feedback baseline: " .. resume_fb, level = "info"})
+    if resume_recent then
+      Human.notify({message = "Fetching recent baseline: " .. resume_recent, level = "info"})
       local fb_info = call_plexus_tool("plexus_evaluation_info", {
-        evaluation_id = resume_fb,
+        evaluation_id = resume_recent,
         output_format = "json"
       })
       if not fb_info or fb_info.error then
         return {
           success = false,
           status  = "error",
-          message = "Failed to resume feedback baseline " .. resume_fb .. ": " .. tostring(fb_info and fb_info.error or "not found")
+          message = "Failed to resume recent baseline " .. resume_recent .. ": " .. tostring(fb_info and fb_info.error or "not found")
         }
       end
-      -- Skip version validation for feedback evals — they use the champion version
+      -- Skip version validation for recent evals — they use the champion version
       -- at the time of evaluation, which may differ from the starting version.
-      feedback_baseline_id      = resume_fb
-      feedback_baseline_metrics = extract_metrics(fb_info)
-      feedback_baseline_rca     = enrich_rca(fb_info.root_cause or {})
+      recent_baseline_id      = resume_recent
+      recent_baseline_metrics = extract_metrics(fb_info)
+      recent_baseline_cost_per_item = extract_cost_per_item(fb_info)
+      recent_baseline_rca     = enrich_rca(fb_info.root_cause or {})
       Human.notify({message = string.format(
-        "Feedback baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-        feedback_baseline_metrics.alignment,
-        feedback_baseline_metrics.accuracy,
-        feedback_baseline_metrics.precision,
-        feedback_baseline_metrics.recall
+        "Recent baseline (resumed): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        recent_baseline_metrics.alignment,
+        recent_baseline_metrics.accuracy,
+        recent_baseline_metrics.precision,
+        recent_baseline_metrics.recall
       ), level = "info"})
     end
 
-    -- If feedback baseline not resumed, must run it
-    if not resume_fb then
-      Human.notify({message = "No feedback baseline to resume — running fresh...", level = "info"})
+    -- If recent baseline not resumed, must run it
+    if not resume_recent then
+      Human.notify({message = "No recent baseline to resume — running fresh...", level = "info"})
     end
   end
 
@@ -2998,7 +3022,7 @@ code: |
 
   -- Try to reuse recent completed evaluations before running fresh baselines
   local n_samples = params.max_samples or 100
-  if not accuracy_baseline_id and champion_version_id then
+  if not regression_baseline_id and champion_version_id then
     local ok_acc, found_acc = pcall(call_plexus_tool, "plexus_evaluation_find_recent", {
       score_version_id = champion_version_id,
       evaluation_type  = "accuracy",
@@ -3006,17 +3030,18 @@ code: |
       min_items        = math.floor(n_samples * 0.8),  -- allow ~20% smaller sample counts
     })
     if ok_acc and found_acc and not found_acc.error and (found_acc.evaluation_id or found_acc.id) then
-      accuracy_baseline_id      = found_acc.evaluation_id or found_acc.id
-      accuracy_baseline_metrics = extract_metrics(found_acc)
-      accuracy_baseline_rca     = enrich_rca(found_acc.root_cause or {})
-      accuracy_available        = true
+      regression_baseline_id      = found_acc.evaluation_id or found_acc.id
+      regression_baseline_metrics = extract_metrics(found_acc)
+      regression_baseline_cost_per_item = extract_cost_per_item(found_acc)
+      regression_baseline_rca     = enrich_rca(found_acc.root_cause or {})
+      regression_available        = true
       Human.notify({message = string.format(
-        "Accuracy baseline (reusing recent): AC1=%.3f, Accuracy=%.3f",
-        accuracy_baseline_metrics.alignment, accuracy_baseline_metrics.accuracy
+        "Regression baseline (reusing recent): AC1=%.3f, Accuracy=%.3f",
+        regression_baseline_metrics.alignment, regression_baseline_metrics.accuracy
       ), level = "info"})
     end
   end
-  if not feedback_baseline_id and champion_version_id then
+  if not recent_baseline_id and champion_version_id then
     local ok_fb, found_fb = pcall(call_plexus_tool, "plexus_evaluation_find_recent", {
       score_version_id = champion_version_id,
       evaluation_type  = "feedback",
@@ -3024,20 +3049,21 @@ code: |
       min_items        = math.floor(n_samples * 0.8),  -- same 20% tolerance as accuracy
     })
     if ok_fb and found_fb and not found_fb.error and (found_fb.evaluation_id or found_fb.id) then
-      feedback_baseline_id      = found_fb.evaluation_id or found_fb.id
-      feedback_baseline_metrics = extract_metrics(found_fb)
-      feedback_baseline_rca     = enrich_rca(found_fb.root_cause or {})
+      recent_baseline_id      = found_fb.evaluation_id or found_fb.id
+      recent_baseline_metrics = extract_metrics(found_fb)
+      recent_baseline_cost_per_item = extract_cost_per_item(found_fb)
+      recent_baseline_rca     = enrich_rca(found_fb.root_cause or {})
       Human.notify({message = string.format(
-        "Feedback baseline (reusing recent): AC1=%.3f, Accuracy=%.3f",
-        feedback_baseline_metrics.alignment, feedback_baseline_metrics.accuracy
+        "Recent baseline (reusing recent): AC1=%.3f, Accuracy=%.3f",
+        recent_baseline_metrics.alignment, recent_baseline_metrics.accuracy
       ), level = "info"})
     end
   end
 
   -- Run fresh baselines for any that weren't found above
-  if not feedback_baseline_id or (not accuracy_baseline_id and not resume_acc) then
+  if not recent_baseline_id or (not regression_baseline_id and not resume_regression) then
     local batch_items = {}
-    if not accuracy_baseline_id then
+    if not regression_baseline_id then
       table.insert(batch_items, {
         scorecard_name  = params.scorecard,
         score_name      = params.score,
@@ -3045,10 +3071,10 @@ code: |
         dataset_id      = dataset_id,
         n_samples       = params.max_samples or 100,
         version         = champion_version_id,
-        notes           = "Baseline: deterministic accuracy dataset for " .. score_name,
+        notes           = "Baseline: deterministic regression dataset for " .. score_name,
       })
     end
-    if not feedback_baseline_id then
+    if not recent_baseline_id then
       table.insert(batch_items, {
         scorecard_name     = params.scorecard,
         score_name         = params.score,
@@ -3069,76 +3095,86 @@ code: |
 
     local baseline_batch = call_plexus_tool("plexus_evaluation_run", {batch = batch_items})
 
-    -- Parse results — map back to accuracy/feedback based on what we requested
+    -- Parse results — map back to regression/recent based on what we requested
     local batch_idx = 1
-    if not accuracy_baseline_id then
+    if not regression_baseline_id then
       local acc_result = baseline_batch and baseline_batch[batch_idx]
       if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
-        accuracy_baseline         = acc_result
-        accuracy_baseline_id      = acc_result.id or acc_result.evaluation_id
-        accuracy_baseline_metrics = extract_metrics(acc_result)
-        accuracy_baseline_rca     = enrich_rca(acc_result.root_cause or {})
-        accuracy_available        = true
+        regression_baseline         = acc_result
+        regression_baseline_id      = acc_result.id or acc_result.evaluation_id
+        regression_baseline_metrics = extract_metrics(acc_result)
+        regression_baseline_cost_per_item = extract_cost_per_item(acc_result)
+        regression_baseline_rca     = enrich_rca(acc_result.root_cause or {})
+        regression_available        = true
         local acc_cache_label = acc_result._from_cache and " (cached)" or ""
         Human.notify({message = string.format(
-          "Accuracy baseline%s: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          "Regression baseline%s: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
           acc_cache_label,
-          accuracy_baseline_metrics.alignment,
-          accuracy_baseline_metrics.accuracy,
-          accuracy_baseline_metrics.precision,
-          accuracy_baseline_metrics.recall
+          regression_baseline_metrics.alignment,
+          regression_baseline_metrics.accuracy,
+          regression_baseline_metrics.precision,
+          regression_baseline_metrics.recall
         ), level = "info"})
-        diag(string.format("Accuracy baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-          tostring(accuracy_baseline_id),
-          accuracy_baseline_metrics.alignment, accuracy_baseline_metrics.accuracy,
-          accuracy_baseline_metrics.precision, accuracy_baseline_metrics.recall))
+        diag(string.format("Regression baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+          tostring(regression_baseline_id),
+          regression_baseline_metrics.alignment, regression_baseline_metrics.accuracy,
+          regression_baseline_metrics.precision, regression_baseline_metrics.recall))
       else
         local err_msg = (acc_result and acc_result.error) or "no result"
-        Human.notify({message = "Accuracy baseline unavailable (will proceed feedback-only): " .. tostring(err_msg), level = "warning"})
+        Human.notify({message = "Regression baseline unavailable (will proceed recent-only): " .. tostring(err_msg), level = "warning"})
       end
       batch_idx = batch_idx + 1
     end
 
-    if not feedback_baseline_id then
+    if not recent_baseline_id then
       local fb_result = baseline_batch and baseline_batch[batch_idx]
       if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
         return {
           success = false,
           status  = "error",
-          message = "Failed to run baseline feedback evaluation: " .. tostring(fb_result and fb_result.error or "no result")
+          message = "Failed to run baseline recent evaluation: " .. tostring(fb_result and fb_result.error or "no result")
         }
       end
-      feedback_baseline_id      = fb_result.id or fb_result.evaluation_id
-      feedback_baseline_metrics = extract_metrics(fb_result)
-      feedback_baseline_rca     = enrich_rca(fb_result.root_cause or {})
+      recent_baseline_id      = fb_result.id or fb_result.evaluation_id
+      recent_baseline_metrics = extract_metrics(fb_result)
+      recent_baseline_cost_per_item = extract_cost_per_item(fb_result)
+      recent_baseline_rca     = enrich_rca(fb_result.root_cause or {})
       local fb_cache_label = fb_result._from_cache and " (cached)" or ""
       Human.notify({message = string.format(
-        "Feedback baseline%s: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        "Recent baseline%s: AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
         fb_cache_label,
-        feedback_baseline_metrics.alignment,
-        feedback_baseline_metrics.accuracy,
-        feedback_baseline_metrics.precision,
-        feedback_baseline_metrics.recall
+        recent_baseline_metrics.alignment,
+        recent_baseline_metrics.accuracy,
+        recent_baseline_metrics.precision,
+        recent_baseline_metrics.recall
       ), level = "info"})
-      diag(string.format("Feedback baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
-        tostring(feedback_baseline_id),
-        feedback_baseline_metrics.alignment, feedback_baseline_metrics.accuracy,
-        feedback_baseline_metrics.precision, feedback_baseline_metrics.recall))
+      diag(string.format("Recent baseline (%s): AC1=%.3f, Accuracy=%.3f, Precision=%.3f, Recall=%.3f",
+        tostring(recent_baseline_id),
+        recent_baseline_metrics.alignment, recent_baseline_metrics.accuracy,
+        recent_baseline_metrics.precision, recent_baseline_metrics.recall))
     end
   end
 
   -- Store both baselines in state
-  State.set("accuracy_baseline_id",      accuracy_baseline_id)
-  State.set("accuracy_baseline_metrics", accuracy_baseline_metrics)
-  State.set("feedback_baseline_id",      feedback_baseline_id)
-  State.set("feedback_baseline_metrics", feedback_baseline_metrics)
+  State.set("regression_baseline_id",      regression_baseline_id)
+  State.set("regression_baseline_metrics", regression_baseline_metrics)
+  State.set("regression_baseline_cost_per_item", regression_baseline_cost_per_item)
+  State.set("recent_baseline_id",      recent_baseline_id)
+  State.set("recent_baseline_metrics", recent_baseline_metrics)
+  State.set("recent_baseline_cost_per_item", recent_baseline_cost_per_item)
   -- Immutable copies for dashboard display — never overwritten on acceptance
   -- (the non-initial keys are updated each accepted cycle for agent context)
-  if State.get("feedback_initial_baseline_metrics") == nil then
-    State.set("feedback_initial_baseline_metrics", feedback_baseline_metrics)
+  if State.get("recent_initial_baseline_metrics") == nil then
+    State.set("recent_initial_baseline_metrics", recent_baseline_metrics)
   end
-  if State.get("accuracy_initial_baseline_metrics") == nil then
-    State.set("accuracy_initial_baseline_metrics", accuracy_baseline_metrics)
+  if State.get("regression_initial_baseline_metrics") == nil then
+    State.set("regression_initial_baseline_metrics", regression_baseline_metrics)
+  end
+  if State.get("recent_initial_baseline_cost_per_item") == nil then
+    State.set("recent_initial_baseline_cost_per_item", recent_baseline_cost_per_item)
+  end
+  if State.get("regression_initial_baseline_cost_per_item") == nil then
+    State.set("regression_initial_baseline_cost_per_item", regression_baseline_cost_per_item)
   end
   State.set("baseline_version_id",       champion_version_id)
   State.set("scorecard_id",    scorecard_id)
@@ -3147,22 +3183,22 @@ code: |
   State.set("score_name",      score_name)
   State.set("iterations",    {})
   -- Store full RCA including _all_item_classifications (State now backed by S3, no size limit)
-  State.set("last_accuracy_rca", accuracy_baseline_rca)
-  State.set("last_feedback_rca", feedback_baseline_rca)
+  State.set("last_regression_rca", regression_baseline_rca)
+  State.set("last_recent_rca", recent_baseline_rca)
 
   -- Consume feedback contradictions results (blocks until background dispatch finishes)
   pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = false})
 
-  -- Fetch smoke test items from the regression dataset (accuracy baseline eval).
+  -- Fetch smoke test items from the regression dataset (regression baseline eval).
   -- Using items from the actual regression dataset ensures they are EDU items
   -- with real school metadata, so the LLM path is exercised during smoke tests.
-  if accuracy_baseline_id then
+  if regression_baseline_id then
     local ids = {}
     -- Sample at three spread offsets to get variety across the dataset
     -- Use small offsets since some evals have 50+ items; avoid going past end
     for _, offset in ipairs({0, 15, 30}) do
       local ok, res = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
-        evaluation_id = accuracy_baseline_id,
+        evaluation_id = regression_baseline_id,
         limit         = 1,
         offset        = offset
       })
@@ -3182,28 +3218,28 @@ code: |
         level = "warning"})
     end
   else
-    Human.notify({message = "WARNING: no accuracy baseline available — smoke tests will be skipped",
+    Human.notify({message = "WARNING: no regression baseline available — smoke tests will be skipped",
       level = "warning"})
   end
   -- Persist so continuation runs can restore it
   State.set("smoke_test_item_ids", smoke_test_item_ids)
 
   -- Early exit: if feedback alignment is already perfect or no RCA data
-  local fb_rca_topics = (type(feedback_baseline_rca) == "table" and feedback_baseline_rca.topics) or {}
+  local fb_rca_topics = (type(recent_baseline_rca) == "table" and recent_baseline_rca.topics) or {}
   local has_fb_rca = type(fb_rca_topics) == "table" and #fb_rca_topics > 0
-  local acc_perfect = not accuracy_available or (accuracy_baseline_metrics and accuracy_baseline_metrics.alignment >= 0.99)
-  if feedback_baseline_metrics.alignment >= 0.99 and acc_perfect then
+  local acc_perfect = not regression_available or (regression_baseline_metrics and regression_baseline_metrics.alignment >= 0.99)
+  if recent_baseline_metrics.alignment >= 0.99 and acc_perfect then
     local reason = "Both baselines already at 99%+ alignment — nothing to optimize."
     Human.notify({message = reason, level = "info"})
     return {
       success = true,
       status = "converged",
       message = reason,
-      accuracy_baseline_id = accuracy_baseline_id,
-      feedback_baseline_id = feedback_baseline_id,
+      regression_baseline_id = regression_baseline_id,
+      recent_baseline_id = recent_baseline_id,
       iterations = {},
-      feedback_improvement = 0,
-      accuracy_improvement = 0,
+      recent_improvement = 0,
+      regression_improvement = 0,
       scorecard_id = scorecard_id,
       score_id = score_id
     }
@@ -3226,20 +3262,20 @@ code: |
   local iterations = State.get("iterations") or {}
   -- Derive last-accepted state from accumulated iterations (works for both paths):
   local _last_accepted_v = champion_version_id
-  local _last_accepted_fb_m = feedback_baseline_metrics
-  local _last_accepted_fb_eid = feedback_baseline_id
-  local _last_accepted_acc_m = accuracy_baseline_metrics
-  local _last_accepted_acc_eid = accuracy_baseline_id
+  local _last_accepted_fb_m = recent_baseline_metrics
+  local _last_accepted_fb_eid = recent_baseline_id
+  local _last_accepted_acc_m = regression_baseline_metrics
+  local _last_accepted_acc_eid = regression_baseline_id
   -- Scan iterations in reverse to find the most recent accepted/carried cycle
   -- (accepted=true for ACCEPTED; carried cycles also have accepted=true with decision="CARRIED")
   for i = #iterations, 1, -1 do
     local it = iterations[i]
     if it.accepted and it.score_version_id then
       _last_accepted_v = it.score_version_id
-      if it.feedback_metrics      then _last_accepted_fb_m   = it.feedback_metrics      end
-      if it.feedback_evaluation_id  then _last_accepted_fb_eid = it.feedback_evaluation_id  end
-      if it.accuracy_metrics      then _last_accepted_acc_m  = it.accuracy_metrics      end
-      if it.accuracy_evaluation_id  then _last_accepted_acc_eid = it.accuracy_evaluation_id  end
+      if it.recent_metrics      then _last_accepted_fb_m   = it.recent_metrics      end
+      if it.recent_evaluation_id  then _last_accepted_fb_eid = it.recent_evaluation_id  end
+      if it.regression_metrics      then _last_accepted_acc_m  = it.regression_metrics      end
+      if it.regression_evaluation_id  then _last_accepted_acc_eid = it.regression_evaluation_id  end
       break
     end
   end
@@ -3526,17 +3562,17 @@ code: |
     end
 
     -- Get current eval metrics (updated after accepted cycles)
-    local current_fb_metrics = State.get("feedback_baseline_metrics") or feedback_baseline_metrics
-    local current_acc_metrics = accuracy_available and (State.get("accuracy_baseline_metrics") or accuracy_baseline_metrics) or nil
-    local current_fb_rca = State.get("last_feedback_rca") or feedback_baseline_rca
-    local current_acc_rca = accuracy_available and (State.get("last_accuracy_rca") or accuracy_baseline_rca) or nil
+    local current_fb_metrics = State.get("recent_baseline_metrics") or recent_baseline_metrics
+    local current_acc_metrics = regression_available and (State.get("regression_baseline_metrics") or regression_baseline_metrics) or nil
+    local current_fb_rca = State.get("last_recent_rca") or recent_baseline_rca
+    local current_acc_rca = regression_available and (State.get("last_regression_rca") or regression_baseline_rca) or nil
 
     -- Count consecutive accuracy regressions for strategy selection
     local consecutive_acc_rejections = 0
     if iterations then
       for i = #iterations, 1, -1 do
         local it = iterations[i]
-        local acc_d = it.accuracy_deltas and it.accuracy_deltas.alignment or 0
+        local acc_d = it.regression_deltas and it.regression_deltas.alignment or 0
         if not it.accepted and acc_d < -0.02 then
           consecutive_acc_rejections = consecutive_acc_rejections + 1
         else
@@ -3563,12 +3599,12 @@ code: |
       baseline_version_id = champion_version_id,
       last_accepted_version_id = last_accepted_version_id,
       iterations = iterations,
-      baseline_fb_metrics = feedback_baseline_metrics,
-      baseline_acc_metrics = accuracy_baseline_metrics,
-      feedback_metrics = current_fb_metrics,
-      accuracy_metrics = current_acc_metrics,
-      feedback_rca = current_fb_rca,
-      accuracy_rca = current_acc_rca,
+      baseline_fb_metrics = recent_baseline_metrics,
+      baseline_acc_metrics = regression_baseline_metrics,
+      recent_metrics = current_fb_metrics,
+      regression_metrics = current_acc_metrics,
+      recent_rca = current_fb_rca,
+      regression_rca = current_acc_rca,
       current_code = current_code,
       current_guidelines = current_guidelines,
       iteration = cycle,
@@ -3590,16 +3626,16 @@ code: |
 
     -- Define the hypothesis generation slots for this cycle.
     -- Slot layout (when not in conservatism mode):
-    --   1. feedback_incremental — small targeted tweak aimed at feedback alignment
-    --   2. feedback_bold        — larger change aimed at feedback alignment
-    --   3. accuracy_fix         — change aimed at the regression accuracy dataset
+    --   1. recent_incremental — small targeted tweak aimed at feedback alignment
+    --   2. recent_bold        — larger change aimed at feedback alignment
+    --   3. regression_fix         — change aimed at the regression accuracy dataset
     --   4. structural           — always present: architecture, preprocessing, model swap,
     --                             or other non-prompt structural change (see cookbook C section)
     -- In conservatism modes (consecutive failures) the slot list shrinks to protect gains.
     local hyp_slots
     if consecutive_failed_cycles >= 4 then
       -- Ultra-conservative: single small hypothesis only
-      hyp_slots = {"feedback_incremental"}
+      hyp_slots = {"recent_incremental"}
       Human.notify({message = string.format(
         "  Conservatism mode: %d consecutive failures — single hypothesis only",
         consecutive_failed_cycles), level = "warning"})
@@ -3608,13 +3644,13 @@ code: |
       -- After multiple prompt-level failures, a structural change is often the breakthrough needed.
       -- Keeping the structural slot here means the agent can try a model swap or architecture change
       -- instead of yet another prompt tweak that follows the same failure pattern.
-      hyp_slots = {"feedback_incremental", "structural"}
+      hyp_slots = {"recent_incremental", "structural"}
       Human.notify({message = string.format(
         "  Conservatism mode: %d consecutive failures — reduced to 2 hypotheses (incremental + structural)",
         consecutive_failed_cycles), level = "warning"})
     else
       -- Normal: 4 hypotheses, structural always occupies slot 4
-      hyp_slots = {"feedback_incremental", "feedback_bold", "accuracy_fix", "structural"}
+      hyp_slots = {"recent_incremental", "recent_bold", "regression_fix", "structural"}
       Human.notify({message = "  4-slot hypothesis set (slots: incremental, bold, accuracy, structural)",
         level = "info"})
     end
@@ -3839,28 +3875,28 @@ code: |
           local last_submit = Tool.last_call("submit_score_version")
           local last_done = Tool.last_call("done")
 
-          local feedback_parts = {}
+          local recent_parts = {}
 
           -- Smoke test failure takes priority over all other feedback
           if smoke_test_failure then
             total_smoke_failures = total_smoke_failures + 1
-            table.insert(feedback_parts, "SMOKE TEST FAILED for the version you just submitted:\n\n" .. smoke_test_failure)
-            table.insert(feedback_parts, "\nThe score version was created but the prediction engine cannot execute it.")
+            table.insert(recent_parts, "SMOKE TEST FAILED for the version you just submitted:\n\n" .. smoke_test_failure)
+            table.insert(recent_parts, "\nThe score version was created but the prediction engine cannot execute it.")
             -- Give targeted recovery advice: processor errors should be reverted, not debugged
             local err_lower = string.lower(smoke_test_failure)
             if string.find(err_lower, "processor") or string.find(err_lower, "filter")
                 or string.find(err_lower, "valueerror") or string.find(err_lower, "modulenotfounderror")
                 or string.find(err_lower, "importerror") or string.find(err_lower, "attributeerror") then
-              table.insert(feedback_parts, "\nRECOVERY — this looks like a processor/class configuration error.")
-              table.insert(feedback_parts, "Do NOT attempt to debug or rewrite the failing processor.")
-              table.insert(feedback_parts, "Instead: remove any `processors:` section you added from score_config.yaml,"
+              table.insert(recent_parts, "\nRECOVERY — this looks like a processor/class configuration error.")
+              table.insert(recent_parts, "Do NOT attempt to debug or rewrite the failing processor.")
+              table.insert(recent_parts, "Instead: remove any `processors:` section you added from score_config.yaml,"
                 .. " then call submit_score_version to restore a clean baseline.")
-              table.insert(feedback_parts, "After reverting, implement the hypothesis using prompt changes only (system_message / user_message).")
+              table.insert(recent_parts, "After reverting, implement the hypothesis using prompt changes only (system_message / user_message).")
             else
-              table.insert(feedback_parts, "Fix the issue in score_config.yaml and call submit_score_version again.")
+              table.insert(recent_parts, "Fix the issue in score_config.yaml and call submit_score_version again.")
             end
             if total_smoke_failures >= max_smoke_failures then
-              table.insert(feedback_parts, string.format(
+              table.insert(recent_parts, string.format(
                 "\nYou have hit %d smoke test failures on this hypothesis. "
                 .. "Call done(reason='cannot_improve: repeated smoke test failures') to skip it.",
                 total_smoke_failures))
@@ -3871,45 +3907,45 @@ code: |
             local edit_result = tostring(last_edit.result or "")
             local edit_command = (last_edit.args and last_edit.args.command) or ""
             if edit_command == "view" then
-              table.insert(feedback_parts, "File viewed successfully. The file has NOT been modified yet.")
-              table.insert(feedback_parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_version to submit.")
+              table.insert(recent_parts, "File viewed successfully. The file has NOT been modified yet.")
+              table.insert(recent_parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_version to submit.")
             elseif string.sub(edit_result, 1, 6) == "Error:" then
-              table.insert(feedback_parts, "Your str_replace_editor call returned an error:\n" .. edit_result)
-              table.insert(feedback_parts, "\nYou can retry the edit with corrected old_str, or call view to re-read the file and copy the exact text.")
+              table.insert(recent_parts, "Your str_replace_editor call returned an error:\n" .. edit_result)
+              table.insert(recent_parts, "\nYou can retry the edit with corrected old_str, or call view to re-read the file and copy the exact text.")
             else
-              table.insert(feedback_parts, "Edit applied successfully.")
-              table.insert(feedback_parts, "You can make more edits, or call submit_score_version(version_note=\"...\") to submit.")
+              table.insert(recent_parts, "Edit applied successfully.")
+              table.insert(recent_parts, "You can make more edits, or call submit_score_version(version_note=\"...\") to submit.")
             end
           end
           if last_submit then
             local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
             if ok_sub and sub_result and sub_result.error then
               local err_text = tostring(sub_result.error)
-              table.insert(feedback_parts, "submit_score_version returned an error:\n  " .. err_text)
+              table.insert(recent_parts, "submit_score_version returned an error:\n  " .. err_text)
               if string.find(err_text, "most recent str_replace_editor") then
-                table.insert(feedback_parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_version again.")
+                table.insert(recent_parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_version again.")
               elseif string.find(err_text, "unchanged from the original") then
-                table.insert(feedback_parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting.")
+                table.insert(recent_parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting.")
               else
-                table.insert(feedback_parts, "\nFix the issue and try submit_score_version again.")
+                table.insert(recent_parts, "\nFix the issue and try submit_score_version again.")
               end
             end
           end
-          if #feedback_parts == 0 then
-            table.insert(feedback_parts, "No recognized tool call was made.")
-            table.insert(feedback_parts, "You must call str_replace_editor, submit_score_version, or done.")
+          if #recent_parts == 0 then
+            table.insert(recent_parts, "No recognized tool call was made.")
+            table.insert(recent_parts, "You must call str_replace_editor, submit_score_version, or done.")
           end
-          table.insert(feedback_parts, string.format("\n(Hypothesis %d, step %d/%d)", h, react_step, max_react_steps))
+          table.insert(recent_parts, string.format("\n(Hypothesis %d, step %d/%d)", h, react_step, max_react_steps))
 
           -- Always include the current file content inline in the feedback message.
           local editor_content = call_plexus_tool("score_editor_get_content", {})
           if editor_content and editor_content.file_content then
-            table.insert(feedback_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
+            table.insert(recent_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
               .. editor_content.file_content
               .. "\n=== END OF score_config.yaml ===")
           end
 
-          msg = table.concat(feedback_parts, "\n")
+          msg = table.concat(recent_parts, "\n")
         end
 
         -- Log the feedback message for debugging
@@ -4226,7 +4262,7 @@ code: |
       -- Batch-eval all submitted hypothesis versions
       local batch = {}
       for _, sv in ipairs(submitted_versions) do
-        if accuracy_available then
+        if regression_available then
           table.insert(batch, {
             scorecard_name = params.scorecard,
             score_name = params.score,
@@ -4234,7 +4270,7 @@ code: |
             dataset_id = dataset_id,
             n_samples = params.max_samples or 100,
             version = sv.version_id,
-            baseline = accuracy_baseline_id,
+            baseline = regression_baseline_id,
             current_baseline = last_accepted_acc_eval_id,
             notes = string.format("Cycle %d / %s — deterministic regression dataset", cycle, trunc(sv.hypothesis.name .. ": " .. (sv.hypothesis.description or ""), 500))
           })
@@ -4247,7 +4283,7 @@ code: |
           max_feedback_items = params.max_samples or 100,
           sampling_mode = "newest",
           version = sv.version_id,
-          baseline = feedback_baseline_id,
+          baseline = recent_baseline_id,
           current_baseline = last_accepted_fb_eval_id,
           wait = true,
           notes = string.format("Cycle %d / %s — recent feedback items", cycle, trunc(sv.hypothesis.name .. ": " .. (sv.hypothesis.description or ""), 500))
@@ -4264,14 +4300,15 @@ code: |
       diag(string.format("Hypothesis eval batch returned (%d results)", batch_results and #batch_results or 0))
 
       -- Parse results
-      local evals_per = accuracy_available and 2 or 1
+      local evals_per = regression_available and 2 or 1
       for i, sv in ipairs(submitted_versions) do
         local base_idx = (i - 1) * evals_per
-        if accuracy_available then
+        if regression_available then
           local acc_r = batch_results and batch_results[base_idx + 1]
           if acc_r and (acc_r.id or acc_r.evaluation_id) then
             sv.acc_metrics = extract_metrics(acc_r)
-            sv.acc_deltas = calculate_deltas(sv.acc_metrics, accuracy_baseline_metrics)
+            sv.acc_cost_per_item = extract_cost_per_item(acc_r)
+            sv.acc_deltas = calculate_deltas(sv.acc_metrics, regression_baseline_metrics)
             sv.acc_deltas_vs_current = calculate_deltas(sv.acc_metrics, last_accepted_acc_metrics)
             sv.acc_rca = enrich_rca(acc_r.root_cause or {})
             sv.acc_eval_id = acc_r.id or acc_r.evaluation_id
@@ -4280,7 +4317,8 @@ code: |
         local fb_r = batch_results and batch_results[base_idx + evals_per]
         if fb_r and (fb_r.id or fb_r.evaluation_id) then
           sv.fb_metrics = extract_metrics(fb_r)
-          sv.fb_deltas = calculate_deltas(sv.fb_metrics, feedback_baseline_metrics)
+          sv.fb_cost_per_item = extract_cost_per_item(fb_r)
+          sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
           sv.fb_deltas_vs_current = calculate_deltas(sv.fb_metrics, last_accepted_fb_metrics)
           sv.fb_rca = enrich_rca(fb_r.root_cause or {})
           sv.fb_eval_id = fb_r.id or fb_r.evaluation_id
@@ -4309,11 +4347,11 @@ code: |
         local fb_d_cur = sv.fb_deltas_vs_current and sv.fb_deltas_vs_current.alignment or 0
         local acc_d_cur = sv.acc_deltas_vs_current and sv.acc_deltas_vs_current.alignment or 0
         Human.notify({message = string.format(
-          "    Hyp %d [%s]: FB AC1 %+.3f (vs current %+.3f), ACC AC1 %+.3f (vs current %+.3f)  [%s]",
+          "    Hyp %d [%s]: Recent AC1 %+.3f (vs current %+.3f), Regression AC1 %+.3f (vs current %+.3f)  [%s]",
           sv.index, status_label, fb_d, fb_d_cur, acc_d, acc_d_cur,
           trunc(sv.done_reason or "", 60)
         ), level = "info"})
-        diag(string.format("Hyp %d [%s] version=%s: FB AC1 %+.3f (cur %+.3f), ACC AC1 %+.3f (cur %+.3f) — %s",
+        diag(string.format("Hyp %d [%s] version=%s: Recent AC1 %+.3f (cur %+.3f), Regression AC1 %+.3f (cur %+.3f) — %s",
           sv.index, status_label, tostring(sv.version_id or "?"),
           fb_d, fb_d_cur, acc_d, acc_d_cur, trunc(sv.done_reason or sv.hypothesis and sv.hypothesis.name or "", 80)))
       end
@@ -4413,19 +4451,19 @@ code: |
           if step == 1 and edit_failures == 0 then
             msg = prompt_text
           else
-            local feedback_parts = {}
+            local recent_parts = {}
             if smoke_failure then
               smoke_failure_count = smoke_failure_count + 1
-              table.insert(feedback_parts, "SMOKE TEST FAILED:\n\n" .. smoke_failure)
+              table.insert(recent_parts, "SMOKE TEST FAILED:\n\n" .. smoke_failure)
               local err_lower = string.lower(smoke_failure)
               if string.find(err_lower, "processor") or string.find(err_lower, "filter")
                   or string.find(err_lower, "valueerror") or string.find(err_lower, "modulenotfounderror")
                   or string.find(err_lower, "importerror") or string.find(err_lower, "attributeerror") then
-                table.insert(feedback_parts, "\nRECOVERY — processor/class error detected.")
-                table.insert(feedback_parts, "Remove any `processors:` section you added and call submit_score_version to restore a clean baseline.")
-                table.insert(feedback_parts, "Then implement the change using prompt modifications only.")
+                table.insert(recent_parts, "\nRECOVERY — processor/class error detected.")
+                table.insert(recent_parts, "Remove any `processors:` section you added and call submit_score_version to restore a clean baseline.")
+                table.insert(recent_parts, "Then implement the change using prompt modifications only.")
               else
-                table.insert(feedback_parts, "\nFix the issue and call submit_score_version again.")
+                table.insert(recent_parts, "\nFix the issue and call submit_score_version again.")
               end
               if smoke_failure_count >= max_smoke_failures then
                 done = true
@@ -4438,33 +4476,33 @@ code: |
                 local edit_result = tostring(last_edit.result or "")
                 local edit_cmd = (last_edit.args and last_edit.args.command) or ""
                 if edit_cmd == "view" then
-                  table.insert(feedback_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
+                  table.insert(recent_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
                 elseif string.sub(edit_result, 1, 6) == "Error:" then
-                  table.insert(feedback_parts, "str_replace_editor error:\n" .. edit_result)
-                  table.insert(feedback_parts, "\nCall view to re-read, then retry with exact text.")
+                  table.insert(recent_parts, "str_replace_editor error:\n" .. edit_result)
+                  table.insert(recent_parts, "\nCall view to re-read, then retry with exact text.")
                 else
-                  table.insert(feedback_parts, "Edit applied. Submit with submit_score_version or continue editing.")
+                  table.insert(recent_parts, "Edit applied. Submit with submit_score_version or continue editing.")
                 end
               end
               if last_submit then
                 local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
                 if ok_sub and sub_result and sub_result.error then
-                  table.insert(feedback_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+                  table.insert(recent_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
                 end
               end
             end
-            if #feedback_parts == 0 then
-              table.insert(feedback_parts, "You must call str_replace_editor or submit_score_version.")
+            if #recent_parts == 0 then
+              table.insert(recent_parts, "You must call str_replace_editor or submit_score_version.")
             end
-            table.insert(feedback_parts, string.format("\n(%s step %d/%d, edit_fails=%d)",
+            table.insert(recent_parts, string.format("\n(%s step %d/%d, edit_fails=%d)",
               strategy_label, step, max_steps, edit_failures))
             local editor_content = call_plexus_tool("score_editor_get_content", {})
             if editor_content and editor_content.file_content then
-              table.insert(feedback_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
+              table.insert(recent_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
                 .. editor_content.file_content
                 .. "\n=== END OF score_config.yaml ===")
             end
-            msg = table.concat(feedback_parts, "\n")
+            msg = table.concat(recent_parts, "\n")
           end
 
           if second_chance_pending then
@@ -4725,10 +4763,10 @@ code: |
           "\nHypothesis %d ('%s'): %s",
           sv.index, sv.hypothesis.name, status))
         table.insert(shared_hyp_parts, string.format(
-          "  vs current baseline: FB AC1 %+.3f   ACC AC1 %+.3f",
+          "  vs current baseline: Recent AC1 %+.3f   Regression AC1 %+.3f",
           fb_d_cur, acc_d_cur))
         table.insert(shared_hyp_parts, string.format(
-          "  vs original baseline: FB AC1 %+.3f   ACC AC1 %+.3f",
+          "  vs original baseline: Recent AC1 %+.3f   Regression AC1 %+.3f",
           fb_d, acc_d))
         table.insert(shared_hyp_parts, string.format(
           "  Rationale: %s", trunc(sv.done_reason or sv.hypothesis.description, 2000)))
@@ -4931,8 +4969,8 @@ code: |
 
         -- Full optimization history table
         local version_history = build_version_history(
-          iterations, baseline_version_id, feedback_baseline_metrics,
-          accuracy_baseline_metrics, last_accepted_version_id)
+          iterations, baseline_version_id, recent_baseline_metrics,
+          regression_baseline_metrics, last_accepted_version_id)
         table.insert(strategy_b_parts, version_history)
         table.insert(strategy_b_parts, "")
 
@@ -5061,7 +5099,7 @@ code: |
         -- Build batch evaluation for all strategy versions
         local eval_batch = {}
         for _, sv in ipairs(strategy_versions) do
-          if accuracy_available then
+          if regression_available then
             table.insert(eval_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
@@ -5069,9 +5107,9 @@ code: |
               dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = sv.version_id,
-              baseline = accuracy_baseline_id,
+              baseline = regression_baseline_id,
               current_baseline = last_accepted_acc_eval_id,
-              notes = string.format("Cycle %d synthesis (Strategy %s) — accuracy: %s",
+              notes = string.format("Cycle %d synthesis (Strategy %s) — regression: %s",
                 cycle, sv.label, trunc(sv.done_reason or "", 300))
             })
           end
@@ -5083,10 +5121,10 @@ code: |
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
             version = sv.version_id,
-            baseline = feedback_baseline_id,
+            baseline = recent_baseline_id,
             current_baseline = last_accepted_fb_eval_id,
             wait = true,
-            notes = string.format("Cycle %d synthesis (Strategy %s) — feedback: %s",
+            notes = string.format("Cycle %d synthesis (Strategy %s) — recent: %s",
               cycle, sv.label, trunc(sv.done_reason or "", 300))
           })
         end
@@ -5099,14 +5137,15 @@ code: |
         diag("Strategy eval batch returned")
 
         -- Extract metrics for each strategy version
-        local evals_per = accuracy_available and 2 or 1
+        local evals_per = regression_available and 2 or 1
         for i, sv in ipairs(strategy_versions) do
           local offset = (i - 1) * evals_per
-          if accuracy_available then
+          if regression_available then
             local acc_r = eval_results and eval_results[offset + 1]
             if acc_r and (acc_r.id or acc_r.evaluation_id) then
               sv.acc_metrics = extract_metrics(acc_r)
-              sv.acc_deltas = calculate_deltas(sv.acc_metrics, accuracy_baseline_metrics)
+              sv.acc_cost_per_item = extract_cost_per_item(acc_r)
+              sv.acc_deltas = calculate_deltas(sv.acc_metrics, regression_baseline_metrics)
               sv.acc_deltas_vs_current = calculate_deltas(sv.acc_metrics, last_accepted_acc_metrics)
               sv.acc_rca = enrich_rca(acc_r.root_cause or {})
               sv.acc_eval_id = acc_r.id or acc_r.evaluation_id
@@ -5115,7 +5154,8 @@ code: |
           local fb_r = eval_results and eval_results[offset + evals_per]
           if fb_r and (fb_r.id or fb_r.evaluation_id) then
             sv.fb_metrics = extract_metrics(fb_r)
-            sv.fb_deltas = calculate_deltas(sv.fb_metrics, feedback_baseline_metrics)
+            sv.fb_cost_per_item = extract_cost_per_item(fb_r)
+            sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
             sv.fb_deltas_vs_current = calculate_deltas(sv.fb_metrics, last_accepted_fb_metrics)
             sv.fb_rca = enrich_rca(fb_r.root_cause or {})
             sv.fb_eval_id = fb_r.id or fb_r.evaluation_id
@@ -5125,7 +5165,7 @@ code: |
           local fb_d_cur = sv.fb_deltas_vs_current and sv.fb_deltas_vs_current.alignment or 0
           local acc_d_cur = sv.acc_deltas_vs_current and sv.acc_deltas_vs_current.alignment or 0
           Human.notify({message = string.format(
-            "  Strategy %s: FB AC1 %+.3f (vs current %+.3f), ACC AC1 %+.3f (vs current %+.3f) (version %s)",
+            "  Strategy %s: Recent AC1 %+.3f (vs current %+.3f), Regression AC1 %+.3f (vs current %+.3f) (version %s)",
             sv.label, fb_d, fb_d_cur, acc_d, acc_d_cur, sv.version_id), level = "info"})
         end
 
@@ -5133,11 +5173,11 @@ code: |
         -- Uses objective_config to support parameterized optimization objectives
         local function score_strategy(sv)
           -- Hard veto checks (objective-specific thresholds)
-          if objective_config.hard_veto_alignment and accuracy_available then
+          if objective_config.hard_veto_alignment and regression_available then
             local align_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
             if align_d < objective_config.hard_veto_alignment then return -999 end
           end
-          if objective_config.hard_veto_accuracy and accuracy_available then
+          if objective_config.hard_veto_accuracy and regression_available then
             local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
             if acc_d < objective_config.hard_veto_accuracy then return -999 end
           end
@@ -5196,6 +5236,8 @@ code: |
         synthesis_eval_results = {
           fb_metrics = best_sv.fb_metrics,
           acc_metrics = best_sv.acc_metrics,
+          fb_cost_per_item = best_sv.fb_cost_per_item,
+          acc_cost_per_item = best_sv.acc_cost_per_item,
           fb_deltas = best_sv.fb_deltas,
           acc_deltas = best_sv.acc_deltas,
           fb_deltas_vs_current = best_sv.fb_deltas_vs_current,
@@ -5238,10 +5280,12 @@ code: |
             iteration = cycle,
             score_version_id = best and best.version_id or nil,
             done_reason = best and best.done_reason or "",
-            accuracy_metrics = best and best.acc_metrics or nil,
-            feedback_metrics = best and best.fb_metrics or nil,
-            accuracy_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-            feedback_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+            regression_metrics = best and best.acc_metrics or nil,
+            recent_metrics = best and best.fb_metrics or nil,
+            regression_cost_per_item = best and best.acc_cost_per_item or nil,
+            recent_cost_per_item = best and best.fb_cost_per_item or nil,
+            regression_deltas = best and best.acc_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+            recent_deltas = best and best.fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0},
             accepted = false,
             num_candidates = #submitted_versions,
             exploration_results = submitted_versions
@@ -5249,8 +5293,8 @@ code: |
           table.insert(iterations, cycle_log)
           State.set("iterations", iterations)
 
-          if best and best.fb_rca then State.set("last_feedback_rca", best.fb_rca) end
-          if best and best.acc_rca then State.set("last_accuracy_rca", best.acc_rca) end
+          if best and best.fb_rca then State.set("last_recent_rca", best.fb_rca) end
+          if best and best.acc_rca then State.set("last_regression_rca", best.acc_rca) end
 
           -- Compact history even on failed cycles
           if cycle < max_cycles then
@@ -5276,6 +5320,7 @@ code: |
       -- ================================================================
       if final_version_id then
         local b_fb_metrics, b_acc_metrics, b_fb_deltas, b_acc_deltas
+        local b_fb_cost_per_item, b_acc_cost_per_item
         local b_fb_deltas_vs_current, b_acc_deltas_vs_current
         local b_fb_rca, b_acc_rca
         local b_fb_eval_id, b_acc_eval_id
@@ -5284,6 +5329,8 @@ code: |
         if synthesis_eval_results then
           b_fb_metrics = synthesis_eval_results.fb_metrics
           b_acc_metrics = synthesis_eval_results.acc_metrics
+          b_fb_cost_per_item = synthesis_eval_results.fb_cost_per_item
+          b_acc_cost_per_item = synthesis_eval_results.acc_cost_per_item
           b_fb_deltas = synthesis_eval_results.fb_deltas
           b_acc_deltas = synthesis_eval_results.acc_deltas
           b_fb_deltas_vs_current = synthesis_eval_results.fb_deltas_vs_current
@@ -5296,6 +5343,8 @@ code: |
         elseif not final_is_synthesis and #succeeded == 1 then
           b_fb_metrics = succeeded[1].fb_metrics
           b_acc_metrics = succeeded[1].acc_metrics
+          b_fb_cost_per_item = succeeded[1].fb_cost_per_item
+          b_acc_cost_per_item = succeeded[1].acc_cost_per_item
           b_fb_deltas = succeeded[1].fb_deltas
           b_acc_deltas = succeeded[1].acc_deltas
           b_fb_deltas_vs_current = succeeded[1].fb_deltas_vs_current
@@ -5309,7 +5358,7 @@ code: |
           diag(string.format("Dispatching synthesis eval for version %s", tostring(final_version_id)))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
-          if accuracy_available then
+          if regression_available then
             table.insert(b_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
@@ -5317,7 +5366,7 @@ code: |
               dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = final_version_id,
-              baseline = accuracy_baseline_id,
+              baseline = regression_baseline_id,
               current_baseline = last_accepted_acc_eval_id,
               notes = string.format("Cycle %d synthesis — deterministic regression dataset: %s", cycle, trunc(final_done_reason or "", 500))
             })
@@ -5330,7 +5379,7 @@ code: |
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
             version = final_version_id,
-            baseline = feedback_baseline_id,
+            baseline = recent_baseline_id,
             current_baseline = last_accepted_fb_eval_id,
             wait = true,
             notes = string.format("Cycle %d synthesis — recent feedback items: %s", cycle, trunc(final_done_reason or "", 500))
@@ -5339,27 +5388,29 @@ code: |
           local b_results = call_plexus_tool("plexus_evaluation_run", {batch = b_batch})
           diag("Synthesis eval batch returned")
 
-          local b_evals_per = accuracy_available and 2 or 1
-          if accuracy_available then
+          local b_evals_per = regression_available and 2 or 1
+          if regression_available then
             local b_acc_r = b_results and b_results[1]
             if b_acc_r and (b_acc_r.id or b_acc_r.evaluation_id) then
               b_acc_metrics = extract_metrics(b_acc_r)
-              b_acc_deltas = calculate_deltas(b_acc_metrics, accuracy_baseline_metrics)
+              b_acc_cost_per_item = extract_cost_per_item(b_acc_r)
+              b_acc_deltas = calculate_deltas(b_acc_metrics, regression_baseline_metrics)
               b_acc_deltas_vs_current = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
               b_acc_rca = enrich_rca(b_acc_r.root_cause or {})
               b_acc_eval_id = b_acc_r.id or b_acc_r.evaluation_id
             end
-            diag(string.format("Accuracy metrics extracted: %s", tostring(b_acc_eval_id)))
+            diag(string.format("Regression metrics extracted: %s", tostring(b_acc_eval_id)))
           end
           local b_fb_r = b_results and b_results[b_evals_per]
           if b_fb_r and (b_fb_r.id or b_fb_r.evaluation_id) then
             b_fb_metrics = extract_metrics(b_fb_r)
-            b_fb_deltas = calculate_deltas(b_fb_metrics, feedback_baseline_metrics)
+            b_fb_cost_per_item = extract_cost_per_item(b_fb_r)
+            b_fb_deltas = calculate_deltas(b_fb_metrics, recent_baseline_metrics)
             b_fb_deltas_vs_current = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
             b_fb_rca = enrich_rca(b_fb_r.root_cause or {})
             b_fb_eval_id = b_fb_r.id or b_fb_r.evaluation_id
           end
-          diag(string.format("Feedback metrics extracted: %s", tostring(b_fb_eval_id)))
+          diag(string.format("Recent metrics extracted: %s", tostring(b_fb_eval_id)))
         end
 
         b_fb_deltas = b_fb_deltas or {alignment = 0, accuracy = 0, precision = 0, recall = 0}
@@ -5370,7 +5421,7 @@ code: |
         b_acc_rca = b_acc_rca or {}
 
         Human.notify({message = string.format(
-          "  Final eval: FB AC1 %+.3f (vs original), %+.3f (vs current); ACC AC1 %+.3f (vs original), %+.3f (vs current)%s",
+          "  Final eval: Recent AC1 %+.3f (vs original), %+.3f (vs current); Regression AC1 %+.3f (vs original), %+.3f (vs current)%s",
           b_fb_deltas.alignment, b_fb_deltas_vs_current.alignment,
           b_acc_deltas.alignment, b_acc_deltas_vs_current.alignment,
           final_is_synthesis and " [SYNTHESIS]" or ""
@@ -5386,29 +5437,29 @@ code: |
         local disqualification_reason = nil
         if not b_fb_metrics then
           disqualified = true
-          disqualification_reason = "missing_feedback_metrics"
-        elseif accuracy_available and b_acc_deltas.alignment < -0.02 then
+          disqualification_reason = "missing_recent_metrics"
+        elseif regression_available and b_acc_deltas.alignment < -0.02 then
           disqualified = true
-          disqualification_reason = string.format("accuracy_regression_vs_baseline_%.3f", b_acc_deltas.alignment)
+          disqualification_reason = string.format("regression_regression_vs_baseline_%.3f", b_acc_deltas.alignment)
         elseif b_fb_deltas.alignment < -0.02 then
           disqualified = true
-          disqualification_reason = string.format("feedback_regression_vs_baseline_%.3f", b_fb_deltas.alignment)
+          disqualification_reason = string.format("recent_regression_vs_baseline_%.3f", b_fb_deltas.alignment)
         end
 
         -- Dual-threshold: also check regression vs last accepted version
         -- Uses looser threshold (-0.05 vs -0.02) to account for evaluation noise
         if not disqualified and last_accepted_fb_metrics then
-          local vs_accepted_fb = calculate_deltas(b_fb_metrics or feedback_baseline_metrics, last_accepted_fb_metrics)
-          local vs_accepted_acc = accuracy_available and last_accepted_acc_metrics and b_acc_metrics
+          local vs_accepted_fb = calculate_deltas(b_fb_metrics or recent_baseline_metrics, last_accepted_fb_metrics)
+          local vs_accepted_acc = regression_available and last_accepted_acc_metrics and b_acc_metrics
             and calculate_deltas(b_acc_metrics, last_accepted_acc_metrics) or nil
 
           local accepted_regression_threshold = -0.05
           if vs_accepted_acc and vs_accepted_acc.alignment < accepted_regression_threshold then
             disqualified = true
-            disqualification_reason = string.format("accuracy_regression_vs_accepted_%.3f", vs_accepted_acc.alignment)
+            disqualification_reason = string.format("regression_regression_vs_accepted_%.3f", vs_accepted_acc.alignment)
           elseif vs_accepted_fb.alignment < accepted_regression_threshold then
             disqualified = true
-            disqualification_reason = string.format("feedback_regression_vs_accepted_%.3f", vs_accepted_fb.alignment)
+            disqualification_reason = string.format("recent_regression_vs_accepted_%.3f", vs_accepted_fb.alignment)
           end
         end
         diag(string.format("disqualified=%s reason=%s", tostring(disqualified), tostring(disqualification_reason)))
@@ -5458,10 +5509,10 @@ code: |
             done_reason = final_done_reason,
             new_version_id = final_version_id,
             prior_version_id = last_accepted_version_id,
-            fb_metrics = b_fb_metrics or feedback_baseline_metrics,
+            fb_metrics = b_fb_metrics or recent_baseline_metrics,
             acc_metrics = iter_accuracy_ok and b_acc_metrics or nil,
-            baseline_fb_ac1 = feedback_baseline_metrics.alignment,
-            baseline_acc_ac1 = accuracy_baseline_metrics and accuracy_baseline_metrics.alignment or 0,
+            baseline_fb_ac1 = recent_baseline_metrics.alignment,
+            baseline_acc_ac1 = regression_baseline_metrics and regression_baseline_metrics.alignment or 0,
             candidates = submitted_versions
           })
           diag(string.format("Review msg length: %d chars, invoking reviewer...", #review_msg))
@@ -5493,7 +5544,7 @@ code: |
           -- many small changes across cycles, only rejecting when things actually got worse.
           local regression_threshold = -0.02
           local accepted_regression_threshold = -0.05
-          local acc_regressed = accuracy_available and iter_accuracy_ok and (b_acc_deltas.alignment < regression_threshold)
+          local acc_regressed = regression_available and iter_accuracy_ok and (b_acc_deltas.alignment < regression_threshold)
           local fb_regressed = b_fb_deltas.alignment < regression_threshold
 
           -- Also check regression vs last accepted version (prevents sliding backward)
@@ -5502,7 +5553,7 @@ code: |
           if last_accepted_fb_metrics then
             local vs_accepted_fb = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
             fb_regressed_vs_accepted = vs_accepted_fb.alignment < accepted_regression_threshold
-            if accuracy_available and iter_accuracy_ok and last_accepted_acc_metrics then
+            if regression_available and iter_accuracy_ok and last_accepted_acc_metrics then
               local vs_accepted_acc = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
               acc_regressed_vs_accepted = vs_accepted_acc.alignment < accepted_regression_threshold
             end
@@ -5536,16 +5587,16 @@ code: |
               Human.notify({message = string.format("Cycle %d ACCEPTED: %s", cycle, decision_reason), level = "info"})
             else
               decision_str = "CARRIED"
-              decision_reason = string.format("neutral result (FB %+.4f)", b_fb_deltas.alignment)
+              decision_reason = string.format("neutral result (Recent %+.4f)", b_fb_deltas.alignment)
               Human.notify({message = string.format("Cycle %d CARRIED: %s — carrying forward to accumulate improvements", cycle, decision_reason), level = "info"})
             end
             last_accepted_version_id = final_version_id
             last_accepted_fb_metrics = b_fb_metrics or last_accepted_fb_metrics
             last_accepted_fb_eval_id = b_fb_eval_id or last_accepted_fb_eval_id
-            if accuracy_available and b_acc_metrics then
+            if regression_available and b_acc_metrics then
               last_accepted_acc_metrics = b_acc_metrics
             end
-            if accuracy_available and b_acc_eval_id then
+            if regression_available and b_acc_eval_id then
               last_accepted_acc_eval_id = b_acc_eval_id
             end
             -- Persist so a continuation run can restore the last-accepted state
@@ -5556,7 +5607,7 @@ code: |
             State.set("last_accepted_acc_eval_id", last_accepted_acc_eval_id)
           end
           diag(string.format(
-            "Cycle %d %s (version=%s): FB AC1=%.3f (%+.3f vs original), ACC AC1=%.3f (%+.3f vs original) — %s",
+            "Cycle %d %s (version=%s): Recent AC1=%.3f (%+.3f vs original), Regression AC1=%.3f (%+.3f vs original) — %s",
             cycle, decision_str or "?", tostring(final_version_id),
             b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment,
             b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment,
@@ -5570,8 +5621,8 @@ code: |
           for _, sv in ipairs(synthesis_eval_results.strategy_versions) do
             dual_synthesis_log["strategy_" .. string.lower(sv.label)] = {
               version_id = sv.version_id,
-              fb_delta = sv.fb_deltas and sv.fb_deltas.alignment or 0,
-              acc_delta = sv.acc_deltas and sv.acc_deltas.alignment or 0,
+              recent_delta = sv.fb_deltas and sv.fb_deltas.alignment or 0,
+              regression_delta = sv.acc_deltas and sv.acc_deltas.alignment or 0,
               done_reason = trunc(sv.done_reason or "", 500)
             }
           end
@@ -5594,15 +5645,17 @@ code: |
         local cycle_log = {
           iteration = cycle,
           score_version_id = final_version_id,
-          accuracy_evaluation_id = b_acc_eval_id,
-          feedback_evaluation_id = b_fb_eval_id,
+          regression_evaluation_id = b_acc_eval_id,
+          recent_evaluation_id = b_fb_eval_id,
           done_reason = final_done_reason,
-          accuracy_metrics = b_acc_metrics,
-          feedback_metrics = b_fb_metrics,
-          accuracy_deltas = b_acc_deltas,
-          feedback_deltas = b_fb_deltas,
-          accuracy_deltas_vs_current = b_acc_deltas_vs_current,
-          feedback_deltas_vs_current = b_fb_deltas_vs_current,
+          regression_metrics = b_acc_metrics,
+          recent_metrics = b_fb_metrics,
+          regression_cost_per_item = b_acc_cost_per_item,
+          recent_cost_per_item = b_fb_cost_per_item,
+          regression_deltas = b_acc_deltas,
+          recent_deltas = b_fb_deltas,
+          regression_deltas_vs_current = b_acc_deltas_vs_current,
+          recent_deltas_vs_current = b_fb_deltas_vs_current,
           accepted = accept,
           disqualified = disqualified,
           disqualification_reason = disqualification_reason,
@@ -5661,7 +5714,7 @@ code: |
         for _, it in ipairs(iterations) do
           if it.skip_reason then skipped_count = skipped_count + 1
           elseif it.accepted then
-            local fb_d = it.feedback_deltas and it.feedback_deltas.alignment or 0
+            local fb_d = it.recent_deltas and it.recent_deltas.alignment or 0
             if fb_d > 0.005 then accepted_count = accepted_count + 1
             else carried_count = carried_count + 1 end
           else rejected_count = rejected_count + 1 end
@@ -5677,7 +5730,7 @@ code: |
         local synthesis_note = final_is_synthesis and " [SYNTHESIS]" or ""
         local reason_short = has_text(final_done_reason) and (": " .. trunc(final_done_reason, 500)) or ""
         Human.notify({message = string.format(
-          "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  FB AC1: %.3f (%+.3f vs original, %+.3f vs current)  ACC AC1: %.3f (%+.3f vs original, %+.3f vs current)\n│  Running: %d accepted, %d carried (neutral), %d rejected, %d skipped\n└─ Current base: %s",
+          "┌─ Cycle %d/%d %s%s (%d succeeded, %d failed)%s\n│  Recent AC1: %.3f (%+.3f vs original, %+.3f vs current)  Regression AC1: %.3f (%+.3f vs original, %+.3f vs current)\n│  Running: %d accepted, %d carried (neutral), %d rejected, %d skipped\n└─ Current base: %s",
           cycle, max_cycles, status_str, synthesis_note, #succeeded, #failed, reason_short,
           b_fb_metrics and b_fb_metrics.alignment or 0, b_fb_deltas.alignment, b_fb_deltas_vs_current.alignment,
           b_acc_metrics and b_acc_metrics.alignment or 0, b_acc_deltas.alignment, b_acc_deltas_vs_current.alignment,
@@ -5695,26 +5748,28 @@ code: |
             consecutive_stagnant_cycles = consecutive_stagnant_cycles + 1  -- CARRIED = stagnant
           end
           if iter_accuracy_ok then
-            State.set("accuracy_baseline_metrics", b_acc_metrics)
+            State.set("regression_baseline_metrics", b_acc_metrics)
+            State.set("regression_baseline_cost_per_item", b_acc_cost_per_item)
           end
-          State.set("feedback_baseline_metrics", b_fb_metrics)
-          State.set("current_accuracy_baseline_id", last_accepted_acc_eval_id)
-          State.set("current_feedback_baseline_id", last_accepted_fb_eval_id)
+          State.set("recent_baseline_metrics", b_fb_metrics)
+          State.set("recent_baseline_cost_per_item", b_fb_cost_per_item)
+          State.set("current_regression_baseline_id", last_accepted_acc_eval_id)
+          State.set("current_recent_baseline_id", last_accepted_fb_eval_id)
         else
           -- Only count genuine regressions toward the failure plateau counter
           consecutive_failed_cycles = consecutive_failed_cycles + 1
           consecutive_stagnant_cycles = consecutive_stagnant_cycles + 1  -- REJECTED = stagnant
         end
         diag("Saving RCA to state...")
-        State.set("last_accuracy_rca", b_acc_rca)
-        State.set("last_feedback_rca", b_fb_rca)
+        State.set("last_regression_rca", b_acc_rca)
+        State.set("last_recent_rca", b_fb_rca)
         diag("State saved, checking exit conditions...")
 
         -- Check if target accuracy was reached (early exit)
         if accept and b_fb_metrics and b_fb_metrics.alignment >= params.target_accuracy then
           Human.notify({
             message = string.format(
-              "Target accuracy reached: feedback AC1=%.3f >= %.3f — stopping early.",
+              "Target alignment reached: recent AC1=%.3f >= %.3f — stopping early.",
               b_fb_metrics.alignment, params.target_accuracy),
             level = "info"
           })
@@ -5794,43 +5849,19 @@ code: |
 
         local syn = {}
 
-        -- ---- Structured report instructions (output first) ----
+        -- ---- Call 1: Planning analysis + executive summary ----
+        -- This is the main analytical call. The agent has full cycle history and reasons
+        -- through what happened, why, and what to try next. Produces:
+        --   ## EXECUTIVE SUMMARY  — 4-6 sentence plain-English summary
+        --   === PLANNING ANALYSIS === — detailed technical reasoning for next cycle
         table.insert(syn, string.format(
-          "You must produce output in exactly two parts in this order:\n\n"
-          .. "=== CYCLE %d REPORT ===\n\n"
+          "You must produce output in exactly this order:\n\n"
           .. "## EXECUTIVE SUMMARY\n"
-          .. "4-6 sentences of plain English prose. No headers, no bullets. Write for any audience —\n"
-          .. "someone who has never seen a confusion matrix should understand it. Cover: what improved\n"
-          .. "(or didn't) this cycle, what the main blocker is, and what decisions or actions are needed.\n"
-          .. "Include the key AC1 numbers. Copy-pasteable into an email or Slack message.\n\n"
-          .. "## LAB REPORT\n"
-          .. "Technical analysis for operators and the next optimizer run. Structure:\n"
-          .. "### What happened\n"
-          .. "(metrics this cycle vs baseline, hypotheses tested, outcomes)\n"
-          .. "### Why hypotheses worked or failed\n"
-          .. "(for each: was the premise correct? implementation off? inconclusive?)\n"
-          .. "### Error patterns still present\n"
-          .. "(2-3 concrete FP/FN patterns with example item counts)\n"
-          .. "### Ceiling analysis\n"
-          .. "(%% contradictions, max achievable AC1, what blocks further prompt-level gains)\n"
-          .. "### Next lab actions\n"
-          .. "(≤5 actions that operators or the next optimizer run can take WITHOUT SME input.\n"
-          .. " For each: what exactly, evidence count or AC1 impact, urgency)\n"
-          .. "### Suspected low-quality feedback labels\n"
-          .. "(specific items where the label appears incorrect or contradictory — cite item IDs\n"
-          .. " or patterns; these need human review before the next run)\n\n"
-          .. "## SME AGENDA\n"
-          .. "Meeting agenda for domain experts. No jargon. No AC1 numbers. No technical detail.\n"
-          .. "Each item is a DECISION TO MAKE, formatted as:\n"
-          .. "  **[Short title]**\n"
-          .. "  Question: [Plain-English question the SME needs to answer]\n"
-          .. "  Example: AI said [X], reviewer marked [Y] — here's what happened: [1-2 sentences]\n"
-          .. "  Options: (a) [option] (b) [option] (c) [option if applicable]\n"
-          .. "  Impact: Resolving this affects ~N disputed reviews\n\n"
-          .. "Only include items that require a human policy decision — not items the AI can fix alone.\n\n"
+          .. "4-6 sentences of plain English prose. No headers, no bullets. Write for any audience.\n"
+          .. "Cover: what improved (or didn't), what the main blocker is, what AC1 is now.\n"
+          .. "Copy-pasteable into an email or Slack message. DO NOT exceed 6 sentences.\n\n"
           .. "=== PLANNING ANALYSIS ===\n"
-          .. "(everything after this header is your reasoning for generating hypotheses"
-          .. " in the next cycle — only present if another cycle will run)\n\n",
+          .. "(everything after this line is technical reasoning for the next cycle's hypotheses)\n\n",
           cycle))
 
         -- ---- Cycle history ----
@@ -5841,8 +5872,8 @@ code: |
 
         for _, prev in ipairs(iterations) do
           local status = prev.accepted and "ACCEPTED" or "REJECTED"
-          local fb_d = prev.feedback_deltas and prev.feedback_deltas.alignment or 0
-          table.insert(syn, string.format("--- Cycle %d (%s, FB AC1 %+.3f) ---",
+          local fb_d = prev.recent_deltas and prev.recent_deltas.alignment or 0
+          table.insert(syn, string.format("--- Cycle %d (%s, Recent AC1 %+.3f) ---",
             prev.iteration, status, fb_d))
           if prev.exploration_results and type(prev.exploration_results) == "table" then
             for _, r in ipairs(prev.exploration_results) do
@@ -5852,7 +5883,7 @@ code: |
                 and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
                 or ("Hypothesis " .. tostring(r.index))
               table.insert(syn, string.format(
-                "  %d. %s\n     Implemented: %s\n     FB AC1 %+.3f   ACC AC1 %+.3f  %s\n",
+                "  %d. %s\n     Implemented: %s\n     Recent AC1 %+.3f   Regression AC1 %+.3f  %s\n",
                 r.index, hyp_label, r.done_reason or "(no note)",
                 r_fb_d, r_acc_d, r.succeeded and "SUCCEEDED" or "FAILED"))
             end
@@ -5935,8 +5966,7 @@ code: |
 
         table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
         table.insert(syn,
-          "The CYCLE REPORT section will be shown to the user immediately after this cycle.\n"
-          .. "The PLANNING ANALYSIS will shape hypotheses for cycle "
+          "The PLANNING ANALYSIS will shape hypotheses for cycle "
           .. tostring(cycle + 1) .. " and will be preserved for future cycles.")
 
         guard_context_budget(code_editor)
@@ -5946,24 +5976,139 @@ code: |
         end
         local syn_text = code_editor.output or "(cycle report complete)"
 
-        -- Extract multi-line section content up to the next ## heading.
-        -- Lua's "." does not match newlines, so string.find is used instead of pattern matching.
-        local function extract_heading_section(text, heading)
-          local search = heading .. "\n"
-          local _, hdr_end = text:find(search, 1, true)
-          if not hdr_end then return "" end
-          local next_hdr = text:find("\n## ", hdr_end + 1)
-          local content = next_hdr and text:sub(hdr_end + 1, next_hdr - 1) or text:sub(hdr_end + 1)
-          return (content:match("^(.-)%s*$") or content)
+        -- Extract executive summary from call 1 output.
+        -- Stop before === PLANNING ANALYSIS === boundary.
+        local exec_summary = ""
+        do
+          local search = "## EXECUTIVE SUMMARY\n"
+          local _, hdr_end = syn_text:find(search, 1, true)
+          if hdr_end then
+            local stop = syn_text:find("\n===", hdr_end + 1)
+            local raw = stop and syn_text:sub(hdr_end + 1, stop - 1) or syn_text:sub(hdr_end + 1)
+            exec_summary = (raw:match("^(.-)%s*$") or raw)
+          end
         end
-        local exec_summary  = extract_heading_section(syn_text, "## EXECUTIVE SUMMARY")
-        local lab_report    = extract_heading_section(syn_text, "## LAB REPORT")
-        local sme_agenda    = extract_heading_section(syn_text, "## SME AGENDA")
-        -- Backward-compat internal fields: map to new sections
-        local diag_summary  = exec_summary
-        local presc_summary = extract_heading_section(lab_report ~= "" and syn_text or "", "### Next lab actions")
 
-        -- Display three separate notifications — one per audience
+        -- ---- Call 2: Lab Report ----
+        -- Separate focused call so the model isn't context-shifting from analysis to SME writing.
+        -- Concise: what we tried, main error pattern still present, ≤3 next actions.
+        local lab_report = ""
+        do
+          local lr_parts = {}
+          table.insert(lr_parts, string.format(
+            "Write a concise lab report for Cycle %d of an optimization run. "
+            .. "Audience: technical operators and the next optimizer run.\n\n"
+            .. "HARD LIMIT: under 250 words total. Be terse.\n\n"
+            .. "## LAB REPORT\n\n"
+            .. "### What happened\n"
+            .. "One line per hypothesis: name, change type (prompt/structural/model), "
+            .. "FB AC1 delta, Regression AC1 delta, PASSED or FAILED.\n\n"
+            .. "### Top error pattern still present\n"
+            .. "1-2 sentences. The single most common remaining FP or FN pattern, with approximate count.\n\n"
+            .. "### Next actions\n"
+            .. "≤3 bullet points. Specific, operator-executable actions for the next cycle. "
+            .. "Each: what exactly to try, why (evidence), expected impact.\n",
+            cycle))
+          -- Provide just enough context: cycle results summary
+          table.insert(lr_parts, "\n=== CYCLE RESULTS ===\n")
+          local cur_iter = iterations[#iterations]
+          if cur_iter and cur_iter.exploration_results then
+            for _, r in ipairs(cur_iter.exploration_results) do
+              local fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
+              local acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
+              table.insert(lr_parts, string.format(
+                "- %s: FB %+.3f  REG %+.3f  [%s]\n  %s",
+                r.hypothesis and r.hypothesis.name or ("H"..tostring(r.index)),
+                fb_d, acc_d, r.succeeded and "PASS" or "FAIL",
+                trunc(r.done_reason or "", 300)))
+            end
+          end
+          table.insert(lr_parts, "\n=== PLANNING ANALYSIS (context only) ===\n")
+          table.insert(lr_parts, trunc(syn_text, 2000))
+
+          Tool.reset()
+          code_editor.clear_history()
+          guard_context_budget(code_editor)
+          local lr_ok, lr_err = safe_editor_call(table.concat(lr_parts, "\n"), nil)
+          if lr_ok then
+            local lr_raw = code_editor.output or ""
+            -- Extract the ## LAB REPORT section
+            local _, hdr_end = lr_raw:find("## LAB REPORT\n", 1, true)
+            if hdr_end then
+              local stop = lr_raw:find("\n===", hdr_end + 1) or lr_raw:find("\n## ", hdr_end + 1)
+              local raw = stop and lr_raw:sub(hdr_end + 1, stop - 1) or lr_raw:sub(hdr_end + 1)
+              lab_report = (raw:match("^(.-)%s*$") or raw)
+            else
+              lab_report = lr_raw
+            end
+          else
+            lab_report = "(lab report generation failed: " .. tostring(lr_err) .. ")"
+            diag("Lab report generation failed: " .. tostring(lr_err))
+          end
+        end
+
+        -- ---- Call 3: SME Agenda ----
+        -- Entirely separate call with minimal context — the agent should not be
+        -- thinking about technical details, only about decisions for domain experts.
+        local sme_agenda = ""
+        do
+          local sme_parts = {}
+          table.insert(sme_parts, string.format(
+            "Write a short meeting agenda for domain experts (Subject Matter Experts). "
+            .. "They are NOT technical. They do NOT know what AC1 means.\n\n"
+            .. "HARD LIMIT: max 3 agenda items. Under 200 words total.\n\n"
+            .. "## SME AGENDA\n\n"
+            .. "Format each item exactly as:\n"
+            .. "### Title of the decision\n"
+            .. "Question: The specific decision they need to make\n"
+            .. "Example: AI said X, reviewer marked Y — 1-2 sentences describing what happened\n"
+            .. "Options: (a) first option (b) second option\n"
+            .. "Impact: ~N disputed reviews\n\n"
+            .. "Rules:\n"
+            .. "- Only include items that REQUIRE a human policy decision\n"
+            .. "- No technical jargon, no model names, no metric names\n"
+            .. "- If there are no SME decisions needed, write: (No SME decisions needed this cycle)\n",
+            cycle))
+          -- Provide only the key error patterns and planning analysis — not the full cycle history
+          table.insert(sme_parts, "\n=== KEY FINDINGS FROM THIS CYCLE ===\n")
+          table.insert(sme_parts, trunc(exec_summary, 500))
+          table.insert(sme_parts, "\n\nTop patterns from planning analysis:\n")
+          -- Extract just the first 1500 chars of planning analysis
+          local pa_start = syn_text:find("=== PLANNING ANALYSIS", 1, true)
+          if pa_start then
+            table.insert(sme_parts, trunc(syn_text:sub(pa_start), 1500))
+          end
+
+          Tool.reset()
+          code_editor.clear_history()
+          guard_context_budget(code_editor)
+          local sme_ok, sme_err = safe_editor_call(table.concat(sme_parts, "\n"), nil)
+          if sme_ok then
+            local sme_raw = code_editor.output or ""
+            local _, hdr_end = sme_raw:find("## SME AGENDA\n", 1, true)
+            if hdr_end then
+              local stop = sme_raw:find("\n===", hdr_end + 1) or sme_raw:find("\n## ", hdr_end + 1)
+              local raw = stop and sme_raw:sub(hdr_end + 1, stop - 1) or sme_raw:sub(hdr_end + 1)
+              sme_agenda = (raw:match("^(.-)%s*$") or raw)
+            else
+              sme_agenda = sme_raw
+            end
+          else
+            sme_agenda = "(SME agenda generation failed: " .. tostring(sme_err) .. ")"
+            diag("SME agenda generation failed: " .. tostring(sme_err))
+          end
+        end
+
+        -- Backward-compat field: exec_summary doubles as the "diagnosis" for older dashboard code
+        local diag_summary  = exec_summary
+        local presc_summary = ""
+        -- Extract "Next actions" from lab report as prescription fallback
+        do
+          local _, na_end = lab_report:find("### Next actions\n", 1, true)
+          if na_end then presc_summary = trunc(lab_report:sub(na_end + 1), 500) end
+        end
+
+        -- Display notifications — one per section
         if has_text(exec_summary) then
           Human.notify({message = string.format(
             "=== Cycle %d — Executive Summary ===\n\n%s", cycle, exec_summary), level = "info"})
@@ -5976,11 +6121,9 @@ code: |
           Human.notify({message = string.format(
             "=== Cycle %d — SME Agenda ===\n\n%s", cycle, sme_agenda), level = "info"})
         end
-        if not has_text(exec_summary) and not has_text(lab_report) then
-          -- Fallback: display raw output if sections weren't found
+        if not has_text(exec_summary) then
           Human.notify({message = syn_text, level = "info"})
         end
-
         -- Persist the cycle report so future cycles and the end-of-run summary can reference it.
         -- Stored in State (survives history compaction).
         local cur = iterations[#iterations]
@@ -6128,7 +6271,7 @@ code: |
               cycle, item_recurrence_snap, iterations,
               current_guidelines)
             if result then
-              State.set("feedback_landscape_diagnostic", result)
+              State.set("recent_landscape_diagnostic", result)
               diag(string.format(
                 "Feedback landscape diagnostic complete (%d notable items, %d chars full report)",
                 result.notable_item_count or 0, #(result.full_report or "")))
@@ -6144,33 +6287,35 @@ code: |
           end
         end
 
-        -- Generate procedure-level summary (one paragraph each for diagnosis and prescription).
-        -- This gives the user a top-level view without drilling into individual cycles.
+        -- Generate procedure-level running summary (progress + next steps).
+        -- Shown in the dashboard between the metrics chart and the cycles table.
         diag("Generating procedure-level summary...")
         local summary_parts = {}
         table.insert(summary_parts, "You are summarizing the current state of an optimization run.\n")
         table.insert(summary_parts, string.format("Completed cycles: %d of %d\n", cycle, params.max_iterations or 3))
-        -- Gather all cycle prescriptions and diagnoses
+        -- Gather all cycle executive summaries (new format) with fallback to diagnosis_summary
         local all_insights = State.get("cycle_insights") or {}
         for _, ci in ipairs(all_insights) do
           table.insert(summary_parts, string.format("--- Cycle %d ---", ci.cycle))
-          if ci.diagnosis_summary and ci.diagnosis_summary ~= "" then
-            table.insert(summary_parts, "Diagnosis: " .. ci.diagnosis_summary)
+          local cycle_status = ci.executive_summary
+          if not cycle_status or cycle_status == "" then cycle_status = ci.diagnosis_summary end
+          if cycle_status and cycle_status ~= "" then
+            table.insert(summary_parts, "Summary: " .. cycle_status)
           end
           if ci.prescription_summary and ci.prescription_summary ~= "" then
-            table.insert(summary_parts, "Prescription: " .. ci.prescription_summary)
+            table.insert(summary_parts, "Next actions: " .. ci.prescription_summary)
           end
           table.insert(summary_parts, "")
         end
         table.insert(summary_parts, "Write exactly two sections:\n")
-        table.insert(summary_parts, "## DIAGNOSIS")
-        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the overall diagnosis across ALL cycles so far.")
-        table.insert(summary_parts, "What has the optimization learned? What patterns are confirmed? What is blocking further gains?")
-        table.insert(summary_parts, "Do NOT list per-cycle results — synthesize them into a coherent narrative.\n")
-        table.insert(summary_parts, "## PRESCRIPTION")
-        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the most important actions needed.")
+        table.insert(summary_parts, "## PROGRESS")
+        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing what the optimization has learned across ALL cycles.")
+        table.insert(summary_parts, "What improved? What patterns are confirmed? What is blocking further gains?")
+        table.insert(summary_parts, "Write in plain English — no jargon. A non-technical stakeholder should understand it.\n")
+        table.insert(summary_parts, "## NEXT STEPS")
+        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the most important actions needed right now.")
         table.insert(summary_parts, "Combine and prioritize across all cycles. Who needs to do what, and why?")
-        table.insert(summary_parts, "Focus on what matters NOW, not everything that was ever suggested.\n")
+        table.insert(summary_parts, "Focus on what matters NOW — not everything that was ever suggested.\n")
         table.insert(summary_parts, "Keep each section to ONE paragraph. No bullet points. No sub-headers.")
 
         Tool.reset()
@@ -6179,16 +6324,19 @@ code: |
         local sum_ok, sum_err = safe_editor_call(table.concat(summary_parts, "\n"), nil)
         if sum_ok then
           local sum_text = code_editor.output or ""
-          local sum_diag = sum_text:match("## DIAGNOSIS\n(.-)\n## PRESCRIPTION")
-          local sum_presc = sum_text:match("## PRESCRIPTION\n(.*)")
+          local sum_prog = sum_text:match("## PROGRESS\n(.-)\n## NEXT STEPS")
+          local sum_next = sum_text:match("## NEXT STEPS\n(.*)")
           State.set("procedure_summary", {
-            diagnosis = sum_diag or "",
-            prescription = sum_presc or "",
+            progress = sum_prog or "",
+            next_steps = sum_next or "",
+            -- Legacy field names kept for backward compat with older runs
+            diagnosis = sum_prog or "",
+            prescription = sum_next or "",
             updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
             cycle = cycle
           })
-          diag(string.format("Procedure summary updated (diag=%d, presc=%d chars)",
-            #(sum_diag or ""), #(sum_presc or "")))
+          diag(string.format("Procedure summary updated (progress=%d, next_steps=%d chars)",
+            #(sum_prog or ""), #(sum_next or "")))
         else
           diag(string.format("Procedure summary generation failed: %s", tostring(sum_err)))
         end
@@ -6205,13 +6353,13 @@ code: |
 
         -- Build context for the advisor
         local es_parts = {}
-        local es_initial_ac1 = feedback_baseline_metrics.alignment
+        local es_initial_ac1 = recent_baseline_metrics.alignment
         local es_current_ac1 = last_accepted_fb_metrics and last_accepted_fb_metrics.alignment or es_initial_ac1
         table.insert(es_parts, string.format(
           "OPTIMIZATION RUN SUMMARY\n"
           .. "Cycle: %d of %d\n"
           .. "Consecutive stagnant cycles (no significant improvement): %d\n"
-          .. "Feedback baseline AC1 (start of run): %.4f\n"
+          .. "Recent baseline AC1 (start of run): %.4f\n"
           .. "Current best feedback AC1: %.4f\n"
           .. "Total improvement so far: %+.4f\n",
           cycle, params.max_iterations or 3,
@@ -6224,8 +6372,8 @@ code: |
         table.insert(es_parts, "\n=== CYCLE HISTORY ===")
         for _, prev in ipairs(iterations) do
           local status = prev.accepted and "ACCEPTED" or "REJECTED"
-          local fb_d = prev.feedback_deltas and prev.feedback_deltas.alignment or 0
-          table.insert(es_parts, string.format("Cycle %d: %s (FB AC1 %+.3f)", prev.iteration, status, fb_d))
+          local fb_d = prev.recent_deltas and prev.recent_deltas.alignment or 0
+          table.insert(es_parts, string.format("Cycle %d: %s (Recent AC1 %+.3f)", prev.iteration, status, fb_d))
         end
 
         -- Include accumulated cycle reports (diagnosis + prescription)
@@ -6261,9 +6409,9 @@ code: |
         local trend_parts_es = {}
         for _, it in ipairs(iterations) do
           if it.contradictions_pct ~= nil then
-            table.insert(trend_parts_es, string.format("  Cycle %d: %d%% contra / %d%% gaps  (FB AC1 %+.3f)",
+            table.insert(trend_parts_es, string.format("  Cycle %d: %d%% contra / %d%% gaps  (Recent AC1 %+.3f)",
               it.iteration or 0, it.contradictions_pct, it.policy_gap_pct or 0,
-              it.feedback_deltas and it.feedback_deltas.alignment or 0))
+              it.recent_deltas and it.recent_deltas.alignment or 0))
           end
         end
         if #trend_parts_es > 0 then
@@ -6297,7 +6445,7 @@ code: |
         end
 
         -- Include landscape diagnostic summary if available
-        local es_landscape = State.get("feedback_landscape_diagnostic")
+        local es_landscape = State.get("recent_landscape_diagnostic")
         if es_landscape and has_text(es_landscape.compact_summary) then
           table.insert(es_parts, "\n=== FEEDBACK LANDSCAPE DIAGNOSTIC (summary) ===")
           table.insert(es_parts, trunc(es_landscape.compact_summary, 1500))
@@ -6349,8 +6497,8 @@ code: |
         iteration = cycle,
         accepted = false,
         skip_reason = "cycle_error: " .. trunc(tostring(cycle_err), 200),
-        feedback_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-        accuracy_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+        recent_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+        regression_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
       })
       State.set("iterations", iterations)
 
@@ -6401,10 +6549,10 @@ code: |
   end
 
   local total_fb_improvement = last_accepted and
-    (last_accepted.feedback_metrics.alignment - feedback_baseline_metrics.alignment) or 0
+    (last_accepted.recent_metrics.alignment - recent_baseline_metrics.alignment) or 0
   local total_acc_improvement = 0
-  if last_accepted and last_accepted.accuracy_metrics and accuracy_baseline_metrics then
-    total_acc_improvement = last_accepted.accuracy_metrics.alignment - accuracy_baseline_metrics.alignment
+  if last_accepted and last_accepted.regression_metrics and regression_baseline_metrics then
+    total_acc_improvement = last_accepted.regression_metrics.alignment - regression_baseline_metrics.alignment
   end
 
   Human.notify({message = string.format(
@@ -6560,13 +6708,13 @@ code: |
   end)
 
   -- 0c2. Generate final feedback landscape diagnostic (always run at end — uses full run data)
-  local final_landscape_diag = State.get("feedback_landscape_diagnostic")
+  local final_landscape_diag = State.get("recent_landscape_diagnostic")
   pcall(function()
     local item_recurrence_final = State.get("item_recurrence") or {}
     local final_result = generate_feedback_landscape_diagnostic(
       #iterations, item_recurrence_final, iterations, current_guidelines)
     if final_result then
-      State.set("feedback_landscape_diagnostic", final_result)
+      State.set("recent_landscape_diagnostic", final_result)
       final_landscape_diag = final_result
       Human.notify({message = string.format(
         "  Final feedback landscape diagnostic: %d notable items analyzed",
@@ -6577,7 +6725,7 @@ code: |
   -- 0d. Residual error sampling from RCA item classifications
   local residual_errors_text = ""
   pcall(function()
-    local last_rca = State.get("last_feedback_rca")
+    local last_rca = State.get("last_recent_rca")
     if not last_rca or type(last_rca) ~= "table" then return end
 
     local items = last_rca._all_item_classifications
@@ -6661,19 +6809,19 @@ code: |
     table.insert(full_ctx_parts, "=== RUN SUMMARY ===")
     table.insert(full_ctx_parts, string.format("Cycles: %d | Accepted: %d | Rejected: %d | Skipped: %d | Success rate: %.0f%%",
       #iterations, total_accepted, total_rejected, total_skipped, success_rate * 100))
-    table.insert(full_ctx_parts, string.format("Baseline FB AC1: %.3f | Final FB AC1: %.3f | Total FB improvement: %+.4f",
-      feedback_baseline_metrics.alignment or 0,
-      last_accepted and last_accepted.feedback_metrics and last_accepted.feedback_metrics.alignment or feedback_baseline_metrics.alignment or 0,
+    table.insert(full_ctx_parts, string.format("Baseline Recent AC1: %.3f | Final Recent AC1: %.3f | Total FB improvement: %+.4f",
+      recent_baseline_metrics.alignment or 0,
+      last_accepted and last_accepted.recent_metrics and last_accepted.recent_metrics.alignment or recent_baseline_metrics.alignment or 0,
       total_fb_improvement))
-    if accuracy_baseline_metrics then
-      table.insert(full_ctx_parts, string.format("Baseline ACC AC1: %.3f | Final ACC AC1: %.3f | Total ACC improvement: %+.4f",
-        accuracy_baseline_metrics.alignment or 0,
-        last_accepted and last_accepted.accuracy_metrics and last_accepted.accuracy_metrics.alignment or accuracy_baseline_metrics.alignment or 0,
+    if regression_baseline_metrics then
+      table.insert(full_ctx_parts, string.format("Baseline Regression AC1: %.3f | Final Regression AC1: %.3f | Total ACC improvement: %+.4f",
+        regression_baseline_metrics.alignment or 0,
+        last_accepted and last_accepted.regression_metrics and last_accepted.regression_metrics.alignment or regression_baseline_metrics.alignment or 0,
         total_acc_improvement))
     end
     table.insert(full_ctx_parts, "")
 
-    local history_text = build_version_history(iterations, baseline_version_id, feedback_baseline_metrics, accuracy_baseline_metrics, last_accepted_version_id)
+    local history_text = build_version_history(iterations, baseline_version_id, recent_baseline_metrics, regression_baseline_metrics, last_accepted_version_id)
     if has_text(history_text) then
       table.insert(full_ctx_parts, "=== CYCLE HISTORY ===")
       table.insert(full_ctx_parts, trunc(history_text, 5000))
@@ -6823,7 +6971,7 @@ code: |
         "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. kc.summary
         .. "\n=== END CONTRADICTION DETAILS ==="})
     end
-    local final_diag = State.get("feedback_landscape_diagnostic")
+    local final_diag = State.get("recent_landscape_diagnostic")
     if final_diag and has_text(final_diag.full_report) then
       code_editor.history:add({role = "system", content =
         "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
@@ -6867,7 +7015,7 @@ code: |
       table.insert(sme_ctx_parts, "")
     end
 
-    local final_diag = State.get("feedback_landscape_diagnostic")
+    local final_diag = State.get("recent_landscape_diagnostic")
     if final_diag and has_text(final_diag.full_report) then
       table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
       table.insert(sme_ctx_parts, final_diag.full_report)
@@ -6906,14 +7054,15 @@ code: |
       "\n- Do NOT summarize the optimization run — the agenda is action-only.",
       "\n\nStructure your output exactly as follows:",
       string.format("\n\n## FOR YOUR NEXT MEETING: %s Quality Review", score_name_for_agenda),
-      "\n\n### Agenda Item 1: [A plain-English question]",
-      "\n**Why this matters:** [1-2 sentences on impact, in plain language]",
-      "\n**Examples:** [2-3 specific examples — describe what the system said vs. what the reviewer said, without IDs]",
-      "\n**Options:** [2-4 concrete options for them to choose from]",
-      "\n**Resolves:** [N] disputed reviews",
-      "\n\n[Repeat the Agenda Item structure for each item, up to 5 total]",
+      "\n\n### Title of the first decision",
+      "\n**Why this matters:** 1-2 sentences on impact, in plain language",
+      "\n**Examples:** 2-3 specific examples — describe what the system said vs. what the reviewer said, without IDs",
+      "\n**Options:** (a) first option (b) second option (c) third option if applicable",
+      "\n**Resolves:** ~N disputed reviews",
+      "\n\n### Title of the second decision",
+      "\n(repeat the same structure for each item, up to 5 total)",
       "\n\n## Background",
-      "\n[1-2 sentences only: overall performance trend in plain language]"
+      "\n1-2 sentences only: overall performance trend in plain language"
     }, "")
 
     guard_context_budget(code_editor)
@@ -6933,9 +7082,9 @@ code: |
       rejected = total_rejected,
       skipped = total_skipped,
       success_rate = success_rate,
-      baseline_fb_ac1 = feedback_baseline_metrics and feedback_baseline_metrics.alignment or 0,
-      final_fb_ac1 = last_accepted and last_accepted.feedback_metrics and last_accepted.feedback_metrics.alignment
-        or (feedback_baseline_metrics and feedback_baseline_metrics.alignment or 0),
+      baseline_fb_ac1 = recent_baseline_metrics and recent_baseline_metrics.alignment or 0,
+      final_fb_ac1 = last_accepted and last_accepted.recent_metrics and last_accepted.recent_metrics.alignment
+        or (recent_baseline_metrics and recent_baseline_metrics.alignment or 0),
       total_fb_improvement = total_fb_improvement,
       total_acc_improvement = total_acc_improvement,
       stop_reason = stop_reason
@@ -7021,12 +7170,12 @@ code: |
       "Completed %d cycles. Feedback AC1: %+.4f, Accuracy AC1: %+.4f (%s)",
       #iterations, total_fb_improvement, total_acc_improvement, stop_reason
     ),
-    accuracy_baseline_id = accuracy_baseline_id,
-    feedback_baseline_id = feedback_baseline_id,
-    final_evaluation_id = last_accepted and last_accepted.feedback_evaluation_id or nil,
+    regression_baseline_id = regression_baseline_id,
+    recent_baseline_id = recent_baseline_id,
+    final_evaluation_id = last_accepted and last_accepted.recent_evaluation_id or nil,
     iterations = iterations,
-    feedback_improvement = total_fb_improvement,
-    accuracy_improvement = total_acc_improvement,
+    recent_improvement = total_fb_improvement,
+    regression_improvement = total_acc_improvement,
     scorecard_id = scorecard_id,
     score_id = score_id,
     executive_summary = executive_summary_text,

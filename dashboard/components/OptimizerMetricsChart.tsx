@@ -18,85 +18,83 @@ export interface IterationData {
   iteration: number
   label?: string
   score_version_id?: string
-  feedback_metrics?: IterationMetrics
-  accuracy_metrics?: IterationMetrics
-  feedback_deltas?: IterationMetrics
-  accuracy_deltas?: IterationMetrics
+  recent_metrics?: IterationMetrics
+  regression_metrics?: IterationMetrics
+  recent_deltas?: IterationMetrics
+  regression_deltas?: IterationMetrics
+  recent_cost_per_item?: number | null
+  regression_cost_per_item?: number | null
   accepted?: boolean
   skip_reason?: string
   disqualified?: boolean
 }
 
+export type DatasetView = "recent" | "regression" | "overall"
+
 interface OptimizerMetricsChartProps {
   iterations: IterationData[]
+  datasetView?: DatasetView
+  onDatasetViewChange?: (view: DatasetView) => void
 }
 
-type DatasetView = "feedback" | "accuracy" | "overall"
-
-// Two dataset colors — shape encodes metric type, color encodes dataset
-const FEEDBACK_COLOR    = "var(--chart-1)"
-const REGRESSION_COLOR  = "var(--chart-2)"
+const RECENT_COLOR = "var(--chart-1)"
+const REGRESSION_COLOR = "var(--chart-2)"
 
 function getLineColor(key: string, view: DatasetView): string {
-  if (key.startsWith("overall_fb"))  return FEEDBACK_COLOR
-  if (key.startsWith("overall_acc")) return REGRESSION_COLOR
-  return view === "accuracy" ? REGRESSION_COLOR : FEEDBACK_COLOR
+  if (key.startsWith("overall_recent")) return RECENT_COLOR
+  if (key.startsWith("overall_regression")) return REGRESSION_COLOR
+  return view === "regression" ? REGRESSION_COLOR : RECENT_COLOR
 }
 
-// chartConfig: labels only — colors are resolved dynamically via getLineColor
 const chartConfig: ChartConfig = {
-  alignment:             { label: "Alignment",            color: FEEDBACK_COLOR },
-  accuracy:              { label: "Accuracy",             color: FEEDBACK_COLOR },
-  precision:             { label: "Precision",            color: FEEDBACK_COLOR },
-  recall:                { label: "Recall",               color: FEEDBACK_COLOR },
-  overall_fb_alignment:  { label: "Feedback Alignment",   color: FEEDBACK_COLOR },
-  overall_fb_accuracy:   { label: "Feedback Accuracy",    color: FEEDBACK_COLOR },
-  overall_acc_alignment: { label: "Regression Alignment", color: REGRESSION_COLOR },
-  overall_acc_accuracy:  { label: "Regression Accuracy",  color: REGRESSION_COLOR },
+  alignment: { label: "Alignment", color: RECENT_COLOR },
+  accuracy: { label: "Accuracy", color: RECENT_COLOR },
+  precision: { label: "Precision", color: RECENT_COLOR },
+  recall: { label: "Recall", color: RECENT_COLOR },
+  overall_recent_alignment: { label: "Recent Alignment", color: RECENT_COLOR },
+  overall_recent_accuracy: { label: "Recent Accuracy", color: RECENT_COLOR },
+  overall_regression_alignment: { label: "Regression Alignment", color: REGRESSION_COLOR },
+  overall_regression_accuracy: { label: "Regression Accuracy", color: REGRESSION_COLOR },
 }
 
 interface ChartDataPoint {
   cycle: string
   accepted?: boolean
   skipped?: boolean
-  alignment:  number | null
-  accuracy:   number | null
-  precision:  number | null
-  recall:     number | null
-  overall_fb_alignment:  number | null
-  overall_fb_accuracy:   number | null
-  overall_acc_alignment: number | null
-  overall_acc_accuracy:  number | null
+  alignment: number | null
+  accuracy: number | null
+  precision: number | null
+  recall: number | null
+  overall_recent_alignment: number | null
+  overall_recent_accuracy: number | null
+  overall_regression_alignment: number | null
+  overall_regression_accuracy: number | null
 }
 
-// Shape encodes metric type — consistent across all views and both datasets
 type ShapeKind = "circle" | "square" | "triangle" | "diamond"
 const METRIC_SHAPE: Record<string, ShapeKind> = {
-  alignment:             "circle",
-  accuracy:              "square",
-  precision:             "triangle",
-  recall:                "diamond",
-  overall_fb_alignment:  "circle",
-  overall_fb_accuracy:   "square",
-  overall_acc_alignment: "circle",   // same shape as alignment — color distinguishes dataset
-  overall_acc_accuracy:  "square",   // same shape as accuracy  — color distinguishes dataset
+  alignment: "circle",
+  accuracy: "square",
+  precision: "triangle",
+  recall: "diamond",
+  overall_recent_alignment: "circle",
+  overall_recent_accuracy: "square",
+  overall_regression_alignment: "circle",
+  overall_regression_accuracy: "square",
 }
 
-// Metric → axis mapping
 const METRIC_AXIS: Record<string, "left" | "right"> = {
   alignment: "left", accuracy: "right", precision: "right", recall: "right",
-  overall_fb_alignment: "left", overall_fb_accuracy: "right",
-  overall_acc_alignment: "left", overall_acc_accuracy: "right",
+  overall_recent_alignment: "left", overall_recent_accuracy: "right",
+  overall_regression_alignment: "left", overall_regression_accuracy: "right",
 }
 
-// Which metrics are visible per view
 const VIEW_METRICS: Record<DatasetView, string[]> = {
-  feedback: ["alignment", "accuracy", "precision", "recall"],
-  accuracy: ["alignment", "accuracy", "precision", "recall"],
-  overall:  ["overall_fb_alignment", "overall_fb_accuracy", "overall_acc_alignment", "overall_acc_accuracy"],
+  recent: ["alignment", "accuracy", "precision", "recall"],
+  regression: ["alignment", "accuracy", "precision", "recall"],
+  overall: ["overall_recent_alignment", "overall_recent_accuracy", "overall_regression_alignment", "overall_regression_accuracy"],
 }
 
-// --- Custom dot shapes for colorblind accessibility ---
 const CircleDot = (props: any) => {
   const { cx, cy, fill } = props
   if (cx == null || cy == null) return null
@@ -122,43 +120,41 @@ const DOT_COMPONENTS: Record<ShapeKind, React.FC<any>> = {
   circle: CircleDot, square: SquareDot, triangle: TriangleDot, diamond: DiamondDot,
 }
 
-// Small inline SVG shapes for legend and tooltip icons
 function ShapeIcon({ shape, color, size = 10 }: { shape: ShapeKind; color: string; size?: number }) {
   const s = size
   const h = s / 2
   switch (shape) {
-    case "circle":   return <svg width={s} height={s}><circle cx={h} cy={h} r={h - 1} fill={color} /></svg>
-    case "square":   return <svg width={s} height={s}><rect x={1} y={1} width={s - 2} height={s - 2} fill={color} /></svg>
-    case "triangle":  return <svg width={s} height={s}><polygon points={`${h},1 ${s - 0.5},${s - 1} 0.5,${s - 1}`} fill={color} /></svg>
-    case "diamond":  return <svg width={s} height={s}><polygon points={`${h},0 ${s},${h} ${h},${s} 0,${h}`} fill={color} /></svg>
+    case "circle": return <svg width={s} height={s}><circle cx={h} cy={h} r={h - 1} fill={color} /></svg>
+    case "square": return <svg width={s} height={s}><rect x={1} y={1} width={s - 2} height={s - 2} fill={color} /></svg>
+    case "triangle": return <svg width={s} height={s}><polygon points={`${h},1 ${s - 0.5},${s - 1} 0.5,${s - 1}`} fill={color} /></svg>
+    case "diamond": return <svg width={s} height={s}><polygon points={`${h},0 ${s},${h} ${h},${s} 0,${h}`} fill={color} /></svg>
   }
 }
 
-// --- Baseline helpers ---
 interface BaselineValues {
   alignment: number | null
   accuracy: number | null
   precision: number | null
   recall: number | null
-  overall_fb_alignment: number | null
-  overall_fb_accuracy: number | null
-  overall_acc_alignment: number | null
-  overall_acc_accuracy: number | null
+  overall_recent_alignment: number | null
+  overall_recent_accuracy: number | null
+  overall_regression_alignment: number | null
+  overall_regression_accuracy: number | null
 }
 
 function extractBaseline(iterations: IterationData[]): BaselineValues {
   const b = iterations.find(it => it.iteration === 0)
-  const fm = b?.feedback_metrics
-  const am = b?.accuracy_metrics
+  const recentMetrics = b?.recent_metrics
+  const regressionMetrics = b?.regression_metrics
   return {
-    alignment: fm?.alignment ?? null,
-    accuracy: fm?.accuracy ?? null,
-    precision: fm?.precision ?? null,
-    recall: fm?.recall ?? null,
-    overall_fb_alignment: fm?.alignment ?? null,
-    overall_fb_accuracy: fm?.accuracy ?? null,
-    overall_acc_alignment: am?.alignment ?? null,
-    overall_acc_accuracy: am?.accuracy ?? null,
+    alignment: recentMetrics?.alignment ?? null,
+    accuracy: recentMetrics?.accuracy ?? null,
+    precision: recentMetrics?.precision ?? null,
+    recall: recentMetrics?.recall ?? null,
+    overall_recent_alignment: recentMetrics?.alignment ?? null,
+    overall_recent_accuracy: recentMetrics?.accuracy ?? null,
+    overall_regression_alignment: regressionMetrics?.alignment ?? null,
+    overall_regression_accuracy: regressionMetrics?.accuracy ?? null,
   }
 }
 
@@ -169,7 +165,6 @@ function formatDelta(val: number | null, base: number | null, isPct: boolean): s
   return isPct ? `${sign}${d.toFixed(1)}%` : `${sign}${d.toFixed(4)}`
 }
 
-// --- Tooltip ---
 interface MetricsTooltipProps {
   active?: boolean
   payload?: any[]
@@ -229,7 +224,6 @@ const MetricsTooltip: React.FC<MetricsTooltipProps> = ({ active, payload, datase
   )
 }
 
-// --- Custom Legend with click-to-focus and correct shapes ---
 interface CustomLegendProps {
   datasetView: DatasetView
   focusedMetric: string | null
@@ -272,49 +266,52 @@ const CustomLegend: React.FC<CustomLegendProps> = ({ datasetView, focusedMetric,
   )
 }
 
-// === Main Component ===
-export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsChartProps) {
-  const [datasetView, setDatasetView] = useState<DatasetView>("overall")
+export default function OptimizerMetricsChart({ iterations, datasetView: controlledDatasetView, onDatasetViewChange }: OptimizerMetricsChartProps) {
+  const [uncontrolledDatasetView, setUncontrolledDatasetView] = useState<DatasetView>("overall")
   const [focusedMetric, setFocusedMetric] = useState<string | null>(null)
 
-  const hasAccuracyData = useMemo(() => iterations.some(it => it.accuracy_metrics), [iterations])
+  const datasetView = controlledDatasetView ?? uncontrolledDatasetView
+  const hasRegressionData = useMemo(() => iterations.some(it => it.regression_metrics), [iterations])
 
   const baseline = useMemo(() => extractBaseline(iterations), [iterations])
 
   const chartData = useMemo<ChartDataPoint[]>(() => {
     const points: ChartDataPoint[] = []
     for (const it of iterations) {
-      const fm = it.feedback_metrics
-      const am = it.accuracy_metrics
+      const recentMetrics = it.recent_metrics
+      const regressionMetrics = it.regression_metrics
 
-      if (datasetView === "feedback" && !fm && !it.skip_reason) continue
-      if (datasetView === "accuracy" && !am && !it.skip_reason) continue
-      if (datasetView === "overall" && !fm && !am && !it.skip_reason) continue
+      if (datasetView === "recent" && !recentMetrics && !it.skip_reason) continue
+      if (datasetView === "regression" && !regressionMetrics && !it.skip_reason) continue
+      if (datasetView === "overall" && !recentMetrics && !regressionMetrics && !it.skip_reason) continue
 
-      const src = datasetView === "accuracy" ? am : fm
+      const src = datasetView === "regression" ? regressionMetrics : recentMetrics
       const m = src || { alignment: 0, accuracy: 0, precision: 0, recall: 0 }
 
       points.push({
         cycle: it.label || `Cycle ${it.iteration}`,
         accepted: it.accepted,
         skipped: Boolean(it.skip_reason),
-        alignment:  src ? m.alignment : null,
-        accuracy:   src ? m.accuracy  : null,
-        precision:  src ? m.precision : null,
-        recall:     src ? m.recall    : null,
-        overall_fb_alignment:  fm ? fm.alignment : null,
-        overall_fb_accuracy:   fm ? fm.accuracy  : null,
-        overall_acc_alignment: am ? am.alignment : null,
-        overall_acc_accuracy:  am ? am.accuracy  : null,
+        alignment: src ? m.alignment : null,
+        accuracy: src ? m.accuracy : null,
+        precision: src ? m.precision : null,
+        recall: src ? m.recall : null,
+        overall_recent_alignment: recentMetrics ? recentMetrics.alignment : null,
+        overall_recent_accuracy: recentMetrics ? recentMetrics.accuracy : null,
+        overall_regression_alignment: regressionMetrics ? regressionMetrics.alignment : null,
+        overall_regression_accuracy: regressionMetrics ? regressionMetrics.accuracy : null,
       })
     }
     return points
   }, [iterations, datasetView])
 
   const handleDatasetToggle = useCallback((view: DatasetView) => {
-    setDatasetView(view)
+    if (controlledDatasetView === undefined) {
+      setUncontrolledDatasetView(view)
+    }
+    onDatasetViewChange?.(view)
     setFocusedMetric(null)
-  }, [])
+  }, [controlledDatasetView, onDatasetViewChange])
 
   const handleLegendClick = useCallback((dataKey: string) => {
     setFocusedMetric(prev => prev === dataKey ? null : dataKey)
@@ -348,16 +345,15 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
       />
     ))
 
-  // All 8 line definitions — shape derives from METRIC_SHAPE, color from getLineColor
-  const ALL_LINES: Array<{ key: string; axis: "left" | "right" }> = [
-    { key: "alignment",             axis: "left"  },
-    { key: "accuracy",              axis: "right" },
-    { key: "precision",             axis: "right" },
-    { key: "recall",                axis: "right" },
-    { key: "overall_fb_alignment",  axis: "left"  },
-    { key: "overall_fb_accuracy",   axis: "right" },
-    { key: "overall_acc_alignment", axis: "left"  },
-    { key: "overall_acc_accuracy",  axis: "right" },
+  const allLines: Array<{ key: string; axis: "left" | "right" }> = [
+    { key: "alignment", axis: "left" },
+    { key: "accuracy", axis: "right" },
+    { key: "precision", axis: "right" },
+    { key: "recall", axis: "right" },
+    { key: "overall_recent_alignment", axis: "left" },
+    { key: "overall_recent_accuracy", axis: "right" },
+    { key: "overall_regression_alignment", axis: "left" },
+    { key: "overall_regression_accuracy", axis: "right" },
   ]
 
   return (
@@ -367,17 +363,21 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">Optimizer Metrics</span>
         </div>
-        {hasAccuracyData && (
+        {hasRegressionData && (
           <div className="flex gap-1">
-            {(["overall", "feedback", "accuracy"] as DatasetView[]).map(view => (
+            {([
+              { value: "overall", label: "Overall" },
+              { value: "recent", label: "Recent" },
+              { value: "regression", label: "Regression" },
+            ] as const).map(view => (
               <Button
-                key={view}
-                variant={datasetView === view ? "default" : "ghost"}
+                key={view.value}
+                variant={datasetView === view.value ? "default" : "ghost"}
                 size="sm"
                 className="h-6 text-xs px-2"
-                onClick={() => handleDatasetToggle(view)}
+                onClick={() => handleDatasetToggle(view.value)}
               >
-                {view.charAt(0).toUpperCase() + view.slice(1)}
+                {view.label}
               </Button>
             ))}
           </div>
@@ -416,11 +416,9 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
             />
             <Tooltip content={renderTooltip} />
 
-            {/* Baseline reference lines (dashed, low opacity) */}
             {referenceLines}
 
-            {/* Data lines — shape = metric type, color = dataset */}
-            {ALL_LINES.map(({ key, axis }) => {
+            {allLines.map(({ key, axis }) => {
               const visible = isVisible(key)
               const shape = METRIC_SHAPE[key]
               const DotComp = DOT_COMPONENTS[shape]
@@ -446,7 +444,6 @@ export default function OptimizerMetricsChart({ iterations }: OptimizerMetricsCh
           </LineChart>
         </ChartContainer>
 
-        {/* Custom legend with correct shapes and click-to-focus */}
         <CustomLegend
           datasetView={datasetView}
           focusedMetric={focusedMetric}

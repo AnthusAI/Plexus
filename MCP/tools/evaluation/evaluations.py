@@ -997,6 +997,9 @@ def register_evaluation_tools(mcp: FastMCP):
                 'evaluation_type': evaluation_type,
                 'scorecard_id': eval_info.get('scorecard_id'),
                 'score_id': eval_info.get('score_id'),
+                'total_items': eval_info.get('total_items'),
+                'processed_items': eval_info.get('processed_items'),
+                'cost': eval_info.get('cost'),
                 'accuracy': eval_info.get('accuracy'),
                 'metrics': eval_info.get('metrics'),
                 'confusionMatrix': eval_info.get('confusion_matrix'),  # snake_case in source
