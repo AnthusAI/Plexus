@@ -5,6 +5,7 @@ import { downloadData } from "aws-amplify/storage";
 
 import { parseOutputString } from "@/lib/utils";
 import ReportBlock, { ReportBlockProps } from "./ReportBlock";
+import { useIncrementalRows } from "./useIncrementalRows";
 
 interface AcceptanceSummary {
   total_items: number;
@@ -108,6 +109,14 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const summary = output.summary;
   const items = Array.isArray(output.items) ? output.items : [];
+  const {
+    visibleRows,
+    visibleCount,
+    totalCount,
+    hasMore,
+    loadMore,
+    sentinelRef,
+  } = useIncrementalRows(items, { initialCount: 100, pageSize: 100 });
   const showItemAcceptance =
     output.include_item_acceptance_rate ?? summary?.item_acceptance_rate !== undefined;
   const title =
@@ -161,6 +170,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
           {output.items_truncated
             ? ` • Showing ${output.items_returned ?? items.length} of ${output.items_total ?? "?"} items`
             : null}
+          {totalCount > 0 ? ` • Rendering ${visibleCount} of ${totalCount} rows` : null}
         </div>
 
         <div className="overflow-x-auto rounded-md bg-card">
@@ -183,7 +193,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                   </td>
                 </tr>
               ) : (
-                items.map((item, index) => (
+                visibleRows.map((item, index) => (
                   <tr
                     key={item.item_id}
                     className={index % 2 === 0 ? "bg-card" : "bg-card-selected/60"}
@@ -204,6 +214,22 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
             </tbody>
           </table>
         </div>
+        {items.length > 0 ? (
+          <div className="flex items-center justify-between gap-3">
+            <div ref={sentinelRef} className="h-1 w-1" aria-hidden="true" />
+            {hasMore ? (
+              <button
+                type="button"
+                onClick={loadMore}
+                className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+              >
+                Load more rows ({visibleCount}/{totalCount})
+              </button>
+            ) : (
+              <span className="text-xs text-muted-foreground">All rows loaded ({totalCount})</span>
+            )}
+          </div>
+        ) : null}
       </div>
     </ReportBlock>
   );
