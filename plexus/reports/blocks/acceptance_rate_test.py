@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -269,3 +270,47 @@ async def test_feedback_items_window_uses_composite_index_when_score_is_present(
     assert items == []
     assert "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt" in captured["query"]
     assert captured["variables"]["sortDirection"] == "DESC"
+
+
+@pytest.mark.asyncio
+async def test_feedback_rates_base_resolves_hyphenated_scorecard_name(mock_api_client):
+    block = AcceptanceRate(
+        config={"scorecard": "Prime - EDU 3rd Party", "days": 1},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    with (
+        patch("plexus.reports.blocks.feedback_rates_base.Scorecard.get_by_key", return_value=None),
+        patch(
+            "plexus.reports.blocks.feedback_rates_base.Scorecard.get_by_name",
+            return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
+        ),
+        patch("plexus.reports.blocks.feedback_rates_base.Scorecard.get_by_external_id", return_value=None),
+    ):
+        resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+
+    assert resolved.id == "sc-1"
+    assert resolved.name == "Prime - EDU 3rd Party"
+
+
+@pytest.mark.asyncio
+async def test_feedback_rates_base_resolves_score_by_name(mock_api_client):
+    block = AcceptanceRate(
+        config={"scorecard": "sc-1", "score": "Agent Branding", "days": 1},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    with (
+        patch(
+            "plexus.reports.blocks.feedback_rates_base.Score.get_by_name",
+            return_value=SimpleNamespace(id="score-1", name="Agent Branding"),
+        ),
+        patch("plexus.reports.blocks.feedback_rates_base.Score.get_by_key", return_value=None),
+        patch("plexus.reports.blocks.feedback_rates_base.Score.get_by_external_id", return_value=None),
+    ):
+        resolved = await block._resolve_score("Agent Branding", "sc-1")
+
+    assert resolved.id == "score-1"
+    assert resolved.name == "Agent Branding"
