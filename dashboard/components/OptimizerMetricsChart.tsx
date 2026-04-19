@@ -387,7 +387,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
       <div className="rounded-md bg-card p-2">
         <div className="relative">
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
-          <LineChart data={chartData} margin={{ top: 8, right: 44, left: 14, bottom: 4 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 52, left: 20, bottom: 4 }}>
             <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
             <XAxis
               dataKey="cycle"
@@ -405,8 +405,8 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
-              tickMargin={12}
-              width={44}
+              tickMargin={18}
+              width={52}
             />
             <YAxis
               yAxisId="right"
@@ -417,8 +417,8 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickFormatter={(v: number) => `${v}%`}
-              tickMargin={12}
-              width={48}
+              tickMargin={18}
+              width={56}
             />
             <Tooltip content={renderTooltip} />
 
