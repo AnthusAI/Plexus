@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4f433a6a-1cb7-492e-83e4-505a2d263baf",
+  "issue_id": "plx-beaf1f7f-f50c-4e37-925f-cc7c156a7bc0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T17:22:14.667Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement optimizer state/UI rename + cycles table mode columns + cost/item"
+  }
+}

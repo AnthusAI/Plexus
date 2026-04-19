@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "65969792-bd20-45b1-ba2d-4073b2de4527",
+  "issue_id": "plx-4af82548-4914-44ad-b585-7436774ab02e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T19:04:42.852Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\nAcceptance Rate report block uses outlined styles for the note and the show/hide item rows button, which violates dashboard visual guidelines.\n\n## Behavior Spec\nFeature: Acceptance Rate controls follow standard dashboard visual style\nScenario: Render Acceptance Rate block with large result set\nGiven item rows are hidden by default\nWhen the block renders\nThen the informational note does not have a border/outline container\nAnd the show item rows control does not use outline/ghost border styling\nAnd controls match standard muted text/button styling used by sibling report blocks.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+    "priority": 2,
+    "status": "open",
+    "title": "Acceptance Rate block: remove bordered hide/show item row controls"
+  }
+}

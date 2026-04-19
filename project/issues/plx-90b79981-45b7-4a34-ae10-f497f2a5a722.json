@@ -1,0 +1,31 @@
+{
+  "id": "plx-90b79981-45b7-4a34-ae10-f497f2a5a722",
+  "title": "OptimizerMetricsChart regression: lines and chart layers disappear after recent axis/tick styling",
+  "description": "## Problem\nOptimizer metrics chart appears blank after initial render; users only see legend squares.\n\n## Behavior Spec\nFeature: Optimizer metrics chart remains visible after render\nScenario: Render optimizer chart with cycle series\nGiven chart has alignment/accuracy series data\nWhen chart mounts and subsequent layout updates occur\nThen lines, labels, and background layers remain visible\nAnd legend remains visible\nAnd chart does not collapse to blank state.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1fb17297-a45b-4edc-972f-3962f88c029b",
+      "author": "ryan",
+      "text": "Started investigation. Reproducing chart regression in OptimizerMetricsChart and isolating whether axis/tick changes are clipping or zeroing rendered series after mount.",
+      "created_at": "2026-04-19T19:07:19.841548Z"
+    },
+    {
+      "id": "c26e059c-3e02-4eea-a73d-ac5c3f41b4c2",
+      "author": "ryan",
+      "text": "Root-caused to recent OptimizerMetricsChart polish changes (ResizeObserver-driven tick rotation + axis label props). Applied targeted rollback of those additions to restore stable line/chart rendering while keeping Overall/Recent/Regression behavior intact. Verified with Jest: OptimizerMetricsChart + ProcedureTask optimizer tests pass.",
+      "created_at": "2026-04-19T19:08:25.044522Z"
+    }
+  ],
+  "created_at": "2026-04-19T19:07:16.465795Z",
+  "updated_at": "2026-04-19T19:08:25.044522Z",
+  "closed_at": null,
+  "custom": {}
+}

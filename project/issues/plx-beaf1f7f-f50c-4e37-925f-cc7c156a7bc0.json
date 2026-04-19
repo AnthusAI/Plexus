@@ -1,0 +1,43 @@
+{
+  "id": "plx-beaf1f7f-f50c-4e37-925f-cc7c156a7bc0",
+  "title": "Implement optimizer state/UI rename + cycles table mode columns + cost/item",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "68d48055-e007-475b-82a7-73950f53c992",
+      "author": "ryan",
+      "text": "Started implementation on branch codex/recent-regression-procedure-dashboard. Scope includes hard-cutover state contract rename (Recent/Regression), ProcedureTask table mode/columns, OptimizerMetricsChart toggle rename + synchronization, MCP evaluation accuracy payload parity for cost/items, storage projection updates, and rerun validation on procedure 6c152581-2e1c-4fbf-b4ea-27a2b06a2cb4 after canceling in-flight task.",
+      "created_at": "2026-04-19T17:22:31.916560Z"
+    },
+    {
+      "id": "d7b13a1b-eef1-4408-8cb9-5769970d725c",
+      "author": "ryan",
+      "text": "Implemented hard-cutover contract rename to recent/regression in optimizer YAML + dashboard state projection + ProcedureTask parsing; added cycles-table mode sync with Overall/Recent/Regression and mode-specific columns (overall includes AC1/Acc deltas + cost/item, recent/regression includes AC1/Acc/P/R); added cost-per-item extraction/propagation from eval payload; updated MCP accuracy payload to include cost/processed_items/total_items; added/updated unit tests and typecheck/pytest runs passing.",
+      "created_at": "2026-04-19T17:35:38.867715Z"
+    },
+    {
+      "id": "116028eb-9864-4a5f-9089-e79fc6d73e87",
+      "author": "ryan",
+      "text": "Applying final UI color tweak for Recent/Regression cycle headers, validating continue-feature availability on develop, then starting 200-sample 10-cycle run.",
+      "created_at": "2026-04-19T18:31:13.562674Z"
+    },
+    {
+      "id": "7907b66d-9467-4878-966b-99de4d5a80e9",
+      "author": "ryan",
+      "text": "Switched to develop, confirmed continue/branch UI and backend code are present; continue action is gated to COMPLETED procedures. Restarting optimizer test run at 200 samples and 10 cycles.",
+      "created_at": "2026-04-19T18:32:09.878611Z"
+    }
+  ],
+  "created_at": "2026-04-19T17:22:14.666465Z",
+  "updated_at": "2026-04-19T18:32:09.878611Z",
+  "closed_at": null,
+  "custom": {}
+}

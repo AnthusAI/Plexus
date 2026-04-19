@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "51d2ea02-ea5d-4196-98f1-0340ed7ecc32",
+  "issue_id": "plx-76fa0fbe-9c35-4a4b-b80f-ae65e17272fe",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-19T17:22:25.296Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "As a procedures-dashboard user, I want optimizer datasets and cycle-table modes to use Recent/Regression terminology and mode-specific columns, so that optimizer output is unambiguous and consistent across state and UI.\n\nFeature: Procedure dashboard optimizer nomenclature and mode-specific cycles table\n\nScenario: Overall mode shows dual dataset deltas and costs\nGiven an optimizer procedure with baseline and cycle metrics\nWhen I view the ProcedureTask in Overall mode\nThen I see Recent and Regression dataset blocks\nAnd each block shows AC1, delta, Accuracy, delta, and Cost/item\nAnd precision/recall columns are not shown\n\nScenario: Recent mode shows only Recent quality metrics\nGiven an optimizer procedure with baseline and cycle metrics\nWhen I switch the optimizer view to Recent\nThen the Cycles table shows only the Recent dataset block\nAnd it shows AC1, Accuracy, Precision, and Recall\nAnd it does not show deltas or cost columns\n\nScenario: Regression mode shows only Regression quality metrics\nGiven an optimizer procedure with baseline and cycle metrics\nWhen I switch the optimizer view to Regression\nThen the Cycles table shows only the Regression dataset block\nAnd it shows AC1, Accuracy, Precision, and Recall\nAnd it does not show deltas or cost columns\n\nScenario: Optimizer state contract uses Recent/Regression keys\nGiven optimizer state is persisted for dashboard consumption\nWhen a new cycle is stored\nThen dataset keys are Recent/Regression (not Feedback/Accuracy)\nAnd each cycle includes recent_cost_per_item and regression_cost_per_item\nAnd dashboard parsing reads only the new keys without compatibility fallbacks"
+      }
+    }
+  }
+}

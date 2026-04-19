@@ -1,0 +1,37 @@
+{
+  "id": "plx-4af82548-4914-44ad-b585-7436774ab02e",
+  "title": "Acceptance Rate block: remove bordered hide/show item row controls",
+  "description": "## Problem\nAcceptance Rate report block uses outlined styles for the note and the show/hide item rows button, which violates dashboard visual guidelines.\n\n## Behavior Spec\nFeature: Acceptance Rate controls follow standard dashboard visual style\nScenario: Render Acceptance Rate block with large result set\nGiven item rows are hidden by default\nWhen the block renders\nThen the informational note does not have a border/outline container\nAnd the show item rows control does not use outline/ghost border styling\nAnd controls match standard muted text/button styling used by sibling report blocks.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ec76188f-7720-4ef1-aa29-bf31aac7396a",
+      "author": "ryan",
+      "text": "Started implementation: locating AcceptanceRate block styles and removing outline/border treatment from the hidden-rows notice and the show/hide item rows control to match dashboard standards.",
+      "created_at": "2026-04-19T19:04:47.418760Z"
+    },
+    {
+      "id": "68704d9c-d00c-437d-95fd-b711c02986c0",
+      "author": "ryan",
+      "text": "Implemented UI fix in AcceptanceRate block: removed border/outline container around the hidden-rows note and converted the show rows control to text-link styling. Added Jest regression test at dashboard/components/blocks/__tests__/AcceptanceRate.test.tsx. Test pass: npm test -- --runInBand components/blocks/__tests__/AcceptanceRate.test.tsx. Note: existing lint script/config in this environment errors before file linting (next lint --no-cache unsupported; eslint crashes in ajv/eslintrc).",
+      "created_at": "2026-04-19T19:05:56.731855Z"
+    },
+    {
+      "id": "69880a71-b9fb-4b9d-b299-2d6acedce627",
+      "author": "ryan",
+      "text": "Code committed and pushed on branch codex/acceptance-rate-remove-outlined-controls (commit 2d40642d7). Waiting for integration decision (PR/merge) to mark this bug closed.",
+      "created_at": "2026-04-19T19:06:31.396651Z"
+    }
+  ],
+  "created_at": "2026-04-19T19:04:42.850971Z",
+  "updated_at": "2026-04-19T19:06:31.396651Z",
+  "closed_at": null,
+  "custom": {}
+}
