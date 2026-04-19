@@ -72,6 +72,11 @@ params:
     default: false
     description: "If true, run analysis only without making score updates"
 
+  optimization_objective:
+    type: string
+    default: "alignment"
+    description: "What metric to optimize. Options: alignment (default), precision_safe, precision, recall_safe, recall. The _safe variants require the primary metric to improve without harming overall alignment. The primary variants treat alignment as a soft constraint only."
+
   prior_run_prescription:
     type: string
     required: false
@@ -2023,6 +2028,141 @@ code: |
     if ok and has_text(result) then SCORE_CONCEPTS_DOC = result end
   end)
 
+  -- ================================================================
+  -- OPTIMIZATION OBJECTIVE: programmatic config driven by params
+  -- ================================================================
+  local objective = has_text(params.optimization_objective)
+    and params.optimization_objective or "alignment"
+
+  -- Config table: scoring weights, hard vetoes, primary metric key
+  local function build_objective_config(obj)
+    if obj == "precision_safe" then
+      return {
+        primary_metric   = "precision",
+        primary_weight   = 0.7,
+        secondary_metric = "alignment",
+        secondary_weight = 0.3,
+        hard_veto_alignment = -0.02,
+        hard_veto_accuracy  = -0.02,
+      }
+    elseif obj == "precision" then
+      return {
+        primary_metric   = "precision",
+        primary_weight   = 1.0,
+        hard_veto_alignment = -0.05,
+      }
+    elseif obj == "recall_safe" then
+      return {
+        primary_metric   = "recall",
+        primary_weight   = 0.7,
+        secondary_metric = "alignment",
+        secondary_weight = 0.3,
+        hard_veto_alignment = -0.02,
+        hard_veto_accuracy  = -0.02,
+      }
+    elseif obj == "recall" then
+      return {
+        primary_metric   = "recall",
+        primary_weight   = 1.0,
+        hard_veto_alignment = -0.05,
+      }
+    else  -- "alignment" (default)
+      return {
+        primary_metric    = "alignment",
+        primary_weight    = 0.6,
+        secondary_metric  = "alignment",   -- accuracy dataset alignment
+        secondary_source  = "acc",         -- pull secondary from acc_deltas (not fb_deltas)
+        secondary_weight  = 0.4,
+        hard_veto_accuracy = -0.02,
+      }
+    end
+  end
+  local objective_config = build_objective_config(objective)
+
+  -- Per-slot objective overrides: only the parts that differ from the
+  -- default alignment wording. Keyed by objective → slot → lines table.
+  local SLOT_OBJECTIVE_OVERRIDES = {
+    precision_safe = {
+      feedback_incremental = {
+        "OBJECTIVE: Incremental precision fix — reduce false positives (Category A)",
+        "GOAL: Tighten the Yes threshold for edge cases to reduce over-prediction.",
+        "Pick the 'Predicted: Yes / Actual: No' confusion matrix segment from the FEEDBACK RCA.",
+        "Target the LARGEST category within false positives.",
+        "POLICY-FIRST: Does the rubric have a clear rule for when a borderline case should be No?",
+        "If not, ADD that rule. If a rule exists but is applied too loosely, SHARPEN it.",
+        "SUCCESS CRITERIA: Precision improves without alignment regressing more than 0.02.",
+      },
+      feedback_bold = {
+        "OBJECTIVE: Bold precision fix — eliminate a category of false positives (Category A or B)",
+        "GOAL: Structurally reduce over-prediction, not just at the margin.",
+        "Look for a FAMILY of false positive patterns in the RCA, not just one item.",
+        "Can you add a gate, tighten a definition, or reorganize the decision criteria",
+        "so an entire category of over-predictions stops happening?",
+        "Be willing to take more risk here — this is your swing-for-the-fences hypothesis.",
+      },
+    },
+    precision = {
+      feedback_incremental = {
+        "OBJECTIVE: Incremental precision fix — reduce false positives (Category A)",
+        "GOAL: Tighten the Yes threshold. Precision is the PRIMARY metric this run.",
+        "Pick the 'Predicted: Yes / Actual: No' segment from the FEEDBACK RCA.",
+        "Alignment is a soft constraint — some alignment regression is acceptable if precision gains are clear.",
+        "POLICY-FIRST: Add or sharpen rules that prevent over-prediction.",
+      },
+      feedback_bold = {
+        "OBJECTIVE: Bold precision fix — eliminate a category of false positives (Category A or B)",
+        "GOAL: Maximize precision improvement. Alignment regression up to -0.05 is acceptable.",
+        "Look for a FAMILY of false positive patterns. Structural rubric changes are preferred over examples.",
+      },
+    },
+    recall_safe = {
+      feedback_incremental = {
+        "OBJECTIVE: Incremental recall fix — reduce false negatives (Category A)",
+        "GOAL: Widen the Yes threshold for valid edge cases to reduce under-prediction.",
+        "Pick the 'Predicted: No / Actual: Yes' confusion matrix segment from the FEEDBACK RCA.",
+        "Target the LARGEST category within false negatives.",
+        "POLICY-FIRST: Does the rubric have a clear rule for when a borderline case should be Yes?",
+        "If not, ADD that rule. If a rule exists but is applied too conservatively, RELAX it.",
+        "SUCCESS CRITERIA: Recall improves without alignment regressing more than 0.02.",
+      },
+      feedback_bold = {
+        "OBJECTIVE: Bold recall fix — catch a category of missed true positives (Category A or B)",
+        "GOAL: Structurally reduce under-prediction, not just at the margin.",
+        "Look for a FAMILY of false negative patterns in the RCA.",
+        "Can you add an explicit inclusion rule, relax an overly strict gate, or reorganize",
+        "the decision criteria so an entire category of false negatives stops happening?",
+        "Be willing to take more risk here — this is your swing-for-the-fences hypothesis.",
+      },
+    },
+    recall = {
+      feedback_incremental = {
+        "OBJECTIVE: Incremental recall fix — reduce false negatives (Category A)",
+        "GOAL: Widen the Yes threshold. Recall is the PRIMARY metric this run.",
+        "Pick the 'Predicted: No / Actual: Yes' segment from the FEEDBACK RCA.",
+        "Alignment is a soft constraint — some alignment regression is acceptable if recall gains are clear.",
+        "POLICY-FIRST: Add or relax rules that prevent under-prediction.",
+      },
+      feedback_bold = {
+        "OBJECTIVE: Bold recall fix — catch a category of missed true positives (Category A or B)",
+        "GOAL: Maximize recall improvement. Alignment regression up to -0.05 is acceptable.",
+        "Look for a FAMILY of false negative patterns. Structural rubric changes are preferred.",
+      },
+    },
+  }
+
+  -- Load objective-specific guidance doc (injected into hypothesis generation context)
+  -- Objective family maps: precision_safe → precision, recall_safe → recall
+  local objective_family = objective:match("^(%a+)") or "alignment"
+  local obj_doc_key = "optimizer-objective-" .. objective_family
+  local OBJECTIVE_DOC = ""
+  pcall(function()
+    local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
+      {filename = obj_doc_key}, {raw_string = true, max_retries = 1})
+    if ok and has_text(result) then OBJECTIVE_DOC = result end
+  end)
+  Human.notify({message = string.format(
+    "  Optimization objective: %s (doc: %s)", objective, obj_doc_key), level = "info"})
+
   -- Build the shared cookbook and constraints section (used by all hypothesis prompts)
   local function build_cookbook_section(opts)
     local parts = {COOKBOOK_STATIC}
@@ -2152,7 +2292,13 @@ code: |
     table.insert(parts, string.format("%d. <Hypothesis name>: <Description of what to change and why>", #already_proposed + 1))
     table.insert(parts, "")
 
-    if slot == "feedback_incremental" then
+    -- Check for per-objective slot description overrides
+    local slot_overrides = SLOT_OBJECTIVE_OVERRIDES[objective]
+    if slot_overrides and slot_overrides[slot] then
+      for _, line in ipairs(slot_overrides[slot]) do
+        table.insert(parts, line)
+      end
+    elseif slot == "feedback_incremental" then
       table.insert(parts, "OBJECTIVE: Incremental feedback fix (Category A)")
       table.insert(parts, "Pick ONE confusion matrix segment from the FEEDBACK RCA above (e.g.,")
       table.insert(parts, "'Predicted: Yes / Actual: No' OR 'Predicted: No / Actual: Yes' — NOT both).")
@@ -3472,11 +3618,14 @@ code: |
           consecutive_failed_cycles = consecutive_failed_cycles
         })
 
-        -- Full prompt = base context + cookbook + score concepts doc + focused task
+        -- Full prompt = base context + cookbook + objective doc + score concepts doc + focused task
         local concepts_inject = has_text(SCORE_CONCEPTS_DOC)
           and ("\n\n=== SCORE FORMAT CONCEPTS ===\n" .. SCORE_CONCEPTS_DOC .. "\n=== END SCORE FORMAT CONCEPTS ===")
           or ""
-        local full_prompt = planning_inject .. "\n\n" .. cookbook .. concepts_inject .. "\n\n" .. hyp_prompt
+        local obj_inject = has_text(OBJECTIVE_DOC)
+          and ("\n\n=== OPTIMIZATION OBJECTIVE: " .. objective:upper() .. " ===\n" .. OBJECTIVE_DOC .. "\n=== END OPTIMIZATION OBJECTIVE ===")
+          or ""
+        local full_prompt = planning_inject .. "\n\n" .. cookbook .. obj_inject .. concepts_inject .. "\n\n" .. hyp_prompt
 
         -- Each hypothesis generation gets a fresh conversation to avoid confusion
         Tool.reset()
@@ -4967,12 +5116,30 @@ code: |
         end
 
         -- Programmatic selection: pick the better strategy version
+        -- Uses objective_config to support parameterized optimization objectives
         local function score_strategy(sv)
-          local fb_d = sv.fb_deltas and sv.fb_deltas.alignment or -999
-          local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
-          -- Hard veto if accuracy regresses >0.02
-          if accuracy_available and acc_d < -0.02 then return -999 end
-          return fb_d * 0.6 + acc_d * 0.4
+          -- Hard veto checks (objective-specific thresholds)
+          if objective_config.hard_veto_alignment and accuracy_available then
+            local align_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
+            if align_d < objective_config.hard_veto_alignment then return -999 end
+          end
+          if objective_config.hard_veto_accuracy and accuracy_available then
+            local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or -999
+            if acc_d < objective_config.hard_veto_accuracy then return -999 end
+          end
+          -- Primary metric always comes from fb_deltas
+          local primary_d = sv.fb_deltas and sv.fb_deltas[objective_config.primary_metric] or -999
+          local score = primary_d * (objective_config.primary_weight or 1.0)
+          -- Secondary metric: source is fb_deltas unless secondary_source == "acc"
+          if objective_config.secondary_metric and objective_config.secondary_weight then
+            local sec_source = (objective_config.secondary_source == "acc")
+              and sv.acc_deltas or sv.fb_deltas
+            local sec_d = sec_source and sec_source[objective_config.secondary_metric] or -999
+            if sec_d > -999 then
+              score = score + sec_d * objective_config.secondary_weight
+            end
+          end
+          return score
         end
 
         local best_sv = strategy_versions[1]
