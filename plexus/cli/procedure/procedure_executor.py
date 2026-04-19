@@ -14,9 +14,171 @@ import queue
 import threading
 import uuid
 import yaml
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
+
+
+def _to_float(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value: Any) -> Optional[int]:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _serialize_cost_event(event: Any) -> Optional[Dict[str, Any]]:
+    if event is None:
+        return None
+
+    cost = _to_float(getattr(event, "total_cost", None))
+    if cost is None:
+        cost = _to_float(getattr(event, "cost", None))
+    if cost is None:
+        return None
+
+    timestamp = getattr(event, "timestamp", None)
+    if hasattr(timestamp, "isoformat"):
+        timestamp = timestamp.isoformat()
+
+    return {
+        "agent_name": getattr(event, "agent_name", None),
+        "provider": getattr(event, "provider", None),
+        "model": getattr(event, "model", None),
+        "prompt_tokens": _to_int(getattr(event, "prompt_tokens", None)),
+        "completion_tokens": _to_int(getattr(event, "completion_tokens", None)),
+        "total_tokens": _to_int(getattr(event, "total_tokens", None)),
+        "prompt_cost": _to_float(getattr(event, "prompt_cost", None)),
+        "completion_cost": _to_float(getattr(event, "completion_cost", None)),
+        "cost": cost,
+        "cache_hit": bool(getattr(event, "cache_hit", False)),
+        "request_id": getattr(event, "request_id", None),
+        "timestamp": timestamp,
+    }
+
+
+def _cost_event_signature(entry: Dict[str, Any]) -> str:
+    request_id = entry.get("request_id")
+    if isinstance(request_id, str) and request_id:
+        return f"request:{request_id}"
+    return "|".join(
+        str(entry.get(key))
+        for key in (
+            "agent_name",
+            "provider",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "cost",
+            "timestamp",
+        )
+    )
+
+
+def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_events: List[Any]) -> None:
+    if not cost_events:
+        return
+
+    state_get = getattr(storage, "state_get", None)
+    state_set = getattr(storage, "state_set", None)
+    if not callable(state_get) or not callable(state_set):
+        return
+
+    try:
+        costs = state_get(procedure_id, "costs", {}) or {}
+        if not isinstance(costs, dict):
+            costs = {}
+
+        inference = costs.get("inference") or {}
+        if not isinstance(inference, dict):
+            inference = {}
+
+        entries = inference.get("entries") or []
+        if not isinstance(entries, list):
+            entries = []
+        seen_signatures = inference.get("seen_signatures") or {}
+        if not isinstance(seen_signatures, dict):
+            seen_signatures = {}
+
+        added = 0
+        for event in cost_events:
+            serialized = _serialize_cost_event(event)
+            if not serialized:
+                continue
+            signature = _cost_event_signature(serialized)
+            if seen_signatures.get(signature):
+                continue
+            entries.append(serialized)
+            seen_signatures[signature] = True
+            added += 1
+
+        if added == 0:
+            return
+
+        inference_total = 0.0
+        by_agent: Dict[str, float] = {}
+        by_model: Dict[str, float] = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_cost = _to_float(entry.get("cost"))
+            if entry_cost is None:
+                continue
+            inference_total += entry_cost
+
+            agent_name = entry.get("agent_name")
+            if isinstance(agent_name, str) and agent_name:
+                by_agent[agent_name] = by_agent.get(agent_name, 0.0) + entry_cost
+
+            model_name = entry.get("model")
+            if isinstance(model_name, str) and model_name:
+                by_model[model_name] = by_model.get(model_name, 0.0) + entry_cost
+
+        inference["entries"] = entries
+        inference["seen_signatures"] = seen_signatures
+        inference["total"] = inference_total
+        inference["by_agent"] = by_agent
+        inference["by_model"] = by_model
+        costs["inference"] = inference
+
+        evaluation = costs.get("evaluation") or {}
+        if not isinstance(evaluation, dict):
+            evaluation = {}
+        eval_incurred = _to_float(evaluation.get("incurred_total")) or 0.0
+        eval_reused = _to_float(evaluation.get("reused_total")) or 0.0
+        eval_total = _to_float(evaluation.get("total"))
+        if eval_total is None:
+            eval_total = eval_incurred + eval_reused
+
+        totals = costs.get("totals") or {}
+        if not isinstance(totals, dict):
+            totals = {}
+        totals["evaluation"] = {
+            "incurred": eval_incurred,
+            "reused": eval_reused,
+            "total": eval_total,
+        }
+        totals["inference"] = {"total": inference_total}
+        totals["overall"] = {
+            "incurred": eval_incurred + inference_total,
+            "total": eval_total + inference_total,
+        }
+        costs["totals"] = totals
+
+        state_set(procedure_id, "costs", costs)
+    except Exception as exc:
+        logger.warning("Failed persisting inference costs to state: %s", exc)
 
 
 def _complete_all_task_stages(client: Any, task_id: str) -> None:
@@ -192,9 +354,10 @@ class _PlexusTraceLogBridge:
 
     supports_streaming = True
 
-    def __init__(self, trace_sink: Any):
+    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None):
         self.trace_sink = trace_sink
         self.cost_events = []
+        self._on_cost_event = on_cost_event
         self._events: "queue.Queue[Any]" = queue.Queue()
         self._closed = threading.Event()
         self._worker = threading.Thread(
@@ -212,6 +375,11 @@ class _PlexusTraceLogBridge:
 
         if CostEvent is not None and isinstance(event, CostEvent):
             self.cost_events.append(event)
+            if callable(self._on_cost_event):
+                try:
+                    self._on_cost_event(event)
+                except Exception as exc:
+                    logger.warning("Failed processing incremental cost event: %s", exc)
             return
 
         try:
@@ -705,7 +873,16 @@ async def _execute_tactus(
         if hitl is None:
             hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
         trace_sink = PlexusTraceSink(chat_recorder)
-        log_bridge = _PlexusTraceLogBridge(trace_sink)
+
+        def _on_incremental_cost_event(event: Any) -> None:
+            # Persist each inference cost event as it arrives so dashboards can
+            # display near-real-time optimizer spend during long-running cycles.
+            _persist_inference_costs_to_state(storage, procedure_id, [event])
+
+        log_bridge = _PlexusTraceLogBridge(
+            trace_sink,
+            on_cost_event=_on_incremental_cost_event,
+        )
 
         # Create Tactus runtime with Plexus adapters.
         # Support both newer and older runtime signatures.
@@ -919,6 +1096,7 @@ async def _execute_tactus(
         result = await runtime.execute(procedure_source, runtime_context, format="yaml")
         if log_bridge:
             await log_bridge.flush()
+            _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
 
         # Mark all remaining task stages as COMPLETED now that execution has finished.
         if _task_id:
@@ -953,6 +1131,7 @@ async def _execute_tactus(
         if log_bridge:
             try:
                 await log_bridge.flush()
+                _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
             except Exception as flush_error:
                 logger.warning("Failed flushing trace log bridge after error: %s", flush_error)
             try:

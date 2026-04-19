@@ -225,6 +225,7 @@ export default function ProcedureTask({
   const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
   const [endOfRunReport, setEndOfRunReport] = useState<any>(null)
   const [procedureSummary, setProcedureSummary] = useState<{ progress?: string; next_steps?: string; diagnosis?: string; prescription?: string; cycle?: number } | null>(null)
+  const [procedureCosts, setProcedureCosts] = useState<any | null>(null)
   const [notableItemRecurrence, setNotableItemRecurrence] = useState<NotableItemRecurrence | null>(null)
   const [iterationDetails, setIterationDetails] = useState<Map<number, any>>(new Map())
   const [expandedVersionRows, setExpandedVersionRows] = useState<Set<number>>(new Set())
@@ -368,6 +369,7 @@ export default function ProcedureTask({
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
         if (state.end_of_run_report) setEndOfRunReport(state.end_of_run_report)
         if (state.procedure_summary) setProcedureSummary(state.procedure_summary)
+        setProcedureCosts(state.costs ?? null)
         if (state.notable_item_recurrence) setNotableItemRecurrence(state.notable_item_recurrence)
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
@@ -584,6 +586,8 @@ export default function ProcedureTask({
 
   const formatCostPerItem = (value?: number | null) =>
     value != null ? `$${value.toFixed(4)}` : '—'
+  const formatCurrency = (value?: number | null) =>
+    value != null ? `$${value.toFixed(4)}` : '—'
 
   const MetricHeaderLabel = ({ label, shape, color }: { label: string; shape: 'circle' | 'square'; color: string }) => (
     <span className="inline-flex items-center gap-1">
@@ -602,6 +606,18 @@ export default function ProcedureTask({
   const cyclesSelectedDatasetLabel = cyclesTableView === 'recent' ? 'Recent' : 'Regression'
   const cyclesSelectedDatasetColor = cyclesTableView === 'recent' ? RECENT_SERIES_COLOR : REGRESSION_SERIES_COLOR
   const cyclesExpandedColSpan = isOverallCyclesView ? 14 : 8
+
+  const evaluationCosts = procedureCosts?.evaluation ?? {}
+  const inferenceCosts = procedureCosts?.inference ?? {}
+  const costTotals = procedureCosts?.totals ?? {}
+  const evaluationIncurred = Number(costTotals?.evaluation?.incurred ?? evaluationCosts?.incurred_total ?? 0)
+  const evaluationReused = Number(costTotals?.evaluation?.reused ?? evaluationCosts?.reused_total ?? 0)
+  const evaluationTotal = Number(costTotals?.evaluation?.total ?? evaluationCosts?.total ?? (evaluationIncurred + evaluationReused))
+  const inferenceTotal = Number(costTotals?.inference?.total ?? inferenceCosts?.total ?? 0)
+  const overallIncurred = Number(costTotals?.overall?.incurred ?? (evaluationIncurred + inferenceTotal))
+  const overallTotal = Number(costTotals?.overall?.total ?? (evaluationTotal + inferenceTotal))
+  const evaluationEntryCount = Array.isArray(evaluationCosts?.entries) ? evaluationCosts.entries.length : 0
+  const inferenceEntryCount = Array.isArray(inferenceCosts?.entries) ? inferenceCosts.entries.length : 0
 
   // ---- Shared helpers for creating a Task and dispatching a procedure run ----
   const createTaskWithStages = async (procedureId: string, runParameters?: ParameterValue) => {
@@ -1130,6 +1146,31 @@ export default function ProcedureTask({
               </div>
             )
           })()}
+
+          {procedureCosts && (
+            <div className="mt-4 rounded-lg border border-border/50 bg-card p-3">
+              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cost Breakdown</h3>
+              <div className="grid grid-cols-1 gap-2 @lg:grid-cols-3 text-xs">
+                <div className="rounded border border-border/40 p-2">
+                  <div className="text-muted-foreground/70 mb-1">Evaluation</div>
+                  <div className="font-medium">Incurred: {formatCurrency(evaluationIncurred)}</div>
+                  <div className="text-muted-foreground">Reused: {formatCurrency(evaluationReused)}</div>
+                  <div className="text-muted-foreground">Total: {formatCurrency(evaluationTotal)}</div>
+                  <div className="text-muted-foreground/70 mt-1">Runs: {evaluationEntryCount}</div>
+                </div>
+                <div className="rounded border border-border/40 p-2">
+                  <div className="text-muted-foreground/70 mb-1">Optimization Inference</div>
+                  <div className="font-medium">Total: {formatCurrency(inferenceTotal)}</div>
+                  <div className="text-muted-foreground/70 mt-1">LLM calls: {inferenceEntryCount}</div>
+                </div>
+                <div className="rounded border border-border/40 p-2">
+                  <div className="text-muted-foreground/70 mb-1">Procedure Total</div>
+                  <div className="font-medium">Incurred: {formatCurrency(overallIncurred)}</div>
+                  <div className="text-muted-foreground">With reused evals: {formatCurrency(overallTotal)}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Cycles table - skeleton while loading, table when data arrives */}
           {isLoadingProcedureState ? (
