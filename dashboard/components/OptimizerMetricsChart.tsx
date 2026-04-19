@@ -142,10 +142,16 @@ const LeftAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
   if (typeof value !== "number") return null
 
   return (
-    <text x={x - 8} y={y} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={11}>
-      <tspan x={x - 8} dy="0.35em">{value.toFixed(1)}</tspan>
-      {value === -1 && <tspan x={x - 8} dy="1.5em" fontSize={10}>AC1</tspan>}
-    </text>
+    <g>
+      <text x={x - 8} y={y} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={11} dy="0.35em">
+        {value.toFixed(1)}
+      </text>
+      {value === -1 && (
+        <text x={x - 8} y={y + 16} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={10}>
+          AC1
+        </text>
+      )}
+    </g>
   )
 }
 
@@ -154,10 +160,16 @@ const RightAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
   if (typeof value !== "number") return null
 
   return (
-    <text x={x + 8} y={y} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={11}>
-      <tspan x={x + 8} dy="0.35em">{value}%</tspan>
-      {value === 0 && <tspan x={x + 8} dy="1.5em" fontSize={10}>Acc</tspan>}
-    </text>
+    <g>
+      <text x={x + 8} y={y} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={11} dy="0.35em">
+        {value}%
+      </text>
+      {value === 0 && (
+        <text x={x + 8} y={y + 16} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={10}>
+          Acc
+        </text>
+      )}
+    </g>
   )
 }
 
