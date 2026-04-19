@@ -2029,6 +2029,18 @@ code: |
   end)
 
   -- ================================================================
+  -- COERCE NUMERIC PARAMS: saved procedures store param values as
+  -- strings; tonumber() ensures arithmetic works regardless of source.
+  -- ================================================================
+  params.days                  = tonumber(params.days) or 90
+  params.max_iterations        = tonumber(params.max_iterations) or 3
+  params.max_samples           = tonumber(params.max_samples) or 100
+  params.num_candidates        = tonumber(params.num_candidates) or 3
+  params.improvement_threshold = tonumber(params.improvement_threshold) or 0.02
+  params.target_accuracy       = tonumber(params.target_accuracy) or 0.95
+  params.context_window        = tonumber(params.context_window) or 180000
+
+  -- ================================================================
   -- OPTIMIZATION OBJECTIVE: programmatic config driven by params
   -- ================================================================
   local objective = has_text(params.optimization_objective)
