@@ -116,6 +116,7 @@ const docSections: DocSidebarItem[] = [
       { name: "Overview", href: "/documentation/procedures" },
       { name: "Getting Started", href: "/documentation/procedures/getting-started" },
       { name: "Human-in-the-Loop", href: "/documentation/procedures/hitl" },
+      { name: "Feedback Optimizer", href: "/documentation/procedures/optimizer" },
       { name: "Examples & Patterns", href: "/documentation/procedures/examples" },
       { name: "API Reference", href: "/documentation/procedures/api" },
       { name: "Message Classification", href: "/documentation/procedures/messages" },
