@@ -159,6 +159,43 @@ class _RuntimeStreamingWithoutTraceParam:
         return {"success": True, "response": "Hello"}
 
 
+class _RuntimeWithCostEvents:
+    def __init__(
+        self,
+        procedure_id,
+        storage_backend,
+        hitl_handler,
+        chat_recorder=None,
+        mcp_server=None,
+        openai_api_key=None,
+    ):
+        assert procedure_id
+        assert storage_backend is not None
+        assert hitl_handler is not None
+        self.toolset_registry = {}
+        self.tool_primitive = None
+        self.log_handler = None
+
+    async def execute(self, _source, _context, format="yaml"):
+        assert format == "yaml"
+        from tactus.protocols.models import CostEvent
+
+        self.log_handler.log(
+            CostEvent(
+                agent_name="optimizer",
+                model="gpt-5.2",
+                provider="openai",
+                prompt_tokens=100,
+                completion_tokens=40,
+                total_tokens=140,
+                prompt_cost=0.002,
+                completion_cost=0.001,
+                total_cost=0.003,
+            )
+        )
+        return {"success": True, "response": "cost event emitted"}
+
+
 @pytest.mark.asyncio
 async def test_execute_tactus_initializes_embedded_mcp_transport(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
@@ -789,6 +826,67 @@ async def test_execute_tactus_streams_via_log_handler_without_trace_sink_constru
     assert len(recorder.updated) >= 1
     assert recorder.updated[-1]["content"] == "Hello"
     assert recorder.fallback_messages == []
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_persists_inference_costs_from_cost_events(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _Recorder(SimpleNamespace):
+        async def record_assistant_message(self, _content: str):
+            return "msg-1"
+
+    class _StorageWithState(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.state = {}
+
+        def state_set(self, _procedure_id, key, value):
+            self.state[key] = value
+
+        def state_get(self, _procedure_id, key, default=None):
+            return self.state.get(key, default)
+
+    storage = _StorageWithState()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithCostEvents)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: storage,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: _Recorder(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-costs",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+    )
+
+    assert result["success"] is True
+    costs = storage.state.get("costs")
+    assert isinstance(costs, dict)
+    assert costs["inference"]["total"] == pytest.approx(0.003)
+    assert len(costs["inference"]["entries"]) == 1
+    assert costs["inference"]["entries"][0]["agent_name"] == "optimizer"
+    assert costs["totals"]["overall"]["incurred"] == pytest.approx(0.003)
 
 
 def test_scorecard_create_dry_run_skips_approval():
