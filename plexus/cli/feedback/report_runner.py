@@ -94,6 +94,7 @@ def run_feedback_report_block(
         return {
             "status": output_data["status"],
             "cache_key": output_data.get("cache_key"),
+            "task_id": output_data.get("task_id"),
             "block_class": block_class,
             "block_config": block_config,
             "cached": False,
