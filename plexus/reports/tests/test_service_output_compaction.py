@@ -1,4 +1,5 @@
 import json
+import pytest
 
 from plexus.reports import service
 from unittest.mock import Mock
@@ -53,21 +54,12 @@ def test_compact_output_json_for_storage_includes_attachment_and_preview():
     assert compact["preview"]["summary"] == "Done"
 
 
-def test_is_dynamodb_item_size_error_matches_known_message():
-    exc = RuntimeError(
-        "GraphQL query failed: Item size to update has exceeded the maximum allowed size"
-    )
-    assert service._is_dynamodb_item_size_error(exc) is True
-    assert service._is_dynamodb_item_size_error(RuntimeError("different error")) is False
-
-
-def test_persist_output_artifact_always_attaches_when_enabled(monkeypatch):
+def test_persist_output_artifact_compacts_with_attachment(monkeypatch):
     monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
-    monkeypatch.setattr(service, "ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT", True)
     upload_mock = Mock(return_value="reportblocks/rb-1/output-rb-1.json")
     monkeypatch.setattr(service, "upload_report_block_file", upload_mock)
 
-    output_json, attached, output_path = service._persist_output_artifact_and_compact_if_needed(
+    output_json, attached, output_path = service._persist_output_artifact_and_compact(
         report_block_id="rb-1",
         output_payload=json.dumps({"status": "ok"}),
         existing_details_files_list=[],
@@ -84,11 +76,10 @@ def test_persist_output_artifact_always_attaches_when_enabled(monkeypatch):
 
 def test_persist_output_artifact_handles_dict_payload(monkeypatch):
     monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
-    monkeypatch.setattr(service, "ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT", True)
     upload_mock = Mock(return_value="reportblocks/rb-dict/output-rb-dict.json")
     monkeypatch.setattr(service, "upload_report_block_file", upload_mock)
 
-    output_json, attached, output_path = service._persist_output_artifact_and_compact_if_needed(
+    output_json, attached, output_path = service._persist_output_artifact_and_compact(
         report_block_id="rb-dict",
         output_payload={"status": "ok", "summary": "dict payload"},
         existing_details_files_list=[],
@@ -105,23 +96,43 @@ def test_persist_output_artifact_handles_dict_payload(monkeypatch):
     assert isinstance(content_arg, bytes)
 
 
-def test_persist_output_artifact_compacts_when_oversized(monkeypatch):
-    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
-    monkeypatch.setattr(service, "ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT", True)
-    monkeypatch.setattr(service, "MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS", 10)
-    monkeypatch.setattr(
-        service, "upload_report_block_file", Mock(return_value="reportblocks/rb-2/output-rb-2.json")
-    )
+def test_persist_output_artifact_raises_when_s3_unavailable(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", False)
 
-    output_json, attached, output_path = service._persist_output_artifact_and_compact_if_needed(
-        report_block_id="rb-2",
-        output_payload=json.dumps({"status": "ok", "summary": "this is long enough"}),
+    with pytest.raises(RuntimeError, match="S3 utilities are unavailable"):
+        service._persist_output_artifact_and_compact(
+            report_block_id="rb-2",
+            output_payload=json.dumps({"status": "ok"}),
+            existing_details_files_list=[],
+            log_prefix="[test]",
+        )
+
+
+def test_persist_log_artifact_if_present_attaches_log(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
+    upload_mock = Mock(return_value="reportblocks/rb-3/log.txt")
+    monkeypatch.setattr(service, "upload_report_block_file", upload_mock)
+
+    log_message, attached, log_path = service._persist_log_artifact_if_present(
+        report_block_id="rb-3",
+        log_output="long log output",
         existing_details_files_list=[],
         log_prefix="[test]",
     )
-    parsed = json.loads(output_json)
 
-    assert parsed["output_compacted"] is True
-    assert parsed["output_attachment"] == "reportblocks/rb-2/output-rb-2.json"
-    assert attached == ["reportblocks/rb-2/output-rb-2.json"]
-    assert output_path == "reportblocks/rb-2/output-rb-2.json"
+    assert log_message == "See log.txt in attachedFiles."
+    assert attached == ["reportblocks/rb-3/log.txt"]
+    assert log_path == "reportblocks/rb-3/log.txt"
+    upload_mock.assert_called_once()
+
+
+def test_persist_log_artifact_if_present_raises_when_s3_unavailable(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", False)
+
+    with pytest.raises(RuntimeError, match="S3 utilities are unavailable"):
+        service._persist_log_artifact_if_present(
+            report_block_id="rb-4",
+            log_output="x",
+            existing_details_files_list=[],
+            log_prefix="[test]",
+        )

@@ -6,6 +6,8 @@ import { downloadData } from "aws-amplify/storage";
 import { parseOutputString } from "@/lib/utils";
 import ReportBlock, { ReportBlockProps } from "./ReportBlock";
 import { useIncrementalRows } from "./useIncrementalRows";
+import { IdentifierDisplay } from "@/components/ui/identifier-display";
+import { Timestamp } from "@/components/ui/timestamp";
 
 interface AcceptanceSummary {
   total_items: number;
@@ -16,10 +18,18 @@ interface AcceptanceSummary {
   accepted_score_results: number;
   corrected_score_results: number;
   score_result_acceptance_rate: number;
+  feedback_items_total: number;
+  feedback_items_valid: number;
+  feedback_items_changed: number;
+  score_results_with_feedback: number;
 }
 
 interface AcceptanceItem {
   item_id: string;
+  item_external_id?: string | null;
+  item_created_at?: string | null;
+  item_updated_at?: string | null;
+  item_identifiers?: string | Record<string, string> | Array<{ name: string; value: string; url?: string }> | null;
   item_accepted: boolean;
   total_score_results: number;
   accepted_score_results: number;
@@ -170,11 +180,23 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
               {(summary?.accepted_score_results ?? 0)} / {(summary?.total_score_results ?? 0)}
             </div>
           </div>
+          <div className="rounded-md bg-card p-3">
+            <div className="text-xs text-muted-foreground">Feedback Edits</div>
+            <div className="text-xl font-semibold">{summary?.feedback_items_total ?? 0}</div>
+            <div className="text-xs text-muted-foreground">
+              Valid: {summary?.feedback_items_valid ?? 0}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Value changed: {summary?.feedback_items_changed ?? 0}
+            </div>
+          </div>
         </div>
 
         <div className="text-sm text-muted-foreground">
           {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
           {output.score_name ? ` • Score: ${output.score_name}` : null}
+          {summary ? ` • Feedback edits: ${summary.feedback_items_valid ?? 0}/${summary.feedback_items_total ?? 0}` : null}
+          {summary ? ` • Value-changing edits: ${summary.feedback_items_changed ?? 0}` : null}
           {output.items_truncated
             ? ` • Showing ${output.items_returned ?? items.length} of ${output.items_total ?? "?"} items`
             : null}
@@ -201,7 +223,8 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
               <table className="w-full text-sm">
                 <thead className="bg-card-selected">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium">Item</th>
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Item Date</th>
+                    <th className="px-3 py-2 text-left font-medium">Item Identifiers</th>
                     <th className="px-3 py-2 text-right font-medium">Feedback Edits</th>
                     <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Score Results</th>
                     <th className="px-3 py-2 text-right font-medium">Accepted</th>
@@ -212,7 +235,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
                         No score results matched the requested filters.
                       </td>
                     </tr>
@@ -222,7 +245,26 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                         key={item.item_id}
                         className={index % 2 === 0 ? "bg-card" : "bg-card-selected/60"}
                       >
-                        <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                          {item.item_created_at ? (
+                            <Timestamp
+                              time={item.item_created_at}
+                              variant="relative"
+                              showIcon={true}
+                              className="text-xs"
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <IdentifierDisplay
+                            identifiers={item.item_identifiers ?? undefined}
+                            externalId={item.item_external_id ?? item.item_id}
+                            displayMode="full"
+                            textSize="xs"
+                          />
+                        </td>
                         <td className="px-3 py-2 text-right">
                           {(item.feedback_items_valid ?? 0)}/{(item.feedback_items_total ?? 0)}
                         </td>

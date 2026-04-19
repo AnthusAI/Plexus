@@ -9,7 +9,6 @@ import time
 from datetime import datetime, timezone # Added datetime
 import traceback # Added for error details
 import re
-import os # Added for API client env vars
 import asyncio # Add asyncio import
 
 # print("[DEBUG] service.py top level print") # DEBUG PRINT
@@ -44,15 +43,7 @@ from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageCo
 logger = logging.getLogger(__name__)
 
 
-MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS = int(
-    os.environ.get("REPORT_BLOCK_MAX_INLINE_OUTPUT_CHARS", "120000")
-)
-MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS = int(
-    os.environ.get("REPORT_BLOCK_OUTPUT_PREVIEW_CHARS", "1000")
-)
-ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT = os.environ.get(
-    "REPORT_BLOCK_ATTACH_OUTPUT_JSON_ALWAYS", "1"
-) not in ("0", "false", "False")
+MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS = 1000
 
 
 def _normalize_output_for_storage(output_payload: Any) -> Optional[str]:
@@ -108,49 +99,58 @@ def _compact_output_json_for_storage(
     return json.dumps(compact_payload)
 
 
-def _persist_output_artifact_and_compact_if_needed(
+def _persist_output_artifact_and_compact(
     report_block_id: str,
     output_payload: Any,
     existing_details_files_list: List[str],
     log_prefix: str,
-) -> Tuple[Optional[str], List[str], Optional[str]]:
+) -> Tuple[str, List[str], str]:
     """
-    Persist output JSON as an attached artifact when enabled, and compact inline output
-    only when it risks exceeding storage limits.
+    Persist output JSON as an attached artifact and return a compact inline envelope.
+
+    Policy: report block output is always persisted as an S3 attachment and never
+    stored inline in DynamoDB.
     """
     normalized_output = _normalize_output_for_storage(output_payload)
-    if not normalized_output or not S3_UTILS_AVAILABLE:
-        return normalized_output, existing_details_files_list, None
+    if not normalized_output:
+        normalized_output = json.dumps({"status": "empty", "message": "Block returned no output"})
+    if not S3_UTILS_AVAILABLE:
+        raise RuntimeError(f"{log_prefix} S3 utilities are unavailable; cannot persist ReportBlock output attachment.")
 
-    output_path: Optional[str] = None
-    should_attach = ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT or (
-        len(normalized_output) > MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS
+    output_file_name = f"output-{report_block_id}.json"
+    output_path = upload_report_block_file(
+        report_block_id=report_block_id,
+        file_name=output_file_name,
+        content=normalized_output.encode("utf-8"),
+        content_type="application/json",
     )
-    if should_attach:
-        output_file_name = f"output-{report_block_id}.json"
-        output_path = upload_report_block_file(
-            report_block_id=report_block_id,
-            file_name=output_file_name,
-            content=normalized_output.encode("utf-8"),
-            content_type="application/json",
-        )
-        if output_path not in existing_details_files_list:
-            existing_details_files_list.append(output_path)
+    if output_path not in existing_details_files_list:
+        existing_details_files_list.append(output_path)
 
-    if should_attach and output_path:
-        # Always compact inline payload when output is attached — one consistent path
-        # for the frontend regardless of output size.
-        return (
-            _compact_output_json_for_storage(normalized_output, output_path),
-            existing_details_files_list,
-            output_path,
-        )
-
-    return normalized_output, existing_details_files_list, output_path
+    compact_output = _compact_output_json_for_storage(normalized_output, output_path)
+    return compact_output, existing_details_files_list, output_path
 
 
-def _is_dynamodb_item_size_error(exc: Exception) -> bool:
-    return "Item size to update has exceeded the maximum allowed size" in str(exc)
+def _persist_log_artifact_if_present(
+    report_block_id: str,
+    log_output: Optional[str],
+    existing_details_files_list: List[str],
+    log_prefix: str,
+) -> Tuple[str, List[str], Optional[str]]:
+    if not log_output:
+        return "No detailed log output.", existing_details_files_list, None
+    if not S3_UTILS_AVAILABLE:
+        raise RuntimeError(f"{log_prefix} S3 utilities are unavailable; cannot persist ReportBlock log attachment.")
+
+    log_path = upload_report_block_file(
+        report_block_id=report_block_id,
+        file_name="log.txt",
+        content=log_output.encode("utf-8"),
+        content_type="text/plain",
+    )
+    if log_path not in existing_details_files_list:
+        existing_details_files_list.append(log_path)
+    return "See log.txt in attachedFiles.", existing_details_files_list, log_path
 
 
 
@@ -1023,23 +1023,31 @@ def _persist_block_result(
         type=block_class,
         name=display_name,
         output="{}",  # placeholder — updated below
-        log=log_output,
+        log="Processing...",
     )
 
-    compact_output_json, _, output_path = _persist_output_artifact_and_compact_if_needed(
+    compact_output_json, attached_files, _ = _persist_output_artifact_and_compact(
         report_block_id=rb.id,
         output_payload=output_data,
         existing_details_files_list=[],
         log_prefix="[run_block_cached]",
     )
+    final_log_message, attached_files, _ = _persist_log_artifact_if_present(
+        report_block_id=rb.id,
+        log_output=log_output,
+        existing_details_files_list=attached_files,
+        log_prefix="[run_block_cached]",
+    )
 
-    block_output = compact_output_json if compact_output_json is not None else json.dumps(output_data, ensure_ascii=False)
-    update_input: dict = {"id": rb.id, "output": block_output}
-    if output_path:
-        update_input["attachedFiles"] = [output_path]
+    update_input: dict = {
+        "id": rb.id,
+        "output": compact_output_json,
+        "log": final_log_message,
+        "attachedFiles": attached_files,
+    }
     mutation = """
     mutation UpdateReportBlock($input: UpdateReportBlockInput!) {
-        updateReportBlock(input: $input) { id output attachedFiles }
+        updateReportBlock(input: $input) { id output log attachedFiles }
     }
     """
     client.execute(mutation, {"input": update_input})
@@ -1428,135 +1436,60 @@ def _generate_report_core(
                 report_block_id=current_report_block.id # Pass the ID
             )
 
-            # Fetch the latest state of the ReportBlock, as the block itself might have updated attachedFiles
-            existing_details_files_list = [] # Initialize before try block
+            # Fetch latest attached files from DB state after block execution.
+            existing_details_files_list: List[str] = []
             try:
                 logger.info(f"{log_prefix} Re-fetching ReportBlock ID {current_report_block.id} after block execution.")
                 db_block_state = ReportBlock.get_by_id(current_report_block.id, client)
                 if not db_block_state:
-                    logger.error(f"{log_prefix} Failed to re-fetch ReportBlock {current_report_block.id} after execution. File attachments might be lost.")
-                    # Fallback to an empty list if fetch fails, though this is problematic
-                    # existing_details_files_list is already []
-                else:
-                    logger.info(f"{log_prefix} Fetched DB state. Current attachedFiles: {db_block_state.attachedFiles}")
-                    if db_block_state.attachedFiles:
-                        # Handle both list and potential legacy JSON string formats
-                        if isinstance(db_block_state.attachedFiles, list):
-                            existing_details_files_list = db_block_state.attachedFiles
-                            logger.info(f"{log_prefix} attachedFiles is already a list with {len(existing_details_files_list)} items")
-                        else:
-                            # For backward compatibility - try to parse JSON if it's a string
-                            try:
-                                existing_details_files_list = json.loads(db_block_state.attachedFiles)
-                                logger.info(f"{log_prefix} Successfully parsed existing attachedFiles JSON (for backward compatibility)")
-                                
-                                # Check if we have old format objects and extract just paths
-                                if existing_details_files_list and isinstance(existing_details_files_list[0], dict) and 'path' in existing_details_files_list[0]:
-                                    logger.warning(f"{log_prefix} Converting old format attachedFiles to just paths")
-                                    existing_details_files_list = [item['path'] for item in existing_details_files_list]
-                            except (json.JSONDecodeError, TypeError):
-                                # If not valid JSON or not string, treat as a single item
-                                logger.warning(f"{log_prefix} Could not parse attachedFiles as JSON - treating as a single item")
-                                existing_details_files_list = [db_block_state.attachedFiles]
-                            
-                        # Ensure it's a list
-                        if not isinstance(existing_details_files_list, list):
-                            logger.warning(f"{log_prefix} attachedFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
-                            existing_details_files_list = []
-            except Exception as e:
-                logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} attachedFiles: {e}. Proceeding with empty list.")
-                existing_details_files_list = [] # Ensure it's an empty list on error
-            
-            # Handle log content attachment
-            final_log_message_for_db = "No detailed log output."
-            if log_string:
-                if S3_UTILS_AVAILABLE:
-                    try:
-                        logger.info(f"{log_prefix} Uploading log.txt for ReportBlock {current_report_block.id}")
-                        log_file_info = upload_report_block_file(
-                            report_block_id=current_report_block.id,
-                            file_name="log.txt",
-                            content=log_string.encode('utf-8'),  # Encode to bytes
-                            content_type="text/plain"
+                    raise RuntimeError(f"Could not re-fetch ReportBlock {current_report_block.id} after execution.")
+                attached_files = db_block_state.attachedFiles
+                if attached_files:
+                    if not isinstance(attached_files, list):
+                        raise RuntimeError(
+                            f"ReportBlock {current_report_block.id} attachedFiles must be a list, got {type(attached_files).__name__}."
                         )
-                        existing_details_files_list.append(log_file_info)
-                        logger.info(f"{log_prefix} Appended log.txt info. New attachedFiles list: {existing_details_files_list}")
-                        final_log_message_for_db = "See log.txt in attachedFiles."
-                    except Exception as e:
-                        logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {str(e)}. Storing log inline (truncated).", exc_info=True)
-                        final_log_message_for_db = log_string[:10000] # Truncate if storing inline
-                else:
-                    logger.warning(f"{log_prefix} S3_UTILS_AVAILABLE is false. Storing log inline (truncated) for ReportBlock {current_report_block.id}.")
-                    final_log_message_for_db = log_string[:10000] # Truncate
-            
+                    existing_details_files_list = list(attached_files)
+            except Exception as e:
+                logger.exception(f"{log_prefix} Failed to fetch attachedFiles for ReportBlock {current_report_block.id}: {e}")
+                if first_block_error_message is None:
+                    first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
+                tracker.update(current_items=i + 1)
+                continue
 
-            # Final update to the ReportBlock record
+            # Final update to the ReportBlock record.
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
 
-                compact_output_json, existing_details_files_list, output_attachment_path = _persist_output_artifact_and_compact_if_needed(
+                final_log_message_for_db, existing_details_files_list, _ = _persist_log_artifact_if_present(
+                    report_block_id=current_report_block.id,
+                    log_output=log_string,
+                    existing_details_files_list=existing_details_files_list,
+                    log_prefix=log_prefix,
+                )
+                compact_output_json, existing_details_files_list, _ = _persist_output_artifact_and_compact(
                     report_block_id=current_report_block.id,
                     output_payload=output_json,
                     existing_details_files_list=existing_details_files_list,
                     log_prefix=log_prefix,
                 )
+
                 update_params = {
-                    'output': compact_output_json if compact_output_json is not None else json.dumps({"status": "failed", "error": log_string}),
+                    'output': compact_output_json,
                     'log': final_log_message_for_db,
-                    'attachedFiles': existing_details_files_list, # Pass array directly without JSON conversion
+                    'attachedFiles': existing_details_files_list,
                     'client': client
                 }
-                
-                # Add resolved dataset ID if available
                 if resolved_dataset_id:
                     update_params['dataSetId'] = resolved_dataset_id
                     logger.info(f"{log_prefix} Adding resolved dataset ID {resolved_dataset_id} to ReportBlock {current_report_block.id}")
-                
+
                 current_report_block.update(**update_params)
                 logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {existing_details_files_list}")
             except Exception as e:
-                if _is_dynamodb_item_size_error(e) and S3_UTILS_AVAILABLE:
-                    logger.warning(
-                        f"{log_prefix} ReportBlock {current_report_block.id} exceeded DynamoDB item size on final update. "
-                        "Retrying with compact output."
-                    )
-                    try:
-                        output_path = output_attachment_path
-                        if output_json and not output_path:
-                            normalized_retry_output = _normalize_output_for_storage(output_json)
-                            output_file_name = f"output-{current_report_block.id}.json"
-                            output_path = upload_report_block_file(
-                                report_block_id=current_report_block.id,
-                                file_name=output_file_name,
-                                content=(normalized_retry_output or "").encode("utf-8"),
-                                content_type="application/json",
-                            )
-                            if output_path not in existing_details_files_list:
-                                existing_details_files_list.append(output_path)
-
-                        retry_update_params = {
-                            'output': _compact_output_json_for_storage(output_json, output_path),
-                            'log': final_log_message_for_db,
-                            'attachedFiles': existing_details_files_list,
-                            'client': client,
-                        }
-                        if resolved_dataset_id:
-                            retry_update_params['dataSetId'] = resolved_dataset_id
-
-                        current_report_block.update(**retry_update_params)
-                        logger.info(
-                            f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id} after compact-output retry."
-                        )
-                    except Exception as retry_error:
-                        logger.exception(
-                            f"{log_prefix} Compact-output retry failed for ReportBlock {current_report_block.id}: {retry_error}"
-                        )
-                        if first_block_error_message is None:
-                            first_block_error_message = f"Failed to finalize block {block_display_name}: {retry_error}"
-                else:
-                    logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
-                    if first_block_error_message is None:
-                        first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
+                logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
+                if first_block_error_message is None:
+                    first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
             
 
             if output_json is None and first_block_error_message is None:
