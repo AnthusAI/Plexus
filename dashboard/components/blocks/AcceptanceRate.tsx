@@ -204,14 +204,14 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
         </div>
 
         {items.length > AUTO_SHOW_ROWS_THRESHOLD && !showRows ? (
-          <div className="rounded-md border bg-card p-4">
+          <div className="rounded-md bg-card p-4">
             <div className="text-sm text-muted-foreground">
               Item rows are hidden by default for large results.
             </div>
             <button
               type="button"
               onClick={() => setShowRows(true)}
-              className="mt-3 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+              className="mt-3 rounded-md bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
             >
               Show item rows ({items.length})
             </button>
@@ -287,7 +287,7 @@ const AcceptanceRate: React.FC<ReportBlockProps> = (props) => {
                   <button
                     type="button"
                     onClick={loadMore}
-                    className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+                    className="rounded-md bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
                   >
                     Load more rows ({visibleCount}/{totalCount})
                   </button>
