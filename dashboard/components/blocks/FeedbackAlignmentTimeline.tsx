@@ -33,6 +33,7 @@ interface FeedbackAlignmentTimelineData {
   mode?: "single_score" | "all_scores";
   block_title?: string;
   block_description?: string;
+  show_bucket_details?: boolean;
   scorecard_id?: string;
   scorecard_name?: string;
   date_range?: {
@@ -45,6 +46,7 @@ interface FeedbackAlignmentTimelineData {
     timezone?: string;
     week_start?: string;
     complete_only?: boolean;
+    window_mode?: "historical_complete" | "exact_window";
   };
   overall?: AlignmentSeries;
   scores?: AlignmentSeries[];
@@ -220,7 +222,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
     return scores.find((score) => score.score_id === selectedSeries) || null;
   }, [data.overall, isSingleScoreMode, scores, selectedSeries]);
 
-  const chartData = activeSeries?.points || [];
+  const chartData = React.useMemo(() => activeSeries?.points || [], [activeSeries?.points]);
   const seriesLabel = activeSeries?.score_name || "Overall";
   const selectedSeriesLabel = selectedSeries === OVERALL_SERIES_KEY
     ? "Overall"
@@ -340,6 +342,11 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
   const hasRenderableAc1Points = renderableAc1Points.length > 0;
   const canDrawConnectingLine = renderableAc1Points.length > 1;
   const hasSeriesSelector = !isSingleScoreMode && scores.length > 0;
+  const showBucketDetails = Boolean(data.show_bucket_details);
+  const bucketModeCopy =
+    data.bucket_policy?.window_mode === "exact_window"
+      ? "exact-window coverage"
+      : "complete periods only";
   const accuracyGaugeSegments = React.useMemo(
     () => GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds({})),
     []
@@ -365,7 +372,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
             <div>
               <strong className="text-foreground">Buckets:</strong>{" "}
               {isLoadingCompactedOutput ? "loading..." : data.bucket_policy?.bucket_count ?? chartData.length} x{" "}
-              {data.bucket_policy?.bucket_type || "trailing_7d"} (complete periods only)
+              {data.bucket_policy?.bucket_type || "trailing_7d"} ({bucketModeCopy})
             </div>
           </div>
 
@@ -390,8 +397,8 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
         </div>
 
         <p className="text-sm text-muted-foreground">
-          This report shows how feedback alignment changes over complete historical buckets for the selected
-          series, using Gwet&apos;s AC1 as the primary trend metric.
+          This report shows how feedback alignment changes over time for the selected series, using
+          Gwet&apos;s AC1 as the primary trend metric.
         </p>
 
         {data.message && <p className="text-xs text-muted-foreground">{data.message}</p>}
@@ -485,70 +492,72 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
             <p className="mt-2 text-xs text-muted-foreground">
               Dot size indicates the number of feedback items in each bucket.
             </p>
-            <div className="mt-4 w-full space-y-3">
-              <h4 className="text-sm font-medium">Bucket Details</h4>
-              {chartData.map((point) => {
-                const hasBucketData =
-                  point.item_count > 0 && point.ac1 !== null && point.accuracy !== null;
+            {showBucketDetails && (
+              <div className="mt-4 w-full space-y-3">
+                <h4 className="text-sm font-medium">Bucket Details</h4>
+                {chartData.map((point) => {
+                  const hasBucketData =
+                    point.item_count > 0 && point.ac1 !== null && point.accuracy !== null;
 
-                return (
-                  <div
-                    key={`${seriesLabel}-${point.bucket_index}-${point.label}`}
-                    className="rounded-md bg-card p-3"
-                  >
-                    <div className="mb-3">
-                      <div className="text-sm font-medium">{point.label}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatBucketRange(point.start, point.end)}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Items: {point.item_count}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                      <div className="flex justify-center">
-                        <div style={{ width: "190px" }}>
-                          <Gauge
-                            value={point.ac1 ?? undefined}
-                            title="Alignment"
-                            valueUnit=""
-                            min={AC1_MIN}
-                            max={AC1_MAX}
-                            decimalPlaces={2}
-                            segments={ac1GaugeSegments}
-                            showTicks
-                          />
+                  return (
+                    <div
+                      key={`${seriesLabel}-${point.bucket_index}-${point.label}`}
+                      className="rounded-md bg-card p-3"
+                    >
+                      <div className="mb-3">
+                        <div className="text-sm font-medium">{point.label}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatBucketRange(point.start, point.end)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Items: {point.item_count}
                         </div>
                       </div>
-                      <div className="flex justify-center">
-                        <div style={{ width: "190px" }}>
-                          <Gauge
-                            value={point.accuracy ?? undefined}
-                            title="Accuracy"
-                            min={0}
-                            max={100}
-                            segments={accuracyGaugeSegments}
-                            showTicks
-                          />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div className="flex justify-center">
+                          <div style={{ width: "190px" }}>
+                            <Gauge
+                              value={point.ac1 ?? undefined}
+                              title="Alignment"
+                              valueUnit=""
+                              min={AC1_MIN}
+                              max={AC1_MAX}
+                              decimalPlaces={2}
+                              segments={ac1GaugeSegments}
+                              showTicks
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-center">
+                          <div style={{ width: "190px" }}>
+                            <Gauge
+                              value={point.accuracy ?? undefined}
+                              title="Accuracy"
+                              min={0}
+                              max={100}
+                              segments={accuracyGaugeSegments}
+                              showTicks
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">Raw Agreement</div>
-                      <RawAgreementBar agreements={point.agreements} totalItems={point.item_count} />
-                    </div>
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">Raw Agreement</div>
+                        <RawAgreementBar agreements={point.agreements} totalItems={point.item_count} />
+                      </div>
 
-                    {!hasBucketData && (
-                      <p className="mt-2 text-xs text-amber-700">
-                        No data for this bucket.
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {!hasBucketData && (
+                        <p className="mt-2 text-xs text-amber-700">
+                          No data for this bucket.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

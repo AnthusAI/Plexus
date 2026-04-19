@@ -32,6 +32,19 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
         "trailing_30d": 30,
     }
 
+    @staticmethod
+    def _parse_bool(value: Any, *, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        value_str = str(value).strip().lower()
+        if value_str in {"1", "true", "yes", "y", "on"}:
+            return True
+        if value_str in {"0", "false", "no", "n", "off"}:
+            return False
+        return default
+
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self.log_messages = []
         try:
@@ -43,6 +56,12 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
             bucket_type = str(self._get_param("bucket_type") or "trailing_7d").strip().lower()
             bucket_count_raw = self._get_param("bucket_count")
             bucket_count = int(bucket_count_raw) if bucket_count_raw is not None else 12
+            show_bucket_details_raw = (
+                self.config.get("show_bucket_details")
+                if isinstance(self.config, dict) and "show_bucket_details" in self.config
+                else self._get_param("show_bucket_details")
+            )
+            show_bucket_details = self._parse_bool(show_bucket_details_raw, default=False)
 
             if bucket_type not in self.TRAILING_BUCKET_DAYS:
                 supported = sorted(self.TRAILING_BUCKET_DAYS.keys())
@@ -141,6 +160,7 @@ class AcceptanceRateTimeline(FeedbackRatesBase):
                 "scorecard_name": scorecard.name,
                 "score_id": resolved_score_id,
                 "score_name": resolved_score_name,
+                "show_bucket_details": show_bucket_details,
                 "bucket_policy": {
                     "bucket_type": bucket_type,
                     "bucket_count": bucket_count,

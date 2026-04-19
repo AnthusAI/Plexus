@@ -102,6 +102,44 @@ async def test_generate_single_score_mode(mock_api_client):
     assert len(output["scores"][0]["points"]) == 2
     assert output["scores"][0]["points"][0]["item_count"] == 1
     assert output["scores"][0]["points"][1]["item_count"] == 1
+    assert output["show_bucket_details"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_exact_window_ignores_bucket_count_and_sets_show_details(mock_api_client):
+    block = FeedbackAlignmentTimeline(
+        config={
+            "scorecard": "sc-1",
+            "score": "score-ext-1",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-19",
+            "bucket_type": "calendar_week",
+            "bucket_count": 1,
+            "timezone": "UTC",
+            "show_bucket_details": True,
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    scorecard = MagicMock(id="sc-1", name="Test Scorecard")
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_feedback_items_for_score", new=AsyncMock(return_value=[])),
+    ):
+        output, _ = await block.generate()
+
+    assert output["show_bucket_details"] is True
+    assert output["bucket_policy"]["window_mode"] == "exact_window"
+    assert output["bucket_policy"]["bucket_count_ignored"] is True
+    assert output["bucket_policy"]["bucket_count"] == 3
+    assert output["date_range"]["start"].startswith("2026-04-01T00:00:00")
+    assert output["date_range"]["end"].startswith("2026-04-19T23:59:59")
 
 
 @pytest.mark.asyncio
