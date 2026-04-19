@@ -1055,6 +1055,178 @@ def _persist_block_result(
     logger.info("Cached block result as Report %s (block %s)", report.id, rb.id)
 
 
+def _build_programmatic_report_markdown(
+    block_definitions: List[Dict[str, Any]],
+) -> str:
+    """
+    Build the markdown block template for a programmatic multi-block report.
+    """
+    rendered_blocks: List[str] = []
+    for block in block_definitions:
+        class_name = str(block.get("class_name") or "").strip()
+        if not class_name:
+            continue
+        block_name = str(block.get("block_name") or _humanize_block_class(class_name)).strip()
+        block_config = block.get("config") if isinstance(block.get("config"), dict) else {}
+        block_yaml = yaml.dump(block_config, default_flow_style=False).strip()
+        if block_yaml:
+            block_body = f"class: {class_name}\n{block_yaml}"
+        else:
+            block_body = f"class: {class_name}"
+        rendered_blocks.append(
+            f'```block name="{block_name}"\n{block_body}\n```'
+        )
+    return "\n\n".join(rendered_blocks)
+
+
+def run_programmatic_report_and_persist(
+    *,
+    report_name: str,
+    block_definitions: List[Dict[str, Any]],
+    account_id: str,
+    client: PlexusDashboardClient,
+    report_parameters: Optional[Dict[str, Any]] = None,
+    display_title: Optional[str] = None,
+    display_subtitle: Optional[str] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Run multiple report blocks and persist them as a single Report with ordered ReportBlocks.
+    """
+    if not report_name or not str(report_name).strip():
+        raise ValueError("'report_name' is required.")
+    if not block_definitions:
+        raise ValueError("'block_definitions' must contain at least one block.")
+
+    normalized_blocks: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(block_definitions):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Invalid block definition at index {idx}: expected object.")
+        class_name = str(raw.get("class_name") or "").strip()
+        if not class_name:
+            raise ValueError(f"Invalid block definition at index {idx}: 'class_name' is required.")
+        block_name = str(raw.get("block_name") or _humanize_block_class(class_name)).strip()
+        config = raw.get("config")
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise ValueError(f"Invalid block definition at index {idx}: 'config' must be an object.")
+        normalized_blocks.append(
+            {
+                "class_name": class_name,
+                "block_name": block_name,
+                "config": config,
+                "position": idx,
+            }
+        )
+
+    config_id = _get_programmatic_config_id(account_id, client)
+    task = Task.create(
+        client=client,
+        type="ProgrammaticReport",
+        target=str(report_name).strip(),
+        command="run_programmatic_report_and_persist",
+        accountId=account_id,
+        status="COMPLETED",
+        dispatchStatus="COMPLETED",
+    )
+
+    parameters = dict(report_parameters or {})
+    if display_title:
+        parameters["_display_title"] = display_title
+    if display_subtitle:
+        parameters["_display_subtitle"] = display_subtitle
+
+    report = Report.create(
+        client=client,
+        accountId=account_id,
+        taskId=task.id,
+        name=str(report_name).strip(),
+        reportConfigurationId=config_id,
+        parameters=parameters,
+    )
+    report.update(output=_build_programmatic_report_markdown(normalized_blocks))
+
+    report_params = {"account_id": account_id}
+    first_error_message: Optional[str] = None
+
+    for block in normalized_blocks:
+        block_class_name = block["class_name"]
+        block_display_name = block["block_name"]
+        block_config = block["config"]
+        position = int(block["position"])
+
+        report_block = ReportBlock.create(
+            client=client,
+            reportId=report.id,
+            position=position,
+            type=block_class_name,
+            name=block_display_name,
+            output="{}",
+            log="Processing...",
+        )
+
+        output_json, log_string, resolved_dataset_id = _instantiate_and_run_block(
+            block_def=block,
+            report_params=report_params,
+            api_client=client,
+            report_block_id=report_block.id,
+        )
+
+        if output_json is None:
+            if first_error_message is None:
+                first_error_message = log_string or f"Block {block_display_name} failed."
+            output_payload: Any = {
+                "error": log_string or f"Block {block_display_name} failed.",
+                "block_class": block_class_name,
+            }
+        else:
+            output_payload = output_json
+
+        db_block_state = ReportBlock.get_by_id(report_block.id, client)
+        if not db_block_state:
+            raise RuntimeError(f"Could not re-fetch ReportBlock {report_block.id} after execution.")
+
+        existing_details_files_list: List[str] = []
+        attached_files = db_block_state.attachedFiles
+        if attached_files:
+            if not isinstance(attached_files, list):
+                raise RuntimeError(
+                    f"ReportBlock {report_block.id} attachedFiles must be a list, got {type(attached_files).__name__}."
+                )
+            existing_details_files_list = list(attached_files)
+
+        final_log_message, existing_details_files_list, _ = _persist_log_artifact_if_present(
+            report_block_id=report_block.id,
+            log_output=log_string,
+            existing_details_files_list=existing_details_files_list,
+            log_prefix="[programmatic-report]",
+        )
+        compact_output_json, existing_details_files_list, _ = _persist_output_artifact_and_compact(
+            report_block_id=report_block.id,
+            output_payload=output_payload,
+            existing_details_files_list=existing_details_files_list,
+            log_prefix="[programmatic-report]",
+        )
+
+        update_input: Dict[str, Any] = {
+            "id": report_block.id,
+            "output": compact_output_json,
+            "log": final_log_message,
+            "attachedFiles": existing_details_files_list,
+        }
+        if resolved_dataset_id:
+            update_input["dataSetId"] = resolved_dataset_id
+
+        mutation = """
+        mutation UpdateReportBlock($input: UpdateReportBlockInput!) {
+            updateReportBlock(input: $input) { id output log attachedFiles dataSetId }
+        }
+        """
+        client.execute(mutation, {"input": update_input})
+
+    return report.id, first_error_message
+
+
 def _fetch_first_block_output(report_id: str, client: PlexusDashboardClient) -> Optional[Any]:
     """Fetch block data from the first ReportBlock of a report.
 
