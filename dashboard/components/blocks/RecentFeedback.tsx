@@ -47,6 +47,8 @@ interface RecentFeedbackData {
   output_attachment?: string;
 }
 
+const AUTO_SHOW_ROWS_THRESHOLD = 200;
+
 const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<RecentFeedbackData | null>(null);
   const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
@@ -96,6 +98,12 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const summary = output.summary;
   const items = Array.isArray(output.items) ? output.items : [];
+  const [showRows, setShowRows] = React.useState(items.length <= AUTO_SHOW_ROWS_THRESHOLD);
+
+  React.useEffect(() => {
+    setShowRows(items.length <= AUTO_SHOW_ROWS_THRESHOLD);
+  }, [items.length]);
+
   const {
     visibleRows,
     visibleCount,
@@ -145,61 +153,79 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
           {totalCount > 0 ? ` • Rendering ${visibleCount} of ${totalCount} rows` : null}
         </div>
 
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Edited At</th>
-                <th className="px-3 py-2 text-left font-medium">Item</th>
-                <th className="px-3 py-2 text-left font-medium">Score</th>
-                <th className="px-3 py-2 text-right font-medium">Initial</th>
-                <th className="px-3 py-2 text-right font-medium">Final</th>
-                <th className="px-3 py-2 text-right font-medium">Corrected</th>
-                <th className="px-3 py-2 text-right font-medium">Invalid</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                    No feedback items matched the requested filters.
-                  </td>
-                </tr>
-              ) : (
-                visibleRows.map((item) => (
-                  <tr key={item.feedback_item_id} className="border-t">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {item.edited_at ? new Date(item.edited_at).toLocaleString() : "N/A"}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
-                    <td className="px-3 py-2">
-                      {item.score_name || <span className="font-mono text-xs">{item.score_id}</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right">{item.initial_value ?? "N/A"}</td>
-                    <td className="px-3 py-2 text-right">{item.final_value ?? "N/A"}</td>
-                    <td className="px-3 py-2 text-right">{item.corrected ? "Yes" : "No"}</td>
-                    <td className="px-3 py-2 text-right">{item.is_invalid ? "Yes" : "No"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {items.length > 0 ? (
-          <div className="flex items-center justify-between gap-3">
-            <div ref={sentinelRef} className="h-1 w-1" aria-hidden="true" />
-            {hasMore ? (
-              <button
-                type="button"
-                onClick={loadMore}
-                className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
-              >
-                Load more rows ({visibleCount}/{totalCount})
-              </button>
-            ) : (
-              <span className="text-xs text-muted-foreground">All rows loaded ({totalCount})</span>
-            )}
+        {items.length > AUTO_SHOW_ROWS_THRESHOLD && !showRows ? (
+          <div className="rounded-md border bg-card p-4">
+            <div className="text-sm text-muted-foreground">
+              Item rows are hidden by default for large results.
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRows(true)}
+              className="mt-3 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+            >
+              Show item rows ({items.length})
+            </button>
           </div>
+        ) : null}
+        {showRows ? (
+          <>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Edited At</th>
+                    <th className="px-3 py-2 text-left font-medium">Item</th>
+                    <th className="px-3 py-2 text-left font-medium">Score</th>
+                    <th className="px-3 py-2 text-right font-medium">Initial</th>
+                    <th className="px-3 py-2 text-right font-medium">Final</th>
+                    <th className="px-3 py-2 text-right font-medium">Corrected</th>
+                    <th className="px-3 py-2 text-right font-medium">Invalid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                        No feedback items matched the requested filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleRows.map((item) => (
+                      <tr key={item.feedback_item_id} className="border-t">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {item.edited_at ? new Date(item.edited_at).toLocaleString() : "N/A"}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs">{item.item_id}</td>
+                        <td className="px-3 py-2">
+                          {item.score_name || <span className="font-mono text-xs">{item.score_id}</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right">{item.initial_value ?? "N/A"}</td>
+                        <td className="px-3 py-2 text-right">{item.final_value ?? "N/A"}</td>
+                        <td className="px-3 py-2 text-right">{item.corrected ? "Yes" : "No"}</td>
+                        <td className="px-3 py-2 text-right">{item.is_invalid ? "Yes" : "No"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {items.length > 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <div ref={sentinelRef} className="h-1 w-1" aria-hidden="true" />
+                {hasMore ? (
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    className="rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-card-selected"
+                  >
+                    Load more rows ({visibleCount}/{totalCount})
+                  </button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">All rows loaded ({totalCount})</span>
+                )}
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
     </ReportBlock>
