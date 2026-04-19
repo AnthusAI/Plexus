@@ -14,7 +14,12 @@ from plexus.cli.feedback.report_runner import (
     run_feedback_report_block,
     summarize_timeline_feedback_volume,
 )
+from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
+from plexus.reports.service import (
+    decode_programmatic_run_payload,
+    run_programmatic_block_and_persist,
+)
 
 
 def _print_result(
@@ -30,7 +35,11 @@ def _print_result(
                 {
                     "status": result["status"],
                     "cache_key": result.get("cache_key"),
-                    "message": f"{title} dispatched to background execution.",
+                    "task_id": result.get("task_id"),
+                    "message": (
+                        f"{title} queued as a durable task for dispatcher execution. "
+                        "Run `plexus command dispatcher` to process it."
+                    ),
                 },
                 indent=2,
             )
@@ -64,6 +73,38 @@ def report() -> None:
     """Run core feedback reports directly from code-defined block classes."""
 
 
+@report.command(name="run-programmatic-block", hidden=True)
+@click.option("--payload-base64", required=True, help="Encoded durable programmatic report payload.")
+def run_programmatic_block(payload_base64: str) -> None:
+    """Internal dispatcher entrypoint for durable programmatic report blocks."""
+    payload = decode_programmatic_run_payload(payload_base64)
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create dashboard client.")
+
+    output_data, log_output = run_programmatic_block_and_persist(
+        cache_key=str(payload.get("cache_key") or "").strip(),
+        block_class=str(payload.get("block_class") or "").strip(),
+        block_config=payload.get("block_config") or {},
+        account_id=str(payload.get("account_id") or "").strip(),
+        client=client,
+        persist_required=True,
+    )
+    if output_data is None:
+        raise click.ClickException(log_output or "Programmatic report block execution failed.")
+
+    console.print(
+        json.dumps(
+            {
+                "status": "success",
+                "cache_key": payload.get("cache_key"),
+                "block_class": payload.get("block_class"),
+            },
+            indent=2,
+        )
+    )
+
+
 @report.command(name="correction-rate")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
@@ -74,7 +115,7 @@ def report() -> None:
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -126,7 +167,7 @@ def correction_rate(
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -177,7 +218,7 @@ def acceptance_rate(
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -223,7 +264,7 @@ def recent(
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -277,7 +318,7 @@ def analysis(
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -335,7 +376,7 @@ def contradictions(
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -393,7 +434,7 @@ def timeline(
 @click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Dispatch in background and return immediately.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")

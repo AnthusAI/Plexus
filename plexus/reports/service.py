@@ -1,9 +1,11 @@
 import importlib
 import logging
-import threading
 from typing import Any, Dict, List, Optional, Tuple
+import base64
 import json
 import hashlib
+import shlex
+import time
 from datetime import datetime, timezone # Added datetime
 import traceback # Added for error details
 import re
@@ -493,12 +495,14 @@ def _instantiate_and_run_block(
 
 _PROGRAMMATIC_CONFIG_NAME = "Programmatic Reports"
 _programmatic_config_id_cache: Optional[str] = None
-
-# In-process tracking for background block dispatches.
-# Maps cache_key → (threading.Event, output_data, log_string).
-# The Event is set when the background thread finishes.
-_background_tasks: Dict[str, Tuple[threading.Event, Optional[Any], Optional[str]]] = {}
-_background_lock = threading.Lock()
+_PROGRAMMATIC_REPORT_TASK_TYPE = "ProgrammaticReportBlock"
+_PROGRAMMATIC_REPORT_COMMAND = "feedback report run-programmatic-block"
+_PROGRAMMATIC_TASK_LOOKBACK_DATE = "2000-01-01T00:00:00.000Z"
+_PROGRAMMATIC_WAIT_TIMEOUT_SECONDS = 600
+_PROGRAMMATIC_WAIT_POLL_SECONDS = 2.0
+_PROGRAMMATIC_IN_FLIGHT_DISPATCH_STATUSES = {"PENDING", "DISPATCHING", "DISPATCHED"}
+_PROGRAMMATIC_IN_FLIGHT_TASK_STATUSES = {"PENDING", "RUNNING"}
+_PROGRAMMATIC_FAILURE_TASK_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 
 
 def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) -> str:
@@ -637,6 +641,321 @@ def _derive_programmatic_display_strings(
     return title, subtitle
 
 
+def _programmatic_task_target(cache_key: str) -> str:
+    cache_digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
+    return f"report/block/{cache_digest}"
+
+
+def _build_programmatic_run_payload(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    account_id: str,
+    ttl_hours: float,
+    fresh: bool,
+) -> Dict[str, Any]:
+    return {
+        "cache_key": cache_key,
+        "block_class": block_class,
+        "block_config": block_config,
+        "account_id": account_id,
+        "ttl_hours": ttl_hours,
+        "fresh": fresh,
+    }
+
+
+def encode_programmatic_run_payload(payload: Dict[str, Any]) -> str:
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return base64.urlsafe_b64encode(serialized.encode("utf-8")).decode("ascii")
+
+
+def decode_programmatic_run_payload(payload_base64: str) -> Dict[str, Any]:
+    try:
+        decoded = base64.urlsafe_b64decode(payload_base64.encode("ascii")).decode("utf-8")
+        payload = json.loads(decoded)
+    except Exception as exc:
+        raise ValueError(f"Invalid programmatic report payload: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid programmatic report payload: expected JSON object.")
+    return payload
+
+
+def _build_programmatic_report_command(payload: Dict[str, Any]) -> str:
+    payload_base64 = encode_programmatic_run_payload(payload)
+    return (
+        f"{_PROGRAMMATIC_REPORT_COMMAND} "
+        f"--payload-base64 {shlex.quote(payload_base64)}"
+    )
+
+
+def _normalize_task_metadata(metadata: Any) -> Dict[str, Any]:
+    if isinstance(metadata, dict):
+        return metadata
+    if isinstance(metadata, str):
+        if not metadata.strip():
+            return {}
+        try:
+            parsed = json.loads(metadata)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _list_recent_tasks_for_account(
+    *,
+    account_id: str,
+    client: PlexusDashboardClient,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    query = """
+    query ListTaskByAccountIdAndUpdatedAt(
+      $accountId: String!
+      $updatedAt: ModelStringKeyConditionInput
+      $sortDirection: ModelSortDirection
+      $limit: Int
+    ) {
+      listTaskByAccountIdAndUpdatedAt(
+        accountId: $accountId
+        updatedAt: $updatedAt
+        sortDirection: $sortDirection
+        limit: $limit
+      ) {
+        items {
+          id
+          accountId
+          type
+          status
+          target
+          command
+          description
+          metadata
+          createdAt
+          updatedAt
+          startedAt
+          completedAt
+          errorMessage
+          errorDetails
+          stdout
+          stderr
+          dispatchStatus
+        }
+      }
+    }
+    """
+    response = client.execute(
+        query,
+        {
+            "accountId": account_id,
+            "updatedAt": {"ge": _PROGRAMMATIC_TASK_LOOKBACK_DATE},
+            "sortDirection": "DESC",
+            "limit": limit,
+        },
+    )
+    return response.get("listTaskByAccountIdAndUpdatedAt", {}).get("items", []) or []
+
+
+def _find_matching_programmatic_task(
+    *,
+    cache_key: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+    include_terminal: bool = False,
+) -> Optional[Task]:
+    target = _programmatic_task_target(cache_key)
+    for task_data in _list_recent_tasks_for_account(account_id=account_id, client=client):
+        if task_data.get("type") != _PROGRAMMATIC_REPORT_TASK_TYPE:
+            continue
+        if task_data.get("target") != target:
+            continue
+        metadata = _normalize_task_metadata(task_data.get("metadata"))
+        if metadata.get("cache_key") != cache_key:
+            continue
+        task = Task.from_dict(task_data, client)
+        if include_terminal or _is_programmatic_task_in_flight(task):
+            return task
+    return None
+
+
+def _is_programmatic_task_in_flight(task: Task) -> bool:
+    dispatch_status = (task.dispatchStatus or "").upper()
+    task_status = (task.status or "").upper()
+    return (
+        dispatch_status in _PROGRAMMATIC_IN_FLIGHT_DISPATCH_STATUSES
+        and task_status in _PROGRAMMATIC_IN_FLIGHT_TASK_STATUSES
+    )
+
+
+def _find_report_by_task_id(
+    *,
+    task_id: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+) -> Optional[Report]:
+    for report in Report.list_by_account_id(account_id, client, limit=200, max_items=200):
+        if report.taskId == task_id:
+            return report
+    return None
+
+
+def _load_programmatic_report_output(
+    *,
+    report: Report,
+    client: PlexusDashboardClient,
+) -> Optional[Any]:
+    output_raw = report.output
+    if not output_raw:
+        return None
+    if isinstance(output_raw, str):
+        stripped = output_raw.strip()
+        if not stripped.startswith("{") and not stripped.startswith("["):
+            return _fetch_first_block_output(report.id, client)
+        try:
+            return json.loads(output_raw)
+        except json.JSONDecodeError:
+            return output_raw
+    return output_raw
+
+
+def _create_programmatic_report_task(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    account_id: str,
+    client: PlexusDashboardClient,
+    ttl_hours: float,
+    fresh: bool,
+) -> Task:
+    payload = _build_programmatic_run_payload(
+        cache_key=cache_key,
+        block_class=block_class,
+        block_config=block_config,
+        account_id=account_id,
+        ttl_hours=ttl_hours,
+        fresh=fresh,
+    )
+    metadata = {
+        **payload,
+        "task_kind": "durable_programmatic_report_block",
+        "task_target": _programmatic_task_target(cache_key),
+    }
+    return Task.create(
+        client=client,
+        accountId=account_id,
+        type=_PROGRAMMATIC_REPORT_TASK_TYPE,
+        target=_programmatic_task_target(cache_key),
+        command=_build_programmatic_report_command(payload),
+        description=f"Run programmatic report block {block_class} for cache key '{cache_key}'",
+        metadata=json.dumps(metadata),
+        dispatchStatus="PENDING",
+        status="PENDING",
+    )
+
+
+def _wait_for_programmatic_task_result(
+    *,
+    task: Task,
+    cache_key: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+    timeout_seconds: int = _PROGRAMMATIC_WAIT_TIMEOUT_SECONDS,
+) -> Tuple[Optional[Any], Optional[str], bool]:
+    deadline = time.monotonic() + timeout_seconds
+    last_task_status = (task.status or "").upper()
+    while time.monotonic() < deadline:
+        report = _find_report_by_task_id(task_id=task.id, account_id=account_id, client=client)
+        if report is not None:
+            output_data = _load_programmatic_report_output(report=report, client=client)
+            if output_data is not None:
+                return output_data, None, True
+
+        refreshed_task = Task.get_by_id(task.id, client)
+        last_task_status = (refreshed_task.status or "").upper()
+        if _is_programmatic_task_in_flight(refreshed_task):
+            time.sleep(_PROGRAMMATIC_WAIT_POLL_SECONDS)
+            continue
+
+        if last_task_status in _PROGRAMMATIC_FAILURE_TASK_STATUSES:
+            failure_parts = [
+                f"Queued programmatic report task failed for {cache_key}.",
+            ]
+            if refreshed_task.errorMessage:
+                failure_parts.append(str(refreshed_task.errorMessage))
+            if refreshed_task.stderr:
+                failure_parts.append(str(refreshed_task.stderr))
+            return None, "\n".join(part for part in failure_parts if part), False
+
+        report = _find_report_by_task_id(task_id=task.id, account_id=account_id, client=client)
+        if report is not None:
+            output_data = _load_programmatic_report_output(report=report, client=client)
+            if output_data is not None:
+                return output_data, None, True
+
+        time.sleep(_PROGRAMMATIC_WAIT_POLL_SECONDS)
+
+    if last_task_status == "COMPLETED":
+        return (
+            None,
+            (
+                f"Queued programmatic report task completed for {cache_key}, "
+                "but no persisted report result became visible before the wait timeout."
+            ),
+            False,
+        )
+    return (
+        None,
+        (
+            f"Queued programmatic report task is still pending for {cache_key}. "
+            "Start a dispatcher with `plexus command dispatcher` or wait for the existing task to complete."
+        ),
+        False,
+    )
+
+
+def run_programmatic_block_and_persist(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    account_id: str,
+    client: PlexusDashboardClient,
+    persist_required: bool = False,
+) -> Tuple[Optional[Any], Optional[str]]:
+    block_def = {
+        "class_name": block_class,
+        "config": block_config,
+        "block_name": block_class,
+    }
+    report_params = {"account_id": account_id}
+    output_data, log_output, _ = _instantiate_and_run_block(
+        block_def=block_def,
+        report_params=report_params,
+        api_client=client,
+    )
+
+    if output_data is None:
+        return None, log_output
+
+    try:
+        _persist_block_result(
+            cache_key,
+            block_class,
+            block_config,
+            output_data,
+            log_output,
+            account_id,
+            client,
+        )
+    except Exception as exc:
+        logger.warning("Failed to cache block result: %s", exc)
+        if persist_required:
+            raise
+
+    return output_data, log_output
+
+
 def _persist_block_result(
     cache_key: str,
     block_class: str,
@@ -661,7 +980,7 @@ def _persist_block_result(
         target=cache_key,
         command="run_block_cached",
         accountId=account_id,
-        status="completed",
+        status="COMPLETED",
         dispatchStatus="COMPLETED",
     )
 
@@ -828,11 +1147,11 @@ def run_block_cached(
     calls with the same *cache_key* within *ttl_hours*, returns the stored
     output without re-running the block.
 
-    When *background* is True and the cache misses, the block is dispatched to
-    a daemon thread and this function returns immediately with
-    ``({"status": "dispatched", "cache_key": cache_key}, None, False)``.
+    When *background* is True and the cache misses, the block is queued as a
+    durable Task for dispatcher execution and this function returns immediately
+    with ``({"status": "dispatched", "cache_key": cache_key, "task_id": ...}, None, False)``.
     A later call with the same *cache_key* and ``background=False`` (the default)
-    will wait for the background thread to finish and return its results.
+    will wait for the queued Task to finish and return its results when available.
 
     Returns (output_data, log_string, was_cached).
     """
@@ -849,90 +1168,59 @@ def run_block_cached(
         except Exception as exc:
             logger.warning("Cache lookup failed for %s: %s", cache_key, exc)
 
-    # --- Check in-process background task ---
-    with _background_lock:
-        bg = _background_tasks.get(cache_key)
-
-    if bg is not None:
-        event, _, _ = bg
+    matching_task = _find_matching_programmatic_task(
+        cache_key=cache_key,
+        account_id=account_id,
+        client=client,
+    )
+    if matching_task is not None:
         if background:
-            # Already dispatched — don't start a second one
-            logger.info("Background task already dispatched for %s", cache_key)
-            return {"status": "already_dispatched", "cache_key": cache_key}, None, False
-        # Foreground caller: wait for the background thread to finish
-        logger.info("Waiting for background task %s to complete…", cache_key)
-        event.wait(timeout=600)  # 10 min max
-        with _background_lock:
-            bg = _background_tasks.pop(cache_key, None)
-        if bg and bg[0].is_set() and bg[1] is not None:
-            logger.info("Background task %s completed — returning results", cache_key)
-            return bg[1], bg[2], True
-        logger.warning("Background task %s timed out or failed — running synchronously", cache_key)
+            logger.info("Programmatic report task already queued for %s", cache_key)
+            return {
+                "status": "already_dispatched",
+                "cache_key": cache_key,
+                "task_id": matching_task.id,
+            }, None, False
+        logger.info("Waiting for queued programmatic report task %s (%s)", cache_key, matching_task.id)
+        waited_output, waited_log, waited_cached = _wait_for_programmatic_task_result(
+            task=matching_task,
+            cache_key=cache_key,
+            account_id=account_id,
+            client=client,
+        )
+        if waited_output is not None:
+            return waited_output, waited_log, waited_cached
+        return None, waited_log, False
 
     # --- Background dispatch mode ---
     if background:
-        event = threading.Event()
-        with _background_lock:
-            _background_tasks[cache_key] = (event, None, None)
-
-        def _run():
-            try:
-                block_def = {
-                    "class_name": block_class,
-                    "config": block_config,
-                    "block_name": block_class,
-                }
-                report_params = {"account_id": account_id}
-                output_data, log_output, _ = _instantiate_and_run_block(
-                    block_def=block_def,
-                    report_params=report_params,
-                    api_client=client,
-                )
-                with _background_lock:
-                    _background_tasks[cache_key] = (event, output_data, log_output)
-                if output_data is not None:
-                    _persist_block_result(
-                        cache_key, block_class, block_config,
-                        output_data, log_output, account_id, client,
-                    )
-            except Exception as exc:
-                logger.exception("Background block %s failed: %s", cache_key, exc)
-                with _background_lock:
-                    _background_tasks[cache_key] = (event, None, str(exc))
-            finally:
-                event.set()
-
-        thread = threading.Thread(target=_run, daemon=True)
-        thread.start()
-        logger.info("Dispatched background block %s", cache_key)
-        return {"status": "dispatched", "cache_key": cache_key}, None, False
+        task = _create_programmatic_report_task(
+            cache_key=cache_key,
+            block_class=block_class,
+            block_config=block_config,
+            account_id=account_id,
+            client=client,
+            ttl_hours=ttl_hours,
+            fresh=fresh,
+        )
+        logger.info("Queued durable programmatic report task %s for %s", task.id, cache_key)
+        return {
+            "status": "dispatched",
+            "cache_key": cache_key,
+            "task_id": task.id,
+        }, None, False
 
     # --- Synchronous execution (cache miss, no background) ---
     logger.info("Cache MISS for %s — running block %s", cache_key, block_class)
-    block_def = {
-        "class_name": block_class,
-        "config": block_config,
-        "block_name": block_class,
-    }
-    report_params = {"account_id": account_id}
-    output_data, log_output, resolved_dataset_id = _instantiate_and_run_block(
-        block_def=block_def,
-        report_params=report_params,
-        api_client=client,
+    output_data, log_output = run_programmatic_block_and_persist(
+        cache_key=cache_key,
+        block_class=block_class,
+        block_config=block_config,
+        account_id=account_id,
+        client=client,
     )
-
     if output_data is None:
         return None, log_output, False
-
-    # --- Persist as Report + ReportBlock ---
-    try:
-        _persist_block_result(
-            cache_key, block_class, block_config,
-            output_data, log_output, account_id, client,
-        )
-    except Exception as exc:
-        logger.warning("Failed to cache block result: %s", exc)
-
     return output_data, log_output, False
 
 

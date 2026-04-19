@@ -487,7 +487,7 @@ def register_report_tools(mcp: FastMCP):
         - cache_key: Deterministic key for caching the block result as a Report record. When provided with ttl_hours, returns cached results if fresh enough.
         - ttl_hours: Cache time-to-live in hours. If a cached result exists within this window, it is returned without re-running the block.
         - fresh: If true, ignore cache and force re-run (result is still cached for future calls).
-        - background: If true, dispatch the block execution in a background thread and return immediately. A subsequent call with the same cache_key (and background=false) will wait for the result.
+        - background: If true, queue the block execution as a durable task and return immediately. A subsequent call with the same cache_key (and background=false) will wait for the result. A dispatcher such as `plexus command dispatcher` must be running to process queued tasks.
 
         Provide either config_id (full report) or block_class (single block), not both.
         """
@@ -561,11 +561,15 @@ def register_report_tools(mcp: FastMCP):
 
                     # Background dispatch returns a dict with status key
                     if isinstance(output_data, dict) and output_data.get("status") in ("dispatched", "already_dispatched"):
-                        logger.info(f"[MCP] Block {block_class} dispatched in background")
+                        logger.info(f"[MCP] Block {block_class} queued for durable background execution")
                         return {
                             "status": output_data["status"],
                             "cache_key": output_data.get("cache_key"),
-                            "message": f"Block {block_class} dispatched to background thread"
+                            "task_id": output_data.get("task_id"),
+                            "message": (
+                                f"Block {block_class} queued as a durable task. "
+                                "Run a dispatcher such as `plexus command dispatcher` to execute it."
+                            ),
                         }
 
                     if output_data is not None:
