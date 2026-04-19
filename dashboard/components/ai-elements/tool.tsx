@@ -12,6 +12,7 @@ import {
   ShieldAlertIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import React from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 export type ToolState =
@@ -80,7 +81,7 @@ export function getStatusBadge(state: ToolState): ReactNode {
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible className={cn("rounded-md border border-border bg-card/40", className)} {...props} />
+  <Collapsible className={cn("rounded-md bg-card/60", className)} {...props} />
 );
 
 export type ToolHeaderProps = Omit<ComponentProps<typeof CollapsibleTrigger>, "type"> & {
@@ -122,7 +123,7 @@ export const ToolHeader = ({
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
-  <CollapsibleContent className={cn("space-y-2 border-t border-border px-3 py-2", className)} {...props} />
+  <CollapsibleContent className={cn("space-y-2 px-3 pb-3", className)} {...props} />
 );
 
 export type ToolInputProps = ComponentProps<"div"> & {
@@ -146,7 +147,7 @@ export const ToolInput = ({ input, className, ...props }: ToolInputProps) => {
     <div className={cn("space-y-1", className)} {...props}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Input</div>
       {entries ? (
-        <dl className="rounded-md bg-background p-2 text-xs text-foreground space-y-1">
+        <dl className="rounded-md bg-muted/60 p-2 text-xs text-foreground space-y-1">
           {entries.map(([k, v]) => (
             <div key={k} className="flex gap-2 min-w-0">
               <dt className="shrink-0 text-muted-foreground font-medium">{k}:</dt>
@@ -155,7 +156,7 @@ export const ToolInput = ({ input, className, ...props }: ToolInputProps) => {
           ))}
         </dl>
       ) : (
-        <pre className="overflow-x-auto rounded-md bg-background p-2 text-xs text-foreground">
+        <pre className="overflow-x-auto rounded-md bg-muted/60 p-2 text-xs text-foreground">
           {JSON.stringify(input ?? {}, null, 2)}
         </pre>
       )}
@@ -172,11 +173,11 @@ export const ToolOutput = ({ output, errorText, className, ...props }: ToolOutpu
   <div className={cn("space-y-1", className)} {...props}>
     <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Output</div>
     {errorText ? (
-      <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-700 dark:text-red-300">
+      <div className="rounded-md bg-red-500/12 p-2 text-xs text-red-700 dark:text-red-300">
         {errorText}
       </div>
     ) : (
-      <div className="rounded-md bg-background p-2 text-xs text-foreground">{output ?? "No output"}</div>
+      <div className="rounded-md bg-muted/60 p-2 text-xs text-foreground">{output ?? "No output"}</div>
     )}
   </div>
 );
