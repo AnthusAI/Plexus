@@ -12,6 +12,7 @@ import inspect
 import asyncio
 import queue
 import threading
+import uuid
 import yaml
 from typing import Dict, Any, Optional
 
@@ -710,8 +711,12 @@ async def _execute_tactus(
         # Support both newer and older runtime signatures.
         _runtime_param_names: list = [
             "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
-            "trace_sink", "log_handler", "mcp_server", "openai_api_key",
+            "trace_sink", "log_handler", "mcp_server", "openai_api_key", "run_id",
         ]
+        # Generate a unique run_id for this invocation so that checkpoints from
+        # previous runs (which have run_id=None) are never replayed.
+        invocation_run_id = str(uuid.uuid4())
+
         runtime_kwargs: Dict[str, Any] = {
             "procedure_id": procedure_id,
             "storage_backend": storage,
@@ -721,6 +726,7 @@ async def _execute_tactus(
             "log_handler": log_bridge,
             "mcp_server": mcp_server,
             "openai_api_key": _api_key,
+            "run_id": invocation_run_id,
         }
         supports_chat_recorder = True
         try:
@@ -901,6 +907,13 @@ async def _execute_tactus(
                 _advance_task_to_running_stage(client, _task_id, target_order=2)
             except Exception as _se:
                 logger.debug("Could not advance task stage at execution start: %s", _se)
+
+        # Inject procedure_id into State so Lua code can use it (e.g. for chat mailbox polling).
+        # This is best-effort — if it fails, mailbox polling will be silently skipped.
+        try:
+            storage.state_set(procedure_id, "_procedure_id", procedure_id)
+        except Exception as _inject_err:
+            logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
 
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
         result = await runtime.execute(procedure_source, runtime_context, format="yaml")

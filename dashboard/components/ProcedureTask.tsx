@@ -3,16 +3,34 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList, PlayCircle } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
@@ -163,6 +181,17 @@ export default function ProcedureTask({
   const [parameters, setParameters] = useState<ParameterDefinition[]>([])
   const [parameterValues, setParameterValues] = useState<ParameterValue>({})
   const [isLoadingProcedureState, setIsLoadingProcedureState] = useState(true)
+  // Continue dialog state
+  const [showContinueDialog, setShowContinueDialog] = useState(false)
+  const [continueAdditionalCycles, setContinueAdditionalCycles] = useState('3')
+  const [continueHint, setContinueHint] = useState('')
+  const [isContinuing, setIsContinuing] = useState(false)
+  // Branch dialog state
+  const [showBranchDialog, setShowBranchDialog] = useState(false)
+  const [branchFromCycle, setBranchFromCycle] = useState<number | null>(null)
+  const [branchAdditionalCycles, setBranchAdditionalCycles] = useState('3')
+  const [branchHint, setBranchHint] = useState('')
+  const [isBranching, setIsBranching] = useState(false)
   const [optimizerIterations, setOptimizerIterations] = useState<IterationData[]>([])
   const [optimizerVersions, setOptimizerVersions] = useState<Array<{
     label: string
@@ -443,6 +472,188 @@ export default function ProcedureTask({
     }
   }, [onConversationFullscreenChange])
 
+  // How many completed optimizer cycles the procedure has run
+  const completedCycleCount = optimizerIterations.filter(it => it.iteration > 0).length
+
+  // ---- Shared helpers for creating a Task and dispatching a procedure run ----
+  const createTaskWithStages = async (procedureId: string) => {
+    const accountId = (procedure as any).accountId
+    if (!accountId) throw new Error('No accountId on procedure')
+    const taskResult = await getAmplifyClient().graphql({
+      query: `
+        mutation CreateTask($input: CreateTaskInput!) {
+          createTask(input: $input) { id accountId type status }
+        }
+      `,
+      variables: {
+        input: {
+          accountId,
+          type: 'Procedure',
+          status: 'PENDING',
+          target: `procedure/run/${procedureId}`,
+          command: `procedure run ${procedureId}`,
+          description: `Procedure workflow for ${procedureId}`,
+          dispatchStatus: 'PENDING',
+          metadata: JSON.stringify({ type: 'Procedure', procedure_id: procedureId })
+        }
+      }
+    })
+    const task = (taskResult as any).data?.createTask
+    if (!task) throw new Error('Failed to create Task')
+    const stages = [
+      { name: 'Start', order: 1, statusMessage: 'Initializing...' },
+      { name: 'Evaluation', order: 2, statusMessage: 'Running evaluation...' },
+      { name: 'Hypothesis', order: 3, statusMessage: 'Generating hypotheses...' },
+      { name: 'Test', order: 4, statusMessage: 'Testing...' },
+      { name: 'Insights', order: 5, statusMessage: 'Generating insights...' },
+    ]
+    for (const stage of stages) {
+      await getAmplifyClient().graphql({
+        query: `
+          mutation CreateTaskStage($input: CreateTaskStageInput!) {
+            createTaskStage(input: $input) { id }
+          }
+        `,
+        variables: { input: { taskId: task.id, name: stage.name, order: stage.order, status: 'PENDING', statusMessage: stage.statusMessage } }
+      })
+    }
+    return task
+  }
+
+  const updateProcedureYaml = async (procedureId: string, newYaml: string) => {
+    await getAmplifyClient().graphql({
+      query: `
+        mutation UpdateProcedure($input: UpdateProcedureInput!) {
+          updateProcedure(input: $input) { id }
+        }
+      `,
+      variables: { input: { id: procedureId, code: newYaml } }
+    })
+  }
+
+  // ---- Continue (same procedure, more cycles) ----
+  const handleContinue = async () => {
+    if (!loadedYaml) {
+      toast.error('Procedure configuration not loaded yet')
+      return
+    }
+    setIsContinuing(true)
+    try {
+      const parsed = yaml.load(loadedYaml) as any
+      const additionalCycles = parseInt(continueAdditionalCycles, 10) || 3
+      const newMaxIterations = completedCycleCount + additionalCycles
+
+      // Update params in YAML
+      if (parsed.params && typeof parsed.params === 'object') {
+        if (parsed.params.max_iterations) parsed.params.max_iterations.value = newMaxIterations
+        if (continueHint.trim()) {
+          if (!parsed.params.hint) parsed.params.hint = { type: 'string', required: false }
+          parsed.params.hint.value = continueHint.trim()
+        }
+      }
+      const updatedYaml = yaml.dump(parsed, { lineWidth: -1 })
+      await updateProcedureYaml(procedure.id, updatedYaml)
+      setLoadedYaml(updatedYaml)
+
+      const task = await createTaskWithStages(procedure.id)
+      const resp = await fetch('/api/console/procedure-continue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ procedureId: procedure.id, taskId: task.id }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error((err as any).error || `HTTP ${resp.status}`)
+      }
+      setShowContinueDialog(false)
+      setContinueHint('')
+      toast.success(`Continuing optimization for ${additionalCycles} more cycle${additionalCycles !== 1 ? 's' : ''}`)
+    } catch (err) {
+      console.error('Continue failed:', err)
+      toast.error(`Failed to continue: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setIsContinuing(false)
+    }
+  }
+
+  // ---- Branch from a specific cycle ----
+  const handleBranchFromCycle = async () => {
+    if (branchFromCycle == null) return
+    setIsBranching(true)
+    try {
+      const additionalCycles = parseInt(branchAdditionalCycles, 10) || 3
+
+      // Create a new procedure with the same YAML but reset max_iterations
+      const parsed = loadedYaml ? yaml.load(loadedYaml) as any : {}
+      const newMaxIterations = branchFromCycle + additionalCycles
+      if (parsed.params && typeof parsed.params === 'object') {
+        if (parsed.params.max_iterations) parsed.params.max_iterations.value = newMaxIterations
+        if (branchHint.trim()) {
+          if (!parsed.params.hint) parsed.params.hint = { type: 'string', required: false }
+          parsed.params.hint.value = branchHint.trim()
+        }
+      }
+      const branchYaml = yaml.dump(parsed, { lineWidth: -1 })
+
+      // Create new procedure record
+      const accountId = (procedure as any).accountId
+      if (!accountId) throw new Error('No accountId on procedure')
+      const createResult = await getAmplifyClient().graphql({
+        query: `
+          mutation CreateProcedure($input: CreateProcedureInput!) {
+            createProcedure(input: $input) { id }
+          }
+        `,
+        variables: {
+          input: {
+            accountId,
+            name: (procedure as any).name ? `${(procedure as any).name} (branch from cycle ${branchFromCycle})` : `Branch from cycle ${branchFromCycle}`,
+            code: branchYaml,
+            featured: false,
+          }
+        }
+      })
+      const newProcedure = (createResult as any).data?.createProcedure
+      if (!newProcedure) throw new Error('Failed to create branch procedure')
+
+      // Clone state via CLI
+      const cloneResp = await fetch('/api/console/procedure-clone-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceProcedureId: procedure.id,
+          targetProcedureId: newProcedure.id,
+          truncateToCycle: branchFromCycle,
+        }),
+      })
+      if (!cloneResp.ok) {
+        const err = await cloneResp.json().catch(() => ({}))
+        throw new Error((err as any).error || `State clone HTTP ${cloneResp.status}`)
+      }
+
+      // Create task and dispatch
+      const task = await createTaskWithStages(newProcedure.id)
+      const runResp = await fetch('/api/console/procedure-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ procedureId: newProcedure.id, taskId: task.id }),
+      })
+      if (!runResp.ok) {
+        const err = await runResp.json().catch(() => ({}))
+        throw new Error((err as any).error || `Dispatch HTTP ${runResp.status}`)
+      }
+
+      setShowBranchDialog(false)
+      setBranchHint('')
+      toast.success(`Branch created from cycle ${branchFromCycle} — running ${additionalCycles} more cycle${additionalCycles !== 1 ? 's' : ''}`)
+    } catch (err) {
+      console.error('Branch failed:', err)
+      toast.error(`Failed to branch: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setIsBranching(false)
+    }
+  }
+
   // Convert procedure data to task data format
   const taskData: BaseTaskData = {
     id: procedure.id,
@@ -516,6 +727,16 @@ export default function ProcedureTask({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {/* Continue — only shown when the procedure has completed optimizer cycles */}
+        {procedure.task?.status === 'COMPLETED' && completedCycleCount > 0 && (
+          <>
+            <DropdownMenuItem onClick={() => setShowContinueDialog(true)}>
+              <PlayCircle className="mr-2 h-4 w-4" />
+              Continue ({completedCycleCount} cycle{completedCycleCount !== 1 ? 's' : ''} done)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {onEdit && (
           <DropdownMenuItem onClick={() => onEdit(procedure.id)}>
             <Edit className="mr-2 h-4 w-4" />
@@ -529,7 +750,7 @@ export default function ProcedureTask({
           </DropdownMenuItem>
         )}
         {onDelete && (
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={() => onDelete(procedure.id)}
             className="text-destructive focus:text-destructive"
           >
@@ -1068,6 +1289,25 @@ export default function ProcedureTask({
                                     </div>
                                   ) : null
                                 })()}
+                                {/* Branch button — hidden inside expanded details */}
+                                {cycleNum != null && (
+                                  <div className="pt-1 border-t border-border/30">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 text-xs text-muted-foreground/60 hover:text-muted-foreground px-2"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setBranchFromCycle(cycleNum)
+                                        setBranchAdditionalCycles('3')
+                                        setBranchHint('')
+                                        setShowBranchDialog(true)
+                                      }}
+                                    >
+                                      Branch from cycle {cycleNum}…
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1126,17 +1366,111 @@ export default function ProcedureTask({
   // No need to render fullscreen view here anymore
 
   return (
-    <Task
-      variant={variant}
-      task={taskObject}
-      onClick={onClick}
-      controlButtons={headerContent}
-      isFullWidth={isFullWidth}
-      onToggleFullWidth={onToggleFullWidth}
-      onClose={onClose}
-      isSelected={isSelected}
-      renderHeader={renderHeader}
-      renderContent={renderContent}
-    />
+    <>
+      <Task
+        variant={variant}
+        task={taskObject}
+        onClick={onClick}
+        controlButtons={headerContent}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={onToggleFullWidth}
+        onClose={onClose}
+        isSelected={isSelected}
+        renderHeader={renderHeader}
+        renderContent={renderContent}
+      />
+
+      {/* Continue dialog */}
+      <Dialog open={showContinueDialog} onOpenChange={setShowContinueDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Continue Optimization</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              {completedCycleCount} cycle{completedCycleCount !== 1 ? 's' : ''} completed.
+              The optimizer will resume from where it left off — no re-running of baselines or dataset build.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="continue-cycles">Additional cycles</Label>
+              <Select value={continueAdditionalCycles} onValueChange={setContinueAdditionalCycles}>
+                <SelectTrigger id="continue-cycles">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 5, 10].map(n => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="continue-hint">Instructions (optional)</Label>
+              <Textarea
+                id="continue-hint"
+                placeholder="e.g. Focus on reducing false positives in the 'Yes' class"
+                value={continueHint}
+                onChange={e => setContinueHint(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowContinueDialog(false)} disabled={isContinuing}>
+              Cancel
+            </Button>
+            <Button onClick={handleContinue} disabled={isContinuing}>
+              {isContinuing ? 'Starting...' : 'Continue Optimization'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Branch dialog */}
+      <Dialog open={showBranchDialog} onOpenChange={setShowBranchDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Branch from Cycle {branchFromCycle}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Creates a new procedure starting from cycle {branchFromCycle}, with a copy of
+              the accumulated state up to that point.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="branch-cycles">Additional cycles to run</Label>
+              <Select value={branchAdditionalCycles} onValueChange={setBranchAdditionalCycles}>
+                <SelectTrigger id="branch-cycles">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 5, 10].map(n => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="branch-hint">Instructions (optional)</Label>
+              <Textarea
+                id="branch-hint"
+                placeholder="e.g. Try structural changes to the prompt"
+                value={branchHint}
+                onChange={e => setBranchHint(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBranchDialog(false)} disabled={isBranching}>
+              Cancel
+            </Button>
+            <Button onClick={handleBranchFromCycle} disabled={isBranching}>
+              {isBranching ? 'Creating branch...' : 'Create Branch'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
