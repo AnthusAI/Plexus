@@ -33,44 +33,44 @@ const STATUS_META: Record<ToolState, StatusMeta> = {
   "input-streaming": {
     label: "Pending",
     icon: <CircleDashedIcon className="size-3.5" />,
-    className: "border-border bg-muted text-muted-foreground",
+    className: "bg-neutral text-primary-foreground",
   },
   "input-available": {
     label: "Running",
     icon: <Loader2Icon className="size-3.5 animate-spin" />,
-    className: "border-blue-300/50 bg-blue-100 text-blue-800 dark:border-blue-500/30 dark:bg-blue-900/30 dark:text-blue-200",
+    className: "bg-info text-primary-foreground",
   },
   "approval-requested": {
     label: "Awaiting Approval",
     icon: <ShieldAlertIcon className="size-3.5" />,
-    className: "border-yellow-300/50 bg-yellow-100 text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/30 dark:text-yellow-200",
+    className: "bg-warning text-primary-foreground",
   },
   "approval-responded": {
     label: "Responded",
     icon: <ShieldCheckIcon className="size-3.5" />,
-    className: "border-slate-300/50 bg-slate-100 text-slate-900 dark:border-slate-500/30 dark:bg-slate-800/40 dark:text-slate-200",
+    className: "bg-neutral text-primary-foreground",
   },
   "output-available": {
     label: "Completed",
     icon: <CheckCircle2Icon className="size-3.5" />,
-    className: "border-green-300/50 bg-green-100 text-green-900 dark:border-green-500/30 dark:bg-green-900/30 dark:text-green-200",
+    className: "bg-true text-primary-foreground",
   },
   "output-error": {
     label: "Error",
     icon: <OctagonXIcon className="size-3.5" />,
-    className: "border-red-300/50 bg-red-100 text-red-900 dark:border-red-500/30 dark:bg-red-900/30 dark:text-red-200",
+    className: "bg-false text-primary-foreground",
   },
   "output-denied": {
     label: "Denied",
     icon: <OctagonXIcon className="size-3.5" />,
-    className: "border-orange-300/50 bg-orange-100 text-orange-900 dark:border-orange-500/30 dark:bg-orange-900/30 dark:text-orange-200",
+    className: "bg-warning text-primary-foreground",
   },
 };
 
 export function getStatusBadge(state: ToolState): ReactNode {
   const status = STATUS_META[state];
   return (
-    <Badge variant="outline" className={cn("inline-flex items-center gap-1.5 text-[11px]", status.className)}>
+    <Badge variant="pill" className={cn("inline-flex items-center gap-1.5 px-1.5 py-0 text-[11px] font-normal", status.className)}>
       {status.icon}
       {status.label}
     </Badge>
