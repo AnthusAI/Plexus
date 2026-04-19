@@ -1,0 +1,37 @@
+{
+  "id": "plx-8912187d-4541-4b8f-b6d5-c0a02f6b5b00",
+  "title": "Implement ProcedureTask conversation/evaluation UI polish",
+  "description": "Implement the approved procedure-focused frontend plan in dashboard/:\n- Match conversation sidebar/main header heights and tighten right header density\n- Canonicalize new session naming to Optimize in creation/source paths\n- Remove tool-card border/outline styling, use flat-shaded regions\n- Add two-phase evaluation tool-output loading with fast first paint + async hydration\n- Ensure tool-rendered evaluation cards show segmented progress and accuracy bar markers\n- Add/update tests for header parity, tool styles, two-phase loading, and accuracy/progress rendering\n- Add dashboard design note preferring flat-shaded region delineation over borders",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a6210f91-239e-4c96-b047-31c66d1bfac9",
+      "author": "ryan",
+      "text": "Started implementation. Scope locked to Procedure conversation/evaluation surfaces and shared tool-card UI styles. Next: conversation-viewer header parity + tool styles + evaluation two-phase loading + tests.",
+      "created_at": "2026-04-19T20:36:35.738024Z"
+    },
+    {
+      "id": "2256decb-7909-4d28-b373-5148c8729764",
+      "author": "ryan",
+      "text": "Implemented procedure-focused UI pass in dashboard/:\n- conversation-viewer: matched sidebar/main header height (h-12), tightened session header density, standardized new session category to Optimize, and replaced evaluation suspense text fallback with compact skeleton\n- ai-elements/tool: removed border/outline styling from tool surfaces in favor of flat-shaded regions\n- evaluation-tool-output: added two-phase loading (light evaluation/task-stage fetch first, then async score-result hydration), enabled TaskDisplay extra mode for accuracy bar/progress context, and added compact loading skeleton\n- docs: added dashboard styling note preferring flat-shaded section delineation over borders\n- tests: added header-height parity assertion, new ai-elements tool style tests, and evaluation-tool-output progressive hydration test\n\nValidation:\n- npx jest components/ui/__tests__/conversation-viewer-session-routing.test.tsx components/ai-elements/__tests__/tool.test.tsx components/ui/__tests__/evaluation-tool-output.test.tsx --runInBand\n- Result: 3 suites passed, 7 tests passed",
+      "created_at": "2026-04-19T20:43:12.991218Z"
+    },
+    {
+      "id": "871520fd-27c4-4cdd-a544-b596f298130e",
+      "author": "ryan",
+      "text": "Committed and pushed implementation to develop at 336fe9274. Attempted to verify GitHub Actions with gh run list, but network escalation approval was declined in this environment, so CI verification is pending manual check.",
+      "created_at": "2026-04-19T20:47:28.342847Z"
+    }
+  ],
+  "created_at": "2026-04-19T20:36:33.001926Z",
+  "updated_at": "2026-04-19T20:47:28.342847Z",
+  "closed_at": null,
+  "custom": {}
+}

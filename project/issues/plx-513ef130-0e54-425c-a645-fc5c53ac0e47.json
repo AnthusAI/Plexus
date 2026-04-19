@@ -1,0 +1,37 @@
+{
+  "id": "plx-513ef130-0e54-425c-a645-fc5c53ac0e47",
+  "title": "Run optimizer on Agent Misrepresentation with 2-year window and 200 samples",
+  "description": "Run a normal optimization procedure for Agent Misrepresentation to validate runtime behavior and parameter persistence in task metadata/procedure UI.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5251c8d8-2f8a-4606-8acb-88347635c58e",
+      "author": "ryan",
+      "text": "Dispatching optimizer run with scorecard 59125ba2-670c-4aa5-b796-c2085cf38a0c, score 69e2adba-553e-49a3-9ede-7f9a679a08f3, start version 093a70ab-623a-479b-bfca-274bd43e1bd9, days=730, max_samples=200, max_iterations=10, plus user-provided decomposition hint.",
+      "created_at": "2026-04-19T19:48:27.100557Z"
+    },
+    {
+      "id": "21e3ce13-24e2-4ee0-95c6-e5cd58fd3f26",
+      "author": "ryan",
+      "text": "Optimization run dispatched successfully. Procedure ID: 7067907a-6ff9-43ea-a7bd-ddeeb34828e1, Task ID: 89009374-f15b-4ac0-a9eb-6b5bbcbf2d66. Verified task metadata now includes run_parameters with days=730, max_samples=200, max_iterations=10, start_version, and full hint text.",
+      "created_at": "2026-04-19T19:49:48.199973Z"
+    },
+    {
+      "id": "28e159f3-26d8-4092-a732-4534f720df84",
+      "author": "ryan",
+      "text": "Killed older optimizer process PID 64965 (365-day run). Verified only latest run process remains: PID 73097 for procedure 7067907a-6ff9-43ea-a7bd-ddeeb34828e1.",
+      "created_at": "2026-04-19T20:05:41.666384Z"
+    }
+  ],
+  "created_at": "2026-04-19T19:48:04.503324Z",
+  "updated_at": "2026-04-19T20:05:41.666384Z",
+  "closed_at": "2026-04-19T19:49:48.215944Z",
+  "custom": {}
+}
