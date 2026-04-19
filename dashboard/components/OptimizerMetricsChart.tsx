@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useCallback } from "react"
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { ChartContainer } from "@/components/ui/chart"
 import { CartesianGrid, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
@@ -269,9 +269,31 @@ const CustomLegend: React.FC<CustomLegendProps> = ({ datasetView, focusedMetric,
 export default function OptimizerMetricsChart({ iterations, datasetView: controlledDatasetView, onDatasetViewChange }: OptimizerMetricsChartProps) {
   const [uncontrolledDatasetView, setUncontrolledDatasetView] = useState<DatasetView>("overall")
   const [focusedMetric, setFocusedMetric] = useState<string | null>(null)
+  const chartWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [isNarrowChart, setIsNarrowChart] = useState(false)
 
   const datasetView = controlledDatasetView ?? uncontrolledDatasetView
   const hasRegressionData = useMemo(() => iterations.some(it => it.regression_metrics), [iterations])
+
+  useEffect(() => {
+    const node = chartWrapperRef.current
+    if (!node) return
+
+    const setFromWidth = (width: number) => setIsNarrowChart(width < 760)
+    setFromWidth(node.clientWidth)
+
+    if (typeof ResizeObserver === "undefined") {
+      if (typeof window !== "undefined") setFromWidth(window.innerWidth)
+      return
+    }
+
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width
+      if (typeof width === "number") setFromWidth(width)
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   const baseline = useMemo(() => extractBaseline(iterations), [iterations])
 
@@ -374,7 +396,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
                 key={view.value}
                 variant={datasetView === view.value ? "default" : "ghost"}
                 size="sm"
-                className="h-6 text-sm px-2"
+                className="h-5 !text-sm !leading-5 px-2"
                 onClick={() => handleDatasetToggle(view.value)}
               >
                 {view.label}
@@ -384,7 +406,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
         )}
       </div>
 
-      <div className="rounded-md bg-card p-3">
+      <div ref={chartWrapperRef} className="rounded-md bg-card p-3">
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
           <LineChart data={chartData} margin={{ top: 8, right: 48, left: 0, bottom: 4 }}>
             <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
@@ -394,6 +416,9 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               interval={0}
+              angle={isNarrowChart ? -45 : 0}
+              textAnchor={isNarrowChart ? "end" : "middle"}
+              height={isNarrowChart ? 46 : undefined}
             />
             <YAxis
               yAxisId="left"
@@ -403,6 +428,9 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
+              tickMargin={8}
+              width={40}
+              label={{ value: "AC1", position: "insideBottomLeft", offset: -2, fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
             />
             <YAxis
               yAxisId="right"
@@ -413,6 +441,9 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickFormatter={(v: number) => `${v}%`}
+              tickMargin={8}
+              width={44}
+              label={{ value: "Acc", position: "insideBottomRight", offset: -2, fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
             />
             <Tooltip content={renderTooltip} />
 
