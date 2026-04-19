@@ -1009,7 +1009,6 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
     # correct classification. This is a score_configuration_problem (preprocessing is config-fixable).
     if normalized_flags.get("preprocessing_evidence_loss"):
         item_ctx = item_context.get("item_context", {})
-        processed_text = item_ctx.get("processed_input_text", "")
         processors_applied = item_ctx.get("processors_applied", "unknown")
         _add_evidence("score_yaml", f"Preprocessing pipeline: {processors_applied}")
         if best_evidence_quote:
