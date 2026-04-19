@@ -1148,22 +1148,22 @@ export default function ProcedureTask({
           })()}
 
           {procedureCosts && (
-            <div className="mt-4 rounded-lg border border-border/50 bg-card p-3">
+            <div className="mt-4 rounded-lg bg-card p-3">
               <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cost Breakdown</h3>
               <div className="grid grid-cols-1 gap-2 @lg:grid-cols-3 text-xs">
-                <div className="rounded border border-border/40 p-2">
+                <div className="rounded p-2 bg-background">
                   <div className="text-muted-foreground/70 mb-1">Evaluation</div>
                   <div className="font-medium">Incurred: {formatCurrency(evaluationIncurred)}</div>
                   <div className="text-muted-foreground">Reused: {formatCurrency(evaluationReused)}</div>
                   <div className="text-muted-foreground">Total: {formatCurrency(evaluationTotal)}</div>
                   <div className="text-muted-foreground/70 mt-1">Runs: {evaluationEntryCount}</div>
                 </div>
-                <div className="rounded border border-border/40 p-2">
+                <div className="rounded p-2 bg-background">
                   <div className="text-muted-foreground/70 mb-1">Optimization Inference</div>
                   <div className="font-medium">Total: {formatCurrency(inferenceTotal)}</div>
                   <div className="text-muted-foreground/70 mt-1">LLM calls: {inferenceEntryCount}</div>
                 </div>
-                <div className="rounded border border-border/40 p-2">
+                <div className="rounded p-2 bg-background">
                   <div className="text-muted-foreground/70 mb-1">Procedure Total</div>
                   <div className="font-medium">Incurred: {formatCurrency(overallIncurred)}</div>
                   <div className="text-muted-foreground">With reused evals: {formatCurrency(overallTotal)}</div>
@@ -1176,24 +1176,24 @@ export default function ProcedureTask({
           {isLoadingProcedureState ? (
             <CycleHistoryTableSkeleton />
           ) : optimizerVersions.length > 0 ? (
-            <div className="mt-4">
+            <div className="mt-4 rounded-lg bg-card p-3">
               <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cycles</h3>
-              <table className="w-full text-xs border-separate border-spacing-y-0.5">
+              <table className="w-full text-xs border-separate border-spacing-y-1">
                 <thead>
                   {isOverallCyclesView ? (
                     <>
                       <tr className="text-muted-foreground/60">
                         <th className="px-1 py-0.5 text-left font-normal"></th>
                         <th className="px-1 py-0.5 text-left font-normal"></th>
-                        <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5} style={{ color: RECENT_SERIES_COLOR }}>Recent</th>
-                        <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5} style={{ color: REGRESSION_SERIES_COLOR }}>Regression</th>
+                        <th className="px-1 py-0.5 text-left font-normal" colSpan={5} style={{ color: RECENT_SERIES_COLOR }}>Recent</th>
+                        <th className="px-1 py-0.5 text-left font-normal" colSpan={5} style={{ color: REGRESSION_SERIES_COLOR }}>Regression</th>
                         <th className="px-1 py-0.5 font-normal"></th>
                         <th className="px-1 py-0.5 font-normal"></th>
                       </tr>
                       <tr className="text-muted-foreground/40">
                         <th className="px-1 py-0 font-normal"></th>
                         <th className="px-1 py-0 font-normal"></th>
-                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">
+                        <th className="px-1 py-0 text-left font-normal">
                           <MetricHeaderLabel label="AC1" shape="circle" color={RECENT_SERIES_COLOR} />
                         </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
@@ -1202,7 +1202,7 @@ export default function ProcedureTask({
                         </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
                         <th className="px-1 py-0 text-left font-normal">Cost/item</th>
-                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">
+                        <th className="px-1 py-0 text-left font-normal">
                           <MetricHeaderLabel label="AC1" shape="circle" color={REGRESSION_SERIES_COLOR} />
                         </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
@@ -1220,14 +1220,14 @@ export default function ProcedureTask({
                       <tr className="text-muted-foreground/60">
                         <th className="px-1 py-0.5 text-left font-normal"></th>
                         <th className="px-1 py-0.5 text-left font-normal"></th>
-                        <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={4} style={{ color: cyclesSelectedDatasetColor }}>{cyclesSelectedDatasetLabel}</th>
+                        <th className="px-1 py-0.5 text-left font-normal" colSpan={4} style={{ color: cyclesSelectedDatasetColor }}>{cyclesSelectedDatasetLabel}</th>
                         <th className="px-1 py-0.5 font-normal"></th>
                         <th className="px-1 py-0.5 font-normal"></th>
                       </tr>
                       <tr className="text-muted-foreground/40">
                         <th className="px-1 py-0 font-normal"></th>
                         <th className="px-1 py-0 font-normal"></th>
-                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">
+                        <th className="px-1 py-0 text-left font-normal">
                           <MetricHeaderLabel label="AC1" shape="circle" color={cyclesSelectedDatasetColor} />
                         </th>
                         <th className="px-1 py-0 text-left font-normal">
@@ -1252,7 +1252,7 @@ export default function ProcedureTask({
                     return (
                       <React.Fragment key={i}>
                         <tr
-                          className={details ? 'cursor-pointer hover:bg-accent/50' : ''}
+                          className={cn('bg-background', details ? 'cursor-pointer hover:bg-accent/50' : '')}
                           onClick={() => {
                             if (!details || cycleNum == null) return
                             setExpandedVersionRows(prev => {
@@ -1293,7 +1293,7 @@ export default function ProcedureTask({
                           </td>
                           {isOverallCyclesView ? (
                             <>
-                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                                 {formatMetricValue(row.recentAC1)}
                               </td>
                               <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
@@ -1308,7 +1308,7 @@ export default function ProcedureTask({
                               <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                                 {formatCostPerItem(row.recentCostPerItem)}
                               </td>
-                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                                 {formatMetricValue(row.regressionAC1)}
                               </td>
                               <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
@@ -1326,7 +1326,7 @@ export default function ProcedureTask({
                             </>
                           ) : cyclesTableView === 'recent' ? (
                             <>
-                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                                 {formatMetricValue(row.recentAC1)}
                               </td>
                               <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
@@ -1341,7 +1341,7 @@ export default function ProcedureTask({
                             </>
                           ) : (
                             <>
-                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
                                 {formatMetricValue(row.regressionAC1)}
                               </td>
                               <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
@@ -1387,7 +1387,7 @@ export default function ProcedureTask({
                                       {details.exploration_results.map((er: any, j: number) => {
                                         const hypDesc = er.done_reason || er.hypothesis?.description || er.agent_reasoning || ''
                                         return (
-                                          <details key={j} className="border border-border/50 rounded">
+                                          <details key={j} className="rounded bg-background">
                                             <summary className="flex items-center gap-2 text-xs px-2 py-1 cursor-pointer hover:bg-accent/30">
                                               <span className="text-muted-foreground truncate flex-1" title={er.hypothesis?.name || `Hyp ${er.index}`}>
                                                 {er.hypothesis?.name || `Hypothesis ${er.index}`}
