@@ -9,7 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Stethoscope, ClipboardList } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Stethoscope, ClipboardList, FileText, Users, FlaskConical } from 'lucide-react'
 
 // --- Types ---
 
@@ -234,6 +234,11 @@ interface EndOfRunReportSection {
 }
 
 interface EndOfRunReportData {
+  // New three-audience format
+  executive_summary?: EndOfRunReportSection
+  lab_report?: EndOfRunReportSection
+  sme_agenda?: EndOfRunReportSection
+  // Legacy fields (kept for backward compat with older runs)
   diagnosis?: EndOfRunReportSection
   prescription?: EndOfRunReportSection
   run_summary?: {
@@ -344,10 +349,16 @@ function resolveSummaryDetail(section: EndOfRunReportSection | undefined): [stri
 
 export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
   if (!report) return null
-  const { diagnosis, prescription, run_summary } = report
-  const hasDiagnosis = diagnosis && (diagnosis.summary || diagnosis.detail || diagnosis.text)
-  const hasPrescription = prescription && (prescription.summary || prescription.detail || prescription.text)
-  if (!hasDiagnosis && !hasPrescription) return null
+  const { executive_summary, lab_report, sme_agenda, diagnosis, prescription, run_summary } = report
+
+  // Prefer new three-audience format; fall back to legacy diagnosis/prescription
+  const useNewFormat = executive_summary || lab_report || sme_agenda
+  const hasContent = useNewFormat
+    ? (executive_summary?.text || lab_report?.text || sme_agenda?.text)
+    : (diagnosis && (diagnosis.summary || diagnosis.detail || diagnosis.text)) ||
+      (prescription && (prescription.summary || prescription.detail || prescription.text))
+
+  if (!hasContent) return null
 
   const [diagSummary, diagDetail] = resolveSummaryDetail(diagnosis)
   const [prescSummary, prescDetail] = resolveSummaryDetail(prescription)
@@ -383,30 +394,66 @@ export function EndOfRunReport({ report }: { report: EndOfRunReportData }) {
         )}
       </div>
 
-      <div className="@container">
-      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-        {hasDiagnosis && (
-          <div className="rounded-lg border border-border/50 bg-card p-4">
-            <ReportSection
-              icon={<Stethoscope className="h-4 w-4" />}
-              title="Diagnosis"
-              summary={diagSummary}
-              detail={diagDetail}
-            />
+      {useNewFormat ? (
+        <div className="space-y-4">
+          {executive_summary?.text && (
+            <div className="rounded-lg border border-border/50 bg-card p-4">
+              <ReportSection
+                icon={<FileText className="h-4 w-4" />}
+                title="Executive Summary"
+                summary={executive_summary.text}
+              />
+            </div>
+          )}
+          <div className="@container">
+          <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+            {lab_report?.text && (
+              <div className="rounded-lg border border-border/50 bg-card p-4">
+                <ReportSection
+                  icon={<FlaskConical className="h-4 w-4" />}
+                  title="Lab Report"
+                  summary={lab_report.text}
+                />
+              </div>
+            )}
+            {sme_agenda?.text && (
+              <div className="rounded-lg border border-border/50 bg-card p-4">
+                <ReportSection
+                  icon={<Users className="h-4 w-4" />}
+                  title="SME Agenda"
+                  summary={sme_agenda.text}
+                />
+              </div>
+            )}
           </div>
-        )}
-        {hasPrescription && (
-          <div className="rounded-lg border border-border/50 bg-card p-4">
-            <ReportSection
-              icon={<ClipboardList className="h-4 w-4" />}
-              title="Prescription"
-              summary={prescSummary}
-              detail={prescDetail}
-            />
           </div>
-        )}
-      </div>
-      </div>
+        </div>
+      ) : (
+        <div className="@container">
+        <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+          {diagSummary && (
+            <div className="rounded-lg border border-border/50 bg-card p-4">
+              <ReportSection
+                icon={<Stethoscope className="h-4 w-4" />}
+                title="Diagnosis"
+                summary={diagSummary}
+                detail={diagDetail}
+              />
+            </div>
+          )}
+          {prescSummary && (
+            <div className="rounded-lg border border-border/50 bg-card p-4">
+              <ReportSection
+                icon={<ClipboardList className="h-4 w-4" />}
+                title="Prescription"
+                summary={prescSummary}
+                detail={prescDetail}
+              />
+            </div>
+          )}
+        </div>
+        </div>
+      )}
     </div>
   )
 }

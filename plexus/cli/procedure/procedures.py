@@ -991,12 +991,12 @@ def watch(interval: int):
 @click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
 @click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
-@click.option('--resume-accuracy-eval', type=str, default=None, help='Reuse existing accuracy baseline evaluation ID (skip running baselines)')
-@click.option('--resume-feedback-eval', type=str, default=None, help='Reuse existing feedback baseline evaluation ID (skip running baselines)')
+@click.option('--resume-regression-eval', type=str, default=None, help='Reuse existing regression baseline evaluation ID (skip running baselines)')
+@click.option('--resume-recent-eval', type=str, default=None, help='Reuse existing recent baseline evaluation ID (skip running baselines)')
 @click.option('--version', '-v', type=str, default=None, help='Score version ID to start from instead of the champion version')
 @click.option('--hint', type=str, default=None, help='Expert hint to guide the optimizer (included verbatim in agent context)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_accuracy_eval: str, resume_feedback_eval: str, version: str, hint: str, output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_regression_eval: str, resume_recent_eval: str, version: str, hint: str, output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -1056,10 +1056,10 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     }
     if max_samples is not None:
         params["max_samples"] = max_samples
-    if resume_accuracy_eval is not None:
-        params["resume_accuracy_eval"] = resume_accuracy_eval
-    if resume_feedback_eval is not None:
-        params["resume_feedback_eval"] = resume_feedback_eval
+    if resume_regression_eval is not None:
+        params["resume_regression_eval"] = resume_regression_eval
+    if resume_recent_eval is not None:
+        params["resume_recent_eval"] = resume_recent_eval
     if version is not None:
         params["start_version"] = version
     if hint is not None:
