@@ -3,7 +3,7 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList, PlayCircle } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -55,7 +55,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
 import { downloadData } from "aws-amplify/storage"
-import OptimizerMetricsChart, { type IterationData } from "./OptimizerMetricsChart"
+import OptimizerMetricsChart, { type DatasetView, type IterationData } from "./OptimizerMetricsChart"
 import { EndOfRunReport, ReportSection } from "./OptimizationInsightsPanel"
 import { OptimizerProblemItemsPanel, type NotableItemRecurrence } from "./OptimizerProblemItemsPanel"
 import { CollapsibleText } from "./ui/message-utils"
@@ -71,6 +71,9 @@ const procedureStateCache = new Map<string, { state: any; timestamp: number }>()
 // Minimal fallback for YAML editor - actual templates come from procedure data
 const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
 # Loading procedure configuration...`
+
+const RECENT_SERIES_COLOR = "var(--chart-1)"
+const REGRESSION_SERIES_COLOR = "var(--chart-2)"
 
 // Status display helper function
 const getStatusDisplay = (status?: string): { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } => {
@@ -198,26 +201,31 @@ export default function ProcedureTask({
     versionId?: string
     accepted?: boolean
     isBaseline?: boolean
-    feedbackAC1?: number | null
-    feedbackDelta?: number | null
-    feedbackAccuracy?: number | null
-    feedbackPrecision?: number | null
-    feedbackRecall?: number | null
-    accuracyAC1?: number | null
-    accuracyDelta?: number | null
-    accuracyAccuracy?: number | null
-    accuracyPrecision?: number | null
-    accuracyRecall?: number | null
+    recentAC1?: number | null
+    recentAlignmentDelta?: number | null
+    recentAccuracy?: number | null
+    recentAccuracyDelta?: number | null
+    recentPrecision?: number | null
+    recentRecall?: number | null
+    recentCostPerItem?: number | null
+    regressionAC1?: number | null
+    regressionAlignmentDelta?: number | null
+    regressionAccuracy?: number | null
+    regressionAccuracyDelta?: number | null
+    regressionPrecision?: number | null
+    regressionRecall?: number | null
+    regressionCostPerItem?: number | null
     skipReason?: string
     disqualified?: boolean
   }>>([])
+  const [cyclesTableView, setCyclesTableView] = useState<DatasetView>('overall')
   const [optimizerVersionBaseIds, setOptimizerVersionBaseIds] = useState<{ scorecardId?: string; scoreId?: string }>({})
   const [stateScorecardName, setStateScorecardName] = useState<string>('')
   const [stateScoreName, setStateScoreName] = useState<string>('')
   const [cycleInsights, setCycleInsights] = useState<any[]>([])
   const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
   const [endOfRunReport, setEndOfRunReport] = useState<any>(null)
-  const [procedureSummary, setProcedureSummary] = useState<{ diagnosis?: string; prescription?: string; cycle?: number } | null>(null)
+  const [procedureSummary, setProcedureSummary] = useState<{ progress?: string; next_steps?: string; diagnosis?: string; prescription?: string; cycle?: number } | null>(null)
   const [notableItemRecurrence, setNotableItemRecurrence] = useState<NotableItemRecurrence | null>(null)
   const [iterationDetails, setIterationDetails] = useState<Map<number, any>>(new Map())
   const [expandedVersionRows, setExpandedVersionRows] = useState<Set<number>>(new Set())
@@ -249,40 +257,54 @@ export default function ProcedureTask({
       const cycleIterations: any[] = state.iterations || []
 
       const firstCycle = cycleIterations[0]
-      const inferredFbBaseline = firstCycle?.feedback_metrics != null && firstCycle?.feedback_deltas != null
+      const inferredRecentBaseline = firstCycle?.recent_metrics != null && firstCycle?.recent_deltas != null
         ? {
-            alignment: firstCycle.feedback_metrics.alignment - firstCycle.feedback_deltas.alignment,
-            accuracy:  firstCycle.feedback_metrics.accuracy  - firstCycle.feedback_deltas.accuracy,
-            precision: firstCycle.feedback_metrics.precision - firstCycle.feedback_deltas.precision,
-            recall:    firstCycle.feedback_metrics.recall    - firstCycle.feedback_deltas.recall,
+            alignment: firstCycle.recent_metrics.alignment - firstCycle.recent_deltas.alignment,
+            accuracy:  firstCycle.recent_metrics.accuracy  - firstCycle.recent_deltas.accuracy,
+            precision: firstCycle.recent_metrics.precision - firstCycle.recent_deltas.precision,
+            recall:    firstCycle.recent_metrics.recall    - firstCycle.recent_deltas.recall,
           }
         : null
-      const inferredAccBaseline = firstCycle?.accuracy_metrics != null && firstCycle?.accuracy_deltas != null
+      const inferredRegressionBaseline = firstCycle?.regression_metrics != null && firstCycle?.regression_deltas != null
         ? {
-            alignment: firstCycle.accuracy_metrics.alignment - firstCycle.accuracy_deltas.alignment,
-            accuracy:  firstCycle.accuracy_metrics.accuracy  - firstCycle.accuracy_deltas.accuracy,
-            precision: firstCycle.accuracy_metrics.precision - firstCycle.accuracy_deltas.precision,
-            recall:    firstCycle.accuracy_metrics.recall    - firstCycle.accuracy_deltas.recall,
+            alignment: firstCycle.regression_metrics.alignment - firstCycle.regression_deltas.alignment,
+            accuracy:  firstCycle.regression_metrics.accuracy  - firstCycle.regression_deltas.accuracy,
+            precision: firstCycle.regression_metrics.precision - firstCycle.regression_deltas.precision,
+            recall:    firstCycle.regression_metrics.recall    - firstCycle.regression_deltas.recall,
           }
         : null
-      const fbBaseline  = state.feedback_initial_baseline_metrics  ?? inferredFbBaseline  ?? state.feedback_baseline_metrics
-      const accBaseline = state.accuracy_initial_baseline_metrics  ?? inferredAccBaseline ?? state.accuracy_baseline_metrics
-      if (!fbBaseline && !accBaseline && cycleIterations.length === 0) return
+      const recentBaseline = state.recent_initial_baseline_metrics ?? inferredRecentBaseline ?? state.recent_baseline_metrics
+      const regressionBaseline = state.regression_initial_baseline_metrics ?? inferredRegressionBaseline ?? state.regression_baseline_metrics
+      const recentBaselineCost = state.recent_initial_baseline_cost_per_item ?? state.recent_baseline_cost_per_item ?? null
+      const regressionBaselineCost = state.regression_initial_baseline_cost_per_item ?? state.regression_baseline_cost_per_item ?? null
+      if (!recentBaseline && !regressionBaseline && cycleIterations.length === 0) return
 
       // Heavy chart/table updates — include setIsLoadingProcedureState so the skeleton
       // only disappears once the chart data is ready in the same render pass.
       startTransition(() => {
         setIsLoadingProcedureState(false)
         const iterations: IterationData[] = []
-        if (fbBaseline || accBaseline) {
-          iterations.push({ iteration: 0, label: 'Baseline', feedback_metrics: fbBaseline, accuracy_metrics: accBaseline, accepted: true })
+        if (recentBaseline || regressionBaseline) {
+          iterations.push({
+            iteration: 0,
+            label: 'Baseline',
+            recent_metrics: recentBaseline,
+            regression_metrics: regressionBaseline,
+            accepted: true,
+            recent_cost_per_item: recentBaselineCost,
+            regression_cost_per_item: regressionBaselineCost,
+          })
         }
         for (const it of cycleIterations) {
           iterations.push({
             iteration: it.iteration, label: `Cycle ${it.iteration}`,
             score_version_id: it.score_version_id,
-            feedback_metrics: it.feedback_metrics, accuracy_metrics: it.accuracy_metrics,
-            feedback_deltas: it.feedback_deltas, accuracy_deltas: it.accuracy_deltas,
+            recent_metrics: it.recent_metrics,
+            regression_metrics: it.regression_metrics,
+            recent_deltas: it.recent_deltas,
+            regression_deltas: it.regression_deltas,
+            recent_cost_per_item: it.recent_cost_per_item,
+            regression_cost_per_item: it.regression_cost_per_item,
             accepted: it.accepted, skip_reason: it.skip_reason, disqualified: it.disqualified,
           })
         }
@@ -291,29 +313,53 @@ export default function ProcedureTask({
         // Version rows for cycles table
         const versionRows: Array<{
           label: string; versionId?: string; accepted?: boolean; isBaseline?: boolean
-          feedbackAC1?: number | null; feedbackDelta?: number | null
-          feedbackAccuracy?: number | null; feedbackPrecision?: number | null; feedbackRecall?: number | null
-          accuracyAC1?: number | null; accuracyDelta?: number | null
-          accuracyAccuracy?: number | null; accuracyPrecision?: number | null; accuracyRecall?: number | null
+          recentAC1?: number | null; recentAlignmentDelta?: number | null
+          recentAccuracy?: number | null; recentAccuracyDelta?: number | null
+          recentPrecision?: number | null; recentRecall?: number | null
+          recentCostPerItem?: number | null
+          regressionAC1?: number | null; regressionAlignmentDelta?: number | null
+          regressionAccuracy?: number | null; regressionAccuracyDelta?: number | null
+          regressionPrecision?: number | null; regressionRecall?: number | null
+          regressionCostPerItem?: number | null
           skipReason?: string; disqualified?: boolean
         }> = []
         if (state.baseline_version_id) {
           versionRows.push({
             label: 'Baseline', versionId: state.baseline_version_id, isBaseline: true,
-            feedbackAC1: fbBaseline?.alignment ?? null, feedbackDelta: null,
-            feedbackAccuracy: fbBaseline?.accuracy ?? null, feedbackPrecision: fbBaseline?.precision ?? null, feedbackRecall: fbBaseline?.recall ?? null,
-            accuracyAC1: accBaseline?.alignment ?? null, accuracyDelta: null,
-            accuracyAccuracy: accBaseline?.accuracy ?? null, accuracyPrecision: accBaseline?.precision ?? null, accuracyRecall: accBaseline?.recall ?? null,
+            recentAC1: recentBaseline?.alignment ?? null,
+            recentAlignmentDelta: null,
+            recentAccuracy: recentBaseline?.accuracy ?? null,
+            recentAccuracyDelta: null,
+            recentPrecision: recentBaseline?.precision ?? null,
+            recentRecall: recentBaseline?.recall ?? null,
+            recentCostPerItem: recentBaselineCost,
+            regressionAC1: regressionBaseline?.alignment ?? null,
+            regressionAlignmentDelta: null,
+            regressionAccuracy: regressionBaseline?.accuracy ?? null,
+            regressionAccuracyDelta: null,
+            regressionPrecision: regressionBaseline?.precision ?? null,
+            regressionRecall: regressionBaseline?.recall ?? null,
+            regressionCostPerItem: regressionBaselineCost,
             accepted: true,
           })
         }
         for (const it of cycleIterations) {
           versionRows.push({
             label: `Cycle ${it.iteration}`, versionId: it.score_version_id, accepted: it.accepted,
-            feedbackAC1: it.feedback_metrics?.alignment ?? null, feedbackDelta: it.feedback_deltas?.alignment ?? null,
-            feedbackAccuracy: it.feedback_metrics?.accuracy ?? null, feedbackPrecision: it.feedback_metrics?.precision ?? null, feedbackRecall: it.feedback_metrics?.recall ?? null,
-            accuracyAC1: it.accuracy_metrics?.alignment ?? null, accuracyDelta: it.accuracy_deltas?.alignment ?? null,
-            accuracyAccuracy: it.accuracy_metrics?.accuracy ?? null, accuracyPrecision: it.accuracy_metrics?.precision ?? null, accuracyRecall: it.accuracy_metrics?.recall ?? null,
+            recentAC1: it.recent_metrics?.alignment ?? null,
+            recentAlignmentDelta: it.recent_deltas?.alignment ?? null,
+            recentAccuracy: it.recent_metrics?.accuracy ?? null,
+            recentAccuracyDelta: it.recent_deltas?.accuracy ?? null,
+            recentPrecision: it.recent_metrics?.precision ?? null,
+            recentRecall: it.recent_metrics?.recall ?? null,
+            recentCostPerItem: it.recent_cost_per_item ?? null,
+            regressionAC1: it.regression_metrics?.alignment ?? null,
+            regressionAlignmentDelta: it.regression_deltas?.alignment ?? null,
+            regressionAccuracy: it.regression_metrics?.accuracy ?? null,
+            regressionAccuracyDelta: it.regression_deltas?.accuracy ?? null,
+            regressionPrecision: it.regression_metrics?.precision ?? null,
+            regressionRecall: it.regression_metrics?.recall ?? null,
+            regressionCostPerItem: it.regression_cost_per_item ?? null,
             skipReason: it.skip_reason, disqualified: it.disqualified,
           })
         }
@@ -474,6 +520,24 @@ export default function ProcedureTask({
 
   // How many completed optimizer cycles the procedure has run
   const completedCycleCount = optimizerIterations.filter(it => it.iteration > 0).length
+
+  const formatMetricValue = (value?: number | null) =>
+    value != null ? value.toFixed(3) : '—'
+
+  const formatDeltaValue = (value?: number | null) =>
+    value != null ? (
+      <span className={value >= 0 ? 'text-green-500' : 'text-red-500'}>
+        {value >= 0 ? '+' : ''}{value.toFixed(3)}
+      </span>
+    ) : null
+
+  const formatCostPerItem = (value?: number | null) =>
+    value != null ? `$${value.toFixed(4)}` : '—'
+
+  const isOverallCyclesView = cyclesTableView === 'overall'
+  const cyclesSelectedDatasetLabel = cyclesTableView === 'recent' ? 'Recent' : 'Regression'
+  const cyclesSelectedDatasetColor = cyclesTableView === 'recent' ? RECENT_SERIES_COLOR : REGRESSION_SERIES_COLOR
+  const cyclesExpandedColSpan = isOverallCyclesView ? 14 : 8
 
   // ---- Shared helpers for creating a Task and dispatching a procedure run ----
   const createTaskWithStages = async (procedureId: string) => {
@@ -956,34 +1020,43 @@ export default function ProcedureTask({
           {isLoadingProcedureState ? (
             <OptimizerMetricsChartSkeleton />
           ) : optimizerIterations.length > 0 ? (
-            <OptimizerMetricsChart iterations={optimizerIterations} />
+            <OptimizerMetricsChart
+              iterations={optimizerIterations}
+              datasetView={cyclesTableView}
+              onDatasetViewChange={setCyclesTableView}
+            />
           ) : null}
 
           {/* Procedure-level summary — updated after each cycle */}
-          {procedureSummary && (procedureSummary.diagnosis || procedureSummary.prescription) && (
-            <div className="mt-4 @container">
-              <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2">
-                {procedureSummary.diagnosis && procedureSummary.diagnosis.trim() && (
-                  <div className="rounded-lg border border-border/50 bg-card p-3">
-                    <ReportSection
-                      icon={<Stethoscope className="h-3.5 w-3.5" />}
-                      title="Diagnosis"
-                      summary={procedureSummary.diagnosis}
-                    />
-                  </div>
-                )}
-                {procedureSummary.prescription && procedureSummary.prescription.trim() && (
-                  <div className="rounded-lg border border-border/50 bg-card p-3">
-                    <ReportSection
-                      icon={<ClipboardList className="h-3.5 w-3.5" />}
-                      title="Prescription"
-                      summary={procedureSummary.prescription}
-                    />
-                  </div>
-                )}
+          {procedureSummary && (() => {
+            const progressText = procedureSummary.progress || procedureSummary.diagnosis || ''
+            const nextText = procedureSummary.next_steps || procedureSummary.prescription || ''
+            if (!progressText && !nextText) return null
+            return (
+              <div className="mt-4 @container">
+                <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2">
+                  {progressText.trim() && (
+                    <div className="rounded-lg border border-border/50 bg-card p-3">
+                      <ReportSection
+                        icon={<FileText className="h-3.5 w-3.5" />}
+                        title="Progress"
+                        summary={progressText}
+                      />
+                    </div>
+                  )}
+                  {nextText.trim() && (
+                    <div className="rounded-lg border border-border/50 bg-card p-3">
+                      <ReportSection
+                        icon={<ClipboardList className="h-3.5 w-3.5" />}
+                        title="Next Steps"
+                        summary={nextText}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Cycles table - skeleton while loading, table when data arrives */}
           {isLoadingProcedureState ? (
@@ -993,30 +1066,54 @@ export default function ProcedureTask({
               <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cycles</h3>
               <table className="w-full text-xs border-separate border-spacing-y-0.5">
                 <thead>
-                  <tr className="text-muted-foreground/60">
-                    <th className="px-1 py-0.5 text-left font-normal"></th>
-                    <th className="px-1 py-0.5 text-left font-normal"></th>
-                    <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5}>Feedback</th>
-                    <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5}>Regression</th>
-                    <th className="px-1 py-0.5 font-normal"></th>
-                    <th className="px-1 py-0.5 font-normal"></th>
-                  </tr>
-                  <tr className="text-muted-foreground/40">
-                    <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
-                    <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-left font-normal">Acc</th>
-                    <th className="px-1 py-0 text-left font-normal">P</th>
-                    <th className="px-1 py-0 text-left font-normal">R</th>
-                    <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
-                    <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 text-left font-normal">Acc</th>
-                    <th className="px-1 py-0 text-left font-normal">P</th>
-                    <th className="px-1 py-0 text-left font-normal">R</th>
-                    <th className="px-1 py-0 font-normal"></th>
-                    <th className="px-1 py-0 font-normal"></th>
-                  </tr>
+                  {isOverallCyclesView ? (
+                    <>
+                      <tr className="text-muted-foreground/60">
+                        <th className="px-1 py-0.5 text-left font-normal"></th>
+                        <th className="px-1 py-0.5 text-left font-normal"></th>
+                        <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5} style={{ color: RECENT_SERIES_COLOR }}>Recent</th>
+                        <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={5} style={{ color: REGRESSION_SERIES_COLOR }}>Regression</th>
+                        <th className="px-1 py-0.5 font-normal"></th>
+                        <th className="px-1 py-0.5 font-normal"></th>
+                      </tr>
+                      <tr className="text-muted-foreground/40">
+                        <th className="px-1 py-0 font-normal"></th>
+                        <th className="px-1 py-0 font-normal"></th>
+                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                        <th className="px-1 py-0 text-left font-normal">Δ</th>
+                        <th className="px-1 py-0 text-left font-normal">Acc</th>
+                        <th className="px-1 py-0 text-left font-normal">Δ</th>
+                        <th className="px-1 py-0 text-left font-normal">Cost/item</th>
+                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                        <th className="px-1 py-0 text-left font-normal">Δ</th>
+                        <th className="px-1 py-0 text-left font-normal">Acc</th>
+                        <th className="px-1 py-0 text-left font-normal">Δ</th>
+                        <th className="px-1 py-0 text-left font-normal">Cost/item</th>
+                        <th className="px-1 py-0 font-normal"></th>
+                        <th className="px-1 py-0 font-normal"></th>
+                      </tr>
+                    </>
+                  ) : (
+                    <>
+                      <tr className="text-muted-foreground/60">
+                        <th className="px-1 py-0.5 text-left font-normal"></th>
+                        <th className="px-1 py-0.5 text-left font-normal"></th>
+                        <th className="px-1 py-0.5 text-left font-normal border-l border-border/40" colSpan={4} style={{ color: cyclesSelectedDatasetColor }}>{cyclesSelectedDatasetLabel}</th>
+                        <th className="px-1 py-0.5 font-normal"></th>
+                        <th className="px-1 py-0.5 font-normal"></th>
+                      </tr>
+                      <tr className="text-muted-foreground/40">
+                        <th className="px-1 py-0 font-normal"></th>
+                        <th className="px-1 py-0 font-normal"></th>
+                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                        <th className="px-1 py-0 text-left font-normal">Acc</th>
+                        <th className="px-1 py-0 text-left font-normal">P</th>
+                        <th className="px-1 py-0 text-left font-normal">R</th>
+                        <th className="px-1 py-0 font-normal"></th>
+                        <th className="px-1 py-0 font-normal"></th>
+                      </tr>
+                    </>
+                  )}
                 </thead>
                 <tbody>
                   {optimizerVersions.map((row, i) => {
@@ -1068,44 +1165,70 @@ export default function ProcedureTask({
                               <Badge variant="secondary" className="text-xs px-1 py-0">Rejected</Badge>
                             )}
                           </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
-                            {row.feedbackAC1 != null ? row.feedbackAC1.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
-                            {row.feedbackDelta != null && (
-                              <span className={row.feedbackDelta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                {row.feedbackDelta >= 0 ? '+' : ''}{row.feedbackDelta.toFixed(3)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
-                            {row.feedbackAccuracy != null ? row.feedbackAccuracy.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
-                            {row.feedbackPrecision != null ? row.feedbackPrecision.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
-                            {row.feedbackRecall != null ? row.feedbackRecall.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
-                            {row.accuracyAC1 != null ? row.accuracyAC1.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
-                            {row.accuracyDelta != null && (
-                              <span className={row.accuracyDelta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                {row.accuracyDelta >= 0 ? '+' : ''}{row.accuracyDelta.toFixed(3)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
-                            {row.accuracyAccuracy != null ? row.accuracyAccuracy.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
-                            {row.accuracyPrecision != null ? row.accuracyPrecision.toFixed(3) : '—'}
-                          </td>
-                          <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
-                            {row.accuracyRecall != null ? row.accuracyRecall.toFixed(3) : '—'}
-                          </td>
+                          {isOverallCyclesView ? (
+                            <>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                                {formatMetricValue(row.recentAC1)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
+                                {formatDeltaValue(row.recentAlignmentDelta)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.recentAccuracy)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
+                                {formatDeltaValue(row.recentAccuracyDelta)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatCostPerItem(row.recentCostPerItem)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                                {formatMetricValue(row.regressionAC1)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
+                                {formatDeltaValue(row.regressionAlignmentDelta)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.regressionAccuracy)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right">
+                                {formatDeltaValue(row.regressionAccuracyDelta)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatCostPerItem(row.regressionCostPerItem)}
+                              </td>
+                            </>
+                          ) : cyclesTableView === 'recent' ? (
+                            <>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                                {formatMetricValue(row.recentAC1)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.recentAccuracy)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.recentPrecision)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.recentRecall)}
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground border-l border-border/40">
+                                {formatMetricValue(row.regressionAC1)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.regressionAccuracy)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.regressionPrecision)}
+                              </td>
+                              <td className="px-1 py-0.5 whitespace-nowrap tabular-nums text-right text-muted-foreground">
+                                {formatMetricValue(row.regressionRecall)}
+                              </td>
+                            </>
+                          )}
                           <td className="px-1 py-0.5 font-mono text-muted-foreground/60 w-full">
                             {row.versionId ? row.versionId.slice(0, 8) + '…' : '—'}
                           </td>
@@ -1123,7 +1246,7 @@ export default function ProcedureTask({
                         </tr>
                         {isExpanded && details && (
                           <tr>
-                            <td colSpan={14} className="px-2 py-2 bg-accent/30 rounded">
+                            <td colSpan={cyclesExpandedColSpan} className="px-2 py-2 bg-accent/30 rounded">
                               <div className="space-y-2">
                                 {details.done_reason && (
                                   <div>
@@ -1149,7 +1272,7 @@ export default function ProcedureTask({
                                                 <Badge variant="secondary" className="text-xs px-1 py-0 flex-shrink-0">Fail</Badge>
                                               )}
                                               <span className="whitespace-nowrap flex-shrink-0">
-                                                <span className="text-muted-foreground/60 mr-1">FB</span>
+                                                <span className="text-muted-foreground/60 mr-1">Recent</span>
                                                 {er.fb_deltas?.alignment != null ? (
                                                   <span className={er.fb_deltas.alignment >= 0 ? 'text-green-500' : 'text-red-500'}>
                                                     {er.fb_deltas.alignment >= 0 ? '+' : ''}{er.fb_deltas.alignment.toFixed(3)}
@@ -1157,7 +1280,7 @@ export default function ProcedureTask({
                                                 ) : '—'}
                                               </span>
                                               <span className="whitespace-nowrap flex-shrink-0">
-                                                <span className="text-muted-foreground/60 mr-1">ACC</span>
+                                                <span className="text-muted-foreground/60 mr-1">Regression</span>
                                                 {er.acc_deltas?.alignment != null ? (
                                                   <span className={er.acc_deltas.alignment >= 0 ? 'text-green-500' : 'text-red-500'}>
                                                     {er.acc_deltas.alignment >= 0 ? '+' : ''}{er.acc_deltas.alignment.toFixed(3)}
@@ -1188,11 +1311,11 @@ export default function ProcedureTask({
                                         <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'A' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
                                           <span className="font-medium">A (cycle-focused)</span>
                                           <span className="ml-2 text-muted-foreground">
-                                            FB <span className={details.dual_synthesis.strategy_a.fb_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_a.fb_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.fb_delta?.toFixed(3)}
+                                            Recent <span className={details.dual_synthesis.strategy_a.recent_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_a.recent_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.recent_delta?.toFixed(3)}
                                             </span>
-                                            {' '}ACC <span className={details.dual_synthesis.strategy_a.acc_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_a.acc_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.acc_delta?.toFixed(3)}
+                                            {' '}Regression <span className={details.dual_synthesis.strategy_a.regression_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_a.regression_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.regression_delta?.toFixed(3)}
                                             </span>
                                           </span>
                                         </div>
@@ -1201,11 +1324,11 @@ export default function ProcedureTask({
                                         <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'B' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
                                           <span className="font-medium">B (arc-focused)</span>
                                           <span className="ml-2 text-muted-foreground">
-                                            FB <span className={details.dual_synthesis.strategy_b.fb_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_b.fb_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.fb_delta?.toFixed(3)}
+                                            Recent <span className={details.dual_synthesis.strategy_b.recent_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_b.recent_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.recent_delta?.toFixed(3)}
                                             </span>
-                                            {' '}ACC <span className={details.dual_synthesis.strategy_b.acc_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_b.acc_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.acc_delta?.toFixed(3)}
+                                            {' '}Regression <span className={details.dual_synthesis.strategy_b.regression_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                              {details.dual_synthesis.strategy_b.regression_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.regression_delta?.toFixed(3)}
                                             </span>
                                           </span>
                                         </div>
@@ -1229,8 +1352,52 @@ export default function ProcedureTask({
                                 {(() => {
                                   const insight = cycleInsights.find((ci: any) => ci.cycle === cycleNum)
                                   if (!insight) return null
-                                  // Parse all sections from full analysis — handles cases where
-                                  // stored summaries are empty (e.g. older runs with regex bug).
+
+                                  // Prefer new three-audience format fields
+                                  const execSummary = insight.executive_summary || ''
+                                  const labReport = insight.lab_report || ''
+                                  const smeAgenda = insight.sme_agenda || ''
+                                  const useNewFormat = execSummary || labReport || smeAgenda
+
+                                  if (useNewFormat) {
+                                    return (
+                                      <div className="mt-1 space-y-2">
+                                        {execSummary && (
+                                          <div className="rounded-lg border border-border/50 bg-card p-3">
+                                            <ReportSection
+                                              icon={<FileText className="h-3.5 w-3.5" />}
+                                              title="Executive Summary"
+                                              summary={execSummary}
+                                            />
+                                          </div>
+                                        )}
+                                        <div className="@container">
+                                        <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2">
+                                          {labReport && (
+                                            <div className="rounded-lg border border-border/50 bg-card p-3">
+                                              <ReportSection
+                                                icon={<FlaskConical className="h-3.5 w-3.5" />}
+                                                title="Lab Report"
+                                                summary={labReport}
+                                              />
+                                            </div>
+                                          )}
+                                          {smeAgenda && (
+                                            <div className="rounded-lg border border-border/50 bg-card p-3">
+                                              <ReportSection
+                                                icon={<Users className="h-3.5 w-3.5" />}
+                                                title="SME Agenda"
+                                                summary={smeAgenda}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+
+                                  // Legacy format: parse diagnosis/prescription from stored fields or analysis text
                                   let diagSummary = insight.diagnosis_summary || ''
                                   let prescSummary = insight.prescription_summary || ''
                                   let diagDetail = ''

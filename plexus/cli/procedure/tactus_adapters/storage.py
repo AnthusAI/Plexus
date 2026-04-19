@@ -64,16 +64,17 @@ def _lua_to_serializable(value: Any) -> Any:
 # Fields kept per iteration entry in the lightweight dashboard state.
 _DASHBOARD_ITERATION_FIELDS = frozenset({
     'iteration', 'score_version_id',
-    'feedback_metrics', 'accuracy_metrics',
-    'feedback_deltas', 'accuracy_deltas',
+    'recent_metrics', 'regression_metrics',
+    'recent_deltas', 'regression_deltas',
     'accepted', 'skip_reason', 'disqualified',
     'done_reason', 'synthesis_strategy', 'synthesis_reasoning', 'dual_synthesis',
-    'feedback_evaluation_id', 'accuracy_evaluation_id',
+    'recent_evaluation_id', 'regression_evaluation_id',
+    'recent_cost_per_item', 'regression_cost_per_item',
 })
 
 # Top-level state fields dropped from the dashboard projection.
 _DASHBOARD_DROP_TOPLEVEL = frozenset({
-    'last_accuracy_rca', 'last_feedback_rca',
+    'last_regression_rca', 'last_recent_rca',
     'item_recurrence', 'known_contradictions',
 })
 
