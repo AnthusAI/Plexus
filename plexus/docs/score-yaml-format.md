@@ -1,729 +1,341 @@
-# Plexus Score Configuration YAML Format Documentation
+# Score YAML Patterns and Shared Design Guide
 
-## Core Concepts
+This document is the umbrella reference for score-authoring patterns. It explains
+what techniques exist, when to use them, and why they help. It does not try to be
+the canonical syntax guide for every score class.
 
-A **Score** is a first-class model in Plexus that represents an evaluative judgment on content, typically implemented as a text classifier. Scores are configured using YAML and can range from simple classifications to complex multi-step evaluations.
+Use this layering:
 
-A **Scorecard** is a collection of related Scores, typically used to evaluate different aspects of the same content (e.g., different quality metrics for a call center transcript).
+- `score-concepts.md`: shared score mental model
+- `score-yaml-format.md` (this file): cross-cutting design patterns and YAML-level features
+- `score-yaml-langgraph.md`: LangGraph-specific implementation recipes
+- `score-yaml-tactusscore.md`: Tactus-specific implementation recipes
 
-## Score Implementation Types
+## Shared Score Shape
 
-```yaml
-- name: Simple Score  # Basic classifier
-  id: 12345
-  class: LangGraphScore  # Most common implementation type
-  model_provider: ChatOpenAI
-  model_name: gpt-4o-mini-2024-07-18
-```
-
-Common implementation classes:
-- `LangGraphScore`: Multi-step agentic flow using a directed graph (recommended)
-- Direct model types (legacy): `OpenAIModelScore`, `AnthropicModelScore`
-
-## 3. Dependencies Between Scores
-
-Scores can depend on other Scores, accessing their results and conditionally executing:
+Every score YAML defines the same broad concerns even when the implementation style
+changes:
 
 ```yaml
-# Simple dependency - Score runs after "Previous Score" completes
-- name: Simple Dependent Score
-  id: 56789
-  depends_on:
-    - Previous Score
-  graph:
-    - name: check_previous_result
-      class: YesOrNoClassifier
-      user_message: |
-        Previous result: {{results["Previous Score"].value}}
-        # Access results using {{results["Score Name"].value}}
-
-# Conditional dependency - Score only runs if condition is met
-- name: Conditional Dependent Score
-  id: 67890
-  depends_on:
-    Previous Score:
-      operator: "=="  # Operators: ==, !=
-      value: "Yes"    # Only runs if Previous Score is "Yes"
-  graph:
-    - name: first_node
-      class: Classifier
-      # Configuration continues...
-```
-
-## LangGraph Configuration
-
-LangGraph Scores consist of nodes arranged in a processing graph:
-
-```yaml
-graph:
-  - name: first_node  # Executed first
-    class: Classifier
-    # Node config...
-    
-  - name: second_node  # Executed next by default
-    class: YesOrNoClassifier
-    # Node config...
-    conditions:  # Optional conditional flow
-      - state: "classification"
-        value: "No"
-        node: "END"  # Special reserved node name
-        output:
-          value: "NA"
-          explanation: "Reason for early termination"
-```
-
-### Node Processing Flow
-
-Nodes are executed sequentially unless redirected by conditions:
-1. Each node processes its input (default: full text)
-2. Results flow to the next node unless conditions redirect
-3. Special node name `"END"` terminates processing
-
-### Critical: Node Independence
-
-**Each node is an independent LLM call with no access to other nodes' context or chat history.**
-
-**Nodes only know what you explicitly pass to them:**
-- Each node must contain ALL information needed to complete its task within its own prompts
-- Nodes can access outputs from previous nodes using Jinja2 syntax (e.g., `{{classification}}`, `{{explanation}}`)
-- Do not assume a node inherently "knows" about other nodes' requirements, decisions, or evaluation criteria
-- Avoid referencing concepts or requirements from other nodes unless explicitly passed as data
-
-❌ **Bad Example** (assuming implicit knowledge):
-```yaml
-- name: secondary_check
-  system_message: |
-    The previous node checked for script compliance. Now evaluate tone...
-    The specific script mentioned earlier is not required here...
-```
-
-✅ **Good Example** (self-contained with explicit data):
-```yaml
-- name: tone_evaluator
-  system_message: |
-    Evaluate the agent's tone during the conversation.
-    Previous classification: {{classification}}
-    Previous reasoning: {{explanation}}
-    
-    Based on this context, assess if the tone was appropriate...
-```
-
-✅ **Good Example** (completely independent):
-```yaml
-- name: tone_evaluator
-  system_message: |
-    Evaluate the agent's tone during the conversation.
-    Look for professional, helpful language...
-```
-
-### Important: Conditions and Output Structure
-
-**When using conditions, output must be nested within each condition - never at the same indentation level.**
-
-❌ **Incorrect** (output and conditions at same level):
-```yaml
-- name: classifier_node
-  class: Classifier
-  output:  # This is wrong!
-    result: classification
-  conditions:
-    - value: "Yes"
-      node: next_node
-```
-
-✅ **Correct** (output nested within conditions):
-```yaml
-- name: classifier_node
-  class: Classifier
-  conditions:
-    - value: "Yes"
-      node: next_node
-      output:
-        result: classification
-        reason: explanation
-    - value: "No"
-      node: END
-      output:
-        result: classification
-        reason: explanation
-```
-
-### Combining Conditions and Edge Clauses
-
-You can use both `conditions:` and `edge:` clauses in the same node to provide more flexible routing:
-
-```yaml
-- name: classifier_node
-  class: Classifier
-  conditions:
-    - value: "Yes"
-      node: END
-      output:
-        value: "Yes"
-        explanation: "None"
-    - value: "Maybe"
-      node: maybe_handler
-      output:
-        value: "Unclear"
-        explanation: "Needs review"
-  edge:
-    node: fallback_handler  # Used when no conditions match
-    output:
-      good_call: classification
-      good_call_explanation: explanation
-```
-
-In this configuration:
-- If `classification` is "Yes" → routes to END with specific output
-- If `classification` is "Maybe" → routes to `maybe_handler` with specific output  
-- If `classification` is anything else (e.g., "No") → routes to `fallback_handler` with edge output aliasing
-- The `edge:` clause provides both the fallback target and output aliasing for unmatched conditions
-
-## Node Types
-
-### Recommended Node Types
-
-**ALWAYS use these modern node types:**
-- `Classifier`: Generic classifier with configurable valid classes - **USE THIS for all LLM-based classification**
-- `Extractor`: Extracts specific information from text
-- `BeforeAfterSlicer`: Segments text based on a quote
-- `LogicalClassifier`: Applies custom code-based logic
-- `LogicalNode`: Execute arbitrary Python code and return custom output values
-- `FuzzyMatchClassifier`: Fuzzy string matching with classification output
-
-### Legacy Node Types (DO NOT USE)
-
-**⚠️ DEPRECATED - Do not use these in new or updated scores:**
-- `YesOrNoClassifier`: Binary classifier (LEGACY - use `Classifier` with `valid_classes: ["Yes", "No"]` instead)
-- `MultiClassClassifier`: Multi-class classifier (LEGACY - use `Classifier` with appropriate `valid_classes` instead)
-
-**Why deprecated?** `YesOrNoClassifier` is simply a degenerate case of `MultiClassClassifier` where the number of valid classes is 2, creating unnecessary code duplication. Both have been replaced by the modern `Classifier` class which handles any number of valid classes.
-
-### Classifier Usage
-
-**ALWAYS use `Classifier` for LLM-based classification:**
-
-```yaml
-# Binary classification (replaces YesOrNoClassifier)
-- name: binary_classifier
-  class: Classifier
-  valid_classes: ["Yes", "No"]
-  system_message: |
-    # System prompt here
-  user_message: |
-    # User prompt here
-
-# Multi-class classification (replaces MultiClassClassifier)
-- name: multi_classifier
-  class: Classifier
-  valid_classes: ["High", "Medium", "Low", "None"]
-  system_message: |
-    # System prompt here
-  user_message: |
-    # User prompt here
-```
-
-## Input and Output Mapping
-
-Nodes can specify inputs and outputs:
-
-```yaml
-- name: node_name
-  class: Classifier
-  input:  # Optional - use output from previous node
-    text: previous_node_output_field
-  output:  # Map node outputs to named fields
-    custom_field_name: classification
-    explanation_field: explanation
-```
-
-## Text Parsing Direction
-
-Control how the classifier extracts answers from LLM responses:
-
-```yaml
-parse_from_start: true  # Parse from beginning (default: false)
-```
-
-- `false` (default): Parse from the end of text (for "reasoning then answer" patterns)
-- `true`: Parse from the beginning (for "answer then explanation" patterns)
-
-## Critical: Avoiding Post-Hoc Rationalization
-
-**NEVER ask for the answer value first and then ask for an explanation.** This creates "Potemkin understanding" - post-hoc rationalization rather than actual reasoning that led to the answer.
-
-### The Problem with Answer-First Patterns
-
-❌ **Dangerous Pattern** (leads to inconsistent results):
-```yaml
-# DON'T DO THIS - Answer first, explanation second
-- name: bad_classifier
-  class: Classifier
-  system_message: |
-    Answer Yes or No, then explain your reasoning.
-  valid_classes: ["Yes", "No"]
-```
-
-❌ **Very Common Anti-Pattern** (two classifiers in sequence):
-```yaml
-# DON'T DO THIS - Binary classifier followed by explanation classifier
-- name: binary_decision
-  class: Classifier
-  valid_classes: ["Yes", "No"]
-  user_message: |
-    Did the agent do the right thing? Answer Yes or No.
-
-- name: explanation_classifier
-  class: Classifier
-  valid_classes: ["Missing greeting", "Wrong procedure", "Poor tone", "No issues"]
-  user_message: |
-    The previous answer was {{binary_decision}}.
-    {% if binary_decision == "No" %}
-    What specific thing did the agent do wrong?
-    {% else %}
-    Select "No issues" since the agent did well.
-    {% endif %}
-```
-
-**Why this fails:** The LLM provides explanations that justify the already-given answer rather than explaining the actual reasoning process. Over time, this leads to inconsistent answer/explanation pairs where the explanation doesn't match the true reasoning. The second classifier is forced to rationalize the first classifier's decision rather than independently evaluating the content.
-
-### Recommended Patterns
-
-✅ **Best Practice: Reasoning-First with LogicalClassifier**
-```yaml
-# Step 1: Get detailed reasoning about specific failure modes (FIRST!)
-- name: failure_analysis
-  class: Classifier
-  valid_classes:
-    - "Missing greeting"
-    - "Incorrect procedure"
-    - "Poor tone"
-    - "Multiple issues"
-    - "None"
-  system_message: |
-    Analyze what the agent did wrong. Choose the primary issue or "None" if they did everything correctly.
-    Do NOT think about whether this is a "Yes" or "No" - just identify the specific issue.
-  user_message: |
-    {{text}}
-
-# Step 2: Use logic to determine final binary answer based on reasoning
-- name: final_decision
-  class: LogicalClassifier
-  code: |
-    def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
-        failure_type = input.metadata.get('failure_analysis', 'None')
-
-        if failure_type == 'None':
-            value = "Yes"
-            explanation = "Agent followed all procedures correctly"
-        else:
-            value = "No"
-            explanation = f"Agent failed because: {failure_type}"
-
-        return Score.Result(
-            parameters=parameters,
-            value=value,
-            metadata={"explanation": explanation}
-        )
-```
-
-This pattern replaces the dangerous "binary classifier → explanation classifier" sequence by:
-1. **First** asking for specific failure analysis without any binary framing
-2. **Then** using deterministic logic to convert that analysis into a binary answer
-3. Ensuring the explanation always matches the binary decision
-
-✅ **Alternative: Chain-of-Thought with Explanation First**
-```yaml
-- name: reasoning_classifier
-  class: Classifier
-  parse_from_start: false  # Parse answer from end
-  valid_classes: ["Yes", "No"]
-  system_message: |
-    First, think through your reasoning step by step.
-    Then provide your final answer as the last word.
-  user_message: |
-    Analyze the agent's performance. Explain your reasoning thoroughly,
-    then end with either "Yes" or "No".
-
-    {{text}}
-```
-
-**Note on Fine-Tuned Models**: If using a fine-tuned classifier that outputs answers first (`parse_from_start: true`), structure the training data so the model generates explanations rather than classification values to avoid post-hoc rationalization.
-
-✅ **Multi-Check Pattern for Complex Evaluations**
-```yaml
-# Check each requirement separately
-- name: greeting_check
-  class: Classifier
-  valid_classes: ["Present", "Missing"]
-  output:
-    has_greeting: classification
-
-- name: procedure_check
-  class: Classifier
-  valid_classes: ["Correct", "Incorrect"]
-  output:
-    correct_procedure: classification
-
-- name: tone_check
-  class: Classifier
-  valid_classes: ["Professional", "Unprofessional"]
-  output:
-    professional_tone: classification
-
-# Combine results with consistent logic
-- name: final_evaluation
-  class: LogicalClassifier
-  code: |
-    def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
-        greeting = input.metadata.get('has_greeting', '')
-        procedure = input.metadata.get('correct_procedure', '')
-        tone = input.metadata.get('professional_tone', '')
-
-        failures = []
-        if greeting == 'Missing':
-            failures.append('missing greeting')
-        if procedure == 'Incorrect':
-            failures.append('incorrect procedure')
-        if tone == 'Unprofessional':
-            failures.append('unprofessional tone')
-
-        if not failures:
-            value = "Yes"
-            explanation = "Agent met all requirements"
-        else:
-            value = "No"
-            explanation = f"Failed on: {', '.join(failures)}"
-
-        return Score.Result(
-            parameters=parameters,
-            value=value,
-            metadata={"explanation": explanation}
-        )
-```
-
-### Key Principles
-
-1. **Reasoning Before Decision**: Always capture the reasoning process before determining the final answer
-2. **Logical Consistency**: Use `LogicalClassifier` to ensure the final answer is always consistent with the reasoning
-3. **Specific Analysis**: Ask about specific failure modes rather than generic "good/bad" judgments
-4. **Separate Concerns**: Use multiple focused classifier nodes rather than trying to do everything in one prompt
-
-## BeforeAfterSlicer Usage
-
-Segment text into "before" and "after" parts based on a found quote:
-
-```yaml
-- name: slicer_node
-  class: BeforeAfterSlicer
-  system_message: |
-    # Instructions to find a specific part of the text
-  user_message: |
-    # Prompt that asks for a specific quote
-  output:
-    before_quote: before  # Text before the quote
-    after_quote: after    # Text after the quote
-```
-## Extractor Usage
-
-```yaml
-      - name: metadata_extractor
-        class: Extractor
-        trust_model_output: true
-        batch: false
-        system_message: |-
-          Your job is to extract XYZ from the transcript
-        user_message: |-
-          {{text}}
-        output:
-          extracted_text: extracted_text
-```
-
-## LogicalClassifier Usage
-
-Apply custom Python logic to make scoring decisions based on previous node outputs:
-
-```yaml
-- name: decision_node
-  class: LogicalClassifier
-  code: |
-    def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
-        # Access input values from metadata
-        value1 = input.metadata.get('field1', 'default')
-        value2 = input.metadata.get('field2', 'default')
-        
-        # Apply custom logic
-        result = "Yes" if some_condition else "No"
-        
-        return Score.Result(
-            parameters=parameters,
-            value=result,
-            metadata={
-                "explanation": f"Decision based on {value1} and {value2}"
-            }
-        )
-```
-
-## LogicalNode Usage
-
-Execute arbitrary Python code and return custom output values. Use for data processing, parsing, and transformation:
-
-```yaml
-- name: data_processor
-  class: LogicalNode
-  code: |
-    def process_data(context):
-        # Access data from previous nodes
-        state = context.get('state')
-        state_dict = state.model_dump() if state else {}
-        input_text = state_dict.get('extracted_text', '')
-        
-        # Custom processing logic
-        return {
-            "word_count": len(input_text.split()),
-            "has_keywords": 'important' in input_text.lower()
-        }
-  function_name: process_data
-  output:  # Map function results to state fields
-    text_length: word_count
-    contains_keywords: has_keywords
-```
-
-**Key differences from LogicalClassifier:**
-- No Score.Result dependency - returns any data structure
-- Configurable function name (not fixed to `score`)
-- Direct state field updates via `output` mapping
-
-**Common patterns:**
-```yaml
-# Text parsing
-- name: parser
-  class: LogicalNode
-  code: |
-    def parse_response(context):
-        state_dict = context['state'].model_dump()
-        response = state_dict.get('extracted_text', '')
-        
-        result = {}
-        for line in response.split('\n'):
-            if line.startswith('Primary AOI:'):
-                result['primary_aoi'] = line.replace('Primary AOI:', '').strip()
-        return result
-  function_name: parse_response
-  output:
-    area_of_interest: primary_aoi
-
-# Business logic
-- name: business_rules
-  class: LogicalNode
-  code: |
-    def apply_rules(context):
-        state_dict = context['state'].model_dump()
-        schools = state_dict.get('metadata', {}).get('schools', [])
-        has_campus = any(s.get('modality') == 'Campus' for s in schools)
-        return {"campus_program": has_campus}
-  function_name: apply_rules
-```
-
-## FuzzyMatchClassifier Usage
-
-Perform fuzzy string matching on state data and return classification results. Ideal for matching variations of names, text patterns, or identifiers with tolerance for spelling differences.
-
-```yaml
-- name: school_matcher
-  class: FuzzyMatchClassifier
-  data_paths: ["metadata.schools[].school_id"]  # JSONPath to extract values
-  targets:
-    operator: "or"  # "and" or "or" for multiple targets
-    items:
-      - target: "American InterContinental University"
-        threshold: 80
-        scorer: "partial_ratio"  # Best for substring matching
-      - target: "Colorado Technical University"
-        threshold: 80
-        scorer: "partial_ratio"
-  classification_mapping:  # Map matched targets to output values
-    "American InterContinental University": "AIU"
-    "Colorado Technical University": "CTU"
-  default_classification: "Other"  # When no matches found
-  output:
-    school_type: classification
-    match_details: explanation
-```
-
-**Key Parameters:**
-- `data_paths`: JSONPath expressions to extract values from state
-  - `["text"]` - Extract from state.text
-  - `["metadata.schools[].school_id"]` - Extract school_id from each item in schools array
-  - `["metadata.schools[0].name"]` - Extract name from first school only
-- `targets`: Single target or group with AND/OR logic
-- `classification_mapping`: Maps target names to classification values
-- `default_classification`: Fallback when no matches found
-
-**Scorers for different use cases:**
-- `partial_ratio`: Best for substring matching (school names in longer text)
-- `ratio`: Good for similar-length strings
-- `token_set_ratio`: Handles word order differences
-- `token_sort_ratio`: Handles reordered words
-
-**Output fields:**
-- `classification`: Primary result for conditions/routing
-- `explanation`: Human-readable match explanation
-- `match_found`: Boolean success indicator
-- `matches`: Detailed match information with scores
-
-## Message Templates
-
-Templates support Jinja2 syntax for dynamic content:
-
-```yaml
-user_message: |
-  {% for school in metadata.schools %}
-  School: {{school.school_id}}
-  - Program: {{program_names.split('\n')[loop.index-1] | replace('Program: ', '')}}
-  {% endfor %}
-```
-
-## Available Metadata
-
-Common metadata includes:
-- `text`: The primary content being scored
-- `metadata.schools`: School-related data (for education clients)
-- `metadata.other_data`: Other metadata
-- `results["Score Name"]`: Results from other scores
-- Custom metadata provided by data sources
-
-## Data Configuration
-
-Specify how to obtain data for testing and training:
-
-```yaml
-data:
-  class: CallCriteriaDBCache
-  queries:
-    - scorecard_id: 1234
-      score_id: 5678
-      number: 1000
-  searches:
-    - item_list_filename: path/to/file.csv
-      values:
-        - "Good Call": "Yes"
-  balance: false  # Whether to balance positive/negative examples
-```
-
-## Text Preprocessing with Processors
-
-Scores can preprocess the input text **before** it reaches the LLM using the `item.processors` pipeline. Processors run in order; each transforms the text before the next one sees it. This is especially valuable for long transcripts where you want the LLM to focus on the relevant parts.
-
-### Configuration
-
-```yaml
-# Recommended location (under item):
+name: Example Score
+class: LangGraphScore or TactusScore
+valid_classes:
+  - "Yes"
+  - "No"
+depends_on:
+  Upstream Score:
+    operator: "=="
+    value: "Yes"
 item:
+  class: DeepgramInputSource
+  options:
+    pattern: ".*deepgram.*\\.json$"
   processors:
     - class: RelevantWindowsTranscriptFilter
       parameters:
-        keywords: ["school", "university", "degree"]
-        fuzzy_match: true
-        fuzzy_threshold: 80
-        prev_count: 2
-        next_count: 2
-    - class: RemoveSpeakerIdentifiersTranscriptFilter
-      parameters: {}
+        keywords: ["consent", "agree"]
+output:
+  value: classification
+  explanation: explanation
 ```
 
-A legacy `data.processors` location is also supported but `item.processors` is preferred.
+The class-specific docs explain how to express the score logic itself. This file
+focuses on the decisions that should drive that implementation.
 
-### Available Text Processors
+## Start With the Output Contract
 
-**RelevantWindowsTranscriptFilter** — Extract windows of text around matching keywords. This is the most impactful processor for improving classification on long transcripts — it dramatically reduces noise by showing only the parts of the text relevant to the classification task.
+Before deciding on prompts or nodes, define the output contract clearly.
 
-Parameters:
-- `keywords` (list): Keywords/phrases to match
-- `fuzzy_match` (bool): Enable fuzzy matching via RapidFuzz (default: false)
-- `fuzzy_threshold` (int): Minimum similarity score 0-100 for fuzzy matching (default: 80)
-- `case_sensitive` (bool): Case-sensitive matching (default: false)
-- `prev_count` (int): Sentences to include before match (default: 1)
-- `next_count` (int): Sentences to include after match (default: 1)
-- `window_unit` (str): `'sentences'`, `'words'`, or `'characters'` (default: `'sentences'`)
+Questions to answer first:
 
-**FilterCustomerOnlyProcessor** — Keep only customer speech (removes agent/system lines).
+- Is the business decision truly binary?
+- Is there a real `NA` or "not scored" state?
+- Should the score emit `confidence`, or is `value` plus `explanation` enough?
+- What explanation format will downstream users or tooling need?
 
-**RemoveSpeakerIdentifiersTranscriptFilter** — Strip speaker labels (`Agent:`, `Customer:`, etc.) from the text.
+Guidance:
 
-**ExpandContractionsProcessor** — Expand contractions (`don't` → `do not`, `can't` → `cannot`).
+- Keep `valid_classes` tight and business-meaningful.
+- Do not overload a binary classifier with hidden third states.
+- If `NA` means "out of scope", treat that as an applicability question, not just a
+  third answer choice.
 
-**RemoveStopWordsTranscriptFilter** — Remove common English filler/stop words.
+## Decompose Overloaded Decisions
 
-**AddEnumeratedSpeakerIdentifiersTranscriptFilter** — Normalize speaker labels to `Speaker A`, `Speaker B`, etc.
+One large prompt that tries to reason about every edge case at once is usually a
+bad optimization target. When a score mixes several independent questions, decompose
+it into smaller decisions.
 
-### Example: Keyword-focused transcript trimming
+Common reasons to decompose:
 
-For a score that classifies whether a school name was mentioned correctly, extract only the parts of the transcript where schools are discussed:
+- several criteria must all be checked independently
+- the score must inspect multiple entities in metadata
+- the model first needs to find evidence before it can judge it
+- applicability and the real business decision are different questions
 
-```yaml
-item:
-  processors:
-    - class: RelevantWindowsTranscriptFilter
-      parameters:
-        keywords: ["school", "university", "college", "program", "degree", "campus"]
-        fuzzy_match: true
-        fuzzy_threshold: 75
-        prev_count: 3
-        next_count: 3
-```
+Decomposition typically improves:
 
-This feeds the LLM a focused excerpt instead of the full transcript, reducing both token cost and classification errors from irrelevant context.
+- prompt clarity
+- local evidence retrieval
+- interpretability of failures
+- ability to aggregate deterministically
 
-## Confidence Scoring
+## Pattern: Split by Criterion
 
-Enable confidence calculation based on first token log probabilities:
+Use this when the score asks a fixed set of questions such as:
 
-```yaml
-- name: confident_classifier
-  class: Classifier
-  enable_confidence: true    # Enable confidence scoring
-  parse_from_start: true     # Required for confidence mode
-  valid_classes: ["Yes", "No"]
-```
+- was the school name stated?
+- was the modality stated?
+- was the location stated?
+- did the caller give a school-specific confirmation?
 
-When enabled:
-- Returns `confidence` field with uncalibrated probability (0.0-1.0)
-- Requires `parse_from_start: true`
-- Works best with fine-tuned models
-- Only supported with OpenAI models
+Why it helps:
 
-## Result Validation
+- each classifier only solves one sub-problem
+- the final rule can often be deterministic
+- RCA becomes easier because failures attach to specific sub-checks
 
-Add optional validation rules under score `parameters.validation` to enforce output contracts:
+This pattern works well in both `LangGraphScore` and `TactusScore`.
 
-```yaml
-parameters:
-  validation:
-    value:
-      valid_classes: ["Yes", "No", "NQ - Pricing", "NQ - Technical"]
-      patterns: ["^(Yes|No)$", "^NQ - (?!Other$).*"]
-    explanation:
-      minimum_length: 10
-      maximum_length: 200
-      patterns: [".*evidence.*", ".*found.*"]
-```
+## Pattern: Split by Entity or Item
 
-Rules are evaluated automatically after each `predict()` call when validation is configured:
-- `valid_classes`: value must be one of the listed classes
-- `patterns`: value must match at least one regex pattern
-- `minimum_length` / `maximum_length`: string length bounds
+Use this when the score must reason over a variable-length list, such as:
 
-If any configured rule fails, the score raises a validation error and the invalid output is rejected.
+- one decision per school
+- one decision per medication
+- one decision per disclosure or offer
 
-## Best Practices
+Why it helps:
 
-1. **Node Independence**: Each node must be self-contained with all necessary information in its prompts - nodes only know what you explicitly pass to them via outputs from previous nodes
-2. **Conditions Structure**: When using conditions, always nest output within each condition block - never place output and conditions at the same indentation level
-3. **Avoid Post-Hoc Rationalization**: Never ask for answer values first and then explanations. Always capture reasoning before determining final answers, preferably using `LogicalClassifier` for consistent answer/explanation pairs
-4. **Use Modern Classifier**: ALWAYS use `Classifier` with `valid_classes` for all LLM-based classification. NEVER use legacy `YesOrNoClassifier` or `MultiClassClassifier` types
-5. Structure graphs to handle early termination with conditions
-6. Use descriptive node names and field mappings
-7. Leverage slicers for complex transcript analysis
-8. Include clear system and user prompts
-9. Avoid redundant processing by sharing results between nodes
+- it mirrors the human review process
+- it avoids one prompt trying to track several entities at once
+- aggregation becomes explicit instead of implicit
+
+Implementation guidance:
+
+- fixed, small fan-out can still fit in `LangGraphScore`
+- variable-length iteration usually belongs in `TactusScore`
+
+## Pattern: Extract Evidence Before the Final Judgment
+
+If the first challenge is locating the right text span, do not force the final
+classifier to both find and evaluate the evidence in one pass.
+
+Use a two-step structure:
+
+1. extract the relevant quote, exchange, or structured evidence
+2. classify whether that evidence satisfies the rule
+
+This is especially useful when:
+
+- transcripts are long
+- the score is sensitive to a local exchange
+- the final rubric is clear once the right evidence is in view
+
+## Pattern: Deterministic Aggregation
+
+If the final rule is mechanical, code it mechanically.
+
+Examples:
+
+- if any required criterion failed, overall result is `"No"`
+- if all entity-level checks passed, overall result is `"Yes"`
+- if no applicable entities exist, return `"NA"`
+
+Why it helps:
+
+- it removes unnecessary LLM variance
+- it makes the score easier to debug
+- it makes optimization safer because the final combination logic is explicit
+
+The LLM should usually produce the uncertain business facts. Code should combine
+those facts when the combination rule is already known.
+
+## Pattern: Applicability / `NA` Gating
+
+This is common enough to treat as its own first-class pattern.
+
+Use an applicability gate when a score has a Yes/No decision plus an out-of-scope
+case. Typical examples:
+
+- the call is not about the product or flow the score evaluates
+- the required metadata entity is missing
+- the interaction type should not be scored at all
+
+Preferred structure:
+
+1. gate: is this score applicable?
+2. if not applicable, return `"NA"` immediately
+3. if applicable, run the pure `"Yes"` / `"No"` classifier
+
+Why it helps:
+
+- the downstream classifier stays focused on the real binary question
+- `NA` handling becomes cheaper and less error-prone
+- evaluation of the actual binary task becomes cleaner
+
+This pattern is a specific, high-value form of decomposition.
+
+## Pattern: Early Termination and Specialized Routing
+
+Not every score should run every step for every item.
+
+Use early exits when:
+
+- a gate already proved the item is out of scope
+- an upstream dependency already resolved the business question
+- a deterministic check already makes the answer obvious
+
+Use specialized routing when:
+
+- different subtypes need different prompts
+- one context benefits from extra extraction while another does not
+- different modalities or product families need different logic
+
+The key principle is to route on the easiest reliable signal available.
+
+## Pattern: Score-to-Score Composition
+
+Scores can compose through `depends_on` and prior `results`.
+
+Use score composition when:
+
+- one score produces a reusable upstream fact
+- applicability can be decided once and reused
+- several scores need the same extracted or classified business context
+
+Good score composition creates reusable business facts. Bad composition creates
+tight coupling where downstream prompts depend on a lot of fragile upstream prose.
+
+Prefer:
+
+- small upstream scores with stable output contracts
+- downstream scores that consume specific values from `results[...]`
+
+Avoid:
+
+- assuming prior prompt context carries over implicitly
+- reusing an upstream explanation as if it were authoritative structured data
+
+## Pattern: Transcript Representation and Input Shaping
+
+Transcript shape is a score-design concern, not just plumbing.
+
+The default transcript may not be the best representation for the business question.
+The `item:` section lets you change what text reaches the classifier.
+
+Important shared tools:
+
+- `DeepgramInputSource`: load Deepgram JSON instead of relying on preformatted text
+- `DeepgramFormatProcessor`: choose paragraphs, sentences, or words and control
+  speaker labels, timestamps, and channel filtering
+- `RelevantWindowsTranscriptFilter`: keep only windows around target keywords
+
+Use these deliberately:
+
+- `format: words` when precise local order matters
+- sentence or paragraph formatting when readability matters more than timing
+- keyword windows when the decision revolves around a small vocabulary in a long call
+- speaker filtering when only one side of the conversation matters
+
+Keep processor strategy in the YAML layer, not buried in prompt instructions.
+
+## Pattern: STT / Phonetic Robustness
+
+Speech-to-text errors are often a core part of the score problem, not noise around
+the edges. Design for them explicitly when the score depends on:
+
+- proper nouns
+- school or company names
+- degree abbreviations
+- technical vocabulary
+- short affirmative responses
+
+Possible fixes:
+
+- add prompt rules about common phonetic substitutions
+- use fuzzy or lexical matching before the classifier
+- change transcript representation so the relevant local exchange is easier to see
+- add an extraction step that focuses on the target phrase first
+
+Do not treat STT robustness as only a prompt-writing issue. Often the better fix is
+structural or processor-based.
+
+## Pattern: Fuzzy or Programmatic Matching Outside the LLM
+
+Some checks are mostly lexical:
+
+- did a target phrase appear?
+- is a quoted span phonetically close to a known name?
+- did any extracted school name match one of the metadata options?
+
+In those cases, deterministic or fuzzy matching can be a better first tool than an
+extra LLM judgment.
+
+Use programmatic matching when:
+
+- the rule is mostly string comparison
+- explainability matters
+- the model is failing because of transcription variants rather than reasoning
+
+Use the LLM when the task still requires contextual judgment after matching.
+
+## Shared Classifier Pattern
+
+Both `LangGraphScore` and `TactusScore` have a standard classifier-centered way to
+express a focused decision. Treat that as the default building block.
+
+The standard classifier pattern should:
+
+- answer one narrow question
+- expose an explicit class set
+- receive only the context relevant to that question
+- return a short explanation tied to that question
+
+When a score is struggling, ask whether the fix is:
+
+- better input text
+- a narrower classifier task
+- a different decomposition
+- deterministic aggregation after the classifier
+
+Do not jump immediately to a larger prompt.
+
+## Optional Confidence
+
+Confidence can be useful, but it is secondary to a correct `value` contract.
+
+Use confidence only when:
+
+- downstream workflows genuinely need it
+- the score class supports it clearly
+- the team knows how confidence will be interpreted
+
+Do not let confidence design distract from the main label contract or structural
+quality of the score.
+
+## Choosing the Implementation Style
+
+Choose `LangGraphScore` when:
+
+- the number of steps is fixed
+- the routing graph is easy to read
+- extraction, routing, and aggregation fit in a short explicit pipeline
+
+Choose `TactusScore` when:
+
+- the score needs loops or explicit early returns
+- metadata contains a variable-length list
+- deterministic logic is a substantial part of the workflow
+- the score should behave like imperative code rather than a graph
+
+Both score types can express the same high-level patterns. The question is which
+representation makes the implementation simplest, clearest, and easiest to optimize.
+
+## See Also
+
+- `score-concepts.md` for the shared mental model
+- `score-yaml-langgraph.md` for LangGraph-specific recipes
+- `score-yaml-tactusscore.md` for Tactus-specific recipes
+- `optimizer-cookbook.md` for guidance on when to try each technique during an
+  optimization cycle

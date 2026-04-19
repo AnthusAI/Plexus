@@ -4,6 +4,17 @@ This document is for AI agents who trigger, monitor, review, continue, or branch
 optimizer procedure runs. For the optimizer agent's own change-strategy reference,
 see `optimizer-cookbook`.
 
+## Error Segment Language
+
+Use explicit segment labels in hints, summaries, and analysis:
+
+- `P"No"->A"Yes"`
+- `P"Yes"->A"No"`
+
+Do not use legacy positive/negative error shorthand or any two-letter abbreviation
+that depends on an implied "positive class". The optimizer works best when each
+hypothesis is tied to one exact prediction-outcome segment.
+
 ---
 
 ## Quick Start
@@ -194,7 +205,7 @@ where fixing one set of items breaks another.
 
 **CLI:**
 ```bash
-plexus procedure continue <PROCEDURE_ID> --additional-cycles 5 --hint "focus on false positives"
+plexus procedure continue <PROCEDURE_ID> --additional-cycles 5 --hint 'focus on P"Yes"->A"No" items caused by bundled confirmations'
 ```
 
 **MCP:**
@@ -272,7 +283,7 @@ The optimizer tracks items across cycles to identify systemic issues:
 |---------|---------|--------|
 | OSCILLATING | wrong→correct→wrong | Likely label contradiction — review label |
 | PERSISTENT | Wrong in same segment 3+ cycles | Genuine policy gap or hard case |
-| FLIP_FLOP | Wrong in different segments across cycles | Unstable classification boundary |
+| FLIP_FLOP | Wrong in different segments across cycles, such as `P"No"->A"Yes"` and later `P"Yes"->A"No"` | Unstable classification boundary |
 | LATE_EMERGING | First appeared cycle 3+, recurs | May be caused by earlier changes |
 
 ### Known Contradictions

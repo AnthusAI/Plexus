@@ -718,8 +718,8 @@ code: |
     return fb_improves or acc_improves
   end
 
-  -- Group RCA items by confusion matrix segment (actual->predicted pair).
-  -- Uses neutral "Predicted: X / Actual: Y" labels — no FP/FN terminology,
+  -- Group RCA items by confusion matrix segment.
+  -- Uses neutral P"X"->A"Y" labels instead of false-positive/false-negative language,
   -- which avoids confusion when the "positive" class is ambiguous or multi-class.
   local function build_confusion_segments(items, confusion_labels)
     if type(items) ~= "table" or #items == 0 then return {}, false end
@@ -756,7 +756,7 @@ code: |
     for _, key in ipairs(segment_order) do
       local seg = segment_map[key]
       -- Neutral label: works for binary and multi-class equally
-      local label = string.format('Predicted: "%s" / Actual: "%s"', seg.predicted, seg.correct)
+      local label = string.format('P"%s"->A"%s"', seg.predicted, seg.correct)
       -- Hint: describe the direction of the error in plain terms
       local hint
       if is_binary then
@@ -1051,7 +1051,7 @@ code: |
     table.insert(dp, "Items below have appeared in multiple optimization cycles. Pay special attention to:")
     table.insert(dp, "- OSCILLATING items: wrong→correct→wrong — the 'whack-a-mole' pattern where fixing one group breaks another")
     table.insert(dp, "- PERSISTENT items: always wrong in the same segment across 3+ cycles despite config changes")
-    table.insert(dp, "- FLIP_FLOP items: wrong in different segments across cycles (FP→FN or vice versa)")
+    table.insert(dp, '- FLIP_FLOP items: wrong in different segments across cycles (for example P"No"->A"Yes" in one cycle and P"Yes"->A"No" in another)')
     table.insert(dp, "OSCILLATING items are especially diagnostic: they reveal contradictory norms in the feedback.\n")
 
     local all_notable = {}
@@ -2155,7 +2155,7 @@ code: |
     if slot == "feedback_incremental" then
       table.insert(parts, "OBJECTIVE: Incremental feedback fix (Category A)")
       table.insert(parts, "Pick ONE confusion matrix segment from the FEEDBACK RCA above (e.g.,")
-      table.insert(parts, "'Predicted: Yes / Actual: No' OR 'Predicted: No / Actual: Yes' — NOT both).")
+      table.insert(parts, '\'P"Yes"->A"No"\' OR \'P"No"->A"Yes"\' — NOT both).')
       table.insert(parts, "Target the LARGEST RCA category within that segment.")
       table.insert(parts, "POLICY-FIRST APPROACH: Ask yourself — does the rubric have a clear rule for")
       table.insert(parts, "the pattern this segment reveals? If not, ADD that rule. If a rule exists but")
@@ -5629,7 +5629,7 @@ code: |
           .. "### Why hypotheses worked or failed\n"
           .. "(for each: was the premise correct? implementation off? inconclusive?)\n"
           .. "### Error patterns still present\n"
-          .. "(2-3 concrete FP/FN patterns with example item counts)\n"
+          .. "(2-3 concrete residual segment patterns such as P\"No\"->A\"Yes\" or P\"Yes\"->A\"No\" with example item counts)\n"
           .. "### Ceiling analysis\n"
           .. "(%% contradictions, max achievable AC1, what blocks further prompt-level gains)\n"
           .. "### Next lab actions\n"
@@ -6427,7 +6427,7 @@ code: |
 
     local parts = {}
     table.insert(parts, "=== RESIDUAL ERROR SAMPLES (items optimizer could not fix) ===")
-    table.insert(parts, string.format("Total misclassified items in final evaluation: %d (FP: %d, FN: %d, Other: %d)",
+    table.insert(parts, string.format('Total misclassified items in final evaluation: %d (P"Yes"->A"No": %d, P"No"->A"Yes": %d, Other: %d)',
       #items, #fp_items, #fn_items, #other_items))
     table.insert(parts, "")
 
@@ -6438,7 +6438,7 @@ code: |
       for i = 1, math.min(max_show, #item_list) do
         local ic = item_list[i]
         table.insert(parts, string.format(
-          "  %d. Predicted=%s, Correct=%s | Category: %s | Fixability: %s",
+          '  %d. P"%s"->A"%s" | Category: %s | Fixability: %s',
           i, tostring(ic.predicted_value), tostring(ic.correct_value),
           tostring(ic.primary_category or "?"), tostring(ic.config_fixability or "?")))
         if has_text(ic.rationale_paragraph) then
@@ -6454,8 +6454,8 @@ code: |
       end
     end
 
-    render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 5)
-    render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 5)
+    render_items('P"Yes"->A"No" cases', fp_items, 5)
+    render_items('P"No"->A"Yes" cases', fn_items, 5)
     if #other_items > 0 then
       render_items("OTHER MISCLASSIFICATIONS", other_items, 3)
     end
@@ -6464,7 +6464,7 @@ code: |
     table.insert(parts, "show whether prompt changes can address them or whether human intervention is needed.")
     table.insert(parts, "=== END RESIDUAL ERROR SAMPLES ===")
     residual_errors_text = table.concat(parts, "\n")
-    Human.notify({message = string.format("  Residual errors sampled: %d FP, %d FN, %d other",
+    Human.notify({message = string.format('  Residual errors sampled: %d P"Yes"->A"No", %d P"No"->A"Yes", %d other',
       #fp_items, #fn_items, #other_items), level = "info"})
   end)
 
