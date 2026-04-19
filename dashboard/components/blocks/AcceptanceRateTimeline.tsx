@@ -27,6 +27,7 @@ interface AcceptanceRateTimelineData {
   report_type?: string;
   block_title?: string;
   block_description?: string;
+  show_bucket_details?: boolean;
   scorecard_name?: string;
   score_name?: string | null;
   date_range?: {
@@ -144,6 +145,7 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const points = Array.isArray(output.points) ? output.points : [];
   const summary = output.summary;
+  const showBucketDetails = Boolean(output.show_bucket_details);
   const title =
     props.name && !props.name.startsWith("block_")
       ? props.name
@@ -225,6 +227,46 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
             </LineChart>
           </ChartContainer>
         </div>
+
+        {showBucketDetails && (
+          <div className="rounded-md bg-card p-3">
+            <div className="mb-2 text-sm font-medium">Bucket Metrics</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="px-2 py-1 font-medium">Bucket</th>
+                    <th className="px-2 py-1 font-medium">Window</th>
+                    <th className="px-2 py-1 font-medium">Acceptance</th>
+                    <th className="px-2 py-1 font-medium">Accepted / Total</th>
+                    <th className="px-2 py-1 font-medium">Corrected</th>
+                    <th className="px-2 py-1 font-medium">Feedback (valid/total)</th>
+                    <th className="px-2 py-1 font-medium">Value Changed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {points.map((point) => (
+                    <tr key={`${point.bucket_index}-${point.label}`}>
+                      <td className="px-2 py-1">{point.label}</td>
+                      <td className="px-2 py-1 text-muted-foreground">
+                        {new Date(point.start).toLocaleDateString()} - {new Date(point.end).toLocaleDateString()}
+                      </td>
+                      <td className="px-2 py-1">{formatPercent(point.score_result_acceptance_rate)}</td>
+                      <td className="px-2 py-1">
+                        {point.accepted_score_results} / {point.total_score_results}
+                      </td>
+                      <td className="px-2 py-1">{point.corrected_score_results}</td>
+                      <td className="px-2 py-1">
+                        {point.feedback_items_valid}/{point.feedback_items_total}
+                      </td>
+                      <td className="px-2 py-1">{point.feedback_items_changed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </ReportBlock>
   );
