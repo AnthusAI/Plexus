@@ -1,35 +1,167 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { MessageSquareCode, Copy, AlertCircle } from 'lucide-react'
+import { generateClient } from 'aws-amplify/api'
 import { Button } from '@/components/ui/button'
 import { CardButton } from '@/components/CardButton'
 import { TaskDisplay } from '@/components/TaskDisplay'
-import { useEvaluationById } from '@/hooks/useEvaluationById'
 import { toast } from 'sonner'
+import type { Schema } from '@/amplify/data/resource'
+import { transformEvaluation } from '@/utils/data-operations'
 import type { Evaluation } from '@/utils/data-operations'
 
 interface EvaluationToolOutputProps {
   toolOutput: unknown
 }
 
+const GET_EVALUATION_LIGHT_QUERY = `
+  query GetEvaluationLight($id: ID!) {
+    getEvaluation(id: $id) {
+      id
+      type
+      accuracy
+      metrics
+      metricsExplanation
+      processedItems
+      totalItems
+      inferences
+      cost
+      status
+      elapsedSeconds
+      estimatedRemainingSeconds
+      startedAt
+      createdAt
+      updatedAt
+      errorMessage
+      errorDetails
+      confusionMatrix
+      scoreGoal
+      datasetClassDistribution
+      isDatasetClassDistributionBalanced
+      predictedClassDistribution
+      isPredictedClassDistributionBalanced
+      scorecardId
+      scoreId
+      scoreVersionId
+      parameters
+      taskId
+      task {
+        id
+        accountId
+        type
+        status
+        target
+        command
+        completedAt
+        startedAt
+        dispatchStatus
+        celeryTaskId
+        workerNodeId
+        description
+        metadata
+        createdAt
+        estimatedCompletionAt
+        errorMessage
+        errorDetails
+        currentStageId
+        stages {
+          items {
+            id
+            taskId
+            name
+            order
+            status
+            statusMessage
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            processedItems
+            totalItems
+            createdAt
+            updatedAt
+          }
+        }
+      }
+      scorecard {
+        id
+        name
+      }
+      score {
+        id
+        name
+      }
+    }
+  }
+`
+
+const LIST_SCORE_RESULTS_QUERY = `
+  query ListScoreResults($evaluationId: String!, $limit: Int, $nextToken: String) {
+    listScoreResultByEvaluationId(
+      evaluationId: $evaluationId
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        value
+        explanation
+        confidence
+        metadata
+        trace
+        itemId
+        createdAt
+        feedbackItem {
+          id
+          editCommentValue
+          initialAnswerValue
+          initialCommentValue
+          finalAnswerValue
+          editorName
+          editedAt
+          createdAt
+          scoreResults {
+            items {
+              id
+              value
+              explanation
+              type
+            }
+          }
+        }
+        item {
+          id
+          itemIdentifiers {
+            items {
+              name
+              value
+              url
+              position
+            }
+          }
+        }
+      }
+      nextToken
+    }
+  }
+`
+
+const EVALUATION_CACHE = new Map<string, Evaluation>()
+const HYDRATED_EVALUATION_IDS = new Set<string>()
+
 function parseToolOutput(output: unknown): unknown {
   if (!output) return null
   if (typeof output === 'string') {
-    // Try direct JSON parse first
     try {
       return JSON.parse(output)
     } catch {
-      // The tool response may be stored as a content string with format:
-      // "Response from tool: <name>\n\nResponse:\n<json>"
-      // Extract the JSON portion after the "Response:\n" separator
       const responseMatch = output.match(/\n\nResponse:\n([\s\S]+)$/)
       if (responseMatch) {
         try {
           return JSON.parse(responseMatch[1].trim())
         } catch {
-          // Not valid JSON
+          return null
         }
       }
       return null
@@ -96,35 +228,164 @@ function buildEvaluationData(evaluation: Evaluation) {
   }
 }
 
-function EvaluationEntry({ evaluationId }: { evaluationId: string }) {
-  const { evaluation, isLoading, error } = useEvaluationById(evaluationId)
+async function fetchEvaluationLight(evaluationId: string): Promise<{ evaluation: Evaluation; raw: any }> {
+  const client = generateClient<Schema>()
+  const result = await client.graphql({
+    query: GET_EVALUATION_LIGHT_QUERY,
+    variables: { id: evaluationId },
+  }) as any
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-foreground" />
-        Loading evaluation...
-      </div>
-    )
+  const raw = result?.data?.getEvaluation
+  if (!raw) {
+    throw new Error('Evaluation not found')
+  }
+
+  const transformed = transformEvaluation(raw)
+  if (!transformed) {
+    throw new Error('Failed to transform evaluation')
+  }
+
+  return {
+    evaluation: transformed as Evaluation,
+    raw,
+  }
+}
+
+async function fetchScoreResultsForEvaluation(evaluationId: string): Promise<any[]> {
+  const client = generateClient<Schema>()
+  let nextToken: string | null = null
+  let scoreResultItems: any[] = []
+
+  do {
+    const result = await client.graphql({
+      query: LIST_SCORE_RESULTS_QUERY,
+      variables: {
+        evaluationId,
+        limit: 1000,
+        nextToken,
+      },
+    }) as any
+
+    const data = result?.data?.listScoreResultByEvaluationId
+    scoreResultItems = scoreResultItems.concat(Array.isArray(data?.items) ? data.items : [])
+    nextToken = data?.nextToken || null
+  } while (nextToken)
+
+  return scoreResultItems
+}
+
+function EvaluationEntrySkeleton() {
+  return (
+    <div className="rounded-md bg-card p-3" data-testid="evaluation-entry-skeleton">
+      <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+      <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
+    </div>
+  )
+}
+
+function EvaluationEntry({ evaluationId }: { evaluationId: string }) {
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(() => EVALUATION_CACHE.get(evaluationId) ?? null)
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(() => !EVALUATION_CACHE.has(evaluationId))
+  const [isHydrating, setIsHydrating] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      try {
+        const cached = EVALUATION_CACHE.get(evaluationId)
+        let baseEvaluation = cached
+        let baseRaw: any = null
+
+        if (!cached) {
+          setIsInitialLoading(true)
+          const light = await fetchEvaluationLight(evaluationId)
+          if (cancelled) return
+          baseEvaluation = light.evaluation
+          baseRaw = light.raw
+          EVALUATION_CACHE.set(evaluationId, light.evaluation)
+          setEvaluation(light.evaluation)
+          setIsInitialLoading(false)
+        } else {
+          setEvaluation(cached)
+          setIsInitialLoading(false)
+        }
+
+        if (HYDRATED_EVALUATION_IDS.has(evaluationId)) {
+          return
+        }
+
+        setIsHydrating(true)
+
+        if (!baseRaw) {
+          const light = await fetchEvaluationLight(evaluationId)
+          if (cancelled) return
+          baseRaw = light.raw
+          baseEvaluation = light.evaluation
+        }
+
+        const scoreResults = await fetchScoreResultsForEvaluation(evaluationId)
+        if (cancelled) return
+
+        const hydratedRaw = {
+          ...baseRaw,
+          scoreResults: { items: scoreResults },
+        }
+        const hydratedEvaluation = transformEvaluation(hydratedRaw) as Evaluation | null
+        if (hydratedEvaluation) {
+          EVALUATION_CACHE.set(evaluationId, hydratedEvaluation)
+          HYDRATED_EVALUATION_IDS.add(evaluationId)
+          setEvaluation(hydratedEvaluation)
+        } else if (baseEvaluation) {
+          EVALUATION_CACHE.set(evaluationId, baseEvaluation)
+          setEvaluation(baseEvaluation)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : `Could not load evaluation ${evaluationId}`)
+          setIsInitialLoading(false)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHydrating(false)
+        }
+      }
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [evaluationId])
+
+  if (isInitialLoading && !evaluation) {
+    return <EvaluationEntrySkeleton />
   }
 
   if (error || !evaluation) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground p-2">
         <AlertCircle className="h-3 w-3" />
-        Could not load evaluation {evaluationId}
+        {error || `Could not load evaluation ${evaluationId}`}
       </div>
     )
   }
 
   return (
-    <Link href={`/lab/evaluations/${evaluationId}`} className="block hover:opacity-90 transition-opacity">
-      <TaskDisplay
-        variant="grid"
-        task={evaluation.task}
-        evaluationData={buildEvaluationData(evaluation)}
-      />
-    </Link>
+    <div className="space-y-1" data-testid="evaluation-entry">
+      <Link href={`/lab/evaluations/${evaluationId}`} className="block hover:opacity-90 transition-opacity">
+        <TaskDisplay
+          variant="grid"
+          task={evaluation.task}
+          evaluationData={buildEvaluationData(evaluation)}
+          extra
+        />
+      </Link>
+      {isHydrating && (
+        <div className="text-[11px] text-muted-foreground px-1">Hydrating score results…</div>
+      )}
+    </div>
   )
 }
 
@@ -145,7 +406,6 @@ export default function EvaluationToolOutput({ toolOutput }: EvaluationToolOutpu
     }
   }
 
-  // No evaluation IDs found — show raw output
   if (evaluationIds.length === 0) {
     return (
       <div className="font-mono whitespace-pre-wrap break-words text-sm">

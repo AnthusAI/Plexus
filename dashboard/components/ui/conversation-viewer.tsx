@@ -56,6 +56,7 @@ import {
 import { cn } from "@/lib/utils"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
+const STANDARD_SESSION_CATEGORY = 'Optimize'
 
 const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_run',
@@ -905,7 +906,12 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 )}
                 {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
                   EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
-                    <React.Suspense fallback={<div className="p-3 text-sm text-muted-foreground">Loading evaluation...</div>}>
+                    <React.Suspense fallback={
+                      <div className="rounded-md bg-card p-3">
+                        <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+                        <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
+                      </div>
+                    }>
                       <EvaluationToolOutput toolOutput={toolViewModel.output} />
                     </React.Suspense>
                   ) : (
@@ -2161,7 +2167,7 @@ function ConversationViewer({
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: 'Console Chat',
+      category: STANDARD_SESSION_CATEGORY,
       createdAt,
       updatedAt: createdAt,
     }, API_KEY_AUTH_OPTIONS)
@@ -2175,7 +2181,7 @@ function ConversationViewer({
       id: sessionId,
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: created?.data?.category || 'Console Chat',
+      category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
@@ -2430,7 +2436,7 @@ function ConversationViewer({
         style={!isSidebarCollapsed ? { width: sidebarWidth } : undefined}
       >
         {/* Sidebar Header */}
-        <div className="p-3 border-b border-border flex items-center justify-between">
+        <div data-testid="conversation-sidebar-header" className="h-12 px-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
             <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
           )}
@@ -2521,19 +2527,17 @@ function ConversationViewer({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Session Header */}
         {selectedSession && (
-          <div className="border-b border-border p-3">
+          <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <h3 className="font-medium text-sm">
+              <div className="flex min-w-0 items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex items-center gap-2">
+                  <h3 className="font-medium text-sm truncate">
                     {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
                   </h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                    <span>
-                      {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
-                    </span>
-                  </div>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
+                  </span>
                 </div>
               </div>
               
