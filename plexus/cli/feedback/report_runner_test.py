@@ -50,6 +50,35 @@ def test_run_feedback_report_block_success(mock_create_client, mock_resolve_acco
     assert result["block_config"]["days"] == 30
 
 
+@patch("plexus.cli.feedback.report_runner.run_block_cached")
+@patch("plexus.cli.feedback.report_runner.resolve_account_id_for_command")
+@patch("plexus.cli.feedback.report_runner.create_client")
+def test_run_feedback_report_block_dispatched_returns_task_id(
+    mock_create_client,
+    mock_resolve_account,
+    mock_run_block_cached,
+):
+    mock_client = MagicMock()
+    mock_create_client.return_value = mock_client
+    mock_resolve_account.return_value = "acct-1"
+    mock_run_block_cached.return_value = (
+        {"status": "dispatched", "cache_key": "cache-1", "task_id": "task-1"},
+        None,
+        False,
+    )
+
+    result = run_feedback_report_block(
+        block_class="AcceptanceRate",
+        scorecard="sc-1",
+        days=30,
+        background=True,
+    )
+
+    assert result["status"] == "dispatched"
+    assert result["cache_key"] == "cache-1"
+    assert result["task_id"] == "task-1"
+
+
 def test_summarize_timeline_feedback_volume():
     timeline_output = {
         "scorecard_id": "sc-1",
