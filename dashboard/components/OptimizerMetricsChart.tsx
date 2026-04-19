@@ -131,6 +131,36 @@ function ShapeIcon({ shape, color, size = 10 }: { shape: ShapeKind; color: strin
   }
 }
 
+interface AxisTickProps {
+  x?: number
+  y?: number
+  payload?: { value: number }
+}
+
+const LeftAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
+  const value = payload?.value
+  if (typeof value !== "number") return null
+
+  return (
+    <text x={x - 8} y={y} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={11}>
+      <tspan x={x - 8} dy="0.35em">{value.toFixed(1)}</tspan>
+      {value === -1 && <tspan x={x - 8} dy="1.2em" fontSize={10}>AC1</tspan>}
+    </text>
+  )
+}
+
+const RightAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
+  const value = payload?.value
+  if (typeof value !== "number") return null
+
+  return (
+    <text x={x + 8} y={y} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={11}>
+      <tspan x={x + 8} dy="0.35em">{value}%</tspan>
+      {value === 0 && <tspan x={x + 8} dy="1.2em" fontSize={10}>Acc</tspan>}
+    </text>
+  )
+}
+
 interface BaselineValues {
   alignment: number | null
   accuracy: number | null
@@ -385,9 +415,8 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
       </div>
 
       <div className="rounded-md bg-card p-2">
-        <div className="relative">
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
-          <LineChart data={chartData} margin={{ top: 8, right: 52, left: 20, bottom: 4 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 52, left: 20, bottom: 16 }}>
             <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
             <XAxis
               dataKey="cycle"
@@ -404,8 +433,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-              tickFormatter={(v: number) => v.toFixed(1)}
-              tickMargin={18}
+              tick={<LeftAxisTick />}
               width={52}
             />
             <YAxis
@@ -416,8 +444,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-              tickFormatter={(v: number) => `${v}%`}
-              tickMargin={18}
+              tick={<RightAxisTick />}
               width={56}
             />
             <Tooltip content={renderTooltip} />
@@ -449,13 +476,6 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
             })}
           </LineChart>
         </ChartContainer>
-        <div className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">
-          AC1
-        </div>
-        <div className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-muted-foreground">
-          Acc
-        </div>
-        </div>
 
         <CustomLegend
           datasetView={datasetView}
