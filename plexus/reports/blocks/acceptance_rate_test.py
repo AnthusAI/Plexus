@@ -261,6 +261,65 @@ async def test_acceptance_rate_zero_max_items_means_no_cap(mock_api_client):
 
 
 @pytest.mark.asyncio
+async def test_acceptance_rate_items_are_sorted_most_recent_first(mock_api_client):
+    block = AcceptanceRate(
+        config={
+            "scorecard": "sc-1",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "max_items": 0,
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+
+    scorecard = MagicMock(id="sc-1", name="Test Scorecard")
+    score_results = [
+        {
+            "id": "sr-old",
+            "itemId": "item-old",
+            "scoreId": "score-1",
+            "value": "yes",
+            "type": "prediction",
+            "status": "COMPLETED",
+            "code": "200",
+            "evaluationId": None,
+            "updatedAt": "2026-04-10T10:00:00+00:00",
+            "score": {"id": "score-1", "name": "Score 1"},
+            "item": {
+                "id": "item-old",
+                "updatedAt": "2026-04-10T10:00:00+00:00",
+            },
+        },
+        {
+            "id": "sr-new",
+            "itemId": "item-new",
+            "scoreId": "score-1",
+            "value": "no",
+            "type": "prediction",
+            "status": "COMPLETED",
+            "code": "200",
+            "evaluationId": None,
+            "updatedAt": "2026-04-10T11:00:00+00:00",
+            "score": {"id": "score-1", "name": "Score 1"},
+            "item": {
+                "id": "item-new",
+                "updatedAt": "2026-04-10T11:00:00+00:00",
+            },
+        },
+    ]
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_fetch_score_results_window", new=AsyncMock(return_value=score_results)),
+        patch.object(block, "_fetch_feedback_items_window", new=AsyncMock(return_value=[])),
+    ):
+        output, _ = await block.generate()
+
+    assert [row["item_id"] for row in output["items"]] == ["item-new", "item-old"]
+
+
+@pytest.mark.asyncio
 async def test_feedback_items_window_fans_out_by_score_ids_and_dedupes(mock_api_client):
     block = AcceptanceRate(
         config={"scorecard": "sc-1", "days": 1},
