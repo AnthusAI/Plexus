@@ -536,6 +536,19 @@ export default function ProcedureTask({
   const formatCostPerItem = (value?: number | null) =>
     value != null ? `$${value.toFixed(4)}` : '—'
 
+  const MetricHeaderLabel = ({ label, shape, color }: { label: string; shape: 'circle' | 'square'; color: string }) => (
+    <span className="inline-flex items-center gap-1">
+      <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true" className="shrink-0">
+        {shape === 'circle' ? (
+          <circle cx="4" cy="4" r="3" fill={color} />
+        ) : (
+          <rect x="1" y="1" width="6" height="6" fill={color} />
+        )}
+      </svg>
+      <span>{label}</span>
+    </span>
+  )
+
   const isOverallCyclesView = cyclesTableView === 'overall'
   const cyclesSelectedDatasetLabel = cyclesTableView === 'recent' ? 'Recent' : 'Regression'
   const cyclesSelectedDatasetColor = cyclesTableView === 'recent' ? RECENT_SERIES_COLOR : REGRESSION_SERIES_COLOR
@@ -1081,14 +1094,22 @@ export default function ProcedureTask({
                       <tr className="text-muted-foreground/40">
                         <th className="px-1 py-0 font-normal"></th>
                         <th className="px-1 py-0 font-normal"></th>
-                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">
+                          <MetricHeaderLabel label="AC1" shape="circle" color={RECENT_SERIES_COLOR} />
+                        </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
-                        <th className="px-1 py-0 text-left font-normal">Acc</th>
+                        <th className="px-1 py-0 text-left font-normal">
+                          <MetricHeaderLabel label="Acc" shape="square" color={RECENT_SERIES_COLOR} />
+                        </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
                         <th className="px-1 py-0 text-left font-normal">Cost/item</th>
-                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
+                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">
+                          <MetricHeaderLabel label="AC1" shape="circle" color={REGRESSION_SERIES_COLOR} />
+                        </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
-                        <th className="px-1 py-0 text-left font-normal">Acc</th>
+                        <th className="px-1 py-0 text-left font-normal">
+                          <MetricHeaderLabel label="Acc" shape="square" color={REGRESSION_SERIES_COLOR} />
+                        </th>
                         <th className="px-1 py-0 text-left font-normal">Δ</th>
                         <th className="px-1 py-0 text-left font-normal">Cost/item</th>
                         <th className="px-1 py-0 font-normal"></th>
@@ -1107,8 +1128,12 @@ export default function ProcedureTask({
                       <tr className="text-muted-foreground/40">
                         <th className="px-1 py-0 font-normal"></th>
                         <th className="px-1 py-0 font-normal"></th>
-                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">AC1</th>
-                        <th className="px-1 py-0 text-left font-normal">Acc</th>
+                        <th className="px-1 py-0 text-left font-normal border-l border-border/40">
+                          <MetricHeaderLabel label="AC1" shape="circle" color={cyclesSelectedDatasetColor} />
+                        </th>
+                        <th className="px-1 py-0 text-left font-normal">
+                          <MetricHeaderLabel label="Acc" shape="square" color={cyclesSelectedDatasetColor} />
+                        </th>
                         <th className="px-1 py-0 text-left font-normal">P</th>
                         <th className="px-1 py-0 text-left font-normal">R</th>
                         <th className="px-1 py-0 font-normal"></th>

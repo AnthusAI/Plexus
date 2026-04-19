@@ -730,14 +730,14 @@ function CollapsibleText({
 
 const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
   const badgeStyles = {
-    blue: 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200',
-    yellow: 'border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-800/40 dark:text-yellow-200',
-    red: 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200',
-    redCritical: 'border-transparent bg-red-200 text-red-900 dark:bg-red-800/60 dark:text-red-100',
-    green: 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200',
-    purple: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-800/40 dark:text-purple-200',
-    orange: 'border-transparent bg-orange-100 text-orange-800 dark:bg-orange-800/40 dark:text-orange-200',
-    gray: 'border-transparent bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-200',
+    blue: 'bg-info text-primary-foreground',
+    yellow: 'bg-warning text-primary-foreground',
+    red: 'bg-false text-primary-foreground',
+    redCritical: 'bg-false text-primary-foreground',
+    green: 'bg-true text-primary-foreground',
+    purple: 'bg-info text-primary-foreground',
+    orange: 'bg-warning text-primary-foreground',
+    gray: 'bg-neutral text-primary-foreground',
   } as const
 
   // Check humanInteraction first for special message types
@@ -873,14 +873,14 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="mb-2 flex items-center gap-2">
               {showMessageTypeBadge && (
                 <Badge
-                  variant="secondary"
-                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                  variant="pill"
+                  className={`text-xs px-1.5 py-0 font-normal ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
                 >
                   {messageTypeLabel}
                 </Badge>
               )}
               {showToolNameBadge && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-neutral text-primary-foreground">
                   {message.toolName}
                 </Badge>
               )}
@@ -963,8 +963,8 @@ const MemoizedMessageRow = React.memo(function MessageRow({
               <div className="flex flex-wrap items-center gap-2">
                 {isSubmitted && (
                   <Badge
-                    variant="outline"
-                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                    variant="pill"
+                    className="bg-true text-primary-foreground text-xs px-1.5 py-0 font-normal"
                   >
                     Response submitted
                   </Badge>
@@ -1067,7 +1067,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 )}
 
                 {isSubmitting && (
-                  <Badge variant="outline">Submitting...</Badge>
+                  <Badge variant="pill" className="bg-warning text-primary-foreground text-xs px-1.5 py-0 font-normal">Submitting...</Badge>
                 )}
               </div>
             </div>
