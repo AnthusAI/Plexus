@@ -144,7 +144,7 @@ const LeftAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
   return (
     <text x={x - 8} y={y} textAnchor="end" fill="hsl(var(--foreground) / 0.7)" fontSize={11}>
       <tspan x={x - 8} dy="0.35em">{value.toFixed(1)}</tspan>
-      {value === -1 && <tspan x={x - 8} dy="1.2em" fontSize={10}>AC1</tspan>}
+      {value === -1 && <tspan x={x - 8} dy="1.5em" fontSize={10}>AC1</tspan>}
     </text>
   )
 }
@@ -156,7 +156,7 @@ const RightAxisTick: React.FC<AxisTickProps> = ({ x = 0, y = 0, payload }) => {
   return (
     <text x={x + 8} y={y} textAnchor="start" fill="hsl(var(--foreground) / 0.7)" fontSize={11}>
       <tspan x={x + 8} dy="0.35em">{value}%</tspan>
-      {value === 0 && <tspan x={x + 8} dy="1.2em" fontSize={10}>Acc</tspan>}
+      {value === 0 && <tspan x={x + 8} dy="1.5em" fontSize={10}>Acc</tspan>}
     </text>
   )
 }
