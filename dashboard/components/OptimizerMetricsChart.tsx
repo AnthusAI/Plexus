@@ -384,9 +384,10 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
         )}
       </div>
 
-      <div className="rounded-md bg-card p-3">
+      <div className="rounded-md bg-card p-2">
+        <div className="relative">
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
-          <LineChart data={chartData} margin={{ top: 8, right: 48, left: 0, bottom: 4 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 32, left: 0, bottom: 4 }}>
             <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
             <XAxis
               dataKey="cycle"
@@ -394,6 +395,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               interval={0}
+              padding={{ left: 16, right: 16 }}
             />
             <YAxis
               yAxisId="left"
@@ -403,6 +405,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickFormatter={(v: number) => v.toFixed(1)}
+              tickMargin={8}
             />
             <YAxis
               yAxisId="right"
@@ -413,6 +416,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickFormatter={(v: number) => `${v}%`}
+              tickMargin={8}
             />
             <Tooltip content={renderTooltip} />
 
@@ -443,6 +447,13 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
             })}
           </LineChart>
         </ChartContainer>
+        <div className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">
+          AC1
+        </div>
+        <div className="pointer-events-none absolute bottom-1 right-1 text-[10px] text-muted-foreground">
+          Acc
+        </div>
+        </div>
 
         <CustomLegend
           datasetView={datasetView}
