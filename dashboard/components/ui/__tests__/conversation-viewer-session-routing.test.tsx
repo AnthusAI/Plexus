@@ -216,7 +216,7 @@ describe("ConversationViewer session-routing states", () => {
           expect.objectContaining({
             accountId: "acct-1",
             procedureId: "builtin:console/chat",
-            category: "Console Chat",
+            category: "Optimize",
           }),
           expect.objectContaining({ authMode: "apiKey" })
         )
@@ -250,5 +250,22 @@ describe("ConversationViewer session-routing states", () => {
     expect(screen.getByText("No session selected")).toBeInTheDocument()
     expect(screen.queryByText("hello")).not.toBeInTheDocument()
     expect(screen.queryByText("assistant reply")).not.toBeInTheDocument()
+  })
+
+  it("uses matching fixed header heights for sidebar and main session header", () => {
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const sidebarHeader = screen.getByTestId("conversation-sidebar-header")
+    const mainHeader = screen.getByTestId("conversation-main-header")
+
+    expect(sidebarHeader.className).toContain("h-12")
+    expect(mainHeader.className).toContain("h-12")
   })
 })

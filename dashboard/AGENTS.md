@@ -173,3 +173,4 @@ npx amplify deploy   # Production deployment
 - Use Storybook for component development and testing
 - GraphQL schema changes require Amplify code generation
 - Dashboard is separate from root Python project - has its own dependencies
+- Visual styling rule for conversation/tool surfaces: prefer flat-shaded background regions over borders/outlines when delineating sections.
