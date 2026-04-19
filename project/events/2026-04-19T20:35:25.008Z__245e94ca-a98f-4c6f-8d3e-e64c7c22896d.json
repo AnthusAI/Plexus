@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "245e94ca-a98f-4c6f-8d3e-e64c7c22896d",
+  "issue_id": "plx-1e3075c3-0d88-4d75-958b-ff0c4658fe04",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T20:35:25.008Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Address remaining PR #179 github-code-quality suggestions"
+  }
+}

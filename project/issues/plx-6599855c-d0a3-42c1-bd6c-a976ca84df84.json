@@ -3,7 +3,7 @@
   "title": "Fix develop CI regressions blocking PR #167 review",
   "description": "",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -76,10 +76,16 @@
       "author": "ryan",
       "text": "Latest develop failure reproduced from GH run 24637486425: Dashboard Unit Tests typecheck error TS17001 in dashboard/components/OptimizerMetricsChart.tsx (duplicate tick prop on YAxis). Preparing minimal patch on bugfix/develop-ci-optimizer-chart-tick-props and validating with dashboard typecheck/tests.",
       "created_at": "2026-04-19T19:56:00.554080Z"
+    },
+    {
+      "id": "ea337532-39a4-4382-b574-f45a3e76de75",
+      "author": "ryan",
+      "text": "Completed: fixed duplicate YAxis tick props causing TS17001 in dashboard/components/OptimizerMetricsChart.tsx, opened PR #178 to develop, and verified post-merge develop CI run 24637998260 passed all required jobs (Dashboard Unit/Storybook + Python 3.11/3.12).",
+      "created_at": "2026-04-19T20:18:15.005851Z"
     }
   ],
   "created_at": "2026-04-14T22:14:47.099327Z",
-  "updated_at": "2026-04-19T19:56:00.554080Z",
-  "closed_at": null,
+  "updated_at": "2026-04-19T20:18:16.845886Z",
+  "closed_at": "2026-04-19T20:18:16.845886Z",
   "custom": {}
 }

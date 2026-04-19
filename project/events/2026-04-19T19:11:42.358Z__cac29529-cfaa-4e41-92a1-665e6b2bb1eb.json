@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cac29529-cfaa-4e41-92a1-665e6b2bb1eb",
+  "issue_id": "plx-cb3e8bcb-5191-43ff-8554-c36c4d0f13ff",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T19:11:42.358Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\nUsers still report the Optimizer Metrics chart renders as blank except legend/squares.\n\n## Behavior Spec\nFeature: Optimizer Metrics chart rendering\nScenario: Render chart with cycle data\nGiven the procedure has recent/regression metrics\nWhen the chart is shown\nThen axes, grid, labels, and metric lines/dots are visible\nAnd legend-only rendering does not occur.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer Metrics chart blank on ProcedureTask (lines/axes/grid disappear)"
+  }
+}

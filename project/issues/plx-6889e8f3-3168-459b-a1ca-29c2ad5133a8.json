@@ -1,0 +1,25 @@
+{
+  "id": "plx-6889e8f3-3168-459b-a1ca-29c2ad5133a8",
+  "title": "Persist resolved procedure run parameters in task metadata",
+  "description": "## Problem\nProcedureTask shows blank parameter values because run-time parameter values are not persisted with the task/procedure run record.\n\n## Behavior Spec\nFeature: Procedure run parameter persistence\nScenario: Dispatch a procedure run with parameter overrides\nGiven a procedure run is started\nWhen the task and procedure dispatch metadata are written\nThen resolved run parameters are stored with the run metadata\nAnd ProcedureTask can read and display those values in the UI.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bb31d52a-35d2-43a7-af6e-eae3c7475418",
+      "author": "ryan",
+      "text": "Implemented persistence + display fix for procedure run parameters. Backend now writes resolved run_parameters/run_options into task metadata at run dispatch (including YAML defaults/value fields + CLI/context overrides). Frontend ProcedureTask now merges YAML defaults/values with task.metadata.run_parameters, and task creation paths (continue/branch/template create) include run_parameters in metadata. Tests passed: dashboard ProcedureTask.optimizer-auth and pytest plexus/cli/shared/test_experiment_runner.py.",
+      "created_at": "2026-04-19T19:46:07.655021Z"
+    }
+  ],
+  "created_at": "2026-04-19T19:43:07.798842Z",
+  "updated_at": "2026-04-19T19:46:07.669321Z",
+  "closed_at": "2026-04-19T19:46:07.669321Z",
+  "custom": {}
+}
