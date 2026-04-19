@@ -442,7 +442,6 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               yAxisId="left"
               domain={[-1, 1]}
               ticks={[-1, -0.5, 0, 0.5, 1]}
-              tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tick={<LeftAxisTick />}
@@ -453,7 +452,6 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
               orientation="right"
               domain={[0, 100]}
               ticks={[0, 25, 50, 75, 100]}
-              tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 11 }}
               axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
               tick={<RightAxisTick />}

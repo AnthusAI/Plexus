@@ -64,10 +64,22 @@
       "author": "derek.norrbom",
       "text": "PR #168 was already merged, so opened a new PR from fix/pr167-feedback-contradictions-develop to develop with post-merge follow-up commits (including c58f0907 dashboard test stabilization).",
       "created_at": "2026-04-14T22:31:24.360318Z"
+    },
+    {
+      "id": "b96ea9f6-e887-47e8-a64a-91eece6f54d4",
+      "author": "ryan",
+      "text": "Taking over to restore develop CI per current request. Next: inspect latest failing GitHub Actions runs on develop, reproduce locally, patch on dedicated branch, and verify green checks before handoff.",
+      "created_at": "2026-04-19T19:55:33.245991Z"
+    },
+    {
+      "id": "fea313e9-2759-4101-a8f2-f37b76840fd2",
+      "author": "ryan",
+      "text": "Latest develop failure reproduced from GH run 24637486425: Dashboard Unit Tests typecheck error TS17001 in dashboard/components/OptimizerMetricsChart.tsx (duplicate tick prop on YAxis). Preparing minimal patch on bugfix/develop-ci-optimizer-chart-tick-props and validating with dashboard typecheck/tests.",
+      "created_at": "2026-04-19T19:56:00.554080Z"
     }
   ],
   "created_at": "2026-04-14T22:14:47.099327Z",
-  "updated_at": "2026-04-14T22:31:24.360318Z",
+  "updated_at": "2026-04-19T19:56:00.554080Z",
   "closed_at": null,
   "custom": {}
 }
