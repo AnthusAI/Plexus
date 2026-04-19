@@ -19,6 +19,10 @@ import VectorTopicMemory from './VectorTopicMemory';
 import ActionItems from './ActionItems';
 import FeedbackContradictions from './FeedbackContradictions';
 import FeedbackAlignmentTimeline from './FeedbackAlignmentTimeline';
+import CorrectionRate from './CorrectionRate';
+import AcceptanceRate from './AcceptanceRate';
+import AcceptanceRateTimeline from './AcceptanceRateTimeline';
+import RecentFeedback from './RecentFeedback';
 
 // Register all block components
 // Register the default block handler first
@@ -36,3 +40,7 @@ registerBlock('VectorTopicMemory', VectorTopicMemory as BlockComponent);
 registerBlock('ActionItems', ActionItems as BlockComponent);
 registerBlock('FeedbackContradictions', FeedbackContradictions as BlockComponent);
 registerBlock('FeedbackAlignmentTimeline', FeedbackAlignmentTimeline as BlockComponent);
+registerBlock('CorrectionRate', CorrectionRate as BlockComponent);
+registerBlock('AcceptanceRate', AcceptanceRate as BlockComponent);
+registerBlock('AcceptanceRateTimeline', AcceptanceRateTimeline as BlockComponent);
+registerBlock('RecentFeedback', RecentFeedback as BlockComponent);
