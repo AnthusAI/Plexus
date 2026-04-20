@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "85057794-284f-4002-ba38-503e1170f385",
+  "issue_id": "plx-5bbd8047-62a2-4e40-9368-498b3fda02fb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-20T18:54:47.399Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Investigate and fix failing test: plexus/scores/LangGraphScore_test.py::test_cost_calculation_across_model_providers.\n\nObserved: get_accumulated_costs now calls litellm.cost_per_token with a MagicMock model value from node parameters instead of the configured model string, causing assertion failure in CI/develop.\n\nDone criteria:\n- Root cause identified\n- Minimal fix applied\n- Target test passes locally",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-51de29d8-c8d5-4fb8-ab96-5d8f82fe09fb",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix LangGraphScore cost calculation test regression"
+  }
+}
