@@ -186,6 +186,7 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     scorecardId?: string
     scoreId?: string
     scoreVersionId?: string
+    procedureId?: string
     dataSetId?: string
   }
   selectedScoreResultId?: string | null
@@ -2443,6 +2444,7 @@ ${categoryLines}${mechanicalLines}
       scorecardId: task.scorecardId,
       scoreId: task.scoreId,
       scoreVersionId: task.scoreVersionId,
+      procedureId: task.procedureId,
       dataSetId: task.data?.dataSetId ?? task.dataSetId ?? dataSetIdFromParameters ?? undefined
     };
   }, [task, taskData, variant, dataSetIdFromParameters]);
@@ -2698,6 +2700,19 @@ ${categoryLines}${mechanicalLines}
                 <span>Unavailable</span>
               )}
             </div>
+            {taskWithDefaults.procedureId && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                <span>Procedure:</span>
+                <span className="truncate font-mono">{taskWithDefaults.procedureId}</span>
+                <Link
+                  href={`/lab/procedures/${taskWithDefaults.procedureId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
             {taskWithDefaults.dataSetId && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Dataset:</span>
