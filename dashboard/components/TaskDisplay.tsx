@@ -31,6 +31,7 @@ interface TaskDisplayProps {
     type: string
     scorecard?: { name: string } | null
     score?: { name: string } | null
+    procedureId?: string | null | undefined
     createdAt: string
     metrics?: any
     metricsExplanation?: string | null
@@ -288,8 +289,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     const evaluationTaskProps = {
       task: {
         ...commonTaskProps,
-        scorecard: evaluationData.scorecard?.name || '-',
-        score: evaluationData.score?.name || '-',
+        scorecard: evaluationData.scorecard?.name || evaluationData.scorecardId || '-',
+        score: evaluationData.score?.name || evaluationData.scoreId || '-',
+        procedureId: evaluationData.procedureId ?? undefined,
         scorecardId: evaluationData.scorecardId,
         scoreId: evaluationData.scoreId,
         scoreVersionId: evaluationData.scoreVersionId,
