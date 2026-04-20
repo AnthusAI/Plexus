@@ -58,10 +58,22 @@
       "author": "ryan",
       "text": "Committed and pushed current branch snapshot as 8e8c8578a. Validation passed locally: dashboard typecheck and fetch_score_configurations_test. Waiting for GitHub Actions on branch feature/tighten-procedure-cycles-header before closing anything.",
       "created_at": "2026-04-20T02:02:18.127502Z"
+    },
+    {
+      "id": "ffad7983-4261-4682-a96d-8bcae48a09e8",
+      "author": "ryan",
+      "text": "Branch feature/tighten-procedure-cycles-header pushed at 8e8c8578a and GitHub Actions run 24644992753 passed. Local checks passed earlier: dashboard typecheck and fetch_score_configurations_test. Leaving story in_progress because this is committed/pushed branch work, not merged release work.",
+      "created_at": "2026-04-20T02:14:04.819604Z"
+    },
+    {
+      "id": "e6ad5cbb-31d1-4db2-8341-13b226fe1f65",
+      "author": "ryan",
+      "text": "Investigating why Cost Breakdown is absent for the prior procedure run UI. Checking the stored task/procedure payload and the render conditions in ProcedureTask before making any code changes.",
+      "created_at": "2026-04-20T04:33:36.940380Z"
     }
   ],
   "created_at": "2026-04-19T20:36:27.392885Z",
-  "updated_at": "2026-04-20T02:02:18.127502Z",
+  "updated_at": "2026-04-20T04:33:36.940380Z",
   "closed_at": null,
   "custom": {}
 }

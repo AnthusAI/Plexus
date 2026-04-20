@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 import socket
 import os
+import signal
+import threading
+import traceback
 from typing import Optional, Tuple, Dict, Any
 import logging
 import json
 import yaml
+import click
 
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
@@ -18,9 +22,148 @@ from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 logger = logging.getLogger(__name__)
 
 
+class ProcedureRunTermination(BaseException):
+    """Raised when the direct CLI procedure process receives a termination signal."""
+
+    def __init__(self, signum: int):
+        self.signum = int(signum)
+        try:
+            self.signal_name = signal.Signals(signum).name
+        except Exception:
+            self.signal_name = f"SIG{signum}"
+        super().__init__(f"Procedure run interrupted by {self.signal_name}")
+
+
 def _to_json_safe(value: Any) -> Any:
     """Convert arbitrary values into JSON-safe structures."""
     return json.loads(json.dumps(value, default=str))
+
+
+def _parse_json_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _json_dumps(value: Dict[str, Any]) -> str:
+    return json.dumps(_to_json_safe(value), default=str)
+
+
+def _build_runtime_identity(command: Optional[str]) -> Dict[str, Any]:
+    return {
+        "pid": os.getpid(),
+        "host": socket.gethostname(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "command": command or "",
+    }
+
+
+def _load_procedure_metadata(client: PlexusDashboardClient, procedure_id: str) -> Optional[Dict[str, Any]]:
+    query = """
+    query GetProcedureTelemetry($id: ID!) {
+        getProcedure(id: $id) {
+            id
+            metadata
+            waitingOnMessageId
+        }
+    }
+    """
+    try:
+        result = client.execute(query, {"id": procedure_id})
+    except Exception as exc:
+        logger.warning("Could not load procedure metadata for %s: %s", procedure_id, exc)
+        return None
+
+    procedure = result.get("getProcedure") or {}
+    return _parse_json_dict(procedure.get("metadata"))
+
+
+def _update_procedure_status_and_metadata(
+    client: PlexusDashboardClient,
+    procedure_id: str,
+    *,
+    status: Optional[str] = None,
+    metadata_patch: Optional[Dict[str, Any]] = None,
+    remove_metadata_keys: Optional[list[str]] = None,
+) -> None:
+    metadata = _load_procedure_metadata(client, procedure_id)
+    update_input: Dict[str, Any] = {"id": procedure_id}
+    if status is not None:
+        update_input["status"] = status
+    if metadata is not None:
+        if remove_metadata_keys:
+            for key in remove_metadata_keys:
+                metadata.pop(key, None)
+        if metadata_patch:
+            metadata.update(_to_json_safe(metadata_patch))
+        update_input["metadata"] = _json_dumps(metadata)
+    elif metadata_patch or remove_metadata_keys:
+        logger.warning(
+            "Skipping procedure metadata merge for %s because current metadata could not be loaded",
+            procedure_id,
+        )
+
+    mutation = """
+    mutation UpdateProcedureTelemetry($input: UpdateProcedureInput!) {
+        updateProcedure(input: $input) {
+            id
+            status
+            metadata
+            waitingOnMessageId
+            updatedAt
+        }
+    }
+    """
+    client.execute(mutation, {"input": update_input})
+
+
+def _merge_task_metadata(task: Task, patch: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    metadata = _parse_json_dict(task.metadata)
+    if patch:
+        metadata.update(_to_json_safe(patch))
+    return metadata
+
+
+def _current_task_phase(task: Optional[Task]) -> Optional[str]:
+    if not task:
+        return None
+
+    try:
+        stages = list(task.get_stages())
+    except Exception as exc:
+        logger.debug("Could not load task stages for %s: %s", getattr(task, "id", None), exc)
+        return None
+
+    current_stage_id = getattr(task, "currentStageId", None)
+    if current_stage_id:
+        stage = next((item for item in stages if item.id == current_stage_id), None)
+        if stage and getattr(stage, "name", None):
+            return str(stage.name)
+
+    running_stage = next((item for item in stages if getattr(item, "status", None) == "RUNNING"), None)
+    if running_stage and getattr(running_stage, "name", None):
+        return str(running_stage.name)
+
+    pending_stage = next((item for item in stages if getattr(item, "status", None) == "PENDING"), None)
+    if pending_stage and getattr(pending_stage, "name", None):
+        return str(pending_stage.name)
+
+    return None
+
+
+def _system_exit_is_failure(code: Any) -> bool:
+    if code is None:
+        return False
+    if isinstance(code, int):
+        return code != 0
+    return True
 
 
 def _extract_run_parameters_from_procedure_yaml(procedure_yaml: Optional[str]) -> Dict[str, Any]:
@@ -398,12 +541,152 @@ async def run_experiment_with_task_tracking(
         'message': 'Task tracking initialized'
     }
 
+    runtime_identity = _build_runtime_identity(
+        task.command if task and getattr(task, "command", None) else f"procedure run {procedure_id}"
+    )
+    task_ref = tracker.task if tracker and tracker.task else task
+    failure_finalized = False
+    installed_signal_handlers: Dict[int, Any] = {}
+
+    def _install_signal_guards() -> None:
+        if threading.current_thread() is not threading.main_thread():
+            return
+
+        def _raise_termination(signum, _frame):
+            raise ProcedureRunTermination(signum)
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                installed_signal_handlers[sig] = signal.getsignal(sig)
+                signal.signal(sig, _raise_termination)
+            except Exception as exc:
+                logger.debug("Could not install signal handler for %s: %s", sig, exc)
+
+    def _restore_signal_guards() -> None:
+        for sig, previous in installed_signal_handlers.items():
+            try:
+                signal.signal(sig, previous)
+            except Exception as exc:
+                logger.debug("Could not restore signal handler for %s: %s", sig, exc)
+        installed_signal_handlers.clear()
+
+    def _mark_run_started() -> None:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if task_ref:
+            task_metadata = _merge_task_metadata(task_ref, {"runtime": runtime_identity})
+            task_ref.update(
+                accountId=task_ref.accountId,
+                type=task_ref.type,
+                status="RUNNING",
+                target=task_ref.target,
+                command=task_ref.command,
+                metadata=_json_dumps(task_metadata),
+                startedAt=now_iso,
+                updatedAt=now_iso,
+                errorMessage=None,
+                errorDetails=None,
+            )
+
+        if not is_builtin_procedure_id(procedure_id):
+            _update_procedure_status_and_metadata(
+                client,
+                procedure_id,
+                status="RUNNING",
+                metadata_patch={"runtime": runtime_identity},
+                remove_metadata_keys=["last_failure"],
+            )
+
+    def _finalize_failed(
+        *,
+        kind: str,
+        message: str,
+        signal_name: Optional[str] = None,
+        exception_type: Optional[str] = None,
+        traceback_text: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        nonlocal failure_finalized
+        if failure_finalized:
+            return {}
+        failure_finalized = True
+
+        from plexus.cli.procedure.procedure_executor import _fail_all_task_stages
+
+        terminated_at = datetime.now(timezone.utc).isoformat()
+        phase = _current_task_phase(task_ref)
+        failure_payload = {
+            "kind": kind,
+            "signal": signal_name,
+            "exception_type": exception_type,
+            "message": str(message),
+            "phase": phase,
+            "terminated_at": terminated_at,
+            "pid": runtime_identity.get("pid"),
+            "host": runtime_identity.get("host"),
+            "traceback": traceback_text,
+        }
+
+        if task_ref:
+            try:
+                _fail_all_task_stages(client, task_ref.id, str(message))
+            except Exception as stage_exc:
+                logger.warning("Could not fail task stages for %s: %s", task_ref.id, stage_exc, exc_info=True)
+
+            try:
+                task_metadata = _merge_task_metadata(task_ref, {"runtime": runtime_identity})
+                task_ref.update(
+                    accountId=task_ref.accountId,
+                    type=task_ref.type,
+                    status="FAILED",
+                    target=task_ref.target,
+                    command=task_ref.command,
+                    metadata=_json_dumps(task_metadata),
+                    updatedAt=terminated_at,
+                    completedAt=terminated_at,
+                    errorMessage=str(message)[:2000],
+                    errorDetails=_json_dumps(failure_payload),
+                )
+            except Exception as task_exc:
+                logger.warning("Could not persist FAILED task state for %s: %s", task_ref.id, task_exc, exc_info=True)
+
+        if not is_builtin_procedure_id(procedure_id):
+            try:
+                _update_procedure_status_and_metadata(
+                    client,
+                    procedure_id,
+                    status="FAILED",
+                    metadata_patch={
+                        "runtime": runtime_identity,
+                        "last_failure": failure_payload,
+                    },
+                )
+            except Exception as proc_exc:
+                logger.warning(
+                    "Could not persist FAILED procedure state for %s: %s",
+                    procedure_id,
+                    proc_exc,
+                    exc_info=True,
+                )
+
+        result.update(
+            {
+                "status": "FAILED",
+                "error": str(message),
+                "message": f"Experiment failed: {message}",
+                "failure": failure_payload,
+            }
+        )
+        return failure_payload
+
+    _install_signal_guards()
+
     try:
+        _mark_run_started()
+
         # Start with Hypothesis stage (only if we have a tracker)
         if tracker:
             tracker.current_stage.status_message = "Starting experiment hypothesis generation"
             tracker.update(current_items=0)
-        
+
         # Import and run the actual procedure using ProcedureService
         from plexus.cli.procedure.service import ProcedureService
         service = ProcedureService(client)
@@ -412,8 +695,8 @@ async def run_experiment_with_task_tracking(
         run_options = dict(experiment_options)
         run_options.setdefault("account_id", account_id)
         # Pass the task ID so the executor can update stage status in real-time
-        if task and task.id:
-            run_options.setdefault("_task_id_for_stage_tracking", task.id)
+        if task_ref and task_ref.id:
+            run_options.setdefault("_task_id_for_stage_tracking", task_ref.id)
         experiment_result = await service.run_experiment(procedure_id, **run_options)
 
         procedure_status = str(experiment_result.get("status") or "").upper()
@@ -443,92 +726,87 @@ async def run_experiment_with_task_tracking(
         else:
             mapped_task_status = "FAILED"
             mapped_procedure_status = "FAILED"
+            err_text = experiment_result.get("error") or experiment_result.get("message") or "Procedure failed"
             logger.warning(
                 f"[PROCEDURE_RUN] procedure={procedure_id} reported failure — "
                 f"error={experiment_result.get('error')} message={experiment_result.get('message')}"
             )
+            _finalize_failed(kind="exception", message=str(err_text))
 
         # Complete or update the task
-        if tracker and tracker.task:
+        if task_ref and mapped_task_status != "FAILED":
             update_data = {
-                "accountId": tracker.task.accountId,
-                "type": tracker.task.type,
+                "accountId": task_ref.accountId,
+                "type": task_ref.type,
                 "status": mapped_task_status,
-                "target": tracker.task.target,
-                "command": tracker.task.command,
+                "target": task_ref.target,
+                "command": task_ref.command,
                 "updatedAt": datetime.now(timezone.utc).isoformat(),
                 "output": json.dumps(experiment_result, default=str),
             }
             if mapped_task_status in {"COMPLETED", "FAILED"}:
                 update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
-            if mapped_task_status == "FAILED":
-                err_text = experiment_result.get("error") or experiment_result.get("message") or "Procedure failed"
-                update_data["errorMessage"] = str(err_text)[:2000]
-                logger.warning(f"[PROCEDURE_RUN] Updating task {tracker.task.id} to FAILED: {err_text}")
-            tracker.task.update(**update_data)
-
-        _procedure_status_mutation = """
-        mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
-            updateProcedure(input: $input) {
-                id
-                status
-                updatedAt
-            }
-        }
-        """
+            task_ref.update(**update_data)
 
         # Keep procedure status consistent with the actual run outcome for DB-backed procedures.
-        if not is_builtin_procedure_id(procedure_id):
+        if mapped_procedure_status != "FAILED" and not is_builtin_procedure_id(procedure_id):
             try:
                 logger.info(f"[PROCEDURE_RUN] Updating procedure {procedure_id} status → {mapped_procedure_status}")
-                client.execute(_procedure_status_mutation, {"input": {"id": procedure_id, "status": mapped_procedure_status}})
+                _update_procedure_status_and_metadata(client, procedure_id, status=mapped_procedure_status)
             except Exception as _pe:
                 logger.warning(f"Failed to update procedure status for {procedure_id}: {_pe}")
 
         # Update result with experiment outcome
         result.update(experiment_result)
-        result['status'] = mapped_procedure_status
-        result['message'] = 'Experiment completed successfully' if mapped_procedure_status == 'COMPLETED' else result.get('message', 'Experiment execution updated')
+        result["status"] = mapped_procedure_status
+        result["message"] = (
+            "Experiment completed successfully"
+            if mapped_procedure_status == "COMPLETED"
+            else result.get("message", "Experiment execution updated")
+        )
 
-    except Exception as e:
-        logging.error(f"Experiment run failed: {str(e)}", exc_info=True)
-
-        # Update task with error
-        if tracker and tracker.task:
-            logger.warning(f"[PROCEDURE_RUN] Exception path — updating task {tracker.task.id} to FAILED: {e}")
-            tracker.task.update(
-                accountId=tracker.task.accountId,
-                type=tracker.task.type,
-                status='FAILED',
-                target=tracker.task.target,
-                command=tracker.task.command,
-                completedAt=datetime.now(timezone.utc).isoformat(),
-                updatedAt=datetime.now(timezone.utc).isoformat(),
-                errorMessage=str(e),
-                errorDetails=json.dumps({'error': str(e), 'type': type(e).__name__}, default=str),
+    except ProcedureRunTermination as exc:
+        logger.warning("Procedure %s interrupted by %s", procedure_id, exc.signal_name)
+        _finalize_failed(
+            kind="signal",
+            signal_name=exc.signal_name,
+            message=f"Procedure run interrupted by {exc.signal_name}",
+        )
+        raise SystemExit(128 + exc.signum) from None
+    except KeyboardInterrupt:
+        logger.warning("Procedure %s interrupted by keyboard", procedure_id)
+        _finalize_failed(
+            kind="signal",
+            signal_name="SIGINT",
+            message="Procedure run interrupted by SIGINT",
+        )
+        raise
+    except click.Abort as exc:
+        logger.warning("Procedure %s aborted", procedure_id)
+        _finalize_failed(
+            kind="abort",
+            exception_type=type(exc).__name__,
+            message=str(exc) or "Procedure run aborted",
+        )
+        raise
+    except SystemExit as exc:
+        if _system_exit_is_failure(exc.code):
+            logger.warning("Procedure %s exited early with code %s", procedure_id, exc.code)
+            _finalize_failed(
+                kind="system_exit",
+                exception_type=type(exc).__name__,
+                message=f"Procedure run exited with status {exc.code}",
             )
-
-        # Update procedure record status even on unexpected exception
-        if not is_builtin_procedure_id(procedure_id):
-            try:
-                _procedure_status_mutation = """
-                mutation UpdateProcedureStatus($input: UpdateProcedureInput!) {
-                    updateProcedure(input: $input) {
-                        id
-                        status
-                        updatedAt
-                    }
-                }
-                """
-                logger.warning(f"[PROCEDURE_RUN] Exception path — updating procedure {procedure_id} status → FAILED")
-                client.execute(_procedure_status_mutation, {"input": {"id": procedure_id, "status": "FAILED"}})
-            except Exception as _pe:
-                logger.warning(f"Failed to update procedure status after exception for {procedure_id}: {_pe}")
-
-        result.update({
-            'status': 'error',
-            'error': str(e),
-            'message': f'Experiment failed: {str(e)}'
-        })
+        raise
+    except Exception as exc:
+        logging.error(f"Experiment run failed: {str(exc)}", exc_info=True)
+        _finalize_failed(
+            kind="exception",
+            exception_type=type(exc).__name__,
+            message=str(exc),
+            traceback_text=traceback.format_exc(),
+        )
+    finally:
+        _restore_signal_guards()
     
     return result
