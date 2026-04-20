@@ -71,17 +71,15 @@ export class ReportService {
   // Fetch report by ID for dashboard deep links
   async fetchReportById(id: string): Promise<any> {
     try {
-      // Determine auth mode for unauthenticated access
-      let authMode: 'userPool' | 'apiKey' | undefined = undefined;
+      // Determine auth mode based on user's session
+      let authMode: 'userPool' | 'identityPool' = 'identityPool';
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
           authMode = 'userPool';
-        } else {
-          authMode = 'apiKey';
         }
       } catch (error) {
-        authMode = 'apiKey';
+        console.log('Error checking auth session, falling back to guest access:', error);
       }
 
       // Use the graphql API directly with a single, comprehensive query
@@ -143,19 +141,14 @@ export class ReportService {
   async fetchReportByShareToken(token: string): Promise<any> {
     try {
       // Determine auth mode based on user's session
-      let authMode: 'userPool' | 'apiKey' | undefined = undefined; // Default to public access
+      let authMode: 'userPool' | 'identityPool' = 'identityPool';
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
           authMode = 'userPool';
-        } else {
-          // For unauthenticated access, use API key instead of identity pool
-          authMode = 'apiKey';
-          console.log('Using API key access mode');
         }
       } catch (error) {
-        console.log('Error checking auth session, falling back to API key access');
-        authMode = 'apiKey';
+        console.log('Error checking auth session, falling back to guest access:', error);
       }
       
       // First get the share link data and resource ID
