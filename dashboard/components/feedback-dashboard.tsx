@@ -4,12 +4,11 @@ import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  ArrowLeft,
-  BarChart3,
   CalendarDays,
   ChevronRight,
   FilePlus2,
   Loader2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,7 +18,6 @@ import { useFeedbackVolume } from "@/hooks/use-feedback-volume";
 import { useIncrementalRows } from "@/components/blocks/useIncrementalRows";
 import { ChartContainer } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -27,6 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { createTask } from "@/utils/data-operations";
 import {
   buildFeedbackReportCommand,
@@ -84,7 +83,7 @@ function FeedbackVolumeTooltip({ active, payload }: any) {
   }
 
   return (
-    <div className="rounded-md border bg-background p-3 text-xs shadow-lg">
+    <div className="rounded-md bg-popover p-3 text-xs text-popover-foreground">
       <div className="font-medium">{point.label}</div>
       <div className="mb-2 text-muted-foreground">
         {new Date(point.start).toLocaleString()} - {new Date(point.end).toLocaleString()}
@@ -101,21 +100,31 @@ function MetricCard({
   label,
   value,
   detail,
+  tone = "neutral",
 }: {
   label: string;
   value: number;
   detail?: string;
+  tone?: "neutral" | "changed" | "unchanged" | "invalid";
 }) {
+  const toneClass = {
+    neutral: "bg-info",
+    changed: "bg-false",
+    unchanged: "bg-true",
+    invalid: "bg-neutral",
+  }[tone];
+
   return (
-    <Card className="border-border/60">
-      <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="rounded-lg bg-frame px-4 py-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className={cn("h-2 w-2 rounded-full", toneClass)} />
+        <span>{label}</span>
+      </div>
+      <div className="mt-2">
         <div className="text-2xl font-semibold">{formatNumber(value)}</div>
         {detail ? <div className="mt-1 text-xs text-muted-foreground">{detail}</div> : null}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -167,26 +176,26 @@ function LoadingDashboardState() {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Card key={index} className="border-border/60">
-            <CardHeader className="pb-2">
+          <div key={index} className="rounded-lg bg-card p-4">
+            <div className="pb-2">
               <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-            </CardHeader>
-            <CardContent className="space-y-2">
+            </div>
+            <div className="space-y-2">
               <div className="h-8 w-20 animate-pulse rounded bg-muted" />
               <div className="h-3 w-32 animate-pulse rounded bg-muted" />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))}
       </div>
-      <Card className="border-border/60">
-        <CardHeader>
+      <div className="rounded-lg bg-card p-4">
+        <div className="space-y-2">
           <div className="h-5 w-40 animate-pulse rounded bg-muted" />
           <div className="h-4 w-56 animate-pulse rounded bg-muted" />
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="mt-4">
           <div className="h-[280px] animate-pulse rounded-lg bg-muted" />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -199,12 +208,10 @@ function EmptyScopeCard({
   description: string;
 }) {
   return (
-    <Card className="border-dashed border-border/60">
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-    </Card>
+    <div className="rounded-lg bg-card px-4 py-5">
+      <div className="text-base font-semibold">{title}</div>
+      <div className="mt-1 text-sm text-muted-foreground">{description}</div>
+    </div>
   );
 }
 
@@ -230,10 +237,15 @@ function FeedbackWindowControls({
           <Button
             key={option.value}
             type="button"
-            variant={preset === option.value ? "default" : "outline"}
+            variant="ghost"
             size="sm"
             onClick={() => setPreset(option.value)}
-            className="rounded-full"
+            className={cn(
+              "rounded-full px-3 shadow-none",
+              preset === option.value
+                ? "bg-secondary text-secondary-foreground hover:bg-secondary-selected"
+                : "bg-card text-muted-foreground hover:bg-card-selected hover:text-foreground"
+            )}
           >
             {option.label}
           </Button>
@@ -241,23 +253,23 @@ function FeedbackWindowControls({
       </div>
       {preset === "custom" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg bg-card px-3 py-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
             <Input
               type="date"
               value={customStartDate}
               onChange={(event) => setCustomStartDate(event.target.value)}
-              className="h-8 w-[150px] border-0 bg-transparent px-0 shadow-none"
+              className="h-8 w-[150px] border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             />
           </div>
           <span className="text-sm text-muted-foreground">to</span>
-          <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg bg-card px-3 py-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
             <Input
               type="date"
               value={customEndDate}
               onChange={(event) => setCustomEndDate(event.target.value)}
-              className="h-8 w-[150px] border-0 bg-transparent px-0 shadow-none"
+              className="h-8 w-[150px] border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             />
           </div>
         </div>
@@ -286,29 +298,33 @@ function VolumeOverviewCard({
   bucketLabel: string;
 }) {
   return (
-    <Card className="border-border/60">
-      <CardHeader>
-        <CardTitle className="text-lg">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="rounded-lg bg-card p-4">
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="mt-4 space-y-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Total Feedback Items"
             value={summary.feedback_items_total}
             detail={`Buckets: ${bucketLabel}`}
+            tone="neutral"
           />
-          <MetricCard label="Changed" value={summary.feedback_items_changed} />
-          <MetricCard label="Unchanged" value={summary.feedback_items_unchanged} />
+          <MetricCard label="Changed" value={summary.feedback_items_changed} tone="changed" />
+          <MetricCard label="Unchanged" value={summary.feedback_items_unchanged} tone="unchanged" />
           <MetricCard
             label="Invalid / Unclassified"
             value={summary.feedback_items_invalid_or_unclassified}
             detail={`Valid feedback: ${formatNumber(summary.feedback_items_valid)}`}
+            tone="invalid"
           />
         </div>
-        <FeedbackVolumeChart points={points} />
-      </CardContent>
-    </Card>
+        <div className="rounded-lg bg-background p-3">
+          <FeedbackVolumeChart points={points} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -324,42 +340,53 @@ function SeriesCard({
   const hasFeedback = series.summary.feedback_items_total > 0;
 
   return (
-    <Card className="border-border/60">
-      <CardHeader className="gap-2 md:flex-row md:items-start md:justify-between">
+    <div className="rounded-lg bg-card p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
-          <CardTitle className="text-base">{series.label}</CardTitle>
-          <CardDescription>
+          <h3 className="text-base font-semibold">{series.label}</h3>
+          <p className="text-sm text-muted-foreground">
             {hasFeedback
               ? `${formatNumber(series.summary.feedback_items_total)} feedback items in the selected window`
               : "No feedback in the selected window"}
-          </CardDescription>
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {reportActions}
           {onSelect ? (
-            <Button variant="outline" size="sm" onClick={onSelect}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onSelect}
+              className="bg-card-selected text-foreground shadow-none hover:bg-card-selected/80"
+            >
               Open
               <ChevronRight className="h-4 w-4" />
             </Button>
           ) : null}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+      <div className="mt-4 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Total" value={series.summary.feedback_items_total} />
-          <MetricCard label="Changed" value={series.summary.feedback_items_changed} />
-          <MetricCard label="Unchanged" value={series.summary.feedback_items_unchanged} />
-          <MetricCard label="Invalid / Unclassified" value={series.summary.feedback_items_invalid_or_unclassified} />
+          <MetricCard label="Total" value={series.summary.feedback_items_total} tone="neutral" />
+          <MetricCard label="Changed" value={series.summary.feedback_items_changed} tone="changed" />
+          <MetricCard label="Unchanged" value={series.summary.feedback_items_unchanged} tone="unchanged" />
+          <MetricCard
+            label="Invalid / Unclassified"
+            value={series.summary.feedback_items_invalid_or_unclassified}
+            tone="invalid"
+          />
         </div>
         {hasFeedback ? (
-          <FeedbackVolumeChart points={series.points} compact />
+          <div className="rounded-lg bg-background p-3">
+            <FeedbackVolumeChart points={series.points} compact />
+          </div>
         ) : (
-          <div className="rounded-lg bg-muted/40 px-3 py-4 text-sm text-muted-foreground">
+          <div className="rounded-lg bg-frame px-3 py-4 text-sm text-muted-foreground">
             This scope has no collected feedback for the selected date window.
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -441,12 +468,17 @@ function FeedbackReportActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={isDispatching}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isDispatching}
+          className="bg-card text-foreground shadow-none hover:bg-card-selected"
+        >
           {isDispatching ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
           {buttonLabel}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-64 border-0 bg-popover shadow-none">
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.id}
@@ -523,42 +555,32 @@ export default function FeedbackDashboard() {
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <BarChart3 className="h-4 w-4" />
-              <span className="text-sm">Live feedback volume</span>
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Feedback</h1>
-              <p className="text-sm text-muted-foreground">
-                Front-end feedback volume analytics with scorecard drilldown and direct report dispatch.
-              </p>
-            </div>
-          </div>
-          {canDispatchScopedReports ? (
-            <FeedbackReportActionsMenu
-              scorecardId={selectedScorecard!}
-              scoreId={selectedScore}
-              days={preset === "custom" ? undefined : Number(preset)}
-              startDate={preset === "custom" ? customStartDate : undefined}
-              endDate={preset === "custom" ? customEndDate : undefined}
-              timezone={browserTimezone}
-              weekStart="monday"
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex flex-1 flex-col gap-3">
+            <ScorecardContext
+              selectedScorecard={selectedScorecard}
+              setSelectedScorecard={setSelectedScorecard}
+              selectedScore={selectedScore}
+              setSelectedScore={setSelectedScore}
             />
-          ) : null}
-        </div>
-
-        <Card className="border-border/60">
-          <CardContent className="flex flex-col gap-4 pt-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="flex-1">
-              <ScorecardContext
-                selectedScorecard={selectedScorecard}
-                setSelectedScorecard={setSelectedScorecard}
-                selectedScore={selectedScore}
-                setSelectedScore={setSelectedScore}
-              />
-            </div>
+            {selectedScore ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span className="rounded-md bg-card px-3 py-1.5">
+                  {data?.scorecard?.name || selectedScorecard} / {data?.score?.name || selectedScore}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedScore(null)}
+                  className="bg-card text-muted-foreground shadow-none hover:bg-card-selected hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                  Clear score
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-3 xl:items-end">
             <FeedbackWindowControls
               preset={preset}
               setPreset={setPreset}
@@ -567,20 +589,19 @@ export default function FeedbackDashboard() {
               customEndDate={customEndDate}
               setCustomEndDate={setCustomEndDate}
             />
-          </CardContent>
-        </Card>
-
-        {selectedScore ? (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedScore(null)}>
-              <ArrowLeft className="h-4 w-4" />
-              Back to scorecard
-            </Button>
-            <div className="text-sm text-muted-foreground">
-              Viewing {data?.score?.name || selectedScore}
-            </div>
+            {canDispatchScopedReports ? (
+              <FeedbackReportActionsMenu
+                scorecardId={selectedScorecard!}
+                scoreId={selectedScore}
+                days={preset === "custom" ? undefined : Number(preset)}
+                startDate={preset === "custom" ? customStartDate : undefined}
+                endDate={preset === "custom" ? customEndDate : undefined}
+                timezone={browserTimezone}
+                weekStart="monday"
+              />
+            ) : null}
           </div>
-        ) : null}
+        </div>
 
         {isLoadingAccounts ? (
           <LoadingDashboardState />
@@ -595,12 +616,10 @@ export default function FeedbackDashboard() {
             description="Both start and end dates are required before live feedback volume can load."
           />
         ) : error ? (
-          <Card className="border-destructive/30">
-            <CardHeader>
-              <CardTitle className="text-base">Unable to load feedback volume</CardTitle>
-              <CardDescription>{error}</CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="rounded-lg bg-card px-4 py-5">
+            <div className="text-base font-semibold text-destructive">Unable to load feedback volume</div>
+            <div className="mt-1 text-sm text-muted-foreground">{error}</div>
+          </div>
         ) : isLoading || !data ? (
           <LoadingDashboardState />
         ) : (
@@ -682,7 +701,12 @@ export default function FeedbackDashboard() {
                 </div>
                 {visibleScoreSeries.hasMore ? (
                   <div ref={visibleScoreSeries.sentinelRef} className="flex justify-center py-4">
-                    <Button variant="ghost" size="sm" onClick={visibleScoreSeries.loadMore}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={visibleScoreSeries.loadMore}
+                      className="bg-card text-muted-foreground shadow-none hover:bg-card-selected hover:text-foreground"
+                    >
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Loading more scores
                     </Button>
@@ -692,14 +716,14 @@ export default function FeedbackDashboard() {
             ) : null}
 
             {data.scope === "score" ? (
-              <Card className="border-border/60">
-                <CardHeader>
-                  <CardTitle className="text-base">Deeper analysis</CardTitle>
-                  <CardDescription>
+              <div className="rounded-lg bg-card p-4">
+                <div className="space-y-1">
+                  <div className="text-base font-semibold">Deeper analysis</div>
+                  <div className="text-sm text-muted-foreground">
                     Use the report menu to generate score-specific analysis such as contradictions or overview reports.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
                   <FeedbackReportActionsMenu
                     scorecardId={selectedScorecard!}
                     scoreId={selectedScore}
@@ -710,8 +734,8 @@ export default function FeedbackDashboard() {
                     weekStart="monday"
                     buttonLabel="Run score report"
                   />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : null}
 
             {data.summary.feedback_items_total === 0 ? (
