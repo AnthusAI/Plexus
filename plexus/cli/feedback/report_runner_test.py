@@ -5,7 +5,6 @@ import pytest
 from plexus.cli.feedback.report_runner import (
     build_window_config,
     run_feedback_report_block,
-    summarize_timeline_feedback_volume,
 )
 
 
@@ -77,25 +76,3 @@ def test_run_feedback_report_block_dispatched_returns_task_id(
     assert result["status"] == "dispatched"
     assert result["cache_key"] == "cache-1"
     assert result["task_id"] == "task-1"
-
-
-def test_summarize_timeline_feedback_volume():
-    timeline_output = {
-        "scorecard_id": "sc-1",
-        "scorecard_name": "Scorecard",
-        "mode": "all_scores",
-        "date_range": {"start": "2026-04-01T00:00:00+00:00", "end": "2026-04-30T23:59:59+00:00"},
-        "bucket_policy": {"bucket_type": "calendar_week", "bucket_count": 4},
-        "overall": {
-            "points": [
-                {"bucket_index": 0, "label": "W1", "start": "a", "end": "b", "item_count": 3, "agreements": 2, "mismatches": 1},
-                {"bucket_index": 1, "label": "W2", "start": "c", "end": "d", "item_count": 0, "agreements": 0, "mismatches": 0},
-            ]
-        },
-    }
-
-    summary = summarize_timeline_feedback_volume(timeline_output)
-    assert summary["report_type"] == "feedback_volume"
-    assert summary["summary"]["total_feedback_items"] == 3
-    assert summary["summary"]["bucket_count"] == 2
-    assert summary["summary"]["buckets_with_feedback"] == 1
