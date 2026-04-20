@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "47210a09-80e8-41cc-a588-11875cbbdace",
+  "issue_id": "plx-29862d34-7e20-4dde-981a-46487c231fce",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-20T22:25:16.633Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Purpose: document the deployed runtime scoring architecture for Plexus when it runs as a pod inside the Tethr Kubernetes cluster in Azure.\n\nDefinition of Done:\n- A repository Excalidraw diagram shows the runtime scoring container inside the Azure/Tethr Kubernetes environment.\n- The diagram shows the AWS GraphQL control plane and the control-plane entities stored there.\n- The diagram shows the in-cluster data-plane API used for Items, Score Results, and Feedback Items.\n- The visual style is consistent with the existing diagram palette and documentation conventions.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Document runtime scoring architecture for Azure-hosted Plexus pod"
+  }
+}
