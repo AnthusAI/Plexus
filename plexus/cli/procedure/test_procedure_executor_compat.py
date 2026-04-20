@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
-from plexus.cli.procedure.procedure_executor import _execute_tactus
+from plexus.cli.procedure.procedure_executor import _PlexusTraceLogBridge, _execute_tactus
 
 
 class _FakeRuntime:
@@ -194,6 +194,47 @@ class _RuntimeWithCostEvents:
             )
         )
         return {"success": True, "response": "cost event emitted"}
+
+
+class _CollectingTraceSink:
+    def __init__(self):
+        self.events = []
+
+    async def record(self, event):
+        self.events.append(event)
+        return None
+
+    async def flush(self):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_trace_bridge_forwards_cost_events_to_trace_sink():
+    from tactus.protocols.models import CostEvent
+
+    sink = _CollectingTraceSink()
+    cost_events = []
+    bridge = _PlexusTraceLogBridge(sink, on_cost_event=lambda e: cost_events.append(e))
+    event = CostEvent(
+        agent_name="optimizer",
+        model="gpt-5.4",
+        provider="openai",
+        prompt_tokens=10,
+        completion_tokens=5,
+        total_tokens=15,
+        prompt_cost=0.001,
+        completion_cost=0.001,
+        total_cost=0.002,
+    )
+
+    bridge.log(event)
+    await bridge.flush()
+    await bridge.close()
+
+    assert len(cost_events) == 1
+    assert len(bridge.cost_events) == 1
+    assert len(sink.events) == 1
+    assert getattr(sink.events[0], "event_type", None) == "cost"
 
 
 @pytest.mark.asyncio
@@ -886,6 +927,11 @@ async def test_execute_tactus_persists_inference_costs_from_cost_events(monkeypa
     assert costs["inference"]["total"] == pytest.approx(0.003)
     assert len(costs["inference"]["entries"]) == 1
     assert costs["inference"]["entries"][0]["agent_name"] == "optimizer"
+    assert isinstance(costs["inference"]["breakdown"], list)
+    assert len(costs["inference"]["breakdown"]) == 1
+    assert costs["inference"]["breakdown"][0]["provider"] == "openai"
+    assert costs["inference"]["breakdown"][0]["model"] == "gpt-5.2"
+    assert costs["inference"]["breakdown"][0]["spent_usd"] == pytest.approx(0.003)
     assert costs["totals"]["overall"]["incurred"] == pytest.approx(0.003)
 
 

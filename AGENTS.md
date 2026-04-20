@@ -180,6 +180,16 @@ This workflow uses a chain of skills and agents:
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
 - **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
 
+## Direct CLI Policy (Critical)
+
+- **Procedures and reports must be executed directly via CLI** (`plexus procedure ...`, `plexus report ...`) during development/debugging.
+- **Do not use dispatcher state as evidence** that a direct CLI procedure/report is running or healthy.
+- **Do not diagnose procedure/report crashes from task status alone**. Use process-level evidence first:
+  1. Live process check (`ps`/PID)
+  2. Direct CLI stdout/stderr logs
+  3. Then dashboard task/procedure records for corroboration
+- If a direct CLI run exits unexpectedly, capture and report the exact exception/traceback from that CLI run before proposing fixes.
+
 ## Debugging Procedures
 
 ### LLM Debug Mode (`PLEXUS_DEBUG_LLM`)

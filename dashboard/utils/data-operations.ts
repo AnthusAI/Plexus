@@ -1059,6 +1059,7 @@ export type Evaluation = {
   totalItems?: number | null;
   inferences?: number | null;
   cost?: number | null;
+  costDetails?: any;
   status?: string | null;
   elapsedSeconds?: number | null;
   estimatedRemainingSeconds?: number | null;
