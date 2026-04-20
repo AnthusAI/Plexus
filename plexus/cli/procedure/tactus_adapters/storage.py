@@ -170,6 +170,33 @@ class PlexusStorageAdapter:
         self._metadata_cache: Optional[ProcedureMetadata] = None
         logger.info(f"PlexusStorageAdapter initialized for procedure {procedure_id}")
 
+    def _fetch_raw_procedure_metadata(self, procedure_id: str) -> Dict[str, Any]:
+        """Fetch the current raw Procedure.metadata envelope for merge-safe writes."""
+        if self._is_builtin:
+            return {}
+
+        query = """
+        query GetProcedure($id: ID!) {
+            getProcedure(id: $id) {
+                id
+                metadata
+            }
+        }
+        """
+
+        response = self.client.execute(query, {'id': procedure_id})
+        procedure_data = response.get('getProcedure') or {}
+        raw_metadata = procedure_data.get('metadata') or {}
+        if isinstance(raw_metadata, str):
+            try:
+                raw_metadata = json.loads(raw_metadata)
+            except Exception:
+                logger.warning("Procedure metadata was not valid JSON during merge; defaulting to empty object")
+                raw_metadata = {}
+        if not isinstance(raw_metadata, dict):
+            return {}
+        return raw_metadata
+
     def load_procedure_metadata(self, procedure_id: str) -> ProcedureMetadata:
         """
         Load procedure metadata from Plexus via GraphQL.
@@ -304,13 +331,15 @@ class PlexusStorageAdapter:
                     entry['run_id'] = checkpoint.run_id
                 checkpoints_dict[name] = entry
 
-        # Build metadata JSON
-        metadata_json = {
+        # Build metadata JSON. Preserve any unrelated top-level keys already on
+        # the Procedure record (for example runtime/last_failure telemetry).
+        metadata_json = self._fetch_raw_procedure_metadata(metadata.procedure_id)
+        metadata_json.update({
             'checkpoints': checkpoints_dict,
             'state': metadata.state,
             'lua_state': metadata.lua_state,
             'replay_index': metadata.replay_index
-        }
+        })
 
         # Update via GraphQL mutation
         mutation = """

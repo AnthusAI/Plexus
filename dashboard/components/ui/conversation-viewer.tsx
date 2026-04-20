@@ -37,6 +37,7 @@ import {
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
+  ChevronDownIcon,
   MoreHorizontal,
   Trash2,
   AlertCircle,
@@ -820,6 +821,60 @@ const getRowFromMessage = (message: ChatMessage): ConversationRow => {
   }
 }
 
+type MessageCostSummary = {
+  schema_version?: number
+  total_usd?: number
+  llm_calls?: number
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  cached_tokens?: number
+  breakdown?: Array<Record<string, unknown>>
+}
+
+type MessageCostMetadata = {
+  kind?: string
+  billing_mode?: string
+  live?: boolean
+  summary?: MessageCostSummary
+}
+
+const hasMeaningfulCostSummary = (summary: MessageCostSummary | null | undefined): boolean => {
+  if (!summary || typeof summary !== 'object') {
+    return false
+  }
+  const totalUsd = typeof summary.total_usd === 'number' ? summary.total_usd : 0
+  const llmCalls = typeof summary.llm_calls === 'number' ? summary.llm_calls : 0
+  const promptTokens = typeof summary.prompt_tokens === 'number' ? summary.prompt_tokens : 0
+  const completionTokens = typeof summary.completion_tokens === 'number' ? summary.completion_tokens : 0
+  const totalTokens = typeof summary.total_tokens === 'number' ? summary.total_tokens : 0
+  const cachedTokens = typeof summary.cached_tokens === 'number' ? summary.cached_tokens : 0
+  const hasBreakdown = Array.isArray(summary.breakdown) && summary.breakdown.length > 0
+  return (
+    totalUsd > 0
+    || llmCalls > 0
+    || promptTokens > 0
+    || completionTokens > 0
+    || totalTokens > 0
+    || cachedTokens > 0
+    || hasBreakdown
+  )
+}
+
+const getMessageCostMetadata = (message: ChatMessage): MessageCostMetadata | null => {
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const cost = (metadata as Record<string, unknown>).cost
+  if (!cost || typeof cost !== 'object' || Array.isArray(cost)) {
+    return null
+  }
+  return cost as MessageCostMetadata
+}
+
+const formatUsd = (value: number | undefined): string => `$${(value || 0).toFixed(4)}`
+
 // Props passed into each virtualized row
 interface MessageRowProps {
   row: ConversationRow
@@ -859,7 +914,17 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   const messageTypeLabel = getMessageTypeLabel(message)
   const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
   const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
-  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge
+  const costMetadata = getMessageCostMetadata(message)
+  const costSummary = costMetadata?.summary
+  const hasCostSummary = hasMeaningfulCostSummary(costSummary)
+  const costTotal = typeof costSummary?.total_usd === 'number' ? costSummary.total_usd : undefined
+  const showInlineCostBadge = !(
+    message.role === 'ASSISTANT' && message.messageType === 'MESSAGE'
+  )
+  const costBadgeLabel = costMetadata && hasCostSummary && showInlineCostBadge
+    ? `${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costTotal)}`
+    : null
+  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge || Boolean(costBadgeLabel)
 
   return (
     <Message
@@ -885,55 +950,135 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                   {message.toolName}
                 </Badge>
               )}
+              {costBadgeLabel && (
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-info text-primary-foreground">
+                  {costBadgeLabel}
+                </Badge>
+              )}
             </div>
           )}
 
           {toolViewModel ? (
-            <Tool
-              defaultOpen={
-                EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
-                toolViewModel.state === 'output-error'
-              }
-            >
-              <ToolHeader
-                toolType={toolViewModel.type}
-                state={toolViewModel.state}
-                toolName={toolViewModel.toolName}
-              />
-              <ToolContent>
-                {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
-                  <ToolInput input={toolViewModel.input} />
-                )}
-                {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
-                    <React.Suspense fallback={
-                      <div className="rounded-md bg-card p-3">
-                        <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
-                        <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
-                      </div>
-                    }>
-                      <EvaluationToolOutput toolOutput={toolViewModel.output} />
-                    </React.Suspense>
-                  ) : (
-                    <ToolOutput
-                      errorText={toolViewModel.errorText}
-                      output={
-                        <div className="font-mono whitespace-pre-wrap break-words">
-                          {toolViewModel.output === undefined || toolViewModel.output === null
-                            ? 'No output'
-                            : typeof toolViewModel.output === 'string'
-                              ? toolViewModel.output
-                              : formatJsonWithNewlines(toolViewModel.output)}
+            <div className="space-y-2">
+              <Tool
+                defaultOpen={
+                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                  toolViewModel.state === 'output-error'
+                }
+              >
+                <ToolHeader
+                  toolType={toolViewModel.type}
+                  state={toolViewModel.state}
+                  toolName={toolViewModel.toolName}
+                />
+                <ToolContent>
+                  {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
+                    <ToolInput input={toolViewModel.input} />
+                  )}
+                  {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
+                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                      <React.Suspense fallback={
+                        <div className="rounded-md bg-card p-3">
+                          <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+                          <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
                         </div>
-                      }
-                    />
-                  )
-                )}
-              </ToolContent>
-            </Tool>
+                      }>
+                        <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                      </React.Suspense>
+                    ) : (
+                      <ToolOutput
+                        errorText={toolViewModel.errorText}
+                        output={
+                          <div className="font-mono whitespace-pre-wrap break-words">
+                            {toolViewModel.output === undefined || toolViewModel.output === null
+                              ? 'No output'
+                              : typeof toolViewModel.output === 'string'
+                                ? toolViewModel.output
+                                : formatJsonWithNewlines(toolViewModel.output)}
+                          </div>
+                        }
+                      />
+                    )
+                  )}
+                </ToolContent>
+              </Tool>
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
+                    <div>Total: {formatUsd(costSummary.total_usd)}</div>
+                    <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
+                    <div>Tokens: {costSummary.total_tokens ?? 0}</div>
+                    {Array.isArray(costSummary.breakdown) && costSummary.breakdown.length > 0 && (
+                      <table className="w-full mt-2">
+                        <thead className="text-muted-foreground/70">
+                          <tr>
+                            <th className="text-left font-medium">Model</th>
+                            <th className="text-right font-medium">Spent</th>
+                            <th className="text-right font-medium">Reused</th>
+                            <th className="text-right font-medium">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {costSummary.breakdown.map((row: any, idx: number) => (
+                            <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`}>
+                              <td className="py-0.5 pr-2">{row.provider || 'unknown'} / {row.model || 'unknown'}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.spent_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.reused_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{Number(row.total_tokens ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
           ) : (
-            <div className="text-sm">
+            <div className="text-sm space-y-2">
               <CollapsibleText content={message.content} />
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
+                    <div>Total: {formatUsd(costSummary.total_usd)}</div>
+                    <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
+                    <div>Prompt tokens: {costSummary.prompt_tokens ?? 0}</div>
+                    <div>Completion tokens: {costSummary.completion_tokens ?? 0}</div>
+                    {Array.isArray(costSummary.breakdown) && costSummary.breakdown.length > 0 && (
+                      <table className="w-full mt-2">
+                        <thead className="text-muted-foreground/70">
+                          <tr>
+                            <th className="text-left font-medium">Model</th>
+                            <th className="text-right font-medium">Spent</th>
+                            <th className="text-right font-medium">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {costSummary.breakdown.map((row: any, idx: number) => (
+                            <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`}>
+                              <td className="py-0.5 pr-2">{row.provider || 'unknown'} / {row.model || 'unknown'}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.referenced_usd ?? row.spent_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{Number(row.total_tokens ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
           )}
 
