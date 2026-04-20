@@ -103,6 +103,7 @@ const TimelineTooltip: React.FC<any> = ({ active, payload }) => {
 const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<AcceptanceRateTimelineData | null>(null);
   const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
+  const isProcessing = Boolean((props.config as any)?.isProcessing);
 
   let parsedOutput: AcceptanceRateTimelineData = {};
   try {
@@ -146,6 +147,13 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
   const points = Array.isArray(output.points) ? output.points : [];
   const summary = output.summary;
   const showBucketDetails = Boolean(output.show_bucket_details);
+  const isLoadingCompactedOutput =
+    Boolean(parsedOutput.output_compacted) && !loadedOutput && !attachmentLoadError;
+  const hasResolvedData =
+    points.length > 0 ||
+    Boolean(summary) ||
+    Boolean(output.error) ||
+    Boolean(output.warning);
   const title =
     props.name && !props.name.startsWith("block_")
       ? props.name
@@ -155,6 +163,24 @@ const AcceptanceRateTimeline: React.FC<ReportBlockProps> = (props) => {
     ...point,
     acceptance: point.score_result_acceptance_rate,
   }));
+
+  if ((isProcessing || isLoadingCompactedOutput) && !hasResolvedData) {
+    return (
+      <ReportBlock
+        {...props}
+        output={output as any}
+        title={title}
+        subtitle={output.block_description}
+        error={attachmentLoadError || output.error}
+        warning={output.warning}
+        dateRange={output.date_range}
+      >
+        <div className="rounded-md bg-card p-4 text-sm text-muted-foreground">
+          Report block is processing. Timeline metrics will appear when computation completes.
+        </div>
+      </ReportBlock>
+    );
+  }
 
   return (
     <ReportBlock

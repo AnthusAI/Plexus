@@ -540,7 +540,7 @@ def _build_default_cache_key(block_class: str, block_config: Dict[str, Any]) -> 
     Build a deterministic but readable cache key for programmatic blocks.
     """
     block_title = _humanize_block_class(block_class)
-    parts: List[str] = [block_title]
+    parts: List[str] = []
 
     scorecard = str(block_config.get("scorecard") or "").strip()
     score = str(block_config.get("score") or block_config.get("score_id") or "").strip()
@@ -555,6 +555,7 @@ def _build_default_cache_key(block_class: str, block_config: Dict[str, Any]) -> 
         parts.append(f"Scorecard {scorecard}")
     if score:
         parts.append(f"Score {score}")
+    parts.append(block_title)
 
     if start_date and end_date:
         parts.append(f"{start_date} to {end_date}")
@@ -618,13 +619,14 @@ def _derive_programmatic_display_strings(
         score_name = output_data.get("score_name") or None
         scope = output_data.get("scope") or None
 
-    title_parts: List[str] = [block_title]
+    title_parts: List[str] = []
     if scorecard_name:
         title_parts.append(str(scorecard_name).strip())
     if score_name:
         title_parts.append(str(score_name).strip())
     elif scope == "scorecard_all_scores":
         title_parts.append("All Scores")
+    title_parts.append(block_title)
 
     title = " - ".join([part for part in title_parts if part])
 
