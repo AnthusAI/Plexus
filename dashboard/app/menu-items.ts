@@ -10,7 +10,7 @@ export interface MenuItem {
 export const menuItems: MenuItem[] = [
   { name: "Activity", icon: Activity, path: "/lab/activity" },
   { name: "Alerts", icon: Siren, path: "/lab/alerts" },
-  { name: "Feedback", icon: Inbox, path: "/lab/feedback-queues" },
+  { name: "Feedback", icon: Inbox, path: "/lab/feedback" },
   { name: "Items", icon: AudioLines, path: "/lab/items" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluation", icon: FlaskConical, path: "/lab/evaluations" },
