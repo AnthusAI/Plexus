@@ -18,70 +18,6 @@ import {
   type FeedbackWeekStart,
 } from "@/utils/feedback-volume";
 
-const ACCOUNT_FEEDBACK_ITEMS_QUERY = `
-  query ListFeedbackItemByAccountIdAndEditedAt(
-    $accountId: String!
-    $editedAt: ModelStringKeyConditionInput
-    $limit: Int
-    $nextToken: String
-    $sortDirection: ModelSortDirection
-  ) {
-    listFeedbackItemByAccountIdAndEditedAt(
-      accountId: $accountId
-      editedAt: $editedAt
-      limit: $limit
-      nextToken: $nextToken
-      sortDirection: $sortDirection
-    ) {
-      items {
-        id
-        scorecardId
-        scoreId
-        itemId
-        initialAnswerValue
-        finalAnswerValue
-        isInvalid
-        editedAt
-        updatedAt
-        createdAt
-      }
-      nextToken
-    }
-  }
-`;
-
-const ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
-  query ListFeedbackItemByAccountIdAndUpdatedAt(
-    $accountId: String!
-    $updatedAt: ModelStringKeyConditionInput
-    $limit: Int
-    $nextToken: String
-    $sortDirection: ModelSortDirection
-  ) {
-    listFeedbackItemByAccountIdAndUpdatedAt(
-      accountId: $accountId
-      updatedAt: $updatedAt
-      limit: $limit
-      nextToken: $nextToken
-      sortDirection: $sortDirection
-    ) {
-      items {
-        id
-        scorecardId
-        scoreId
-        itemId
-        initialAnswerValue
-        finalAnswerValue
-        isInvalid
-        editedAt
-        updatedAt
-        createdAt
-      }
-      nextToken
-    }
-  }
-`;
-
 const SCORE_FEEDBACK_ITEMS_QUERY = `
   query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
     $accountId: String!
@@ -280,32 +216,6 @@ function mergeAndDedupeFeedbackItems(items: FeedbackVolumeSourceItem[]): Feedbac
   return Array.from(byId.values());
 }
 
-async function fetchFeedbackItemsByAccountAndEditedAt(
-  accountId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  return paginatedFeedbackQuery(ACCOUNT_FEEDBACK_ITEMS_QUERY, {
-    accountId,
-    editedAt: {
-      between: [startDate.toISOString(), endDate.toISOString()],
-    },
-  }, "listFeedbackItemByAccountIdAndEditedAt");
-}
-
-async function fetchFeedbackItemsByAccountAndUpdatedAt(
-  accountId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  return paginatedFeedbackQuery(ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY, {
-    accountId,
-    updatedAt: {
-      between: [startDate.toISOString(), endDate.toISOString()],
-    },
-  }, "listFeedbackItemByAccountIdAndUpdatedAt");
-}
-
 async function fetchFeedbackItemsByScore(
   accountId: string,
   scorecardId: string,
@@ -356,18 +266,6 @@ async function fetchFeedbackItemsByScoreAndUpdatedAt(
       ],
     },
   }, "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt");
-}
-
-async function fetchFeedbackItemsByAccountWindow(
-  accountId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  const [byEditedAt, byUpdatedAt] = await Promise.all([
-    fetchFeedbackItemsByAccountAndEditedAt(accountId, startDate, endDate),
-    fetchFeedbackItemsByAccountAndUpdatedAt(accountId, startDate, endDate),
-  ]);
-  return mergeAndDedupeFeedbackItems([...byEditedAt, ...byUpdatedAt]);
 }
 
 async function fetchFeedbackItemsByScoreWindow(
@@ -436,10 +334,18 @@ async function loadFeedbackVolumeDashboardData({
     bucketType ?? pickAutoFeedbackVolumeBucketType(window.start, window.end);
 
   if (scope === "account") {
-    const [scorecards, items] = await Promise.all([
-      fetchScorecardsForAccount(accountId),
-      fetchFeedbackItemsByAccountWindow(accountId, window.start, window.end),
-    ]);
+    const scorecards = await fetchScorecardsForAccount(accountId);
+    const scoresByScorecard = await mapWithConcurrency(scorecards, 4, async (scorecard) => ({
+      scorecardId: scorecard.id,
+      scores: await fetchScoresForScorecard(scorecard.id),
+    }));
+    const scopedScores = scoresByScorecard.flatMap(({ scorecardId, scores }) =>
+      scores.map((score) => ({ scorecardId, scoreId: score.id }))
+    );
+    const perScoreItems = await mapWithConcurrency(scopedScores, 4, async ({ scorecardId, scoreId }) =>
+      fetchFeedbackItemsByScoreWindow(accountId, scorecardId, scoreId, window.start, window.end)
+    );
+    const items = mergeAndDedupeFeedbackItems(perScoreItems.flat());
 
     return buildFeedbackVolumeDashboardData({
       scope,
