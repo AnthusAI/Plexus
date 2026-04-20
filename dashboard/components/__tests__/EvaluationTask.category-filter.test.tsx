@@ -1,11 +1,27 @@
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import EvaluationTask from '@/components/EvaluationTask'
 
 jest.mock('@/components/EvaluationTaskScoreResults', () => ({
   EvaluationTaskScoreResults: ({ selectedItemIds }: { selectedItemIds: string[] | null }) => (
     <div data-testid="selected-item-ids">{JSON.stringify(selectedItemIds)}</div>
   ),
+}))
+
+jest.mock('@/utils/amplify-client', () => ({
+  getClient: () => ({
+    graphql: jest.fn().mockResolvedValue({
+      data: {
+        getScoreVersion: {
+          id: 'version-1',
+          createdAt: '2024-01-01T00:00:00Z',
+          score: {
+            championVersionId: 'version-1',
+          },
+        },
+      },
+    }),
+  }),
 }))
 
 const makeTask = () => {
@@ -51,6 +67,10 @@ const makeTask = () => {
     type: 'Accuracy Evaluation',
     scorecard: 'Test scorecard',
     score: 'Test score',
+    scorecardId: 'scorecard-1',
+    scoreId: 'score-1',
+    scoreVersionId: 'version-1',
+    procedureId: 'procedure-1',
     time: new Date().toISOString(),
     data: {
       id: 'eval-1',
@@ -104,5 +124,17 @@ describe('EvaluationTask category summary drill-down', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
     expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('null')
+  })
+
+  test('renders score version and procedure links in detail view', async () => {
+    const { container } = render(<EvaluationTask variant="detail" task={makeTask()} />)
+
+    await waitFor(() => {
+      expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
+    })
+
+    expect(container.querySelector('a[href="/lab/scorecards/scorecard-1"]')).toBeTruthy()
+    expect(container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"]')).toBeTruthy()
+    expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
   })
 })
