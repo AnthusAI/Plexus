@@ -946,6 +946,12 @@ class LangGraphScore(Score, LangChainUser):
             }
             return mapping.get(normalized, normalized)
 
+        def _string_attr(source: object, attribute: str) -> Optional[str]:
+            if source is None:
+                return None
+            value = getattr(source, attribute, None)
+            return value if isinstance(value, str) and value else None
+
         node_instances = getattr(self, "node_instances", None)
         if isinstance(node_instances, list):
             for node_name, node_instance in node_instances:
@@ -967,11 +973,11 @@ class LangGraphScore(Score, LangChainUser):
 
                 node_params = getattr(node_instance, "parameters", None)
                 model_name = (
-                    getattr(node_params, "model_name", None)
+                    _string_attr(node_params, "model_name")
                     or self.parameters.model_name
                 )
                 provider_name = _normalize_provider(
-                    getattr(node_params, "model_provider", None) or self.parameters.model_provider
+                    _string_attr(node_params, "model_provider") or self.parameters.model_provider
                 )
 
                 prompt_cost = 0.0
