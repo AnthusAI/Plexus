@@ -17,10 +17,51 @@ permissions:
   contents: write
 
 jobs:
+  version-sync:
+    name: Version Sync Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Validate pyproject and _version.py stay in sync
+      run: |
+        python - <<'PY'
+        import re
+        import sys
+        from pathlib import Path
+
+        pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+        version_file_text = Path("plexus/_version.py").read_text(encoding="utf-8")
+
+        pyproject_match = re.search(r'(?m)^version\s*=\s*"([^"]+)"\s*$', pyproject_text)
+        version_file_match = re.search(r'(?m)^__version__\s*=\s*"([^"]+)"\s*$', version_file_text)
+
+        if not pyproject_match or not version_file_match:
+            print("Unable to parse version from pyproject.toml or plexus/_version.py", file=sys.stderr)
+            sys.exit(1)
+
+        pyproject_version = pyproject_match.group(1)
+        version_file_version = version_file_match.group(1)
+
+        print(f"pyproject version: {pyproject_version}")
+        print(f"_version.py version: {version_file_version}")
+
+        if pyproject_version != version_file_version:
+            print(
+                "Version mismatch: pyproject.toml and plexus/_version.py must match. "
+                "Release automation should update both together.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        PY
+
   python-tests:
     name: Python Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: [version-sync]
     strategy:
       fail-fast: false
       matrix:
