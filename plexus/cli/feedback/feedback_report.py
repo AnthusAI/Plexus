@@ -34,7 +34,7 @@ def _print_result(
     include_log: bool,
 ) -> None:
     if result.get("status") in {"dispatched", "already_dispatched"}:
-        console.print(
+        click.echo(
             json.dumps(
                 {
                     "status": result["status"],
@@ -54,12 +54,13 @@ def _print_result(
         payload = result.copy()
         if not include_log:
             payload.pop("log", None)
-        console.print(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
+        click.echo(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
     else:
         payload = result.copy()
         if not include_log:
             payload.pop("log", None)
-        console.print(json.dumps(payload, indent=2, default=str))
+        # Use plain stdout writes for machine-readable output; Rich may wrap long strings.
+        click.echo(json.dumps(payload, indent=2, default=str))
 
 
 def _coerce_optional_int(value: Optional[int], name: str) -> Optional[int]:
@@ -297,6 +298,18 @@ def recent(
 @report.command(name="analysis")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
+@click.option(
+    "--order-scores",
+    type=click.Choice(["best_to_worst", "worst_to_best", "none"]),
+    default="best_to_worst",
+    show_default=True,
+    help="Scorecard-level only: order per-score results by AC1/accuracy.",
+)
+@click.option(
+    "--memory-analysis",
+    is_flag=True,
+    help="Enable optional LLM-backed topic clustering for mismatch comments (slow/expensive).",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -310,6 +323,8 @@ def recent(
 def analysis(
     scorecard: str,
     score: Optional[str],
+    order_scores: str,
+    memory_analysis: bool,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -334,6 +349,7 @@ def analysis(
         ttl_hours=ttl_hours,
         fresh=fresh,
         background=background,
+        extra_config={"order_scores": order_scores, "memory_analysis": bool(memory_analysis)},
     )
     _print_result(title="FeedbackAnalysis", result=result, output_format=output_format, include_log=include_log)
 
