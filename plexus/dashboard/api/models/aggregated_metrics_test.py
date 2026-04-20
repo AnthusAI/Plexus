@@ -281,6 +281,60 @@ def test_create_or_update_updates_existing(mock_client, sample_metrics_data):
     assert metric.count == 150
 
 
+def test_generate_composite_key_includes_scope_identity():
+    start_time = datetime(2026, 4, 20, 12, 0, tzinfo=timezone.utc)
+
+    assert AggregatedMetrics.generate_composite_key(
+        'feedbackItemsByScorecard',
+        start_time,
+        60,
+        scorecard_id='scorecard-123',
+    ) == 'feedbackItemsByScorecard#scorecard-123#2026-04-20T12:00:00Z#60'
+
+    assert AggregatedMetrics.generate_composite_key(
+        'feedbackItemsByScore',
+        start_time,
+        60,
+        scorecard_id='scorecard-123',
+        score_id='score-456',
+    ) == 'feedbackItemsByScore#score-456#2026-04-20T12:00:00Z#60'
+
+
+def test_create_or_update_uses_scope_aware_composite_key(mock_client, sample_metrics_data):
+    def mock_execute(query, variables):
+        if 'updateAggregatedMetrics' in query:
+            raise Exception("record not found")
+        scoped_data = dict(sample_metrics_data)
+        scoped_data['recordType'] = 'feedbackItemsByScore'
+        scoped_data['scorecardId'] = 'scorecard-123'
+        scoped_data['scoreId'] = 'score-456'
+        scoped_data['compositeKey'] = 'feedbackItemsByScore#score-456#2026-04-20T12:00:00Z#60'
+        return {'createAggregatedMetrics': scoped_data}
+
+    mock_client.execute.side_effect = mock_execute
+
+    start_time = datetime(2026, 4, 20, 12, 0, tzinfo=timezone.utc)
+    end_time = start_time + timedelta(minutes=60)
+
+    AggregatedMetrics.create_or_update(
+        mock_client,
+        account_id='acc-123',
+        record_type='feedbackItemsByScore',
+        time_range_start=start_time,
+        time_range_end=end_time,
+        number_of_minutes=60,
+        count=12,
+        complete=True,
+        scorecard_id='scorecard-123',
+        score_id='score-456',
+        metadata={'changedCount': 4, 'unchangedCount': 7, 'invalidCount': 1},
+    )
+
+    create_call = mock_client.execute.call_args_list[1]
+    assert 'createAggregatedMetrics' in create_call[0][0]
+    assert create_call[0][1]['input']['compositeKey'] == 'feedbackItemsByScore#score-456#2026-04-20T12:00:00Z#60'
+
+
 def test_fields_method():
     """Test that fields() returns all expected fields"""
     fields = AggregatedMetrics.fields()
