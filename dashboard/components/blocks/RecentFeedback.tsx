@@ -52,6 +52,7 @@ const AUTO_SHOW_ROWS_THRESHOLD = 200;
 const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = React.useState<RecentFeedbackData | null>(null);
   const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
+  const isProcessing = Boolean((props.config as any)?.isProcessing);
 
   let parsedOutput: RecentFeedbackData = {};
   try {
@@ -98,6 +99,13 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
   const output = loadedOutput ?? parsedOutput;
   const summary = output.summary;
   const items = Array.isArray(output.items) ? output.items : [];
+  const isLoadingCompactedOutput =
+    Boolean(parsedOutput.output_compacted) && !loadedOutput && !attachmentLoadError;
+  const hasResolvedData =
+    Boolean(summary) ||
+    items.length > 0 ||
+    Boolean(output.error) ||
+    Boolean(output.warning);
   const [showRows, setShowRows] = React.useState(items.length <= AUTO_SHOW_ROWS_THRESHOLD);
 
   React.useEffect(() => {
@@ -116,6 +124,24 @@ const RecentFeedback: React.FC<ReportBlockProps> = (props) => {
     props.name && !props.name.startsWith("block_")
       ? props.name
       : output.block_title || "Recent Feedback";
+
+  if ((isProcessing || isLoadingCompactedOutput) && !hasResolvedData) {
+    return (
+      <ReportBlock
+        {...props}
+        output={output as any}
+        title={title}
+        subtitle={output.block_description}
+        error={attachmentLoadError || output.error}
+        warning={output.warning}
+        dateRange={output.date_range}
+      >
+        <div className="rounded-md bg-card p-4 text-sm text-muted-foreground">
+          Report block is processing. Feedback metrics will appear when computation completes.
+        </div>
+      </ReportBlock>
+    );
+  }
 
   return (
     <ReportBlock

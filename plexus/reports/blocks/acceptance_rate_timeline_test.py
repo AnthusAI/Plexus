@@ -22,6 +22,7 @@ async def test_acceptance_rate_timeline_buckets_and_counts(mock_api_client):
             "end_date": "2026-04-15",
             "bucket_type": "trailing_7d",
             "bucket_count": 2,
+            "show_bucket_details": True,
         },
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
@@ -84,6 +85,7 @@ async def test_acceptance_rate_timeline_buckets_and_counts(mock_api_client):
         output, _ = await block.generate()
 
     assert output["report_type"] == "acceptance_rate_timeline"
+    assert output["show_bucket_details"] is True
     points = output["points"]
     assert len(points) == 2
 
