@@ -48,6 +48,7 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
   task: AmplifyTask | null;
   scorecard: { name: string } | null;
   score: { name: string } | null;
+  procedureId?: string | null;
   metrics: any;  // Allow any for processed metrics since we parse JSON
   confusionMatrix: any;  // Allow any for processed matrix since we parse JSON
   datasetClassDistribution: any;  // Allow any for processed distribution since we parse JSON
@@ -881,6 +882,33 @@ type RawScoreResults = {
   items: RawScoreResult[];
 };
 
+export function parseTaskMetadata(rawMetadata: unknown): Record<string, unknown> | null {
+  if (!rawMetadata) return null;
+
+  if (typeof rawMetadata === 'string') {
+    try {
+      const parsed = JSON.parse(rawMetadata);
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof rawMetadata === 'object') {
+    return rawMetadata as Record<string, unknown>;
+  }
+
+  return null;
+}
+
+export function getTaskProcedureId(task: AmplifyTask | null | undefined): string | null {
+  const metadata = parseTaskMetadata(task?.metadata);
+  if (!metadata) return null;
+
+  const procedureId = metadata.procedure_id ?? metadata.procedureId;
+  return typeof procedureId === 'string' && procedureId.trim() ? procedureId : null;
+}
+
 export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {
 
   if (!evaluation) return null;
@@ -1024,12 +1052,15 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     };
   });
 
+  const procedureId = getTaskProcedureId(taskData);
+
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
     ...evaluation, // Include all base evaluation fields
     task: taskData,
     scorecard: scorecardData ? { name: scorecardData.name } : null,
     score: scoreData ? { name: scoreData.name } : null,
+    procedureId,
     metrics: typeof evaluation.metrics === 'string' ? 
       JSON.parse(evaluation.metrics) : evaluation.metrics,
     confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
