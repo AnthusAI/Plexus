@@ -1,0 +1,25 @@
+{
+  "id": "plx-0271cca8-a07a-4e4f-8774-69a015107ef2",
+  "title": "Recover missing recent procedures in dashboard list",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "25758d45-a67d-494d-9361-332e255920ab",
+      "author": "ryan",
+      "text": "Root cause: the dashboard's initial procedure load stopped after a single sparse page from listProcedureByAccountIdAndUpdatedAt. The AppSync GSI/query was fine; newer procedures were on later pages. Fix: keep using the normal Amplify Gen2 list query, but page through nextToken during initial load until we accumulate enough visible rows for the existing client-side start/created-time sort to surface recent procedures.",
+      "created_at": "2026-04-20T19:39:57.057885Z"
+    }
+  ],
+  "created_at": "2026-04-20T19:12:14.848643Z",
+  "updated_at": "2026-04-20T19:39:57.057885Z",
+  "closed_at": null,
+  "custom": {}
+}

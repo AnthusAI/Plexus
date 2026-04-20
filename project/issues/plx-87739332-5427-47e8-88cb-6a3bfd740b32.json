@@ -1,0 +1,55 @@
+{
+  "id": "plx-87739332-5427-47e8-88cb-6a3bfd740b32",
+  "title": "Persist procedure/task failure telemetry on direct CLI termination",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c428918f-25e5-4a24-a79f-55413e295f30",
+      "author": "ryan",
+      "text": "Implementing direct CLI failure telemetry for procedure runs. Scope: catch SIGINT/SIGTERM, uncaught exceptions, click.Abort, and non-zero SystemExit; persist FAILED status and structured failure details into Procedure metadata + Task error fields; fail current/pending TaskStages; fix chat session error branches that currently end as COMPLETED. No heartbeat/watcher/reconciler and no schema change.",
+      "created_at": "2026-04-20T16:41:30.921651Z"
+    },
+    {
+      "id": "260368f1-5e69-4e67-9af5-050c20eda20b",
+      "author": "ryan",
+      "text": "Implemented direct CLI procedure failure telemetry without schema changes. Added a shared failure path in `plexus/cli/shared/experiment_runner.py` that: installs SIGINT/SIGTERM handlers after task creation, persists `Procedure.status=RUNNING` plus `metadata.runtime` at start, and routes failed result / uncaught exception / click.Abort / non-zero SystemExit / signal termination through one idempotent finalizer that writes `Procedure.status=FAILED`, `metadata.last_failure`, Task `errorMessage/errorDetails`, and fails remaining TaskStages. Updated Tactus storage adapter to preserve unrelated Procedure.metadata keys during state/checkpoint saves so runtime/failure telemetry is not erased. Fixed Lua DSL runtime error branches to end chat sessions as FAILED instead of COMPLETED. Validation: `pytest -q plexus/cli/shared/test_experiment_runner.py plexus/cli/procedure/test_storage_metadata_preservation.py plexus/cli/procedure/lua_dsl/test_runtime_failure_session_status.py` => 8 passed. Also passed `python -m py_compile` on modified source/test files.",
+      "created_at": "2026-04-20T16:51:14.314083Z"
+    },
+    {
+      "id": "02a6d6c7-a16f-4b6d-9d74-dcd72a95258b",
+      "author": "ryan",
+      "text": "Follow-up safety hardening: adjusted the new Procedure metadata merge helper so a transient metadata-read failure does not write a partial metadata envelope back to the record. It now degrades to status-only update instead of risking checkpoint/state loss. Re-ran targeted validation after the change: 8 tests passed and py_compile remained clean.",
+      "created_at": "2026-04-20T16:51:53.074890Z"
+    },
+    {
+      "id": "d282dd19-6bbc-4b51-819a-b24588a06561",
+      "author": "ryan",
+      "text": "Starting live termination integration test. Stopping existing optimizer process PID 97825 so the test run is isolated, then launching a fresh direct CLI procedure run and planning to SIGTERM it after ~2 minutes to verify FAILED telemetry persists to Procedure/Task/TaskStage records.",
+      "created_at": "2026-04-20T17:00:40.506Z"
+    },
+    {
+      "id": "48608a1f-3db4-4802-af82-5059232e7756",
+      "author": "ryan",
+      "text": "Live integration test passed. Launched direct CLI optimizer run, let it reach execution, then sent SIGTERM after ~2 minutes. Verified persisted backend state for procedure 00e8613d-da5b-4374-8441-b0696f4b601a / task 9a30ae38-52e5-4283-9e66-43f54b92a56a: Procedure.status=FAILED; Procedure.metadata.last_failure={kind: signal, signal: SIGTERM, phase: Evaluation, pid: 41508, terminated_at: 2026-04-20T17:03:16.542515+00:00}; Task.status=FAILED; Task.errorMessage='Procedure run interrupted by SIGTERM'; Task.errorDetails carries the same structured payload; Task stages flipped from stale running state to FAILED with visible statusMessage 'Procedure run interrupted by SIGTERM'. This demonstrates the feature working against real GraphQL data, not just unit tests.",
+      "created_at": "2026-04-20T17:03:45.614013Z"
+    },
+    {
+      "id": "f0b43b0b-9fd3-4b69-85cd-e0d1fb56d0a7",
+      "author": "ryan",
+      "text": "Transitioning from kill-path validation to a real long-run integration test. Next step: start a fresh direct CLI optimizer run targeting 10 cycles and monitor startup/execution to confirm it gets beyond the initial cycle instead of dying immediately.",
+      "created_at": "2026-04-20T17:07:54.746496Z"
+    }
+  ],
+  "created_at": "2026-04-20T16:41:20.359983Z",
+  "updated_at": "2026-04-20T17:58:18.062175Z",
+  "closed_at": null,
+  "custom": {}
+}
