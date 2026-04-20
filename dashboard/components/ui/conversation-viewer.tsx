@@ -37,6 +37,7 @@ import {
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
+  ChevronDownIcon,
   MoreHorizontal,
   Trash2,
   AlertCircle,
@@ -838,6 +839,28 @@ type MessageCostMetadata = {
   summary?: MessageCostSummary
 }
 
+const hasMeaningfulCostSummary = (summary: MessageCostSummary | null | undefined): boolean => {
+  if (!summary || typeof summary !== 'object') {
+    return false
+  }
+  const totalUsd = typeof summary.total_usd === 'number' ? summary.total_usd : 0
+  const llmCalls = typeof summary.llm_calls === 'number' ? summary.llm_calls : 0
+  const promptTokens = typeof summary.prompt_tokens === 'number' ? summary.prompt_tokens : 0
+  const completionTokens = typeof summary.completion_tokens === 'number' ? summary.completion_tokens : 0
+  const totalTokens = typeof summary.total_tokens === 'number' ? summary.total_tokens : 0
+  const cachedTokens = typeof summary.cached_tokens === 'number' ? summary.cached_tokens : 0
+  const hasBreakdown = Array.isArray(summary.breakdown) && summary.breakdown.length > 0
+  return (
+    totalUsd > 0
+    || llmCalls > 0
+    || promptTokens > 0
+    || completionTokens > 0
+    || totalTokens > 0
+    || cachedTokens > 0
+    || hasBreakdown
+  )
+}
+
 const getMessageCostMetadata = (message: ChatMessage): MessageCostMetadata | null => {
   const metadata = message.metadata
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
@@ -893,8 +916,12 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
   const costMetadata = getMessageCostMetadata(message)
   const costSummary = costMetadata?.summary
+  const hasCostSummary = hasMeaningfulCostSummary(costSummary)
   const costTotal = typeof costSummary?.total_usd === 'number' ? costSummary.total_usd : undefined
-  const costBadgeLabel = costMetadata
+  const showInlineCostBadge = !(
+    message.role === 'ASSISTANT' && message.messageType === 'MESSAGE'
+  )
+  const costBadgeLabel = costMetadata && hasCostSummary && showInlineCostBadge
     ? `${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costTotal)}`
     : null
   const showMetadataBadges = showMessageTypeBadge || showToolNameBadge || Boolean(costBadgeLabel)
@@ -975,12 +1002,15 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                   )}
                 </ToolContent>
               </Tool>
-              {costMetadata && costSummary && (
-                <details className="rounded border border-border/40 p-2 text-xs">
-                  <summary className="cursor-pointer text-muted-foreground">
-                    Cost details
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
                   </summary>
-                  <div className="mt-2 space-y-1 tabular-nums">
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
                     <div>Total: {formatUsd(costSummary.total_usd)}</div>
                     <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
                     <div>Tokens: {costSummary.total_tokens ?? 0}</div>
@@ -1013,12 +1043,15 @@ const MemoizedMessageRow = React.memo(function MessageRow({
           ) : (
             <div className="text-sm space-y-2">
               <CollapsibleText content={message.content} />
-              {costMetadata && costSummary && (
-                <details className="rounded border border-border/40 p-2 text-xs">
-                  <summary className="cursor-pointer text-muted-foreground">
-                    Cost details
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
                   </summary>
-                  <div className="mt-2 space-y-1 tabular-nums">
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
                     <div>Total: {formatUsd(costSummary.total_usd)}</div>
                     <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
                     <div>Prompt tokens: {costSummary.prompt_tokens ?? 0}</div>

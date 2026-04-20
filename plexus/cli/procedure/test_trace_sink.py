@@ -354,3 +354,73 @@ async def test_trace_sink_tool_call_message_includes_tool_cost_metadata():
     assert cost.get("kind") == "tool_execution"
     assert cost.get("billing_mode") == "reused"
     assert cost.get("live") is False
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_does_not_attach_zero_cost_placeholder_to_assistant_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-assistant-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    await sink.record({"event_type": "agent_turn", "agent_name": "code_editor", "stage": "started"})
+    await sink.record(
+        {
+            "role": "ASSISTANT",
+            "content": "Compliance-bias clarification for ambiguous cost language",
+            # Deliberately omit agent_name to exercise active-turn fallback.
+        }
+    )
+
+    record_kwargs = recorder.record_message.await_args.kwargs
+    metadata = record_kwargs.get("metadata")
+    assert not isinstance(metadata, dict) or "cost" not in metadata
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_late_cost_event_updates_recent_assistant_message():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-assistant-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    await sink.record({"event_type": "agent_turn", "agent_name": "code_editor", "stage": "started"})
+    await sink.record(
+        {
+            "role": "ASSISTANT",
+            "content": "Hypothesis text",
+            # Deliberately omit agent_name to exercise active-turn fallback.
+        }
+    )
+    await sink.record({"event_type": "agent_turn", "agent_name": "code_editor", "stage": "completed"})
+    await sink.record(
+        {
+            "event_type": "cost",
+            "agent_name": "code_editor",
+            "provider": "openai",
+            "model": "gpt-5.4",
+            "prompt_tokens": 100,
+            "completion_tokens": 25,
+            "total_tokens": 125,
+            "total_cost": 0.0125,
+        }
+    )
+
+    update_kwargs = recorder.update_message.await_args.kwargs
+    assert update_kwargs.get("message_id") == "msg-assistant-1"
+    metadata = update_kwargs.get("metadata")
+    assert isinstance(metadata, dict)
+    cost = metadata.get("cost")
+    assert isinstance(cost, dict)
+    assert cost.get("kind") == "assistant_inference"
+    assert cost.get("live") is False
+    summary = cost.get("summary")
+    assert isinstance(summary, dict)
+    assert summary.get("total_usd") == pytest.approx(0.0125)
+    assert summary.get("llm_calls") == 1
