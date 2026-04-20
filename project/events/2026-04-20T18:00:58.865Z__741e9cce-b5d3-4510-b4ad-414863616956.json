@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "741e9cce-b5d3-4510-b4ad-414863616956",
+  "issue_id": "plx-c5bf9c9e-0cad-43ff-81f3-db29aa3e584c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-20T18:00:58.865Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Identify metadata placeholders used by system/user prompts and ensure Plexus write path persists corresponding fields for reliable prompt rendering.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-09a2c340-b32d-4d16-b27d-3e9717a80a0e",
+    "priority": 1,
+    "status": "open",
+    "title": "Map missing prompt placeholders into persisted Item.metadata"
+  }
+}
