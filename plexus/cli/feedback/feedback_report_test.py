@@ -164,11 +164,13 @@ def test_feedback_volume_uses_dedicated_block_and_show_bucket_details(mock_run_f
 
 
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
+@patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
 @patch("plexus.cli.feedback.feedback_report.run_programmatic_report_and_persist")
 @patch("plexus.cli.feedback.feedback_report.create_client")
 def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     mock_create_client,
     mock_run_programmatic_report_and_persist,
+    mock_enrich_parameters_with_names,
     mock_resolve_account_id_for_command,
 ):
     runner = CliRunner()
@@ -176,6 +178,13 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     mock_client.generate_deep_link.return_value = "https://app.plexus.ai/lab/reports/report-123"
     mock_create_client.return_value = mock_client
     mock_resolve_account_id_for_command.return_value = "acct-1"
+    mock_enrich_parameters_with_names.return_value = {
+        "scorecard": "1438",
+        "score": "45813",
+        "days": 90,
+        "scorecard_name": "SelectQuote HCS Medium-Risk",
+        "score_name": "Agent Misrepresentation",
+    }
     mock_run_programmatic_report_and_persist.return_value = ("report-123", None)
 
     result = runner.invoke(
@@ -209,3 +218,5 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     assert block_definitions[0]["config"]["show_bucket_details"] is True
     assert block_definitions[0]["config"]["bucket_type"] == "trailing_7d"
     assert block_definitions[1]["config"]["show_bucket_details"] is True
+    assert kwargs["display_title"] == "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview"
+    assert "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview" in kwargs["report_name"]
