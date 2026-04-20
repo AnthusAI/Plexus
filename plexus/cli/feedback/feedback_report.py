@@ -613,9 +613,8 @@ def acceptance_rate_timeline(
     "--show-bucket-details/--chart-only",
     default=False,
     show_default=True,
-    help="Show or hide per-bucket details for the top timeline block.",
+    help="Show or hide per-bucket details for the timeline blocks.",
 )
-@click.option("--max-items", type=int, default=200, show_default=True, help="Maximum acceptance-rate item rows.")
 @click.option(
     "--mode",
     type=click.Choice(["contradictions", "aligned"]),
@@ -639,7 +638,6 @@ def overview(
     timezone_name: str,
     week_start: str,
     show_bucket_details: bool,
-    max_items: int,
     mode: str,
     max_feedback_items: int,
     num_topics: int,
@@ -650,7 +648,7 @@ def overview(
 ) -> None:
     """
     Generate a 3-block score overview report:
-    FeedbackAlignmentTimeline, AcceptanceRate, FeedbackContradictions.
+    FeedbackVolumeTimeline, FeedbackAlignmentTimeline, FeedbackContradictions.
     """
     client = create_client()
     if not client:
@@ -675,10 +673,12 @@ def overview(
         "week_start": week_start,
         "show_bucket_details": show_bucket_details,
     }
-    acceptance_config: Dict[str, Any] = {
+    volume_timeline_config: Dict[str, Any] = {
         **shared_scope,
-        "include_item_acceptance_rate": True,
-        "max_items": max_items,
+        "bucket_type": bucket_type,
+        "timezone": timezone_name,
+        "week_start": week_start,
+        "show_bucket_details": show_bucket_details,
     }
     contradictions_config: Dict[str, Any] = {
         **shared_scope,
@@ -699,14 +699,14 @@ def overview(
         report_name=final_report_name,
         block_definitions=[
             {
+                "class_name": "FeedbackVolumeTimeline",
+                "block_name": "Feedback Volume Timeline",
+                "config": volume_timeline_config,
+            },
+            {
                 "class_name": "FeedbackAlignmentTimeline",
                 "block_name": "Feedback Alignment Timeline",
                 "config": timeline_config,
-            },
-            {
-                "class_name": "AcceptanceRate",
-                "block_name": "Acceptance Rate",
-                "config": acceptance_config,
             },
             {
                 "class_name": "FeedbackContradictions",
@@ -722,7 +722,6 @@ def overview(
             "timezone": timezone_name,
             "week_start": week_start,
             "show_bucket_details": show_bucket_details,
-            "acceptance_max_items": max_items,
             "contradictions_mode": mode,
             "max_feedback_items": max_feedback_items,
             "num_topics": num_topics,
@@ -742,8 +741,8 @@ def overview(
         "report_name": final_report_name,
         "dashboard_url": dashboard_url,
         "blocks": [
+            "FeedbackVolumeTimeline",
             "FeedbackAlignmentTimeline",
-            "AcceptanceRate",
             "FeedbackContradictions",
         ],
         "shared_scope": shared_scope,

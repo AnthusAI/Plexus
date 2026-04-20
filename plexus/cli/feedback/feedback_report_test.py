@@ -196,8 +196,8 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     _, kwargs = mock_run_programmatic_report_and_persist.call_args
     block_definitions = kwargs["block_definitions"]
     assert [block["class_name"] for block in block_definitions] == [
+        "FeedbackVolumeTimeline",
         "FeedbackAlignmentTimeline",
-        "AcceptanceRate",
         "FeedbackContradictions",
     ]
 
@@ -207,4 +207,5 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
         assert block["config"]["days"] == 90
 
     assert block_definitions[0]["config"]["show_bucket_details"] is True
-    assert block_definitions[1]["config"]["include_item_acceptance_rate"] is True
+    assert block_definitions[0]["config"]["bucket_type"] == "trailing_7d"
+    assert block_definitions[1]["config"]["show_bucket_details"] is True
