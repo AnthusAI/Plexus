@@ -39,6 +39,34 @@ const getStageItemsFromAny = (stages: any): TaskStageType[] => {
   return [] as TaskStageType[];
 };
 
+const formatSubscriptionError = (error: unknown) => {
+  const source = error as any;
+  const graphQLErrors = source?.errors ?? source?.graphQLErrors ?? null;
+  const networkError = source?.networkError ?? null;
+  const message =
+    (typeof source?.message === 'string' && source.message) ||
+    (Array.isArray(graphQLErrors) && graphQLErrors.length > 0 ? String(graphQLErrors[0]?.message || '') : '') ||
+    '';
+
+  let raw: string | null = null;
+  try {
+    if (error == null) raw = null;
+    else if (typeof error === 'string') raw = error;
+    else raw = JSON.stringify(error, Object.getOwnPropertyNames(error as object));
+  } catch {
+    raw = String(error);
+  }
+
+  return {
+    name: source?.name ?? null,
+    message: message || null,
+    graphQLErrors,
+    networkError,
+    raw,
+    isEmpty: !message && !graphQLErrors && !networkError && (raw === '{}' || raw === null),
+  };
+};
+
 // Add type for score result
 type ScoreResult = {
   id: string;
@@ -1042,7 +1070,10 @@ export function useEvaluationData({
                 existingEval.status !== transformedEvaluation.status ||
                 existingEval.accuracy !== transformedEvaluation.accuracy ||
                 existingEval.processedItems !== transformedEvaluation.processedItems ||
-                existingEval.totalItems !== transformedEvaluation.totalItems;
+                existingEval.totalItems !== transformedEvaluation.totalItems ||
+                existingEval.parameters !== transformedEvaluation.parameters ||
+                existingEval.cost !== transformedEvaluation.cost ||
+                existingEval.taskId !== transformedEvaluation.taskId;
 
               if (!isMeaningfulUpdate) {
                 console.log(`STAGE_TRACE: Skipping non-meaningful update for eval ${transformedEvaluation.id}`);
@@ -1065,6 +1096,8 @@ export function useEvaluationData({
                   // Preserve existing score results and scorecard/score names when updating evaluation
                   const updatedEval: ProcessedEvaluation = {
                     ...transformedEvaluation,
+                    // Preserve prior parameter payload when a partial update omits it.
+                    parameters: transformedEvaluation.parameters ?? e.parameters,
                     scoreResults: e.scoreResults || transformedEvaluation.scoreResults,
                     scorecard: transformedEvaluation.scorecard || e.scorecard,
                     score: transformedEvaluation.score || e.score,
@@ -1223,7 +1256,12 @@ export function useEvaluationData({
         }
       },
       error: (error: Error) => {
-        console.error('Error in evaluation update subscription:', error);
+        const details = formatSubscriptionError(error);
+        if (details.isEmpty) {
+          console.warn('Evaluation update subscription emitted an empty error payload (likely transient transport reconnect).', details);
+          return;
+        }
+        console.error('Error in evaluation update subscription:', details);
       }
     });
     subscriptions.push(evaluationUpdateSubscription);
@@ -1238,7 +1276,12 @@ export function useEvaluationData({
         }
       },
       error: (error: Error) => {
-        console.error('Error in task update subscription:', error);
+        const details = formatSubscriptionError(error);
+        if (details.isEmpty) {
+          console.warn('Task update subscription emitted an empty error payload (likely transient transport reconnect).', details);
+          return;
+        }
+        console.error('Error in task update subscription:', details);
       }
     });
     subscriptions.push(taskSubscription);
@@ -1262,7 +1305,12 @@ export function useEvaluationData({
         }
       },
       error: (error: Error) => {
-console.error('STAGE_TRACE: Error in task stage update subscription:', error.message);
+        const details = formatSubscriptionError(error);
+        if (details.isEmpty) {
+          console.warn('Task stage update subscription emitted an empty error payload (likely transient transport reconnect).', details);
+          return;
+        }
+        console.error('STAGE_TRACE: Error in task stage update subscription:', details);
       }
     });
     subscriptions.push(stageSubscription);
