@@ -1,8 +1,10 @@
 import {
   buildFeedbackVolumeDashboardData,
+  buildFeedbackVolumeDashboardDataFromMetrics,
   classifyFeedbackVolumeItem,
   createDateWindowFromDateInputs,
   pickAutoFeedbackVolumeBucketType,
+  type FeedbackVolumeMetricRecord,
   type FeedbackVolumeSourceItem,
 } from "@/utils/feedback-volume";
 
@@ -145,5 +147,60 @@ describe("feedback-volume utilities", () => {
     ]);
     expect(data.scorecardSeries[0].summary.feedback_items_total).toBe(2);
     expect(data.scorecardSeries[2].summary.feedback_items_total).toBe(0);
+  });
+
+  it("builds scorecard scope data from aggregated metrics and preserves zero-feedback scores", () => {
+    const window = createDateWindowFromDateInputs("2026-01-01", "2026-01-07", "UTC");
+    const summaryMetrics: FeedbackVolumeMetricRecord[] = [
+      {
+        recordType: "feedbackItemsByScorecard",
+        scorecardId: "scorecard-1",
+        timeRangeStart: "2026-01-02T00:00:00Z",
+        timeRangeEnd: "2026-01-02T01:00:00Z",
+        numberOfMinutes: 60,
+        count: 2,
+        metadata: { changedCount: 1, unchangedCount: 1, invalidCount: 0 },
+      },
+    ];
+    const scoreMetrics: FeedbackVolumeMetricRecord[] = [
+      {
+        recordType: "feedbackItemsByScore",
+        scorecardId: "scorecard-1",
+        scoreId: "score-1",
+        timeRangeStart: "2026-01-02T00:00:00Z",
+        timeRangeEnd: "2026-01-02T01:00:00Z",
+        numberOfMinutes: 60,
+        count: 2,
+        metadata: { changedCount: 1, unchangedCount: 1, invalidCount: 0 },
+      },
+    ];
+
+    const data = buildFeedbackVolumeDashboardDataFromMetrics({
+      scope: "scorecard",
+      summaryMetrics,
+      scoreSeriesMetrics: scoreMetrics,
+      scorecards: [{ id: "scorecard-1", name: "Medium Risk" }],
+      scores: [
+        { id: "score-1", name: "Agent Misrepresentation" },
+        { id: "score-2", name: "Good Call" },
+      ],
+      selectedScorecardId: "scorecard-1",
+      bucketType: "calendar_day",
+      timeZone: "UTC",
+      window: {
+        start: window.start,
+        end: window.end,
+        label: "2026-01-01 - 2026-01-07",
+        mode: "explicit",
+      },
+    });
+
+    expect(data.summary.feedback_items_total).toBe(2);
+    expect(data.summary.feedback_items_changed).toBe(1);
+    expect(data.scoreSeries).toHaveLength(2);
+    expect(data.scoreSeries[0].label).toBe("Agent Misrepresentation");
+    expect(data.scoreSeries[0].summary.feedback_items_total).toBe(2);
+    expect(data.scoreSeries[1].label).toBe("Good Call");
+    expect(data.scoreSeries[1].summary.feedback_items_total).toBe(0);
   });
 });

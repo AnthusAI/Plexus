@@ -7,153 +7,117 @@ import { graphqlRequest } from "@/utils/amplify-client";
 import { listFromModel } from "@/utils/amplify-helpers";
 import { getClient } from "@/utils/data-operations";
 import {
-  buildFeedbackVolumeDashboardData,
+  buildFeedbackVolumeDashboardDataFromMetrics,
   pickAutoFeedbackVolumeBucketType,
   resolveFeedbackVolumeWindow,
   type FeedbackVolumeBucketType,
   type FeedbackVolumeDashboardData,
+  type FeedbackVolumeMetricRecord,
   type FeedbackVolumeNamedEntity,
   type FeedbackVolumeScope,
-  type FeedbackVolumeSourceItem,
   type FeedbackWeekStart,
 } from "@/utils/feedback-volume";
 
-const ACCOUNT_FEEDBACK_ITEMS_EDITED_AT_QUERY = `
-  query ListFeedbackItemByAccountIdAndEditedAt(
+type AggregatedMetricsRecord = Schema["AggregatedMetrics"]["type"];
+
+const AGGREGATED_METRIC_FIELDS = `
+  accountId
+  compositeKey
+  scorecardId
+  scoreId
+  recordType
+  timeRangeStart
+  timeRangeEnd
+  numberOfMinutes
+  count
+  metadata
+  complete
+  createdAt
+  updatedAt
+`;
+
+const ACCOUNT_FEEDBACK_VOLUME_QUERY = `
+  query ListAggregatedMetricsByAccountRecordType(
     $accountId: String!
-    $editedAt: ModelStringKeyConditionInput
-    $limit: Int
+    $recordType: String!
+    $startTime: String!
+    $endTime: String!
     $nextToken: String
-    $sortDirection: ModelSortDirection
   ) {
-    listFeedbackItemByAccountIdAndEditedAt(
+    listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart(
       accountId: $accountId
-      editedAt: $editedAt
-      limit: $limit
+      recordTypeTimeRangeStart: {
+        between: [
+          { recordType: $recordType, timeRangeStart: $startTime }
+          { recordType: $recordType, timeRangeStart: $endTime }
+        ]
+      }
+      limit: 1000
       nextToken: $nextToken
-      sortDirection: $sortDirection
     ) {
       items {
-        id
-        scorecardId
-        scoreId
-        itemId
-        initialAnswerValue
-        finalAnswerValue
-        isInvalid
-        editedAt
-        updatedAt
-        createdAt
+        ${AGGREGATED_METRIC_FIELDS}
       }
       nextToken
     }
   }
 `;
 
-const ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
-  query ListFeedbackItemByAccountIdAndUpdatedAt(
-    $accountId: String!
-    $updatedAt: ModelStringKeyConditionInput
-    $limit: Int
+const SCORECARD_FEEDBACK_VOLUME_QUERY = `
+  query ListAggregatedMetricsByScorecardTimeRange(
+    $scorecardId: String!
+    $startTime: String!
+    $endTime: String!
     $nextToken: String
-    $sortDirection: ModelSortDirection
   ) {
-    listFeedbackItemByAccountIdAndUpdatedAt(
-      accountId: $accountId
-      updatedAt: $updatedAt
-      limit: $limit
+    listAggregatedMetricsByScorecardIdAndTimeRangeStartAndRecordType(
+      scorecardId: $scorecardId
+      timeRangeStartRecordType: {
+        between: [
+          { timeRangeStart: $startTime, recordType: "" }
+          { timeRangeStart: $endTime, recordType: "\\uffff" }
+        ]
+      }
+      limit: 1000
       nextToken: $nextToken
-      sortDirection: $sortDirection
     ) {
       items {
-        id
-        scorecardId
-        scoreId
-        itemId
-        initialAnswerValue
-        finalAnswerValue
-        isInvalid
-        editedAt
-        updatedAt
-        createdAt
+        ${AGGREGATED_METRIC_FIELDS}
       }
       nextToken
     }
   }
 `;
 
-const SCORE_FEEDBACK_ITEMS_EDITED_AT_QUERY = `
-  query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
-    $accountId: String!
-    $compositeCondition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput
-    $limit: Int
+const SCORE_FEEDBACK_VOLUME_QUERY = `
+  query ListAggregatedMetricsByScoreTimeRange(
+    $scoreId: String!
+    $startTime: String!
+    $endTime: String!
     $nextToken: String
-    $sortDirection: ModelSortDirection
   ) {
-    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
-      accountId: $accountId
-      scorecardIdScoreIdEditedAt: $compositeCondition
-      limit: $limit
+    listAggregatedMetricsByScoreIdAndTimeRangeStartAndRecordType(
+      scoreId: $scoreId
+      timeRangeStartRecordType: {
+        between: [
+          { timeRangeStart: $startTime, recordType: "" }
+          { timeRangeStart: $endTime, recordType: "\\uffff" }
+        ]
+      }
+      limit: 1000
       nextToken: $nextToken
-      sortDirection: $sortDirection
     ) {
       items {
-        id
-        scorecardId
-        scoreId
-        itemId
-        initialAnswerValue
-        finalAnswerValue
-        isInvalid
-        editedAt
-        updatedAt
-        createdAt
+        ${AGGREGATED_METRIC_FIELDS}
       }
       nextToken
     }
   }
 `;
 
-const SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
-  query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
-    $accountId: String!
-    $compositeCondition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput
-    $limit: Int
-    $nextToken: String
-    $sortDirection: ModelSortDirection
-  ) {
-    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
-      accountId: $accountId
-      scorecardIdScoreIdUpdatedAt: $compositeCondition
-      limit: $limit
-      nextToken: $nextToken
-      sortDirection: $sortDirection
-    ) {
-      items {
-        id
-        scorecardId
-        scoreId
-        itemId
-        initialAnswerValue
-        finalAnswerValue
-        isInvalid
-        editedAt
-        updatedAt
-        createdAt
-      }
-      nextToken
-    }
-  }
-`;
-
-interface FeedbackItemQueryResponse {
-  items: FeedbackVolumeSourceItem[];
+interface AggregatedMetricsQueryResponse {
+  items: AggregatedMetricsRecord[];
   nextToken: string | null;
-}
-
-interface PaginatedQueryOptions {
-  limit?: number;
-  timeoutMs?: number;
 }
 
 interface UseFeedbackVolumeConfig {
@@ -169,7 +133,7 @@ interface UseFeedbackVolumeConfig {
 }
 
 export interface FeedbackVolumeProgress {
-  phase: "fetching_edited" | "fetching_updated" | "finalizing";
+  phase: "idle";
   pagesFetched: number;
   rawCount: number;
   uniqueCount: number;
@@ -181,30 +145,6 @@ interface UseFeedbackVolumeState {
   data: FeedbackVolumeDashboardData | null;
   isPartial: boolean;
   progress: FeedbackVolumeProgress | null;
-}
-
-interface SnapshotContext {
-  scope: FeedbackVolumeScope;
-  window: ReturnType<typeof resolveFeedbackVolumeWindow>;
-  bucketType: FeedbackVolumeBucketType;
-  timeZone: string;
-  weekStart: FeedbackWeekStart;
-  selectedScorecardId?: string | null;
-  selectedScoreId?: string | null;
-}
-
-interface SnapshotOptions extends SnapshotContext {
-  itemMap: Map<string, FeedbackVolumeSourceItem>;
-  scorecards: FeedbackVolumeNamedEntity[];
-  scores: FeedbackVolumeNamedEntity[];
-}
-
-interface ProgressiveLoadOptions extends SnapshotContext {
-  accountId: string;
-  onProgress?: (snapshot: {
-    data: FeedbackVolumeDashboardData;
-    progress: FeedbackVolumeProgress;
-  }) => void;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -228,14 +168,12 @@ async function fetchScorecards(): Promise<FeedbackVolumeNamedEntity[]> {
   let nextToken: string | undefined;
   const scorecards: FeedbackVolumeNamedEntity[] = [];
   const seenTokens = new Set<string>();
-  let pages = 0;
 
   do {
     if (nextToken) {
       if (seenTokens.has(nextToken)) break;
       seenTokens.add(nextToken);
     }
-    if (pages >= 100) break;
 
     const result = await withTimeout(
       listFromModel<Schema["Scorecard"]["type"]>(client.models.Scorecard, undefined, nextToken, 1000),
@@ -249,7 +187,6 @@ async function fetchScorecards(): Promise<FeedbackVolumeNamedEntity[]> {
       }))
     );
     nextToken = result.nextToken ?? undefined;
-    pages += 1;
   } while (nextToken);
 
   return scorecards.sort((left, right) => left.name.localeCompare(right.name));
@@ -260,14 +197,12 @@ async function fetchScoresForScorecard(scorecardId: string): Promise<FeedbackVol
   let nextToken: string | undefined;
   const scores: FeedbackVolumeNamedEntity[] = [];
   const seenTokens = new Set<string>();
-  let pages = 0;
 
   do {
     if (nextToken) {
       if (seenTokens.has(nextToken)) break;
       seenTokens.add(nextToken);
     }
-    if (pages >= 100) break;
 
     const result = await withTimeout(
       listFromModel<Schema["Score"]["type"]>(
@@ -286,104 +221,104 @@ async function fetchScoresForScorecard(scorecardId: string): Promise<FeedbackVol
       }))
     );
     nextToken = result.nextToken ?? undefined;
-    pages += 1;
   } while (nextToken);
 
   return scores.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function getFeedbackItemTimestamp(item: FeedbackVolumeSourceItem): number {
-  const timestamp = item.editedAt || item.updatedAt || item.createdAt;
-  if (!timestamp) return 0;
-  const parsed = Date.parse(timestamp);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function upsertFeedbackItems(itemMap: Map<string, FeedbackVolumeSourceItem>, items: FeedbackVolumeSourceItem[]): void {
-  for (const item of items) {
-    const existing = itemMap.get(item.id);
-    if (!existing || getFeedbackItemTimestamp(item) >= getFeedbackItemTimestamp(existing)) {
-      itemMap.set(item.id, item);
-    }
+function normalizeMetricRecord(record: AggregatedMetricsRecord): FeedbackVolumeMetricRecord | null {
+  if (!record.recordType || !record.timeRangeStart || !record.timeRangeEnd) {
+    return null;
   }
+  if (typeof record.numberOfMinutes !== "number" || typeof record.count !== "number") {
+    return null;
+  }
+
+  return {
+    accountId: record.accountId,
+    compositeKey: record.compositeKey,
+    recordType: record.recordType,
+    scorecardId: record.scorecardId,
+    scoreId: record.scoreId,
+    timeRangeStart: record.timeRangeStart,
+    timeRangeEnd: record.timeRangeEnd,
+    numberOfMinutes: record.numberOfMinutes,
+    count: record.count,
+    metadata:
+      record.metadata && typeof record.metadata === "object"
+        ? {
+            changedCount:
+              typeof (record.metadata as Record<string, unknown>).changedCount === "number"
+                ? ((record.metadata as Record<string, unknown>).changedCount as number)
+                : 0,
+            unchangedCount:
+              typeof (record.metadata as Record<string, unknown>).unchangedCount === "number"
+                ? ((record.metadata as Record<string, unknown>).unchangedCount as number)
+                : 0,
+            invalidCount:
+              typeof (record.metadata as Record<string, unknown>).invalidCount === "number"
+                ? ((record.metadata as Record<string, unknown>).invalidCount as number)
+                : 0,
+          }
+        : undefined,
+    complete: record.complete,
+  };
 }
 
-function createDashboardSnapshot({
-  scope,
-  itemMap,
-  scorecards,
-  scores,
-  selectedScorecardId,
-  selectedScoreId,
-  timeZone,
-  weekStart,
-  bucketType,
-  window,
-}: SnapshotOptions): FeedbackVolumeDashboardData {
-  return buildFeedbackVolumeDashboardData({
-    scope,
-    items: Array.from(itemMap.values()),
-    scorecards,
-    scores,
-    selectedScorecardId,
-    selectedScoreId,
-    timeZone,
-    weekStart,
-    bucketType,
-    window,
-  });
+function recordOverlapsWindow(record: FeedbackVolumeMetricRecord, start: Date, end: Date): boolean {
+  const recordStart = new Date(record.timeRangeStart);
+  const recordEnd = new Date(record.timeRangeEnd);
+  if (Number.isNaN(recordStart.getTime()) || Number.isNaN(recordEnd.getTime())) {
+    return false;
+  }
+  return recordStart < end && recordEnd > start;
 }
 
-async function paginatedFeedbackQuery(
+async function paginatedAggregatedMetricsQuery(
   query: string,
   variables: Record<string, unknown>,
-  dataKey: string,
-  onPage: (items: FeedbackVolumeSourceItem[]) => void | Promise<void>,
-  options: PaginatedQueryOptions = {}
-): Promise<number> {
-  const limit = options.limit ?? 1000;
-  const timeoutMs = options.timeoutMs ?? 20_000;
+  dataKey: string
+): Promise<FeedbackVolumeMetricRecord[]> {
   let nextToken: string | null = null;
   const seenTokens = new Set<string>();
-  let pagesFetched = 0;
+  const records: FeedbackVolumeMetricRecord[] = [];
 
   do {
     if (nextToken) {
-      if (seenTokens.has(nextToken)) {
-        break;
-      }
+      if (seenTokens.has(nextToken)) break;
       seenTokens.add(nextToken);
     }
 
     const response: {
-      data?: Record<string, FeedbackItemQueryResponse>;
+      data?: Record<string, AggregatedMetricsQueryResponse>;
       errors?: { message: string }[];
     } = await withTimeout(
-      graphqlRequest<Record<string, FeedbackItemQueryResponse>>(query, {
+      graphqlRequest<Record<string, AggregatedMetricsQueryResponse>>(query, {
         ...variables,
         nextToken,
-        sortDirection: "DESC",
-        limit,
       }),
-      timeoutMs,
-      "Feedback query"
+      20_000,
+      "Feedback aggregate query"
     );
 
     if (response.errors?.length) {
-      throw new Error(response.errors.map((error: { message: string }) => error.message).join(", "));
+      throw new Error(response.errors.map((error) => error.message).join(", "));
     }
 
-    const result: FeedbackItemQueryResponse | undefined = response.data?.[dataKey];
+    const result = response.data?.[dataKey];
     if (!result) {
       break;
     }
 
-    pagesFetched += 1;
-    await onPage(result.items || []);
+    records.push(
+      ...result.items
+        .map((item) => normalizeMetricRecord(item))
+        .filter((item): item is FeedbackVolumeMetricRecord => item !== null)
+    );
     nextToken = result.nextToken ?? null;
   } while (nextToken);
 
-  return pagesFetched;
+  return records;
 }
 
 async function loadFeedbackVolumeDashboardData({
@@ -396,7 +331,6 @@ async function loadFeedbackVolumeDashboardData({
   timezone,
   weekStart = "monday",
   bucketType,
-  onProgress,
 }: {
   accountId: string;
   scorecardId?: string | null;
@@ -407,104 +341,42 @@ async function loadFeedbackVolumeDashboardData({
   timezone: string;
   weekStart?: FeedbackWeekStart;
   bucketType?: FeedbackVolumeBucketType;
-  onProgress?: ProgressiveLoadOptions["onProgress"];
 }): Promise<FeedbackVolumeDashboardData> {
   const scope: FeedbackVolumeScope = scoreId ? "score" : scorecardId ? "scorecard" : "account";
   const window = resolveFeedbackVolumeWindow({ days, startDate, endDate });
   const resolvedBucketType =
     bucketType ?? pickAutoFeedbackVolumeBucketType(window.start, window.end);
-
-  const context: SnapshotContext = {
-    scope,
-    window,
-    bucketType: resolvedBucketType,
-    timeZone: timezone,
-    weekStart,
-    selectedScorecardId: scorecardId || undefined,
-    selectedScoreId: scoreId || undefined,
-  };
-
-  const itemMap = new Map<string, FeedbackVolumeSourceItem>();
-  let scorecards: FeedbackVolumeNamedEntity[] = [];
-  let scores: FeedbackVolumeNamedEntity[] = [];
-  let currentPhase: FeedbackVolumeProgress["phase"] = "fetching_edited";
-  let pagesFetched = 0;
-  let rawCount = 0;
-
-  const publish = () => {
-    if (!onProgress) return;
-    onProgress({
-      data: createDashboardSnapshot({
-        ...context,
-        itemMap,
-        scorecards,
-        scores,
-      }),
-      progress: {
-        phase: currentPhase,
-        pagesFetched,
-        rawCount,
-        uniqueCount: itemMap.size,
-      },
-    });
-  };
-
-  const absorbPage = async (
-    phase: FeedbackVolumeProgress["phase"],
-    pageItems: FeedbackVolumeSourceItem[]
-  ) => {
-    currentPhase = phase;
-    pagesFetched += 1;
-    rawCount += pageItems.length;
-    upsertFeedbackItems(itemMap, pageItems);
-    publish();
-  };
-
-  const scorecardsPromise = fetchScorecards()
-    .then((result) => {
-      scorecards = result;
-      if (itemMap.size > 0) publish();
-      return result;
-    })
-    .catch(() => {
-      scorecards = [];
-      return [];
-    });
+  const startIso = window.start.toISOString();
+  const endIso = window.end.toISOString();
 
   if (scope === "account") {
-    await paginatedFeedbackQuery(
-      ACCOUNT_FEEDBACK_ITEMS_EDITED_AT_QUERY,
-      {
-        accountId,
-        editedAt: {
-          between: [window.start.toISOString(), window.end.toISOString()],
+    const [scorecards, summaryMetrics] = await Promise.all([
+      fetchScorecards(),
+      paginatedAggregatedMetricsQuery(
+        ACCOUNT_FEEDBACK_VOLUME_QUERY,
+        {
+          accountId,
+          recordType: "feedbackItemsByScorecard",
+          startTime: startIso,
+          endTime: endIso,
         },
-      },
-      "listFeedbackItemByAccountIdAndEditedAt",
-      (pageItems) => absorbPage("fetching_edited", pageItems)
+        "listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart"
+      ),
+    ]);
+
+    const filteredSummaryMetrics = summaryMetrics.filter((record) =>
+      record.recordType === "feedbackItemsByScorecard" && recordOverlapsWindow(record, window.start, window.end)
     );
 
-    await paginatedFeedbackQuery(
-      ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY,
-      {
-        accountId,
-        updatedAt: {
-          between: [window.start.toISOString(), window.end.toISOString()],
-        },
-      },
-      "listFeedbackItemByAccountIdAndUpdatedAt",
-      (pageItems) => absorbPage("fetching_updated", pageItems)
-    );
-
-    scorecards = await scorecardsPromise;
-    currentPhase = "finalizing";
-    publish();
-
-    return createDashboardSnapshot({
-      ...context,
-      itemMap,
+    return buildFeedbackVolumeDashboardDataFromMetrics({
+      scope,
+      summaryMetrics: filteredSummaryMetrics,
+      scorecardSeriesMetrics: filteredSummaryMetrics,
       scorecards,
-      scores,
+      timeZone: timezone,
+      weekStart,
+      bucketType: resolvedBucketType,
+      window,
     });
   }
 
@@ -512,138 +384,70 @@ async function loadFeedbackVolumeDashboardData({
     throw new Error("scorecardId is required for scorecard and score scoped feedback volume.");
   }
 
-  const scoresPromise = fetchScoresForScorecard(scorecardId)
-    .then((result) => {
-      scores = result;
-      if (itemMap.size > 0) publish();
-      return result;
-    })
-    .catch(() => {
-      scores = [];
-      return [];
-    });
-
   if (scope === "score") {
-    await paginatedFeedbackQuery(
-      SCORE_FEEDBACK_ITEMS_EDITED_AT_QUERY,
-      {
-        accountId,
-        compositeCondition: {
-          between: [
-            {
-              scorecardId,
-              scoreId,
-              editedAt: window.start.toISOString(),
-            },
-            {
-              scorecardId,
-              scoreId,
-              editedAt: window.end.toISOString(),
-            },
-          ],
+    const [scorecards, scores, summaryMetrics] = await Promise.all([
+      fetchScorecards(),
+      fetchScoresForScorecard(scorecardId),
+      paginatedAggregatedMetricsQuery(
+        SCORE_FEEDBACK_VOLUME_QUERY,
+        {
+          scoreId,
+          startTime: startIso,
+          endTime: endIso,
         },
-      },
-      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt",
-      (pageItems) => absorbPage("fetching_edited", pageItems)
+        "listAggregatedMetricsByScoreIdAndTimeRangeStartAndRecordType"
+      ),
+    ]);
+
+    const filteredSummaryMetrics = summaryMetrics.filter((record) =>
+      record.recordType === "feedbackItemsByScore"
+      && record.scoreId === scoreId
+      && recordOverlapsWindow(record, window.start, window.end)
     );
 
-    await paginatedFeedbackQuery(
-      SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY,
-      {
-        accountId,
-        compositeCondition: {
-          between: [
-            {
-              scorecardId,
-              scoreId,
-              updatedAt: window.start.toISOString(),
-            },
-            {
-              scorecardId,
-              scoreId,
-              updatedAt: window.end.toISOString(),
-            },
-          ],
-        },
-      },
-      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt",
-      (pageItems) => absorbPage("fetching_updated", pageItems)
-    );
-
-    scorecards = await scorecardsPromise;
-    scores = await scoresPromise;
-    currentPhase = "finalizing";
-    publish();
-
-    return createDashboardSnapshot({
-      ...context,
-      itemMap,
+    return buildFeedbackVolumeDashboardDataFromMetrics({
+      scope,
+      summaryMetrics: filteredSummaryMetrics,
       scorecards,
       scores,
+      selectedScorecardId: scorecardId,
+      selectedScoreId: scoreId,
+      timeZone: timezone,
+      weekStart,
+      bucketType: resolvedBucketType,
+      window,
     });
   }
 
-  scores = await scoresPromise;
-
-  for (const score of scores) {
-    await paginatedFeedbackQuery(
-      SCORE_FEEDBACK_ITEMS_EDITED_AT_QUERY,
+  const [scorecards, scores, allMetrics] = await Promise.all([
+    fetchScorecards(),
+    fetchScoresForScorecard(scorecardId),
+    paginatedAggregatedMetricsQuery(
+      SCORECARD_FEEDBACK_VOLUME_QUERY,
       {
-        accountId,
-        compositeCondition: {
-          between: [
-            {
-              scorecardId,
-              scoreId: score.id,
-              editedAt: window.start.toISOString(),
-            },
-            {
-              scorecardId,
-              scoreId: score.id,
-              editedAt: window.end.toISOString(),
-            },
-          ],
-        },
+        scorecardId,
+        startTime: startIso,
+        endTime: endIso,
       },
-      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt",
-      (pageItems) => absorbPage("fetching_edited", pageItems)
-    );
-  }
+      "listAggregatedMetricsByScorecardIdAndTimeRangeStartAndRecordType"
+    ),
+  ]);
 
-  for (const score of scores) {
-    await paginatedFeedbackQuery(
-      SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY,
-      {
-        accountId,
-        compositeCondition: {
-          between: [
-            {
-              scorecardId,
-              scoreId: score.id,
-              updatedAt: window.start.toISOString(),
-            },
-            {
-              scorecardId,
-              scoreId: score.id,
-              updatedAt: window.end.toISOString(),
-            },
-          ],
-        },
-      },
-      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt",
-      (pageItems) => absorbPage("fetching_updated", pageItems)
-    );
-  }
+  const filteredMetrics = allMetrics.filter((record) =>
+    record.scorecardId === scorecardId && recordOverlapsWindow(record, window.start, window.end)
+  );
 
-  scorecards = await scorecardsPromise;
-  currentPhase = "finalizing";
-  publish();
-
-  return createDashboardSnapshot({
-    ...context,
-    itemMap,
+  return buildFeedbackVolumeDashboardDataFromMetrics({
+    scope,
+    summaryMetrics: filteredMetrics.filter((record) => record.recordType === "feedbackItemsByScorecard"),
+    scoreSeriesMetrics: filteredMetrics.filter((record) => record.recordType === "feedbackItemsByScore"),
     scorecards,
     scores,
+    selectedScorecardId: scorecardId,
+    timeZone: timezone,
+    weekStart,
+    bucketType: resolvedBucketType,
+    window,
   });
 }
 
@@ -708,12 +512,13 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
 
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setState((current) => ({
-      ...current,
+    setState({
       isLoading: true,
       error: null,
+      data: null,
+      isPartial: false,
       progress: null,
-    }));
+    });
 
     void loadFeedbackVolumeDashboardData({
       accountId: config.accountId,
@@ -725,18 +530,6 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
       timezone: config.timezone,
       weekStart: config.weekStart,
       bucketType: config.bucketType,
-      onProgress: ({ data, progress }) => {
-        if (requestIdRef.current !== requestId) {
-          return;
-        }
-        setState({
-          isLoading: true,
-          error: null,
-          data,
-          isPartial: true,
-          progress,
-        });
-      },
     })
       .then((data) => {
         if (requestIdRef.current !== requestId) {
@@ -754,11 +547,13 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
         if (requestIdRef.current !== requestId) {
           return;
         }
-        setState((current) => ({
-          ...current,
+        setState({
           isLoading: false,
           error: error instanceof Error ? error.message : "Failed to load feedback volume.",
-        }));
+          data: null,
+          isPartial: false,
+          progress: null,
+        });
       });
   }, [config.accountId, dependencyKey]);
 

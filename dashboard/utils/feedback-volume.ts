@@ -26,6 +26,26 @@ export interface FeedbackVolumeSourceItem {
   isInvalid?: boolean | number | string | null;
 }
 
+export interface FeedbackVolumeMetricMetadata {
+  changedCount?: number | null;
+  unchangedCount?: number | null;
+  invalidCount?: number | null;
+}
+
+export interface FeedbackVolumeMetricRecord {
+  accountId?: string | null;
+  compositeKey?: string | null;
+  recordType: "feedbackItems" | "feedbackItemsByScorecard" | "feedbackItemsByScore" | string;
+  scorecardId?: string | null;
+  scoreId?: string | null;
+  timeRangeStart: string;
+  timeRangeEnd: string;
+  numberOfMinutes: number;
+  count: number;
+  metadata?: FeedbackVolumeMetricMetadata | null;
+  complete?: boolean | null;
+}
+
 export interface FeedbackVolumePoint {
   bucket_index: number;
   label: string;
@@ -100,6 +120,21 @@ export interface FeedbackVolumeDashboardData {
 export interface BuildFeedbackVolumeDashboardDataInput {
   scope: FeedbackVolumeScope;
   items: FeedbackVolumeSourceItem[];
+  scorecards?: FeedbackVolumeNamedEntity[];
+  scores?: FeedbackVolumeNamedEntity[];
+  selectedScorecardId?: string | null;
+  selectedScoreId?: string | null;
+  timeZone: string;
+  weekStart?: FeedbackWeekStart;
+  bucketType: FeedbackVolumeBucketType;
+  window: FeedbackVolumeWindow;
+}
+
+export interface BuildFeedbackVolumeDashboardDataFromMetricsInput {
+  scope: FeedbackVolumeScope;
+  summaryMetrics: FeedbackVolumeMetricRecord[];
+  scorecardSeriesMetrics?: FeedbackVolumeMetricRecord[];
+  scoreSeriesMetrics?: FeedbackVolumeMetricRecord[];
   scorecards?: FeedbackVolumeNamedEntity[];
   scores?: FeedbackVolumeNamedEntity[];
   selectedScorecardId?: string | null;
@@ -725,6 +760,250 @@ export function buildFeedbackVolumeDashboardData({
         return sortSeries(
           Array.from(knownIds).map((scoreId) =>
             createSeries(
+              `score:${scoreId}`,
+              "score",
+              scoreNameById.get(scoreId) || (scoreId === "__unknown_score__" ? "Unknown Score" : scoreId),
+              grouped.get(scoreId) || [],
+              buckets,
+              {
+                scorecardId: selectedScorecardId,
+                scorecardName: selectedScorecardName,
+                scoreId,
+                scoreName:
+                  scoreNameById.get(scoreId) || (scoreId === "__unknown_score__" ? "Unknown Score" : scoreId),
+              }
+            )
+          )
+        );
+      })()
+    : [];
+
+  return {
+    scope,
+    scorecard: selectedScorecardId
+      ? {
+          id: selectedScorecardId,
+          name: selectedScorecardName || selectedScorecardId,
+        }
+      : null,
+    score: selectedScoreId
+      ? {
+          id: selectedScoreId,
+          name: selectedScoreName || selectedScoreId,
+        }
+      : null,
+    summary,
+    points,
+    scorecardSeries,
+    scoreSeries,
+    dateRange: {
+      start: window.start.toISOString(),
+      end: window.end.toISOString(),
+      label: window.label,
+    },
+    bucketPolicy: {
+      bucket_type: bucketType,
+      bucket_count: buckets.length,
+      timezone: timeZone,
+      week_start: weekStart,
+      window_mode: "exact_window",
+    },
+  };
+}
+
+function getMetricMetadataValue(
+  record: FeedbackVolumeMetricRecord,
+  key: keyof FeedbackVolumeMetricMetadata
+): number {
+  const value = record.metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function metricRecordOverlapsWindow(
+  record: FeedbackVolumeMetricRecord,
+  start: Date,
+  end: Date
+): boolean {
+  const recordStart = new Date(record.timeRangeStart);
+  const recordEnd = new Date(record.timeRangeEnd);
+  if (Number.isNaN(recordStart.getTime()) || Number.isNaN(recordEnd.getTime())) {
+    return false;
+  }
+  return recordStart < end && recordEnd > start;
+}
+
+function summarizeFeedbackVolumeMetricRecords(
+  records: FeedbackVolumeMetricRecord[],
+  start: Date,
+  end: Date
+): FeedbackVolumeSummary {
+  const overlappingRecords = records.filter((record) => metricRecordOverlapsWindow(record, start, end));
+  if (overlappingRecords.length === 0) {
+    return emptyFeedbackVolumeSummary();
+  }
+
+  const sortedRecords = [...overlappingRecords].sort((left, right) => {
+    if (right.numberOfMinutes !== left.numberOfMinutes) {
+      return right.numberOfMinutes - left.numberOfMinutes;
+    }
+    return new Date(left.timeRangeStart).getTime() - new Date(right.timeRangeStart).getTime();
+  });
+
+  const coveredRanges: Array<[number, number]> = [];
+  const selectedRecords: FeedbackVolumeMetricRecord[] = [];
+
+  for (const record of sortedRecords) {
+    const recordStart = new Date(record.timeRangeStart).getTime();
+    const recordEnd = new Date(record.timeRangeEnd).getTime();
+    const clampedStart = Math.max(recordStart, start.getTime());
+    const clampedEnd = Math.min(recordEnd, end.getTime());
+    if (clampedStart >= clampedEnd) {
+      continue;
+    }
+
+    const overlaps = coveredRanges.some(([coveredStart, coveredEnd]) => clampedStart < coveredEnd && clampedEnd > coveredStart);
+    if (overlaps) {
+      continue;
+    }
+
+    selectedRecords.push(record);
+    coveredRanges.push([clampedStart, clampedEnd]);
+  }
+
+  return selectedRecords.reduce<FeedbackVolumeSummary>(
+    (summary, record) => {
+      const changed = getMetricMetadataValue(record, "changedCount");
+      const unchanged = getMetricMetadataValue(record, "unchangedCount");
+      const invalid = getMetricMetadataValue(record, "invalidCount");
+      return {
+        feedback_items_total: summary.feedback_items_total + (record.count || 0),
+        feedback_items_valid: summary.feedback_items_valid + changed + unchanged,
+        feedback_items_changed: summary.feedback_items_changed + changed,
+        feedback_items_unchanged: summary.feedback_items_unchanged + unchanged,
+        feedback_items_invalid_or_unclassified:
+          summary.feedback_items_invalid_or_unclassified + invalid,
+      };
+    },
+    emptyFeedbackVolumeSummary()
+  );
+}
+
+export function buildFeedbackVolumePointsFromMetrics(
+  records: FeedbackVolumeMetricRecord[],
+  buckets: TimeBucket[]
+): FeedbackVolumePoint[] {
+  return buckets.map((bucket, index) => {
+    const summary = summarizeFeedbackVolumeMetricRecords(records, bucket.start, bucket.end);
+    return {
+      bucket_index: index,
+      label: bucket.label,
+      start: bucket.start.toISOString(),
+      end: bucket.end.toISOString(),
+      ...summary,
+    };
+  });
+}
+
+function createSeriesFromMetrics(
+  key: string,
+  scope: "scorecard" | "score",
+  label: string,
+  records: FeedbackVolumeMetricRecord[],
+  buckets: TimeBucket[],
+  identifiers: {
+    scorecardId?: string | null;
+    scorecardName?: string | null;
+    scoreId?: string | null;
+    scoreName?: string | null;
+  } = {}
+): FeedbackVolumeSeries {
+  const points = buildFeedbackVolumePointsFromMetrics(records, buckets);
+  return {
+    key,
+    scope,
+    label,
+    ...identifiers,
+    points,
+    summary: summarizeFeedbackVolumePoints(points),
+  };
+}
+
+export function buildFeedbackVolumeDashboardDataFromMetrics({
+  scope,
+  summaryMetrics,
+  scorecardSeriesMetrics = [],
+  scoreSeriesMetrics = [],
+  scorecards = [],
+  scores = [],
+  selectedScorecardId,
+  selectedScoreId,
+  timeZone,
+  weekStart = "monday",
+  bucketType,
+  window,
+}: BuildFeedbackVolumeDashboardDataFromMetricsInput): FeedbackVolumeDashboardData {
+  const buckets = buildExactFeedbackVolumeBuckets({
+    start: window.start,
+    end: window.end,
+    bucketType,
+    timeZone,
+    weekStart,
+  });
+
+  const scorecardNameById = new Map(scorecards.map((scorecard) => [scorecard.id, scorecard.name]));
+  const scoreNameById = new Map(scores.map((score) => [score.id, score.name]));
+  const selectedScorecardName = selectedScorecardId ? scorecardNameById.get(selectedScorecardId) || selectedScorecardId : null;
+  const selectedScoreName = selectedScoreId ? scoreNameById.get(selectedScoreId) || selectedScoreId : null;
+
+  const points = buildFeedbackVolumePointsFromMetrics(summaryMetrics, buckets);
+  const summary = summarizeFeedbackVolumePoints(points);
+
+  const scorecardSeries = scope === "account"
+    ? (() => {
+        const grouped = new Map<string, FeedbackVolumeMetricRecord[]>();
+        for (const record of scorecardSeriesMetrics) {
+          const groupKey = record.scorecardId || "__unknown_scorecard__";
+          if (!grouped.has(groupKey)) grouped.set(groupKey, []);
+          grouped.get(groupKey)!.push(record);
+        }
+        const knownIds = new Set<string>([
+          ...scorecards.map((scorecard) => scorecard.id),
+          ...Array.from(grouped.keys()),
+        ]);
+        return sortSeries(
+          Array.from(knownIds).map((scorecardId) =>
+            createSeriesFromMetrics(
+              `scorecard:${scorecardId}`,
+              "scorecard",
+              scorecardNameById.get(scorecardId) || (scorecardId === "__unknown_scorecard__" ? "Unknown Scorecard" : scorecardId),
+              grouped.get(scorecardId) || [],
+              buckets,
+              {
+                scorecardId,
+                scorecardName:
+                  scorecardNameById.get(scorecardId) || (scorecardId === "__unknown_scorecard__" ? "Unknown Scorecard" : scorecardId),
+              }
+            )
+          )
+        );
+      })()
+    : [];
+
+  const scoreSeries = scope === "scorecard"
+    ? (() => {
+        const grouped = new Map<string, FeedbackVolumeMetricRecord[]>();
+        for (const record of scoreSeriesMetrics) {
+          const groupKey = record.scoreId || "__unknown_score__";
+          if (!grouped.has(groupKey)) grouped.set(groupKey, []);
+          grouped.get(groupKey)!.push(record);
+        }
+        const knownIds = new Set<string>([
+          ...scores.map((score) => score.id),
+          ...Array.from(grouped.keys()),
+        ]);
+        return sortSeries(
+          Array.from(knownIds).map((scoreId) =>
+            createSeriesFromMetrics(
               `score:${scoreId}`,
               "score",
               scoreNameById.get(scoreId) || (scoreId === "__unknown_score__" ? "Unknown Score" : scoreId),

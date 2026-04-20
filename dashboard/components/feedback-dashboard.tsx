@@ -208,19 +208,6 @@ function LoadingDashboardState() {
   );
 }
 
-function formatProgressPhase(phase: "fetching_edited" | "fetching_updated" | "finalizing"): string {
-  switch (phase) {
-    case "fetching_edited":
-      return "Loading edited feedback";
-    case "fetching_updated":
-      return "Loading updated feedback";
-    case "finalizing":
-      return "Finalizing totals";
-    default:
-      return "Loading feedback";
-  }
-}
-
 function EmptyScopeCard({
   title,
   description,
@@ -558,7 +545,7 @@ export default function FeedbackDashboard() {
     };
   }, [customWindow, preset]);
 
-  const { data, isLoading, error, isPartial, progress } = useFeedbackVolume({
+  const { data, isLoading, error } = useFeedbackVolume({
     accountId: selectedAccount?.id,
     scorecardId: selectedScorecard,
     scoreId: selectedScore,
@@ -652,11 +639,6 @@ export default function FeedbackDashboard() {
           <LoadingDashboardState />
         ) : (
           <>
-            {isLoading && progress ? (
-              <div className="rounded-lg bg-card px-4 py-3 text-sm text-muted-foreground">
-                {`${formatProgressPhase(progress.phase)}... ${formatNumber(progress.pagesFetched)} pages, ${formatNumber(progress.uniqueCount)} unique feedback items counted so far.`}
-              </div>
-            ) : null}
             {error ? (
               <div className="rounded-lg bg-card px-4 py-3 text-sm text-destructive">
                 {error}
@@ -674,7 +656,6 @@ export default function FeedbackDashboard() {
               points={data.points}
               summary={data.summary}
               bucketLabel={timelineLabel}
-              isPartial={isPartial}
             />
 
             {data.scope === "account" ? (
@@ -692,7 +673,6 @@ export default function FeedbackDashboard() {
                     <SeriesCard
                       key={series.key}
                       series={series}
-                      isPartial={isPartial}
                       onSelect={() => {
                         setSelectedScorecard(series.scorecardId || null);
                         setSelectedScore(null);
@@ -721,7 +701,6 @@ export default function FeedbackDashboard() {
                     <SeriesCard
                       key={series.key}
                       series={series}
-                      isPartial={isPartial}
                       onSelect={() => setSelectedScore(series.scoreId || null)}
                       reportActions={
                         series.scoreId ? (
