@@ -38,7 +38,7 @@ export type BaseActivity = {
   startedAt?: string
   estimatedCompletionAt?: string
   completedAt?: string
-  status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
   stageConfigs?: TaskStageConfig[]
   data?: BaseTaskData
 }
