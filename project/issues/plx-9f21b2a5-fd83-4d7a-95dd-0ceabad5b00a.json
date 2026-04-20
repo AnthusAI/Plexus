@@ -3,7 +3,7 @@
   "title": "Run full optimization cycle on test score",
   "description": "Execute complete optimization with real data to validate end-to-end functionality.\n\n## Prerequisites\n\n- Test score selected (from previous task)\n- Smoke tests passing\n\n## Test Execution\n\nRun optimization with moderate settings:\n```bash\nplexus procedure optimize \\\n  -s <scorecard-key> \\\n  -c <score-key> \\\n  --days 90 \\\n  --max-iterations 3 \\\n  --improvement-threshold 0.02\n```\n\n## Validation Checklist\n\nDuring execution, verify:\n- [ ] Baseline evaluation runs with RCA\n- [ ] RCA output shows meaningful topic clusters\n- [ ] Analyzer agent proposes logical changes\n- [ ] HITL approval gate appears with clear context\n- [ ] After approval, new score version created\n- [ ] Version note contains hypothesis\n- [ ] Evaluation runs with baseline comparison\n- [ ] Metric deltas calculated correctly\n- [ ] Iteration log complete\n- [ ] Can continue through multiple iterations\n\nAfter completion, verify:\n- [ ] Final summary shows total improvement\n- [ ] All iterations logged correctly\n- [ ] No data corruption (score versions valid)\n- [ ] Baseline ID consistent across iterations\n\n## Success Criteria\n\n- Completes without errors\n- At least 1 iteration executes fully\n- Metrics improve or stay flat (no major regressions)\n- All data structures match specifications\n\n## Documentation\n\nComment with:\n- Procedure ID\n- Number of iterations completed\n- AC1 improvement (baseline → final)\n- Any issues encountered\n- Screenshots of HITL prompts (if helpful)",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -31,7 +31,15 @@
     }
   ],
   "created_at": "2026-04-02T16:09:15.727062Z",
-  "updated_at": "2026-04-06T18:20:28.511124Z",
+  "updated_at": "2026-04-20T01:22:30.795407Z",
+  "closed_at": null,
+  "custom": {}
+}e are no live local 'plexus procedure run/optimize' processes, but the latest Procedure task still shows RUNNING in the database. Plan: kill any DB-side in-progress procedures/tasks we find, relaunch the latest optimizer run at 200 samples / 10 cycles, and verify actual liveness via both process inspection and task/stage timestamps.",
+      "created_at": "2026-04-20T01:22:30.795234Z"
+    }
+  ],
+  "created_at": "2026-04-02T16:09:15.727062Z",
+  "updated_at": "2026-04-20T01:22:30.795234Z",
   "closed_at": null,
   "custom": {}
 }

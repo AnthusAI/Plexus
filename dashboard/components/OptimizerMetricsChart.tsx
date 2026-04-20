@@ -399,8 +399,8 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
   ]
 
   return (
-    <div className="mt-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="mt-4 rounded-lg bg-card p-3">
+      <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">Optimizer Metrics</span>
@@ -426,7 +426,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
         )}
       </div>
 
-      <div className="rounded-md bg-card p-2">
+      <div className="rounded-md bg-background p-2">
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
           <LineChart data={chartData} margin={{ top: 8, right: 52, left: 20, bottom: 16 }}>
             <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
