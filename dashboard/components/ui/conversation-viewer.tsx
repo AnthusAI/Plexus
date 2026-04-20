@@ -56,6 +56,7 @@ import {
 import { cn } from "@/lib/utils"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
+const STANDARD_SESSION_CATEGORY = 'Optimize'
 
 const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_run',
@@ -730,14 +731,14 @@ function CollapsibleText({
 
 const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
   const badgeStyles = {
-    blue: 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200',
-    yellow: 'border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-800/40 dark:text-yellow-200',
-    red: 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200',
-    redCritical: 'border-transparent bg-red-200 text-red-900 dark:bg-red-800/60 dark:text-red-100',
-    green: 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200',
-    purple: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-800/40 dark:text-purple-200',
-    orange: 'border-transparent bg-orange-100 text-orange-800 dark:bg-orange-800/40 dark:text-orange-200',
-    gray: 'border-transparent bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-200',
+    blue: 'bg-info text-primary-foreground',
+    yellow: 'bg-warning text-primary-foreground',
+    red: 'bg-false text-primary-foreground',
+    redCritical: 'bg-false text-primary-foreground',
+    green: 'bg-true text-primary-foreground',
+    purple: 'bg-info text-primary-foreground',
+    orange: 'bg-warning text-primary-foreground',
+    gray: 'bg-neutral text-primary-foreground',
   } as const
 
   // Check humanInteraction first for special message types
@@ -873,14 +874,14 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="mb-2 flex items-center gap-2">
               {showMessageTypeBadge && (
                 <Badge
-                  variant="secondary"
-                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                  variant="pill"
+                  className={`text-xs px-1.5 py-0 font-normal ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
                 >
                   {messageTypeLabel}
                 </Badge>
               )}
               {showToolNameBadge && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-neutral text-primary-foreground">
                   {message.toolName}
                 </Badge>
               )}
@@ -905,7 +906,12 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 )}
                 {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
                   EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
-                    <React.Suspense fallback={<div className="p-3 text-sm text-muted-foreground">Loading evaluation...</div>}>
+                    <React.Suspense fallback={
+                      <div className="rounded-md bg-card p-3">
+                        <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+                        <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
+                      </div>
+                    }>
                       <EvaluationToolOutput toolOutput={toolViewModel.output} />
                     </React.Suspense>
                   ) : (
@@ -963,8 +969,8 @@ const MemoizedMessageRow = React.memo(function MessageRow({
               <div className="flex flex-wrap items-center gap-2">
                 {isSubmitted && (
                   <Badge
-                    variant="outline"
-                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                    variant="pill"
+                    className="bg-true text-primary-foreground text-xs px-1.5 py-0 font-normal"
                   >
                     Response submitted
                   </Badge>
@@ -1067,7 +1073,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 )}
 
                 {isSubmitting && (
-                  <Badge variant="outline">Submitting...</Badge>
+                  <Badge variant="pill" className="bg-warning text-primary-foreground text-xs px-1.5 py-0 font-normal">Submitting...</Badge>
                 )}
               </div>
             </div>
@@ -2161,7 +2167,7 @@ function ConversationViewer({
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: 'Console Chat',
+      category: STANDARD_SESSION_CATEGORY,
       createdAt,
       updatedAt: createdAt,
     }, API_KEY_AUTH_OPTIONS)
@@ -2175,7 +2181,7 @@ function ConversationViewer({
       id: sessionId,
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: created?.data?.category || 'Console Chat',
+      category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
@@ -2430,7 +2436,7 @@ function ConversationViewer({
         style={!isSidebarCollapsed ? { width: sidebarWidth } : undefined}
       >
         {/* Sidebar Header */}
-        <div className="p-3 border-b border-border flex items-center justify-between">
+        <div data-testid="conversation-sidebar-header" className="h-12 px-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
             <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
           )}
@@ -2521,19 +2527,17 @@ function ConversationViewer({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Session Header */}
         {selectedSession && (
-          <div className="border-b border-border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <h3 className="font-medium text-sm">
+          <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
+            <div className="flex h-full items-center justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex items-center gap-2">
+                  <h3 className="font-medium text-sm truncate">
                     {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
                   </h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                    <span>
-                      {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
-                    </span>
-                  </div>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
+                  </span>
                 </div>
               </div>
               

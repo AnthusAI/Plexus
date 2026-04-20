@@ -2720,12 +2720,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                     parameters = evaluation.parameters
 
             baseline_evaluation_id = None
+            current_baseline_evaluation_id = None
             root_cause = None
             misclassification_analysis = None
             if isinstance(parameters, dict):
                 metadata = parameters.get("metadata")
                 if isinstance(metadata, dict):
                     baseline_evaluation_id = metadata.get("baseline")
+                    current_baseline_evaluation_id = metadata.get("current_baseline")
                 root_cause_candidate = parameters.get("root_cause")
                 if isinstance(root_cause_candidate, dict):
                     # If root_cause was compacted (only a pointer), fetch full version from S3
@@ -2795,6 +2797,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'metrics': metrics,
                 'parameters': parameters,
                 'baseline_evaluation_id': baseline_evaluation_id,
+                'current_baseline_evaluation_id': current_baseline_evaluation_id,
                 'root_cause': root_cause,
                 'misclassification_analysis': misclassification_analysis,
                 'confusion_matrix': confusion_matrix,
@@ -3747,6 +3750,23 @@ class FeedbackEvaluation(Evaluation):
                         )
                 except Exception as exc:
                     self.logger.debug("Failed to fetch score context: %s", exc)
+
+            # Parse processors from score YAML config so we can show the RCA sub-agent
+            # both the raw input text AND the processed text (what the LLM actually saw).
+            processors_config = []
+            processors_config_summary = ""
+            if score_yaml_code:
+                try:
+                    import yaml as _yaml
+                    _parsed_yaml = _yaml.safe_load(score_yaml_code)
+                    _item_section = _parsed_yaml.get("item", {}) if isinstance(_parsed_yaml, dict) else {}
+                    processors_config = _item_section.get("processors", []) if isinstance(_item_section, dict) else []
+                    if processors_config:
+                        _proc_names = [p.get("class", "unknown") for p in processors_config if isinstance(p, dict)]
+                        processors_config_summary = " → ".join(_proc_names)
+                        self.logger.info(f"RCA: Found {len(processors_config)} preprocessor(s): {processors_config_summary}")
+                except Exception as exc:
+                    self.logger.debug("Failed to parse processors from score YAML: %s", exc)
             scorecard_obj = getattr(self, "scorecard", None)
             if isinstance(scorecard_obj, dict):
                 scorecard_guidance_text = (
@@ -3892,6 +3912,22 @@ class FeedbackEvaluation(Evaluation):
                     metadata_snapshot = item_context_record.get("metadata_snapshot", "")
                     primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
                     primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
+
+                    # Run the preprocessor pipeline on the raw text so the RCA sub-agent
+                    # can compare what the LLM actually saw vs. the original input.
+                    processed_input_text = ""
+                    if primary_input_text and processors_config:
+                        try:
+                            from plexus.scores.Score import Score as _Score
+                            processed_input_text = _Score.apply_processors_to_text(
+                                primary_input_text, processors_config
+                            )
+                        except Exception as _proc_exc:
+                            self.logger.debug(
+                                "Failed to apply processors for RCA context (item %s): %s",
+                                fi.itemId, _proc_exc,
+                            )
+
                     misclassification_item_context = build_misclassification_item_context(
                         feedback_item_id=fi.id,
                         item_id=fi.itemId or "",
@@ -3914,6 +3950,8 @@ class FeedbackEvaluation(Evaluation):
                         resolved_final_classes=resolved_final_classes,
                         class_resolution_source=class_resolution_source,
                         primary_input_fetch_error=primary_input_fetch_error,
+                        processed_input_text=processed_input_text,
+                        processors_config_summary=processors_config_summary,
                     )
                     misclassification_evidence_flags = await asyncio.to_thread(
                         extract_misclassification_evidence_flags,
@@ -4021,6 +4059,7 @@ class FeedbackEvaluation(Evaluation):
             for result in rca_results:
                 if isinstance(result, Exception):
                     rca_errors += 1
+                    self.logger.debug("RCA item failed: %s: %s", type(result).__name__, result)
                     continue
                 timestamped, canonical_row = result
                 texts.append(timestamped)
@@ -4029,6 +4068,10 @@ class FeedbackEvaluation(Evaluation):
             if rca_errors:
                 self.logger.warning(f"RCA: {rca_errors}/{len(candidate_items)} items failed (continuing with {len(texts)} successful)")
 
+            # Suppress HuggingFace hub update checks — model is already cached locally.
+            # Use setdefault so an explicit HF_HUB_OFFLINE=0 in the environment still wins.
+            import os as _os
+            _os.environ.setdefault("HF_HUB_OFFLINE", "1")
             embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
             # Warm up the model before analysis to avoid meta-tensor race conditions
             await asyncio.to_thread(embed_fn, ["warmup"])
@@ -4542,6 +4585,21 @@ class FeedbackEvaluation(Evaluation):
                         class_resolution_source = class_details.get("source", "")
             except Exception as exc:
                 self.logger.debug("Failed to fetch small-set score context: %s", exc)
+
+        processors_config = []
+        processors_config_summary = ""
+        if score_yaml_code:
+            try:
+                import yaml as _yaml
+                _parsed_yaml = _yaml.safe_load(score_yaml_code)
+                _item_section = _parsed_yaml.get("item", {}) if isinstance(_parsed_yaml, dict) else {}
+                processors_config = _item_section.get("processors", []) if isinstance(_item_section, dict) else []
+                if processors_config:
+                    _proc_names = [p.get("class", "unknown") for p in processors_config if isinstance(p, dict)]
+                    processors_config_summary = " → ".join(_proc_names)
+            except Exception as exc:
+                self.logger.debug("Failed to parse processors from score YAML (small-set): %s", exc)
+
         exemplars = []
         for fi in candidate_items[:max_report_exemplars]:
             sr = score_result_map.get(fi.id, {}) if score_result_map is not None else {}
@@ -4656,6 +4714,18 @@ class FeedbackEvaluation(Evaluation):
             primary_input_fetch_error = bool(
                 item_context_record.get("primary_input_fetch_error") if item_context_record else False
             )
+            processed_input_text = ""
+            if primary_input_text and processors_config:
+                try:
+                    from plexus.scores.Score import Score as _Score
+                    processed_input_text = _Score.apply_processors_to_text(
+                        primary_input_text, processors_config
+                    )
+                except Exception as _proc_exc:
+                    self.logger.debug(
+                        "Failed to apply processors for small-set RCA context (item %s): %s",
+                        ex.get("item_id"), _proc_exc,
+                    )
             ex["misclassification_item_context"] = build_misclassification_item_context(
                 feedback_item_id=ex.get("feedback_item_id", ""),
                 item_id=ex.get("item_id", ""),
@@ -4680,6 +4750,8 @@ class FeedbackEvaluation(Evaluation):
                 resolved_final_classes=resolved_final_classes,
                 class_resolution_source=class_resolution_source,
                 primary_input_fetch_error=primary_input_fetch_error,
+                processed_input_text=processed_input_text,
+                processors_config_summary=processors_config_summary,
             )
             misclassification_evidence_flags = await asyncio.to_thread(
                 extract_misclassification_evidence_flags,

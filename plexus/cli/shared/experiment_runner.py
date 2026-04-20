@@ -6,6 +6,7 @@ import os
 from typing import Optional, Tuple, Dict, Any
 import logging
 import json
+import yaml
 
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
@@ -15,6 +16,57 @@ from plexus.dashboard.api.models.task import Task
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
+
+
+def _to_json_safe(value: Any) -> Any:
+    """Convert arbitrary values into JSON-safe structures."""
+    return json.loads(json.dumps(value, default=str))
+
+
+def _extract_run_parameters_from_procedure_yaml(procedure_yaml: Optional[str]) -> Dict[str, Any]:
+    """Extract resolved run parameter values from procedure YAML.
+
+    Resolution order per parameter:
+    1) explicit value
+    2) default value
+    """
+    if not procedure_yaml:
+        return {}
+
+    try:
+        config = yaml.safe_load(procedure_yaml)
+    except Exception:
+        return {}
+
+    if not isinstance(config, dict):
+        return {}
+
+    resolved: Dict[str, Any] = {}
+
+    mapping_params = config.get("params")
+    if isinstance(mapping_params, dict):
+        for name, definition in mapping_params.items():
+            if not isinstance(definition, dict):
+                continue
+            if "value" in definition:
+                resolved[str(name)] = definition.get("value")
+            elif "default" in definition:
+                resolved[str(name)] = definition.get("default")
+
+    list_params = config.get("parameters")
+    if isinstance(list_params, list):
+        for definition in list_params:
+            if not isinstance(definition, dict):
+                continue
+            name = definition.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if "value" in definition:
+                resolved[name] = definition.get("value")
+            elif "default" in definition:
+                resolved[name] = definition.get("default")
+
+    return _to_json_safe(resolved)
 
 
 def _find_existing_task_for_procedure(procedure_id: str, account_id: str, client) -> Optional[str]:
@@ -98,6 +150,8 @@ def create_tracker_and_experiment_task(
     scorecard_name: Optional[str] = None,
     score_name: Optional[str] = None,
     total_items: int = 0,
+    run_parameters: Optional[Dict[str, Any]] = None,
+    run_options: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[TaskProgressTracker], Optional[DashboardProcedure], Optional['Task']]:
     """Create a TaskProgressTracker for an experiment run.
 
@@ -124,6 +178,10 @@ def create_tracker_and_experiment_task(
         "procedure_id": procedure_id,
         "task_type": "Experiment Run",
     }
+    if run_parameters:
+        metadata["run_parameters"] = _to_json_safe(run_parameters)
+    if run_options:
+        metadata["run_options"] = _to_json_safe(run_options)
     if scorecard_name:
         metadata["scorecard"] = scorecard_name
     if score_name:
@@ -232,6 +290,10 @@ def create_tracker_and_experiment_task(
                     task_metadata = {}
             task_metadata["procedure_id"] = procedure_id
             task_metadata["procedure_type"] = "run"
+            if run_parameters:
+                task_metadata["run_parameters"] = _to_json_safe(run_parameters)
+            if run_options:
+                task_metadata["run_options"] = _to_json_safe(run_options)
             
             # Update the task with the metadata
             task.update(
@@ -287,7 +349,36 @@ async def run_experiment_with_task_tracking(
     if not account_id:
         from plexus.cli.report.utils import resolve_account_id_for_command
         account_id = resolve_account_id_for_command(client, None)
-    
+
+    # Capture resolved run parameters and run options in task metadata so the
+    # dashboard can show exactly what was used for this run.
+    run_options_for_metadata: Dict[str, Any] = {}
+    for key, value in experiment_options.items():
+        if key.startswith("_"):
+            continue
+        if key in {"openai_api_key", "context"}:
+            continue
+        run_options_for_metadata[key] = value
+
+    run_parameters_for_metadata: Dict[str, Any] = {}
+    if not is_builtin_procedure_id(procedure_id):
+        try:
+            procedure_record = DashboardProcedure.get_by_id(client=client, id=procedure_id)
+            run_parameters_for_metadata.update(
+                _extract_run_parameters_from_procedure_yaml(getattr(procedure_record, "code", None))
+            )
+        except Exception as e:
+            logger.debug("Could not resolve procedure YAML for run parameter capture: %s", e)
+
+    context_params = experiment_options.get("context")
+    if isinstance(context_params, dict):
+        run_parameters_for_metadata.update(context_params)
+
+    if experiment_options.get("max_iterations") is not None:
+        run_parameters_for_metadata["max_iterations"] = experiment_options.get("max_iterations")
+    if experiment_options.get("dry_run") is not None:
+        run_parameters_for_metadata["dry_run"] = experiment_options.get("dry_run")
+
     # Create tracker and update experiment
     tracker, experiment_record, task = create_tracker_and_experiment_task(
         client=client,
@@ -296,6 +387,8 @@ async def run_experiment_with_task_tracking(
         scorecard_name=scorecard_name,
         score_name=score_name,
         total_items=total_items,
+        run_parameters=run_parameters_for_metadata,
+        run_options=run_options_for_metadata,
     )
 
     result = {

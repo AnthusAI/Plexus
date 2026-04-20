@@ -991,12 +991,12 @@ def watch(interval: int):
 @click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
 @click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
-@click.option('--resume-accuracy-eval', type=str, default=None, help='Reuse existing accuracy baseline evaluation ID (skip running baselines)')
-@click.option('--resume-feedback-eval', type=str, default=None, help='Reuse existing feedback baseline evaluation ID (skip running baselines)')
+@click.option('--resume-regression-eval', type=str, default=None, help='Reuse existing regression baseline evaluation ID (skip running baselines)')
+@click.option('--resume-recent-eval', type=str, default=None, help='Reuse existing recent baseline evaluation ID (skip running baselines)')
 @click.option('--version', '-v', type=str, default=None, help='Score version ID to start from instead of the champion version')
 @click.option('--hint', type=str, default=None, help='Expert hint to guide the optimizer (included verbatim in agent context)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_accuracy_eval: str, resume_feedback_eval: str, version: str, hint: str, output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_regression_eval: str, resume_recent_eval: str, version: str, hint: str, output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -1056,10 +1056,10 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     }
     if max_samples is not None:
         params["max_samples"] = max_samples
-    if resume_accuracy_eval is not None:
-        params["resume_accuracy_eval"] = resume_accuracy_eval
-    if resume_feedback_eval is not None:
-        params["resume_feedback_eval"] = resume_feedback_eval
+    if resume_regression_eval is not None:
+        params["resume_regression_eval"] = resume_regression_eval
+    if resume_recent_eval is not None:
+        params["resume_recent_eval"] = resume_recent_eval
     if version is not None:
         params["start_version"] = version
     if hint is not None:
@@ -1208,32 +1208,41 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 @procedure.command()
 @click.argument('procedure_id')
 @click.option('--after', '-a', help='Clear checkpoints after this step name')
-def reset(procedure_id: str, after: Optional[str]):
+@click.option('--checkpoints-only', is_flag=True, default=False,
+              help='Clear only checkpoints, preserving accumulated State (use before continuation)')
+def reset(procedure_id: str, after: Optional[str], checkpoints_only: bool):
     """Reset procedure checkpoints for testing.
 
     Clears checkpoints to allow re-execution. Useful for testing and development.
 
     Without --after: Clears ALL checkpoints (procedure restarts from beginning)
     With --after: Clears checkpoint and all subsequent ones (partial reset)
+    With --checkpoints-only: Clears checkpoints but preserves State (for continuation runs)
 
     Examples:
         plexus procedure reset proc-123abc
         plexus procedure reset proc-123abc --after "evaluate_candidate_1"
+        plexus procedure reset proc-123abc --checkpoints-only
     """
     client = create_client()
     if not client:
         console.print("[red]Error: Could not create API client[/red]")
         return
 
-    from plexus.cli.procedure.reset_service import reset_checkpoints
+    from plexus.cli.procedure.reset_service import reset_checkpoints, reset_checkpoints_only
 
-    if after:
+    if checkpoints_only:
+        console.print(f"Clearing checkpoints (preserving State) for procedure {procedure_id}...")
+    elif after:
         console.print(f"Clearing checkpoints after '{after}' for procedure {procedure_id}...")
     else:
         console.print(f"[yellow]⚠️  Clearing ALL checkpoints for procedure {procedure_id}...[/yellow]")
 
     try:
-        result = reset_checkpoints(client, procedure_id, after_step=after)
+        if checkpoints_only:
+            result = reset_checkpoints_only(client, procedure_id)
+        else:
+            result = reset_checkpoints(client, procedure_id, after_step=after)
 
         console.print(f"[green]✓ Checkpoints cleared[/green]")
         console.print(f"Cleared: {result['cleared_count']} checkpoints")
@@ -1243,6 +1252,194 @@ def reset(procedure_id: str, after: Optional[str]):
 
     except Exception as e:
         console.print(f"[red]Error resetting checkpoints: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+
+
+@procedure.command('continue')
+@click.argument('procedure_id')
+@click.option('--additional-cycles', '-n', type=int, default=3,
+              help='Number of additional cycles to run (default: 3)')
+@click.option('--hint', '-h', 'hint', default=None,
+              help='Optional instructions to guide the continuation run')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table')
+def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], output: str):
+    """Continue a completed optimizer procedure for additional cycles.
+
+    Updates max_iterations, clears Tactus replay checkpoints (preserving
+    accumulated State), then re-dispatches the procedure.  The optimizer
+    detects prior iterations and skips expensive dataset/baseline init.
+
+    Examples:
+        plexus procedure continue abc-123
+        plexus procedure continue abc-123 --additional-cycles 5
+        plexus procedure continue abc-123 -n 2 --hint "focus on false positives"
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.continuation_service import prepare_continuation
+
+    console.print(f"Preparing continuation for procedure {procedure_id} (+{additional_cycles} cycles)...")
+
+    try:
+        info = prepare_continuation(client, procedure_id, additional_cycles, hint)
+    except Exception as e:
+        console.print(f"[red]Error preparing continuation: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+        return
+
+    console.print(
+        f"[green]✓ Ready[/green] — {info['completed_cycles']} cycles done, "
+        f"running to {info['new_max_iterations']} total"
+    )
+    if info['hint_applied']:
+        console.print(f"  Hint: {hint}")
+
+    console.print("Dispatching procedure run...")
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    account_id = resolve_account_id_for_command(client, None)
+
+    import asyncio
+    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+
+    try:
+        result = asyncio.run(run_experiment_with_task_tracking(
+            procedure_id=procedure_id,
+            client=client,
+            account_id=account_id,
+        ))
+    except Exception as e:
+        console.print(f"[red]Error dispatching procedure: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+        return
+
+    if output == 'json':
+        import json as _json
+        console.print(_json.dumps(result, indent=2, default=str))
+    else:
+        status = result.get('status', 'unknown')
+        color = {'completed': 'green', 'running': 'yellow', 'initiated': 'blue', 'error': 'red'}.get(status, 'white')
+        console.print(f"[{color}]{result.get('message', 'Continuation dispatched')}[/{color}]")
+        console.print(f"Procedure: {procedure_id} | Task: {result.get('task_id', 'N/A')}")
+
+
+@procedure.command('branch')
+@click.argument('source_id')
+@click.option('--cycle', '-c', type=int, required=True,
+              help='Branch from after this cycle number')
+@click.option('--additional-cycles', '-n', type=int, default=3,
+              help='Number of cycles to run in the branch (default: 3)')
+@click.option('--hint', '-h', 'hint', default=None,
+              help='Optional instructions for the branch run')
+@click.option('--name', default=None, help='Name for the new branch procedure')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table')
+def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[str],
+           name: Optional[str], output: str):
+    """Branch a procedure from cycle N into a new procedure.
+
+    Creates a new procedure whose State is a copy of source_id truncated to
+    cycle N, then dispatches it.  The optimizer detects N prior cycles and
+    runs additional cycles from cycle N+1.
+
+    Examples:
+        plexus procedure branch abc-123 --cycle 2
+        plexus procedure branch abc-123 --cycle 2 --additional-cycles 5
+        plexus procedure branch abc-123 -c 3 -n 4 --hint "try structural prompt changes"
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.continuation_service import prepare_branch
+
+    console.print(f"Branching {source_id} from cycle {cycle} (+{additional_cycles} cycles)...")
+
+    try:
+        info = prepare_branch(client, source_id, cycle, additional_cycles, hint, name)
+    except Exception as e:
+        console.print(f"[red]Error preparing branch: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+        return
+
+    target_id = info['target_id']
+    console.print(
+        f"[green]✓ Branch created[/green]: {target_id}\n"
+        f"  Name: {info['target_name']}\n"
+        f"  Cycles: {cycle} carried over, running to {info['new_max_iterations']} total"
+    )
+
+    console.print("Dispatching branch run...")
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    account_id = resolve_account_id_for_command(client, None)
+
+    import asyncio
+    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+
+    try:
+        result = asyncio.run(run_experiment_with_task_tracking(
+            procedure_id=target_id,
+            client=client,
+            account_id=account_id,
+        ))
+    except Exception as e:
+        console.print(f"[red]Error dispatching branch: {e}[/red]")
+        import traceback
+        console.print(traceback.format_exc())
+        return
+
+    if output == 'json':
+        import json as _json
+        console.print(_json.dumps({**info, **result}, indent=2, default=str))
+    else:
+        status = result.get('status', 'unknown')
+        color = {'completed': 'green', 'running': 'yellow', 'initiated': 'blue', 'error': 'red'}.get(status, 'white')
+        console.print(f"[{color}]{result.get('message', 'Branch dispatched')}[/{color}]")
+        console.print(f"Branch procedure: {target_id} | Task: {result.get('task_id', 'N/A')}")
+
+
+@procedure.command('clone-state')
+@click.argument('source_id')
+@click.argument('target_id')
+@click.option('--truncate-to-cycle', '-n', type=int, required=True,
+              help='Copy only the first N cycles of state to the target procedure')
+def clone_state(source_id: str, target_id: str, truncate_to_cycle: int):
+    """Clone procedure state to a branch target, truncated to cycle N.
+
+    Copies accumulated optimizer State (iterations, baselines, dataset, etc.)
+    from SOURCE_ID to TARGET_ID, keeping only the first N cycles.  The target
+    procedure gets empty checkpoints so the optimizer runs fresh from cycle N+1.
+
+    Used internally by the 'Branch from cycle N' UI action.
+
+    Examples:
+        plexus procedure clone-state src-uuid tgt-uuid --truncate-to-cycle 3
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.procedure.reset_service import clone_state_for_branch
+
+    console.print(f"Cloning state from {source_id} → {target_id} (truncating to {truncate_to_cycle} cycles)...")
+
+    try:
+        result = clone_state_for_branch(client, source_id, target_id, truncate_to_cycle)
+        console.print(f"[green]✓ State cloned[/green]")
+        console.print(f"Iterations copied: {result['iterations_copied']}")
+        console.print(f"Truncated to cycle: {result['truncated_to_cycle']}")
+        console.print(f"\n[blue]→ Run 'plexus procedure run {target_id}' to execute the branch[/blue]")
+    except Exception as e:
+        console.print(f"[red]Error cloning state: {e}[/red]")
         import traceback
         console.print(traceback.format_exc())
 

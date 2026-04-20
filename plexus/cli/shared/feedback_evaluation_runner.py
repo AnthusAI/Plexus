@@ -28,6 +28,7 @@ class FeedbackRunnerRequest:
     days: Optional[int] = None
     version: Optional[str] = None
     baseline: Optional[str] = None
+    current_baseline: Optional[str] = None
     max_items: int = 200
     sampling_mode: str = "newest"
     sample_seed: Optional[int] = None
@@ -67,6 +68,8 @@ def build_feedback_command(
         cmd.extend(["--version", request.version])
     if request.baseline:
         cmd.extend(["--baseline", request.baseline])
+    if request.current_baseline:
+        cmd.extend(["--current-baseline", request.current_baseline])
     if request.sample_seed is not None:
         cmd.extend(["--sample-seed", str(request.sample_seed)])
     return cmd
@@ -437,6 +440,7 @@ def run_feedback_evaluation_orchestrated(
         days=request.days,
         version=request.version,
         baseline=request.baseline,
+        current_baseline=request.current_baseline,
         max_items=request.max_items,
         sampling_mode=request_sampling_mode,
         sample_seed=request.sample_seed,

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import BaseReportBlock
 from . import feedback_utils
 from .guideline_vetting import GuidelineVettingService
+from .identifier_utils import looks_like_uuid
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 
@@ -287,7 +288,7 @@ class FeedbackContradictions(BaseReportBlock):
 
     async def _resolve_scorecard(self, scorecard_param: str) -> Optional[Any]:
         """Resolve a scorecard by ID, key, name, or externalId using existing model methods."""
-        is_uuid = len(scorecard_param) > 20 and "-" in scorecard_param
+        is_uuid = looks_like_uuid(scorecard_param)
         for lookup in (
             [lambda p: asyncio.to_thread(Scorecard.get_by_id, id=p, client=self.api_client)]
             if is_uuid
@@ -307,11 +308,7 @@ class FeedbackContradictions(BaseReportBlock):
 
     async def _resolve_score(self, score_param: str, scorecard_id: str) -> Optional[Any]:
         """Resolve a score by ID, name, key, or externalId using existing model methods."""
-        is_uuid_like = (
-            len(score_param) == 36
-            and score_param.count("-") == 4
-            and all(char in "0123456789abcdefABCDEF-" for char in score_param)
-        )
+        is_uuid_like = looks_like_uuid(score_param)
         if is_uuid_like:
             try:
                 score_obj = await asyncio.to_thread(Score.get_by_id, id=score_param, client=self.api_client)
