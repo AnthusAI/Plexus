@@ -1,0 +1,18 @@
+{
+  "id": "plx-09a2c340-b32d-4d16-b27d-3e9717a80a0e",
+  "title": "Ensure prompt metadata fields are persisted on Plexus items",
+  "description": "Track work to map and persist required Call Criteria prompt metadata into Plexus Item.metadata so prompt templates resolve reliably.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-20T18:00:56.216471548Z",
+  "updated_at": "2026-04-20T18:00:56.216471548Z",
+  "closed_at": null,
+  "custom": {}
+}
