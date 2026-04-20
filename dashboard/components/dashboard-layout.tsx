@@ -86,7 +86,7 @@ const MobileHeader = ({
 
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
-  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
+  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
@@ -211,7 +211,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3 w-16'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => {
               const isCurrentPage = (pathname === item.path ||
-                (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                (item.name === "Feedback" &&
+                  (pathname === "/feedback"
+                    || pathname === "/lab/feedback-queues"
+                    || pathname.startsWith("/lab/feedback"))) ||
                 (item.name === "Items" && pathname.startsWith(item.path)) ||
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                 (item.name === "Procedures" && pathname.startsWith(item.path)) ||

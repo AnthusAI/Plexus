@@ -2,6 +2,38 @@ import { transformEvaluation } from './data-operations';
 import type { BaseEvaluation } from './data-operations';
 
 describe('transformEvaluation', () => {
+  it('derives procedureId from task metadata and preserves score identifiers', () => {
+    const mockEvaluation: BaseEvaluation = {
+      id: 'eval-procedure',
+      type: 'accuracy',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      status: 'COMPLETED',
+      accountId: 'account-1',
+      scorecardId: 'scorecard-123',
+      scoreId: 'score-456',
+      scoreVersionId: 'version-789',
+      task: {
+        id: 'task-1',
+        type: 'Accuracy Evaluation',
+        status: 'COMPLETED',
+        target: 'evaluation/accuracy/test',
+        command: 'evaluate accuracy --scorecard test',
+        metadata: JSON.stringify({
+          procedure_id: 'procedure-999',
+        }),
+      } as any,
+    } as any;
+
+    const result = transformEvaluation(mockEvaluation);
+
+    expect(result).toBeTruthy();
+    expect(result!.scorecardId).toBe('scorecard-123');
+    expect(result!.scoreId).toBe('score-456');
+    expect(result!.scoreVersionId).toBe('version-789');
+    expect(result!.procedureId).toBe('procedure-999');
+  });
+
   describe('itemIdentifiers extraction', () => {
     it('should extract itemIdentifiers from score results with item relationships', () => {
       const mockEvaluation: BaseEvaluation = {
