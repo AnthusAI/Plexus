@@ -421,7 +421,8 @@ class _PlexusTraceLogBridge:
                     self._on_cost_event(event)
                 except Exception as exc:
                     logger.warning("Failed processing incremental cost event: %s", exc)
-            return
+            # Also forward cost events to the trace sink so assistant/tool chat
+            # messages can receive live per-turn cost metadata updates.
 
         try:
             self._events.put_nowait(event)
