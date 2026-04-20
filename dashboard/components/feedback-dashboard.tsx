@@ -19,6 +19,7 @@ import { useIncrementalRows } from "@/components/blocks/useIncrementalRows";
 import { ChartContainer } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import NumberFlowWrapper from "@/components/ui/number-flow";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +49,7 @@ const VOLUME_CHART_CONFIG = {
     color: "var(--false)",
   },
   invalid: {
-    label: "Invalid / Unclassified",
+    label: "Invalid",
     color: "var(--progress-background)",
   },
 };
@@ -91,7 +92,7 @@ function FeedbackVolumeTooltip({ active, payload }: any) {
       <div>Total: {formatNumber(point.feedback_items_total)}</div>
       <div>Unchanged: {formatNumber(point.feedback_items_unchanged)}</div>
       <div>Changed: {formatNumber(point.feedback_items_changed)}</div>
-      <div>Invalid / Unclassified: {formatNumber(point.feedback_items_invalid_or_unclassified)}</div>
+      <div>Invalid: {formatNumber(point.feedback_items_invalid_or_unclassified)}</div>
     </div>
   );
 }
@@ -101,11 +102,13 @@ function MetricCard({
   value,
   detail,
   tone = "neutral",
+  isPartial = false,
 }: {
   label: string;
   value: number;
   detail?: string;
   tone?: "neutral" | "changed" | "unchanged" | "invalid";
+  isPartial?: boolean;
 }) {
   const toneClass = {
     neutral: "bg-info",
@@ -121,7 +124,9 @@ function MetricCard({
         <span>{label}</span>
       </div>
       <div className="mt-2">
-        <div className="text-2xl font-semibold">{formatNumber(value)}</div>
+        <div className={cn("text-2xl font-semibold", isPartial ? "text-muted-foreground" : "text-foreground")}>
+          <NumberFlowWrapper value={value} />
+        </div>
         {detail ? <div className="mt-1 text-xs text-muted-foreground">{detail}</div> : null}
       </div>
     </div>
@@ -201,6 +206,19 @@ function LoadingDashboardState() {
       </div>
     </div>
   );
+}
+
+function formatProgressPhase(phase: "fetching_edited" | "fetching_updated" | "finalizing"): string {
+  switch (phase) {
+    case "fetching_edited":
+      return "Loading edited feedback";
+    case "fetching_updated":
+      return "Loading updated feedback";
+    case "finalizing":
+      return "Finalizing totals";
+    default:
+      return "Loading feedback";
+  }
 }
 
 function EmptyScopeCard({
@@ -287,6 +305,7 @@ function VolumeOverviewCard({
   points,
   summary,
   bucketLabel,
+  isPartial = false,
 }: {
   title: string;
   description: string;
@@ -299,6 +318,7 @@ function VolumeOverviewCard({
     feedback_items_valid: number;
   };
   bucketLabel: string;
+  isPartial?: boolean;
 }) {
   return (
     <div className="rounded-lg bg-card p-4">
@@ -313,14 +333,16 @@ function VolumeOverviewCard({
             value={summary.feedback_items_total}
             detail={`Buckets: ${bucketLabel}`}
             tone="neutral"
+            isPartial={isPartial}
           />
-          <MetricCard label="Changed" value={summary.feedback_items_changed} tone="changed" />
-          <MetricCard label="Unchanged" value={summary.feedback_items_unchanged} tone="unchanged" />
+          <MetricCard label="Changed" value={summary.feedback_items_changed} tone="changed" isPartial={isPartial} />
+          <MetricCard label="Unchanged" value={summary.feedback_items_unchanged} tone="unchanged" isPartial={isPartial} />
           <MetricCard
-            label="Invalid / Unclassified"
+            label="Invalid"
             value={summary.feedback_items_invalid_or_unclassified}
             detail={`Valid feedback: ${formatNumber(summary.feedback_items_valid)}`}
             tone="invalid"
+            isPartial={isPartial}
           />
         </div>
         <div className="rounded-lg bg-background p-3">
@@ -335,10 +357,12 @@ function SeriesCard({
   series,
   onSelect,
   reportActions,
+  isPartial = false,
 }: {
   series: FeedbackVolumeSeries;
   onSelect?: () => void;
   reportActions?: React.ReactNode;
+  isPartial?: boolean;
 }) {
   const hasFeedback = series.summary.feedback_items_total > 0;
 
@@ -370,13 +394,14 @@ function SeriesCard({
       </div>
       <div className="mt-4 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Total" value={series.summary.feedback_items_total} tone="neutral" />
-          <MetricCard label="Changed" value={series.summary.feedback_items_changed} tone="changed" />
-          <MetricCard label="Unchanged" value={series.summary.feedback_items_unchanged} tone="unchanged" />
+          <MetricCard label="Total" value={series.summary.feedback_items_total} tone="neutral" isPartial={isPartial} />
+          <MetricCard label="Changed" value={series.summary.feedback_items_changed} tone="changed" isPartial={isPartial} />
+          <MetricCard label="Unchanged" value={series.summary.feedback_items_unchanged} tone="unchanged" isPartial={isPartial} />
           <MetricCard
-            label="Invalid / Unclassified"
+            label="Invalid"
             value={series.summary.feedback_items_invalid_or_unclassified}
             tone="invalid"
+            isPartial={isPartial}
           />
         </div>
         {hasFeedback ? (
@@ -501,7 +526,7 @@ export default function FeedbackDashboard() {
   const { selectedAccount, isLoadingAccounts } = useAccount();
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null);
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
-  const [preset, setPreset] = useState<PresetValue>("90");
+  const [preset, setPreset] = useState<PresetValue>("14");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
@@ -533,7 +558,7 @@ export default function FeedbackDashboard() {
     };
   }, [customWindow, preset]);
 
-  const { data, isLoading, error } = useFeedbackVolume({
+  const { data, isLoading, error, isPartial, progress } = useFeedbackVolume({
     accountId: selectedAccount?.id,
     scorecardId: selectedScorecard,
     scoreId: selectedScore,
@@ -554,16 +579,10 @@ export default function FeedbackDashboard() {
 
   const timelineLabel = data?.bucketPolicy.bucket_type || "calendar_week";
   const canDispatchScopedReports = Boolean(selectedScorecard && data);
-  const showDiagnostics = process.env.NODE_ENV !== "production";
 
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4">
-        {showDiagnostics ? (
-          <div className="rounded-lg bg-card px-4 py-2 text-xs text-muted-foreground">
-            {`debug: account=${selectedAccount?.id || "none"} loading=${String(isLoading)} error=${error || "none"} dataScope=${data?.scope || "none"} total=${data?.summary.feedback_items_total ?? 0} scorecards=${data?.scorecardSeries.length ?? 0} scores=${data?.scoreSeries.length ?? 0}`}
-          </div>
-        ) : null}
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex flex-1 flex-col gap-3">
             <ScorecardContext
@@ -624,15 +643,25 @@ export default function FeedbackDashboard() {
             title="Select a custom date range"
             description="Both start and end dates are required before live feedback volume can load."
           />
-        ) : error ? (
+        ) : error && !data ? (
           <div className="rounded-lg bg-card px-4 py-5">
             <div className="text-base font-semibold text-destructive">Unable to load feedback volume</div>
             <div className="mt-1 text-sm text-muted-foreground">{error}</div>
           </div>
-        ) : isLoading || !data ? (
+        ) : !data ? (
           <LoadingDashboardState />
         ) : (
           <>
+            {isLoading && progress ? (
+              <div className="rounded-lg bg-card px-4 py-3 text-sm text-muted-foreground">
+                {`${formatProgressPhase(progress.phase)}... ${formatNumber(progress.pagesFetched)} pages, ${formatNumber(progress.uniqueCount)} unique feedback items counted so far.`}
+              </div>
+            ) : null}
+            {error ? (
+              <div className="rounded-lg bg-card px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
             <VolumeOverviewCard
               title={
                 data.scope === "account"
@@ -645,6 +674,7 @@ export default function FeedbackDashboard() {
               points={data.points}
               summary={data.summary}
               bucketLabel={timelineLabel}
+              isPartial={isPartial}
             />
 
             {data.scope === "account" ? (
@@ -662,6 +692,7 @@ export default function FeedbackDashboard() {
                     <SeriesCard
                       key={series.key}
                       series={series}
+                      isPartial={isPartial}
                       onSelect={() => {
                         setSelectedScorecard(series.scorecardId || null);
                         setSelectedScore(null);
@@ -690,6 +721,7 @@ export default function FeedbackDashboard() {
                     <SeriesCard
                       key={series.key}
                       series={series}
+                      isPartial={isPartial}
                       onSelect={() => setSelectedScore(series.scoreId || null)}
                       reportActions={
                         series.scoreId ? (
@@ -747,7 +779,7 @@ export default function FeedbackDashboard() {
               </div>
             ) : null}
 
-            {data.summary.feedback_items_total === 0 ? (
+            {!isLoading && data.summary.feedback_items_total === 0 ? (
               <EmptyScopeCard
                 title="No feedback collected in this window"
                 description="The current scorecard / score scope has no feedback items for the selected range."
