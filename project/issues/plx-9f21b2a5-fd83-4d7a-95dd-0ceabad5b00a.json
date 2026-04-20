@@ -34,12 +34,4 @@
   "updated_at": "2026-04-20T01:22:30.795407Z",
   "closed_at": null,
   "custom": {}
-}e are no live local 'plexus procedure run/optimize' processes, but the latest Procedure task still shows RUNNING in the database. Plan: kill any DB-side in-progress procedures/tasks we find, relaunch the latest optimizer run at 200 samples / 10 cycles, and verify actual liveness via both process inspection and task/stage timestamps.",
-      "created_at": "2026-04-20T01:22:30.795234Z"
-    }
-  ],
-  "created_at": "2026-04-02T16:09:15.727062Z",
-  "updated_at": "2026-04-20T01:22:30.795234Z",
-  "closed_at": null,
-  "custom": {}
 }
