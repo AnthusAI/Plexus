@@ -25,6 +25,9 @@ type ProcedureWithTask = Procedure & {
   task?: Task | null
 }
 
+const INITIAL_VISIBLE_PROCEDURE_COUNT = 50
+const PROCEDURE_PAGE_SIZE = 25
+
 const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
   const startCandidate =
     procedure.task?.startedAt ||
@@ -167,58 +170,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     try {
       setIsLoading(true)
       lastLoadTimeRef.current = Date.now()
-      // First get procedures
-      const proceduresResult = await getAmplifyClient().graphql({
-        query: `
-          query ListProcedureByAccountIdAndUpdatedAt(
-            $accountId: String!
-            $sortDirection: ModelSortDirection
-            $limit: Int
-            $nextToken: String
-          ) {
-            listProcedureByAccountIdAndUpdatedAt(
-              accountId: $accountId
-              sortDirection: $sortDirection
-              limit: $limit
-              nextToken: $nextToken
-            ) {
-              items {
-                id
-                name
-                featured
-                code
-                rootNodeId
-                createdAt
-                updatedAt
-                accountId
-                scorecardId
-                scorecard {
-                  id
-                  name
-                }
-                scoreId
-                score {
-                  id
-                  name
-                }
-
-              }
-              nextToken
-            }
-          }
-        `,
-        variables: {
-          accountId: selectedAccount.id,
-          sortDirection: 'DESC',
-          limit: 25,
-          nextToken: null
-        }
-      })
-      const procedureResponse = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt
-      const proceduresData = procedureResponse?.items || []
-      const newNextToken: string | null = procedureResponse?.nextToken ?? null
-      
-      // Then get tasks related to procedures (via metadata)
       const tasksResult = await getAmplifyClient().graphql({
         query: `
           query ListTaskByAccountIdAndUpdatedAt(
@@ -272,6 +223,62 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         }
       })
       
+      const proceduresData: Procedure[] = []
+      let newNextToken: string | null = null
+
+      do {
+        const proceduresResult = await getAmplifyClient().graphql({
+          query: `
+            query ListProcedureByAccountIdAndUpdatedAt(
+              $accountId: String!
+              $sortDirection: ModelSortDirection
+              $limit: Int
+              $nextToken: String
+            ) {
+              listProcedureByAccountIdAndUpdatedAt(
+                accountId: $accountId
+                sortDirection: $sortDirection
+                limit: $limit
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  name
+                  featured
+                  code
+                  rootNodeId
+                  createdAt
+                  updatedAt
+                  accountId
+                  scorecardId
+                  scorecard {
+                    id
+                    name
+                  }
+                  scoreId
+                  score {
+                    id
+                    name
+                  }
+
+                }
+                nextToken
+              }
+            }
+          `,
+          variables: {
+            accountId: selectedAccount.id,
+            sortDirection: 'DESC',
+            limit: PROCEDURE_PAGE_SIZE,
+            nextToken: newNextToken
+          }
+        })
+
+        const procedureResponse = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt
+        proceduresData.push(...(procedureResponse?.items || []))
+        newNextToken = procedureResponse?.nextToken ?? null
+      } while (newNextToken && proceduresData.length < INITIAL_VISIBLE_PROCEDURE_COUNT)
+
       const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
       
       // Filter tasks that have procedure_id in metadata
@@ -381,7 +388,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         variables: {
           accountId: selectedAccount.id,
           sortDirection: 'DESC',
-          limit: 25,
+          limit: PROCEDURE_PAGE_SIZE,
           nextToken
         }
       })
