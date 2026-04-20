@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
 from plexus.scores.Score import Score
+from plexus.dashboard.api.models.item import Item as PlexusItem
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +362,14 @@ def register_prediction_tools(mcp: FastMCP):
                             logger.warning(f"Failed to parse metadata for item {target_id}: {metadata_raw}")
                             item_metadata = {}
 
+                    # Construct a full Item object so input sources (e.g. DeepgramInputSource)
+                    # that require the Item record (for attachedFiles, etc.) can function.
+                    try:
+                        item_obj = PlexusItem.from_dict(item_data, client)
+                    except Exception as e:
+                        logger.warning(f"Could not construct Item object for {target_id}: {e}")
+                        item_obj = None
+
                     logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
                     logger.info(f"Running scorecard evaluation with canonical dependency resolution for score '{score_name}'")
 
@@ -369,7 +378,8 @@ def register_prediction_tools(mcp: FastMCP):
                             text=item_text,
                             metadata=item_metadata,
                             modality=None,
-                            subset_of_score_names=[resolved_score_name]
+                            subset_of_score_names=[resolved_score_name],
+                            item=item_obj
                         )
 
                         score_result_obj = None

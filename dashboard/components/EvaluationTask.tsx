@@ -532,11 +532,12 @@ const getStatusMessage = (data: EvaluationTaskData) => {
   return undefined;
 }
 
-const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy }: {
+const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy, currentBaselineAccuracy }: {
   data: EvaluationTaskData;
   extra?: boolean;
   isSelected?: boolean;
   baselineAccuracy?: number | null;
+  currentBaselineAccuracy?: number | null;
 }) => {
 
 
@@ -681,6 +682,7 @@ const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy }: {
           accuracy={accuracy}
           isSelected={isSelected}
           baselineAccuracy={baselineAccuracy ?? undefined}
+          currentBaselineAccuracy={currentBaselineAccuracy ?? undefined}
         />
       )}
     </div>
@@ -709,6 +711,7 @@ const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy }: {
     prevProps.extra !== nextProps.extra ||
     prevProps.isSelected !== nextProps.isSelected ||
     prevProps.baselineAccuracy !== nextProps.baselineAccuracy ||
+    prevProps.currentBaselineAccuracy !== nextProps.currentBaselineAccuracy ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults)
   );
 
@@ -1971,6 +1974,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   } | null>(null);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
   const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
+  const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
 
@@ -2041,6 +2045,16 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     }
   }, [data.parameters])
 
+  const currentBaselineEvaluationId = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      const metadata = parseJsonDeep(params?.metadata) as Record<string, unknown> | null
+      return typeof metadata?.current_baseline === 'string' ? metadata.current_baseline : null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+
   const dataSetIdFromParameters = useMemo(() => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
@@ -2106,6 +2120,39 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
     fetchBaselineMetrics();
   }, [baselineEvaluationId, variant]);
+
+  // Fetch current baseline accuracy (latest accepted version baseline for dual baseline display)
+  useEffect(() => {
+    if (!currentBaselineEvaluationId) {
+      setCurrentBaselineAccuracy(null);
+      return;
+    }
+
+    const fetchCurrentBaselineAccuracy = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetCurrentBaselineEvaluation($id: ID!) {
+              getEvaluation(id: $id) {
+                id
+                accuracy
+              }
+            }
+          `,
+          variables: { id: currentBaselineEvaluationId }
+        });
+
+        const eval_ = (result as any).data?.getEvaluation;
+        setCurrentBaselineAccuracy(eval_?.accuracy ?? null);
+      } catch (error) {
+        console.error('Error fetching current baseline evaluation:', error);
+        setCurrentBaselineAccuracy(null);
+      }
+    };
+
+    fetchCurrentBaselineAccuracy();
+  }, [currentBaselineEvaluationId, variant]);
 
   // Function to generate universal YAML code for evaluation
   const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
@@ -2576,10 +2623,17 @@ ${categoryLines}${mechanicalLines}
             </div>
           </div>
           {variant !== 'detail' && evaluationNotes && (
-            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                 p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
-                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                code: ({children, className}) => {
+                  const isBlock = Boolean(className && className.includes('language-'))
+                  if (isBlock) {
+                    return <code className={`${className} text-foreground`}>{children}</code>
+                  }
+                  return <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">{children}</code>
+                },
               }}>
                 {evaluationNotes}
               </ReactMarkdown>
@@ -2676,10 +2730,17 @@ ${categoryLines}${mechanicalLines}
               className="text-muted-foreground"
             />
             {evaluationNotes && (
-              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                   p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
-                  strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                  strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                  code: ({children, className}) => {
+                    const isBlock = Boolean(className && className.includes('language-'))
+                    if (isBlock) {
+                      return <code className={`${className} text-foreground`}>{children}</code>
+                    }
+                    return <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">{children}</code>
+                  },
                 }}>
                   {evaluationNotes}
                 </ReactMarkdown>
@@ -2693,7 +2754,7 @@ ${categoryLines}${mechanicalLines}
             {detailMetadata}
             <TaskContent {...props} hideTaskStatus={true}>
               {variant === 'grid' ? (
-                <GridContent data={data} extra={extra} isSelected={isSelected} baselineAccuracy={baselineAccuracy} />
+                <GridContent data={data} extra={extra} isSelected={isSelected} baselineAccuracy={baselineAccuracy} currentBaselineAccuracy={currentBaselineAccuracy} />
               ) : (
                 <DetailContent
                   data={data}

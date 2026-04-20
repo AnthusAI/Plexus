@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import traceback
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.exceptions import Timeout, RequestException
@@ -92,6 +92,80 @@ class Evaluation:
     The Evaluation class is commonly used during model development to measure performance
     and during production to monitor for accuracy drift.
     """
+
+    @staticmethod
+    def build_cost_details_from_expenses(expenses: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a compact provider/model cost summary from scorecard expenses."""
+        if not isinstance(expenses, dict):
+            return {
+                "schema_version": 1,
+                "total_usd": 0.0,
+                "llm_calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cached_tokens": 0,
+                "breakdown": [],
+            }
+
+        grouped: Dict[Tuple[Optional[str], Optional[str]], Dict[str, Any]] = {}
+        components = expenses.get("components")
+        if isinstance(components, list):
+            for component in components:
+                if not isinstance(component, dict):
+                    continue
+                if component.get("type") != "api_call":
+                    continue
+                provider_raw = component.get("provider")
+                model_raw = component.get("model")
+                provider = str(provider_raw) if isinstance(provider_raw, str) and provider_raw else None
+                model = str(model_raw) if isinstance(model_raw, str) and model_raw else None
+                key = (provider, model)
+                row = grouped.setdefault(
+                    key,
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "spent_usd": 0.0,
+                        "reused_usd": 0.0,
+                        "referenced_usd": 0.0,
+                        "llm_calls": 0,
+                        "evaluation_runs": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cached_tokens": 0,
+                    },
+                )
+                usd = float(component.get("usd") or 0.0)
+                prompt_tokens = int(component.get("prompt_tokens") or 0)
+                completion_tokens = int(component.get("completion_tokens") or 0)
+                cached_tokens = int(component.get("cached_tokens") or 0)
+                row["spent_usd"] += usd
+                row["referenced_usd"] += usd
+                row["llm_calls"] += int(component.get("llm_calls") or 1)
+                row["prompt_tokens"] += prompt_tokens
+                row["completion_tokens"] += completion_tokens
+                row["total_tokens"] += prompt_tokens + completion_tokens
+                row["cached_tokens"] += cached_tokens
+
+        breakdown = list(grouped.values())
+        breakdown.sort(key=lambda item: item.get("referenced_usd", 0), reverse=True)
+
+        prompt_tokens = int(expenses.get("prompt_tokens") or 0)
+        completion_tokens = int(expenses.get("completion_tokens") or 0)
+        cached_tokens = int(expenses.get("cached_tokens") or 0)
+        total_tokens = prompt_tokens + completion_tokens
+        return {
+            "schema_version": 1,
+            "total_usd": float(expenses.get("total_cost") or 0.0),
+            "llm_calls": int(expenses.get("llm_calls") or expenses.get("api_calls") or 0),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "cached_tokens": cached_tokens,
+            "breakdown": breakdown,
+        }
 
     def __init__(self, *,
         scorecard_name: str,
@@ -1524,6 +1598,27 @@ class Evaluation:
         }
         """
 
+    @staticmethod
+    def _coerce_parameters_dict(raw_parameters: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(raw_parameters, dict):
+            return dict(raw_parameters)
+        if isinstance(raw_parameters, str):
+            try:
+                parsed = json.loads(raw_parameters)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                return None
+        return None
+
+    def _get_existing_parameters_for_update(self) -> Dict[str, Any]:
+        local = self._coerce_parameters_dict(getattr(self, "parameters", None))
+        if isinstance(local, dict):
+            return local
+        # Keep progress updates fast and side-effect free: do not make network reads
+        # in this hot path. If local parameters are unavailable, skip merge.
+        return {}
+
     def _get_update_variables(self, metrics, status):
         """Get the variables for the update mutation"""
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
@@ -1580,6 +1675,22 @@ class Evaluation:
                 total_cost = expenses.get('total_cost', 0)
                 if total_cost > 0:
                     update_input["cost"] = float(total_cost)
+                if status == "COMPLETED":
+                    cost_details = self.build_cost_details_from_expenses(expenses)
+                    existing_parameters = self._get_existing_parameters_for_update()
+                    if existing_parameters:
+                        metadata = existing_parameters.get("metadata")
+                        if not isinstance(metadata, dict):
+                            metadata = {}
+                        metadata["cost_details"] = cost_details
+                        existing_parameters["metadata"] = metadata
+                        update_input["parameters"] = json.dumps(existing_parameters)
+                        self.parameters = existing_parameters
+                    else:
+                        self.logging.debug(
+                            "Skipping cost_details parameter write for evaluation %s because local parameters are unavailable",
+                            getattr(self, "experiment_id", None),
+                        )
         except Exception as e:
             logging.debug(f"Could not get accumulated costs: {e}")
         
@@ -2720,12 +2831,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                     parameters = evaluation.parameters
 
             baseline_evaluation_id = None
+            current_baseline_evaluation_id = None
             root_cause = None
             misclassification_analysis = None
             if isinstance(parameters, dict):
                 metadata = parameters.get("metadata")
                 if isinstance(metadata, dict):
                     baseline_evaluation_id = metadata.get("baseline")
+                    current_baseline_evaluation_id = metadata.get("current_baseline")
                 root_cause_candidate = parameters.get("root_cause")
                 if isinstance(root_cause_candidate, dict):
                     # If root_cause was compacted (only a pointer), fetch full version from S3
@@ -2782,6 +2895,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                     logging.warning(f"Could not parse dataset class distribution: {e}")
                     dataset_class_distribution = evaluation.datasetClassDistribution
             
+            cost_details = getattr(evaluation, "costDetails", None)
+            if not isinstance(cost_details, dict) and isinstance(parameters, dict):
+                metadata = parameters.get("metadata")
+                if isinstance(metadata, dict):
+                    metadata_cost_details = metadata.get("cost_details")
+                    if isinstance(metadata_cost_details, dict):
+                        cost_details = metadata_cost_details
+
             result = {
                 'id': evaluation.id,
                 'type': evaluation.type,
@@ -2795,6 +2916,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'metrics': metrics,
                 'parameters': parameters,
                 'baseline_evaluation_id': baseline_evaluation_id,
+                'current_baseline_evaluation_id': current_baseline_evaluation_id,
                 'root_cause': root_cause,
                 'misclassification_analysis': misclassification_analysis,
                 'confusion_matrix': confusion_matrix,
@@ -2803,6 +2925,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'total_items': evaluation.totalItems,
                 'processed_items': evaluation.processedItems,
                 'cost': evaluation.cost,
+                'cost_details': cost_details,
                 'elapsed_seconds': evaluation.elapsedSeconds,
                 'estimated_remaining_seconds': evaluation.estimatedRemainingSeconds,
                 'started_at': evaluation.startedAt.isoformat() if evaluation.startedAt else None,
@@ -3747,6 +3870,23 @@ class FeedbackEvaluation(Evaluation):
                         )
                 except Exception as exc:
                     self.logger.debug("Failed to fetch score context: %s", exc)
+
+            # Parse processors from score YAML config so we can show the RCA sub-agent
+            # both the raw input text AND the processed text (what the LLM actually saw).
+            processors_config = []
+            processors_config_summary = ""
+            if score_yaml_code:
+                try:
+                    import yaml as _yaml
+                    _parsed_yaml = _yaml.safe_load(score_yaml_code)
+                    _item_section = _parsed_yaml.get("item", {}) if isinstance(_parsed_yaml, dict) else {}
+                    processors_config = _item_section.get("processors", []) if isinstance(_item_section, dict) else []
+                    if processors_config:
+                        _proc_names = [p.get("class", "unknown") for p in processors_config if isinstance(p, dict)]
+                        processors_config_summary = " → ".join(_proc_names)
+                        self.logger.info(f"RCA: Found {len(processors_config)} preprocessor(s): {processors_config_summary}")
+                except Exception as exc:
+                    self.logger.debug("Failed to parse processors from score YAML: %s", exc)
             scorecard_obj = getattr(self, "scorecard", None)
             if isinstance(scorecard_obj, dict):
                 scorecard_guidance_text = (
@@ -3892,6 +4032,22 @@ class FeedbackEvaluation(Evaluation):
                     metadata_snapshot = item_context_record.get("metadata_snapshot", "")
                     primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
                     primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
+
+                    # Run the preprocessor pipeline on the raw text so the RCA sub-agent
+                    # can compare what the LLM actually saw vs. the original input.
+                    processed_input_text = ""
+                    if primary_input_text and processors_config:
+                        try:
+                            from plexus.scores.Score import Score as _Score
+                            processed_input_text = _Score.apply_processors_to_text(
+                                primary_input_text, processors_config
+                            )
+                        except Exception as _proc_exc:
+                            self.logger.debug(
+                                "Failed to apply processors for RCA context (item %s): %s",
+                                fi.itemId, _proc_exc,
+                            )
+
                     misclassification_item_context = build_misclassification_item_context(
                         feedback_item_id=fi.id,
                         item_id=fi.itemId or "",
@@ -3914,6 +4070,8 @@ class FeedbackEvaluation(Evaluation):
                         resolved_final_classes=resolved_final_classes,
                         class_resolution_source=class_resolution_source,
                         primary_input_fetch_error=primary_input_fetch_error,
+                        processed_input_text=processed_input_text,
+                        processors_config_summary=processors_config_summary,
                     )
                     misclassification_evidence_flags = await asyncio.to_thread(
                         extract_misclassification_evidence_flags,
@@ -4021,6 +4179,7 @@ class FeedbackEvaluation(Evaluation):
             for result in rca_results:
                 if isinstance(result, Exception):
                     rca_errors += 1
+                    self.logger.debug("RCA item failed: %s: %s", type(result).__name__, result)
                     continue
                 timestamped, canonical_row = result
                 texts.append(timestamped)
@@ -4029,6 +4188,10 @@ class FeedbackEvaluation(Evaluation):
             if rca_errors:
                 self.logger.warning(f"RCA: {rca_errors}/{len(candidate_items)} items failed (continuing with {len(texts)} successful)")
 
+            # Suppress HuggingFace hub update checks — model is already cached locally.
+            # Use setdefault so an explicit HF_HUB_OFFLINE=0 in the environment still wins.
+            import os as _os
+            _os.environ.setdefault("HF_HUB_OFFLINE", "1")
             embed_fn = sentence_transformer_embedder(model_id="all-MiniLM-L6-v2")
             # Warm up the model before analysis to avoid meta-tensor race conditions
             await asyncio.to_thread(embed_fn, ["warmup"])
@@ -4542,6 +4705,21 @@ class FeedbackEvaluation(Evaluation):
                         class_resolution_source = class_details.get("source", "")
             except Exception as exc:
                 self.logger.debug("Failed to fetch small-set score context: %s", exc)
+
+        processors_config = []
+        processors_config_summary = ""
+        if score_yaml_code:
+            try:
+                import yaml as _yaml
+                _parsed_yaml = _yaml.safe_load(score_yaml_code)
+                _item_section = _parsed_yaml.get("item", {}) if isinstance(_parsed_yaml, dict) else {}
+                processors_config = _item_section.get("processors", []) if isinstance(_item_section, dict) else []
+                if processors_config:
+                    _proc_names = [p.get("class", "unknown") for p in processors_config if isinstance(p, dict)]
+                    processors_config_summary = " → ".join(_proc_names)
+            except Exception as exc:
+                self.logger.debug("Failed to parse processors from score YAML (small-set): %s", exc)
+
         exemplars = []
         for fi in candidate_items[:max_report_exemplars]:
             sr = score_result_map.get(fi.id, {}) if score_result_map is not None else {}
@@ -4656,6 +4834,18 @@ class FeedbackEvaluation(Evaluation):
             primary_input_fetch_error = bool(
                 item_context_record.get("primary_input_fetch_error") if item_context_record else False
             )
+            processed_input_text = ""
+            if primary_input_text and processors_config:
+                try:
+                    from plexus.scores.Score import Score as _Score
+                    processed_input_text = _Score.apply_processors_to_text(
+                        primary_input_text, processors_config
+                    )
+                except Exception as _proc_exc:
+                    self.logger.debug(
+                        "Failed to apply processors for small-set RCA context (item %s): %s",
+                        ex.get("item_id"), _proc_exc,
+                    )
             ex["misclassification_item_context"] = build_misclassification_item_context(
                 feedback_item_id=ex.get("feedback_item_id", ""),
                 item_id=ex.get("item_id", ""),
@@ -4680,6 +4870,8 @@ class FeedbackEvaluation(Evaluation):
                 resolved_final_classes=resolved_final_classes,
                 class_resolution_source=class_resolution_source,
                 primary_input_fetch_error=primary_input_fetch_error,
+                processed_input_text=processed_input_text,
+                processors_config_summary=processors_config_summary,
             )
             misclassification_evidence_flags = await asyncio.to_thread(
                 extract_misclassification_evidence_flags,
@@ -5372,3 +5564,76 @@ class AccuracyEvaluation(Evaluation):
             use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
             yaml_only=False  # Allow API calls if needed
         )
+    @staticmethod
+    def build_cost_details_from_expenses(expenses: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a compact provider/model cost summary from scorecard expenses."""
+        if not isinstance(expenses, dict):
+            return {
+                "schema_version": 1,
+                "total_usd": 0.0,
+                "llm_calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cached_tokens": 0,
+                "breakdown": [],
+            }
+
+        grouped: Dict[Tuple[Optional[str], Optional[str]], Dict[str, Any]] = {}
+        components = expenses.get("components")
+        if isinstance(components, list):
+            for component in components:
+                if not isinstance(component, dict):
+                    continue
+                if component.get("type") != "api_call":
+                    continue
+                provider_raw = component.get("provider")
+                model_raw = component.get("model")
+                provider = str(provider_raw) if isinstance(provider_raw, str) and provider_raw else None
+                model = str(model_raw) if isinstance(model_raw, str) and model_raw else None
+                key = (provider, model)
+                row = grouped.setdefault(
+                    key,
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "spent_usd": 0.0,
+                        "reused_usd": 0.0,
+                        "referenced_usd": 0.0,
+                        "llm_calls": 0,
+                        "evaluation_runs": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cached_tokens": 0,
+                    },
+                )
+                usd = float(component.get("usd") or 0.0)
+                prompt_tokens = int(component.get("prompt_tokens") or 0)
+                completion_tokens = int(component.get("completion_tokens") or 0)
+                cached_tokens = int(component.get("cached_tokens") or 0)
+                row["spent_usd"] += usd
+                row["referenced_usd"] += usd
+                row["llm_calls"] += int(component.get("llm_calls") or 1)
+                row["prompt_tokens"] += prompt_tokens
+                row["completion_tokens"] += completion_tokens
+                row["total_tokens"] += prompt_tokens + completion_tokens
+                row["cached_tokens"] += cached_tokens
+
+        breakdown = list(grouped.values())
+        breakdown.sort(key=lambda item: item.get("referenced_usd", 0), reverse=True)
+
+        prompt_tokens = int(expenses.get("prompt_tokens") or 0)
+        completion_tokens = int(expenses.get("completion_tokens") or 0)
+        cached_tokens = int(expenses.get("cached_tokens") or 0)
+        total_tokens = prompt_tokens + completion_tokens
+        return {
+            "schema_version": 1,
+            "total_usd": float(expenses.get("total_cost") or 0.0),
+            "llm_calls": int(expenses.get("llm_calls") or expenses.get("api_calls") or 0),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "cached_tokens": cached_tokens,
+            "breakdown": breakdown,
+        }

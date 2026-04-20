@@ -260,6 +260,50 @@ class TestEvaluationInfoTool:
         assert payload['score'] == 'Test Score'
         assert payload['total_items'] == 100
         assert payload['accuracy'] == 85.0
+
+    def test_accuracy_response_includes_cost_and_item_counts(self):
+        """Accuracy evaluation responses must include cost + item count fields."""
+        eval_info = {
+            'id': 'eval-acc-1',
+            'scorecard_id': 'scorecard-1',
+            'score_id': 'score-1',
+            'total_items': 120,
+            'processed_items': 118,
+            'cost': 0.314,
+            'accuracy': 91.2,
+            'metrics': [{'name': 'Accuracy', 'value': 91.2}],
+            'confusion_matrix': {'labels': ['yes', 'no'], 'matrix': [[50, 5], [4, 59]]},
+            'predicted_class_distribution': [],
+            'dataset_class_distribution': [],
+            'baseline_evaluation_id': None,
+            'current_baseline_evaluation_id': None,
+            'root_cause': {},
+            'misclassification_analysis': {},
+        }
+
+        response = {
+            'evaluation_id': eval_info.get('id'),
+            'evaluation_type': 'accuracy',
+            'scorecard_id': eval_info.get('scorecard_id'),
+            'score_id': eval_info.get('score_id'),
+            'total_items': eval_info.get('total_items'),
+            'processed_items': eval_info.get('processed_items'),
+            'cost': eval_info.get('cost'),
+            'accuracy': eval_info.get('accuracy'),
+            'metrics': eval_info.get('metrics'),
+            'confusionMatrix': eval_info.get('confusion_matrix'),
+            'predictedClassDistribution': eval_info.get('predicted_class_distribution'),
+            'datasetClassDistribution': eval_info.get('dataset_class_distribution'),
+            'baselineEvaluationId': eval_info.get('baseline_evaluation_id'),
+            'currentBaselineEvaluationId': eval_info.get('current_baseline_evaluation_id'),
+            'root_cause': eval_info.get('root_cause'),
+            'misclassification_analysis': eval_info.get('misclassification_analysis'),
+        }
+
+        assert response['evaluation_type'] == 'accuracy'
+        assert response['total_items'] == 120
+        assert response['processed_items'] == 118
+        assert response['cost'] == 0.314
     
     def test_examples_fetching_patterns(self):
         """Test examples fetching patterns for evaluation info"""

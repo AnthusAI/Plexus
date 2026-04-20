@@ -196,7 +196,7 @@ def test_classifier_detects_score_configuration_problem_default():
 
 def test_classifier_detects_information_gap_from_feedback_signal():
     context = _base_item_context()
-    context["feedback_context"]["edit_comment_excerpt"] = "Critical phrase not in transcript."
+    context["feedback_context"]["edit_comment"] = "Critical phrase not in transcript."
     context["label_provenance"]["feedback_context_present"] = True
     result = classify_misclassification_item(
         context,
@@ -208,7 +208,7 @@ def test_classifier_detects_information_gap_from_feedback_signal():
 
 def test_classifier_detects_guideline_gap_from_ambiguity_signal():
     context = _base_item_context()
-    context["feedback_context"]["edit_comment_excerpt"] = "Guideline is ambiguous here and needs SME clarification."
+    context["feedback_context"]["edit_comment"] = "Guideline is ambiguous here and needs SME clarification."
     context["label_provenance"]["feedback_context_present"] = True
     result = classify_misclassification_item(
         context,
@@ -219,7 +219,7 @@ def test_classifier_detects_guideline_gap_from_ambiguity_signal():
 
 def test_classifier_detects_mechanical_runtime_error_with_subtype():
     context = _base_item_context()
-    context["prediction"]["score_explanation_excerpt"] = "Runtime error: timeout while running classifier."
+    context["prediction"]["score_explanation"] = "Runtime error: timeout while running classifier."
     result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "runtime_error"
@@ -228,14 +228,14 @@ def test_classifier_detects_mechanical_runtime_error_with_subtype():
 
 def test_classifier_does_not_treat_failed_requirements_text_as_mechanical():
     context = _base_item_context()
-    context["prediction"]["score_explanation_excerpt"] = "The customer failed requirements for eligibility."
+    context["prediction"]["score_explanation"] = "The customer failed requirements for eligibility."
     result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "score_configuration_problem"
 
 
 def test_classifier_detects_mechanical_parse_or_schema_error():
     context = _base_item_context()
-    context["prediction"]["score_explanation_excerpt"] = "Parser error: schema validation failed to parse model output."
+    context["prediction"]["score_explanation"] = "Parser error: schema validation failed to parse model output."
     result = classify_misclassification_item(context, _base_evidence_flags())
     assert result["primary_category"] == "mechanical_malfunction"
     assert result["mechanical_subtype"] == "parse_or_schema_error"
