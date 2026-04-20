@@ -318,13 +318,25 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getByText("Thinking")).toBeInTheDocument()
     })
 
+    const messageCreateCall = mockChatMessageCreate.mock.calls[0] || []
+    expect(messageCreateCall[1]).toBeUndefined()
+
     const dispatchCall = mockGraphql.mock.calls[0]?.[0]
+    expect(dispatchCall?.authMode).toBeUndefined()
     expect(dispatchCall?.variables?.clientInstrumentation).toBeTruthy()
     const instrumentation = JSON.parse(dispatchCall.variables.clientInstrumentation)
     expect(instrumentation.client_history_snapshot).toEqual([
       { role: "ASSISTANT", content: "Hel" },
       { role: "USER", content: "Test thinking state" },
     ])
+
+    await waitFor(() => {
+      const taskStatusCall = mockGraphql.mock.calls
+        .map(call => call?.[0])
+        .find((args: any) => String(args?.query || "").includes("GetTaskStatus"))
+      expect(taskStatusCall).toBeDefined()
+      expect(taskStatusCall?.authMode).toBeUndefined()
+    })
 
     await act(async () => {
       subscriptions.messageCreate?.next({
