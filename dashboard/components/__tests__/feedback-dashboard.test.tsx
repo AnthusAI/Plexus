@@ -17,6 +17,11 @@ jest.mock("@/components/ui/chart", () => ({
   ChartContainer: ({ children }: any) => <div data-testid="chart-container">{children}</div>,
 }));
 
+jest.mock("@/components/ui/number-flow", () => ({
+  __esModule: true,
+  default: ({ value }: { value: number }) => <span>{value}</span>,
+}));
+
 jest.mock("recharts", () => ({
   Bar: () => null,
   BarChart: ({ children }: any) => <div data-testid="bar-chart">{children}</div>,
@@ -159,12 +164,12 @@ describe("FeedbackDashboard", () => {
   beforeEach(() => {
     mockUseFeedbackVolume.mockImplementation((config) => {
       if (config.scoreId === "score-1") {
-        return { isLoading: false, error: null, data: scoreData };
+        return { isLoading: false, error: null, data: scoreData, isPartial: false, progress: null };
       }
       if (config.scorecardId === "scorecard-1") {
-        return { isLoading: false, error: null, data: scorecardData };
+        return { isLoading: false, error: null, data: scorecardData, isPartial: false, progress: null };
       }
-      return { isLoading: false, error: null, data: accountData };
+      return { isLoading: false, error: null, data: accountData, isPartial: false, progress: null };
     });
   });
 
@@ -187,5 +192,26 @@ describe("FeedbackDashboard", () => {
 
     expect(screen.getByRole("button", { name: /Clear score/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Run score report/i })).toBeInTheDocument();
+  });
+
+  it("shows a progress line and partial data while feedback volume is still loading", () => {
+    mockUseFeedbackVolume.mockReturnValue({
+      isLoading: true,
+      error: null,
+      data: accountData,
+      isPartial: true,
+      progress: {
+        phase: "fetching_updated",
+        pagesFetched: 4,
+        rawCount: 5,
+        uniqueCount: 3,
+      },
+    });
+
+    render(<FeedbackDashboard />);
+
+    expect(screen.getByText(/Loading updated feedback/i)).toBeInTheDocument();
+    expect(screen.getByText(/4 pages, 3 unique feedback items counted so far/i)).toBeInTheDocument();
+    expect(screen.getByText("SelectQuote HCS Medium-Risk")).toBeInTheDocument();
   });
 });
