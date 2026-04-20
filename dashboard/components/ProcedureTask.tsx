@@ -589,6 +589,8 @@ export default function ProcedureTask({
     value != null ? `$${value.toFixed(4)}` : '—'
   const formatCurrency = (value?: number | null) =>
     value != null ? `$${value.toFixed(4)}` : '—'
+  const formatDiscountCurrency = (value?: number | null) =>
+    value != null ? `-${formatCurrency(value)}` : '—'
 
   const MetricHeaderLabel = ({ label, shape, color }: { label: string; shape: 'circle' | 'square'; color: string }) => (
     <span className="inline-flex items-center gap-1">
@@ -1155,23 +1157,41 @@ export default function ProcedureTask({
                 <div className="rounded p-2 bg-background">
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <div className="text-muted-foreground/70">Evaluation</div>
-                    <div className="text-right text-muted-foreground/70">Runs: {evaluationEntryCount}</div>
+                    <div className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                      {evaluationEntryCount} runs
+                    </div>
                   </div>
-                  <div className="font-medium">Incurred: {formatCurrency(evaluationIncurred)}</div>
-                  <div className="text-muted-foreground">Reused: {formatCurrency(evaluationReused)}</div>
-                  <div className="text-muted-foreground">Total: {formatCurrency(evaluationTotal)}</div>
+                  <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
+                    <div className="text-muted-foreground">Referenced total</div>
+                    <div className="text-right tabular-nums">{formatCurrency(evaluationTotal)}</div>
+                    <div className="text-emerald-700 dark:text-emerald-400">Reuse discount</div>
+                    <div className="text-right tabular-nums text-emerald-700 dark:text-emerald-400">{formatDiscountCurrency(evaluationReused)}</div>
+                    <div className="text-muted-foreground">Spent this run</div>
+                    <div className="text-right font-medium tabular-nums">{formatCurrency(evaluationIncurred)}</div>
+                  </div>
                 </div>
                 <div className="rounded p-2 bg-background">
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <div className="text-muted-foreground/70">Optimization Inference</div>
-                    <div className="text-right text-muted-foreground/70">LLM calls: {inferenceEntryCount}</div>
+                    <div className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                      {inferenceEntryCount} LLM calls
+                    </div>
                   </div>
-                  <div className="font-medium">Total: {formatCurrency(inferenceTotal)}</div>
+                  <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
+                    <div className="text-muted-foreground">Spent this run</div>
+                    <div className="text-right font-medium tabular-nums">{formatCurrency(inferenceTotal)}</div>
+                  </div>
                 </div>
                 <div className="rounded p-2 bg-background">
                   <div className="text-muted-foreground/70 mb-1">Procedure Total</div>
-                  <div className="font-medium">Incurred: {formatCurrency(overallIncurred)}</div>
-                  <div className="text-muted-foreground">With reused evals: {formatCurrency(overallTotal)}</div>
+                  <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
+                    <div className="text-muted-foreground">Referenced total</div>
+                    <div className="text-right tabular-nums">{formatCurrency(overallTotal)}</div>
+                    <div className="text-emerald-700 dark:text-emerald-400">Reuse discount</div>
+                    <div className="text-right tabular-nums text-emerald-700 dark:text-emerald-400">{formatDiscountCurrency(evaluationReused)}</div>
+                    <div className="text-muted-foreground">Spent this run</div>
+                    <div className="text-right font-medium tabular-nums">{formatCurrency(overallIncurred)}</div>
+                  </div>
                 </div>
               </div>
             </div>
