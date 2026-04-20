@@ -1,6 +1,7 @@
 """Functions to fetch and cache score configurations from the API."""
 
 import logging
+from io import StringIO
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Union, Tuple
 
@@ -185,15 +186,19 @@ def fetch_score_configurations(
                     if key not in ['name', 'key', 'id', 'version', 'parent']:
                         ordered_config[key] = value
                 
+                rendered_config = StringIO()
+                yaml.dump(ordered_config, rendered_config)
+                normalized_config_yaml = rendered_config.getvalue()
+
                 # Get the YAML file path
                 yaml_path = get_score_yaml_path(scorecard_name, score_name)
                 
                 # Write to file with proper formatting
                 with open(yaml_path, 'w') as f:
-                    yaml.dump(ordered_config, f)
+                    f.write(normalized_config_yaml)
                 
-                # Store the configuration in memory
-                configurations[score_id] = config_yaml
+                # Keep the in-memory configuration identical to the cached YAML on disk.
+                configurations[score_id] = normalized_config_yaml
                 
                 logging.info(f"==== CONFIGURATION SAVED ====")
                 logging.info(f"Score: {score_name}")
