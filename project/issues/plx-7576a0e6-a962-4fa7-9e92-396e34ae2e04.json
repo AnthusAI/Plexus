@@ -34,10 +34,16 @@
       "author": "ryan",
       "text": "User approved landing changes. Committing auth fix, merging feature branch into develop, pushing, and iterating on CI failures until green.",
       "created_at": "2026-04-20T23:49:58.901820Z"
+    },
+    {
+      "id": "a0eae5e0-d15c-4fc5-9c81-74093834b098",
+      "author": "ryan",
+      "text": "Addressing CI lint failure on develop: fix undefined procedure_info reference in plexus/cli/procedure/service.py, rerun lint/tests, push, and verify GitHub Actions green.",
+      "created_at": "2026-04-20T23:55:27.401679Z"
     }
   ],
   "created_at": "2026-04-20T22:53:25.728209Z",
-  "updated_at": "2026-04-20T23:49:58.901820Z",
+  "updated_at": "2026-04-20T23:55:27.401679Z",
   "closed_at": null,
   "custom": {}
 }
