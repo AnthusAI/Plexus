@@ -3,7 +3,7 @@ import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -1125,24 +1125,42 @@ export default function ProcedureTask({
             const nextText = procedureSummary.next_steps || procedureSummary.prescription || ''
             if (!progressText && !nextText) return null
             return (
-              <div className="mt-4 @container">
+              <div className="mt-4 rounded-lg bg-card p-3 @container">
                 <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2">
                   {progressText.trim() && (
-                    <div className="rounded-lg border border-border/50 bg-card p-3">
-                      <ReportSection
-                        icon={<FileText className="h-3.5 w-3.5" />}
-                        title="Progress"
-                        summary={progressText}
-                      />
+                    <div className="rounded-lg bg-card p-3">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                        <FileText className="h-3.5 w-3.5" />
+                        Progress
+                      </div>
+                      <div className="rounded-md bg-background p-3">
+                        <div className="prose prose-sm prose-invert max-w-none
+                          prose-headings:text-foreground prose-headings:font-semibold
+                          prose-h2:text-sm prose-h3:text-xs
+                          prose-strong:text-foreground
+                          prose-ul:my-1 prose-li:my-0.5
+                          prose-p:my-1 text-sm text-foreground/90">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{progressText}</ReactMarkdown>
+                        </div>
+                      </div>
                     </div>
                   )}
                   {nextText.trim() && (
-                    <div className="rounded-lg border border-border/50 bg-card p-3">
-                      <ReportSection
-                        icon={<ClipboardList className="h-3.5 w-3.5" />}
-                        title="Next Steps"
-                        summary={nextText}
-                      />
+                    <div className="rounded-lg bg-card p-3">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                        <ClipboardList className="h-3.5 w-3.5" />
+                        Next Steps
+                      </div>
+                      <div className="rounded-md bg-background p-3">
+                        <div className="prose prose-sm prose-invert max-w-none
+                          prose-headings:text-foreground prose-headings:font-semibold
+                          prose-h2:text-sm prose-h3:text-xs
+                          prose-strong:text-foreground
+                          prose-ul:my-1 prose-li:my-0.5
+                          prose-p:my-1 text-sm text-foreground/90">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{nextText}</ReactMarkdown>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1152,7 +1170,10 @@ export default function ProcedureTask({
 
           {procedureCosts && (
             <div className="mt-4 rounded-lg bg-card p-3">
-              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cost Breakdown</h3>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                <CircleDollarSign className="h-4 w-4" />
+                Cost Breakdown
+              </h3>
               <div className="grid grid-cols-1 gap-2 @lg:grid-cols-3 text-xs">
                 <div className="rounded p-2 bg-background">
                   <div className="mb-1 flex items-start justify-between gap-2">
@@ -1202,14 +1223,17 @@ export default function ProcedureTask({
             <CycleHistoryTableSkeleton />
           ) : optimizerVersions.length > 0 ? (
             <div className="mt-4 rounded-lg bg-card p-3">
-              <h3 className="text-sm font-semibold text-muted-foreground mb-2">Cycles</h3>
               <table className="w-full text-xs border-separate border-spacing-y-1">
                 <thead>
                   {isOverallCyclesView ? (
                     <>
                       <tr className="text-muted-foreground/60">
-                        <th className="px-1 py-0.5 text-left font-normal"></th>
-                        <th className="px-1 py-0.5 text-left font-normal"></th>
+                        <th className="px-1 pb-1 text-left align-bottom text-sm font-semibold text-muted-foreground" colSpan={2}>
+                          <span className="flex items-center gap-2">
+                            <Repeat className="h-4 w-4" />
+                            Cycles
+                          </span>
+                        </th>
                         <th className="px-1 py-0.5 text-left font-normal" colSpan={5} style={{ color: RECENT_SERIES_COLOR }}>Recent</th>
                         <th className="px-1 py-0.5 text-left font-normal" colSpan={5} style={{ color: REGRESSION_SERIES_COLOR }}>Regression</th>
                         <th className="px-1 py-0.5 font-normal"></th>
@@ -1243,8 +1267,12 @@ export default function ProcedureTask({
                   ) : (
                     <>
                       <tr className="text-muted-foreground/60">
-                        <th className="px-1 py-0.5 text-left font-normal"></th>
-                        <th className="px-1 py-0.5 text-left font-normal"></th>
+                        <th className="px-1 pb-1 text-left align-bottom text-sm font-semibold text-muted-foreground" colSpan={2}>
+                          <span className="flex items-center gap-2">
+                            <Repeat className="h-4 w-4" />
+                            Cycles
+                          </span>
+                        </th>
                         <th className="px-1 py-0.5 text-left font-normal" colSpan={4} style={{ color: cyclesSelectedDatasetColor }}>{cyclesSelectedDatasetLabel}</th>
                         <th className="px-1 py-0.5 font-normal"></th>
                         <th className="px-1 py-0.5 font-normal"></th>
@@ -1649,7 +1677,7 @@ export default function ProcedureTask({
           {/* Procedure Conversation section */}
           <div className="mt-6">
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pr-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
                   Conversations ({sessionCount})

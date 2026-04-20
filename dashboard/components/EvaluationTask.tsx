@@ -2623,10 +2623,17 @@ ${categoryLines}${mechanicalLines}
             </div>
           </div>
           {variant !== 'detail' && evaluationNotes && (
-            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                 p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
-                strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                code: ({children, className}) => {
+                  const isBlock = Boolean(className && className.includes('language-'))
+                  if (isBlock) {
+                    return <code className={`${className} text-foreground`}>{children}</code>
+                  }
+                  return <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">{children}</code>
+                },
               }}>
                 {evaluationNotes}
               </ReactMarkdown>
@@ -2723,10 +2730,17 @@ ${categoryLines}${mechanicalLines}
               className="text-muted-foreground"
             />
             {evaluationNotes && (
-              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground">
+              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                   p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
-                  strong: ({children}) => <strong className="font-semibold">{children}</strong>,
+                  strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                  code: ({children, className}) => {
+                    const isBlock = Boolean(className && className.includes('language-'))
+                    if (isBlock) {
+                      return <code className={`${className} text-foreground`}>{children}</code>
+                    }
+                    return <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">{children}</code>
+                  },
                 }}>
                   {evaluationNotes}
                 </ReactMarkdown>
