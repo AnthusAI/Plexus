@@ -185,7 +185,7 @@ describe("FeedbackDashboard", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /open/i })[0]);
 
-    expect(screen.getByText(/Back to scorecard/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Clear score/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Run score report/i })).toBeInTheDocument();
   });
 });
