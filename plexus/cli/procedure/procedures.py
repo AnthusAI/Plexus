@@ -383,6 +383,91 @@ def update(procedure_id: str, yaml: Optional[str], note: Optional[str]):
     else:
         console.print(f"[red]Error: {message}[/red]")
 
+
+@procedure.command("timeout-stale")
+@click.option('--account', '-a', help='Account identifier (key, name, or ID)')
+@click.option('--threshold-seconds', type=int, default=3600, show_default=True, help='Mark RUNNING procedures stale after this many seconds without chat activity')
+@click.option('--lookback-hours', type=int, default=72, show_default=True, help='Only consider procedures started within this many hours')
+@click.option('--dry-run', is_flag=True, help='Show stale procedures without updating records')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
+def timeout_stale(account: Optional[str], threshold_seconds: int, lookback_hours: int, dry_run: bool, output: str):
+    """Detect and mark stale procedure runs using chat-message inactivity.
+
+    A RUNNING procedure is considered stale when it has produced no new chat
+    messages for the configured threshold.
+    """
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from .stale_timeout import timeout_stale_procedures
+
+    account_id = resolve_account_id_for_command(client, account)
+    result = timeout_stale_procedures(
+        client=client,
+        account_id=account_id,
+        threshold_seconds=threshold_seconds,
+        lookback_hours=lookback_hours,
+        dry_run=dry_run,
+    )
+
+    if output == 'json':
+        console.print(JSON.from_data(result))
+        return
+    if output == 'yaml':
+        console.print(yaml.dump(result, default_flow_style=False))
+        return
+
+    summary = (
+        f"Recent started {result.get('recent_started_count', 0)} | "
+        f"Checked RUNNING {result.get('checked', 0)} | "
+        f"Timed out {len(result.get('timed_out') or [])} | "
+        f"Skipped {len(result.get('skipped') or [])}"
+    )
+    style = "yellow" if dry_run else "green"
+    console.print(f"[{style}]{summary}[/{style}]")
+
+    recent_started = result.get("recent_started") or []
+    if recent_started:
+        recent_table = Table(title=f"Procedures Started In Last {lookback_hours} Hours")
+        recent_table.add_column("Procedure", style="cyan")
+        recent_table.add_column("Task", style="magenta")
+        recent_table.add_column("Status", style="white")
+        recent_table.add_column("Started", style="green")
+        recent_table.add_column("Updated", style="yellow")
+        for item in recent_started:
+            recent_table.add_row(
+                str(item.get("procedure_id") or ""),
+                str(item.get("task_id") or ""),
+                str(item.get("status") or ""),
+                str(item.get("started_at") or "N/A"),
+                str(item.get("updated_at") or "N/A"),
+            )
+        console.print(recent_table)
+
+    timed_out = result.get("timed_out") or []
+    if timed_out:
+        table = Table(title="Stale Procedures")
+        table.add_column("Procedure", style="cyan")
+        table.add_column("Task", style="magenta")
+        table.add_column("Last Chat Activity", style="white")
+        table.add_column("Silence (min)", style="yellow", justify="right")
+        table.add_column("Action", style="green")
+        for item in timed_out:
+            silence_minutes = int((item.get("silence_seconds") or 0) / 60)
+            table.add_row(
+                str(item.get("procedure_id") or ""),
+                str(item.get("task_id") or ""),
+                str(item.get("last_chat_activity_at") or "N/A"),
+                str(silence_minutes),
+                "Would fail" if dry_run else "Failed",
+            )
+        console.print(table)
+    elif dry_run:
+        console.print("[green]No stale procedures detected[/green]")
+
 @procedure.command()
 @click.argument('procedure_id')
 @click.option('--confirm', is_flag=True, help='Skip confirmation prompt')
@@ -712,6 +797,8 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             'error': 'red',
             'FAILED': 'red',
             'failed': 'red',
+            'STALLED': 'yellow',
+            'stalled': 'yellow',
         }.get(status, 'white')
         
         console.print(f"[{status_color}]✓ {result.get('message', 'Procedure run completed')}[/{status_color}]")
@@ -1339,6 +1426,8 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
             'error': 'red',
             'FAILED': 'red',
             'failed': 'red',
+            'STALLED': 'yellow',
+            'stalled': 'yellow',
         }.get(status, 'white')
         console.print(f"[{color}]{result.get('message', 'Continuation dispatched')}[/{color}]")
         console.print(f"Procedure: {procedure_id} | Task: {result.get('task_id', 'N/A')}")
@@ -1426,6 +1515,8 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
             'error': 'red',
             'FAILED': 'red',
             'failed': 'red',
+            'STALLED': 'yellow',
+            'stalled': 'yellow',
         }.get(status, 'white')
         console.print(f"[{color}]{result.get('message', 'Branch dispatched')}[/{color}]")
         console.print(f"Branch procedure: {target_id} | Task: {result.get('task_id', 'N/A')}")

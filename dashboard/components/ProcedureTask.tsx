@@ -84,6 +84,7 @@ const getStatusDisplay = (status?: string): { text: string; variant: 'default' |
     RUNNING: { text: 'Running', variant: 'default' },
     COMPLETED: { text: 'Completed', variant: 'outline' },
     FAILED: { text: 'Failed', variant: 'destructive' },
+    STALLED: { text: 'Stalled', variant: 'secondary' },
     // Procedure states (state machine)
     START: { text: 'Start', variant: 'secondary' },
     HYPOTHESIS: { text: 'Hypothesis', variant: 'default' },
@@ -112,6 +113,7 @@ export interface ProcedureTaskData extends BaseTaskData {
     id?: string
     name: string
   } | null
+  status?: string
   taskId?: string
   task?: {
     id: string
@@ -436,7 +438,10 @@ export default function ProcedureTask({
 
     fetchMetrics()
 
-    const isCompleted = procedure.task?.status === 'COMPLETED' || procedure.task?.status === 'FAILED'
+    const isCompleted =
+      procedure.task?.status === 'COMPLETED' ||
+      procedure.task?.status === 'FAILED' ||
+      procedure.task?.status === 'STALLED'
     if (!isCompleted) {
       const interval = setInterval(fetchMetrics, 15000)
       return () => clearInterval(interval)
@@ -881,12 +886,27 @@ export default function ProcedureTask({
     command: procedure.command
   }
 
+  const procedureStatus = procedure.status?.toUpperCase()
+  const taskStatus = procedure.task?.status?.toUpperCase()
+  const hasFailureStatus = taskStatus === 'FAILED' || procedureStatus === 'FAILED' || procedureStatus === 'ERROR'
+  const hasStalledStatus = taskStatus === 'STALLED' || procedureStatus === 'STALLED'
+  const effectiveTaskStatus: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED' = hasFailureStatus
+    ? 'FAILED'
+    : hasStalledStatus
+      ? 'STALLED'
+    : taskStatus === 'RUNNING'
+      ? 'RUNNING'
+      : taskStatus === 'COMPLETED'
+        ? 'COMPLETED'
+        : 'PENDING'
+
   // Create the task object that matches the Task component's expected interface
   // Format stages with proper colors based on status
   const formattedStages = (procedure.task?.stages?.items || []).map((stage: any) => {
     const isCompleted = stage.status === 'COMPLETED';
     const isRunning = stage.status === 'RUNNING';
     const isFailed = stage.status === 'FAILED';
+    const isStalled = stage.status === 'STALLED';
     
     return {
       id: stage.id,
@@ -895,10 +915,11 @@ export default function ProcedureTask({
       color: isCompleted ? 'bg-primary' :
              isRunning ? 'bg-secondary' :
              isFailed ? 'bg-false' :
+             isStalled ? 'bg-neutral' :
              'bg-neutral',
       name: stage.name,
       order: stage.order,
-      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+      status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED',
       statusMessage: stage.statusMessage,
       startedAt: stage.startedAt,
       completedAt: stage.completedAt,
@@ -929,7 +950,7 @@ export default function ProcedureTask({
     startedAt: procedure.task?.startedAt, // Get from task
     estimatedCompletionAt: procedure.task?.estimatedCompletionAt, // Get from task
     completedAt: procedure.task?.completedAt, // Get from task
-    status: (procedure.task?.status || 'PENDING') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+    status: effectiveTaskStatus,
     errorMessage: procedure.task?.errorMessage || procedure.errorMessage
   }
 
