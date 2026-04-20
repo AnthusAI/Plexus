@@ -689,8 +689,8 @@ def overview(
 
     timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     generated_name = (
-        f"Feedback Overview | Scorecard {shared_scope['scorecard']} | "
-        f"Score {shared_scope['score']} | {_window_label(days, start_date, end_date)} | {timestamp_utc}"
+        f"Scorecard {shared_scope['scorecard']} | Score {shared_scope['score']} | "
+        f"Feedback Overview | {_window_label(days, start_date, end_date)} | {timestamp_utc}"
     )
     final_report_name = str(report_name).strip() if report_name and str(report_name).strip() else generated_name
 
