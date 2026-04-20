@@ -3,7 +3,7 @@
   "title": "Fix LangGraphScore cost calculation test regression",
   "description": "Investigate and fix failing test: plexus/scores/LangGraphScore_test.py::test_cost_calculation_across_model_providers.\n\nObserved: get_accumulated_costs now calls litellm.cost_per_token with a MagicMock model value from node parameters instead of the configured model string, causing assertion failure in CI/develop.\n\nDone criteria:\n- Root cause identified\n- Minimal fix applied\n- Target test passes locally",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,22 @@
       "author": "derek",
       "text": "Root cause confirmed: get_accumulated_costs resolved model_name from node parameters without type validation. In this test, node.parameters is a MagicMock, so model_name became MagicMock instead of configured 'gpt-4'. Implemented fix: coerce model name to a non-empty string; otherwise fallback to score-level model_name.",
       "created_at": "2026-04-20T18:55:55.739669354Z"
+    },
+    {
+      "id": "f683a8c7-095d-421b-ba79-6c56d9d6bb71",
+      "author": "derek",
+      "text": "Created branch bugfix/langgraph-cost-model-name-regression, committed fix b95e179c, and opened PR to develop: https://github.com/AnthusAI/Plexus/pull/184",
+      "created_at": "2026-04-20T18:57:36.995725612Z"
+    },
+    {
+      "id": "b60acffa-fc81-4c7d-b724-e88c3d28a9b9",
+      "author": "derek",
+      "text": "Completed. Fixed LangGraphScore cost model-name regression by requiring non-empty string node model_name and falling back to score-level model_name. Merged in PR #184 and released through PR #185 to main.",
+      "created_at": "2026-04-20T19:27:19.559657863Z"
     }
   ],
   "created_at": "2026-04-20T18:54:47.399590398Z",
-  "updated_at": "2026-04-20T18:55:55.739669354Z",
-  "closed_at": null,
+  "updated_at": "2026-04-20T19:27:19.571345578Z",
+  "closed_at": "2026-04-20T19:27:19.571345578Z",
   "custom": {}
 }
