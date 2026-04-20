@@ -34,10 +34,16 @@
       "author": "ryan",
       "text": "Applied additional ProcedureTask visual polish per feedback:\n- Removed outline/border styling from Optimizer Metrics tooltip container; kept flat shaded surface\n- Added top spacing before Optimizer Metrics section (mt-4) to mirror Parameters→Code rhythm\n- Removed borders from Cost Breakdown container and cells\n- Implemented alternating flat-shaded backgrounds for Cost Breakdown cells (Evaluation / Optimization Inference / Procedure Total)\n\nValidation:\n- npx jest components/__tests__/OptimizerMetricsChart.test.tsx --runInBand\n- npx jest components/__tests__/ProcedureTask.optimizer-auth.test.tsx --runInBand\n- Result: both suites passed",
       "created_at": "2026-04-19T22:49:10.706813Z"
+    },
+    {
+      "id": "11b0d123-7ebf-4ae9-8444-363bf48f7296",
+      "author": "ryan",
+      "text": "Finalizing latest evaluation-notes dark/light mode markdown contrast fix; preparing commit and push to develop as requested.",
+      "created_at": "2026-04-20T02:03:25.224005Z"
     }
   ],
   "created_at": "2026-04-19T20:36:33.001926Z",
-  "updated_at": "2026-04-19T22:49:10.706813Z",
+  "updated_at": "2026-04-20T02:03:25.224005Z",
   "closed_at": null,
   "custom": {}
 }
