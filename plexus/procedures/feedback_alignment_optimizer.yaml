@@ -497,6 +497,8 @@ code: |
     if type(evaluation) ~= "table" then evaluation = {} end
     if type(evaluation.entries) ~= "table" then evaluation.entries = {} end
     if type(evaluation.seen_ids) ~= "table" then evaluation.seen_ids = {} end
+    if type(evaluation.breakdown) ~= "table" then evaluation.breakdown = {} end
+    if type(evaluation.breakdown_index) ~= "table" then evaluation.breakdown_index = {} end
     evaluation.incurred_total = tonumber(evaluation.incurred_total) or 0
     evaluation.reused_total = tonumber(evaluation.reused_total) or 0
     evaluation.total = tonumber(evaluation.total) or (evaluation.incurred_total + evaluation.reused_total)
@@ -505,6 +507,88 @@ code: |
     if type(costs.totals) ~= "table" then costs.totals = {} end
     if type(costs.inference) ~= "table" then costs.inference = {} end
     return costs, evaluation
+  end
+
+  local function merge_evaluation_breakdown(evaluation, eval_result, reused, fallback_cost)
+    local rows = {}
+    local cost_details = eval_result.cost_details
+    if type(cost_details) == "table" and type(cost_details.breakdown) == "table" then
+      rows = cost_details.breakdown
+    end
+
+    if #rows == 0 then
+      local model_name = nil
+      local provider_name = nil
+      if type(eval_result.parameters) == "table" then
+        model_name = eval_result.parameters.model_name
+        provider_name = eval_result.parameters.model_provider
+      end
+      rows = {{
+        provider = provider_name,
+        model = model_name,
+        spent_usd = fallback_cost,
+        reused_usd = 0,
+        referenced_usd = fallback_cost,
+        llm_calls = 0,
+        evaluation_runs = 1,
+        prompt_tokens = 0,
+        completion_tokens = 0,
+        total_tokens = 0,
+        cached_tokens = 0,
+      }}
+    end
+
+    for _, row in ipairs(rows) do
+      if type(row) == "table" then
+        local provider_key = tostring(row.provider or "")
+        local model_key = tostring(row.model or "")
+        local key = provider_key .. "|" .. model_key
+        local entry = evaluation.breakdown_index[key]
+        if type(entry) ~= "table" then
+          entry = {
+            provider = row.provider or nil,
+            model = row.model or nil,
+            spent_usd = 0,
+            reused_usd = 0,
+            referenced_usd = 0,
+            llm_calls = 0,
+            evaluation_runs = 0,
+            prompt_tokens = 0,
+            completion_tokens = 0,
+            total_tokens = 0,
+            cached_tokens = 0,
+          }
+          evaluation.breakdown_index[key] = entry
+        end
+
+        local row_spent = tonumber(row.spent_usd) or tonumber(row.referenced_usd) or 0
+        local row_reused = tonumber(row.reused_usd) or 0
+        local row_ref = tonumber(row.referenced_usd) or (row_spent + row_reused)
+        if reused then
+          entry.reused_usd = (tonumber(entry.reused_usd) or 0) + row_ref
+          entry.spent_usd = tonumber(entry.spent_usd) or 0
+        else
+          entry.spent_usd = (tonumber(entry.spent_usd) or 0) + row_spent
+          entry.reused_usd = (tonumber(entry.reused_usd) or 0) + row_reused
+        end
+        entry.referenced_usd = (tonumber(entry.referenced_usd) or 0) + row_ref
+        entry.llm_calls = (tonumber(entry.llm_calls) or 0) + (tonumber(row.llm_calls) or 0)
+        entry.evaluation_runs = (tonumber(entry.evaluation_runs) or 0) + 1
+        entry.prompt_tokens = (tonumber(entry.prompt_tokens) or 0) + (tonumber(row.prompt_tokens) or 0)
+        entry.completion_tokens = (tonumber(entry.completion_tokens) or 0) + (tonumber(row.completion_tokens) or 0)
+        entry.total_tokens = (tonumber(entry.total_tokens) or 0) + (tonumber(row.total_tokens) or 0)
+        entry.cached_tokens = (tonumber(entry.cached_tokens) or 0) + (tonumber(row.cached_tokens) or 0)
+      end
+    end
+
+    local flattened = {}
+    for _, row in pairs(evaluation.breakdown_index) do
+      table.insert(flattened, row)
+    end
+    table.sort(flattened, function(a, b)
+      return (tonumber(a.referenced_usd) or 0) > (tonumber(b.referenced_usd) or 0)
+    end)
+    evaluation.breakdown = flattened
   end
 
   local function record_evaluation_cost(eval_result, source_label, fallback_eval_type)
@@ -532,6 +616,7 @@ code: |
       source = source_label or "unspecified",
       reused = reused,
       cost = cost,
+      cost_details = eval_result.cost_details,
       processed_items = processed_items,
       cost_per_item = cost_per_item,
       score_version_id = eval_result.score_version_id or eval_result.scoreVersionId,
@@ -544,6 +629,7 @@ code: |
     else
       evaluation.incurred_total = (tonumber(evaluation.incurred_total) or 0) + cost
     end
+    merge_evaluation_breakdown(evaluation, eval_result, reused, cost)
     evaluation.total = (tonumber(evaluation.incurred_total) or 0) + (tonumber(evaluation.reused_total) or 0)
     costs.evaluation = evaluation
 

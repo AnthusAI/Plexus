@@ -781,6 +781,7 @@ def register_evaluation_tools(mcp: FastMCP):
                         "baselineEvaluationId": eval_info.get('baseline_evaluation_id'),
                         "currentBaselineEvaluationId": eval_info.get('current_baseline_evaluation_id'),
                         "cost": eval_info.get('cost'),
+                        "cost_details": eval_info.get('cost_details'),
                         "started_at": eval_info.get('started_at'),
                         "created_at": eval_info.get('created_at'),
                         "updated_at": eval_info.get('updated_at'),
@@ -1000,6 +1001,7 @@ def register_evaluation_tools(mcp: FastMCP):
                 'total_items': eval_info.get('total_items'),
                 'processed_items': eval_info.get('processed_items'),
                 'cost': eval_info.get('cost'),
+                'cost_details': eval_info.get('cost_details'),
                 'accuracy': eval_info.get('accuracy'),
                 'metrics': eval_info.get('metrics'),
                 'confusionMatrix': eval_info.get('confusion_matrix'),  # snake_case in source
@@ -1122,6 +1124,7 @@ def register_evaluation_tools(mcp: FastMCP):
                     "baselineEvaluationId": eval_info.get("baseline_evaluation_id"),
                     "currentBaselineEvaluationId": eval_info.get("current_baseline_evaluation_id"),
                     "cost": eval_info.get("cost"),
+                    "cost_details": eval_info.get("cost_details"),
                     "started_at": eval_info.get("started_at"),
                     "created_at": eval_info.get("created_at"),
                     "updated_at": eval_info.get("updated_at"),

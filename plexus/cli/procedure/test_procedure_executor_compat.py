@@ -886,6 +886,11 @@ async def test_execute_tactus_persists_inference_costs_from_cost_events(monkeypa
     assert costs["inference"]["total"] == pytest.approx(0.003)
     assert len(costs["inference"]["entries"]) == 1
     assert costs["inference"]["entries"][0]["agent_name"] == "optimizer"
+    assert isinstance(costs["inference"]["breakdown"], list)
+    assert len(costs["inference"]["breakdown"]) == 1
+    assert costs["inference"]["breakdown"][0]["provider"] == "openai"
+    assert costs["inference"]["breakdown"][0]["model"] == "gpt-5.2"
+    assert costs["inference"]["breakdown"][0]["spent_usd"] == pytest.approx(0.003)
     assert costs["totals"]["overall"]["incurred"] == pytest.approx(0.003)
 
 
