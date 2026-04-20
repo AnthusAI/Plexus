@@ -18,17 +18,17 @@ import {
   type FeedbackWeekStart,
 } from "@/utils/feedback-volume";
 
-const SCORE_FEEDBACK_ITEMS_QUERY = `
-  query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+const ACCOUNT_FEEDBACK_ITEMS_EDITED_AT_QUERY = `
+  query ListFeedbackItemByAccountIdAndEditedAt(
     $accountId: String!
-    $compositeCondition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput
+    $editedAt: ModelStringKeyConditionInput
     $limit: Int
     $nextToken: String
     $sortDirection: ModelSortDirection
   ) {
-    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+    listFeedbackItemByAccountIdAndEditedAt(
       accountId: $accountId
-      scorecardIdScoreIdEditedAt: $compositeCondition
+      editedAt: $editedAt
       limit: $limit
       nextToken: $nextToken
       sortDirection: $sortDirection
@@ -61,6 +61,38 @@ const ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
     listFeedbackItemByAccountIdAndUpdatedAt(
       accountId: $accountId
       updatedAt: $updatedAt
+      limit: $limit
+      nextToken: $nextToken
+      sortDirection: $sortDirection
+    ) {
+      items {
+        id
+        scorecardId
+        scoreId
+        itemId
+        initialAnswerValue
+        finalAnswerValue
+        isInvalid
+        editedAt
+        updatedAt
+        createdAt
+      }
+      nextToken
+    }
+  }
+`;
+
+const SCORE_FEEDBACK_ITEMS_EDITED_AT_QUERY = `
+  query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+    $accountId: String!
+    $compositeCondition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput
+    $limit: Int
+    $nextToken: String
+    $sortDirection: ModelSortDirection
+  ) {
+    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+      accountId: $accountId
+      scorecardIdScoreIdEditedAt: $compositeCondition
       limit: $limit
       nextToken: $nextToken
       sortDirection: $sortDirection
@@ -119,6 +151,11 @@ interface FeedbackItemQueryResponse {
   nextToken: string | null;
 }
 
+interface PaginatedQueryOptions {
+  limit?: number;
+  timeoutMs?: number;
+}
+
 interface UseFeedbackVolumeConfig {
   accountId?: string | null;
   scorecardId?: string | null;
@@ -131,23 +168,79 @@ interface UseFeedbackVolumeConfig {
   bucketType?: FeedbackVolumeBucketType;
 }
 
+export interface FeedbackVolumeProgress {
+  phase: "fetching_edited" | "fetching_updated" | "finalizing";
+  pagesFetched: number;
+  rawCount: number;
+  uniqueCount: number;
+}
+
 interface UseFeedbackVolumeState {
   isLoading: boolean;
   error: string | null;
   data: FeedbackVolumeDashboardData | null;
+  isPartial: boolean;
+  progress: FeedbackVolumeProgress | null;
+}
+
+interface SnapshotContext {
+  scope: FeedbackVolumeScope;
+  window: ReturnType<typeof resolveFeedbackVolumeWindow>;
+  bucketType: FeedbackVolumeBucketType;
+  timeZone: string;
+  weekStart: FeedbackWeekStart;
+  selectedScorecardId?: string | null;
+  selectedScoreId?: string | null;
+}
+
+interface SnapshotOptions extends SnapshotContext {
+  itemMap: Map<string, FeedbackVolumeSourceItem>;
+  scorecards: FeedbackVolumeNamedEntity[];
+  scores: FeedbackVolumeNamedEntity[];
+}
+
+interface ProgressiveLoadOptions extends SnapshotContext {
+  accountId: string;
+  onProgress?: (snapshot: {
+    data: FeedbackVolumeDashboardData;
+    progress: FeedbackVolumeProgress;
+  }) => void;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
 }
 
 async function fetchScorecards(): Promise<FeedbackVolumeNamedEntity[]> {
   const client = getClient();
   let nextToken: string | undefined;
   const scorecards: FeedbackVolumeNamedEntity[] = [];
+  const seenTokens = new Set<string>();
+  let pages = 0;
 
   do {
-    const result = await listFromModel<Schema["Scorecard"]["type"]>(
-      client.models.Scorecard,
-      undefined,
-      nextToken,
-      1000
+    if (nextToken) {
+      if (seenTokens.has(nextToken)) break;
+      seenTokens.add(nextToken);
+    }
+    if (pages >= 100) break;
+
+    const result = await withTimeout(
+      listFromModel<Schema["Scorecard"]["type"]>(client.models.Scorecard, undefined, nextToken, 1000),
+      8_000,
+      "Scorecard list"
     );
     scorecards.push(
       ...result.data.map((scorecard) => ({
@@ -156,6 +249,7 @@ async function fetchScorecards(): Promise<FeedbackVolumeNamedEntity[]> {
       }))
     );
     nextToken = result.nextToken ?? undefined;
+    pages += 1;
   } while (nextToken);
 
   return scorecards.sort((left, right) => left.name.localeCompare(right.name));
@@ -165,13 +259,25 @@ async function fetchScoresForScorecard(scorecardId: string): Promise<FeedbackVol
   const client = getClient();
   let nextToken: string | undefined;
   const scores: FeedbackVolumeNamedEntity[] = [];
+  const seenTokens = new Set<string>();
+  let pages = 0;
 
   do {
-    const result = await listFromModel<Schema["Score"]["type"]>(
-      client.models.Score,
-      { scorecardId: { eq: scorecardId } },
-      nextToken,
-      1000
+    if (nextToken) {
+      if (seenTokens.has(nextToken)) break;
+      seenTokens.add(nextToken);
+    }
+    if (pages >= 100) break;
+
+    const result = await withTimeout(
+      listFromModel<Schema["Score"]["type"]>(
+        client.models.Score,
+        { scorecardId: { eq: scorecardId } },
+        nextToken,
+        1000
+      ),
+      8_000,
+      `Score list for ${scorecardId}`
     );
     scores.push(
       ...result.data.map((score) => ({
@@ -180,19 +286,66 @@ async function fetchScoresForScorecard(scorecardId: string): Promise<FeedbackVol
       }))
     );
     nextToken = result.nextToken ?? undefined;
+    pages += 1;
   } while (nextToken);
 
   return scores.sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function getFeedbackItemTimestamp(item: FeedbackVolumeSourceItem): number {
+  const timestamp = item.editedAt || item.updatedAt || item.createdAt;
+  if (!timestamp) return 0;
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function upsertFeedbackItems(itemMap: Map<string, FeedbackVolumeSourceItem>, items: FeedbackVolumeSourceItem[]): void {
+  for (const item of items) {
+    const existing = itemMap.get(item.id);
+    if (!existing || getFeedbackItemTimestamp(item) >= getFeedbackItemTimestamp(existing)) {
+      itemMap.set(item.id, item);
+    }
+  }
+}
+
+function createDashboardSnapshot({
+  scope,
+  itemMap,
+  scorecards,
+  scores,
+  selectedScorecardId,
+  selectedScoreId,
+  timeZone,
+  weekStart,
+  bucketType,
+  window,
+}: SnapshotOptions): FeedbackVolumeDashboardData {
+  return buildFeedbackVolumeDashboardData({
+    scope,
+    items: Array.from(itemMap.values()),
+    scorecards,
+    scores,
+    selectedScorecardId,
+    selectedScoreId,
+    timeZone,
+    weekStart,
+    bucketType,
+    window,
+  });
+}
+
 async function paginatedFeedbackQuery(
   query: string,
   variables: Record<string, unknown>,
-  dataKey: string
-): Promise<FeedbackVolumeSourceItem[]> {
-  const items: FeedbackVolumeSourceItem[] = [];
+  dataKey: string,
+  onPage: (items: FeedbackVolumeSourceItem[]) => void | Promise<void>,
+  options: PaginatedQueryOptions = {}
+): Promise<number> {
+  const limit = options.limit ?? 1000;
+  const timeoutMs = options.timeoutMs ?? 20_000;
   let nextToken: string | null = null;
   const seenTokens = new Set<string>();
+  let pagesFetched = 0;
 
   do {
     if (nextToken) {
@@ -204,13 +357,17 @@ async function paginatedFeedbackQuery(
 
     const response: {
       data?: Record<string, FeedbackItemQueryResponse>;
-      errors?: Array<{ message: string }>;
-    } = await graphqlRequest<Record<string, FeedbackItemQueryResponse>>(query, {
-      ...variables,
-      nextToken,
-      sortDirection: "DESC",
-      limit: 1000,
-    });
+      errors?: { message: string }[];
+    } = await withTimeout(
+      graphqlRequest<Record<string, FeedbackItemQueryResponse>>(query, {
+        ...variables,
+        nextToken,
+        sortDirection: "DESC",
+        limit,
+      }),
+      timeoutMs,
+      "Feedback query"
+    );
 
     if (response.errors?.length) {
       throw new Error(response.errors.map((error: { message: string }) => error.message).join(", "));
@@ -221,135 +378,12 @@ async function paginatedFeedbackQuery(
       break;
     }
 
-    items.push(...(result.items || []));
+    pagesFetched += 1;
+    await onPage(result.items || []);
     nextToken = result.nextToken ?? null;
   } while (nextToken);
 
-  return items;
-}
-
-function getFeedbackItemTimestamp(item: FeedbackVolumeSourceItem): number {
-  const timestamp = item.editedAt || item.updatedAt || item.createdAt;
-  if (!timestamp) {
-    return 0;
-  }
-  const parsed = Date.parse(timestamp);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function mergeAndDedupeFeedbackItems(items: FeedbackVolumeSourceItem[]): FeedbackVolumeSourceItem[] {
-  const byId = new Map<string, FeedbackVolumeSourceItem>();
-  for (const item of items) {
-    const existing = byId.get(item.id);
-    if (!existing || getFeedbackItemTimestamp(item) >= getFeedbackItemTimestamp(existing)) {
-      byId.set(item.id, item);
-    }
-  }
-  return Array.from(byId.values());
-}
-
-async function fetchFeedbackItemsByScore(
-  accountId: string,
-  scorecardId: string,
-  scoreId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  return paginatedFeedbackQuery(SCORE_FEEDBACK_ITEMS_QUERY, {
-    accountId,
-    compositeCondition: {
-      between: [
-        {
-          scorecardId,
-          scoreId,
-          editedAt: startDate.toISOString(),
-        },
-        {
-          scorecardId,
-          scoreId,
-          editedAt: endDate.toISOString(),
-        },
-      ],
-    },
-  }, "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt");
-}
-
-async function fetchFeedbackItemsByScoreAndUpdatedAt(
-  accountId: string,
-  scorecardId: string,
-  scoreId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  return paginatedFeedbackQuery(SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY, {
-    accountId,
-    compositeCondition: {
-      between: [
-        {
-          scorecardId,
-          scoreId,
-          updatedAt: startDate.toISOString(),
-        },
-        {
-          scorecardId,
-          scoreId,
-          updatedAt: endDate.toISOString(),
-        },
-      ],
-    },
-  }, "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt");
-}
-
-async function fetchFeedbackItemsByAccountAndUpdatedAt(
-  accountId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  return paginatedFeedbackQuery(ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY, {
-    accountId,
-    updatedAt: {
-      between: [startDate.toISOString(), endDate.toISOString()],
-    },
-  }, "listFeedbackItemByAccountIdAndUpdatedAt");
-}
-
-async function fetchFeedbackItemsByScoreWindow(
-  accountId: string,
-  scorecardId: string,
-  scoreId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<FeedbackVolumeSourceItem[]> {
-  const [byEditedAt, byUpdatedAt] = await Promise.all([
-    fetchFeedbackItemsByScore(accountId, scorecardId, scoreId, startDate, endDate),
-    fetchFeedbackItemsByScoreAndUpdatedAt(accountId, scorecardId, scoreId, startDate, endDate),
-  ]);
-  return mergeAndDedupeFeedbackItems([...byEditedAt, ...byUpdatedAt]);
-}
-
-async function mapWithConcurrency<T, R>(
-  values: T[],
-  concurrency: number,
-  mapper: (value: T, index: number) => Promise<R>
-): Promise<R[]> {
-  if (values.length === 0) {
-    return [];
-  }
-
-  const resolvedConcurrency = Math.max(1, Math.min(concurrency, values.length));
-  const results = new Array<R>(values.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < values.length) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      results[currentIndex] = await mapper(values[currentIndex], currentIndex);
-    }
-  }
-
-  await Promise.all(Array.from({ length: resolvedConcurrency }, () => worker()));
-  return results;
+  return pagesFetched;
 }
 
 async function loadFeedbackVolumeDashboardData({
@@ -362,6 +396,7 @@ async function loadFeedbackVolumeDashboardData({
   timezone,
   weekStart = "monday",
   bucketType,
+  onProgress,
 }: {
   accountId: string;
   scorecardId?: string | null;
@@ -372,26 +407,104 @@ async function loadFeedbackVolumeDashboardData({
   timezone: string;
   weekStart?: FeedbackWeekStart;
   bucketType?: FeedbackVolumeBucketType;
+  onProgress?: ProgressiveLoadOptions["onProgress"];
 }): Promise<FeedbackVolumeDashboardData> {
   const scope: FeedbackVolumeScope = scoreId ? "score" : scorecardId ? "scorecard" : "account";
   const window = resolveFeedbackVolumeWindow({ days, startDate, endDate });
   const resolvedBucketType =
     bucketType ?? pickAutoFeedbackVolumeBucketType(window.start, window.end);
 
-  if (scope === "account") {
-    const [scorecards, items] = await Promise.all([
-      fetchScorecards(),
-      fetchFeedbackItemsByAccountAndUpdatedAt(accountId, window.start, window.end),
-    ]);
+  const context: SnapshotContext = {
+    scope,
+    window,
+    bucketType: resolvedBucketType,
+    timeZone: timezone,
+    weekStart,
+    selectedScorecardId: scorecardId || undefined,
+    selectedScoreId: scoreId || undefined,
+  };
 
-    return buildFeedbackVolumeDashboardData({
-      scope,
-      items,
+  const itemMap = new Map<string, FeedbackVolumeSourceItem>();
+  let scorecards: FeedbackVolumeNamedEntity[] = [];
+  let scores: FeedbackVolumeNamedEntity[] = [];
+  let currentPhase: FeedbackVolumeProgress["phase"] = "fetching_edited";
+  let pagesFetched = 0;
+  let rawCount = 0;
+
+  const publish = () => {
+    if (!onProgress) return;
+    onProgress({
+      data: createDashboardSnapshot({
+        ...context,
+        itemMap,
+        scorecards,
+        scores,
+      }),
+      progress: {
+        phase: currentPhase,
+        pagesFetched,
+        rawCount,
+        uniqueCount: itemMap.size,
+      },
+    });
+  };
+
+  const absorbPage = async (
+    phase: FeedbackVolumeProgress["phase"],
+    pageItems: FeedbackVolumeSourceItem[]
+  ) => {
+    currentPhase = phase;
+    pagesFetched += 1;
+    rawCount += pageItems.length;
+    upsertFeedbackItems(itemMap, pageItems);
+    publish();
+  };
+
+  const scorecardsPromise = fetchScorecards()
+    .then((result) => {
+      scorecards = result;
+      if (itemMap.size > 0) publish();
+      return result;
+    })
+    .catch(() => {
+      scorecards = [];
+      return [];
+    });
+
+  if (scope === "account") {
+    await paginatedFeedbackQuery(
+      ACCOUNT_FEEDBACK_ITEMS_EDITED_AT_QUERY,
+      {
+        accountId,
+        editedAt: {
+          between: [window.start.toISOString(), window.end.toISOString()],
+        },
+      },
+      "listFeedbackItemByAccountIdAndEditedAt",
+      (pageItems) => absorbPage("fetching_edited", pageItems)
+    );
+
+    await paginatedFeedbackQuery(
+      ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY,
+      {
+        accountId,
+        updatedAt: {
+          between: [window.start.toISOString(), window.end.toISOString()],
+        },
+      },
+      "listFeedbackItemByAccountIdAndUpdatedAt",
+      (pageItems) => absorbPage("fetching_updated", pageItems)
+    );
+
+    scorecards = await scorecardsPromise;
+    currentPhase = "finalizing";
+    publish();
+
+    return createDashboardSnapshot({
+      ...context,
+      itemMap,
       scorecards,
-      timeZone: timezone,
-      weekStart,
-      bucketType: resolvedBucketType,
-      window,
+      scores,
     });
   }
 
@@ -399,46 +512,138 @@ async function loadFeedbackVolumeDashboardData({
     throw new Error("scorecardId is required for scorecard and score scoped feedback volume.");
   }
 
-  const [scorecards, scores] = await Promise.all([
-    fetchScorecards(),
-    fetchScoresForScorecard(scorecardId),
-  ]);
+  const scoresPromise = fetchScoresForScorecard(scorecardId)
+    .then((result) => {
+      scores = result;
+      if (itemMap.size > 0) publish();
+      return result;
+    })
+    .catch(() => {
+      scores = [];
+      return [];
+    });
 
   if (scope === "score") {
-    if (!scoreId) {
-      throw new Error("scoreId is required for score scope.");
-    }
+    await paginatedFeedbackQuery(
+      SCORE_FEEDBACK_ITEMS_EDITED_AT_QUERY,
+      {
+        accountId,
+        compositeCondition: {
+          between: [
+            {
+              scorecardId,
+              scoreId,
+              editedAt: window.start.toISOString(),
+            },
+            {
+              scorecardId,
+              scoreId,
+              editedAt: window.end.toISOString(),
+            },
+          ],
+        },
+      },
+      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt",
+      (pageItems) => absorbPage("fetching_edited", pageItems)
+    );
 
-    const items = await fetchFeedbackItemsByScoreWindow(accountId, scorecardId, scoreId, window.start, window.end);
-    return buildFeedbackVolumeDashboardData({
-      scope,
-      items,
+    await paginatedFeedbackQuery(
+      SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY,
+      {
+        accountId,
+        compositeCondition: {
+          between: [
+            {
+              scorecardId,
+              scoreId,
+              updatedAt: window.start.toISOString(),
+            },
+            {
+              scorecardId,
+              scoreId,
+              updatedAt: window.end.toISOString(),
+            },
+          ],
+        },
+      },
+      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt",
+      (pageItems) => absorbPage("fetching_updated", pageItems)
+    );
+
+    scorecards = await scorecardsPromise;
+    scores = await scoresPromise;
+    currentPhase = "finalizing";
+    publish();
+
+    return createDashboardSnapshot({
+      ...context,
+      itemMap,
       scorecards,
       scores,
-      selectedScorecardId: scorecardId,
-      selectedScoreId: scoreId,
-      timeZone: timezone,
-      weekStart,
-      bucketType: resolvedBucketType,
-      window,
     });
   }
 
-  const perScoreItems = await mapWithConcurrency(scores, 4, async (score) =>
-    fetchFeedbackItemsByScoreWindow(accountId, scorecardId, score.id, window.start, window.end)
-  );
-  const items = perScoreItems.flat();
+  scores = await scoresPromise;
 
-  return buildFeedbackVolumeDashboardData({
-    scope,
-    items,
+  for (const score of scores) {
+    await paginatedFeedbackQuery(
+      SCORE_FEEDBACK_ITEMS_EDITED_AT_QUERY,
+      {
+        accountId,
+        compositeCondition: {
+          between: [
+            {
+              scorecardId,
+              scoreId: score.id,
+              editedAt: window.start.toISOString(),
+            },
+            {
+              scorecardId,
+              scoreId: score.id,
+              editedAt: window.end.toISOString(),
+            },
+          ],
+        },
+      },
+      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt",
+      (pageItems) => absorbPage("fetching_edited", pageItems)
+    );
+  }
+
+  for (const score of scores) {
+    await paginatedFeedbackQuery(
+      SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY,
+      {
+        accountId,
+        compositeCondition: {
+          between: [
+            {
+              scorecardId,
+              scoreId: score.id,
+              updatedAt: window.start.toISOString(),
+            },
+            {
+              scorecardId,
+              scoreId: score.id,
+              updatedAt: window.end.toISOString(),
+            },
+          ],
+        },
+      },
+      "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt",
+      (pageItems) => absorbPage("fetching_updated", pageItems)
+    );
+  }
+
+  scorecards = await scorecardsPromise;
+  currentPhase = "finalizing";
+  publish();
+
+  return createDashboardSnapshot({
+    ...context,
+    itemMap,
     scorecards,
     scores,
-    selectedScorecardId: scorecardId,
-    timeZone: timezone,
-    weekStart,
-    bucketType: resolvedBucketType,
-    window,
   });
 }
 
@@ -447,6 +652,8 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
     isLoading: false,
     error: null,
     data: null,
+    isPartial: false,
+    progress: null,
   });
   const requestIdRef = useRef(0);
 
@@ -482,6 +689,8 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
         isLoading: false,
         error: null,
         data: null,
+        isPartial: false,
+        progress: null,
       });
       return;
     }
@@ -491,6 +700,8 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
         isLoading: false,
         error: "Both start and end dates are required for a custom range.",
         data: null,
+        isPartial: false,
+        progress: null,
       });
       return;
     }
@@ -501,9 +712,10 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
       ...current,
       isLoading: true,
       error: null,
+      progress: null,
     }));
 
-    loadFeedbackVolumeDashboardData({
+    void loadFeedbackVolumeDashboardData({
       accountId: config.accountId,
       scorecardId: config.scorecardId || undefined,
       scoreId: config.scoreId || undefined,
@@ -513,6 +725,18 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
       timezone: config.timezone,
       weekStart: config.weekStart,
       bucketType: config.bucketType,
+      onProgress: ({ data, progress }) => {
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+        setState({
+          isLoading: true,
+          error: null,
+          data,
+          isPartial: true,
+          progress,
+        });
+      },
     })
       .then((data) => {
         if (requestIdRef.current !== requestId) {
@@ -522,17 +746,19 @@ export function useFeedbackVolume(config: UseFeedbackVolumeConfig): UseFeedbackV
           isLoading: false,
           error: null,
           data,
+          isPartial: false,
+          progress: null,
         });
       })
       .catch((error) => {
         if (requestIdRef.current !== requestId) {
           return;
         }
-        setState({
+        setState((current) => ({
+          ...current,
           isLoading: false,
           error: error instanceof Error ? error.message : "Failed to load feedback volume.",
-          data: null,
-        });
+        }));
       });
   }, [config.accountId, dependencyKey]);
 
