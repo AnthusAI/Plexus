@@ -58,10 +58,28 @@
       "author": "ryan",
       "text": "Landing final pending changes now: run targeted quality gates, commit remaining model-cost-attribution updates, open PR to develop, and verify CI before merging so develop->main PR includes this work.",
       "created_at": "2026-04-20T17:54:50.032794Z"
+    },
+    {
+      "id": "0de4611d-0b71-4fd8-b58c-9c06e4013796",
+      "author": "ryan",
+      "text": "PR #182 checks entered stale in_progress state (no updatedAt movement). Canceling stale runs and retriggering CI via empty commit to unblock merge.",
+      "created_at": "2026-04-20T18:00:31.292225Z"
+    },
+    {
+      "id": "51cdeb4f-7b90-4478-940c-84700cf34e97",
+      "author": "ryan",
+      "text": "Starting validation run for new evaluation cost tracking by model. Plan: (1) capture latest ProcedureTask parameters, (2) rerun same direct CLI procedure path with equivalent params, (3) verify persisted cost breakdown includes per-model totals for evaluation executions, and (4) report pass/fail evidence with logs and task IDs.",
+      "created_at": "2026-04-20T18:50:41.009829Z"
+    },
+    {
+      "id": "8f5d51d6-bee5-46eb-b7bb-373d7ea14ac8",
+      "author": "ryan",
+      "text": "Validation blocker discovered: procedure listing is stale/incomplete. Evidence on 2026-04-20: CLI procedure list and MCP procedure list both return only three procedures (latest created_at=2026-04-20T04:31:06Z), but direct procedure-info lookups for task-linked IDs from today succeed: 93ec5f96-b724-49d2-96ef-ed7f58b208d5 (created_at=2026-04-20T16:15:55Z) and 5e028fcd-3a2f-4c44-b50f-011351d7f6d5 (created_at=2026-04-20T17:08:16Z). Both are in account 9c929f25-a91f-4db7-8943-5aa93498b8e9 and not returned by list endpoint. Conclusion: dashboard/list API path is missing recent procedure rows (likely query/index/filter issue), while direct get-by-id path works.",
+      "created_at": "2026-04-20T19:01:42.614488Z"
     }
   ],
   "created_at": "2026-04-19T21:07:30.685196Z",
-  "updated_at": "2026-04-20T17:54:50.032794Z",
+  "updated_at": "2026-04-20T19:01:49.588261Z",
   "closed_at": null,
   "custom": {}
 }

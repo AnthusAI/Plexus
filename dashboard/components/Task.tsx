@@ -31,7 +31,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     totalItems?: number
     startedAt?: string
     estimatedCompletionAt?: string
-    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
     dispatchStatus?: 'DISPATCHED'
     celeryTaskId?: string
     workerNodeId?: string

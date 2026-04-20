@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7a276ab8-2a31-41fd-ae5b-f96832cd0480",
+  "issue_id": "plx-7576a0e6-a962-4fa7-9e92-396e34ae2e04",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-20T22:53:25.729Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Merge develop and run 3-cycle procedure association verification"
+  }
+}
