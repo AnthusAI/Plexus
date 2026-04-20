@@ -194,24 +194,17 @@ describe("FeedbackDashboard", () => {
     expect(screen.getByRole("button", { name: /Run score report/i })).toBeInTheDocument();
   });
 
-  it("shows a progress line and partial data while feedback volume is still loading", () => {
+  it("shows the standard loading state while aggregated feedback volume is loading", () => {
     mockUseFeedbackVolume.mockReturnValue({
       isLoading: true,
       error: null,
-      data: accountData,
+      data: null,
       isPartial: true,
-      progress: {
-        phase: "fetching_updated",
-        pagesFetched: 4,
-        rawCount: 5,
-        uniqueCount: 3,
-      },
+      progress: null,
     });
 
     render(<FeedbackDashboard />);
 
-    expect(screen.getByText(/Loading updated feedback/i)).toBeInTheDocument();
-    expect(screen.getByText(/4 pages, 3 unique feedback items counted so far/i)).toBeInTheDocument();
-    expect(screen.getByText("SelectQuote HCS Medium-Risk")).toBeInTheDocument();
+    expect(screen.getByText(/Loading feedback volume data/i)).toBeInTheDocument();
   });
 });

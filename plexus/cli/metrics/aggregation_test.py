@@ -14,6 +14,8 @@ from .aggregation import (
     BucketCounter,
     parse_iso_datetime,
     count_records_efficiently,
+    count_feedback_records_efficiently,
+    dedupe_feedback_records,
     BUCKET_SIZES
 )
 
@@ -294,3 +296,87 @@ def test_count_records_hierarchical_consistency():
     sixty_min_buckets = [c for c in counts if c['number_of_minutes'] == 60]
     assert len(sixty_min_buckets) == 1
     assert sixty_min_buckets[0]['count'] == 30
+
+
+def test_dedupe_feedback_records_prefers_latest_effective_timestamp():
+    records = [
+        {
+            'id': 'feedback-1',
+            'scorecardId': 'scorecard-1',
+            'scoreId': 'score-1',
+            'initialAnswerValue': 'yes',
+            'finalAnswerValue': 'yes',
+            'updatedAt': '2026-04-01T00:00:00Z',
+        },
+        {
+            'id': 'feedback-1',
+            'scorecardId': 'scorecard-1',
+            'scoreId': 'score-1',
+            'initialAnswerValue': 'yes',
+            'finalAnswerValue': 'no',
+            'editedAt': '2026-04-02T00:00:00Z',
+            'updatedAt': '2026-04-02T00:00:00Z',
+        },
+    ]
+
+    deduped = dedupe_feedback_records(records)
+    assert len(deduped) == 1
+    assert deduped[0]['finalAnswerValue'] == 'no'
+
+
+def test_count_feedback_records_efficiently_writes_account_scorecard_and_score_buckets():
+    records = [
+        {
+            'id': 'feedback-1',
+            'scorecardId': 'scorecard-1',
+            'scoreId': 'score-1',
+            'initialAnswerValue': 'yes',
+            'finalAnswerValue': 'no',
+            'editedAt': '2026-04-01T12:00:00Z',
+        },
+        {
+            'id': 'feedback-2',
+            'scorecardId': 'scorecard-1',
+            'scoreId': 'score-1',
+            'initialAnswerValue': 'yes',
+            'finalAnswerValue': 'yes',
+            'updatedAt': '2026-04-01T12:01:00Z',
+        },
+        {
+            'id': 'feedback-3',
+            'scorecardId': 'scorecard-1',
+            'scoreId': 'score-2',
+            'initialAnswerValue': 'yes',
+            'finalAnswerValue': None,
+            'updatedAt': '2026-04-01T12:02:00Z',
+        },
+    ]
+
+    counts = count_feedback_records_efficiently(records, 'acc-123', verbose=False)
+
+    account_one_min = [
+        bucket for bucket in counts
+        if bucket['record_type'] == 'feedbackItems' and bucket['number_of_minutes'] == 1
+    ]
+    scorecard_one_min = [
+        bucket for bucket in counts
+        if bucket['record_type'] == 'feedbackItemsByScorecard' and bucket['number_of_minutes'] == 1
+    ]
+    score_one_min = [
+        bucket for bucket in counts
+        if bucket['record_type'] == 'feedbackItemsByScore' and bucket['number_of_minutes'] == 1
+    ]
+
+    assert len(account_one_min) == 3
+    assert sum(bucket['count'] for bucket in account_one_min) == 3
+    assert sum(bucket['metadata']['changedCount'] for bucket in account_one_min) == 1
+    assert sum(bucket['metadata']['unchangedCount'] for bucket in account_one_min) == 1
+    assert sum(bucket['metadata']['invalidCount'] for bucket in account_one_min) == 1
+
+    assert len(scorecard_one_min) == 3
+    assert all(bucket['scorecard_id'] == 'scorecard-1' for bucket in scorecard_one_min)
+    assert sum(bucket['count'] for bucket in scorecard_one_min) == 3
+
+    assert len(score_one_min) == 3
+    assert sorted(bucket['score_id'] for bucket in score_one_min) == ['score-1', 'score-1', 'score-2']
+    assert sum(bucket['count'] for bucket in score_one_min) == 3
