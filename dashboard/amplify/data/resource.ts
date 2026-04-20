@@ -230,6 +230,7 @@ const schema = a.schema({
             inferences: a.integer(),
             accuracy: a.float().required(),
             cost: a.float(),
+            costDetails: a.json(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             status: a.string().required(),
