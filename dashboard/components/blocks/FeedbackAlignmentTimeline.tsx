@@ -115,6 +115,7 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
   const [attachmentLoadError, setAttachmentLoadError] = React.useState<string | null>(null);
   const [selectedSeries, setSelectedSeries] = React.useState<string>(OVERALL_SERIES_KEY);
   const [isSeriesLoading, setIsSeriesLoading] = React.useState(false);
+  const isProcessing = Boolean((props.config as any)?.isProcessing);
 
   let parsedOutput: FeedbackAlignmentTimelineData = {};
   try {
@@ -343,6 +344,11 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
   const canDrawConnectingLine = renderableAc1Points.length > 1;
   const hasSeriesSelector = !isSingleScoreMode && scores.length > 0;
   const showBucketDetails = Boolean(data.show_bucket_details);
+  const hasResolvedData =
+    hasChartData ||
+    Boolean(data.message) ||
+    Boolean(data.error) ||
+    Boolean(data.warning);
   const bucketModeCopy =
     data.bucket_policy?.window_mode === "exact_window"
       ? "exact-window coverage"
@@ -406,6 +412,10 @@ const FeedbackAlignmentTimeline: React.FC<ReportBlockProps> = (props) => {
         {isLoadingCompactedOutput ? (
           <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
             Loading bucketed alignment data...
+          </div>
+        ) : isProcessing && !hasResolvedData ? (
+          <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+            Report block is processing. Timeline data will appear when computation completes.
           </div>
         ) : isSeriesLoading ? (
           <div className="rounded-md bg-muted/20 p-4 text-sm text-muted-foreground">
