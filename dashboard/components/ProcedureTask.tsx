@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useTransition } from 'react'
+import React, { useCallback, useState, useEffect, useMemo, useTransition } from 'react'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
@@ -621,6 +621,68 @@ export default function ProcedureTask({
   const overallTotal = Number(costTotals?.overall?.total ?? (evaluationTotal + inferenceTotal))
   const evaluationEntryCount = Array.isArray(evaluationCosts?.entries) ? evaluationCosts.entries.length : 0
   const inferenceEntryCount = Array.isArray(inferenceCosts?.entries) ? inferenceCosts.entries.length : 0
+  const evaluationBreakdownRows = Array.isArray(evaluationCosts?.breakdown)
+    ? evaluationCosts.breakdown
+    : (evaluationCosts?.breakdown && typeof evaluationCosts.breakdown === 'object'
+      ? Object.values(evaluationCosts.breakdown)
+      : [])
+  const inferenceBreakdownRows = Array.isArray(inferenceCosts?.breakdown)
+    ? inferenceCosts.breakdown
+    : (inferenceCosts?.breakdown && typeof inferenceCosts.breakdown === 'object'
+      ? Object.values(inferenceCosts.breakdown)
+      : [])
+  const modelCostRows = useMemo(() => {
+    const index = new Map<string, {
+      provider: string | null
+      model: string | null
+      evalSpent: number
+      evalReused: number
+      optimizer: number
+      totalReferenced: number
+    }>()
+
+    const upsert = (provider: string | null, model: string | null) => {
+      const key = `${provider ?? ''}|${model ?? ''}`
+      const existing = index.get(key)
+      if (existing) return existing
+      const created = {
+        provider,
+        model,
+        evalSpent: 0,
+        evalReused: 0,
+        optimizer: 0,
+        totalReferenced: 0,
+      }
+      index.set(key, created)
+      return created
+    }
+
+    for (const row of evaluationBreakdownRows as any[]) {
+      if (!row || typeof row !== 'object') continue
+      const target = upsert(
+        typeof row.provider === 'string' ? row.provider : null,
+        typeof row.model === 'string' ? row.model : null,
+      )
+      const spent = Number(row.spent_usd ?? 0)
+      const reused = Number(row.reused_usd ?? 0)
+      const referenced = Number(row.referenced_usd ?? (spent + reused))
+      target.evalSpent += spent
+      target.evalReused += reused
+      target.totalReferenced += referenced
+    }
+    for (const row of inferenceBreakdownRows as any[]) {
+      if (!row || typeof row !== 'object') continue
+      const target = upsert(
+        typeof row.provider === 'string' ? row.provider : null,
+        typeof row.model === 'string' ? row.model : null,
+      )
+      const optimizer = Number(row.spent_usd ?? row.referenced_usd ?? 0)
+      target.optimizer += optimizer
+      target.totalReferenced += optimizer
+    }
+
+    return Array.from(index.values()).sort((a, b) => b.totalReferenced - a.totalReferenced)
+  }, [evaluationBreakdownRows, inferenceBreakdownRows])
 
   // ---- Shared helpers for creating a Task and dispatching a procedure run ----
   const createTaskWithStages = async (procedureId: string, runParameters?: ParameterValue) => {
@@ -1215,6 +1277,35 @@ export default function ProcedureTask({
                   </div>
                 </div>
               </div>
+              {modelCostRows.length > 0 && (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-muted-foreground/70">
+                      <tr>
+                        <th className="py-1 text-left font-medium">Provider / Model</th>
+                        <th className="py-1 text-right font-medium">Eval spent</th>
+                        <th className="py-1 text-right font-medium">Eval reused</th>
+                        <th className="py-1 text-right font-medium">Optimizer</th>
+                        <th className="py-1 text-right font-medium">Total referenced</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {modelCostRows.map((row, idx) => (
+                        <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`} className="border-t border-border/40">
+                          <td className="py-1 pr-2">
+                            <span className="text-foreground/90">{row.provider || 'unknown'}</span>
+                            <span className="text-muted-foreground"> / {row.model || 'unknown'}</span>
+                          </td>
+                          <td className="py-1 text-right tabular-nums">{formatCurrency(row.evalSpent)}</td>
+                          <td className="py-1 text-right tabular-nums text-emerald-700 dark:text-emerald-400">{formatCurrency(row.evalReused)}</td>
+                          <td className="py-1 text-right tabular-nums">{formatCurrency(row.optimizer)}</td>
+                          <td className="py-1 text-right font-medium tabular-nums">{formatCurrency(row.totalReferenced)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
