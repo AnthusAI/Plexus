@@ -459,3 +459,143 @@ class ProcessorValidationRule(ValidationRule):
                     ))
 
         return messages
+
+class DeepgramInputSourcePlacementRule(ValidationRule):
+    """Rule that detects item processor/input-source configuration placed in the wrong location.
+
+    Item processors and input sources (DeepgramInputSource, processors: lists, input_source: keys,
+    etc.) must live in the top-level `item:` section, NOT nested under `data:` or any other section.
+
+    Correct structure:
+
+        data:
+          class: CallCriteriaDBCache
+          searches: ...          # dataset config only — no input_source, no processors here
+
+        item:                    # ← all item config lives here at the top level
+          class: DeepgramInputSource
+          options:
+            pattern: ".*deepgram.*\\.json$"
+          processors:
+            - class: DeepgramFormatProcessor
+              parameters:
+                format: words
+                speaker_labels: true
+                include_timestamps: true
+
+    Common mistakes:
+      - Placing `input_source:` as a nested key inside `data:`
+      - Placing a `processors:` list inside `data:` or any other non-`item:` section
+      - Using a known processor class name (DeepgramFormatProcessor, RelevantWindowsTranscriptFilter,
+        etc.) as `class:` inside `data:` or other wrong sections
+    """
+
+    # Item input-source classes (the class of the top-level `item:` section)
+    _INPUT_SOURCE_CLASSES = {
+        "DeepgramInputSource",
+    }
+
+    # Keys that belong exclusively in `item:`, never in `data:` or other sections
+    _ITEM_ONLY_KEYS = {"processors", "input_source"}
+
+    _CORRECT_YAML = (
+        "data:\n"
+        "  class: CallCriteriaDBCache\n"
+        "  searches: ...    # dataset config only — no input_source or processors here\n\n"
+        "item:              # ← NEW top-level section (same indent level as data:)\n"
+        "  class: DeepgramInputSource\n"
+        "  options:\n"
+        '    pattern: ".*deepgram.*\\.json$"\n'
+        "  processors:\n"
+        "    - class: DeepgramFormatProcessor\n"
+        "      parameters:\n"
+        "        format: words          # or 'sentences' or 'paragraphs'\n"
+        "        speaker_labels: true\n"
+        "        include_timestamps: true"
+    )
+
+    def __init__(self):
+        super().__init__(
+            rule_id="ITEM_PROCESSOR_PLACEMENT",
+            description=(
+                "Item processors and input sources must be in the top-level `item:` section, "
+                "not nested under `data:` or other sections"
+            ),
+            severity='error'
+        )
+
+    def _find_misplaced(self, obj, path=""):
+        """Recursively find processor/input-source config placed in the wrong section.
+
+        Returns a list of (path_str, reason) tuples describing each violation found.
+        """
+        violations = []
+        if isinstance(obj, dict):
+            cls = obj.get("class")
+            # Known processor class used somewhere it shouldn't be
+            known_processors = ProcessorValidationRule._KNOWN_PROCESSORS
+            if cls and (cls in self._INPUT_SOURCE_CLASSES or cls in known_processors):
+                violations.append((path, f"class: {cls}"))
+            # `processors:` or `input_source:` key present in wrong section
+            for key in self._ITEM_ONLY_KEYS:
+                if key in obj:
+                    violations.append((f"{path}.{key}" if path else key, f"key '{key}'"))
+            # Recurse into values (but don't re-flag the same dict for its children)
+            for k, v in obj.items():
+                child_path = f"{path}.{k}" if path else k
+                violations.extend(self._find_misplaced(v, child_path))
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                violations.extend(self._find_misplaced(v, f"{path}[{i}]"))
+        return violations
+
+    def validate(self, data: Dict[str, Any]) -> List['LintMessage']:
+        from .yaml_linter import LintMessage
+
+        messages = []
+
+        # Scan every top-level section except `item:` itself
+        for section_key, section_value in data.items():
+            if section_key == "item":
+                continue  # correct location — skip
+
+            violations = self._find_misplaced(section_value, section_key)
+            if not violations:
+                continue
+
+            # Emit one error per section summarising everything that was found
+            found_summary = "; ".join(
+                f"{reason} at {path}" for path, reason in violations[:3]
+            )
+            if len(violations) > 3:
+                found_summary += f" (and {len(violations) - 3} more)"
+
+            if section_key == "data":
+                code = "PROCESSOR_UNDER_DATA"
+                title = "Item processor/source config found in `data:` — must be in `item:`"
+                message = (
+                    f"Found processor/input-source configuration inside the `data:` section: "
+                    f"{found_summary}. "
+                    "The `data:` section defines the dataset source (e.g. CallCriteriaDBCache) "
+                    "and must not contain processor classes, `processors:` lists, or "
+                    "`input_source:` keys. All of that belongs in a top-level `item:` section."
+                )
+            else:
+                code = "PROCESSOR_WRONG_SECTION"
+                title = f"Item processor/source config found in `{section_key}:` — must be in `item:`"
+                message = (
+                    f"Found processor/input-source configuration inside the `{section_key}:` "
+                    f"section: {found_summary}. "
+                    "Processor classes, `processors:` lists, and `input_source:` keys all "
+                    "belong in the top-level `item:` section, not in other sections."
+                )
+
+            messages.append(LintMessage(
+                level='error',
+                code=code,
+                title=title,
+                message=message,
+                suggestion=f"Add a top-level `item:` block. Correct structure:\n\n{self._CORRECT_YAML}",
+            ))
+
+        return messages

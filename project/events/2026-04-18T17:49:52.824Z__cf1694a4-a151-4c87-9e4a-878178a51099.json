@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cf1694a4-a151-4c87-9e4a-878178a51099",
+  "issue_id": "plx-d878a433-8c84-49cb-bb25-cbe6ed686b61",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-18T17:49:52.824Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Fix optimizer continuation detection (is_continuation always false)"
+  }
+}

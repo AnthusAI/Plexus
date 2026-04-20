@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7329a4d8-0b89-4136-8d8d-e3c43fcfcf41",
+  "issue_id": "plx-a56edea2-22bd-4023-91e6-1164be793fef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T15:17:24.505Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As an optimizer agent, I want optimizer-facing score documentation and procedure guidance to describe prediction outcome segments explicitly instead of using false-positive/false-negative terminology, so that I can reason about error directions without ambiguity when binary labels are inverted.\n\nFeature: Optimizer score documentation uses explicit predicted/actual segment language\n\nScenario: Investigating prediction outcome segments in optimizer-facing docs\nGiven the optimizer-facing score documentation and procedure guidance\nWhen an agent reads about a misclassification direction\nThen the docs describe it using explicit predicted and actual labels\nAnd the docs do not rely on false-positive or false-negative terminology\n\nScenario: Learning a reusable NA-gating pattern from the score docs\nGiven the umbrella score YAML documentation\nWhen an agent reads about scores with Yes/No outcomes plus an NA case\nThen the docs explain applicability gating as a separate first-class pattern\nAnd the subclass docs show concrete implementation recipes for that pattern",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer docs use explicit confusion-matrix segment language"
+  }
+}

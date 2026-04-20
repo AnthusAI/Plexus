@@ -47,7 +47,7 @@ time_range: last_30_days
             <li>
               <strong className="text-foreground">Report (`Report`)</strong>
               <p>
-                This represents a specific instance of a report generated from a `ReportConfiguration` at a particular time, potentially with specific runtime parameters. It stores the final rendered output (e.g., the Markdown content after processing) and links to the results of the individual analysis blocks.
+                This represents a specific instance of a report generated from a `ReportConfiguration` at a particular time, potentially with specific runtime parameters. `Report.output` stores the report template markdown, while execution results are stored in the related `ReportBlock` records.
               </p>
               <p className="mt-2">If the Configuration is the recipe, the Report is the finished cake, baked on a specific day.</p>
             </li>
@@ -57,13 +57,13 @@ time_range: last_30_days
                 These are the reusable Python components that perform the actual data fetching and analysis for specific sections within a report. Examples might include `ScorePerformanceBlock`, `FeedbackTopicAnalysisBlock`, or `SentimentTrendBlock`. When a report is generated, the system executes the Python code for each block defined in the configuration.
               </p>
               <p className="mt-2">
-                Each block generates structured data (usually JSON) containing its findings (e.g., metrics, lists of feedback, chart data) and optionally logs. This structured output is stored alongside the final report.
+                Each block generates structured data (usually JSON) containing its findings (e.g., metrics, lists of feedback, chart data) and optionally logs. Large outputs and logs may be stored as S3-backed attachments and referenced from the block record.
               </p>
             </li>
             <li>
               <strong className="text-foreground">Task Integration (`Task`)</strong>
               <p>
-                Generating a report, especially one involving multiple complex analysis blocks, can take time. Plexus leverages the existing `Task` system to manage report generation as a background job. When you request a new report, a `Task` is created to handle the process. You can monitor the report's progress (Initializing, Running Blocks, Finalizing, Completed/Failed) through the standard Task interface, ensuring consistency with other background operations like Evaluations. The `Report` record itself is directly linked to its corresponding `Task` record.
+                Report generation is tracked with the existing `Task` system. Dashboard-dispatched runs typically execute in workers, while CLI runs execute synchronously in-process, but both create and update Task records for progress/status visibility. The `Report` record itself is directly linked to its corresponding `Task` record.
               </p>
             </li>
           </ul>
@@ -77,22 +77,21 @@ time_range: last_30_days
           <ol className="list-decimal pl-6 space-y-4 text-muted-foreground">
             <li>
               <strong className="text-foreground">Define a `ReportConfiguration`</strong>
-              <p>Create a template (using Markdown and block definitions) for the type of report you need. This is often done once and then reused. You might use the CLI or eventually a UI editor.</p>
               <p>Create a template (using Markdown and block definitions) for the type of report you need. This is often done once and then reused. This can be done using the Plexus CLI, the Dashboard UI, or programmatically via the API/SDK (used by AI agents).</p>
               <pre className="bg-muted rounded-lg mt-2">
                 <div className="code-container p-4">
                   <code>{`# Example: Creating a config from a file
-python -m plexus.cli.CommandLineInterface report config create --name "Agent Prof Report" --file agent_prof_report.md`}</code>
+plexus report config create --name "Agent Prof Report" --file agent_prof_report.md`}</code>
                 </div>
               </pre>
             </li>
             <li>
               <strong className="text-foreground">Run the Report</strong>
-              <p>Trigger the generation of a new `Report` based on a chosen `ReportConfiguration`. This creates a `Task` to handle the background processing.</p>
+              <p>Trigger the generation of a new `Report` based on a chosen `ReportConfiguration`. This creates/updates a `Task` for observability; worker-dispatched and synchronous CLI execution paths both use the same core generation flow.</p>
                <pre className="bg-muted rounded-lg mt-2">
                 <div className="code-container p-4">
                   <code>{`# Example: Running the report
-python -m plexus.cli.CommandLineInterface report run --config "Agent Prof Report"`}</code>
+plexus report run --config "Agent Prof Report"`}</code>
                 </div>
               </pre>
             </li>
@@ -106,7 +105,7 @@ python -m plexus.cli.CommandLineInterface report run --config "Agent Prof Report
                <pre className="bg-muted rounded-lg mt-2">
                 <div className="code-container p-4">
                   <code>{`# Example: Viewing the latest generated report
-python -m plexus.cli.CommandLineInterface report last`}</code>
+plexus report last`}</code>
                 </div>
               </pre>
             </li>

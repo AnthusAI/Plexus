@@ -19,6 +19,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _evaluation_cost_details_enabled() -> bool:
+    """Cost details are stored in parameters.metadata; GraphQL field is disabled."""
+    return False
+
 @dataclass
 class Evaluation(BaseModel):
     type: str
@@ -31,6 +36,7 @@ class Evaluation(BaseModel):
     inferences: Optional[int] = None
     accuracy: Optional[float] = None
     cost: Optional[float] = None
+    costDetails: Optional[Dict] = None
     startedAt: Optional[datetime] = None
     elapsedSeconds: Optional[int] = None
     estimatedRemainingSeconds: Optional[int] = None
@@ -63,6 +69,7 @@ class Evaluation(BaseModel):
         inferences: Optional[int] = None,
         accuracy: Optional[float] = None,
         cost: Optional[float] = None,
+        costDetails: Optional[Dict] = None,
         startedAt: Optional[datetime] = None,
         elapsedSeconds: Optional[int] = None,
         estimatedRemainingSeconds: Optional[int] = None,
@@ -92,6 +99,7 @@ class Evaluation(BaseModel):
         self.inferences = inferences
         self.accuracy = accuracy
         self.cost = cost
+        self.costDetails = costDetails
         self.startedAt = startedAt
         self.elapsedSeconds = elapsedSeconds
         self.estimatedRemainingSeconds = estimatedRemainingSeconds
@@ -113,7 +121,7 @@ class Evaluation(BaseModel):
     @classmethod
     def fields(cls) -> str:
         """Fields to request in queries and mutations"""
-        return """
+        fields = """
             id
             type
             accountId
@@ -143,6 +151,9 @@ class Evaluation(BaseModel):
             isPredictedClassDistributionBalanced
             taskId
         """
+        if _evaluation_cost_details_enabled():
+            fields = fields.replace("            cost\n", "            cost\n            costDetails\n")
+        return fields
 
     @classmethod
     def create(
@@ -168,6 +179,8 @@ class Evaluation(BaseModel):
             'updatedAt': now,
             **kwargs
         }
+        if not _evaluation_cost_details_enabled():
+            input_data.pop('costDetails', None)
         
         if scorecardId:
             input_data['scorecardId'] = scorecardId
@@ -211,6 +224,7 @@ class Evaluation(BaseModel):
             inferences=data.get('inferences'),
             accuracy=data.get('accuracy'),
             cost=data.get('cost'),
+            costDetails=data.get('costDetails'),
             startedAt=data.get('startedAt'),
             elapsedSeconds=data.get('elapsedSeconds'),
             estimatedRemainingSeconds=data.get('estimatedRemainingSeconds'),
@@ -245,6 +259,8 @@ class Evaluation(BaseModel):
             kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
                 '+00:00', 'Z'
             )
+            if not _evaluation_cost_details_enabled():
+                kwargs.pop("costDetails", None)
 
             mutation = """
             mutation UpdateEvaluation($input: UpdateEvaluationInput!) {

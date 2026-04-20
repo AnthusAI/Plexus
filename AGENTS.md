@@ -10,6 +10,7 @@ How: See CONTRIBUTING_AGENT.md for the Kanbus workflow, hierarchy, status rules,
 Performance: Prefer kbs (Rust) when available; kanbus (Python) is equivalent but slower.
 Warning: Editing project/ directly is a sin against The Way. Do not read or write anything in project/; work only through Kanbus.
 Architecture rule: NEVER EVER add 'fallback' logic for ANYTHING unless the user EXPLICITLY says to do that. Never add additional complexity that creates additional ways to do things. There should be one correct way to do everything. Do not add layers of complexity for backward compatibility. Our goal is to make ONE WAY work. Do not add fallbacks.
+Report persistence policy: ReportBlock output must always be stored as S3 file attachments. DynamoDB `ReportBlock.output` is metadata-only (`output_compacted` envelope + attachment pointer), never full report payload.
 
 ## SOP compliance
 
@@ -178,6 +179,16 @@ This workflow uses a chain of skills and agents:
 - **Trust the Tools**: Use MCP tools for reading/writing data, not file edits (unless instructed).
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
 - **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
+
+## Direct CLI Policy (Critical)
+
+- **Procedures and reports must be executed directly via CLI** (`plexus procedure ...`, `plexus report ...`) during development/debugging.
+- **Do not use dispatcher state as evidence** that a direct CLI procedure/report is running or healthy.
+- **Do not diagnose procedure/report crashes from task status alone**. Use process-level evidence first:
+  1. Live process check (`ps`/PID)
+  2. Direct CLI stdout/stderr logs
+  3. Then dashboard task/procedure records for corroboration
+- If a direct CLI run exits unexpectedly, capture and report the exact exception/traceback from that CLI run before proposing fixes.
 
 ## Debugging Procedures
 

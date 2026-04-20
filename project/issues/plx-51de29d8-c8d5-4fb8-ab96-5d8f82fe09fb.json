@@ -1,0 +1,18 @@
+{
+  "id": "plx-51de29d8-c8d5-4fb8-ab96-5d8f82fe09fb",
+  "title": "Restore unauthenticated report share URL access",
+  "description": "Investigate and fix regression where report share URLs return GraphQL 401 Unauthorized for unauthenticated users. Identify root cause from recent changes, implement fix, and verify public share links work without login.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-20T17:48:22.157345286Z",
+  "updated_at": "2026-04-20T17:48:22.157345286Z",
+  "closed_at": null,
+  "custom": {}
+}
