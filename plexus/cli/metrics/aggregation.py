@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 
 # Bucket sizes we track (in minutes)
 BUCKET_SIZES = [1, 5, 15, 60]
+FEEDBACK_RECORD_TYPES = [
+    'feedbackItems',
+    'feedbackItemsByScorecard',
+    'feedbackItemsByScore',
+]
 
 
 class BucketCounter:
@@ -135,6 +140,14 @@ def parse_iso_datetime(timestamp_str: str) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def align_to_bucket(timestamp: datetime, bucket_minutes: int) -> datetime:
+    """Align a timestamp to a bucket boundary without instantiating a counter."""
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    minutes_since_epoch = int((timestamp - epoch).total_seconds() / 60)
+    bucket_start_minutes = (minutes_since_epoch // bucket_minutes) * bucket_minutes
+    return epoch + timedelta(minutes=bucket_start_minutes)
+
+
 def count_records_efficiently(
     records: List[Dict[str, Any]], 
     account_id: str, 
@@ -208,6 +221,153 @@ def count_records_efficiently(
     return bucket_counts
 
 
+def get_feedback_record_timestamp(record: Dict[str, Any]) -> Optional[datetime]:
+    """Resolve the effective feedback timestamp used for bucketing."""
+    timestamp_str = record.get('editedAt') or record.get('updatedAt') or record.get('createdAt')
+    if not timestamp_str:
+        return None
+    return parse_iso_datetime(timestamp_str)
+
+
+def classify_feedback_record(record: Dict[str, Any]) -> str:
+    """Classify a feedback record using dashboard/report semantics."""
+    is_invalid = record.get('isInvalid')
+    if isinstance(is_invalid, str):
+        is_invalid = is_invalid.strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+    elif isinstance(is_invalid, (int, float)):
+        is_invalid = is_invalid != 0
+    else:
+        is_invalid = bool(is_invalid)
+
+    initial_value = record.get('initialAnswerValue')
+    final_value = record.get('finalAnswerValue')
+
+    if is_invalid or initial_value is None or final_value is None:
+        return 'invalid'
+    if str(initial_value) != str(final_value):
+        return 'changed'
+    return 'unchanged'
+
+
+def dedupe_feedback_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Deduplicate feedback items by id using the newest effective timestamp."""
+    deduped: Dict[str, Dict[str, Any]] = {}
+    for record in records:
+        record_id = record.get('id')
+        if not record_id:
+            continue
+        timestamp = get_feedback_record_timestamp(record)
+        if not timestamp:
+            continue
+        existing = deduped.get(record_id)
+        if not existing:
+            deduped[record_id] = record
+            continue
+        existing_timestamp = get_feedback_record_timestamp(existing)
+        if not existing_timestamp or timestamp >= existing_timestamp:
+            deduped[record_id] = record
+    return list(deduped.values())
+
+
+def count_feedback_records_efficiently(
+    records: List[Dict[str, Any]],
+    account_id: str,
+    verbose: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Count feedback records into account, scorecard, and score scoped buckets.
+
+    This uses one canonical feedback path with no fallback counting semantics.
+    """
+    counters: Dict[Tuple[str, Optional[str], Optional[str]], Dict[Tuple[datetime, int], Dict[str, Any]]] = {}
+    processed = 0
+    skipped = 0
+
+    def get_counter(
+        record_type: str,
+        scorecard_id: Optional[str] = None,
+        score_id: Optional[str] = None,
+    ) -> Dict[Tuple[datetime, int], Dict[str, Any]]:
+        key = (record_type, scorecard_id, score_id)
+        if key not in counters:
+            counters[key] = defaultdict(lambda: {
+                'count': 0,
+                'changed_count': 0,
+                'unchanged_count': 0,
+                'invalid_count': 0,
+            })
+        return counters[key]
+
+    deduped_records = dedupe_feedback_records(records)
+
+    for record in deduped_records:
+        timestamp = get_feedback_record_timestamp(record)
+        if not timestamp:
+            skipped += 1
+            continue
+
+        scorecard_id = record.get('scorecardId')
+        score_id = record.get('scoreId')
+        classification = classify_feedback_record(record)
+
+        scopes = [('feedbackItems', None, None)]
+        if scorecard_id:
+            scopes.append(('feedbackItemsByScorecard', scorecard_id, None))
+        if scorecard_id and score_id:
+            scopes.append(('feedbackItemsByScore', scorecard_id, score_id))
+
+        for record_type, scoped_scorecard_id, scoped_score_id in scopes:
+            counter = get_counter(record_type, scoped_scorecard_id, scoped_score_id)
+            for bucket_minutes in BUCKET_SIZES:
+                bucket_start = align_to_bucket(timestamp, bucket_minutes)
+                bucket_key = (bucket_start, bucket_minutes)
+                bucket = counter[bucket_key]
+                bucket['count'] += 1
+                if classification == 'changed':
+                    bucket['changed_count'] += 1
+                elif classification == 'unchanged':
+                    bucket['unchanged_count'] += 1
+                else:
+                    bucket['invalid_count'] += 1
+
+        processed += 1
+
+    now = datetime.now(timezone.utc)
+    bucket_counts: List[Dict[str, Any]] = []
+    for (record_type, scorecard_id, score_id), scoped_buckets in counters.items():
+        for (bucket_start, bucket_minutes), bucket in scoped_buckets.items():
+            bucket_end = bucket_start + timedelta(minutes=bucket_minutes)
+            bucket_counts.append({
+                'account_id': account_id,
+                'record_type': record_type,
+                'scorecard_id': scorecard_id,
+                'score_id': score_id,
+                'time_range_start': bucket_start,
+                'time_range_end': bucket_end,
+                'number_of_minutes': bucket_minutes,
+                'count': bucket['count'],
+                'complete': bucket_end <= now,
+                'metadata': {
+                    'changedCount': bucket['changed_count'],
+                    'unchangedCount': bucket['unchanged_count'],
+                    'invalidCount': bucket['invalid_count'],
+                },
+            })
+
+    if verbose:
+        print(f"  Processed: {processed} feedback items ({skipped} skipped - no effective timestamp)")
+        for record_type in FEEDBACK_RECORD_TYPES:
+            type_buckets = [bucket for bucket in bucket_counts if bucket['record_type'] == record_type]
+            one_min_total = sum(
+                bucket['count']
+                for bucket in type_buckets
+                if bucket['number_of_minutes'] == 1
+            )
+            print(f"    {record_type}: {len(type_buckets)} buckets, {one_min_total} total feedback items in 1-min buckets")
+
+    return bucket_counts
+
+
 def query_records_for_counting(
     client: 'PlexusDashboardClient',
     account_id: str,
@@ -245,7 +405,7 @@ def query_records_for_counting(
         return _query_tasks(client, account_id, start_time, end_time, verbose)
     elif record_type == 'evaluations':
         return _query_evaluations(client, account_id, start_time, end_time, verbose)
-    elif record_type == 'feedbackItems':
+    elif record_type in FEEDBACK_RECORD_TYPES:
         return _query_feedback_items(client, account_id, start_time, end_time, verbose)
     elif record_type == 'procedures':
         return _query_procedures(client, account_id, start_time, end_time, verbose)
@@ -491,9 +651,39 @@ def _query_feedback_items(
     end_time: datetime,
     verbose: bool = False
 ) -> List[Dict[str, Any]]:
-    """Query FeedbackItems in time window."""
-    query = """
-    query ListFeedbackItemsByTime(
+    """Query FeedbackItems in time window via editedAt and updatedAt, then dedupe."""
+    edited_query = """
+    query ListFeedbackItemsByEditedTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listFeedbackItemByAccountIdAndEditedAt(
+            accountId: $accountId,
+            editedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                scorecardId
+                scoreId
+                itemId
+                initialAnswerValue
+                finalAnswerValue
+                isInvalid
+                editedAt
+                updatedAt
+                createdAt
+            }
+            nextToken
+        }
+    }
+    """
+
+    updated_query = """
+    query ListFeedbackItemsByUpdatedTime(
         $accountId: String!,
         $startTime: String!,
         $endTime: String!,
@@ -507,24 +697,50 @@ def _query_feedback_items(
         ) {
             items {
                 id
+                scorecardId
+                scoreId
+                itemId
+                initialAnswerValue
+                finalAnswerValue
+                isInvalid
+                editedAt
                 updatedAt
+                createdAt
             }
             nextToken
         }
     }
     """
-    
-    return _paginated_query(
+
+    variables = {
+        'accountId': account_id,
+        'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+        'endTime': end_time.isoformat().replace('+00:00', 'Z')
+    }
+
+    edited_items = _paginated_query(
         client,
-        query,
-        {
-            'accountId': account_id,
-            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
-            'endTime': end_time.isoformat().replace('+00:00', 'Z')
-        },
+        edited_query,
+        dict(variables),
+        'listFeedbackItemByAccountIdAndEditedAt',
+        verbose
+    )
+    updated_items = _paginated_query(
+        client,
+        updated_query,
+        dict(variables),
         'listFeedbackItemByAccountIdAndUpdatedAt',
         verbose
     )
+    deduped_items = dedupe_feedback_records(edited_items + updated_items)
+
+    if verbose:
+        print(
+            f"  Deduped feedback items: {len(deduped_items)} unique "
+            f"from {len(edited_items)} editedAt + {len(updated_items)} updatedAt records"
+        )
+
+    return deduped_items
 
 
 def _query_procedures(
