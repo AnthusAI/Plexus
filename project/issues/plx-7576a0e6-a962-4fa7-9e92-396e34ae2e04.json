@@ -16,10 +16,28 @@
       "author": "ryan",
       "text": "Starting: commit current feature branch worktree, merge latest develop, run a fresh procedure smoke test (scorecard 1229, days=90, max_samples=100, max_iterations=3) to verify evaluation<->scoreVersion and procedure<->evaluation associations in task/procedure views.",
       "created_at": "2026-04-20T22:53:29.734503Z"
+    },
+    {
+      "id": "9bfb9efe-c1df-43f0-a36a-8be3cc6224ce",
+      "author": "ryan",
+      "text": "Implementing auth normalization now: removing API-key auth overrides from ProcedureTask conversation viewer and updating tests.",
+      "created_at": "2026-04-20T23:03:32.596315Z"
+    },
+    {
+      "id": "228f4bd0-8d80-4d12-9e11-5bd8e286cf15",
+      "author": "ryan",
+      "text": "Implemented auth normalization in conversation viewer: removed explicit apiKey auth overrides from chat session/message list/create/get/subscriptions and startConsoleRun/getTask GraphQL calls. Updated conversation viewer tests and verified: 2 conversation-viewer suites + ProcedureTask optimizer auth suite all pass.",
+      "created_at": "2026-04-20T23:04:53.392236Z"
+    },
+    {
+      "id": "0db228d2-6855-47ff-9dd7-6d463b804e42",
+      "author": "ryan",
+      "text": "User approved landing changes. Committing auth fix, merging feature branch into develop, pushing, and iterating on CI failures until green.",
+      "created_at": "2026-04-20T23:49:58.901820Z"
     }
   ],
   "created_at": "2026-04-20T22:53:25.728209Z",
-  "updated_at": "2026-04-20T22:53:29.734503Z",
+  "updated_at": "2026-04-20T23:49:58.901820Z",
   "closed_at": null,
   "custom": {}
 }
