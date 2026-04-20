@@ -1,0 +1,31 @@
+{
+  "id": "plx-5bbd8047-62a2-4e40-9368-498b3fda02fb",
+  "title": "Fix LangGraphScore cost calculation test regression",
+  "description": "Investigate and fix failing test: plexus/scores/LangGraphScore_test.py::test_cost_calculation_across_model_providers.\n\nObserved: get_accumulated_costs now calls litellm.cost_per_token with a MagicMock model value from node parameters instead of the configured model string, causing assertion failure in CI/develop.\n\nDone criteria:\n- Root cause identified\n- Minimal fix applied\n- Target test passes locally",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-51de29d8-c8d5-4fb8-ab96-5d8f82fe09fb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6b2313de-ffb2-4ec4-abfd-d27d81132f89",
+      "author": "derek",
+      "text": "Reproduced failure locally on branch bugfix/report-share-identitypool-auth. Next step: inspect get_accumulated_costs model-name resolution and patch to use concrete string fallback when node parameters contain mocks/non-string values.",
+      "created_at": "2026-04-20T18:55:04.810752473Z"
+    },
+    {
+      "id": "74211101-4f03-42b2-b326-e131ea8d4650",
+      "author": "derek",
+      "text": "Root cause confirmed: get_accumulated_costs resolved model_name from node parameters without type validation. In this test, node.parameters is a MagicMock, so model_name became MagicMock instead of configured 'gpt-4'. Implemented fix: coerce model name to a non-empty string; otherwise fallback to score-level model_name.",
+      "created_at": "2026-04-20T18:55:55.739669354Z"
+    }
+  ],
+  "created_at": "2026-04-20T18:54:47.399590398Z",
+  "updated_at": "2026-04-20T18:55:55.739669354Z",
+  "closed_at": null,
+  "custom": {}
+}
