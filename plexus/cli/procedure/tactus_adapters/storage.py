@@ -2,13 +2,14 @@
 Plexus Storage Adapter for Tactus.
 
 Implements the Tactus StorageBackend protocol using Plexus GraphQL API.
-Stores checkpoints and state in the Procedure.metadata JSON field.
+The DynamoDB Procedure record is an index card: it holds S3 keys and replay_index.
+All procedure data (state, lua_state, checkpoints) lives in S3 attachments.
 """
 
 import logging
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import boto3
@@ -19,8 +20,6 @@ from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
 
-# S3 offload settings for large metadata
-_S3_THRESHOLD = 350_000  # bytes — offload state when metadata exceeds this (DynamoDB limit is 400KB)
 _S3_BUCKET = os.environ.get("AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME", "reportblockdetails-production")
 
 
@@ -62,6 +61,93 @@ def _lua_to_serializable(value: Any) -> Any:
         return str(value)
 
 
+# Fields kept per iteration entry in the lightweight dashboard state.
+_DASHBOARD_ITERATION_FIELDS = frozenset({
+    'iteration', 'score_version_id',
+    'recent_metrics', 'regression_metrics',
+    'recent_deltas', 'regression_deltas',
+    'accepted', 'skip_reason', 'disqualified',
+    'done_reason', 'synthesis_strategy', 'synthesis_reasoning', 'dual_synthesis',
+    'recent_evaluation_id', 'regression_evaluation_id',
+    'recent_cost_per_item', 'regression_cost_per_item',
+})
+
+# Top-level state fields dropped from the dashboard projection.
+_DASHBOARD_DROP_TOPLEVEL = frozenset({
+    'last_regression_rca', 'last_recent_rca',
+    'item_recurrence', 'known_contradictions',
+})
+
+# Recurrence patterns that are surfaced in the dashboard projection.
+# "EMERGING" is excluded — it's noise at this stage.
+_NOTABLE_RECURRENCE_PATTERNS = frozenset({
+    'PERSISTENT', 'OSCILLATING', 'FLIP_FLOP', 'LATE_EMERGING',
+})
+
+
+def _build_notable_item_recurrence(tracker: Any) -> Optional[Dict[str, Any]]:
+    """Return a compact subset of item_recurrence for the dashboard projection.
+
+    Filters to notable patterns only (not EMERGING), caps per_cycle history
+    to the 5 most recent entries, and caps the total to 30 items sorted by
+    wrong_count descending.  Returns None if there are no notable items.
+    """
+    if not isinstance(tracker, dict) or not tracker:
+        return None
+
+    notable: List[tuple] = []
+    for item_id, entry in tracker.items():
+        if not isinstance(entry, dict):
+            continue
+        if entry.get('pattern') not in _NOTABLE_RECURRENCE_PATTERNS:
+            continue
+        # Keep only the 5 most recent per_cycle entries.
+        per_cycle = entry.get('per_cycle') or []
+        if isinstance(per_cycle, list) and len(per_cycle) > 5:
+            per_cycle = per_cycle[-5:]
+        trimmed = {**entry, 'per_cycle': per_cycle}
+        notable.append((item_id, trimmed, entry.get('wrong_count', 0)))
+
+    if not notable:
+        return None
+
+    # Sort by wrong_count descending, cap at 30.
+    notable.sort(key=lambda t: t[2], reverse=True)
+    return {item_id: entry for item_id, entry, _ in notable[:30]}
+
+
+def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a lightweight copy of the optimizer state for the dashboard.
+
+    The full state can exceed 10 MB because each iteration's
+    ``exploration_results`` embeds hypothesis details, transcripts, and
+    evaluation data.  The dashboard only needs scalar metrics, deltas,
+    and small summary fields — this projection keeps the file under ~50 KB.
+    """
+    if not isinstance(full_state, dict):
+        return full_state
+
+    out: Dict[str, Any] = {}
+    for key, value in full_state.items():
+        if key in _DASHBOARD_DROP_TOPLEVEL:
+            continue
+        if key == 'iterations' and isinstance(value, list):
+            out['iterations'] = [
+                {k: v for k, v in it.items() if k in _DASHBOARD_ITERATION_FIELDS}
+                for it in value
+                if isinstance(it, dict)
+            ]
+        else:
+            out[key] = value
+
+    # Add filtered notable item recurrence (PERSISTENT/OSCILLATING/FLIP_FLOP/LATE_EMERGING).
+    notable = _build_notable_item_recurrence(full_state.get('item_recurrence') or {})
+    if notable:
+        out['notable_item_recurrence'] = notable
+
+    return out
+
+
 class PlexusStorageAdapter:
     """
     Implements Tactus StorageBackend protocol using Plexus GraphQL.
@@ -83,6 +169,33 @@ class PlexusStorageAdapter:
         self._is_builtin = is_builtin_procedure_id(procedure_id)
         self._metadata_cache: Optional[ProcedureMetadata] = None
         logger.info(f"PlexusStorageAdapter initialized for procedure {procedure_id}")
+
+    def _fetch_raw_procedure_metadata(self, procedure_id: str) -> Dict[str, Any]:
+        """Fetch the current raw Procedure.metadata envelope for merge-safe writes."""
+        if self._is_builtin:
+            return {}
+
+        query = """
+        query GetProcedure($id: ID!) {
+            getProcedure(id: $id) {
+                id
+                metadata
+            }
+        }
+        """
+
+        response = self.client.execute(query, {'id': procedure_id})
+        procedure_data = response.get('getProcedure') or {}
+        raw_metadata = procedure_data.get('metadata') or {}
+        if isinstance(raw_metadata, str):
+            try:
+                raw_metadata = json.loads(raw_metadata)
+            except Exception:
+                logger.warning("Procedure metadata was not valid JSON during merge; defaulting to empty object")
+                raw_metadata = {}
+        if not isinstance(raw_metadata, dict):
+            return {}
+        return raw_metadata
 
     def load_procedure_metadata(self, procedure_id: str) -> ProcedureMetadata:
         """
@@ -154,7 +267,7 @@ class PlexusStorageAdapter:
                         return default
                 return raw_value if raw_value is not None else default
 
-            # Load checkpoints — may be offloaded to S3 for large procedures
+            # All procedure data lives in S3 attachments; the DynamoDB record holds S3 keys.
             raw_checkpoints = raw_metadata.get('checkpoints', {})
             checkpoints_dict = _load_s3_field(raw_checkpoints, 'checkpoints', {})
 
@@ -166,11 +279,11 @@ class PlexusStorageAdapter:
                     position=position,
                     type='checkpoint',
                     result={'name': name, 'data': ckpt_data.get('result')},
-                    timestamp=datetime.fromisoformat(ckpt_data.get('completed_at'))
+                    timestamp=datetime.fromisoformat(ckpt_data.get('completed_at')),
+                    run_id=ckpt_data.get('run_id'),  # None for old checkpoints — won't match new run_id
                 ))
                 position += 1
 
-            # Load state and lua_state — may be offloaded to S3 for large procedures
             state_data = _load_s3_field(raw_metadata.get('state', {}), 'state', {})
             lua_state_data = _load_s3_field(raw_metadata.get('lua_state', {}), 'lua_state', {})
 
@@ -209,19 +322,24 @@ class PlexusStorageAdapter:
         for checkpoint in metadata.execution_log:
             if checkpoint.type == 'checkpoint' and isinstance(checkpoint.result, dict):
                 name = checkpoint.result.get('name', f'checkpoint_{checkpoint.position}')
-                checkpoints_dict[name] = {
+                entry: dict = {
                     'name': name,
                     'result': checkpoint.result.get('data'),
-                    'completed_at': checkpoint.timestamp.isoformat()
+                    'completed_at': checkpoint.timestamp.isoformat(),
                 }
+                if checkpoint.run_id is not None:
+                    entry['run_id'] = checkpoint.run_id
+                checkpoints_dict[name] = entry
 
-        # Build metadata JSON
-        metadata_json = {
+        # Build metadata JSON. Preserve any unrelated top-level keys already on
+        # the Procedure record (for example runtime/last_failure telemetry).
+        metadata_json = self._fetch_raw_procedure_metadata(metadata.procedure_id)
+        metadata_json.update({
             'checkpoints': checkpoints_dict,
             'state': metadata.state,
             'lua_state': metadata.lua_state,
             'replay_index': metadata.replay_index
-        }
+        })
 
         # Update via GraphQL mutation
         mutation = """
@@ -242,47 +360,49 @@ class PlexusStorageAdapter:
                 logger.debug("Saved in-memory metadata for built-in procedure %s", metadata.procedure_id)
                 return
 
+            # Procedure data lives in S3. DynamoDB holds only S3 pointers and replay_index.
+            s3 = boto3.client('s3')
+            pid = metadata.procedure_id
+
+            def _store_attachment(field_name: str, payload: Any, s3_path: str) -> None:
+                payload_json = json.dumps(payload)
+                try:
+                    s3.put_object(
+                        Bucket=_S3_BUCKET,
+                        Key=s3_path,
+                        Body=payload_json.encode('utf-8'),
+                        ContentType='application/json',
+                    )
+                    logger.debug(
+                        "Stored %d bytes of %s to S3: %s/%s",
+                        len(payload_json), field_name, _S3_BUCKET, s3_path,
+                    )
+                except ClientError as s3_err:
+                    logger.error("Failed to store %s to S3: %s", field_name, s3_err)
+                    raise
+
+            _store_attachment('state', metadata.state, f"procedures/{pid}/state.json")
+            metadata_json['state'] = {'_s3_key': f"procedures/{pid}/state.json"}
+
+            # Write dashboard projection under reportblocks/ prefix — the
+            # Cognito authenticated role has read access to reportblocks/*
+            # but NOT procedures/* (IAM policy not deployed for that path).
+            dashboard_state = _build_dashboard_state(metadata.state or {})
+            _store_attachment(
+                'dashboard_state', dashboard_state,
+                f"reportblocks/procedures/{pid}/dashboard_state.json",
+            )
+            metadata_json['dashboard_state'] = {
+                '_s3_key': f"reportblocks/procedures/{pid}/dashboard_state.json"
+            }
+
+            _store_attachment('lua_state', metadata.lua_state, f"procedures/{pid}/lua_state.json")
+            metadata_json['lua_state'] = {'_s3_key': f"procedures/{pid}/lua_state.json"}
+
+            _store_attachment('checkpoints', checkpoints_dict, f"procedures/{pid}/checkpoints.json")
+            metadata_json['checkpoints'] = {'_s3_key': f"procedures/{pid}/checkpoints.json"}
+
             serialized = json.dumps(metadata_json)
-
-            # If metadata exceeds DynamoDB threshold, offload large fields to S3
-            # Cascade: state → lua_state → checkpoints, stopping once it fits.
-            if len(serialized) > _S3_THRESHOLD:
-                s3 = boto3.client('s3')
-                pid = metadata.procedure_id
-
-                def _offload(field_name: str, payload: Any, s3_path: str) -> None:
-                    payload_json = json.dumps(payload)
-                    try:
-                        s3.put_object(
-                            Bucket=_S3_BUCKET,
-                            Key=s3_path,
-                            Body=payload_json.encode('utf-8'),
-                            ContentType='application/json',
-                        )
-                        logger.info(
-                            "Offloaded %d bytes of %s to S3: %s/%s",
-                            len(payload_json), field_name, _S3_BUCKET, s3_path,
-                        )
-                    except ClientError as s3_err:
-                        logger.error("Failed to offload %s to S3: %s", field_name, s3_err)
-                        raise
-
-                # 1. Offload state
-                _offload('state', metadata.state, f"procedures/{pid}/state.json")
-                metadata_json['state'] = {'_s3_key': f"procedures/{pid}/state.json"}
-                serialized = json.dumps(metadata_json)
-
-                # 2. If still too large, offload lua_state
-                if len(serialized) > _S3_THRESHOLD:
-                    _offload('lua_state', metadata.lua_state, f"procedures/{pid}/lua_state.json")
-                    metadata_json['lua_state'] = {'_s3_key': f"procedures/{pid}/lua_state.json"}
-                    serialized = json.dumps(metadata_json)
-
-                # 3. If still too large, offload checkpoints
-                if len(serialized) > _S3_THRESHOLD:
-                    _offload('checkpoints', checkpoints_dict, f"procedures/{pid}/checkpoints.json")
-                    metadata_json['checkpoints'] = {'_s3_key': f"procedures/{pid}/checkpoints.json"}
-                    serialized = json.dumps(metadata_json)
 
             self.client.execute(mutation, {
                 'id': metadata.procedure_id,

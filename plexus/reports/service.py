@@ -1,12 +1,14 @@
 import importlib
 import logging
-import threading
 from typing import Any, Dict, List, Optional, Tuple
+import base64
 import json
+import hashlib
+import shlex
+import time
 from datetime import datetime, timezone # Added datetime
 import traceback # Added for error details
 import re
-import os # Added for API client env vars
 import asyncio # Add asyncio import
 
 # print("[DEBUG] service.py top level print") # DEBUG PRINT
@@ -41,15 +43,7 @@ from plexus.cli.shared.task_progress_tracker import TaskProgressTracker, StageCo
 logger = logging.getLogger(__name__)
 
 
-MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS = int(
-    os.environ.get("REPORT_BLOCK_MAX_INLINE_OUTPUT_CHARS", "120000")
-)
-MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS = int(
-    os.environ.get("REPORT_BLOCK_OUTPUT_PREVIEW_CHARS", "1000")
-)
-ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT = os.environ.get(
-    "REPORT_BLOCK_ATTACH_OUTPUT_JSON_ALWAYS", "1"
-) not in ("0", "false", "False")
+MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS = 1000
 
 
 def _normalize_output_for_storage(output_payload: Any) -> Optional[str]:
@@ -105,49 +99,58 @@ def _compact_output_json_for_storage(
     return json.dumps(compact_payload)
 
 
-def _persist_output_artifact_and_compact_if_needed(
+def _persist_output_artifact_and_compact(
     report_block_id: str,
     output_payload: Any,
     existing_details_files_list: List[str],
     log_prefix: str,
-) -> Tuple[Optional[str], List[str], Optional[str]]:
+) -> Tuple[str, List[str], str]:
     """
-    Persist output JSON as an attached artifact when enabled, and compact inline output
-    only when it risks exceeding storage limits.
+    Persist output JSON as an attached artifact and return a compact inline envelope.
+
+    Policy: report block output is always persisted as an S3 attachment and never
+    stored inline in DynamoDB.
     """
     normalized_output = _normalize_output_for_storage(output_payload)
-    if not normalized_output or not S3_UTILS_AVAILABLE:
-        return normalized_output, existing_details_files_list, None
+    if not normalized_output:
+        normalized_output = json.dumps({"status": "empty", "message": "Block returned no output"})
+    if not S3_UTILS_AVAILABLE:
+        raise RuntimeError(f"{log_prefix} S3 utilities are unavailable; cannot persist ReportBlock output attachment.")
 
-    output_path: Optional[str] = None
-    should_attach = ALWAYS_ATTACH_REPORT_BLOCK_OUTPUT or (
-        len(normalized_output) > MAX_REPORT_BLOCK_INLINE_OUTPUT_CHARS
+    output_file_name = f"output-{report_block_id}.json"
+    output_path = upload_report_block_file(
+        report_block_id=report_block_id,
+        file_name=output_file_name,
+        content=normalized_output.encode("utf-8"),
+        content_type="application/json",
     )
-    if should_attach:
-        output_file_name = f"output-{report_block_id}.json"
-        output_path = upload_report_block_file(
-            report_block_id=report_block_id,
-            file_name=output_file_name,
-            content=normalized_output.encode("utf-8"),
-            content_type="application/json",
-        )
-        if output_path not in existing_details_files_list:
-            existing_details_files_list.append(output_path)
+    if output_path not in existing_details_files_list:
+        existing_details_files_list.append(output_path)
 
-    if should_attach and output_path:
-        # Always compact inline payload when output is attached — one consistent path
-        # for the frontend regardless of output size.
-        return (
-            _compact_output_json_for_storage(normalized_output, output_path),
-            existing_details_files_list,
-            output_path,
-        )
-
-    return normalized_output, existing_details_files_list, output_path
+    compact_output = _compact_output_json_for_storage(normalized_output, output_path)
+    return compact_output, existing_details_files_list, output_path
 
 
-def _is_dynamodb_item_size_error(exc: Exception) -> bool:
-    return "Item size to update has exceeded the maximum allowed size" in str(exc)
+def _persist_log_artifact_if_present(
+    report_block_id: str,
+    log_output: Optional[str],
+    existing_details_files_list: List[str],
+    log_prefix: str,
+) -> Tuple[str, List[str], Optional[str]]:
+    if not log_output:
+        return "No detailed log output.", existing_details_files_list, None
+    if not S3_UTILS_AVAILABLE:
+        raise RuntimeError(f"{log_prefix} S3 utilities are unavailable; cannot persist ReportBlock log attachment.")
+
+    log_path = upload_report_block_file(
+        report_block_id=report_block_id,
+        file_name="log.txt",
+        content=log_output.encode("utf-8"),
+        content_type="text/plain",
+    )
+    if log_path not in existing_details_files_list:
+        existing_details_files_list.append(log_path)
+    return "See log.txt in attachedFiles.", existing_details_files_list, log_path
 
 
 
@@ -490,14 +493,16 @@ def _instantiate_and_run_block(
         # Return None for JSON output and the error message as the log string
         return None, f"{error_msg}\nDetails:\n{detailed_error}", None
 
-_PROGRAMMATIC_CONFIG_NAME = "__programmatic_blocks__"
+_PROGRAMMATIC_CONFIG_NAME = "Programmatic Reports"
 _programmatic_config_id_cache: Optional[str] = None
-
-# In-process tracking for background block dispatches.
-# Maps cache_key → (threading.Event, output_data, log_string).
-# The Event is set when the background thread finishes.
-_background_tasks: Dict[str, Tuple[threading.Event, Optional[Any], Optional[str]]] = {}
-_background_lock = threading.Lock()
+_PROGRAMMATIC_REPORT_TASK_TYPE = "ProgrammaticReportBlock"
+_PROGRAMMATIC_REPORT_COMMAND = "feedback report run-programmatic-block"
+_PROGRAMMATIC_TASK_LOOKBACK_DATE = "2000-01-01T00:00:00.000Z"
+_PROGRAMMATIC_WAIT_TIMEOUT_SECONDS = 600
+_PROGRAMMATIC_WAIT_POLL_SECONDS = 2.0
+_PROGRAMMATIC_IN_FLIGHT_DISPATCH_STATUSES = {"PENDING", "DISPATCHING", "DISPATCHED"}
+_PROGRAMMATIC_IN_FLIGHT_TASK_STATUSES = {"PENDING", "RUNNING"}
+_PROGRAMMATIC_FAILURE_TASK_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 
 
 def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) -> str:
@@ -525,6 +530,434 @@ def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) 
     return _programmatic_config_id_cache
 
 
+def _humanize_block_class(block_class: str) -> str:
+    """Convert block class name to human-friendly title."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", block_class).strip()
+
+
+def _build_default_cache_key(block_class: str, block_config: Dict[str, Any]) -> str:
+    """
+    Build a deterministic but readable cache key for programmatic blocks.
+    """
+    block_title = _humanize_block_class(block_class)
+    parts: List[str] = []
+
+    scorecard = str(block_config.get("scorecard") or "").strip()
+    score = str(block_config.get("score") or block_config.get("score_id") or "").strip()
+    start_date = str(block_config.get("start_date") or "").strip()
+    end_date = str(block_config.get("end_date") or "").strip()
+    days = block_config.get("days")
+    mode = str(block_config.get("mode") or "").strip()
+    bucket_type = str(block_config.get("bucket_type") or "").strip()
+    bucket_count = block_config.get("bucket_count")
+
+    if scorecard:
+        parts.append(f"Scorecard {scorecard}")
+    if score:
+        parts.append(f"Score {score}")
+    parts.append(block_title)
+
+    if start_date and end_date:
+        parts.append(f"{start_date} to {end_date}")
+    elif days is not None:
+        parts.append(f"Last {days} days")
+
+    if mode:
+        parts.append(f"Mode {mode}")
+    if bucket_type:
+        if bucket_count is not None:
+            parts.append(f"{bucket_type} x {bucket_count}")
+        else:
+            parts.append(bucket_type)
+
+    config_str = json.dumps(block_config, sort_keys=True, separators=(",", ":"))
+    config_fingerprint = hashlib.sha1(config_str.encode("utf-8")).hexdigest()[:10]
+    parts.append(f"cfg {config_fingerprint}")
+    return " | ".join(parts)
+
+
+def _format_date_window_for_display(block_config: Dict[str, Any], output_data: Any) -> Optional[str]:
+    start = str(block_config.get("start_date") or "").strip()
+    end = str(block_config.get("end_date") or "").strip()
+    days = block_config.get("days")
+
+    if start and end:
+        return f"{start} to {end}"
+    if days is not None:
+        return f"Last {days} days"
+
+    if isinstance(output_data, dict):
+        date_range = output_data.get("date_range")
+        if isinstance(date_range, dict):
+            start_raw = str(date_range.get("start") or "").strip()
+            end_raw = str(date_range.get("end") or "").strip()
+            if start_raw and end_raw:
+                return f"{start_raw} to {end_raw}"
+    return None
+
+
+def _derive_programmatic_display_strings(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    output_data: Any,
+) -> Tuple[str, Optional[str]]:
+    """
+    Derive a readable title/subtitle pair for programmatic reports.
+
+    Keep cache_key for caching, but store human-friendly display strings in parameters
+    so the dashboard doesn't have to show long cache identifiers in the report list.
+    """
+    block_title = _humanize_block_class(block_class)
+
+    scorecard_name: Optional[str] = None
+    score_name: Optional[str] = None
+    scope: Optional[str] = None
+    if isinstance(output_data, dict):
+        scorecard_name = output_data.get("scorecard_name") or None
+        score_name = output_data.get("score_name") or None
+        scope = output_data.get("scope") or None
+
+    title_parts: List[str] = []
+    if scorecard_name:
+        title_parts.append(str(scorecard_name).strip())
+    if score_name:
+        title_parts.append(str(score_name).strip())
+    elif scope == "scorecard_all_scores":
+        title_parts.append("All Scores")
+    title_parts.append(block_title)
+
+    title = " - ".join([part for part in title_parts if part])
+
+    window_str = _format_date_window_for_display(block_config, output_data)
+    subtitle_parts: List[str] = []
+    if window_str:
+        subtitle_parts.append(window_str)
+
+    config_str = json.dumps(block_config, sort_keys=True, separators=(",", ":"))
+    config_fingerprint = hashlib.sha1(config_str.encode("utf-8")).hexdigest()[:10]
+    subtitle_parts.append(f"cfg {config_fingerprint}")
+
+    subtitle = " | ".join([part for part in subtitle_parts if part]) or None
+    return title, subtitle
+
+
+def _programmatic_task_target(cache_key: str) -> str:
+    cache_digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
+    return f"report/block/{cache_digest}"
+
+
+def _build_programmatic_run_payload(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    account_id: str,
+    ttl_hours: float,
+    fresh: bool,
+) -> Dict[str, Any]:
+    return {
+        "cache_key": cache_key,
+        "block_class": block_class,
+        "block_config": block_config,
+        "account_id": account_id,
+        "ttl_hours": ttl_hours,
+        "fresh": fresh,
+    }
+
+
+def encode_programmatic_run_payload(payload: Dict[str, Any]) -> str:
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return base64.urlsafe_b64encode(serialized.encode("utf-8")).decode("ascii")
+
+
+def decode_programmatic_run_payload(payload_base64: str) -> Dict[str, Any]:
+    try:
+        decoded = base64.urlsafe_b64decode(payload_base64.encode("ascii")).decode("utf-8")
+        payload = json.loads(decoded)
+    except Exception as exc:
+        raise ValueError(f"Invalid programmatic report payload: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid programmatic report payload: expected JSON object.")
+    return payload
+
+
+def _build_programmatic_report_command(payload: Dict[str, Any]) -> str:
+    payload_base64 = encode_programmatic_run_payload(payload)
+    return (
+        f"{_PROGRAMMATIC_REPORT_COMMAND} "
+        f"--payload-base64 {shlex.quote(payload_base64)}"
+    )
+
+
+def _normalize_task_metadata(metadata: Any) -> Dict[str, Any]:
+    if isinstance(metadata, dict):
+        return metadata
+    if isinstance(metadata, str):
+        if not metadata.strip():
+            return {}
+        try:
+            parsed = json.loads(metadata)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _list_recent_tasks_for_account(
+    *,
+    account_id: str,
+    client: PlexusDashboardClient,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    query = """
+    query ListTaskByAccountIdAndUpdatedAt(
+      $accountId: String!
+      $updatedAt: ModelStringKeyConditionInput
+      $sortDirection: ModelSortDirection
+      $limit: Int
+    ) {
+      listTaskByAccountIdAndUpdatedAt(
+        accountId: $accountId
+        updatedAt: $updatedAt
+        sortDirection: $sortDirection
+        limit: $limit
+      ) {
+        items {
+          id
+          accountId
+          type
+          status
+          target
+          command
+          description
+          metadata
+          createdAt
+          updatedAt
+          startedAt
+          completedAt
+          errorMessage
+          errorDetails
+          stdout
+          stderr
+          dispatchStatus
+        }
+      }
+    }
+    """
+    response = client.execute(
+        query,
+        {
+            "accountId": account_id,
+            "updatedAt": {"ge": _PROGRAMMATIC_TASK_LOOKBACK_DATE},
+            "sortDirection": "DESC",
+            "limit": limit,
+        },
+    )
+    return response.get("listTaskByAccountIdAndUpdatedAt", {}).get("items", []) or []
+
+
+def _find_matching_programmatic_task(
+    *,
+    cache_key: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+    include_terminal: bool = False,
+) -> Optional[Task]:
+    target = _programmatic_task_target(cache_key)
+    for task_data in _list_recent_tasks_for_account(account_id=account_id, client=client):
+        if task_data.get("type") != _PROGRAMMATIC_REPORT_TASK_TYPE:
+            continue
+        if task_data.get("target") != target:
+            continue
+        metadata = _normalize_task_metadata(task_data.get("metadata"))
+        if metadata.get("cache_key") != cache_key:
+            continue
+        task = Task.from_dict(task_data, client)
+        if include_terminal or _is_programmatic_task_in_flight(task):
+            return task
+    return None
+
+
+def _is_programmatic_task_in_flight(task: Task) -> bool:
+    dispatch_status = (task.dispatchStatus or "").upper()
+    task_status = (task.status or "").upper()
+    return (
+        dispatch_status in _PROGRAMMATIC_IN_FLIGHT_DISPATCH_STATUSES
+        and task_status in _PROGRAMMATIC_IN_FLIGHT_TASK_STATUSES
+    )
+
+
+def _find_report_by_task_id(
+    *,
+    task_id: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+) -> Optional[Report]:
+    for report in Report.list_by_account_id(account_id, client, limit=200, max_items=200):
+        if report.taskId == task_id:
+            return report
+    return None
+
+
+def _load_programmatic_report_output(
+    *,
+    report: Report,
+    client: PlexusDashboardClient,
+) -> Optional[Any]:
+    output_raw = report.output
+    if not output_raw:
+        return None
+    if isinstance(output_raw, str):
+        stripped = output_raw.strip()
+        if not stripped.startswith("{") and not stripped.startswith("["):
+            return _fetch_first_block_output(report.id, client)
+        try:
+            return json.loads(output_raw)
+        except json.JSONDecodeError:
+            return output_raw
+    return output_raw
+
+
+def _create_programmatic_report_task(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    account_id: str,
+    client: PlexusDashboardClient,
+    ttl_hours: float,
+    fresh: bool,
+) -> Task:
+    payload = _build_programmatic_run_payload(
+        cache_key=cache_key,
+        block_class=block_class,
+        block_config=block_config,
+        account_id=account_id,
+        ttl_hours=ttl_hours,
+        fresh=fresh,
+    )
+    metadata = {
+        **payload,
+        "task_kind": "durable_programmatic_report_block",
+        "task_target": _programmatic_task_target(cache_key),
+    }
+    return Task.create(
+        client=client,
+        accountId=account_id,
+        type=_PROGRAMMATIC_REPORT_TASK_TYPE,
+        target=_programmatic_task_target(cache_key),
+        command=_build_programmatic_report_command(payload),
+        description=f"Run programmatic report block {block_class} for cache key '{cache_key}'",
+        metadata=json.dumps(metadata),
+        dispatchStatus="PENDING",
+        status="PENDING",
+    )
+
+
+def _wait_for_programmatic_task_result(
+    *,
+    task: Task,
+    cache_key: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+    timeout_seconds: int = _PROGRAMMATIC_WAIT_TIMEOUT_SECONDS,
+) -> Tuple[Optional[Any], Optional[str], bool]:
+    deadline = time.monotonic() + timeout_seconds
+    last_task_status = (task.status or "").upper()
+    while time.monotonic() < deadline:
+        report = _find_report_by_task_id(task_id=task.id, account_id=account_id, client=client)
+        if report is not None:
+            output_data = _load_programmatic_report_output(report=report, client=client)
+            if output_data is not None:
+                return output_data, None, True
+
+        refreshed_task = Task.get_by_id(task.id, client)
+        last_task_status = (refreshed_task.status or "").upper()
+        if _is_programmatic_task_in_flight(refreshed_task):
+            time.sleep(_PROGRAMMATIC_WAIT_POLL_SECONDS)
+            continue
+
+        if last_task_status in _PROGRAMMATIC_FAILURE_TASK_STATUSES:
+            failure_parts = [
+                f"Queued programmatic report task failed for {cache_key}.",
+            ]
+            if refreshed_task.errorMessage:
+                failure_parts.append(str(refreshed_task.errorMessage))
+            if refreshed_task.stderr:
+                failure_parts.append(str(refreshed_task.stderr))
+            return None, "\n".join(part for part in failure_parts if part), False
+
+        report = _find_report_by_task_id(task_id=task.id, account_id=account_id, client=client)
+        if report is not None:
+            output_data = _load_programmatic_report_output(report=report, client=client)
+            if output_data is not None:
+                return output_data, None, True
+
+        time.sleep(_PROGRAMMATIC_WAIT_POLL_SECONDS)
+
+    if last_task_status == "COMPLETED":
+        return (
+            None,
+            (
+                f"Queued programmatic report task completed for {cache_key}, "
+                "but no persisted report result became visible before the wait timeout."
+            ),
+            False,
+        )
+    return (
+        None,
+        (
+            f"Queued programmatic report task is still pending for {cache_key}. "
+            "Start a dispatcher with `plexus command dispatcher` or wait for the existing task to complete."
+        ),
+        False,
+    )
+
+
+def run_programmatic_block_and_persist(
+    *,
+    cache_key: str,
+    block_class: str,
+    block_config: Dict[str, Any],
+    account_id: str,
+    client: PlexusDashboardClient,
+    persist_required: bool = False,
+) -> Tuple[Optional[Any], Optional[str]]:
+    block_def = {
+        "class_name": block_class,
+        "config": block_config,
+        "block_name": block_class,
+    }
+    report_params = {"account_id": account_id}
+    output_data, log_output, _ = _instantiate_and_run_block(
+        block_def=block_def,
+        report_params=report_params,
+        api_client=client,
+    )
+
+    if output_data is None:
+        return None, log_output
+
+    try:
+        _persist_block_result(
+            cache_key,
+            block_class,
+            block_config,
+            output_data,
+            log_output,
+            account_id,
+            client,
+        )
+    except Exception as exc:
+        logger.warning("Failed to cache block result: %s", exc)
+        if persist_required:
+            raise
+
+    return output_data, log_output
+
+
 def _persist_block_result(
     cache_key: str,
     block_class: str,
@@ -536,6 +969,12 @@ def _persist_block_result(
 ) -> None:
     """Persist a block result as Report + ReportBlock records."""
     config_id = _get_programmatic_config_id(account_id, client)
+    display_title, display_subtitle = _derive_programmatic_display_strings(
+        cache_key=cache_key,
+        block_class=block_class,
+        block_config=block_config or {},
+        output_data=output_data,
+    )
 
     task = Task.create(
         client=client,
@@ -543,7 +982,7 @@ def _persist_block_result(
         target=cache_key,
         command="run_block_cached",
         accountId=account_id,
-        status="completed",
+        status="COMPLETED",
         dispatchStatus="COMPLETED",
     )
 
@@ -553,7 +992,12 @@ def _persist_block_result(
         taskId=task.id,
         name=cache_key,
         reportConfigurationId=config_id,
-        parameters=block_config,
+        parameters={
+            **(block_config or {}),
+            "_cache_key": cache_key,
+            "_display_title": display_title,
+            "_display_subtitle": display_subtitle,
+        },
     )
 
     # Derive a human-readable display name from the class name
@@ -581,28 +1025,208 @@ def _persist_block_result(
         type=block_class,
         name=display_name,
         output="{}",  # placeholder — updated below
-        log=log_output,
+        log="Processing...",
     )
 
-    compact_output_json, _, output_path = _persist_output_artifact_and_compact_if_needed(
+    compact_output_json, attached_files, _ = _persist_output_artifact_and_compact(
         report_block_id=rb.id,
         output_payload=output_data,
         existing_details_files_list=[],
         log_prefix="[run_block_cached]",
     )
+    final_log_message, attached_files, _ = _persist_log_artifact_if_present(
+        report_block_id=rb.id,
+        log_output=log_output,
+        existing_details_files_list=attached_files,
+        log_prefix="[run_block_cached]",
+    )
 
-    block_output = compact_output_json if compact_output_json is not None else json.dumps(output_data, ensure_ascii=False)
-    update_input: dict = {"id": rb.id, "output": block_output}
-    if output_path:
-        update_input["attachedFiles"] = [output_path]
+    update_input: dict = {
+        "id": rb.id,
+        "output": compact_output_json,
+        "log": final_log_message,
+        "attachedFiles": attached_files,
+    }
     mutation = """
     mutation UpdateReportBlock($input: UpdateReportBlockInput!) {
-        updateReportBlock(input: $input) { id output attachedFiles }
+        updateReportBlock(input: $input) { id output log attachedFiles }
     }
     """
     client.execute(mutation, {"input": update_input})
 
     logger.info("Cached block result as Report %s (block %s)", report.id, rb.id)
+
+
+def _build_programmatic_report_markdown(
+    block_definitions: List[Dict[str, Any]],
+) -> str:
+    """
+    Build the markdown block template for a programmatic multi-block report.
+    """
+    rendered_blocks: List[str] = []
+    for block in block_definitions:
+        class_name = str(block.get("class_name") or "").strip()
+        if not class_name:
+            continue
+        block_name = str(block.get("block_name") or _humanize_block_class(class_name)).strip()
+        block_config = block.get("config") if isinstance(block.get("config"), dict) else {}
+        block_yaml = yaml.dump(block_config, default_flow_style=False).strip()
+        if block_yaml:
+            block_body = f"class: {class_name}\n{block_yaml}"
+        else:
+            block_body = f"class: {class_name}"
+        rendered_blocks.append(
+            f'```block name="{block_name}"\n{block_body}\n```'
+        )
+    return "\n\n".join(rendered_blocks)
+
+
+def run_programmatic_report_and_persist(
+    *,
+    report_name: str,
+    block_definitions: List[Dict[str, Any]],
+    account_id: str,
+    client: PlexusDashboardClient,
+    report_parameters: Optional[Dict[str, Any]] = None,
+    display_title: Optional[str] = None,
+    display_subtitle: Optional[str] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Run multiple report blocks and persist them as a single Report with ordered ReportBlocks.
+    """
+    if not report_name or not str(report_name).strip():
+        raise ValueError("'report_name' is required.")
+    if not block_definitions:
+        raise ValueError("'block_definitions' must contain at least one block.")
+
+    normalized_blocks: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(block_definitions):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Invalid block definition at index {idx}: expected object.")
+        class_name = str(raw.get("class_name") or "").strip()
+        if not class_name:
+            raise ValueError(f"Invalid block definition at index {idx}: 'class_name' is required.")
+        block_name = str(raw.get("block_name") or _humanize_block_class(class_name)).strip()
+        config = raw.get("config")
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise ValueError(f"Invalid block definition at index {idx}: 'config' must be an object.")
+        normalized_blocks.append(
+            {
+                "class_name": class_name,
+                "block_name": block_name,
+                "config": config,
+                "position": idx,
+            }
+        )
+
+    config_id = _get_programmatic_config_id(account_id, client)
+    task = Task.create(
+        client=client,
+        type="ProgrammaticReport",
+        target=str(report_name).strip(),
+        command="run_programmatic_report_and_persist",
+        accountId=account_id,
+        status="COMPLETED",
+        dispatchStatus="COMPLETED",
+    )
+
+    parameters = dict(report_parameters or {})
+    if display_title:
+        parameters["_display_title"] = display_title
+    if display_subtitle:
+        parameters["_display_subtitle"] = display_subtitle
+
+    report = Report.create(
+        client=client,
+        accountId=account_id,
+        taskId=task.id,
+        name=str(report_name).strip(),
+        reportConfigurationId=config_id,
+        parameters=parameters,
+    )
+    report.update(output=_build_programmatic_report_markdown(normalized_blocks))
+
+    report_params = {"account_id": account_id}
+    first_error_message: Optional[str] = None
+
+    for block in normalized_blocks:
+        block_class_name = block["class_name"]
+        block_display_name = block["block_name"]
+        block_config = block["config"]
+        position = int(block["position"])
+
+        report_block = ReportBlock.create(
+            client=client,
+            reportId=report.id,
+            position=position,
+            type=block_class_name,
+            name=block_display_name,
+            output="{}",
+            log="Processing...",
+        )
+
+        output_json, log_string, resolved_dataset_id = _instantiate_and_run_block(
+            block_def=block,
+            report_params=report_params,
+            api_client=client,
+            report_block_id=report_block.id,
+        )
+
+        if output_json is None:
+            if first_error_message is None:
+                first_error_message = log_string or f"Block {block_display_name} failed."
+            output_payload: Any = {
+                "error": log_string or f"Block {block_display_name} failed.",
+                "block_class": block_class_name,
+            }
+        else:
+            output_payload = output_json
+
+        db_block_state = ReportBlock.get_by_id(report_block.id, client)
+        if not db_block_state:
+            raise RuntimeError(f"Could not re-fetch ReportBlock {report_block.id} after execution.")
+
+        existing_details_files_list: List[str] = []
+        attached_files = db_block_state.attachedFiles
+        if attached_files:
+            if not isinstance(attached_files, list):
+                raise RuntimeError(
+                    f"ReportBlock {report_block.id} attachedFiles must be a list, got {type(attached_files).__name__}."
+                )
+            existing_details_files_list = list(attached_files)
+
+        final_log_message, existing_details_files_list, _ = _persist_log_artifact_if_present(
+            report_block_id=report_block.id,
+            log_output=log_string,
+            existing_details_files_list=existing_details_files_list,
+            log_prefix="[programmatic-report]",
+        )
+        compact_output_json, existing_details_files_list, _ = _persist_output_artifact_and_compact(
+            report_block_id=report_block.id,
+            output_payload=output_payload,
+            existing_details_files_list=existing_details_files_list,
+            log_prefix="[programmatic-report]",
+        )
+
+        update_input: Dict[str, Any] = {
+            "id": report_block.id,
+            "output": compact_output_json,
+            "log": final_log_message,
+            "attachedFiles": existing_details_files_list,
+        }
+        if resolved_dataset_id:
+            update_input["dataSetId"] = resolved_dataset_id
+
+        mutation = """
+        mutation UpdateReportBlock($input: UpdateReportBlockInput!) {
+            updateReportBlock(input: $input) { id output log attachedFiles dataSetId }
+        }
+        """
+        client.execute(mutation, {"input": update_input})
+
+    return report.id, first_error_message
 
 
 def _fetch_first_block_output(report_id: str, client: PlexusDashboardClient) -> Optional[Any]:
@@ -705,17 +1329,16 @@ def run_block_cached(
     calls with the same *cache_key* within *ttl_hours*, returns the stored
     output without re-running the block.
 
-    When *background* is True and the cache misses, the block is dispatched to
-    a daemon thread and this function returns immediately with
-    ``({"status": "dispatched", "cache_key": cache_key}, None, False)``.
+    When *background* is True and the cache misses, the block is queued as a
+    durable Task for dispatcher execution and this function returns immediately
+    with ``({"status": "dispatched", "cache_key": cache_key, "task_id": ...}, None, False)``.
     A later call with the same *cache_key* and ``background=False`` (the default)
-    will wait for the background thread to finish and return its results.
+    will wait for the queued Task to finish and return its results when available.
 
     Returns (output_data, log_string, was_cached).
     """
     if cache_key is None:
-        config_str = json.dumps(block_config, sort_keys=True)
-        cache_key = f"cache:{block_class}:{config_str}"
+        cache_key = _build_default_cache_key(block_class, block_config)
 
     # --- Check database cache ---
     if not fresh:
@@ -727,90 +1350,59 @@ def run_block_cached(
         except Exception as exc:
             logger.warning("Cache lookup failed for %s: %s", cache_key, exc)
 
-    # --- Check in-process background task ---
-    with _background_lock:
-        bg = _background_tasks.get(cache_key)
-
-    if bg is not None:
-        event, _, _ = bg
+    matching_task = _find_matching_programmatic_task(
+        cache_key=cache_key,
+        account_id=account_id,
+        client=client,
+    )
+    if matching_task is not None:
         if background:
-            # Already dispatched — don't start a second one
-            logger.info("Background task already dispatched for %s", cache_key)
-            return {"status": "already_dispatched", "cache_key": cache_key}, None, False
-        # Foreground caller: wait for the background thread to finish
-        logger.info("Waiting for background task %s to complete…", cache_key)
-        event.wait(timeout=600)  # 10 min max
-        with _background_lock:
-            bg = _background_tasks.pop(cache_key, None)
-        if bg and bg[0].is_set() and bg[1] is not None:
-            logger.info("Background task %s completed — returning results", cache_key)
-            return bg[1], bg[2], True
-        logger.warning("Background task %s timed out or failed — running synchronously", cache_key)
+            logger.info("Programmatic report task already queued for %s", cache_key)
+            return {
+                "status": "already_dispatched",
+                "cache_key": cache_key,
+                "task_id": matching_task.id,
+            }, None, False
+        logger.info("Waiting for queued programmatic report task %s (%s)", cache_key, matching_task.id)
+        waited_output, waited_log, waited_cached = _wait_for_programmatic_task_result(
+            task=matching_task,
+            cache_key=cache_key,
+            account_id=account_id,
+            client=client,
+        )
+        if waited_output is not None:
+            return waited_output, waited_log, waited_cached
+        return None, waited_log, False
 
     # --- Background dispatch mode ---
     if background:
-        event = threading.Event()
-        with _background_lock:
-            _background_tasks[cache_key] = (event, None, None)
-
-        def _run():
-            try:
-                block_def = {
-                    "class_name": block_class,
-                    "config": block_config,
-                    "block_name": block_class,
-                }
-                report_params = {"account_id": account_id}
-                output_data, log_output, _ = _instantiate_and_run_block(
-                    block_def=block_def,
-                    report_params=report_params,
-                    api_client=client,
-                )
-                with _background_lock:
-                    _background_tasks[cache_key] = (event, output_data, log_output)
-                if output_data is not None:
-                    _persist_block_result(
-                        cache_key, block_class, block_config,
-                        output_data, log_output, account_id, client,
-                    )
-            except Exception as exc:
-                logger.exception("Background block %s failed: %s", cache_key, exc)
-                with _background_lock:
-                    _background_tasks[cache_key] = (event, None, str(exc))
-            finally:
-                event.set()
-
-        thread = threading.Thread(target=_run, daemon=True)
-        thread.start()
-        logger.info("Dispatched background block %s", cache_key)
-        return {"status": "dispatched", "cache_key": cache_key}, None, False
+        task = _create_programmatic_report_task(
+            cache_key=cache_key,
+            block_class=block_class,
+            block_config=block_config,
+            account_id=account_id,
+            client=client,
+            ttl_hours=ttl_hours,
+            fresh=fresh,
+        )
+        logger.info("Queued durable programmatic report task %s for %s", task.id, cache_key)
+        return {
+            "status": "dispatched",
+            "cache_key": cache_key,
+            "task_id": task.id,
+        }, None, False
 
     # --- Synchronous execution (cache miss, no background) ---
     logger.info("Cache MISS for %s — running block %s", cache_key, block_class)
-    block_def = {
-        "class_name": block_class,
-        "config": block_config,
-        "block_name": block_class,
-    }
-    report_params = {"account_id": account_id}
-    output_data, log_output, resolved_dataset_id = _instantiate_and_run_block(
-        block_def=block_def,
-        report_params=report_params,
-        api_client=client,
+    output_data, log_output = run_programmatic_block_and_persist(
+        cache_key=cache_key,
+        block_class=block_class,
+        block_config=block_config,
+        account_id=account_id,
+        client=client,
     )
-
     if output_data is None:
         return None, log_output, False
-
-    # --- Persist as Report + ReportBlock ---
-    try:
-        _persist_block_result(
-            cache_key, block_class, block_config,
-            output_data, log_output, account_id, client,
-        )
-    except Exception as exc:
-        logger.warning("Failed to cache block result: %s", exc)
-
     return output_data, log_output, False
 
 
@@ -1018,135 +1610,60 @@ def _generate_report_core(
                 report_block_id=current_report_block.id # Pass the ID
             )
 
-            # Fetch the latest state of the ReportBlock, as the block itself might have updated attachedFiles
-            existing_details_files_list = [] # Initialize before try block
+            # Fetch latest attached files from DB state after block execution.
+            existing_details_files_list: List[str] = []
             try:
                 logger.info(f"{log_prefix} Re-fetching ReportBlock ID {current_report_block.id} after block execution.")
                 db_block_state = ReportBlock.get_by_id(current_report_block.id, client)
                 if not db_block_state:
-                    logger.error(f"{log_prefix} Failed to re-fetch ReportBlock {current_report_block.id} after execution. File attachments might be lost.")
-                    # Fallback to an empty list if fetch fails, though this is problematic
-                    # existing_details_files_list is already []
-                else:
-                    logger.info(f"{log_prefix} Fetched DB state. Current attachedFiles: {db_block_state.attachedFiles}")
-                    if db_block_state.attachedFiles:
-                        # Handle both list and potential legacy JSON string formats
-                        if isinstance(db_block_state.attachedFiles, list):
-                            existing_details_files_list = db_block_state.attachedFiles
-                            logger.info(f"{log_prefix} attachedFiles is already a list with {len(existing_details_files_list)} items")
-                        else:
-                            # For backward compatibility - try to parse JSON if it's a string
-                            try:
-                                existing_details_files_list = json.loads(db_block_state.attachedFiles)
-                                logger.info(f"{log_prefix} Successfully parsed existing attachedFiles JSON (for backward compatibility)")
-                                
-                                # Check if we have old format objects and extract just paths
-                                if existing_details_files_list and isinstance(existing_details_files_list[0], dict) and 'path' in existing_details_files_list[0]:
-                                    logger.warning(f"{log_prefix} Converting old format attachedFiles to just paths")
-                                    existing_details_files_list = [item['path'] for item in existing_details_files_list]
-                            except (json.JSONDecodeError, TypeError):
-                                # If not valid JSON or not string, treat as a single item
-                                logger.warning(f"{log_prefix} Could not parse attachedFiles as JSON - treating as a single item")
-                                existing_details_files_list = [db_block_state.attachedFiles]
-                            
-                        # Ensure it's a list
-                        if not isinstance(existing_details_files_list, list):
-                            logger.warning(f"{log_prefix} attachedFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
-                            existing_details_files_list = []
-            except Exception as e:
-                logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} attachedFiles: {e}. Proceeding with empty list.")
-                existing_details_files_list = [] # Ensure it's an empty list on error
-            
-            # Handle log content attachment
-            final_log_message_for_db = "No detailed log output."
-            if log_string:
-                if S3_UTILS_AVAILABLE:
-                    try:
-                        logger.info(f"{log_prefix} Uploading log.txt for ReportBlock {current_report_block.id}")
-                        log_file_info = upload_report_block_file(
-                            report_block_id=current_report_block.id,
-                            file_name="log.txt",
-                            content=log_string.encode('utf-8'),  # Encode to bytes
-                            content_type="text/plain"
+                    raise RuntimeError(f"Could not re-fetch ReportBlock {current_report_block.id} after execution.")
+                attached_files = db_block_state.attachedFiles
+                if attached_files:
+                    if not isinstance(attached_files, list):
+                        raise RuntimeError(
+                            f"ReportBlock {current_report_block.id} attachedFiles must be a list, got {type(attached_files).__name__}."
                         )
-                        existing_details_files_list.append(log_file_info)
-                        logger.info(f"{log_prefix} Appended log.txt info. New attachedFiles list: {existing_details_files_list}")
-                        final_log_message_for_db = "See log.txt in attachedFiles."
-                    except Exception as e:
-                        logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {str(e)}. Storing log inline (truncated).", exc_info=True)
-                        final_log_message_for_db = log_string[:10000] # Truncate if storing inline
-                else:
-                    logger.warning(f"{log_prefix} S3_UTILS_AVAILABLE is false. Storing log inline (truncated) for ReportBlock {current_report_block.id}.")
-                    final_log_message_for_db = log_string[:10000] # Truncate
-            
+                    existing_details_files_list = list(attached_files)
+            except Exception as e:
+                logger.exception(f"{log_prefix} Failed to fetch attachedFiles for ReportBlock {current_report_block.id}: {e}")
+                if first_block_error_message is None:
+                    first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
+                tracker.update(current_items=i + 1)
+                continue
 
-            # Final update to the ReportBlock record
+            # Final update to the ReportBlock record.
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
 
-                compact_output_json, existing_details_files_list, output_attachment_path = _persist_output_artifact_and_compact_if_needed(
+                final_log_message_for_db, existing_details_files_list, _ = _persist_log_artifact_if_present(
+                    report_block_id=current_report_block.id,
+                    log_output=log_string,
+                    existing_details_files_list=existing_details_files_list,
+                    log_prefix=log_prefix,
+                )
+                compact_output_json, existing_details_files_list, _ = _persist_output_artifact_and_compact(
                     report_block_id=current_report_block.id,
                     output_payload=output_json,
                     existing_details_files_list=existing_details_files_list,
                     log_prefix=log_prefix,
                 )
+
                 update_params = {
-                    'output': compact_output_json if compact_output_json is not None else json.dumps({"status": "failed", "error": log_string}),
+                    'output': compact_output_json,
                     'log': final_log_message_for_db,
-                    'attachedFiles': existing_details_files_list, # Pass array directly without JSON conversion
+                    'attachedFiles': existing_details_files_list,
                     'client': client
                 }
-                
-                # Add resolved dataset ID if available
                 if resolved_dataset_id:
                     update_params['dataSetId'] = resolved_dataset_id
                     logger.info(f"{log_prefix} Adding resolved dataset ID {resolved_dataset_id} to ReportBlock {current_report_block.id}")
-                
+
                 current_report_block.update(**update_params)
                 logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {existing_details_files_list}")
             except Exception as e:
-                if _is_dynamodb_item_size_error(e) and S3_UTILS_AVAILABLE:
-                    logger.warning(
-                        f"{log_prefix} ReportBlock {current_report_block.id} exceeded DynamoDB item size on final update. "
-                        "Retrying with compact output."
-                    )
-                    try:
-                        output_path = output_attachment_path
-                        if output_json and not output_path:
-                            normalized_retry_output = _normalize_output_for_storage(output_json)
-                            output_file_name = f"output-{current_report_block.id}.json"
-                            output_path = upload_report_block_file(
-                                report_block_id=current_report_block.id,
-                                file_name=output_file_name,
-                                content=(normalized_retry_output or "").encode("utf-8"),
-                                content_type="application/json",
-                            )
-                            if output_path not in existing_details_files_list:
-                                existing_details_files_list.append(output_path)
-
-                        retry_update_params = {
-                            'output': _compact_output_json_for_storage(output_json, output_path),
-                            'log': final_log_message_for_db,
-                            'attachedFiles': existing_details_files_list,
-                            'client': client,
-                        }
-                        if resolved_dataset_id:
-                            retry_update_params['dataSetId'] = resolved_dataset_id
-
-                        current_report_block.update(**retry_update_params)
-                        logger.info(
-                            f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id} after compact-output retry."
-                        )
-                    except Exception as retry_error:
-                        logger.exception(
-                            f"{log_prefix} Compact-output retry failed for ReportBlock {current_report_block.id}: {retry_error}"
-                        )
-                        if first_block_error_message is None:
-                            first_block_error_message = f"Failed to finalize block {block_display_name}: {retry_error}"
-                else:
-                    logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
-                    if first_block_error_message is None:
-                        first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
+                logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
+                if first_block_error_message is None:
+                    first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
             
 
             if output_json is None and first_block_error_message is None:

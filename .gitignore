@@ -13,6 +13,7 @@ tmp/
 .langchain.db/
 .plexus_training_data_cache/
 /scorecards/
+dashboard/scorecards/
 .plexus/
 .claude/scheduled_tasks.lock
 .codeql/

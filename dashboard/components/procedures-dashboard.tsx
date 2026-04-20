@@ -25,6 +25,19 @@ type ProcedureWithTask = Procedure & {
   task?: Task | null
 }
 
+const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
+  const startCandidate =
+    procedure.task?.startedAt ||
+    procedure.task?.createdAt ||
+    procedure.createdAt ||
+    procedure.updatedAt
+  const timestamp = startCandidate ? new Date(startCandidate).getTime() : 0
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
+  [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
+
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
@@ -308,12 +321,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         console.log('Most recent 5 procedures by API order:', recentProcedures)
       }
       
-      // Sort procedures in reverse chronological order (newest first)
-      const sortedData = data?.sort((a: Procedure, b: Procedure) => {
-        const dateA = new Date(a.updatedAt || a.createdAt)
-        const dateB = new Date(b.updatedAt || b.createdAt)
-        return dateB.getTime() - dateA.getTime()
-      }) || []
+      // Order by actual run start time instead of update time.
+      const sortedData = sortProceduresByStartTime(data || [])
       
       // Always replace with the first page — loadProcedures is a full reset
       setProcedures(sortedData)
@@ -386,7 +395,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         task: taskMap.get(procedure.id) ?? null
       }))
 
-      setProcedures(prev => [...prev, ...merged])
+      setProcedures(prev => sortProceduresByStartTime([...prev, ...merged]))
       setNextToken(newNextToken)
       setHasMore(!!newNextToken)
     } catch (err) {
@@ -420,8 +429,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               console.log(`Updating procedure ${metadata.procedure_id} with task data:`, data);
               
               // Update the procedures list with new task data, preserving stages
-              setProcedures(prevProcedures => 
-                prevProcedures.map(procedure => {
+              setProcedures(prevProcedures =>
+                sortProceduresByStartTime(prevProcedures.map(procedure => {
                   if (procedure.id === metadata.procedure_id) {
                     // Merge new task data with existing task, preserving stages
                     const updatedTask = procedure.task 
@@ -430,7 +439,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                     return { ...procedure, task: updatedTask };
                   }
                   return procedure;
-                })
+                }))
               );
             }
           } catch (error) {
@@ -449,8 +458,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         
         if (data?.taskId) {
           // Update the procedures list with new stage data
-          setProcedures(prevProcedures => 
-            prevProcedures.map((procedure: ProcedureWithTask) => {
+          setProcedures(prevProcedures =>
+            sortProceduresByStartTime(prevProcedures.map((procedure: ProcedureWithTask) => {
               if (procedure.task?.id === data.taskId) {
                 console.log(`Updating procedure ${procedure.id} stages with:`, data);
                 
@@ -484,7 +493,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 return { ...procedure, task: updatedTask };
               }
               return procedure;
-            })
+            }))
           );
         }
       },
@@ -514,7 +523,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           if (!procedure || procedure.accountId !== accountId) return;
           setProcedures(prev => {
             if (prev.some(p => p.id === procedure.id)) return prev;
-            return [{ ...procedure, task: null }, ...prev];
+            return sortProceduresByStartTime([{ ...procedure, task: null }, ...prev]);
           });
         },
         error: (error: Error) => console.error('Error in create procedure subscription:', error)
@@ -532,7 +541,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           const updated = data?.onUpdateProcedure;
           if (!updated || updated.accountId !== accountId) return;
           setProcedures(prev =>
-            prev.map(p => p.id === updated.id ? { ...p, ...updated } : p)
+            sortProceduresByStartTime(
+              prev.map(p => p.id === updated.id ? { ...p, ...updated } : p)
+            )
           );
         },
         error: (error: Error) => console.error('Error in update procedure subscription:', error)
@@ -619,10 +630,23 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }
 
   // Helper function to create Task with stages for a procedure
-  const createTaskWithStagesForProcedure = async (procedureId: string, accountId: string) => {
+  const createTaskWithStagesForProcedure = async (
+    procedureId: string,
+    accountId: string,
+    runParameters?: Record<string, any>,
+  ) => {
     console.log('[createTaskWithStagesForProcedure] Starting for procedure:', procedureId, 'account:', accountId)
     
     // Create Task
+    const metadata: Record<string, any> = {
+      type: 'Procedure',
+      procedure_id: procedureId,
+      task_type: 'Procedure',
+    }
+    if (runParameters && Object.keys(runParameters).length > 0) {
+      metadata.run_parameters = runParameters
+    }
+
     const taskInput = {
       accountId: accountId,
       type: 'Procedure',
@@ -631,11 +655,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       command: `procedure run ${procedureId}`,
       description: `Procedure workflow for ${procedureId}`,
       dispatchStatus: 'PENDING',
-      metadata: JSON.stringify({
-        type: 'Procedure',
-        procedure_id: procedureId,
-        task_type: 'Procedure'
-      })
+      metadata: JSON.stringify(metadata)
     }
 
     const taskResult = await getAmplifyClient().graphql({
@@ -822,7 +842,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         let createdTask = null
         try {
           console.log('Creating Task with stages for procedure:', newProcedure.id)
-          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id)
+          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id, parameters)
           console.log('✓ Task and stages created:', createdTask)
         } catch (taskError) {
           console.error('Failed to create Task for procedure:', taskError)

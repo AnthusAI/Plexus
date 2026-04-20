@@ -304,10 +304,14 @@ class TactusScore(Score):
         # CostEvent objects are dataclasses, not dicts — use getattr()
         if cost_breakdown:
             for call in cost_breakdown:
+                provider = getattr(call, 'provider', None)
+                model = getattr(call, 'model', None)
+                if (not provider) and isinstance(model, str) and "/" in model:
+                    provider = model.split("/", 1)[0]
                 from decimal import Decimal
                 self._cost_accumulator.add_api_call(
-                    provider='tactus',
-                    model=getattr(call, 'model', None),
+                    provider=str(provider or "tactus"),
+                    model=model,
                     prompt_tokens=getattr(call, 'prompt_tokens', 0),
                     completion_tokens=getattr(call, 'completion_tokens', 0),
                     cached_tokens=getattr(call, 'cache_tokens', 0) or 0,

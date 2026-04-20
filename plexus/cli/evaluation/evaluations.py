@@ -1513,6 +1513,7 @@ def _fetch_accuracy_evaluation_summary_for_json(evaluation_id: Optional[str]) ->
         "score_version_id": getattr(evaluation, "scoreVersionId", None),
         "dataset_id": parameters.get("dataset_id"),
         "baseline": metadata.get("baseline"),
+        "current_baseline": metadata.get("current_baseline"),
         "root_cause_required": parameters.get("root_cause_required"),
         "has_root_cause": bool(parameters.get("root_cause")),
         "incorrect_items_total": parameters.get("incorrect_items_total"),
@@ -2003,6 +2004,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--all-score-associated-datasets', is_flag=True, default=False, help='Run one evaluation per dataset associated with the score.')
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for before/after dashboard comparison.')
+@click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
 def accuracy(
@@ -2030,6 +2032,7 @@ def accuracy(
     all_score_associated_datasets: bool,
     allow_no_labels: bool,
     baseline: Optional[str],
+    current_baseline: Optional[str],
     json_only: bool,
     notes: Optional[str] = None,
     ):
@@ -2203,6 +2206,8 @@ def accuracy(
                 cmd.append("--allow-no-labels")
             if baseline:
                 cmd.extend(["--baseline", baseline])
+            if current_baseline:
+                cmd.extend(["--current-baseline", current_baseline])
             if json_only:
                 cmd.append("--json-only")
 
@@ -2379,13 +2384,16 @@ def accuracy(
                                 "sampling_method": sampling_method,
                                 "sample_size": number_of_samples,
                                 **({"notes": notes} if notes else {}),
-                                "metadata": {"baseline": baseline} if baseline else {},
+                                "metadata": {
+                                    **({"baseline": baseline} if baseline else {}),
+                                    **({"current_baseline": current_baseline} if current_baseline else {}),
+                                } if (baseline or current_baseline) else {},
                             }),
                             "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                             "estimatedRemainingSeconds": number_of_samples,
                             "taskId": task.id
                         }
-                        
+
                         # Add scoreVersionId if using API loading and version is specified
                         # Do not add scoreVersionId if using --yaml flag (local YAML files only contain champion versions)
                         if not yaml and resolved_version:
@@ -2450,7 +2458,10 @@ def accuracy(
                         "sampling_method": sampling_method,
                         "sample_size": number_of_samples,
                         **({"notes": notes} if notes else {}),
-                        "metadata": {"baseline": baseline} if baseline else {},
+                        "metadata": {
+                            **({"baseline": baseline} if baseline else {}),
+                            **({"current_baseline": current_baseline} if current_baseline else {}),
+                        } if (baseline or current_baseline) else {},
                     }),
                     "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
                     "estimatedRemainingSeconds": number_of_samples,
@@ -4101,6 +4112,7 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--sample-seed', default=None, type=int, help='Optional random seed (only valid when --sampling-mode random).')
 @click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20).')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
+@click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
@@ -4114,6 +4126,7 @@ def feedback(
     sample_seed: Optional[int],
     max_category_summary_items: int,
     baseline: Optional[str],
+    current_baseline: Optional[str],
     use_yaml: bool,
     task_id: Optional[str],
     notes: Optional[str] = None,
@@ -4451,8 +4464,9 @@ def feedback(
                         "mode": "accuracy_with_feedback_dataset",
                         **({"notes": notes} if notes else {}),
                         "metadata": {
-                            "baseline": baseline
-                        } if baseline else {}
+                            **({"baseline": baseline} if baseline else {}),
+                            **({"current_baseline": current_baseline} if current_baseline else {}),
+                        } if (baseline or current_baseline) else {}
                     }),
                     "taskId": task_id
                 }
@@ -4622,6 +4636,7 @@ def feedback(
 @click.option('--sample-seed', default=None, type=int, help='Optional random seed (only valid when --sampling-mode random)')
 @click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20)')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison')
+@click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--task-id', default=None, type=str, help='Optional explicit task ID used to correlate the run to an evaluation record')
 @click.option('--kanbus-issue-id', default=None, type=str, help='Optional Kanbus issue ID to receive standardized run summary comment')
 @click.option('--creation-timeout-seconds', default=180, type=int, help='Timeout waiting for evaluation record creation (default: 180)')
@@ -4638,6 +4653,7 @@ def feedback_runner(
     sample_seed: Optional[int],
     max_category_summary_items: int,
     baseline: Optional[str],
+    current_baseline: Optional[str],
     task_id: Optional[str],
     kanbus_issue_id: Optional[str],
     creation_timeout_seconds: int,
@@ -4678,6 +4694,7 @@ def feedback_runner(
         days=days,
         version=version,
         baseline=baseline,
+        current_baseline=current_baseline,
         max_items=max_items,
         sampling_mode=normalized_sampling_mode,
         sample_seed=sample_seed,
