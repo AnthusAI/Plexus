@@ -1,0 +1,49 @@
+{
+  "id": "plx-cd63156f-930a-49d1-874c-cbe5d95e6879",
+  "title": "Sync Plexus package version with semantic-release tags",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c9c07b03-685d-4d94-8d60-01eafebe6522",
+      "author": "derek",
+      "text": "Investigating semantic-release configuration: tags advance and plexus/_version.py updates, but pyproject.toml [tool.poetry].version remains 1.23.0, causing deployed package metadata to stay stale across tags.",
+      "created_at": "2026-04-20T22:23:54.396924194Z"
+    },
+    {
+      "id": "d13f18ed-0d68-4340-843d-f6884fff6126",
+      "author": "derek",
+      "text": "Implemented fix on branch fix/semantic-release-version-sync: (1) semantic-release now updates pyproject.toml tool.poetry.version via version_toml, (2) aligned current pyproject version to 1.34.0 to match plexus/_version.py, (3) added CI version-sync job to fail when pyproject and _version diverge.",
+      "created_at": "2026-04-20T22:24:35.750200899Z"
+    },
+    {
+      "id": "c7392d75-4cfc-434e-bf7f-ea20e812449f",
+      "author": "derek",
+      "text": "Pushed branch fix/semantic-release-version-sync with commits 3b993607, b0350cf0, 2dfd80c2. Working tree clean. Ready for PR to develop and CI validation.",
+      "created_at": "2026-04-20T22:24:50.620222045Z"
+    },
+    {
+      "id": "58b7befd-e18e-424c-b592-91d858c6cd6a",
+      "author": "derek",
+      "text": "Follow-up: release PR check failed because origin/develop drifted after merge from main (_version.py=1.35.0 while pyproject.toml stayed 1.34.0). Creating a small fix branch to align pyproject to 1.35.0.",
+      "created_at": "2026-04-20T22:37:13.537989655Z"
+    },
+    {
+      "id": "090ccf60-584e-454f-975a-90c51c5980dd",
+      "author": "derek",
+      "text": "Opened follow-up PR #190 to fix develop drift: https://github.com/AnthusAI/Plexus/pull/190. This aligns pyproject tool.poetry.version with _version.py at 1.35.0 so version-sync CI passes.",
+      "created_at": "2026-04-20T22:37:44.401216908Z"
+    }
+  ],
+  "created_at": "2026-04-20T22:23:51.732917451Z",
+  "updated_at": "2026-04-20T22:37:44.401216908Z",
+  "closed_at": null,
+  "custom": {}
+}
