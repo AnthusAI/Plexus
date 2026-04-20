@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "56bd12d0-07a7-4e74-aa95-037aa913935f",
+  "issue_id": "plx-6f2d5bc4-8763-4d82-9614-fe415d5a3307",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-20T17:58:18.199Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Detect and fail stale procedures after one hour"
+  }
+}

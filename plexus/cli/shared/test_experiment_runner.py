@@ -163,6 +163,37 @@ async def test_run_experiment_persists_failed_result_telemetry(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_experiment_launches_background_stale_timeout_scan(monkeypatch):
+    fake_task = _FakeTask()
+    fake_client = _FakeClient()
+    launched_scans = []
+
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout.launch_async_stale_timeout_scan",
+        lambda **kwargs: launched_scans.append(kwargs),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": True, "status": "completed", "message": "ok"}
+
+    _patch_service(monkeypatch, _run_impl)
+
+    result = await run_experiment_with_task_tracking(
+        procedure_id="proc-123",
+        client=fake_client,
+        account_id="acct-123",
+    )
+
+    assert result["status"] == "COMPLETED"
+    assert launched_scans == [{"account_id": "acct-123", "exclude_procedure_id": "proc-123"}]
+
+
+@pytest.mark.asyncio
 async def test_run_experiment_persists_sigterm_telemetry_and_reraises(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
