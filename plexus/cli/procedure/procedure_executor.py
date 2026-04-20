@@ -129,6 +129,7 @@ def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_even
         inference_total = 0.0
         by_agent: Dict[str, float] = {}
         by_model: Dict[str, float] = {}
+        grouped_breakdown: Dict[str, Dict[str, Any]] = {}
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -145,11 +146,51 @@ def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_even
             if isinstance(model_name, str) and model_name:
                 by_model[model_name] = by_model.get(model_name, 0.0) + entry_cost
 
+            provider_name = entry.get("provider")
+            provider_key = provider_name if isinstance(provider_name, str) and provider_name else ""
+            model_key = model_name if isinstance(model_name, str) and model_name else ""
+            breakdown_key = f"{provider_key}|{model_key}"
+            row = grouped_breakdown.get(breakdown_key)
+            if row is None:
+                row = {
+                    "provider": provider_key or None,
+                    "model": model_key or None,
+                    "spent_usd": 0.0,
+                    "reused_usd": 0.0,
+                    "referenced_usd": 0.0,
+                    "llm_calls": 0,
+                    "evaluation_runs": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "cached_tokens": 0,
+                }
+                grouped_breakdown[breakdown_key] = row
+
+            prompt_tokens = _to_int(entry.get("prompt_tokens")) or 0
+            completion_tokens = _to_int(entry.get("completion_tokens")) or 0
+            total_tokens = _to_int(entry.get("total_tokens"))
+            if total_tokens is None:
+                total_tokens = prompt_tokens + completion_tokens
+            row["spent_usd"] += entry_cost
+            row["referenced_usd"] += entry_cost
+            row["llm_calls"] += 1
+            row["prompt_tokens"] += prompt_tokens
+            row["completion_tokens"] += completion_tokens
+            row["total_tokens"] += total_tokens
+            if entry.get("cache_hit") is True:
+                row["cached_tokens"] += total_tokens
+
         inference["entries"] = entries
         inference["seen_signatures"] = seen_signatures
         inference["total"] = inference_total
         inference["by_agent"] = by_agent
         inference["by_model"] = by_model
+        inference["breakdown"] = sorted(
+            grouped_breakdown.values(),
+            key=lambda item: float(item.get("referenced_usd", 0.0)),
+            reverse=True,
+        )
         costs["inference"] = inference
 
         evaluation = costs.get("evaluation") or {}

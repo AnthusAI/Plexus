@@ -31,6 +31,7 @@ class Evaluation(BaseModel):
     inferences: Optional[int] = None
     accuracy: Optional[float] = None
     cost: Optional[float] = None
+    costDetails: Optional[Dict] = None
     startedAt: Optional[datetime] = None
     elapsedSeconds: Optional[int] = None
     estimatedRemainingSeconds: Optional[int] = None
@@ -63,6 +64,7 @@ class Evaluation(BaseModel):
         inferences: Optional[int] = None,
         accuracy: Optional[float] = None,
         cost: Optional[float] = None,
+        costDetails: Optional[Dict] = None,
         startedAt: Optional[datetime] = None,
         elapsedSeconds: Optional[int] = None,
         estimatedRemainingSeconds: Optional[int] = None,
@@ -92,6 +94,7 @@ class Evaluation(BaseModel):
         self.inferences = inferences
         self.accuracy = accuracy
         self.cost = cost
+        self.costDetails = costDetails
         self.startedAt = startedAt
         self.elapsedSeconds = elapsedSeconds
         self.estimatedRemainingSeconds = estimatedRemainingSeconds
@@ -125,6 +128,7 @@ class Evaluation(BaseModel):
             inferences
             accuracy
             cost
+            costDetails
             startedAt
             elapsedSeconds
             estimatedRemainingSeconds
@@ -211,6 +215,7 @@ class Evaluation(BaseModel):
             inferences=data.get('inferences'),
             accuracy=data.get('accuracy'),
             cost=data.get('cost'),
+            costDetails=data.get('costDetails'),
             startedAt=data.get('startedAt'),
             elapsedSeconds=data.get('elapsedSeconds'),
             estimatedRemainingSeconds=data.get('estimatedRemainingSeconds'),

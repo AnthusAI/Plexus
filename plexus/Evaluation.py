@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import traceback
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
 from requests.exceptions import Timeout, RequestException
@@ -92,6 +92,80 @@ class Evaluation:
     The Evaluation class is commonly used during model development to measure performance
     and during production to monitor for accuracy drift.
     """
+
+    @staticmethod
+    def build_cost_details_from_expenses(expenses: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a compact provider/model cost summary from scorecard expenses."""
+        if not isinstance(expenses, dict):
+            return {
+                "schema_version": 1,
+                "total_usd": 0.0,
+                "llm_calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cached_tokens": 0,
+                "breakdown": [],
+            }
+
+        grouped: Dict[Tuple[Optional[str], Optional[str]], Dict[str, Any]] = {}
+        components = expenses.get("components")
+        if isinstance(components, list):
+            for component in components:
+                if not isinstance(component, dict):
+                    continue
+                if component.get("type") != "api_call":
+                    continue
+                provider_raw = component.get("provider")
+                model_raw = component.get("model")
+                provider = str(provider_raw) if isinstance(provider_raw, str) and provider_raw else None
+                model = str(model_raw) if isinstance(model_raw, str) and model_raw else None
+                key = (provider, model)
+                row = grouped.setdefault(
+                    key,
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "spent_usd": 0.0,
+                        "reused_usd": 0.0,
+                        "referenced_usd": 0.0,
+                        "llm_calls": 0,
+                        "evaluation_runs": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cached_tokens": 0,
+                    },
+                )
+                usd = float(component.get("usd") or 0.0)
+                prompt_tokens = int(component.get("prompt_tokens") or 0)
+                completion_tokens = int(component.get("completion_tokens") or 0)
+                cached_tokens = int(component.get("cached_tokens") or 0)
+                row["spent_usd"] += usd
+                row["referenced_usd"] += usd
+                row["llm_calls"] += 1
+                row["prompt_tokens"] += prompt_tokens
+                row["completion_tokens"] += completion_tokens
+                row["total_tokens"] += prompt_tokens + completion_tokens
+                row["cached_tokens"] += cached_tokens
+
+        breakdown = list(grouped.values())
+        breakdown.sort(key=lambda item: item.get("referenced_usd", 0), reverse=True)
+
+        prompt_tokens = int(expenses.get("prompt_tokens") or 0)
+        completion_tokens = int(expenses.get("completion_tokens") or 0)
+        cached_tokens = int(expenses.get("cached_tokens") or 0)
+        total_tokens = prompt_tokens + completion_tokens
+        return {
+            "schema_version": 1,
+            "total_usd": float(expenses.get("total_cost") or 0.0),
+            "llm_calls": int(expenses.get("llm_calls") or expenses.get("api_calls") or 0),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "cached_tokens": cached_tokens,
+            "breakdown": breakdown,
+        }
 
     def __init__(self, *,
         scorecard_name: str,
@@ -1580,6 +1654,7 @@ class Evaluation:
                 total_cost = expenses.get('total_cost', 0)
                 if total_cost > 0:
                     update_input["cost"] = float(total_cost)
+                update_input["costDetails"] = self.build_cost_details_from_expenses(expenses)
         except Exception as e:
             logging.debug(f"Could not get accumulated costs: {e}")
         
@@ -2806,6 +2881,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'total_items': evaluation.totalItems,
                 'processed_items': evaluation.processedItems,
                 'cost': evaluation.cost,
+                'cost_details': evaluation.costDetails,
                 'elapsed_seconds': evaluation.elapsedSeconds,
                 'estimated_remaining_seconds': evaluation.estimatedRemainingSeconds,
                 'started_at': evaluation.startedAt.isoformat() if evaluation.startedAt else None,
@@ -5444,3 +5520,76 @@ class AccuracyEvaluation(Evaluation):
             use_cache=True,  # Use cached YAML files when available (supports --yaml mode)
             yaml_only=False  # Allow API calls if needed
         )
+    @staticmethod
+    def build_cost_details_from_expenses(expenses: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a compact provider/model cost summary from scorecard expenses."""
+        if not isinstance(expenses, dict):
+            return {
+                "schema_version": 1,
+                "total_usd": 0.0,
+                "llm_calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cached_tokens": 0,
+                "breakdown": [],
+            }
+
+        grouped: Dict[Tuple[Optional[str], Optional[str]], Dict[str, Any]] = {}
+        components = expenses.get("components")
+        if isinstance(components, list):
+            for component in components:
+                if not isinstance(component, dict):
+                    continue
+                if component.get("type") != "api_call":
+                    continue
+                provider_raw = component.get("provider")
+                model_raw = component.get("model")
+                provider = str(provider_raw) if isinstance(provider_raw, str) and provider_raw else None
+                model = str(model_raw) if isinstance(model_raw, str) and model_raw else None
+                key = (provider, model)
+                row = grouped.setdefault(
+                    key,
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "spent_usd": 0.0,
+                        "reused_usd": 0.0,
+                        "referenced_usd": 0.0,
+                        "llm_calls": 0,
+                        "evaluation_runs": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cached_tokens": 0,
+                    },
+                )
+                usd = float(component.get("usd") or 0.0)
+                prompt_tokens = int(component.get("prompt_tokens") or 0)
+                completion_tokens = int(component.get("completion_tokens") or 0)
+                cached_tokens = int(component.get("cached_tokens") or 0)
+                row["spent_usd"] += usd
+                row["referenced_usd"] += usd
+                row["llm_calls"] += 1
+                row["prompt_tokens"] += prompt_tokens
+                row["completion_tokens"] += completion_tokens
+                row["total_tokens"] += prompt_tokens + completion_tokens
+                row["cached_tokens"] += cached_tokens
+
+        breakdown = list(grouped.values())
+        breakdown.sort(key=lambda item: item.get("referenced_usd", 0), reverse=True)
+
+        prompt_tokens = int(expenses.get("prompt_tokens") or 0)
+        completion_tokens = int(expenses.get("completion_tokens") or 0)
+        cached_tokens = int(expenses.get("cached_tokens") or 0)
+        total_tokens = prompt_tokens + completion_tokens
+        return {
+            "schema_version": 1,
+            "total_usd": float(expenses.get("total_cost") or 0.0),
+            "llm_calls": int(expenses.get("llm_calls") or expenses.get("api_calls") or 0),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "cached_tokens": cached_tokens,
+            "breakdown": breakdown,
+        }
