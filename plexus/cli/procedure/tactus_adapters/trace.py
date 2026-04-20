@@ -56,6 +56,17 @@ class PlexusTraceSink:
         self._session_context: Optional[Dict[str, Any]] = None
         self._agent_cost_summaries: Dict[str, Dict[str, Any]] = {}
         self._message_metadata_cache: Dict[str, Dict[str, Any]] = {}
+        self._active_turn_agent_name: Optional[str] = None
+        self._recent_assistant_message_ids: Dict[str, Tuple[str, float]] = {}
+        self._recent_finalized_message_ids: Dict[str, Tuple[str, float]] = {}
+
+    def _resolve_agent_name(self, event: Any, *, default: str = "assistant") -> str:
+        explicit = _event_field(event, "agent_name")
+        if isinstance(explicit, str) and explicit.strip():
+            return explicit.strip()
+        if isinstance(self._active_turn_agent_name, str) and self._active_turn_agent_name.strip():
+            return self._active_turn_agent_name.strip()
+        return default
 
     def _empty_cost_summary(self) -> Dict[str, Any]:
         return {
@@ -225,25 +236,43 @@ class PlexusTraceSink:
         summary = self._agent_cost_summaries.get(agent_name)
         if not isinstance(summary, dict):
             return None
+        finalized = self._finalize_summary(summary)
+        if (
+            float(finalized.get("total_usd", 0.0) or 0.0) <= 0.0
+            and int(finalized.get("llm_calls", 0) or 0) <= 0
+            and not (finalized.get("breakdown") or [])
+        ):
+            return None
         return {
             "cost": {
                 "kind": "assistant_inference",
                 "billing_mode": "spent",
                 "live": live,
-                "summary": self._finalize_summary(summary),
+                "summary": finalized,
             }
         }
 
     async def _record_cost_event(self, event: Any) -> None:
-        agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+        agent_name = self._resolve_agent_name(event)
         increment = self._summary_from_cost_event(event)
         merged_summary = self._merge_cost_summaries(self._agent_cost_summaries.get(agent_name), increment)
         self._agent_cost_summaries[agent_name] = merged_summary
         message_id = self._active_stream_message_ids.get(agent_name)
+        live = True
+        if not message_id:
+            recent = self._recent_assistant_message_ids.get(agent_name)
+            if recent and (time.monotonic() - recent[1]) <= 30:
+                message_id = recent[0]
+                live = False
+            if not message_id:
+                finalized = self._recent_finalized_message_ids.get(agent_name)
+                if finalized and (time.monotonic() - finalized[1]) <= 30:
+                    message_id = finalized[0]
+                    live = False
         if message_id:
             metadata = self._merged_metadata(
                 message_id,
-                self._agent_cost_metadata(agent_name, live=True),
+                self._agent_cost_metadata(agent_name, live=live),
             )
             await self.chat_recorder.update_message(
                 message_id=message_id,
@@ -376,7 +405,7 @@ class PlexusTraceSink:
         return bool(self.session_id)
 
     async def _record_stream_chunk(self, event: Any) -> Optional[str]:
-        agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+        agent_name = self._resolve_agent_name(event)
         chunk_text = str(_event_field(event, "chunk_text", default="") or "")
         accumulated_text = str(_event_field(event, "accumulated_text", default="") or "")
         if not accumulated_text:
@@ -513,9 +542,11 @@ class PlexusTraceSink:
         )
 
         normalized = final_text.strip()
+        now_mono = time.monotonic()
         if normalized:
             self.assistant_message_texts.append(normalized)
-            self._recent_finalized_streams[agent_name] = (normalized, time.monotonic())
+            self._recent_finalized_streams[agent_name] = (normalized, now_mono)
+        self._recent_finalized_message_ids[agent_name] = (message_id, now_mono)
 
         self._active_stream_chunk_counts.pop(agent_name, None)
         self._active_stream_first_chunk_received_at.pop(agent_name, None)
@@ -574,15 +605,19 @@ class PlexusTraceSink:
         if event_type == "agent_turn":
             stage = str(_event_field(event, "stage", default="") or "").strip().lower()
             if stage == "completed":
-                agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+                agent_name = self._resolve_agent_name(event)
                 result = await self._finalize_stream_for_agent(
                     agent_name=agent_name,
                     timestamp=_event_field(event, "timestamp"),
                 )
-                self._agent_cost_summaries.pop(agent_name, None)
+                # Keep summary available briefly because CostEvent can arrive
+                # after AgentTurnEvent(completed) in some runtimes.
+                if self._active_turn_agent_name == agent_name:
+                    self._active_turn_agent_name = None
                 return result
             if stage == "started":
-                agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+                agent_name = self._resolve_agent_name(event)
+                self._active_turn_agent_name = agent_name
                 self._agent_cost_summaries[agent_name] = self._empty_cost_summary()
             return None
 
@@ -620,7 +655,7 @@ class PlexusTraceSink:
             return None
 
         if role == "ASSISTANT" and message_type == "MESSAGE":
-            agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+            agent_name = self._resolve_agent_name(event)
             recent_stream = self._recent_finalized_streams.get(agent_name)
             if recent_stream:
                 streamed_text, finalized_at = recent_stream
@@ -638,7 +673,7 @@ class PlexusTraceSink:
         tool_name = _event_field(event, "tool_name")
         message_metadata = _event_field(event, "metadata")
         if role == "ASSISTANT" and message_type == "MESSAGE":
-            agent_name = str(_event_field(event, "agent_name", default="assistant") or "assistant")
+            agent_name = self._resolve_agent_name(event)
             cost_patch = self._agent_cost_metadata(agent_name, live=True)
             if isinstance(cost_patch, dict):
                 message_metadata = dict(message_metadata) if isinstance(message_metadata, dict) else {}
@@ -723,6 +758,9 @@ class PlexusTraceSink:
         )
         if message_id and isinstance(message_metadata, dict):
             self._message_metadata_cache[message_id] = message_metadata
+        if message_id and role == "ASSISTANT" and message_type == "MESSAGE":
+            agent_name = self._resolve_agent_name(event)
+            self._recent_assistant_message_ids[agent_name] = (message_id, time.monotonic())
 
         if event_kind == "TOOL_CALL" and message_id and tool_name:
             key = str(tool_name)

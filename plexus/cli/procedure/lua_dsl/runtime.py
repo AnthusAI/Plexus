@@ -311,7 +311,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -347,7 +347,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -383,7 +383,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
