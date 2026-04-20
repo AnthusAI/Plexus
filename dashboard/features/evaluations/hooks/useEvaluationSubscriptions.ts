@@ -8,6 +8,34 @@ import {
   TASK_STAGE_UPDATE_SUBSCRIPTION 
 } from '../graphql/queries'
 
+const formatSubscriptionError = (error: unknown) => {
+  const source = error as any
+  const graphQLErrors = source?.errors ?? source?.graphQLErrors ?? null
+  const networkError = source?.networkError ?? null
+  const message =
+    (typeof source?.message === 'string' && source.message) ||
+    (Array.isArray(graphQLErrors) && graphQLErrors.length > 0 ? String(graphQLErrors[0]?.message || '') : '') ||
+    ''
+
+  let raw: string | null = null
+  try {
+    if (error == null) raw = null
+    else if (typeof error === 'string') raw = error
+    else raw = JSON.stringify(error, Object.getOwnPropertyNames(error as object))
+  } catch {
+    raw = String(error)
+  }
+
+  return {
+    name: source?.name ?? null,
+    message: message || null,
+    graphQLErrors,
+    networkError,
+    raw,
+    isEmpty: !message && !graphQLErrors && !networkError && (raw === '{}' || raw === null),
+  }
+}
+
 interface UseEvaluationSubscriptionsProps {
   accountId: string | null
   onEvaluationUpdate: (evaluation: Schema['Evaluation']['type']) => void
@@ -40,7 +68,12 @@ export function useEvaluationSubscriptions({
         }
       },
       error: (error: Error) => {
-        console.error('Error in evaluation update subscription:', error)
+        const details = formatSubscriptionError(error)
+        if (details.isEmpty) {
+          console.warn('Evaluation update subscription emitted an empty error payload (likely transient transport reconnect).', details)
+          return
+        }
+        console.error('Error in evaluation update subscription:', details)
       }
     })
     subscriptions.push(evaluationSub)
@@ -60,7 +93,12 @@ export function useEvaluationSubscriptions({
         }
       },
       error: (error: Error) => {
-        console.error('Error in task update subscription:', error)
+        const details = formatSubscriptionError(error)
+        if (details.isEmpty) {
+          console.warn('Task update subscription emitted an empty error payload (likely transient transport reconnect).', details)
+          return
+        }
+        console.error('Error in task update subscription:', details)
       }
     })
     subscriptions.push(taskSub)
@@ -79,7 +117,12 @@ export function useEvaluationSubscriptions({
         }
       },
       error: (error: Error) => {
-        console.error('Error in task stage update subscription:', error)
+        const details = formatSubscriptionError(error)
+        if (details.isEmpty) {
+          console.warn('Task stage update subscription emitted an empty error payload (likely transient transport reconnect).', details)
+          return
+        }
+        console.error('Error in task stage update subscription:', details)
       }
     })
     subscriptions.push(stageSub)

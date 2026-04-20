@@ -19,6 +19,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _evaluation_cost_details_enabled() -> bool:
+    """Cost details are stored in parameters.metadata; GraphQL field is disabled."""
+    return False
+
 @dataclass
 class Evaluation(BaseModel):
     type: str
@@ -116,7 +121,7 @@ class Evaluation(BaseModel):
     @classmethod
     def fields(cls) -> str:
         """Fields to request in queries and mutations"""
-        return """
+        fields = """
             id
             type
             accountId
@@ -128,7 +133,6 @@ class Evaluation(BaseModel):
             inferences
             accuracy
             cost
-            costDetails
             startedAt
             elapsedSeconds
             estimatedRemainingSeconds
@@ -147,6 +151,9 @@ class Evaluation(BaseModel):
             isPredictedClassDistributionBalanced
             taskId
         """
+        if _evaluation_cost_details_enabled():
+            fields = fields.replace("            cost\n", "            cost\n            costDetails\n")
+        return fields
 
     @classmethod
     def create(
@@ -172,6 +179,8 @@ class Evaluation(BaseModel):
             'updatedAt': now,
             **kwargs
         }
+        if not _evaluation_cost_details_enabled():
+            input_data.pop('costDetails', None)
         
         if scorecardId:
             input_data['scorecardId'] = scorecardId
@@ -250,6 +259,8 @@ class Evaluation(BaseModel):
             kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
                 '+00:00', 'Z'
             )
+            if not _evaluation_cost_details_enabled():
+                kwargs.pop("costDetails", None)
 
             mutation = """
             mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
