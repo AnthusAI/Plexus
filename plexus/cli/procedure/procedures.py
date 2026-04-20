@@ -704,9 +704,14 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         status = result.get('status', 'unknown')
         status_color = {
             'completed': 'green',
+            'COMPLETED': 'green',
             'running': 'yellow', 
+            'RUNNING': 'yellow',
+            'WAITING_FOR_HUMAN': 'yellow',
             'initiated': 'blue',
-            'error': 'red'
+            'error': 'red',
+            'FAILED': 'red',
+            'failed': 'red',
         }.get(status, 'white')
         
         console.print(f"[{status_color}]✓ {result.get('message', 'Procedure run completed')}[/{status_color}]")
@@ -1324,7 +1329,17 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
         console.print(_json.dumps(result, indent=2, default=str))
     else:
         status = result.get('status', 'unknown')
-        color = {'completed': 'green', 'running': 'yellow', 'initiated': 'blue', 'error': 'red'}.get(status, 'white')
+        color = {
+            'completed': 'green',
+            'COMPLETED': 'green',
+            'running': 'yellow',
+            'RUNNING': 'yellow',
+            'WAITING_FOR_HUMAN': 'yellow',
+            'initiated': 'blue',
+            'error': 'red',
+            'FAILED': 'red',
+            'failed': 'red',
+        }.get(status, 'white')
         console.print(f"[{color}]{result.get('message', 'Continuation dispatched')}[/{color}]")
         console.print(f"Procedure: {procedure_id} | Task: {result.get('task_id', 'N/A')}")
 
@@ -1401,7 +1416,17 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
         console.print(_json.dumps({**info, **result}, indent=2, default=str))
     else:
         status = result.get('status', 'unknown')
-        color = {'completed': 'green', 'running': 'yellow', 'initiated': 'blue', 'error': 'red'}.get(status, 'white')
+        color = {
+            'completed': 'green',
+            'COMPLETED': 'green',
+            'running': 'yellow',
+            'RUNNING': 'yellow',
+            'WAITING_FOR_HUMAN': 'yellow',
+            'initiated': 'blue',
+            'error': 'red',
+            'FAILED': 'red',
+            'failed': 'red',
+        }.get(status, 'white')
         console.print(f"[{color}]{result.get('message', 'Branch dispatched')}[/{color}]")
         console.print(f"Branch procedure: {target_id} | Task: {result.get('task_id', 'N/A')}")
 

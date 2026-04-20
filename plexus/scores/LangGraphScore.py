@@ -929,21 +929,102 @@ class LangGraphScore(Score, LangChainUser):
         :return: A dictionary containing cost and usage information.
         """
         usage = self.get_token_usage()
+        components = []
+        total_input_cost = 0.0
+        total_output_cost = 0.0
 
-        try:
-            prompt_cost, completion_cost = _litellm.cost_per_token(
-                model=self.parameters.model_name,
-                prompt_tokens=usage['prompt_tokens'],
-                completion_tokens=usage['completion_tokens']
-            )
-            cost_info = {
-                "input_cost": float(prompt_cost),
-                "output_cost": float(completion_cost),
-                "total_cost": float(prompt_cost + completion_cost),
+        def _normalize_provider(provider_name: Optional[str]) -> Optional[str]:
+            if not provider_name:
+                return None
+            normalized = str(provider_name).strip().lower()
+            mapping = {
+                "chatopenai": "openai",
+                "azurechatopenai": "azure_openai",
+                "bedrockchat": "bedrock",
+                "chatvertexai": "vertexai",
+                "chatollama": "ollama",
             }
-        except Exception as e:
-            logging.error(f"Error calculating cost: {str(e)}")
-            cost_info = {"input_cost": 0, "output_cost": 0, "total_cost": 0}
+            return mapping.get(normalized, normalized)
+
+        node_instances = getattr(self, "node_instances", None)
+        if isinstance(node_instances, list):
+            for node_name, node_instance in node_instances:
+                if not hasattr(node_instance, "get_token_usage"):
+                    continue
+                try:
+                    node_usage = node_instance.get_token_usage() or {}
+                except Exception as e:
+                    logging.error(f"Error getting token usage for node '{node_name}': {str(e)}")
+                    continue
+
+                prompt_tokens = int(node_usage.get("prompt_tokens", 0) or 0)
+                completion_tokens = int(node_usage.get("completion_tokens", 0) or 0)
+                total_tokens = int(node_usage.get("total_tokens", prompt_tokens + completion_tokens) or 0)
+                cached_tokens = int(node_usage.get("cached_tokens", 0) or 0)
+                llm_calls = int(node_usage.get("successful_requests", 0) or 0)
+                if llm_calls <= 0 and total_tokens <= 0:
+                    continue
+
+                node_params = getattr(node_instance, "parameters", None)
+                model_name = (
+                    getattr(node_params, "model_name", None)
+                    or self.parameters.model_name
+                )
+                provider_name = _normalize_provider(
+                    getattr(node_params, "model_provider", None) or self.parameters.model_provider
+                )
+
+                prompt_cost = 0.0
+                completion_cost = 0.0
+                if model_name:
+                    try:
+                        node_prompt_cost, node_completion_cost = _litellm.cost_per_token(
+                            model=model_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                        )
+                        prompt_cost = float(node_prompt_cost)
+                        completion_cost = float(node_completion_cost)
+                    except Exception as e:
+                        logging.error(f"Error calculating cost for node '{node_name}': {str(e)}")
+
+                total_input_cost += prompt_cost
+                total_output_cost += completion_cost
+                components.append({
+                    "type": "api_call",
+                    "provider": provider_name,
+                    "model": model_name,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cached_tokens": cached_tokens,
+                    "llm_calls": llm_calls,
+                    "usd": float(prompt_cost + completion_cost),
+                    "metadata": {"node_name": node_name},
+                })
+
+        if not components:
+            try:
+                prompt_cost, completion_cost = _litellm.cost_per_token(
+                    model=self.parameters.model_name,
+                    prompt_tokens=usage['prompt_tokens'],
+                    completion_tokens=usage['completion_tokens']
+                )
+                total_input_cost = float(prompt_cost)
+                total_output_cost = float(completion_cost)
+                if usage['total_tokens'] > 0 or usage['successful_requests'] > 0:
+                    components.append({
+                        "type": "api_call",
+                        "provider": _normalize_provider(self.parameters.model_provider),
+                        "model": self.parameters.model_name,
+                        "prompt_tokens": usage['prompt_tokens'],
+                        "completion_tokens": usage['completion_tokens'],
+                        "cached_tokens": usage['cached_tokens'],
+                        "llm_calls": usage['successful_requests'],
+                        "usd": float(total_input_cost + total_output_cost),
+                        "metadata": {"node_name": "score"},
+                    })
+            except Exception as e:
+                logging.error(f"Error calculating cost: {str(e)}")
 
         return {
             "prompt_tokens":     usage['prompt_tokens'],
@@ -951,9 +1032,10 @@ class LangGraphScore(Score, LangChainUser):
             "total_tokens":      usage['total_tokens'],
             "llm_calls":         usage['successful_requests'],
             "cached_tokens":     usage['cached_tokens'],
-            "input_cost":        cost_info['input_cost'],
-            "output_cost":       cost_info['output_cost'],
-            "total_cost":        cost_info['total_cost']
+            "input_cost":        total_input_cost,
+            "output_cost":       total_output_cost,
+            "total_cost":        float(total_input_cost + total_output_cost),
+            "components":        components,
         }
 
     def reset_token_usage(self):
@@ -1685,4 +1767,3 @@ class LangGraphScore(Score, LangChainUser):
                        for item in result.get('listBatchJobScoringJobs', {}).get('items', [])]
         logging.info(f"Found {len(scoring_jobs)} scoring jobs for batch {batch_job_id}")
         return scoring_jobs
-
