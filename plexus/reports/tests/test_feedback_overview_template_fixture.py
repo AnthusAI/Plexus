@@ -21,7 +21,6 @@ def test_feedback_overview_template_days_window_renders_three_blocks_with_shared
             "timezone": "UTC",
             "week_start": "monday",
             "show_bucket_details": False,
-            "max_items": 200,
             "mode": "contradictions",
             "max_feedback_items": 400,
             "num_topics": 8,
@@ -31,8 +30,8 @@ def test_feedback_overview_template_days_window_renders_three_blocks_with_shared
 
     blocks = _parse_report_configuration(rendered)
     assert [block["class_name"] for block in blocks] == [
+        "FeedbackVolumeTimeline",
         "FeedbackAlignmentTimeline",
-        "AcceptanceRate",
         "FeedbackContradictions",
     ]
 
@@ -58,7 +57,6 @@ def test_feedback_overview_template_explicit_window_overrides_days() -> None:
             "timezone": "UTC",
             "week_start": "monday",
             "show_bucket_details": True,
-            "max_items": 200,
             "mode": "contradictions",
             "max_feedback_items": 400,
             "num_topics": 8,
