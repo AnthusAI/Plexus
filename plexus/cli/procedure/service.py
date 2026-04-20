@@ -3315,7 +3315,7 @@ Based on this data, you should prioritize examining error types with the highest
 
             # Run the evaluation (reuse existing method)
             evaluation_results_json = await self._run_evaluation_for_procedure(
-                procedure_id=procedure_info.procedure.id,
+                procedure_id=node.procedureId,
                 scorecard_name=scorecard_name,
                 score_name=score_name,
                 score_version_id=score_version_id,
