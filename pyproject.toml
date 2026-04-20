@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "plexus"
-version = "1.23.0"
+version = "1.34.0"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
 license = "MIT"
@@ -118,6 +118,7 @@ exclude_lines = [
 
 [tool.semantic_release]
 version_source = "tag"
+version_toml = ["pyproject.toml:tool.poetry.version"]
 version_variables = ["plexus/_version.py:__version__"]
 commit_message = "chore: release {version}"
 major_on_zero = false
