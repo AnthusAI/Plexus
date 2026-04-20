@@ -946,6 +946,16 @@ class LangGraphScore(Score, LangChainUser):
             }
             return mapping.get(normalized, normalized)
 
+        def _coerce_model_name(node_params: Any) -> Optional[str]:
+            node_model_name = getattr(node_params, "model_name", None)
+            if isinstance(node_model_name, str) and node_model_name.strip():
+                return node_model_name.strip()
+
+            score_model_name = getattr(self.parameters, "model_name", None)
+            if isinstance(score_model_name, str) and score_model_name.strip():
+                return score_model_name.strip()
+            return None
+
         node_instances = getattr(self, "node_instances", None)
         if isinstance(node_instances, list):
             for node_name, node_instance in node_instances:
@@ -966,10 +976,7 @@ class LangGraphScore(Score, LangChainUser):
                     continue
 
                 node_params = getattr(node_instance, "parameters", None)
-                model_name = (
-                    getattr(node_params, "model_name", None)
-                    or self.parameters.model_name
-                )
+                model_name = _coerce_model_name(node_params)
                 provider_name = _normalize_provider(
                     getattr(node_params, "model_provider", None) or self.parameters.model_provider
                 )
