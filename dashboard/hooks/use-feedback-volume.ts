@@ -50,6 +50,38 @@ const SCORE_FEEDBACK_ITEMS_QUERY = `
   }
 `;
 
+const ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
+  query ListFeedbackItemByAccountIdAndUpdatedAt(
+    $accountId: String!
+    $updatedAt: ModelStringKeyConditionInput
+    $limit: Int
+    $nextToken: String
+    $sortDirection: ModelSortDirection
+  ) {
+    listFeedbackItemByAccountIdAndUpdatedAt(
+      accountId: $accountId
+      updatedAt: $updatedAt
+      limit: $limit
+      nextToken: $nextToken
+      sortDirection: $sortDirection
+    ) {
+      items {
+        id
+        scorecardId
+        scoreId
+        itemId
+        initialAnswerValue
+        finalAnswerValue
+        isInvalid
+        editedAt
+        updatedAt
+        createdAt
+      }
+      nextToken
+    }
+  }
+`;
+
 const SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
   query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
     $accountId: String!
@@ -105,7 +137,7 @@ interface UseFeedbackVolumeState {
   data: FeedbackVolumeDashboardData | null;
 }
 
-async function fetchScorecardsForAccount(accountId: string): Promise<FeedbackVolumeNamedEntity[]> {
+async function fetchScorecards(): Promise<FeedbackVolumeNamedEntity[]> {
   const client = getClient();
   let nextToken: string | undefined;
   const scorecards: FeedbackVolumeNamedEntity[] = [];
@@ -113,7 +145,7 @@ async function fetchScorecardsForAccount(accountId: string): Promise<FeedbackVol
   do {
     const result = await listFromModel<Schema["Scorecard"]["type"]>(
       client.models.Scorecard,
-      { accountId: { eq: accountId } },
+      undefined,
       nextToken,
       1000
     );
@@ -268,6 +300,19 @@ async function fetchFeedbackItemsByScoreAndUpdatedAt(
   }, "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt");
 }
 
+async function fetchFeedbackItemsByAccountAndUpdatedAt(
+  accountId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FeedbackVolumeSourceItem[]> {
+  return paginatedFeedbackQuery(ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY, {
+    accountId,
+    updatedAt: {
+      between: [startDate.toISOString(), endDate.toISOString()],
+    },
+  }, "listFeedbackItemByAccountIdAndUpdatedAt");
+}
+
 async function fetchFeedbackItemsByScoreWindow(
   accountId: string,
   scorecardId: string,
@@ -334,18 +379,10 @@ async function loadFeedbackVolumeDashboardData({
     bucketType ?? pickAutoFeedbackVolumeBucketType(window.start, window.end);
 
   if (scope === "account") {
-    const scorecards = await fetchScorecardsForAccount(accountId);
-    const scoresByScorecard = await mapWithConcurrency(scorecards, 4, async (scorecard) => ({
-      scorecardId: scorecard.id,
-      scores: await fetchScoresForScorecard(scorecard.id),
-    }));
-    const scopedScores = scoresByScorecard.flatMap(({ scorecardId, scores }) =>
-      scores.map((score) => ({ scorecardId, scoreId: score.id }))
-    );
-    const perScoreItems = await mapWithConcurrency(scopedScores, 4, async ({ scorecardId, scoreId }) =>
-      fetchFeedbackItemsByScoreWindow(accountId, scorecardId, scoreId, window.start, window.end)
-    );
-    const items = mergeAndDedupeFeedbackItems(perScoreItems.flat());
+    const [scorecards, items] = await Promise.all([
+      fetchScorecards(),
+      fetchFeedbackItemsByAccountAndUpdatedAt(accountId, window.start, window.end),
+    ]);
 
     return buildFeedbackVolumeDashboardData({
       scope,
@@ -363,7 +400,7 @@ async function loadFeedbackVolumeDashboardData({
   }
 
   const [scorecards, scores] = await Promise.all([
-    fetchScorecardsForAccount(accountId),
+    fetchScorecards(),
     fetchScoresForScorecard(scorecardId),
   ]);
 
