@@ -40,10 +40,16 @@
       "author": "derek",
       "text": "Fix branch pushed: bugfix/report-share-identitypool-auth (commit 6cb41477). Report page auth mode now mirrors evaluations: userPool when authenticated, identityPool guest when unauthenticated (no apiKey dependency in report fetch paths).",
       "created_at": "2026-04-20T18:43:29.646006734Z"
+    },
+    {
+      "id": "560d78e9-e08c-4ac9-944b-e4d29e0b8541",
+      "author": "derek",
+      "text": "Opened PR to develop: https://github.com/AnthusAI/Plexus/pull/183\nTitle: fix(reports): use identityPool guest auth for shared report access\nCurrent check status: security/snyk (Capacity AQA) pending.",
+      "created_at": "2026-04-20T18:48:22.996201851Z"
     }
   ],
   "created_at": "2026-04-20T17:48:39.439276117Z",
-  "updated_at": "2026-04-20T18:43:29.646006734Z",
+  "updated_at": "2026-04-20T18:48:22.996201851Z",
   "closed_at": null,
   "custom": {}
 }
