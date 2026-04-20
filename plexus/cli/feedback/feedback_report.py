@@ -18,6 +18,7 @@ from plexus.cli.feedback.report_runner import (
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
+from plexus.reports.parameter_utils import enrich_parameters_with_names
 from plexus.reports.service import (
     decode_programmatic_run_payload,
     run_programmatic_block_and_persist,
@@ -665,6 +666,14 @@ def overview(
         "score": str(score).strip(),
         **window_config,
     }
+    named_scope = enrich_parameters_with_names(
+        [
+            {"name": "scorecard", "type": "scorecard_select"},
+            {"name": "score", "type": "score_select", "depends_on": "scorecard"},
+        ],
+        shared_scope,
+        client,
+    )
 
     timeline_config: Dict[str, Any] = {
         **shared_scope,
@@ -689,9 +698,11 @@ def overview(
     }
 
     timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    scorecard_title = str(named_scope.get("scorecard_name") or shared_scope["scorecard"]).strip()
+    score_title = str(named_scope.get("score_name") or shared_scope["score"]).strip()
+    display_title = f"{scorecard_title} - {score_title} - Feedback Overview"
     generated_name = (
-        f"Scorecard {shared_scope['scorecard']} | Score {shared_scope['score']} | "
-        f"Feedback Overview | {_window_label(days, start_date, end_date)} | {timestamp_utc}"
+        f"{display_title} | {_window_label(days, start_date, end_date)} | {timestamp_utc}"
     )
     final_report_name = str(report_name).strip() if report_name and str(report_name).strip() else generated_name
 
@@ -717,7 +728,7 @@ def overview(
         account_id=account_id,
         client=client,
         report_parameters={
-            **shared_scope,
+            **named_scope,
             "bucket_type": bucket_type,
             "timezone": timezone_name,
             "week_start": week_start,
@@ -727,7 +738,7 @@ def overview(
             "num_topics": num_topics,
             "max_concurrent": max_concurrent,
         },
-        display_title="Feedback Overview",
+        display_title=display_title,
         display_subtitle=_window_label(days, start_date, end_date),
     )
 
