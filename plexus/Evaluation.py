@@ -143,7 +143,7 @@ class Evaluation:
                 cached_tokens = int(component.get("cached_tokens") or 0)
                 row["spent_usd"] += usd
                 row["referenced_usd"] += usd
-                row["llm_calls"] += 1
+                row["llm_calls"] += int(component.get("llm_calls") or 1)
                 row["prompt_tokens"] += prompt_tokens
                 row["completion_tokens"] += completion_tokens
                 row["total_tokens"] += prompt_tokens + completion_tokens
@@ -1598,6 +1598,27 @@ class Evaluation:
         }
         """
 
+    @staticmethod
+    def _coerce_parameters_dict(raw_parameters: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(raw_parameters, dict):
+            return dict(raw_parameters)
+        if isinstance(raw_parameters, str):
+            try:
+                parsed = json.loads(raw_parameters)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                return None
+        return None
+
+    def _get_existing_parameters_for_update(self) -> Dict[str, Any]:
+        local = self._coerce_parameters_dict(getattr(self, "parameters", None))
+        if isinstance(local, dict):
+            return local
+        # Keep progress updates fast and side-effect free: do not make network reads
+        # in this hot path. If local parameters are unavailable, skip merge.
+        return {}
+
     def _get_update_variables(self, metrics, status):
         """Get the variables for the update mutation"""
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
@@ -1654,7 +1675,22 @@ class Evaluation:
                 total_cost = expenses.get('total_cost', 0)
                 if total_cost > 0:
                     update_input["cost"] = float(total_cost)
-                update_input["costDetails"] = self.build_cost_details_from_expenses(expenses)
+                if status == "COMPLETED":
+                    cost_details = self.build_cost_details_from_expenses(expenses)
+                    existing_parameters = self._get_existing_parameters_for_update()
+                    if existing_parameters:
+                        metadata = existing_parameters.get("metadata")
+                        if not isinstance(metadata, dict):
+                            metadata = {}
+                        metadata["cost_details"] = cost_details
+                        existing_parameters["metadata"] = metadata
+                        update_input["parameters"] = json.dumps(existing_parameters)
+                        self.parameters = existing_parameters
+                    else:
+                        self.logging.debug(
+                            "Skipping cost_details parameter write for evaluation %s because local parameters are unavailable",
+                            getattr(self, "experiment_id", None),
+                        )
         except Exception as e:
             logging.debug(f"Could not get accumulated costs: {e}")
         
@@ -2859,6 +2895,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                     logging.warning(f"Could not parse dataset class distribution: {e}")
                     dataset_class_distribution = evaluation.datasetClassDistribution
             
+            cost_details = getattr(evaluation, "costDetails", None)
+            if not isinstance(cost_details, dict) and isinstance(parameters, dict):
+                metadata = parameters.get("metadata")
+                if isinstance(metadata, dict):
+                    metadata_cost_details = metadata.get("cost_details")
+                    if isinstance(metadata_cost_details, dict):
+                        cost_details = metadata_cost_details
+
             result = {
                 'id': evaluation.id,
                 'type': evaluation.type,
@@ -2881,7 +2925,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'total_items': evaluation.totalItems,
                 'processed_items': evaluation.processedItems,
                 'cost': evaluation.cost,
-                'cost_details': evaluation.costDetails,
+                'cost_details': cost_details,
                 'elapsed_seconds': evaluation.elapsedSeconds,
                 'estimated_remaining_seconds': evaluation.estimatedRemainingSeconds,
                 'started_at': evaluation.startedAt.isoformat() if evaluation.startedAt else None,
@@ -5570,7 +5614,7 @@ class AccuracyEvaluation(Evaluation):
                 cached_tokens = int(component.get("cached_tokens") or 0)
                 row["spent_usd"] += usd
                 row["referenced_usd"] += usd
-                row["llm_calls"] += 1
+                row["llm_calls"] += int(component.get("llm_calls") or 1)
                 row["prompt_tokens"] += prompt_tokens
                 row["completion_tokens"] += completion_tokens
                 row["total_tokens"] += prompt_tokens + completion_tokens
