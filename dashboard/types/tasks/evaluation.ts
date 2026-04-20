@@ -139,6 +139,7 @@ export interface EvaluationTaskProps {
     type: string
     scorecard: string
     score: string
+    procedureId?: string
     time: string
     data: EvaluationTaskData
   }
