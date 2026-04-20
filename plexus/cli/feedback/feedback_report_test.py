@@ -140,6 +140,29 @@ def test_acceptance_rate_timeline_show_bucket_details_flag_pass_through(mock_run
     assert kwargs["extra_config"]["show_bucket_details"] is True
 
 
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_feedback_volume_uses_dedicated_block_and_show_bucket_details(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"points": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "volume",
+            "--scorecard",
+            "1438",
+            "--days",
+            "30",
+            "--show-bucket-details",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["block_class"] == "FeedbackVolumeTimeline"
+    assert kwargs["extra_config"]["show_bucket_details"] is True
+
+
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
 @patch("plexus.cli.feedback.feedback_report.run_programmatic_report_and_persist")
 @patch("plexus.cli.feedback.feedback_report.create_client")
