@@ -15,12 +15,12 @@ alwaysApply: false
 - Backend:
   - Report blocks: [plexus/reports/blocks/](mdc:plexus/reports/blocks)
   - Report generation service: [plexus/reports/service.py](mdc:plexus/reports/service.py)
-  - CLI commands: [plexus/cli/commands/report/](mdc:plexus/cli/commands/report)
+  - CLI commands: [plexus/cli/report/](mdc:plexus/cli/report)
   
 - Frontend:
-  - Report components: [dashboard/components/reports/](mdc:dashboard/components/reports)
+  - Report components: [dashboard/components/ReportTask.tsx](mdc:dashboard/components/ReportTask.tsx)
   - Block rendering system: [dashboard/components/blocks/](mdc:dashboard/components/blocks)
-  - Report pages: [dashboard/app/lab/reports/](mdc:dashboard/app/lab/reports)
+  - Report pages: [dashboard/app/lab/reports-dashboard/](mdc:dashboard/app/lab/reports-dashboard)
 
 ## Creating a New Report Block
 1. Backend: Create a new Python class in `plexus/reports/blocks/` that inherits from `BaseReportBlock`
@@ -123,9 +123,9 @@ score: ExampleScore
   - Shows how to format dates and percentage values
 
 ## Testing Reports
-- Use `python -m plexus.cli.CommandLineInterface report config create --name "Test Config" --file config.md`
-- Run a report with `python -m plexus.cli.CommandLineInterface report run --config "Test Config"`
-- View reports with `python -m plexus.cli.CommandLineInterface report list` and `report show <id>`
+- Use `plexus report config create --name "Test Config" --file config.md`
+- Run a report with `plexus report run --config "Test Config"`
+- View reports with `plexus report list` and `plexus report show <id>`
 
 ## Common Patterns
 - Report blocks should follow the naming convention of their Python class

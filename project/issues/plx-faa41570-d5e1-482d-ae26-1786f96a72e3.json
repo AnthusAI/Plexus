@@ -1,0 +1,67 @@
+{
+  "id": "plx-faa41570-d5e1-482d-ae26-1786f96a72e3",
+  "title": "Implement optimizer procedure cost ledger and UI breakdown",
+  "description": "Implement state-level cost accounting (evaluation incurred/referenced + inference by agent/model), branch/continue semantics, and ProcedureTask UI rendering from canonical state.costs.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5a9fc5f3-5b5e-4e32-a3f7-cdfca0de0829",
+      "author": "ryan",
+      "text": "Implemented canonical procedure cost ledger plumbing: persisted inference CostEvents into state.costs, added evaluation cost ledger recording across baseline/hypothesis/strategy/synthesis eval paths, cleared costs on branch clone, and added ProcedureTask cost breakdown UI. Added tests for inference-cost persistence and branch clone cost reset; targeted pytest suite passing.",
+      "created_at": "2026-04-19T21:12:13.216577Z"
+    },
+    {
+      "id": "5dfa104c-b6df-4300-b78d-cd80d72ad0a0",
+      "author": "ryan",
+      "text": "Investigating live assistant completion cost pills showing /bin/zsh/0 tokens despite non-zero inference totals. Tracing cost-event attachment path in PlexusTraceSink and Procedure log bridge; preparing patch and regression test.",
+      "created_at": "2026-04-20T13:03:18.130044Z"
+    },
+    {
+      "id": "a54c328d-2f0e-448d-a23c-dc10858c43c4",
+      "author": "ryan",
+      "text": "Fixing misleading zero-cost completion badges/details: suppress empty cost summaries in conversation UI and harden trace cost attachment semantics.",
+      "created_at": "2026-04-20T13:10:06.368919Z"
+    },
+    {
+      "id": "f154bb82-2aff-41b1-9c12-66e5d912170f",
+      "author": "ryan",
+      "text": "Integration run e3701ef8-882f-42d1-a483-810ba4ecc86a is live. Verified non-zero assistant completion cost metadata in chat (message b198ecbb... total_usd=0.025708, llm_calls=1) and live state aggregation (inference_total=0.036058, entries=2, model=openai/gpt-5.4). Also removed GraphQL costDetails writes; now persisting cost_details under evaluation parameters.metadata to avoid schema dependency.",
+      "created_at": "2026-04-20T13:21:08.015757Z"
+    },
+    {
+      "id": "cf970ba0-6da4-40b5-9ace-bdeffe0862ec",
+      "author": "ryan",
+      "text": "Investigating regression: evaluation notes/hypothesis context missing in in-progress procedure run. Checking recent cost-related parameter update path for metadata overwrite.",
+      "created_at": "2026-04-20T13:43:11.658426Z"
+    },
+    {
+      "id": "8ed85f06-2ee3-45af-9776-ebf8c038f0f1",
+      "author": "ryan",
+      "text": "Implemented fixes for two regressions: (1) preserve evaluation parameters when injecting cost_details so notes + baseline/current_baseline metadata are not clobbered, and (2) add model-level cost components for LangGraphScore + improved provider/model extraction in TactusScore. Added tests for parameter preservation and per-node model components.",
+      "created_at": "2026-04-20T13:51:16.885136Z"
+    },
+    {
+      "id": "ce90237c-fc44-4edc-97c2-a0f25ad7d53a",
+      "author": "ryan",
+      "text": "Executing fresh 200x10 integration validation now: preflight -> launch procedure -> verify notes/baseline/model breakdown in backend + UI data surfaces.",
+      "created_at": "2026-04-20T13:59:26.938142Z"
+    },
+    {
+      "id": "bcfff527-cdc4-4334-b798-381dfab76587",
+      "author": "ryan",
+      "text": "Landing final pending changes now: run targeted quality gates, commit remaining model-cost-attribution updates, open PR to develop, and verify CI before merging so develop->main PR includes this work.",
+      "created_at": "2026-04-20T17:54:50.032794Z"
+    }
+  ],
+  "created_at": "2026-04-19T21:07:30.685196Z",
+  "updated_at": "2026-04-20T17:54:50.032794Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9319f33b-127c-4443-89c5-1e096e3115db",
+  "issue_id": "plx-3da3a774-e699-4ac9-8750-d390a36a94d2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T20:36:27.393Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a procedures dashboard user, I want conversation headers, session naming, tool call surfaces, and evaluation tool-output cards to render consistently and quickly, so that optimizer runs are readable and actionable in real time.\n\nFeature: Procedure conversation and evaluation rendering polish\nScenario: Header alignment and compactness\nGiven a procedure conversation view with sidebar and selected session\nWhen the conversation UI renders\nThen sidebar and main headers share the same height token and controls are vertically centered\n\nScenario: New session naming\nGiven a user creates a new procedure chat session\nWhen the session record is created\nThen the stored category/name uses Optimize terminology for new sessions\n\nScenario: Borderless tool surfaces\nGiven tool call/response rows are shown\nWhen tool cards render\nThen region boundaries use flat background shading and no border/outline classes\n\nScenario: Progressive evaluation rendering\nGiven a tool response contains an evaluation id\nWhen evaluation output renders\nThen an initial card appears immediately from lightweight evaluation/task data\nAnd heavy score results hydrate in a later phase\nAnd segmented stage progress plus accuracy bar with baseline/current-baseline markers are visible when metadata exists",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+    "priority": 1,
+    "status": "open",
+    "title": "Procedure conversation UI polish and evaluation tool-output responsiveness"
+  }
+}

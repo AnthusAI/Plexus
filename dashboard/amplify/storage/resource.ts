@@ -10,6 +10,9 @@ export const reportBlockDetails = defineStorage({
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
     ],
+    'procedures/*': [
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ],
     // Add access for scoreresults path within this bucket as well, if files are here
     'scoreresults/*': [
       allow.guest.to(['read']), // Assuming guests might also need read if they can see the card

@@ -66,6 +66,7 @@ MISCLASSIFICATION_EVIDENCE_FLAG_KEYS = (
     "missing_required_context_due_system",
     "runtime_or_parsing_failure",
     "invalid_output_class_signal",
+    "preprocessing_evidence_loss",
 )
 
 PRIMARY_NEXT_ACTIONS = (
@@ -83,7 +84,7 @@ MISCLASSIFICATION_CATEGORY_LABELS = {
 }
 
 
-def _excerpt(text: str, max_chars: int = 500) -> str:
+def _excerpt(text: str, max_chars: int = 50000) -> str:
     if not text:
         return ""
     value = str(text).strip()
@@ -408,6 +409,8 @@ def build_misclassification_item_context(
     class_resolution_source: str = "",
     primary_input_fetch_error: bool = False,
     missing_required_context_keys: Optional[List[str]] = None,
+    processed_input_text: str = "",
+    processors_config_summary: str = "",
 ) -> dict:
     """Build standardized item context/provenance payload for misclassification analysis."""
     if label_provenance_source not in MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES:
@@ -430,6 +433,11 @@ def build_misclassification_item_context(
         for value in (missing_required_context_keys or [])
         if _normalize_label(value)
     ]
+    preprocessing_changed_input = bool(
+        processed_input_text
+        and primary_input_text
+        and processed_input_text.strip() != primary_input_text.strip()
+    )
 
     return {
         "identifiers": {
@@ -442,21 +450,21 @@ def build_misclassification_item_context(
         "prediction": {
             "predicted_value": predicted_value or "",
             "correct_value": correct_value or "",
-            "score_explanation_excerpt": _excerpt(score_explanation, 700),
+            "score_explanation": _excerpt(score_explanation),
         },
         "label_provenance": {
             "source": label_provenance_source,
             "feedback_context_present": feedback_context_present,
         },
         "feedback_context": {
-            "edit_comment_excerpt": edit_comment_excerpt,
-            "initial_comment_excerpt": initial_comment_excerpt,
-            "final_comment_excerpt": final_comment_excerpt,
+            "edit_comment": edit_comment_excerpt,
+            "initial_comment": initial_comment_excerpt,
+            "final_comment": final_comment_excerpt,
         },
         "score_context": {
-            "guidelines_excerpt": _excerpt(score_guidelines_text, 700),
-            "score_yaml_excerpt": _excerpt(score_yaml_configuration, 700),
-            "scorecard_guidance_excerpt": _excerpt(scorecard_guidance_text, 700),
+            "guidelines": _excerpt(score_guidelines_text),
+            "score_yaml_configuration": _excerpt(score_yaml_configuration),
+            "scorecard_guidance": _excerpt(scorecard_guidance_text),
             "resolved_final_classes": [
                 _normalize_label(class_name)
                 for class_name in (resolved_final_classes or [])
@@ -465,9 +473,26 @@ def build_misclassification_item_context(
             "class_resolution_source": _normalize_label(class_resolution_source),
         },
         "item_context": {
-            "primary_input_excerpt": _excerpt(primary_input_text, 700),
+            "raw_input_text": _excerpt(primary_input_text),
+            "raw_input_text_description": (
+                "The ORIGINAL input text before any preprocessing. "
+                "Compare against processed_input_text to see what the "
+                "preprocessor pipeline removed or changed."
+            ),
+            "processed_input_text": _excerpt(processed_input_text) if processed_input_text else "",
+            "processed_input_text_description": (
+                "The text AFTER the preprocessor pipeline ran — this is what the "
+                "classification LLM actually saw. If critical evidence exists in "
+                "raw_input_text but NOT here, the preprocessor removed it. "
+                "That would be a score_configuration_problem in the preprocessing config."
+                if processed_input_text else
+                "No preprocessor pipeline was applied (or processed text unavailable). "
+                "The LLM saw the raw input text directly."
+            ),
+            "processors_applied": processors_config_summary or "none",
+            "preprocessing_changed_input": preprocessing_changed_input,
             "primary_input_modality": normalized_modality,
-            "metadata_snapshot_excerpt": _excerpt(metadata_snapshot, 700),
+            "metadata_snapshot": _excerpt(metadata_snapshot),
         },
         "source_availability": {
             "has_score_explanation": bool(score_explanation),
@@ -476,6 +501,7 @@ def build_misclassification_item_context(
             "has_score_yaml_configuration": bool(score_yaml_configuration),
             "has_scorecard_guidance": bool(scorecard_guidance_text),
             "has_primary_input": bool(primary_input_text),
+            "has_processed_input": bool(processed_input_text),
             "has_metadata_snapshot": bool(metadata_snapshot),
             "primary_input_fetch_error": bool(primary_input_fetch_error),
             "missing_required_context_keys": normalized_missing_context_keys,
@@ -485,6 +511,57 @@ def build_misclassification_item_context(
                 "persisted_audit_metadata_required"
             ]
         },
+    }
+
+
+def _compact_context_for_triage(item_context: dict) -> dict:
+    """Build a compact version of item context for the evidence-flag triage call.
+
+    Evidence extraction only needs key triage signals — not the full transcript,
+    full YAML, or full guidelines (which can be 50KB+ combined and would inflate
+    the Bedrock request to an unmanageable size). The explanation call gets the
+    full context via explain_misclassification_item_classification().
+    """
+    pred = item_context.get("prediction", {})
+    fb = item_context.get("feedback_context", {})
+    sc = item_context.get("score_context", {})
+    ic = item_context.get("item_context", {})
+    avail = item_context.get("source_availability", {})
+    return {
+        "identifiers": item_context.get("identifiers", {}),
+        "prediction": {
+            "predicted_value": pred.get("predicted_value", ""),
+            "correct_value": pred.get("correct_value", ""),
+            # First 800 chars of explanation — enough to detect mechanical failures
+            "score_explanation": _excerpt(pred.get("score_explanation", ""), 800),
+        },
+        "label_provenance": item_context.get("label_provenance", {}),
+        "feedback_context": {
+            # Full feedback comments — these are the most important triage signals
+            "edit_comment": fb.get("edit_comment", ""),
+            "initial_comment": fb.get("initial_comment", ""),
+            "final_comment": fb.get("final_comment", ""),
+        },
+        "score_context": {
+            # Short excerpts — enough to check if guidelines exist and spot ambiguity
+            "guidelines": _excerpt(sc.get("guidelines", ""), 1200),
+            "score_yaml_configuration": _excerpt(sc.get("score_yaml_configuration", ""), 800),
+            "scorecard_guidance": _excerpt(sc.get("scorecard_guidance", ""), 400),
+            "resolved_final_classes": sc.get("resolved_final_classes", []),
+            "class_resolution_source": sc.get("class_resolution_source", ""),
+        },
+        "item_context": {
+            # Key preprocessing comparison — truncated but enough to detect evidence loss
+            "raw_input_text": _excerpt(ic.get("raw_input_text", ""), 1500),
+            "raw_input_text_description": ic.get("raw_input_text_description", ""),
+            "processed_input_text": _excerpt(ic.get("processed_input_text", ""), 1500),
+            "processed_input_text_description": ic.get("processed_input_text_description", ""),
+            "processors_applied": ic.get("processors_applied", "none"),
+            "preprocessing_changed_input": ic.get("preprocessing_changed_input", False),
+            "primary_input_modality": ic.get("primary_input_modality", "unknown"),
+            "metadata_snapshot": _excerpt(ic.get("metadata_snapshot", ""), 400),
+        },
+        "source_availability": avail,
     }
 
 
@@ -504,14 +581,36 @@ def extract_misclassification_evidence_flags(
         "Focus on explicit evidence in the provided context. "
         "Use modality-agnostic language."
     )
+    rca_cookbook = (
+        "Common root causes to check for:\n"
+        "1. PREPROCESSING_EVIDENCE_LOSS: A preprocessor (e.g., RelevantWindowsTranscriptFilter) "
+        "removed transcript lines containing the evidence needed for correct classification. "
+        "Check: Does raw_input_text contain evidence supporting the correct answer that is "
+        "absent from processed_input_text? If preprocessing_changed_input is true, compare carefully.\n"
+        "2. PHONETIC_TRANSCRIPTION_ERROR: Speech-to-text mangled a proper noun (school name, "
+        "product name, acronym) into a phonetically similar common word. The LLM couldn't "
+        "match it to the expected term.\n"
+        "3. KEYWORD_GAP: A RelevantWindowsTranscriptFilter is configured with keywords that "
+        "don't cover a synonym or variant used in this transcript. Relevant content was "
+        "filtered out because the keyword list was incomplete.\n"
+        "4. TEMPORAL_ORDERING_LOSS: The transcript format (sentences/paragraphs) collapsed "
+        "word-level timing. The LLM couldn't determine which response followed which prompt.\n"
+        "5. SPEAKER_FILTER_ERROR: A speaker filter removed the wrong speaker's lines, or "
+        "speaker channels were swapped.\n"
+        "6. GUIDELINE_PROMPT_MISMATCH: Classification guidelines describe a policy not "
+        "reflected in the LLM prompts (system_message/user_message).\n"
+        "7. AMBIGUOUS_BOUNDARY: The item genuinely sits on the classification boundary and "
+        "the guidelines don't clearly define which class applies to this specific pattern.\n"
+    )
     prompt = (
-        "Return exactly seven lines in this exact format:\n"
+        "Return exactly eight lines in this exact format:\n"
         "FLAG_EXTERNAL_INFORMATION_GAP: <true|false>\n"
         "FLAG_GUIDELINE_GAP: <true|false>\n"
         "FLAG_SYSTEM_MISSING_CONTEXT: <true|false>\n"
         "FLAG_RUNTIME_OR_PARSER_FAILURE: <true|false>\n"
         "FLAG_INVALID_OUTPUT_CLASS: <true|false>\n"
-        "BEST_EVIDENCE_SOURCE: <edit_comment|score_explanation|guidelines|score_yaml|primary_input|metadata|none>\n"
+        "FLAG_PREPROCESSING_EVIDENCE_LOSS: <true|false>\n"
+        "BEST_EVIDENCE_SOURCE: <edit_comment|score_explanation|guidelines|score_yaml|primary_input|processed_input|metadata|none>\n"
         "BEST_EVIDENCE_QUOTE: <short supporting quote/fact>\n\n"
         "Interpretation rules:\n"
         "- EXTERNAL_INFORMATION_GAP=true only when evidence says source evidence is degraded/insufficient externally "
@@ -521,14 +620,19 @@ def extract_misclassification_evidence_flags(
         "(including missing metadata fields).\n"
         "- RUNTIME_OR_PARSER_FAILURE=true only for explicit runtime/parser/schema failures.\n"
         "- INVALID_OUTPUT_CLASS=true only when output class appears invalid/out-of-schema.\n"
+        "- PREPROCESSING_EVIDENCE_LOSS=true when item_context.preprocessing_changed_input is true AND "
+        "the raw_input_text contains evidence relevant to the correct classification that is absent "
+        "from processed_input_text. This means the preprocessor pipeline removed critical evidence. "
+        "If preprocessing_changed_input is false or processed_input_text is empty, set this to false.\n"
         "- If multiple flags could apply, set all that are supported by explicit evidence.\n\n"
-        f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n"
+        f"{rca_cookbook}\n"
+        f"Item context JSON:\n{json.dumps(_compact_context_for_triage(item_context), ensure_ascii=True)}\n"
     )
 
     client = boto3.client("bedrock-runtime", region_name="us-east-1")
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 220,
+        "max_tokens": 320,
         "system": system,
         "messages": [{"role": "user", "content": prompt}],
     })
@@ -561,6 +665,7 @@ def extract_misclassification_evidence_flags(
         "FLAG_SYSTEM_MISSING_CONTEXT",
         "FLAG_RUNTIME_OR_PARSER_FAILURE",
         "FLAG_INVALID_OUTPUT_CLASS",
+        "FLAG_PREPROCESSING_EVIDENCE_LOSS",
         "BEST_EVIDENCE_SOURCE",
         "BEST_EVIDENCE_QUOTE",
     )
@@ -586,6 +691,7 @@ def extract_misclassification_evidence_flags(
         "guidelines",
         "score_yaml",
         "primary_input",
+        "processed_input",
         "metadata",
         "none",
     }
@@ -613,6 +719,10 @@ def extract_misclassification_evidence_flags(
             kv["FLAG_INVALID_OUTPUT_CLASS"],
             "FLAG_INVALID_OUTPUT_CLASS",
         ),
+        "preprocessing_evidence_loss": _parse_bool(
+            kv["FLAG_PREPROCESSING_EVIDENCE_LOSS"],
+            "FLAG_PREPROCESSING_EVIDENCE_LOSS",
+        ),
         "best_evidence_source": source,
         "best_evidence_quote": _excerpt(kv["BEST_EVIDENCE_QUOTE"], 260),
     }
@@ -628,7 +738,10 @@ def normalize_best_evidence_source(raw_source: str) -> str:
         "guidelines_excerpt": "guidelines",
         "input": "primary_input",
         "primary_input_excerpt": "primary_input",
+        "raw_input_text": "primary_input",
         "transcript": "primary_input",
+        "processed_input": "processed_input",
+        "processed_input_text": "processed_input",
         "prediction": "score_explanation",
         "model_output": "score_explanation",
         "model_prediction": "score_explanation",
@@ -659,11 +772,13 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
 
     predicted_value = (prediction.get("predicted_value") or "").strip()
     correct_value = (prediction.get("correct_value") or "").strip()
-    score_explanation = (prediction.get("score_explanation_excerpt") or "").strip()
-    edit_comment = (feedback_context.get("edit_comment_excerpt") or "").strip()
-    final_comment = (feedback_context.get("final_comment_excerpt") or "").strip()
+    score_explanation = (prediction.get("score_explanation") or prediction.get("score_explanation_excerpt") or "").strip()
+    edit_comment = (feedback_context.get("edit_comment") or feedback_context.get("edit_comment_excerpt") or "").strip()
+    final_comment = (feedback_context.get("final_comment") or feedback_context.get("final_comment_excerpt") or "").strip()
     primary_input_excerpt = (
-        item_context.get("item_context", {}).get("primary_input_excerpt") or ""
+        item_context.get("item_context", {}).get("raw_input_text")
+        or item_context.get("item_context", {}).get("primary_input_excerpt")
+        or ""
     ).strip()
     primary_input_modality = (
         item_context.get("item_context", {}).get("primary_input_modality") or "unknown"
@@ -878,7 +993,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
         _add_evidence("edit_comment", edit_comment or final_comment)
         if normalized_flags["guideline_or_policy_ambiguity"] and best_evidence_quote:
             _add_evidence(best_evidence_source or "edit_comment", best_evidence_quote)
-        _add_evidence("guidelines", score_context.get("guidelines_excerpt", "Guidelines were unavailable."))
+        _add_evidence("guidelines", score_context.get("guidelines", score_context.get("guidelines_excerpt", "Guidelines were unavailable.")))
         return {
             "primary_category": "guideline_gap_requires_sme",
             "rationale": "The misclassification appears to depend on rubric ambiguity or missing policy detail.",
@@ -890,9 +1005,33 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
             "evidence_flags": normalized_flags,
         }
 
+    # Preprocessing evidence loss: the preprocessor pipeline removed evidence critical for
+    # correct classification. This is a score_configuration_problem (preprocessing is config-fixable).
+    if normalized_flags.get("preprocessing_evidence_loss"):
+        item_ctx = item_context.get("item_context", {})
+        processors_applied = item_ctx.get("processors_applied", "unknown")
+        _add_evidence("score_yaml", f"Preprocessing pipeline: {processors_applied}")
+        if best_evidence_quote:
+            _add_evidence(best_evidence_source or "primary_input", best_evidence_quote)
+        _add_evidence("score_explanation", score_explanation)
+        return {
+            "primary_category": "score_configuration_problem",
+            "rationale": (
+                "The preprocessor pipeline removed content from the input that contained evidence "
+                "relevant to the correct classification. This is a score configuration issue — "
+                "the preprocessing config (e.g., keyword list, filter settings) needs adjustment."
+            ),
+            "confidence": "high",
+            "mechanical_subtype": "preprocessing_evidence_loss",
+            "mechanical_details": f"processors_applied={processors_applied}",
+            "information_gap_subtype": None,
+            "evidence_snippets": evidence or [{"source": "score_yaml", "quote_or_fact": f"Preprocessor config needs review: {processors_applied}"}],
+            "evidence_flags": normalized_flags,
+        }
+
     # Default bucket for model/score logic behavior.
     _add_evidence("score_explanation", score_explanation)
-    _add_evidence("score_yaml", score_context.get("score_yaml_excerpt", "Score configuration context available."))
+    _add_evidence("score_yaml", score_context.get("score_yaml_configuration", score_context.get("score_yaml_excerpt", "Score configuration context available.")))
     return {
         "primary_category": "score_configuration_problem",
         "rationale": "Evidence points to score logic/prompt behavior rather than missing information or policy ambiguity.",
@@ -920,6 +1059,22 @@ def explain_misclassification_item_classification(
         "You explain misclassification triage decisions for AI evaluations. "
         "Use neutral, modality-agnostic language. Call transcripts are only one possible example."
     )
+    rca_cookbook = (
+        "Common root causes to reference when writing your explanation:\n"
+        "1. PREPROCESSING_EVIDENCE_LOSS: A preprocessor (e.g., RelevantWindowsTranscriptFilter) "
+        "removed transcript lines containing critical evidence. Check preprocessing_changed_input "
+        "and compare raw_input_text vs processed_input_text.\n"
+        "2. PHONETIC_TRANSCRIPTION_ERROR: Speech-to-text mangled a proper noun (school/product name) "
+        "into a phonetically similar common word the LLM couldn't recognize.\n"
+        "3. KEYWORD_GAP: RelevantWindowsTranscriptFilter keyword list is missing a synonym used in "
+        "this transcript — the relevant content was filtered out.\n"
+        "4. TEMPORAL_ORDERING_LOSS: Sentence/paragraph transcript format collapsed word-level timing, "
+        "making it impossible to tell which response followed which prompt.\n"
+        "5. SPEAKER_FILTER_ERROR: A speaker filter removed the wrong speaker's lines.\n"
+        "6. GUIDELINE_PROMPT_MISMATCH: Guidelines describe a policy absent from the LLM prompts.\n"
+        "7. AMBIGUOUS_BOUNDARY: Item sits on the classification boundary; guidelines don't clearly "
+        "define which class applies to this specific pattern.\n"
+    )
     prompt = (
         "You are given normalized item context and an assigned category decision.\n"
         "Return exactly three lines in this exact format:\n"
@@ -932,7 +1087,11 @@ def explain_misclassification_item_classification(
         "- If failure is execution/system/context contract related, use blocked_by_mechanical.\n"
         "- If source evidence is genuinely insufficient/degraded, use blocked_by_input.\n"
         "- If policy ambiguity dominates, use needs_sme_clarification.\n"
-        "- If score logic/prompt adjustment is the likely fix, use likely_fixable.\n\n"
+        "- If score logic/prompt adjustment is the likely fix, use likely_fixable.\n"
+        "- If preprocessing_evidence_loss flag is true: explain specifically what the preprocessor "
+        "removed and why that removal caused the misclassification. Reference the processors_applied "
+        "field and the difference between raw_input_text and processed_input_text.\n\n"
+        f"{rca_cookbook}\n"
         f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n\n"
         f"Deterministic classification JSON:\n{json.dumps(classification, ensure_ascii=True)}\n"
     )

@@ -37,6 +37,7 @@ import {
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
+  ChevronDownIcon,
   MoreHorizontal,
   Trash2,
   AlertCircle,
@@ -56,6 +57,7 @@ import {
 import { cn } from "@/lib/utils"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
+const STANDARD_SESSION_CATEGORY = 'Optimize'
 
 const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_run',
@@ -730,14 +732,14 @@ function CollapsibleText({
 
 const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
   const badgeStyles = {
-    blue: 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200',
-    yellow: 'border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-800/40 dark:text-yellow-200',
-    red: 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200',
-    redCritical: 'border-transparent bg-red-200 text-red-900 dark:bg-red-800/60 dark:text-red-100',
-    green: 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200',
-    purple: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-800/40 dark:text-purple-200',
-    orange: 'border-transparent bg-orange-100 text-orange-800 dark:bg-orange-800/40 dark:text-orange-200',
-    gray: 'border-transparent bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-200',
+    blue: 'bg-info text-primary-foreground',
+    yellow: 'bg-warning text-primary-foreground',
+    red: 'bg-false text-primary-foreground',
+    redCritical: 'bg-false text-primary-foreground',
+    green: 'bg-true text-primary-foreground',
+    purple: 'bg-info text-primary-foreground',
+    orange: 'bg-warning text-primary-foreground',
+    gray: 'bg-neutral text-primary-foreground',
   } as const
 
   // Check humanInteraction first for special message types
@@ -819,6 +821,60 @@ const getRowFromMessage = (message: ChatMessage): ConversationRow => {
   }
 }
 
+type MessageCostSummary = {
+  schema_version?: number
+  total_usd?: number
+  llm_calls?: number
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  cached_tokens?: number
+  breakdown?: Array<Record<string, unknown>>
+}
+
+type MessageCostMetadata = {
+  kind?: string
+  billing_mode?: string
+  live?: boolean
+  summary?: MessageCostSummary
+}
+
+const hasMeaningfulCostSummary = (summary: MessageCostSummary | null | undefined): boolean => {
+  if (!summary || typeof summary !== 'object') {
+    return false
+  }
+  const totalUsd = typeof summary.total_usd === 'number' ? summary.total_usd : 0
+  const llmCalls = typeof summary.llm_calls === 'number' ? summary.llm_calls : 0
+  const promptTokens = typeof summary.prompt_tokens === 'number' ? summary.prompt_tokens : 0
+  const completionTokens = typeof summary.completion_tokens === 'number' ? summary.completion_tokens : 0
+  const totalTokens = typeof summary.total_tokens === 'number' ? summary.total_tokens : 0
+  const cachedTokens = typeof summary.cached_tokens === 'number' ? summary.cached_tokens : 0
+  const hasBreakdown = Array.isArray(summary.breakdown) && summary.breakdown.length > 0
+  return (
+    totalUsd > 0
+    || llmCalls > 0
+    || promptTokens > 0
+    || completionTokens > 0
+    || totalTokens > 0
+    || cachedTokens > 0
+    || hasBreakdown
+  )
+}
+
+const getMessageCostMetadata = (message: ChatMessage): MessageCostMetadata | null => {
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const cost = (metadata as Record<string, unknown>).cost
+  if (!cost || typeof cost !== 'object' || Array.isArray(cost)) {
+    return null
+  }
+  return cost as MessageCostMetadata
+}
+
+const formatUsd = (value: number | undefined): string => `$${(value || 0).toFixed(4)}`
+
 // Props passed into each virtualized row
 interface MessageRowProps {
   row: ConversationRow
@@ -858,7 +914,17 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   const messageTypeLabel = getMessageTypeLabel(message)
   const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
   const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
-  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge
+  const costMetadata = getMessageCostMetadata(message)
+  const costSummary = costMetadata?.summary
+  const hasCostSummary = hasMeaningfulCostSummary(costSummary)
+  const costTotal = typeof costSummary?.total_usd === 'number' ? costSummary.total_usd : undefined
+  const showInlineCostBadge = !(
+    message.role === 'ASSISTANT' && message.messageType === 'MESSAGE'
+  )
+  const costBadgeLabel = costMetadata && hasCostSummary && showInlineCostBadge
+    ? `${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costTotal)}`
+    : null
+  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge || Boolean(costBadgeLabel)
 
   return (
     <Message
@@ -873,61 +939,146 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="mb-2 flex items-center gap-2">
               {showMessageTypeBadge && (
                 <Badge
-                  variant="secondary"
-                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                  variant="pill"
+                  className={`text-xs px-1.5 py-0 font-normal ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
                 >
                   {messageTypeLabel}
                 </Badge>
               )}
               {showToolNameBadge && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-neutral text-primary-foreground">
                   {message.toolName}
+                </Badge>
+              )}
+              {costBadgeLabel && (
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-info text-primary-foreground">
+                  {costBadgeLabel}
                 </Badge>
               )}
             </div>
           )}
 
           {toolViewModel ? (
-            <Tool
-              defaultOpen={
-                EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
-                toolViewModel.state === 'output-error'
-              }
-            >
-              <ToolHeader
-                toolType={toolViewModel.type}
-                state={toolViewModel.state}
-                toolName={toolViewModel.toolName}
-              />
-              <ToolContent>
-                {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
-                  <ToolInput input={toolViewModel.input} />
-                )}
-                {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
-                    <React.Suspense fallback={<div className="p-3 text-sm text-muted-foreground">Loading evaluation...</div>}>
-                      <EvaluationToolOutput toolOutput={toolViewModel.output} />
-                    </React.Suspense>
-                  ) : (
-                    <ToolOutput
-                      errorText={toolViewModel.errorText}
-                      output={
-                        <div className="font-mono whitespace-pre-wrap break-words">
-                          {toolViewModel.output === undefined || toolViewModel.output === null
-                            ? 'No output'
-                            : typeof toolViewModel.output === 'string'
-                              ? toolViewModel.output
-                              : formatJsonWithNewlines(toolViewModel.output)}
+            <div className="space-y-2">
+              <Tool
+                defaultOpen={
+                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                  toolViewModel.state === 'output-error'
+                }
+              >
+                <ToolHeader
+                  toolType={toolViewModel.type}
+                  state={toolViewModel.state}
+                  toolName={toolViewModel.toolName}
+                />
+                <ToolContent>
+                  {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
+                    <ToolInput input={toolViewModel.input} />
+                  )}
+                  {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
+                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                      <React.Suspense fallback={
+                        <div className="rounded-md bg-card p-3">
+                          <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+                          <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
                         </div>
-                      }
-                    />
-                  )
-                )}
-              </ToolContent>
-            </Tool>
+                      }>
+                        <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                      </React.Suspense>
+                    ) : (
+                      <ToolOutput
+                        errorText={toolViewModel.errorText}
+                        output={
+                          <div className="font-mono whitespace-pre-wrap break-words">
+                            {toolViewModel.output === undefined || toolViewModel.output === null
+                              ? 'No output'
+                              : typeof toolViewModel.output === 'string'
+                                ? toolViewModel.output
+                                : formatJsonWithNewlines(toolViewModel.output)}
+                          </div>
+                        }
+                      />
+                    )
+                  )}
+                </ToolContent>
+              </Tool>
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
+                    <div>Total: {formatUsd(costSummary.total_usd)}</div>
+                    <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
+                    <div>Tokens: {costSummary.total_tokens ?? 0}</div>
+                    {Array.isArray(costSummary.breakdown) && costSummary.breakdown.length > 0 && (
+                      <table className="w-full mt-2">
+                        <thead className="text-muted-foreground/70">
+                          <tr>
+                            <th className="text-left font-medium">Model</th>
+                            <th className="text-right font-medium">Spent</th>
+                            <th className="text-right font-medium">Reused</th>
+                            <th className="text-right font-medium">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {costSummary.breakdown.map((row: any, idx: number) => (
+                            <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`}>
+                              <td className="py-0.5 pr-2">{row.provider || 'unknown'} / {row.model || 'unknown'}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.spent_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.reused_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{Number(row.total_tokens ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
           ) : (
-            <div className="text-sm">
+            <div className="text-sm space-y-2">
               <CollapsibleText content={message.content} />
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
+                    <div>Total: {formatUsd(costSummary.total_usd)}</div>
+                    <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
+                    <div>Prompt tokens: {costSummary.prompt_tokens ?? 0}</div>
+                    <div>Completion tokens: {costSummary.completion_tokens ?? 0}</div>
+                    {Array.isArray(costSummary.breakdown) && costSummary.breakdown.length > 0 && (
+                      <table className="w-full mt-2">
+                        <thead className="text-muted-foreground/70">
+                          <tr>
+                            <th className="text-left font-medium">Model</th>
+                            <th className="text-right font-medium">Spent</th>
+                            <th className="text-right font-medium">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {costSummary.breakdown.map((row: any, idx: number) => (
+                            <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`}>
+                              <td className="py-0.5 pr-2">{row.provider || 'unknown'} / {row.model || 'unknown'}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.referenced_usd ?? row.spent_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{Number(row.total_tokens ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
           )}
 
@@ -963,8 +1114,8 @@ const MemoizedMessageRow = React.memo(function MessageRow({
               <div className="flex flex-wrap items-center gap-2">
                 {isSubmitted && (
                   <Badge
-                    variant="outline"
-                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
+                    variant="pill"
+                    className="bg-true text-primary-foreground text-xs px-1.5 py-0 font-normal"
                   >
                     Response submitted
                   </Badge>
@@ -1067,7 +1218,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 )}
 
                 {isSubmitting && (
-                  <Badge variant="outline">Submitting...</Badge>
+                  <Badge variant="pill" className="bg-warning text-primary-foreground text-xs px-1.5 py-0 font-normal">Submitting...</Badge>
                 )}
               </div>
             </div>
@@ -2161,7 +2312,7 @@ function ConversationViewer({
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: 'Console Chat',
+      category: STANDARD_SESSION_CATEGORY,
       createdAt,
       updatedAt: createdAt,
     }, API_KEY_AUTH_OPTIONS)
@@ -2175,7 +2326,7 @@ function ConversationViewer({
       id: sessionId,
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: created?.data?.category || 'Console Chat',
+      category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
@@ -2430,7 +2581,7 @@ function ConversationViewer({
         style={!isSidebarCollapsed ? { width: sidebarWidth } : undefined}
       >
         {/* Sidebar Header */}
-        <div className="p-3 border-b border-border flex items-center justify-between">
+        <div data-testid="conversation-sidebar-header" className="h-12 px-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
             <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
           )}
@@ -2521,19 +2672,17 @@ function ConversationViewer({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Session Header */}
         {selectedSession && (
-          <div className="border-b border-border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <h3 className="font-medium text-sm">
+          <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
+            <div className="flex h-full items-center justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex items-center gap-2">
+                  <h3 className="font-medium text-sm truncate">
                     {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
                   </h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                    <span>
-                      {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
-                    </span>
-                  </div>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
+                  </span>
                 </div>
               </div>
               

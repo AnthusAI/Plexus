@@ -68,23 +68,23 @@ const getMessageIcon = (role?: string, messageType?: string) => {
 
 const getMessageTypeColor = (role?: string, messageType?: string) => {
   if (messageType === 'TOOL_CALL') {
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+    return 'bg-info text-primary-foreground'
   }
   if (messageType === 'TOOL_RESPONSE') {
-    return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+    return 'bg-true text-primary-foreground'
   }
   
   switch (role) {
     case 'USER':
-      return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      return 'bg-info text-primary-foreground'
     case 'ASSISTANT':
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      return 'bg-info text-primary-foreground'
     case 'SYSTEM':
-      return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      return 'bg-warning text-primary-foreground'
     case 'TOOL':
-      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      return 'bg-true text-primary-foreground'
     default:
-      return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      return 'bg-neutral text-primary-foreground'
   }
 }
 
@@ -236,14 +236,14 @@ export default function NodeChatMessages({ nodeId }: Props) {
                   </div>
                   
                   <Badge 
-                    variant="secondary" 
-                    className={`text-xs ${getMessageTypeColor(message.role, message.messageType)}`}
+                    variant="pill" 
+                    className={`text-xs px-1.5 py-0 font-normal ${getMessageTypeColor(message.role, message.messageType)}`}
                   >
                     {getMessageTypeLabel(message.role, message.messageType)}
                   </Badge>
                   
                   {message.toolName && (
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-neutral text-primary-foreground">
                       {message.toolName}
                     </Badge>
                   )}

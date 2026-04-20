@@ -311,7 +311,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -347,7 +347,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -383,7 +383,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -480,12 +480,13 @@ class LuaDSLRuntime:
             from langchain_core.tools import tool
 
             @tool
-            def done(reason: str, success: bool = True) -> str:
+            def done(reason: str, success: bool = True, decision: str = "") -> str:
                 """Signal completion of the task.
 
                 Args:
                     reason: Brief explanation of completion
                     success: True if completed successfully
+                    decision: Optional decision value (e.g. 'abort', 'continue', 'keep', 'revert')
 
                 Returns:
                     Acknowledgment message

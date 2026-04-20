@@ -1,0 +1,97 @@
+{
+  "id": "plx-cb3e8bcb-5191-43ff-8554-c36c4d0f13ff",
+  "title": "Optimizer Metrics chart blank on ProcedureTask (lines/axes/grid disappear)",
+  "description": "## Problem\nUsers still report the Optimizer Metrics chart renders as blank except legend/squares.\n\n## Behavior Spec\nFeature: Optimizer Metrics chart rendering\nScenario: Render chart with cycle data\nGiven the procedure has recent/regression metrics\nWhen the chart is shown\nThen axes, grid, labels, and metric lines/dots are visible\nAnd legend-only rendering does not occur.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "38426e28-6fbc-47f9-86ab-fb2ab5a7138c",
+      "author": "ryan",
+      "text": "Created fix branch from develop and beginning implementation/validation for blank optimizer chart rendering bug.",
+      "created_at": "2026-04-19T19:11:44.840554Z"
+    },
+    {
+      "id": "85c9613f-9afa-4b07-90f0-86d20621de3a",
+      "author": "ryan",
+      "text": "Applied fix by cherry-picking commit b6461732b onto a branch from current develop (new commit 81e908eab), removing the unstable axis polish (ResizeObserver + y-axis label props) that correlated with blank chart rendering. Verification passed: OptimizerMetricsChart and ProcedureTask optimizer tests.",
+      "created_at": "2026-04-19T19:12:06.588129Z"
+    },
+    {
+      "id": "7da7e66f-c4ed-4282-8cfe-b8ba0783e61d",
+      "author": "ryan",
+      "text": "Applying follow-up visual tweak: reduce Optimizer Metrics chart side padding/margins so plotting area is wider without changing metric behavior.",
+      "created_at": "2026-04-19T19:16:12.343542Z"
+    },
+    {
+      "id": "d25f4e49-aba5-4095-85eb-a103cf1853ae",
+      "author": "ryan",
+      "text": "Adjusted chart layout per feedback: widened plot area by reducing wrapper padding and right margin, shifted x labels inward with XAxis padding, added y-axis tick margin, and added explicit AC1/Acc labels under left/right scales via overlay text (without Recharts axis-label props). Tests pass for OptimizerMetricsChart and ProcedureTask optimizer suite.",
+      "created_at": "2026-04-19T19:16:47.116201Z"
+    },
+    {
+      "id": "45c277f3-f683-4ad7-84b9-c6a6ee3420b8",
+      "author": "ryan",
+      "text": "Applying second spacing pass: increase y-axis label gutters and move x-axis category positions inward further to eliminate Baseline/Cycle labels directly under y tick labels.",
+      "created_at": "2026-04-19T19:17:27.629095Z"
+    },
+    {
+      "id": "550d2e84-6e24-4abf-bbfa-e4e5c2403e25",
+      "author": "ryan",
+      "text": "Second spacing pass complete: increased left/right chart margins, increased x-axis edge padding, and widened y-axis gutters/tick margins so category labels no longer sit directly under y-axis ticks. Verified with OptimizerMetricsChart + ProcedureTask optimizer tests (pass).",
+      "created_at": "2026-04-19T19:17:43.127443Z"
+    },
+    {
+      "id": "263af031-c6e4-47c4-8a41-83a22a6bbc8d",
+      "author": "ryan",
+      "text": "Applying axis-label alignment tweak: move left y tick labels further left and right y tick labels further right to align vertically above AC1/Acc captions.",
+      "created_at": "2026-04-19T19:18:31.063489Z"
+    },
+    {
+      "id": "1f7996b4-7763-4b26-b4fa-405189aa0187",
+      "author": "ryan",
+      "text": "Moved y-axis tick columns outward to match AC1/Acc caption positions: increased left/right axis widths, increased tickMargin on both axes, and expanded chart side margins. Verified optimizer chart and ProcedureTask optimizer tests pass.",
+      "created_at": "2026-04-19T19:18:49.930739Z"
+    },
+    {
+      "id": "33ebed85-327b-490a-83f0-ea2b1d66efb4",
+      "author": "ryan",
+      "text": "Switching to simpler axis-label approach: remove absolute AC1/Acc overlays and render AC1/Acc within custom YAxis tick renderer on the bottom tick so labels are guaranteed in same column as tick values.",
+      "created_at": "2026-04-19T19:25:08.172374Z"
+    },
+    {
+      "id": "dd859dc5-da85-42d5-8cb8-cb14523a9c96",
+      "author": "ryan",
+      "text": "Simplified axis labeling per request: removed absolute AC1/Acc overlays and implemented custom left/right YAxis tick renderers that render AC1 under -1.0 and Acc under 0% in the same tick text column. Increased chart bottom margin slightly to avoid clipping. Chart tests pass.",
+      "created_at": "2026-04-19T19:26:02.575921Z"
+    },
+    {
+      "id": "95925f20-2ee7-41b6-9450-4d7e4c3f2b66",
+      "author": "ryan",
+      "text": "Adjusting AC1/Acc vertical placement: moving labels lower beneath their y-axis ticks while keeping the same horizontal column alignment.",
+      "created_at": "2026-04-19T19:28:20.415637Z"
+    },
+    {
+      "id": "61d4f38c-bb8f-4ab7-b5b3-43aecf6276f4",
+      "author": "ryan",
+      "text": "Moved AC1/Acc labels lower beneath their ticks by increasing tspan dy from 1.2em to 1.5em in custom YAxis tick renderer. Verified OptimizerMetricsChart test passes.",
+      "created_at": "2026-04-19T19:28:32.488174Z"
+    },
+    {
+      "id": "70695e9b-9756-470d-bd5b-f12da28fa0fa",
+      "author": "ryan",
+      "text": "Aligned AC1/Acc with x-axis label row by switching to fixed Y-offset label placement in custom y-tick renderers (y + 16 from bottom y-tick), instead of cumulative tspan dy. OptimizerMetricsChart test passes.",
+      "created_at": "2026-04-19T19:37:49.103643Z"
+    }
+  ],
+  "created_at": "2026-04-19T19:11:42.347073Z",
+  "updated_at": "2026-04-19T19:37:49.103643Z",
+  "closed_at": null,
+  "custom": {}
+}
