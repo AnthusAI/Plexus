@@ -174,6 +174,9 @@ function FeedbackVolumeChart({
 function LoadingDashboardState() {
   return (
     <div className="space-y-4">
+      <div className="rounded-lg bg-card px-4 py-3 text-sm text-muted-foreground">
+        Loading feedback volume data...
+      </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="rounded-lg bg-card p-4">
@@ -551,10 +554,16 @@ export default function FeedbackDashboard() {
 
   const timelineLabel = data?.bucketPolicy.bucket_type || "calendar_week";
   const canDispatchScopedReports = Boolean(selectedScorecard && data);
+  const showDiagnostics = process.env.NODE_ENV !== "production";
 
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4">
+        {showDiagnostics ? (
+          <div className="rounded-lg bg-card px-4 py-2 text-xs text-muted-foreground">
+            {`debug: account=${selectedAccount?.id || "none"} loading=${String(isLoading)} error=${error || "none"} dataScope=${data?.scope || "none"} total=${data?.summary.feedback_items_total ?? 0} scorecards=${data?.scorecardSeries.length ?? 0} scores=${data?.scoreSeries.length ?? 0}`}
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex flex-1 flex-col gap-3">
             <ScorecardContext
