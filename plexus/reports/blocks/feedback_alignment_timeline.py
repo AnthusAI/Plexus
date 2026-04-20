@@ -31,11 +31,14 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
     - scorecard only: all scores on the scorecard
     - scorecard + score/score_id: single-score mode
 
-    Bucket policy supports trailing complete windows and calendar-aligned complete windows.
+    Bucket policy supports:
+    - complete historical buckets (default when no explicit window is provided)
+    - exact-window buckets (when days or start_date/end_date is provided)
     """
 
     DEFAULT_NAME = "Feedback Alignment Timeline"
-    DEFAULT_DESCRIPTION = "Alignment metrics over complete historical time buckets"
+    DEFAULT_DESCRIPTION = "Alignment metrics over time"
+    DEFAULT_DAYS = 30
 
     TRAILING_BUCKET_DAYS: Dict[str, int] = {
         "trailing_1d": 1,
@@ -50,33 +53,26 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         self.log_messages = []
 
         try:
-            scorecard_identifier = self.config.get("scorecard")
+            scorecard_identifier = self._get_param("scorecard")
             if not scorecard_identifier:
                 raise ValueError("'scorecard' is required in block configuration.")
 
-            score_identifier = (
-                self.config.get("score_id")
-                or self.config.get("score")
-                or self.params.get("score_id")
-                or self.params.get("score")
-                or self.params.get("param_score_id")
-                or self.params.get("param_score")
-            )
+            score_identifier = self._get_param("score_id") or self._get_param("score")
             if score_identifier is not None:
                 score_identifier = str(score_identifier).strip() or None
 
-            bucket_type = str(self.config.get("bucket_type", "trailing_7d")).strip().lower()
-            bucket_count = int(self.config.get("bucket_count", 12))
-            timezone_name = str(self.config.get("timezone", "UTC")).strip()
-            week_start = str(self.config.get("week_start", "monday")).strip().lower()
+            bucket_type = str(self._get_param("bucket_type") or "trailing_7d").strip().lower()
+            requested_bucket_count = self._get_param("bucket_count")
+            bucket_count = int(requested_bucket_count) if requested_bucket_count is not None else 12
+            timezone_name = str(self._get_param("timezone") or "UTC").strip()
+            week_start = str(self._get_param("week_start") or "monday").strip().lower()
+            show_bucket_details = self._parse_bool(self._get_param("show_bucket_details"), default=False)
 
             if bucket_type not in self.TRAILING_BUCKET_DAYS and bucket_type not in self.CALENDAR_BUCKET_TYPES:
                 supported = sorted(list(self.TRAILING_BUCKET_DAYS.keys()) + list(self.CALENDAR_BUCKET_TYPES))
                 raise ValueError(
                     f"Unsupported bucket_type '{bucket_type}'. Supported values: {supported}"
                 )
-            if bucket_count <= 0:
-                raise ValueError("'bucket_count' must be a positive integer.")
             if week_start not in self.WEEK_START_INDEX:
                 raise ValueError("'week_start' must be either 'monday' or 'sunday'.")
 
@@ -85,27 +81,71 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             except Exception as exc:
                 raise ValueError(f"Invalid timezone '{timezone_name}': {exc}") from exc
 
-            now_local = self._now_utc().astimezone(tzinfo)
-            buckets = self._build_buckets(
-                now_local=now_local,
-                bucket_type=bucket_type,
-                bucket_count=bucket_count,
-                week_start=week_start,
-            )
+            has_explicit_window = self._has_explicit_window()
+            if has_explicit_window:
+                window_start_utc, window_end_utc = self._resolve_window_utc()
+                window_start_local = window_start_utc.astimezone(tzinfo)
+                window_end_local = window_end_utc.astimezone(tzinfo)
+                if window_end_local <= window_start_local:
+                    raise ValueError("Resolved time window must have end > start.")
+
+                buckets = self._build_exact_window_buckets(
+                    start_local=window_start_local,
+                    end_local=window_end_local,
+                    bucket_type=bucket_type,
+                    week_start=week_start,
+                )
+                window_mode = "exact_window"
+                complete_only = False
+                if requested_bucket_count is not None:
+                    self._log(
+                        "Ignoring 'bucket_count' because an explicit window was provided (days/start_date/end_date).",
+                        level="INFO",
+                    )
+                range_start_utc = window_start_utc
+                # Feedback item query uses inclusive bounds.
+                range_end_query_utc = window_end_utc
+                date_range_end_utc = window_end_utc
+            else:
+                if bucket_count <= 0:
+                    raise ValueError("'bucket_count' must be a positive integer.")
+                now_local = self._now_utc().astimezone(tzinfo)
+                buckets = self._build_buckets(
+                    now_local=now_local,
+                    bucket_type=bucket_type,
+                    bucket_count=bucket_count,
+                    week_start=week_start,
+                )
+                window_mode = "historical_complete"
+                complete_only = True
+                range_start_utc = buckets[0].start_local.astimezone(timezone.utc)
+                # Query end is inclusive; subtract 1 microsecond to remain in the last bucket.
+                range_end_query_utc = (
+                    buckets[-1].end_local.astimezone(timezone.utc) - timedelta(microseconds=1)
+                )
+                date_range_end_utc = buckets[-1].end_local.astimezone(timezone.utc)
+
             if not buckets:
                 raise ValueError("No time buckets were generated.")
 
-            range_start_utc = buckets[0].start_local.astimezone(timezone.utc)
-            # Query end is inclusive in FeedbackItem utility query; subtract 1 microsecond to stay inside last bucket.
-            range_end_query_utc = (
-                buckets[-1].end_local.astimezone(timezone.utc) - timedelta(microseconds=1)
-            )
-
+            effective_bucket_count = len(buckets)
             scorecard = await self._resolve_scorecard(str(scorecard_identifier))
             scores_to_analyze = await self._resolve_scores_for_mode(
                 scorecard_id=scorecard.id,
                 score_identifier=score_identifier,
             )
+
+            bucket_policy = {
+                "bucket_type": bucket_type,
+                "bucket_count": effective_bucket_count,
+                "requested_bucket_count": bucket_count,
+                "bucket_count_ignored": bool(has_explicit_window and requested_bucket_count is not None),
+                "timezone": timezone_name,
+                "week_start": week_start,
+                "complete_only": complete_only,
+                "window_mode": window_mode,
+            }
+
             if not scores_to_analyze:
                 return {
                     "mode": "single_score" if score_identifier else "all_scores",
@@ -113,22 +153,22 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                     "block_description": self.DEFAULT_DESCRIPTION,
                     "scorecard_id": scorecard.id,
                     "scorecard_name": scorecard.name,
-                    "bucket_policy": {
-                        "bucket_type": bucket_type,
-                        "bucket_count": bucket_count,
-                        "timezone": timezone_name,
-                        "week_start": week_start,
-                        "complete_only": True,
-                    },
+                    "show_bucket_details": show_bucket_details,
+                    "bucket_policy": bucket_policy,
                     "buckets": self._serialize_buckets(buckets),
                     "overall": {"score_id": "overall", "score_name": "Overall", "points": []},
                     "scores": [],
                     "message": "No scores found for the requested scope.",
+                    "date_range": {
+                        "start": range_start_utc.isoformat(),
+                        "end": date_range_end_utc.isoformat(),
+                    },
                 }, self._get_log_string()
 
             self._log(
                 f"Running FeedbackAlignmentTimeline for scorecard '{scorecard.name}' "
-                f"with {len(scores_to_analyze)} score(s), bucket_type={bucket_type}, bucket_count={bucket_count}"
+                f"with {len(scores_to_analyze)} score(s), bucket_type={bucket_type}, "
+                f"bucket_count={effective_bucket_count}, window_mode={window_mode}"
             )
 
             overall_bucket_items: List[List[FeedbackItem]] = [[] for _ in buckets]
@@ -186,13 +226,8 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 "block_description": self.DEFAULT_DESCRIPTION,
                 "scorecard_id": scorecard.id,
                 "scorecard_name": scorecard.name,
-                "bucket_policy": {
-                    "bucket_type": bucket_type,
-                    "bucket_count": bucket_count,
-                    "timezone": timezone_name,
-                    "week_start": week_start,
-                    "complete_only": True,
-                },
+                "show_bucket_details": show_bucket_details,
+                "bucket_policy": bucket_policy,
                 "buckets": self._serialize_buckets(buckets),
                 "overall": {
                     "score_id": "overall",
@@ -201,17 +236,17 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 },
                 "scores": score_series,
                 "date_range": {
-                    "start": buckets[0].start_local.astimezone(timezone.utc).isoformat(),
-                    "end": buckets[-1].end_local.astimezone(timezone.utc).isoformat(),
+                    "start": range_start_utc.isoformat(),
+                    "end": date_range_end_utc.isoformat(),
                 },
                 "total_feedback_items_retrieved": total_feedback_items_retrieved,
                 "message": (
                     f"Processed {len(score_series)} score(s) across "
-                    f"{len(buckets)} complete bucket(s)."
+                    f"{len(buckets)} bucket(s) in {window_mode} mode."
                 ),
             }
 
-            # In single-score mode, "overall" and selected score should represent the same series.
+            # In single-score mode, "overall" and selected score represent the same series.
             if mode == "single_score" and score_series:
                 output["overall"] = {
                     "score_id": score_series[0]["score_id"],
@@ -226,6 +261,82 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
 
     def _now_utc(self) -> datetime:
         return datetime.now(timezone.utc)
+
+    def _get_param(self, name: str) -> Any:
+        if name in self.config and self.config.get(name) is not None:
+            return self.config.get(name)
+        if name in self.params and self.params.get(name) is not None:
+            return self.params.get(name)
+        param_name = f"param_{name}"
+        if param_name in self.params and self.params.get(param_name) is not None:
+            return self.params.get(param_name)
+        return None
+
+    def _parse_bool(self, value: Any, *, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        value_str = str(value).strip().lower()
+        if value_str in {"1", "true", "yes", "y", "on"}:
+            return True
+        if value_str in {"0", "false", "no", "n", "off"}:
+            return False
+        return default
+
+    def _has_explicit_window(self) -> bool:
+        return any(
+            self._get_param(name) is not None
+            for name in ("days", "start_date", "end_date")
+        )
+
+    def _parse_dt(self, value: Any, *, is_end: bool) -> datetime:
+        value_str = str(value).strip()
+        date_only = (
+            len(value_str) == 10
+            and value_str[4] == "-"
+            and value_str[7] == "-"
+        )
+        try:
+            dt = datetime.fromisoformat(value_str)
+            if date_only:
+                if is_end:
+                    dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                else:
+                    dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        except Exception:
+            dt = datetime.strptime(value_str, "%Y-%m-%d")
+            if is_end:
+                dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            else:
+                dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    def _resolve_window_utc(self) -> Tuple[datetime, datetime]:
+        start_date_raw = self._get_param("start_date")
+        end_date_raw = self._get_param("end_date")
+        days_raw = self._get_param("days")
+
+        if (start_date_raw and not end_date_raw) or (end_date_raw and not start_date_raw):
+            raise ValueError("Both 'start_date' and 'end_date' are required when specifying explicit date windows.")
+        if days_raw is not None and start_date_raw and end_date_raw:
+            raise ValueError("Use either 'days' or 'start_date'+'end_date', not both.")
+
+        if start_date_raw and end_date_raw:
+            start_date = self._parse_dt(start_date_raw, is_end=False)
+            end_date = self._parse_dt(end_date_raw, is_end=True)
+        else:
+            days = int(days_raw) if days_raw is not None else self.DEFAULT_DAYS
+            if days <= 0:
+                raise ValueError("'days' must be a positive integer.")
+            end_date = self._now_utc()
+            start_date = end_date - timedelta(days=days)
+
+        if end_date <= start_date:
+            raise ValueError("'end_date' must be after 'start_date'.")
+        return start_date, end_date
 
     async def _resolve_scorecard(self, scorecard_identifier: str) -> Scorecard:
         scorecard = None
@@ -469,6 +580,102 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             return buckets
 
         raise ValueError(f"Unhandled bucket_type '{bucket_type}'.")
+
+    def _build_exact_window_buckets(
+        self,
+        *,
+        start_local: datetime,
+        end_local: datetime,
+        bucket_type: str,
+        week_start: str,
+    ) -> List[_TimeBucket]:
+        if start_local.tzinfo is None:
+            start_local = start_local.replace(tzinfo=timezone.utc)
+        if end_local.tzinfo is None:
+            end_local = end_local.replace(tzinfo=timezone.utc)
+
+        if end_local <= start_local:
+            return []
+
+        if bucket_type in self.TRAILING_BUCKET_DAYS:
+            duration = timedelta(days=self.TRAILING_BUCKET_DAYS[bucket_type])
+            buckets: List[_TimeBucket] = []
+            current_start = start_local
+            while current_start < end_local:
+                current_end = min(current_start + duration, end_local)
+                buckets.append(
+                    _TimeBucket(
+                        start_local=current_start,
+                        end_local=current_end,
+                        label=current_start.strftime("%Y-%m-%d"),
+                    )
+                )
+                current_start = current_end
+            return buckets
+
+        period_start = self._calendar_period_start(start_local, bucket_type, week_start)
+        buckets = []
+        while period_start < end_local:
+            period_end = self._advance_calendar_period(period_start, bucket_type)
+            clipped_start = max(period_start, start_local)
+            clipped_end = min(period_end, end_local)
+            if clipped_start < clipped_end:
+                buckets.append(
+                    _TimeBucket(
+                        start_local=clipped_start,
+                        end_local=clipped_end,
+                        label=self._calendar_period_label(period_start, bucket_type),
+                    )
+                )
+            period_start = period_end
+
+        return buckets
+
+    def _calendar_period_start(
+        self,
+        value: datetime,
+        bucket_type: str,
+        week_start: str,
+    ) -> datetime:
+        day_start = value.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if bucket_type == "calendar_day":
+            return day_start
+
+        if bucket_type == "calendar_week":
+            week_start_index = self.WEEK_START_INDEX[week_start]
+            offset = (day_start.weekday() - week_start_index) % 7
+            return day_start - timedelta(days=offset)
+
+        if bucket_type == "calendar_biweek":
+            week_start_index = self.WEEK_START_INDEX[week_start]
+            offset = (day_start.weekday() - week_start_index) % 7
+            current_week_start = day_start - timedelta(days=offset)
+            epoch_day = 5 if week_start == "monday" else 4
+            epoch = day_start.replace(year=1970, month=1, day=epoch_day)
+            weeks_since_epoch = int((current_week_start - epoch).days // 7)
+            return epoch + timedelta(weeks=(weeks_since_epoch // 2) * 2)
+
+        if bucket_type == "calendar_month":
+            return day_start.replace(day=1)
+
+        raise ValueError(f"Unsupported calendar bucket type '{bucket_type}'.")
+
+    def _advance_calendar_period(self, period_start: datetime, bucket_type: str) -> datetime:
+        if bucket_type == "calendar_day":
+            return period_start + timedelta(days=1)
+        if bucket_type == "calendar_week":
+            return period_start + timedelta(days=7)
+        if bucket_type == "calendar_biweek":
+            return period_start + timedelta(days=14)
+        if bucket_type == "calendar_month":
+            return self._shift_months(period_start, 1)
+        raise ValueError(f"Unsupported calendar bucket type '{bucket_type}'.")
+
+    def _calendar_period_label(self, period_start: datetime, bucket_type: str) -> str:
+        if bucket_type == "calendar_month":
+            return period_start.strftime("%Y-%m")
+        return period_start.strftime("%Y-%m-%d")
 
     def _shift_months(self, value: datetime, months: int) -> datetime:
         month_index = (value.month - 1) + months
