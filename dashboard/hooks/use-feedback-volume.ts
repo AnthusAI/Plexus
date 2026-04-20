@@ -50,6 +50,38 @@ const ACCOUNT_FEEDBACK_ITEMS_QUERY = `
   }
 `;
 
+const ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
+  query ListFeedbackItemByAccountIdAndUpdatedAt(
+    $accountId: String!
+    $updatedAt: ModelStringKeyConditionInput
+    $limit: Int
+    $nextToken: String
+    $sortDirection: ModelSortDirection
+  ) {
+    listFeedbackItemByAccountIdAndUpdatedAt(
+      accountId: $accountId
+      updatedAt: $updatedAt
+      limit: $limit
+      nextToken: $nextToken
+      sortDirection: $sortDirection
+    ) {
+      items {
+        id
+        scorecardId
+        scoreId
+        itemId
+        initialAnswerValue
+        finalAnswerValue
+        isInvalid
+        editedAt
+        updatedAt
+        createdAt
+      }
+      nextToken
+    }
+  }
+`;
+
 const SCORE_FEEDBACK_ITEMS_QUERY = `
   query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
     $accountId: String!
@@ -61,6 +93,38 @@ const SCORE_FEEDBACK_ITEMS_QUERY = `
     listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
       accountId: $accountId
       scorecardIdScoreIdEditedAt: $compositeCondition
+      limit: $limit
+      nextToken: $nextToken
+      sortDirection: $sortDirection
+    ) {
+      items {
+        id
+        scorecardId
+        scoreId
+        itemId
+        initialAnswerValue
+        finalAnswerValue
+        isInvalid
+        editedAt
+        updatedAt
+        createdAt
+      }
+      nextToken
+    }
+  }
+`;
+
+const SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY = `
+  query ListFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+    $accountId: String!
+    $compositeCondition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput
+    $limit: Int
+    $nextToken: String
+    $sortDirection: ModelSortDirection
+  ) {
+    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+      accountId: $accountId
+      scorecardIdScoreIdUpdatedAt: $compositeCondition
       limit: $limit
       nextToken: $nextToken
       sortDirection: $sortDirection
@@ -196,6 +260,26 @@ async function paginatedFeedbackQuery(
   return items;
 }
 
+function getFeedbackItemTimestamp(item: FeedbackVolumeSourceItem): number {
+  const timestamp = item.editedAt || item.updatedAt || item.createdAt;
+  if (!timestamp) {
+    return 0;
+  }
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function mergeAndDedupeFeedbackItems(items: FeedbackVolumeSourceItem[]): FeedbackVolumeSourceItem[] {
+  const byId = new Map<string, FeedbackVolumeSourceItem>();
+  for (const item of items) {
+    const existing = byId.get(item.id);
+    if (!existing || getFeedbackItemTimestamp(item) >= getFeedbackItemTimestamp(existing)) {
+      byId.set(item.id, item);
+    }
+  }
+  return Array.from(byId.values());
+}
+
 async function fetchFeedbackItemsByAccountAndEditedAt(
   accountId: string,
   startDate: Date,
@@ -207,6 +291,19 @@ async function fetchFeedbackItemsByAccountAndEditedAt(
       between: [startDate.toISOString(), endDate.toISOString()],
     },
   }, "listFeedbackItemByAccountIdAndEditedAt");
+}
+
+async function fetchFeedbackItemsByAccountAndUpdatedAt(
+  accountId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FeedbackVolumeSourceItem[]> {
+  return paginatedFeedbackQuery(ACCOUNT_FEEDBACK_ITEMS_UPDATED_AT_QUERY, {
+    accountId,
+    updatedAt: {
+      between: [startDate.toISOString(), endDate.toISOString()],
+    },
+  }, "listFeedbackItemByAccountIdAndUpdatedAt");
 }
 
 async function fetchFeedbackItemsByScore(
@@ -233,6 +330,58 @@ async function fetchFeedbackItemsByScore(
       ],
     },
   }, "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt");
+}
+
+async function fetchFeedbackItemsByScoreAndUpdatedAt(
+  accountId: string,
+  scorecardId: string,
+  scoreId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FeedbackVolumeSourceItem[]> {
+  return paginatedFeedbackQuery(SCORE_FEEDBACK_ITEMS_UPDATED_AT_QUERY, {
+    accountId,
+    compositeCondition: {
+      between: [
+        {
+          scorecardId,
+          scoreId,
+          updatedAt: startDate.toISOString(),
+        },
+        {
+          scorecardId,
+          scoreId,
+          updatedAt: endDate.toISOString(),
+        },
+      ],
+    },
+  }, "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt");
+}
+
+async function fetchFeedbackItemsByAccountWindow(
+  accountId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FeedbackVolumeSourceItem[]> {
+  const [byEditedAt, byUpdatedAt] = await Promise.all([
+    fetchFeedbackItemsByAccountAndEditedAt(accountId, startDate, endDate),
+    fetchFeedbackItemsByAccountAndUpdatedAt(accountId, startDate, endDate),
+  ]);
+  return mergeAndDedupeFeedbackItems([...byEditedAt, ...byUpdatedAt]);
+}
+
+async function fetchFeedbackItemsByScoreWindow(
+  accountId: string,
+  scorecardId: string,
+  scoreId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FeedbackVolumeSourceItem[]> {
+  const [byEditedAt, byUpdatedAt] = await Promise.all([
+    fetchFeedbackItemsByScore(accountId, scorecardId, scoreId, startDate, endDate),
+    fetchFeedbackItemsByScoreAndUpdatedAt(accountId, scorecardId, scoreId, startDate, endDate),
+  ]);
+  return mergeAndDedupeFeedbackItems([...byEditedAt, ...byUpdatedAt]);
 }
 
 async function mapWithConcurrency<T, R>(
@@ -289,7 +438,7 @@ async function loadFeedbackVolumeDashboardData({
   if (scope === "account") {
     const [scorecards, items] = await Promise.all([
       fetchScorecardsForAccount(accountId),
-      fetchFeedbackItemsByAccountAndEditedAt(accountId, window.start, window.end),
+      fetchFeedbackItemsByAccountWindow(accountId, window.start, window.end),
     ]);
 
     return buildFeedbackVolumeDashboardData({
@@ -317,7 +466,7 @@ async function loadFeedbackVolumeDashboardData({
       throw new Error("scoreId is required for score scope.");
     }
 
-    const items = await fetchFeedbackItemsByScore(accountId, scorecardId, scoreId, window.start, window.end);
+    const items = await fetchFeedbackItemsByScoreWindow(accountId, scorecardId, scoreId, window.start, window.end);
     return buildFeedbackVolumeDashboardData({
       scope,
       items,
@@ -333,7 +482,7 @@ async function loadFeedbackVolumeDashboardData({
   }
 
   const perScoreItems = await mapWithConcurrency(scores, 4, async (score) =>
-    fetchFeedbackItemsByScore(accountId, scorecardId, score.id, window.start, window.end)
+    fetchFeedbackItemsByScoreWindow(accountId, scorecardId, score.id, window.start, window.end)
   );
   const items = perScoreItems.flat();
 
