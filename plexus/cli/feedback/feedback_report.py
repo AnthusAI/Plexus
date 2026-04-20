@@ -14,7 +14,6 @@ import yaml
 from plexus.cli.feedback.report_runner import (
     build_window_config,
     run_feedback_report_block,
-    summarize_timeline_feedback_volume,
 )
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.cli.shared.client_utils import create_client
@@ -475,6 +474,12 @@ def timeline(
 @click.option("--bucket-count", type=int, default=12, show_default=True)
 @click.option("--timezone", "timezone_name", default="UTC", show_default=True)
 @click.option("--week-start", type=click.Choice(["monday", "sunday"]), default="monday", show_default=True)
+@click.option(
+    "--show-bucket-details/--chart-only",
+    default=False,
+    show_default=True,
+    help="Show or hide per-bucket metrics details below the chart.",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -492,6 +497,7 @@ def volume(
     bucket_count: int,
     timezone_name: str,
     week_start: str,
+    show_bucket_details: bool,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -503,9 +509,9 @@ def volume(
     output_format: str,
     include_log: bool,
 ) -> None:
-    """Run timeline and return a feedback-volume-focused payload."""
+    """Run the FeedbackVolumeTimeline report block."""
     result = run_feedback_report_block(
-        block_class="FeedbackAlignmentTimeline",
+        block_class="FeedbackVolumeTimeline",
         scorecard=scorecard,
         score=score,
         days=_coerce_optional_int(days, "days"),
@@ -521,16 +527,11 @@ def volume(
             "bucket_count": bucket_count,
             "timezone": timezone_name,
             "week_start": week_start,
+            "show_bucket_details": show_bucket_details,
         },
     )
 
-    if result.get("status") == "success":
-        result = {
-            **result,
-            "output": summarize_timeline_feedback_volume(result["output"]),
-        }
-
-    _print_result(title="FeedbackVolume", result=result, output_format=output_format, include_log=include_log)
+    _print_result(title="FeedbackVolumeTimeline", result=result, output_format=output_format, include_log=include_log)
 
 
 @report.command(name="acceptance-rate-timeline")
