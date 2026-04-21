@@ -3,7 +3,7 @@
   "title": "Add configurable date range parameter type for reports",
   "description": "",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "derek",
       "text": "Added semantic-release safeguard: creating a final Conventional Commit (feat(reports): add date-range report parameters and calendar UX) on this branch so bump intent is explicit when changes eventually reach main.",
       "created_at": "2026-04-21T18:51:54.304550910Z"
+    },
+    {
+      "id": "e87821b9-5110-4e01-8381-b8df785d073d",
+      "author": "derek",
+      "text": "Epic deliverables completed and submitted via PR #192, with release promotion PR #193 and code-quality follow-up PR #194. Moving epic to closed.",
+      "created_at": "2026-04-21T19:22:35.087136334Z"
     }
   ],
   "created_at": "2026-04-21T16:23:20.515463843Z",
-  "updated_at": "2026-04-21T18:51:54.304550910Z",
-  "closed_at": null,
+  "updated_at": "2026-04-21T19:22:35.098687592Z",
+  "closed_at": "2026-04-21T19:22:35.098687592Z",
   "custom": {}
 }
