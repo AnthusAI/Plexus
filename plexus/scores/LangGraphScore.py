@@ -1647,12 +1647,15 @@ class LangGraphScore(Score, LangChainUser):
                     explanation="A timeout occurred during workflow execution"
                 )
         except Exception as e:
-            logging.error(f"Error in predict for thread_id {thread_id}: {e}")
+            # Preserve exception type for operator debugging (the raw message alone is often opaque,
+            # e.g. "the connection is closed").
+            logging.error(f"Error in predict for thread_id {thread_id}: {type(e).__name__}: {e}")
             logging.error(traceback.format_exc())
             return Score.Result(
                 parameters=self.parameters,
                 value="ERROR",
-                error=str(e)
+                error=f"{type(e).__name__}: {e}",
+                metadata={"exception_type": type(e).__name__},
             )
 
     def preprocess_text(self, text):
