@@ -22,10 +22,16 @@
       "author": "derek",
       "text": "Implemented. Updated dashboard scripts so  now runs web only and dispatcher requires explicit . Updated dashboard/README.md and root README.md to document the new local workflow and avoid accidental local dispatcher collisions.",
       "created_at": "2026-04-21T17:55:42.573150014Z"
+    },
+    {
+      "id": "ed440631-6ae5-4053-bbb6-daa0e69a1696",
+      "author": "derek",
+      "text": "Follow-up CI fix: added explicit typing for GraphQL response/page in dashboard/utils/report-configurations.ts to resolve TS7022 implicit-any failure in dashboard typecheck workflow.",
+      "created_at": "2026-04-21T18:08:36.861321619Z"
     }
   ],
   "created_at": "2026-04-21T17:54:51.922012328Z",
-  "updated_at": "2026-04-21T17:55:42.573150014Z",
+  "updated_at": "2026-04-21T18:08:36.861321619Z",
   "closed_at": "2026-04-21T17:55:42.111195137Z",
   "custom": {}
 }
