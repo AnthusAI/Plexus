@@ -9,7 +9,7 @@ from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 
 from . import feedback_utils
-from .feedback_analysis import FeedbackAnalysis
+from .feedback_alignment import FeedbackAlignment
 from .reinforcement_helpers import (
     fetch_item_identifiers,
     is_normal_prediction_score_result,
@@ -19,12 +19,12 @@ from .reinforcement_helpers import (
 logger = logging.getLogger(__name__)
 
 
-class ExplanationAnalysis(FeedbackAnalysis):
+class ExplanationAnalysis(FeedbackAlignment):
     """
     Semantic reinforcement-memory analysis over normal production
     ScoreResult explanations.
 
-    This is intentionally a separate report block from FeedbackAnalysis.
+    This is intentionally a separate report block from FeedbackAlignment.
     """
 
     DEFAULT_NAME = "Explanation Analysis"
