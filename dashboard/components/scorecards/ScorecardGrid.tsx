@@ -10,7 +10,7 @@ interface ScorecardGridProps {
   selectedScorecardId?: string
   onSelectScorecard: (scorecard: Schema['Scorecard']['type'] | null) => void
   onEdit: (scorecard: Schema['Scorecard']['type']) => void
-  onFeedbackAnalysis: (scorecardId: string) => void
+  onFeedbackAlignment: (scorecardId: string) => void
   onCostAnalysis: (scorecardId: string) => void
   scorecardRefsMap: React.RefObject<Map<string, HTMLDivElement | null>>
 }
@@ -22,7 +22,7 @@ const ScorecardGrid = React.memo(function ScorecardGrid({
   selectedScorecardId,
   onSelectScorecard,
   onEdit,
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   scorecardRefsMap
 }: ScorecardGridProps) {
@@ -57,7 +57,7 @@ const ScorecardGrid = React.memo(function ScorecardGrid({
               isSelected={selectedScorecardId === scorecard.id}
               onClick={() => onSelectScorecard(scorecard)}
               onEdit={() => onEdit(scorecard)}
-              onFeedbackAnalysis={() => onFeedbackAnalysis(scorecard.id)}
+              onFeedbackAlignment={() => onFeedbackAlignment(scorecard.id)}
               onCostAnalysis={() => onCostAnalysis(scorecard.id)}
             />
           </div>

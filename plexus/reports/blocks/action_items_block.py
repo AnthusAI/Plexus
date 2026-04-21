@@ -1,7 +1,7 @@
 """
 ActionItems ReportBlock
 
-Post-processes a sibling FeedbackAnalysis block's output and emits a prioritised,
+Post-processes a sibling FeedbackAlignment block's output and emits a prioritised,
 structured list of action items for downstream classifier improvement work.
 
 The block output (the "Code" view in the dashboard) is a JSON dict with an
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class ActionItems(BaseReportBlock):
-    """Generate a prioritised action-item list from a sibling FeedbackAnalysis block."""
+    """Generate a prioritised action-item list from a sibling FeedbackAlignment block."""
 
     DEFAULT_NAME = "Action Items"
     DEFAULT_DESCRIPTION = "Prioritised list of classifier improvement tasks from feedback root-cause analysis."
@@ -42,12 +42,12 @@ class ActionItems(BaseReportBlock):
 
         _log(f"ActionItems: ac1_threshold={ac1_threshold}, recency_days={recency_days}")
 
-        # ── Find the sibling FeedbackAnalysis block ─────────────────────────
+        # ── Find the sibling FeedbackAlignment block ─────────────────────────
         fa_block = await asyncio.to_thread(
-            self._find_feedback_analysis_block, source_block_name
+            self._find_feedback_alignment_block, source_block_name
         )
         if fa_block is None:
-            msg = "No FeedbackAnalysis block found in this report."
+            msg = "No FeedbackAlignment block found in this report."
             _log(f"ERROR: {msg}")
             return {"error": msg, "action_items": [], "total_count": 0}, "\n".join(logs)
 
@@ -56,7 +56,7 @@ class ActionItems(BaseReportBlock):
         # ── Fetch its output ─────────────────────────────────────────────────
         output = await asyncio.to_thread(fetch_block_output, fa_block)
         if not output:
-            msg = "Could not read FeedbackAnalysis block output."
+            msg = "Could not read FeedbackAlignment block output."
             _log(f"ERROR: {msg}")
             return {"error": msg, "action_items": [], "total_count": 0}, "\n".join(logs)
 
@@ -92,8 +92,8 @@ class ActionItems(BaseReportBlock):
         }
         return result, "\n".join(logs)
 
-    def _find_feedback_analysis_block(self, source_block_name: Optional[str]):
-        """Return the sibling FeedbackAnalysis ReportBlock, or None."""
+    def _find_feedback_alignment_block(self, source_block_name: Optional[str]):
+        """Return the sibling FeedbackAlignment ReportBlock, or None."""
         from plexus.dashboard.api.models.report_block import ReportBlock
 
         if not self.report_block_id:
@@ -114,10 +114,10 @@ class ActionItems(BaseReportBlock):
                 None,
             )
 
-        # Default: first block whose type is FeedbackAnalysis
+        # Default: first block whose type is FeedbackAlignment
         return next(
             (b for b in siblings
-             if (b.type or "").lower() in ("feedbackanalysis", "feedback_analysis")
+             if (b.type or "").lower() in ("feedbackalignment", "feedback_alignment")
              and b.id != self.report_block_id),
             None,
         )

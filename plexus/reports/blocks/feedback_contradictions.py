@@ -18,9 +18,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import BaseReportBlock
 from . import feedback_utils
 from .guideline_vetting import GuidelineVettingService
-from .identifier_utils import looks_like_uuid
-from plexus.dashboard.api.models.score import Score
-from plexus.dashboard.api.models.scorecard import Scorecard
+from .feedback_scope_resolver import (
+    resolve_score_for_scorecard,
+    resolve_scorecard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +91,10 @@ class FeedbackContradictions(BaseReportBlock):
 
         self._log(f"Resolving scorecard: {scorecard_param}")
         scorecard_obj = await self._resolve_scorecard(str(scorecard_param))
-        if not scorecard_obj:
-            raise ValueError(f"Scorecard not found: {scorecard_param}")
         self._log(f"Scorecard: '{scorecard_obj.name}' ({scorecard_obj.id})")
 
         self._log(f"Resolving score: {score_param}")
         score_obj = await self._resolve_score(str(score_param), scorecard_obj.id)
-        if not score_obj:
-            raise ValueError(f"Score not found: {score_param}")
         self._log(f"Score: '{score_obj.name}' ({score_obj.id})")
 
         guidelines = await self._fetch_guidelines(score_obj.id)
@@ -296,72 +293,30 @@ class FeedbackContradictions(BaseReportBlock):
                 }
             )
 
+        mode_title = "Feedback Contradictions" if mode == "contradictions" else "Feedback Aligned Items"
         context_header = (
-            "# Feedback Guideline-Vetting Report Output\n"
+            f"# {scorecard_obj.name} - {score_obj.name} - {mode_title}\n"
+            f"# {start_date.date()} to {end_date.date()}\n"
             "#\n"
-            "# This report evaluates feedback items against score guidelines using shared\n"
-            "# multi-model voting (Sonnet + GPT-5.4 with optional tiebreakers).\n"
-            "#\n"
-            "# Modes:\n"
-            "#   - contradictions: contradictions/policy gaps\n"
-            "#   - aligned: non-contradicting vetted items\n"
+            "# This report evaluates feedback edits against score guidelines using\n"
+            "# multi-model voting. It clusters selected items into RCA topics and\n"
+            "# includes exemplar evidence and consensus diagnostics.\n"
             "#\n"
             "# Key fields:\n"
             "#   scorecard_name, score_name, mode, date_range\n"
-            "#   total_items_analyzed, items_vetted\n"
-            "#   contradictions_found, aligned_found, selected_items_count\n"
+            "#   total_items_analyzed, items_vetted, selected_items_count\n"
+            "#   contradictions_found, aligned_found\n"
             "#   topics[*].exemplars[*].voting/confidence/verdict/associated_dataset_eligible\n"
-            "#   aligned mode also includes eligible_associated_feedback_item_ids payload\n"
             "\n"
         )
         formatted_output = context_header + json.dumps(output, indent=2, ensure_ascii=False)
         return formatted_output, "\n".join(self._orm.log_messages)
 
-    async def _resolve_scorecard(self, scorecard_param: str) -> Optional[Any]:
-        """Resolve a scorecard by ID, key, name, or externalId using existing model methods."""
-        is_uuid = looks_like_uuid(scorecard_param)
-        for lookup in (
-            [lambda p: asyncio.to_thread(Scorecard.get_by_id, id=p, client=self.api_client)]
-            if is_uuid
-            else [
-                lambda p: asyncio.to_thread(Scorecard.list_by_key, key=p, client=self.api_client),
-                lambda p: asyncio.to_thread(Scorecard.list_by_name, name=p, client=self.api_client),
-                lambda p: asyncio.to_thread(Scorecard.list_by_external_id, external_id=p, client=self.api_client),
-            ]
-        ):
-            try:
-                result = await lookup(scorecard_param)
-                if result:
-                    return result
-            except Exception as exc:  # lookup method not supported or lookup failed; try next
-                logger.debug("Scorecard lookup failed for %r: %s", scorecard_param, exc)
-        return None
+    async def _resolve_scorecard(self, scorecard_param: str) -> Any:
+        return await resolve_scorecard(self.api_client, scorecard_param)
 
-    async def _resolve_score(self, score_param: str, scorecard_id: str) -> Optional[Any]:
-        """Resolve a score by ID, name, key, or externalId using existing model methods."""
-        is_uuid_like = looks_like_uuid(score_param)
-        if is_uuid_like:
-            try:
-                score_obj = await asyncio.to_thread(Score.get_by_id, id=score_param, client=self.api_client)
-                scorecard_link = getattr(score_obj, "scorecardId", None) or getattr(score_obj, "scorecard_id", None)
-                if score_obj and scorecard_link == scorecard_id:
-                    return score_obj
-            except Exception as exc:  # ID lookup failed; fall through to name/key lookups
-                logger.debug("Score UUID lookup failed for %r: %s", score_param, exc)
-
-        for lookup in [
-            lambda p: asyncio.to_thread(Score.get_by_name, name=p, scorecard_id=scorecard_id, client=self.api_client),
-            lambda p: asyncio.to_thread(Score.get_by_key, key=p, scorecard_id=scorecard_id, client=self.api_client),
-            lambda p: asyncio.to_thread(Score.get_by_external_id, external_id=p, scorecard_id=scorecard_id, client=self.api_client),
-        ]:
-            try:
-                result = await lookup(score_param)
-                if result:
-                    return result
-            except Exception as exc:  # lookup method not supported or lookup failed; try next
-                logger.debug("Score lookup failed for %r: %s", score_param, exc)
-
-        return None
+    async def _resolve_score(self, score_param: str, scorecard_id: str) -> Any:
+        return await resolve_score_for_scorecard(self.api_client, scorecard_id, score_param)
 
     async def _fetch_guidelines(self, score_id: str) -> Optional[str]:
         try:

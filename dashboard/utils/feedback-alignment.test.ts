@@ -1,5 +1,5 @@
 /**
- * Tests for Feedback Analysis Utility Functions
+ * Tests for Feedback Alignment Utility Functions
  */
 
 import {
@@ -12,7 +12,7 @@ import {
   filterFeedbackByDateRange,
   convertToScorecardReportFormat,
   type FeedbackItem
-} from './feedback-analysis';
+} from './feedback-alignment';
 
 // Mock data for testing
 const createMockFeedbackItem = (

@@ -1,7 +1,7 @@
 /**
- * Reusable Feedback Analysis Display Component
+ * Reusable Feedback Alignment Display Component
  * 
- * This component displays feedback analysis results and can be used with both
+ * This component displays feedback alignment results and can be used with both
  * server-side generated data (from report blocks) and client-side generated data
  * (from ad-hoc analysis).
  */
@@ -14,7 +14,7 @@ import type { ReportBlockProps } from '@/components/blocks/ReportBlock';
 // Removed unused imports - individual scores handle their own drill-down now
 import { useAccount } from '@/app/contexts/AccountContext';
 
-export interface FeedbackAnalysisDisplayData extends ScorecardReportData {
+export interface FeedbackAlignmentDisplayData extends ScorecardReportData {
   overall_ac1: number | null;
   date_range: {
     start: string;
@@ -24,8 +24,8 @@ export interface FeedbackAnalysisDisplayData extends ScorecardReportData {
   block_description?: string;
 }
 
-export interface FeedbackAnalysisDisplayProps {
-  data: FeedbackAnalysisDisplayData;
+export interface FeedbackAlignmentDisplayProps {
+  data: FeedbackAlignmentDisplayData;
   title?: string;
   subtitle?: string;
   showDateRange?: boolean;
@@ -47,13 +47,13 @@ export interface FeedbackAnalysisDisplayProps {
 }
 
 /**
- * Renders a Feedback Analysis display showing Gwet's AC1 agreement scores.
+ * Renders a Feedback Alignment display showing Gwet's AC1 agreement scores.
  * This component displays overall agreement and per-question breakdowns.
  * 
  * The confusion matrix uses interactive cells to allow drilling down into
  * specific feedback items in a structured before/after format.
  */
-export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { children?: React.ReactNode }> = ({
+export const FeedbackAlignmentDisplay: React.FC<FeedbackAlignmentDisplayProps & { children?: React.ReactNode }> = ({
   data,
   title,
   subtitle,
@@ -67,9 +67,9 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { 
   attachedFiles,
   log,
   rawOutput,
-  id = 'feedback-analysis-display',
+  id = 'feedback-alignment-display',
   position = 0,
-  config = { class: 'FeedbackAnalysis' },
+  config = { class: 'FeedbackAlignment' },
   // On-demand analysis props
   scorecardId,
   scoreId,
@@ -109,7 +109,7 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { 
   }, [onCellSelection]);
 
   if (!data) {
-    return <p>No feedback analysis data available or data is loading.</p>;
+    return <p>No feedback alignment data available or data is loading.</p>;
   }
 
   // Create a modified output that maps overall_ac1 to overall_agreement for ScorecardReport
@@ -123,8 +123,8 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { 
   // Create ReportBlockProps to satisfy ScorecardReport interface
   const reportBlockProps: ReportBlockProps = {
     id: id,
-    name: showHeader ? (title || 'Feedback Analysis') : undefined,
-    type: 'FeedbackAnalysis',
+    name: showHeader ? (title || 'Feedback Alignment') : undefined,
+    type: 'FeedbackAlignment',
     position: position,
     output: modifiedOutput,
     config: config,
@@ -156,4 +156,4 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { 
   );
 };
 
-export default FeedbackAnalysisDisplay;
+export default FeedbackAlignmentDisplay;

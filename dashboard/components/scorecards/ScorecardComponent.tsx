@@ -71,7 +71,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScorecardData
   onEdit?: () => void
   onViewData?: () => void
-  onFeedbackAnalysis?: () => void
+  onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
   isSelected?: boolean
   onClick?: () => void
@@ -142,7 +142,7 @@ interface DetailContentProps {
   onToggleFullWidth?: () => void
   onClose?: () => void
   onViewData?: () => void
-  onFeedbackAnalysis?: () => void
+  onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
   onEdit?: () => void
   onEditChange?: (changes: Partial<ScorecardData>) => void
@@ -177,7 +177,7 @@ export const DetailContent = React.memo(function DetailContent({
   onToggleFullWidth,
   onClose,
   onViewData,
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   onEditChange,
   onAddSection,
@@ -602,11 +602,11 @@ export const DetailContent = React.memo(function DetailContent({
                     View Data
                   </DropdownMenu.Item>
                 )}
-                {onFeedbackAnalysis && (
+                {onFeedbackAlignment && (
                   <DropdownMenu.Item 
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={() => {
-                      onFeedbackAnalysis();
+                      onFeedbackAlignment();
                     }}
                   >
                     <MessageCircleMore className="mr-2 h-4 w-4" />
@@ -1060,7 +1060,7 @@ export default function ScorecardComponent({
   score, 
   onEdit, 
   onViewData, 
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   variant = 'grid', 
   isSelected,
@@ -1440,7 +1440,7 @@ export default function ScorecardComponent({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onViewData={onViewData}
-              onFeedbackAnalysis={onFeedbackAnalysis}
+              onFeedbackAlignment={onFeedbackAlignment}
               onCostAnalysis={onCostAnalysis}
               onEditChange={handleEditChange}
               onAddSection={handleAddSection}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReportBlockProps } from './ReportBlock';
-import { FeedbackAnalysisDisplay, type FeedbackAnalysisDisplayData } from '@/components/ui/feedback-analysis-display';
+import { FeedbackAlignmentDisplay, type FeedbackAlignmentDisplayData } from '@/components/ui/feedback-alignment-display';
 import * as yaml from 'js-yaml';
 import { Gauge, type Segment } from '@/components/gauge';
 import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
@@ -9,7 +9,7 @@ import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 
 // Re-export the interface for backward compatibility
-export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
+export interface FeedbackAlignmentData extends FeedbackAlignmentDisplayData {
   memories_file?: string;
   memories?: {
     scores: Array<{
@@ -33,10 +33,10 @@ export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {
 }
 
 /**
- * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
+ * Renders a Feedback Alignment block showing Gwet's AC1 agreement scores.
  * This component displays overall agreement and per-question breakdowns.
  * 
- * This component now uses the reusable FeedbackAnalysisDisplay component
+ * This component now uses the reusable FeedbackAlignmentDisplay component
  * to maintain consistency between server-side report blocks and client-side
  * ad-hoc analysis.
  * 
@@ -52,7 +52,7 @@ const ExpandedScorecardView: React.FC<{
   index: number;
   totalCount: number;
 }> = ({ scorecardData, blockProps, index, totalCount }) => {
-  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAlignmentData['memories'] | null>(null);
 
   const memoriesFile: string | null = scorecardData.memories_file ?? null;
   React.useEffect(() => {
@@ -65,7 +65,7 @@ const ExpandedScorecardView: React.FC<{
           options: { bucket: 'reportBlockDetails' as any },
         }).result;
         const text = await result.body.text();
-        const parsed = yaml.load(text) as FeedbackAnalysisData['memories'];
+        const parsed = yaml.load(text) as FeedbackAlignmentData['memories'];
         setLoadedMemories(parsed ?? null);
       } catch (e) {
         console.warn('ExpandedScorecardView: failed to load memories_file', e);
@@ -87,7 +87,7 @@ const ExpandedScorecardView: React.FC<{
 
   return (
     <div className="pt-3" style={{ marginBottom: index < totalCount - 1 ? '4em' : '0' }}>
-      <FeedbackAnalysisDisplay
+      <FeedbackAlignmentDisplay
         data={dataWithTopics}
         showHeader={false}
         showDateRange={false}
@@ -230,9 +230,9 @@ const AllScorecardsView: React.FC<{
   );
 };
 
-const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
-  const [loadedOutput, setLoadedOutput] = React.useState<FeedbackAnalysisData | null>(null);
-  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAnalysisData['memories'] | null>(null);
+const FeedbackAlignment: React.FC<ReportBlockProps> = (props) => {
+  const [loadedOutput, setLoadedOutput] = React.useState<FeedbackAlignmentData | null>(null);
+  const [loadedMemories, setLoadedMemories] = React.useState<FeedbackAlignmentData['memories'] | null>(null);
   const [expandedScorecardId, setExpandedScorecardId] = React.useState<string | null>(null);
   const [expandedMemoryIds, setExpandedMemoryIds] = React.useState<Set<string>>(new Set());
   const toggleMemory = React.useCallback((id: string) => {
@@ -248,17 +248,17 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   }, []);
 
   // Parse output unconditionally so hooks always run in the same order
-  let parsedOutput: FeedbackAnalysisData | null = null;
+  let parsedOutput: FeedbackAlignmentData | null = null;
   let parseError = false;
   if (props.output) {
     try {
       if (typeof props.output === 'string') {
-        parsedOutput = yaml.load(props.output) as FeedbackAnalysisData;
+        parsedOutput = yaml.load(props.output) as FeedbackAlignmentData;
       } else {
-        parsedOutput = props.output as FeedbackAnalysisData;
+        parsedOutput = props.output as FeedbackAlignmentData;
       }
     } catch (error) {
-      console.error('❌ FeedbackAnalysis: Failed to parse output data:', error);
+      console.error('❌ FeedbackAlignment: Failed to parse output data:', error);
       parseError = true;
     }
   }
@@ -276,9 +276,9 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
           options: { bucket: 'reportBlockDetails' as any },
         }).result;
         const text = await result.body.text();
-        setLoadedOutput(yaml.load(text) as FeedbackAnalysisData);
+        setLoadedOutput(yaml.load(text) as FeedbackAlignmentData);
       } catch (e) {
-        console.warn('FeedbackAnalysis: failed to load output attachment', e);
+        console.warn('FeedbackAlignment: failed to load output attachment', e);
       }
     })();
   }, [outputCompacted, outputAttachment, loadedOutput]);
@@ -297,21 +297,21 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
           options: { bucket: 'reportBlockDetails' as any },
         }).result;
         const text = await result.body.text();
-        const parsed = yaml.load(text) as FeedbackAnalysisData['memories'];
+        const parsed = yaml.load(text) as FeedbackAlignmentData['memories'];
         setLoadedMemories(parsed ?? null);
       } catch (e) {
-        console.warn('FeedbackAnalysis: failed to load memories_file', e);
+        console.warn('FeedbackAlignment: failed to load memories_file', e);
       }
     })();
   }, [memoriesFile, loadedMemories]);
 
   if (!props.output) {
-    return <p>No feedback analysis data available or data is loading.</p>;
+    return <p>No feedback alignment data available or data is loading.</p>;
   }
   if (parseError) {
     return (
       <div className="p-4 text-center text-destructive">
-        Error parsing feedback analysis data. Please check the report generation.
+        Error parsing feedback alignment data. Please check the report generation.
       </div>
     );
   }
@@ -322,16 +322,16 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   }
 
   if (!feedbackData) {
-    return <p>No feedback analysis data available after parsing.</p>;
+    return <p>No feedback alignment data available after parsing.</p>;
   }
 
   // Use a meaningful name, ignoring generic block names
-  const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Analysis';
+  const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Alignment';
 
   // Check if this is "all scorecards" mode
   if ((feedbackData as any).mode === 'all_scorecards') {
     return (
-      <FeedbackAnalysisDisplay
+      <FeedbackAlignmentDisplay
         data={{ scores: [] } as any}
         title={title}
         subtitle={(feedbackData as any).block_description}
@@ -346,7 +346,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
         config={props.config}
       >
         <AllScorecardsView data={feedbackData as any} title={title} blockProps={props} />
-      </FeedbackAnalysisDisplay>
+      </FeedbackAlignmentDisplay>
     );
   }
 
@@ -365,7 +365,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
 
   return (
     <div>
-      <FeedbackAnalysisDisplay
+      <FeedbackAlignmentDisplay
         data={feedbackDataWithTopics as any}
         title={title}
         subtitle={feedbackData.block_description}
@@ -382,6 +382,6 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
 };
 
 // Set the blockClass property
-(FeedbackAnalysis as any).blockClass = 'FeedbackAnalysis';
+(FeedbackAlignment as any).blockClass = 'FeedbackAlignment';
 
-export default FeedbackAnalysis; 
+export default FeedbackAlignment; 

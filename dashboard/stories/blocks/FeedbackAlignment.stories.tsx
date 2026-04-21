@@ -1,12 +1,12 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { BlockRenderer } from '@/components/blocks/BlockRegistry';
-import FeedbackAnalysis from '@/components/blocks/FeedbackAnalysis';
+import FeedbackAlignment from '@/components/blocks/FeedbackAlignment';
 import { type ClassDistribution } from '@/components/ClassDistributionVisualizer';
 import { type ConfusionMatrixData } from '@/components/confusion-matrix';
 
 const meta: Meta<typeof BlockRenderer> = {
-  title: 'Reports/Blocks/FeedbackAnalysis',
+  title: 'Reports/Blocks/FeedbackAlignment',
   component: BlockRenderer,
   parameters: {
     layout: 'padded',
@@ -16,7 +16,7 @@ const meta: Meta<typeof BlockRenderer> = {
 export default meta;
 type Story = StoryObj<typeof BlockRenderer>;
 
-const baseFeedbackAnalysisData = {
+const baseFeedbackAlignmentData = {
   total_items: 0, // Will be overridden
   total_agreements: 0, // Will be overridden  
   total_mismatches: 0, // Will be overridden
@@ -107,17 +107,17 @@ const scoreTemplate = (
 
 export const SingleScore: Story = {
   args: {
-    name: 'Feedback Analysis - Single Score',
-    type: 'FeedbackAnalysis', // This type must match the key used in registerBlock
+    name: 'Feedback Alignment - Single Score',
+    type: 'FeedbackAlignment', // This type must match the key used in registerBlock
     position: 0,
     log: 'Log for single score analysis.',
     config: { // Mock config passed to the block
-      class: 'FeedbackAnalysis', // This is what the python block's config would look like
+      class: 'FeedbackAlignment', // This is what the python block's config would look like
       scorecard: 'some-scorecard-id',
       days: 30,
     },
     output: { // This is the actual data structure the component expects
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.75,
       scores: [
         scoreTemplate('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'Excellent': 30, 'Good': 15, 'Poor': 5 }),
@@ -133,17 +133,17 @@ export const SingleScore: Story = {
 
 export const MultipleScores: Story = {
   args: {
-    name: 'Feedback Analysis - Multiple Scores',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - Multiple Scores',
+    type: 'FeedbackAlignment',
     position: 1,
     log: 'Log for multiple score analysis.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'another-scorecard-id',
       days: 60,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.82,
       scores: [
         scoreTemplate('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'High': 25, 'Medium': 15, 'Low': 10 }),
@@ -162,17 +162,17 @@ export const MultipleScores: Story = {
 
 export const WithBalancedDistribution: Story = {
   args: {
-    name: 'Feedback Analysis - Balanced Class Distribution',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - Balanced Class Distribution',
+    type: 'FeedbackAlignment',
     position: 1,
     log: 'Log with balanced class distribution.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'balanced-example',
       days: 30,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.65,
       scores: [
         scoreTemplate('score1', 'Binary Score (50/50)', 0.65, 100, 25, 75.0, { 'yes': 50, 'no': 50 }),
@@ -188,17 +188,17 @@ export const WithBalancedDistribution: Story = {
 
 export const WithImbalancedDistribution: Story = {
   args: {
-    name: 'Feedback Analysis - Imbalanced Class Distribution',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - Imbalanced Class Distribution',
+    type: 'FeedbackAlignment',
     position: 1,
     log: 'Log with imbalanced class distribution.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'imbalanced-example',
       days: 30,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.55,
       scores: [
         scoreTemplate('score1', 'Binary Score (90/10)', 0.55, 100, 10, 90.0, { 'yes': 90, 'no': 10 }),
@@ -214,17 +214,17 @@ export const WithImbalancedDistribution: Story = {
 
 export const WithVeryImbalancedDistribution: Story = {
   args: {
-    name: 'Feedback Analysis - Very Imbalanced',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - Very Imbalanced',
+    type: 'FeedbackAlignment',
     position: 1,
     log: 'Log with extremely imbalanced class distribution.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'very-imbalanced-example',
       days: 30,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.25,
       scores: [
         scoreTemplate('score1', 'Binary Score (95/5)', 0.25, 100, 5, 95.0, { 'yes': 95, 'no': 5 }),
@@ -239,15 +239,15 @@ export const WithVeryImbalancedDistribution: Story = {
 
 export const NoScores: Story = {
   args: {
-    name: 'Feedback Analysis - No Scores',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - No Scores',
+    type: 'FeedbackAlignment',
     position: 2,
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'empty-scorecard-id',
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: null,
       scores: [],
       total_items: 0,
@@ -259,11 +259,11 @@ export const NoScores: Story = {
 
 export const LoadingState: Story = {
  args: {
-    name: 'Feedback Analysis - Loading',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - Loading',
+    type: 'FeedbackAlignment',
     position: 0,
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
     },
     // To simulate loading, we pass null or an empty object for output
     // The component itself should handle this gracefully.
@@ -273,17 +273,17 @@ export const LoadingState: Story = {
 
 export const WithSingleWarning: Story = {
   args: {
-    name: 'Feedback Analysis - One Score With Warning',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - One Score With Warning',
+    type: 'FeedbackAlignment',
     position: 3,
     log: 'Log for analysis with one warning.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'warning-example-single',
       days: 30,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.68,
       scores: [
         scoreTemplate('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'High': 25, 'Medium': 15, 'Low': 10 }),
@@ -305,17 +305,17 @@ export const WithSingleWarning: Story = {
 
 export const WithMultipleWarnings: Story = {
   args: {
-    name: 'Feedback Analysis - Multiple Scores With Warnings',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - Multiple Scores With Warnings',
+    type: 'FeedbackAlignment',
     position: 4,
     log: 'Log for analysis with multiple warnings.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'warning-example-multiple',
       days: 45,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.58,
       scores: [
         // First warning - data quality issue
@@ -341,17 +341,17 @@ export const WithMultipleWarnings: Story = {
 
 export const WithNotesAndDiscussion: Story = {
   args: {
-    name: 'Feedback Analysis - With Notes and Discussion',
-    type: 'FeedbackAnalysis',
+    name: 'Feedback Alignment - With Notes and Discussion',
+    type: 'FeedbackAlignment',
     position: 5,
     log: 'Log for analysis with notes and discussion.',
     config: {
-      class: 'FeedbackAnalysis',
+      class: 'FeedbackAlignment',
       scorecard: 'notes-discussion-example',
       days: 30,
     },
     output: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.64,
       scores: [
         // Score with just notes
