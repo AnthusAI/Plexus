@@ -3398,7 +3398,7 @@ code: |
           regression_baseline_metrics.precision, regression_baseline_metrics.recall))
       else
         local err_msg = (acc_result and acc_result.error) or "no result"
-        Human.notify({message = "Regression baseline unavailable (will proceed recent-only): " .. tostring(err_msg), level = "warning"})
+        error("Failed to run baseline regression evaluation: " .. tostring(err_msg))
       end
       batch_idx = batch_idx + 1
     end
@@ -3406,11 +3406,7 @@ code: |
     if not recent_baseline_id then
       local fb_result = baseline_batch and baseline_batch[batch_idx]
       if not fb_result or fb_result.error or not (fb_result.id or fb_result.evaluation_id) then
-        return {
-          success = false,
-          status  = "error",
-          message = "Failed to run baseline recent evaluation: " .. tostring(fb_result and fb_result.error or "no result")
-        }
+        error("Failed to run baseline recent evaluation: " .. tostring(fb_result and fb_result.error or "no result"))
       end
       recent_baseline_id      = fb_result.id or fb_result.evaluation_id
       recent_baseline_metrics = extract_metrics(fb_result)
