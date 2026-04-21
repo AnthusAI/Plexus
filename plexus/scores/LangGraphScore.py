@@ -50,8 +50,6 @@ else:
     set_verbose(False)
 
 from pathlib import Path
-# Lazy import to avoid requiring psycopg for non-LangGraph operations
-AsyncPostgresSaver = None
 import uuid
 from langgraph.errors import NodeInterrupt
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -79,7 +77,7 @@ class LangGraphScore(Score, LangChainUser):
     LangGraphScore enables complex classification logic using a graph of LLM operations.
     It provides:
     - Declarative graph definition in YAML
-    - State management and checkpointing
+    - State management
     - Cost tracking and optimization
     - Batch processing support
     - Integration with multiple LLM providers
@@ -157,17 +155,9 @@ class LangGraphScore(Score, LangChainUser):
         output: Optional[dict] = None
         depends_on: Optional[Union[List[str], Dict[str, Union[str, Dict[str, Any]]]]] = None
         single_line_messages: bool = False
-        checkpoint_db_path: Optional[str] = Field(
-            default="./.plexus/checkpoints/langgraph.db",
-            description="Path to SQLite checkpoint database"
-        )
         thread_id: Optional[str] = Field(
             default=None,
             description="Deprecated - thread_id is now automatically set from content_id"
-        )
-        postgres_url: Optional[str] = Field(
-            default=None,
-            description="PostgreSQL connection URL for LangGraph checkpoints"
         )
 
     class Result(Score.Result):
@@ -223,7 +213,6 @@ class LangGraphScore(Score, LangChainUser):
         self.parameters = self.Parameters(**parameters)
         self.node_instances = []
         self.workflow = None
-        self.checkpointer = None
         self.db_connection = None
 
     def _requires_confidence(self):
@@ -256,38 +245,7 @@ class LangGraphScore(Score, LangChainUser):
         # Load environment variables
         load_dotenv('.env', override=True)
         
-        # Get PostgreSQL URL from parameters or environment
-        db_uri = self.parameters.postgres_url or \
-                 os.getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
-        
-        if db_uri:
-            logging.info("Using PostgreSQL checkpoint database")
-            # Lazy import only when actually using PostgreSQL checkpointer
-            global AsyncPostgresSaver
-            if AsyncPostgresSaver is None:
-                try:
-                    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-                except ImportError as e:
-                    logging.warning(f"PostgreSQL checkpointer requested but psycopg not available: {e}")
-                    logging.warning("Falling back to in-memory checkpointer")
-                    db_uri = None  # Fall through to else branch
-
-            if db_uri and AsyncPostgresSaver is not None:
-                # Create checkpointer and store the context manager
-                self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
-                # Enter the context and store the checkpointer
-                self.checkpointer = await self._checkpointer_context.__aenter__()
-
-                # Initialize tables
-                logging.info("Setting up checkpointer database tables...")
-                await self.checkpointer.setup()
-                logging.info("PostgreSQL checkpointer setup complete")
-        else:
-            logging.info("No PostgreSQL URL provided - running without checkpointing")
-            self.checkpointer = None
-            self._checkpointer_context = None
-        
-        # Build workflow with optional checkpointer
+        # Build workflow
         self.workflow = await self.build_compiled_workflow()
 
     @staticmethod
@@ -730,10 +688,7 @@ class LangGraphScore(Score, LangChainUser):
 
             logging.info("Workflow compilation complete.")
             
-            # Compile with checkpointer only if configured
-            app = workflow.compile(
-                checkpointer=self.checkpointer if self.checkpointer else None
-            )
+            app = workflow.compile()
             
             # Store node instances for later token usage calculation
             self.node_instances = node_instances
@@ -1692,12 +1647,15 @@ class LangGraphScore(Score, LangChainUser):
                     explanation="A timeout occurred during workflow execution"
                 )
         except Exception as e:
-            logging.error(f"Error in predict for thread_id {thread_id}: {e}")
+            # Preserve exception type for operator debugging (the raw message alone is often opaque,
+            # e.g. "the connection is closed").
+            logging.error(f"Error in predict for thread_id {thread_id}: {type(e).__name__}: {e}")
             logging.error(traceback.format_exc())
             return Score.Result(
                 parameters=self.parameters,
                 value="ERROR",
-                error=str(e)
+                error=f"{type(e).__name__}: {e}",
+                metadata={"exception_type": type(e).__name__},
             )
 
     def preprocess_text(self, text):
@@ -1711,18 +1669,6 @@ class LangGraphScore(Score, LangChainUser):
         try:
             # Give LangGraph a chance to finish any pending operations
             await asyncio.sleep(0.1)
-
-            # Close PostgreSQL checkpointer if it was initialized
-            if hasattr(self, '_checkpointer_context') and \
-               self._checkpointer_context is not None:
-                try:
-                    logging.info("Closing PostgreSQL checkpointer...")
-                    await self._checkpointer_context.__aexit__(None, None, None)
-                    self.checkpointer = None
-                    self._checkpointer_context = None
-                    logging.info("PostgreSQL checkpointer closed")
-                except Exception as e:
-                    logging.error(f"Error closing PostgreSQL checkpointer: {e}")
 
             # Close Azure credentials
             if hasattr(self, '_credential'):

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f89f8667-099c-4da7-8632-22e42b6a452e",
+  "issue_id": "plx-c533d5d6-dba8-4723-8a38-9e55ab04c3d9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T13:09:00.618Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Observed feedback evaluation b8ba30b0-9083-4051-bbb6-ace554994fa4 failing after 58/200 items with score result value ERROR and error 'the connection is closed' from LangGraphScore Classifier model.ainvoke. Agent Misrepresentation has been stable for days; this started surfacing once ERROR became fatal. Fix: add narrow retry for transient closed-connection exceptions around model.ainvoke in Classifier node; and include exception type + short details in ERROR Score.Result for transparency. Acceptance: evaluation no longer fails due to a single transient closed-connection error; if retries still exhaust, dashboard/task/eval error includes exception type and message.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "LangGraph evaluations fail with 'the connection is closed'"
+  }
+}

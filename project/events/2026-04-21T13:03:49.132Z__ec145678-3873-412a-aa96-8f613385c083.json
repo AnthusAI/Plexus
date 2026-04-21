@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "ec145678-3873-412a-aa96-8f613385c083",
+  "issue_id": "plx-17d6228f-bc9d-45c8-b4ff-a75aa9047093",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-21T13:03:49.132Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "assignee": {
+        "from": null,
+        "to": "codex"
+      }
+    }
+  }
+}

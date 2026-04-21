@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "75e887dc-35e9-4876-8f40-c6d6f5afda5d",
+  "issue_id": "plx-61c33208-9ea6-4eaa-b2dc-5a0f93d4a7db",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T12:40:06.737Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix procedure chat toolResponse + actionable score update errors"
+  }
+}

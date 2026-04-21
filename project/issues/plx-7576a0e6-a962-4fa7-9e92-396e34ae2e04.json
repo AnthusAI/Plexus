@@ -52,10 +52,16 @@
       "author": "ryan",
       "text": "Applying CodeQL PR #189 suggestions: removed unused task-status variable, removed unused feedback_analysis constant, and replaced empty parse except blocks in reports/service with narrow exceptions + debug logs.",
       "created_at": "2026-04-21T00:20:59.386929Z"
+    },
+    {
+      "id": "346e59c8-9050-469b-94d2-e604ac2c3184",
+      "author": "ryan",
+      "text": "Starting requested optimization run from develop for scorecard 0e48be55-1682-4949-9e7e-3c5b5da1e00a, score 72db3535-2a93-48f3-8900-bb275490cc28, version af242924-9fe3-4246-ace3-37c151b62a62, days=30, max_samples=200, max_iterations=3.",
+      "created_at": "2026-04-21T01:09:19.830953Z"
     }
   ],
   "created_at": "2026-04-20T22:53:25.728209Z",
-  "updated_at": "2026-04-21T00:20:59.386929Z",
+  "updated_at": "2026-04-21T01:09:19.830953Z",
   "closed_at": null,
   "custom": {}
 }

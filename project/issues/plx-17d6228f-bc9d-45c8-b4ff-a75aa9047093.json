@@ -1,0 +1,25 @@
+{
+  "id": "plx-17d6228f-bc9d-45c8-b4ff-a75aa9047093",
+  "title": "Optimizer should fail task/stages when baseline evaluation fails",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "codex",
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fdc918b4-6904-46ae-be51-f8f929796541",
+      "author": "ryan",
+      "text": "Baseline eval failure is currently returned as plexus_evaluation_run toolResponse (array of {error: ...}) but the optimizer Lua does not treat that as fatal, so Task/TaskStages end COMPLETED. Implement: detect evaluation_run failures and raise error to abort run; ensure task/stage failure messages include item/feedback IDs. Add focused test around evaluation_run result handling in optimizer Lua or procedure executor.",
+      "created_at": "2026-04-21T13:03:49.132756Z"
+    }
+  ],
+  "created_at": "2026-04-21T13:03:40.809139Z",
+  "updated_at": "2026-04-21T13:03:49.132756Z",
+  "closed_at": null,
+  "custom": {}
+}
