@@ -268,6 +268,36 @@ class TestScoreTextProcessing:
         assert mock_get_item.call_args.args[0] == "item-top-level"
         assert mock_evaluation._create_score_result.await_args.kwargs["feedback_item_id"] == "fi-top-level"
 
+    @pytest.mark.asyncio
+    async def test_score_text_raises_when_score_returns_error_result(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+
+        error_result = Score.Result(
+            parameters=Score.Parameters(name="test_score", scorecard_name="test_scorecard"),
+            value="ERROR",
+            error="'dict object' has no attribute 'other_data'",
+            metadata={},
+        )
+        mock_evaluation.scorecard.score_entire_text = AsyncMock(
+            return_value={"test_score": error_result}
+        )
+
+        row = pd.Series({
+            "text": "feedback transcript",
+            "content_id": "content-999",
+            "item_id": "item-999",
+            "feedback_item_id": "fi-999",
+            "metadata": {"source": "top-level", "human_label": "yes"},
+            "columns": {"form_id": "form-999"},
+            "test_score_label": "yes",
+        })
+
+        with pytest.raises(RuntimeError, match="Initial evaluation failed: score 'test_score' returned ERROR"):
+            await mock_evaluation.score_text(row, score_name="test_score")
+
 
 class TestLabelStandardization:
     """Test label standardization and comparison logic"""

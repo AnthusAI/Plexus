@@ -1348,6 +1348,39 @@ class FeedbackItems(DataCache):
                 return value.isoformat()
             return value
 
+        def require_item_metadata_dict() -> Dict[str, Any]:
+            item_id = getattr(getattr(feedback_item, 'item', None), 'id', None) or feedback_item.itemId or 'unknown'
+            feedback_item_id = getattr(feedback_item, 'id', None) or 'unknown'
+
+            if not feedback_item.item:
+                raise ValueError(
+                    "Feedback-backed evaluation requires related Item metadata, "
+                    f"but feedback item {feedback_item_id} has no loaded Item (item_id={item_id})."
+                )
+
+            raw_item_metadata = getattr(feedback_item.item, 'metadata', None)
+            if raw_item_metadata in (None, ""):
+                raise ValueError(
+                    "Feedback-backed evaluation requires Item metadata, "
+                    f"but feedback item {feedback_item_id} item {item_id} had no metadata."
+                )
+
+            try:
+                parsed_metadata = json.loads(raw_item_metadata) if isinstance(raw_item_metadata, str) else raw_item_metadata
+            except Exception as e:
+                raise ValueError(
+                    "Feedback-backed evaluation requires parseable Item metadata, "
+                    f"but feedback item {feedback_item_id} item {item_id} metadata could not be parsed: {e}"
+                ) from e
+
+            if not isinstance(parsed_metadata, dict):
+                raise ValueError(
+                    "Feedback-backed evaluation requires Item metadata to be an object, "
+                    f"but feedback item {feedback_item_id} item {item_id} metadata was {type(parsed_metadata).__name__}."
+                )
+
+            return parsed_metadata
+
         metadata = {
             'feedback_item_id': feedback_item.id,
             'scorecard_id': feedback_item.scorecardId,
@@ -1376,33 +1409,11 @@ class FeedbackItems(DataCache):
             metadata['item'] = item_metadata
             logger.debug(f"Item metadata added: {item_metadata}")
             
-            # Use the Item's cached metadata directly (it should already have the API structure)
-            original_item_metadata = getattr(feedback_item.item, 'metadata', None)
-            logger.debug(f"DEBUG: Checking item metadata for item_id={feedback_item.item.id}")
-            logger.debug(f"DEBUG: feedback_item.item type: {type(feedback_item.item)}")
-            logger.debug(f"DEBUG: feedback_item.item attributes: {dir(feedback_item.item)}")
-            logger.debug(f"DEBUG: original_item_metadata: {original_item_metadata}")
-            logger.debug(f"DEBUG: original_item_metadata type: {type(original_item_metadata)}")
-            if original_item_metadata:
-                logger.debug(f"Found original item metadata for item_id={feedback_item.item.id}: type={type(original_item_metadata)}")
-                try:
-                    # Parse the original item metadata if it's a JSON string
-                    if isinstance(original_item_metadata, str):
-                        parsed_metadata = json.loads(original_item_metadata)
-                        logger.debug(f"Parsed item metadata from JSON string for item_id={feedback_item.item.id}")
-                    else:
-                        parsed_metadata = original_item_metadata
-                        logger.debug(f"Using item metadata as object for item_id={feedback_item.item.id}")
-                    
-                    # Merge the API-cached metadata directly (should already have other_data, etc.)
-                    if isinstance(parsed_metadata, dict):
-                        metadata.update(parsed_metadata)
-                        logger.debug(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
-                    else:
-                        logger.debug(f"Parsed item metadata is not a dict for item_id={feedback_item.item.id}, type={type(parsed_metadata)}")
-                except Exception as e:
-                    logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
-                    # Continue without the cached metadata
+            parsed_metadata = require_item_metadata_dict()
+            metadata.update(parsed_metadata)
+            logger.debug(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
+        else:
+            require_item_metadata_dict()
         
         # Parse JSON string fields in metadata (fix the root cause)
         # Common fields that might be JSON strings: other_data, schools, etc.

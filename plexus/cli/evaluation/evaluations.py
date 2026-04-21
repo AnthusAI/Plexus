@@ -3037,11 +3037,12 @@ def accuracy(
                 else:
                     logging.warning("Evaluation run() returned None, using default metrics")
             except Exception as e:
-                error_msg = f"Error during execution: {str(e)}"
+                raw_error_msg = str(e)
+                error_msg = raw_error_msg if raw_error_msg.startswith("Initial evaluation failed:") else f"Initial evaluation failed: {raw_error_msg}"
                 logging.error(error_msg)
                 if tracker:
                     tracker.fail_current_stage(error_msg)
-                raise
+                raise RuntimeError(error_msg) from e
                 
 
             # Analyzing stage advancement now handled in AccuracyEvaluation.run()
@@ -3237,6 +3238,18 @@ def accuracy(
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
+            if evaluation_record:
+                try:
+                    evaluation_record.update(
+                        status="FAILED",
+                        errorMessage=str(e),
+                    )
+                except Exception as update_error:
+                    logging.error(
+                        "Failed to update evaluation failure status for %s: %s",
+                        getattr(evaluation_record, 'id', 'unknown'),
+                        update_error,
+                    )
             if task and tracker:
                 tracker.fail_processing(str(e), traceback.format_exc())
             elif task:
@@ -4723,5 +4736,4 @@ def feedback_runner(
         "summary": summary,
         "kanbus_comment": format_feedback_run_kanbus_comment(summary),
     }))
-
 
