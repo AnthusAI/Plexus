@@ -2737,6 +2737,56 @@ code: |
   local current_code         = nil
   local current_guidelines   = nil
 
+  local function parse_contradictions_report_result(report_result)
+    if not report_result then
+      return nil, "Contradictions report returned no result"
+    end
+    if type(report_result) ~= "table" then
+      return nil, "Contradictions report returned unexpected result type: " .. tostring(report_result)
+    end
+
+    local status = string.lower(tostring(report_result.status or ""))
+    if status == "failed" or status == "error" then
+      return nil, tostring(report_result.error or report_result.message or "Contradictions report failed")
+    end
+
+    if not report_result.output then
+      return nil, tostring(report_result.message or "Contradictions report returned no output")
+    end
+
+    local out = report_result.output
+    local code_repr = nil
+    if type(out) == "string" then
+      local json_start = string.find(out, "%s*{")
+      if json_start then
+        local comment_header = string.sub(out, 1, json_start - 1)
+        local json_str = string.sub(out, json_start)
+        local parsed, parse_err = safe_decode(json_str)
+        if parsed and type(parsed) == "table" then
+          parsed.guidelines = nil
+          local ok_enc, encoded = pcall(function() return Json.encode(parsed) end)
+          if ok_enc and encoded then
+            code_repr = comment_header .. encoded
+          end
+          out = parsed
+        else
+          return nil, "Contradictions report JSON parse failed: " .. tostring(parse_err)
+        end
+      else
+        return nil, "Contradictions report output has no JSON object"
+      end
+    end
+
+    if type(out) ~= "table" then
+      return nil, "Contradictions report returned unsupported output type: " .. tostring(type(out))
+    end
+    if out.error then
+      return nil, tostring(out.error)
+    end
+
+    return { output = out, code_repr = code_repr }, nil
+  end
+
   -- Helper: run FeedbackContradictions report and cache result in State.
   -- Supports background=true for fire-and-forget dispatch; a later call with
   -- background=false (default) blocks until the background thread completes.
@@ -2766,7 +2816,14 @@ code: |
       background = bg
     })
     if not ok or not report_result then
-      Human.notify({message = "  Contradictions report failed", level = "warning"})
+      local err = "Contradictions report failed"
+      if type(report_result) == "table" and report_result.error then
+        err = tostring(report_result.error)
+      elseif report_result then
+        err = tostring(report_result)
+      end
+      State.set("known_contradictions_status", {cycle = current_cycle, available = false, error = err})
+      Human.notify({message = "  Contradictions report failed: " .. err, level = "warning"})
       return
     end
     -- Background dispatch returns status="dispatched" — results will be collected later
@@ -2774,39 +2831,15 @@ code: |
       Human.notify({message = "  Contradictions report dispatched in background — will consume results later", level = "info"})
       return
     end
-    if not report_result.output then
-      Human.notify({message = "  Contradictions report returned no output", level = "warning"})
+    local parsed_result, parse_error = parse_contradictions_report_result(report_result)
+    if not parsed_result then
+      State.set("known_contradictions_status", {cycle = current_cycle, available = false, error = parse_error})
+      Human.notify({message = "  Contradictions report unavailable: " .. tostring(parse_error), level = "warning"})
       return
     end
 
-    local out = report_result.output
-    -- The FeedbackContradictions report returns a string (comment header + JSON),
-    -- not a table. Detect this and parse the JSON portion.
-    local code_repr = nil  -- will hold the "# header\n{JSON}" code representation for agent context
-    if type(out) == "string" then
-      local json_start = string.find(out, "%s*{")
-      if json_start then
-        local comment_header = string.sub(out, 1, json_start - 1)
-        local json_str = string.sub(out, json_start)
-        local parsed, parse_err = safe_decode(json_str)
-        if parsed and type(parsed) == "table" then
-          -- Build code repr: comment header + JSON with guidelines field stripped (it's large and
-          -- already present in the agent's context as the score guidelines).
-          parsed.guidelines = nil
-          local ok_enc, encoded = pcall(function() return Json.encode(parsed) end)
-          if ok_enc and encoded then
-            code_repr = comment_header .. encoded
-          end
-          out = parsed
-        else
-          Human.notify({message = "  Contradictions report: failed to parse JSON output: " .. tostring(parse_err), level = "warning"})
-          return
-        end
-      else
-        Human.notify({message = "  Contradictions report: output has no JSON object", level = "warning"})
-        return
-      end
-    end
+    local out = parsed_result.output
+    local code_repr = parsed_result.code_repr
     local topics = out.topics or {}
     local total_items = out.total_items_analyzed or 0
     local contradictions_found = out.contradictions_found or 0
@@ -2905,6 +2938,7 @@ code: |
       topics = topics_structured,
       summary = table.concat(summary_parts, "")
     })
+    State.set("known_contradictions_status", {cycle = current_cycle, available = true, error = nil})
     if code_repr then
       State.set("known_contradictions_code_repr", code_repr)
       Human.notify({message = string.format(
@@ -6788,15 +6822,14 @@ code: |
       ttl_hours = 4,
       fresh = false
     })
-    if ok and report_result and report_result.output then
-      local out = report_result.output
-      if type(out) == "string" then
-        local json_start = string.find(out, "%s*{")
-        if json_start then
-          local parsed = safe_decode(string.sub(out, json_start))
-          if parsed and type(parsed) == "table" then out = parsed end
-        end
+    if ok and report_result then
+      local parsed_result, parse_error = parse_contradictions_report_result(report_result)
+      if not parsed_result then
+        State.set("known_contradictions_status", {cycle = "final", available = false, error = parse_error})
+        Human.notify({message = "  Final contradictions unavailable: " .. tostring(parse_error), level = "warning"})
+        return
       end
+      local out = parsed_result.output
       if type(out) == "table" and out.topics then
         -- Re-run the full topic parsing from refresh_known_contradictions
         local topics = out.topics or {}
@@ -6874,6 +6907,7 @@ code: |
           topics = topics_structured,
           summary = table.concat(summary_parts, "")
         })
+        State.set("known_contradictions_status", {cycle = "final", available = true, error = nil})
         Human.notify({message = string.format(
           "  Final contradictions: %d items | %d contradictions, %d policy gaps, %d topics",
           total_items, contradictions_found, policy_gap_count, #topics), level = "info"})
@@ -6881,7 +6915,8 @@ code: |
     end
   end)
   if not final_contra_ok then
-    Human.notify({message = "  Final contradictions refresh failed; using cached data", level = "warning"})
+    State.set("known_contradictions_status", {cycle = "final", available = false, error = "Final contradictions refresh failed"})
+    Human.notify({message = "  Final contradictions refresh failed", level = "warning"})
   end
 
   -- 0b. Build divergence analysis

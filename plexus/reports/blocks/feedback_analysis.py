@@ -18,6 +18,7 @@ from .base import BaseReportBlock
 from . import feedback_utils
 from .identifier_utils import looks_like_uuid
 from .reinforcement_helpers import fetch_item_identifiers
+from .score_resolution import resolve_score_for_scorecard
 
 logger = logging.getLogger(__name__)
 
@@ -248,37 +249,11 @@ class FeedbackAnalysis(BaseReportBlock):
             if cc_question_id_param:
                 self._log(f"Looking up specific Plexus Score for identifier: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
                 try:
-                    # Accept Plexus score UUID, name, key, or external ID.
-                    is_uuid_like = looks_like_uuid(cc_question_id_param)
-                    if is_uuid_like:
-                        plexus_score_obj = await asyncio.to_thread(
-                            Score.get_by_id,
-                            id=cc_question_id_param,
-                            client=self.api_client
-                        )
-                        if plexus_score_obj and plexus_score_obj.scorecard_id != plexus_scorecard_obj.id:
-                            self._log(
-                                f"WARNING: Score {cc_question_id_param} belongs to a different scorecard. Skipping.",
-                                level="WARNING"
-                            )
-                            plexus_score_obj = None
-                    else:
-                        plexus_score_obj = None
-                        for lookup, kwargs in [
-                            (Score.get_by_name, {"name": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
-                            (Score.get_by_key, {"key": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
-                            (Score.get_by_external_id, {"external_id": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
-                        ]:
-                            try:
-                                plexus_score_obj = await asyncio.to_thread(
-                                    lookup,
-                                    client=self.api_client,
-                                    **kwargs,
-                                )
-                                if plexus_score_obj:
-                                    break
-                            except Exception:
-                                continue
+                    plexus_score_obj = await resolve_score_for_scorecard(
+                        api_client=self.api_client,
+                        score_identifier=str(cc_question_id_param),
+                        scorecard_id=str(plexus_scorecard_obj.id),
+                    )
                     if plexus_score_obj:
                         scores_to_process.append({
                             'plexus_score_id': plexus_score_obj.id,
