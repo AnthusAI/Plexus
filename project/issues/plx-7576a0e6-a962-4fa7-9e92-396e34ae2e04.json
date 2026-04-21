@@ -52,10 +52,16 @@
       "author": "ryan",
       "text": "Applying CodeQL PR #189 suggestions: removed unused task-status variable, removed unused feedback_analysis constant, and replaced empty parse except blocks in reports/service with narrow exceptions + debug logs.",
       "created_at": "2026-04-21T00:20:59.386929Z"
+    },
+    {
+      "id": "678ac144-5573-4b48-a404-079e46fe06fb",
+      "author": "ryan",
+      "text": "Unblocking release approval flow: close stuck develop->main PR and open a fresh develop->main PR so Derek can approve under branch protection rules.",
+      "created_at": "2026-04-21T00:24:01.238374Z"
     }
   ],
   "created_at": "2026-04-20T22:53:25.728209Z",
-  "updated_at": "2026-04-21T00:20:59.386929Z",
+  "updated_at": "2026-04-21T00:24:01.238374Z",
   "closed_at": null,
   "custom": {}
 }
