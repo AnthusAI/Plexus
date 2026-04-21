@@ -654,7 +654,7 @@ def register_procedure_tools(mcp):
                     try:
                         if raw_content.startswith('{') and raw_content.endswith('}'):
                             parsed_content = json.loads(raw_content)
-                    except:
+                    except (json.JSONDecodeError, TypeError, ValueError):
                         pass  # Keep as string if not valid JSON
 
                     processed_msg = {
@@ -682,7 +682,7 @@ def register_procedure_tools(mcp):
                             try:
                                 if tool_response_raw.startswith('{') and tool_response_raw.endswith('}'):
                                     tool_response_parsed = json.loads(tool_response_raw)
-                            except:
+                            except (json.JSONDecodeError, TypeError, ValueError):
                                 pass
                             processed_msg["tool_response"] = tool_response_parsed
                             session_tool_responses.append(msg["id"])
