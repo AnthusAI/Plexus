@@ -1,0 +1,31 @@
+{
+  "id": "plx-1e78121d-f9c6-4a98-9ba4-cafddbfce0d0",
+  "title": "Fix date-range popover interaction inside report parameter dialog",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-88d8f8c6-72b2-4f34-8a65-9818f9673ab7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "992cb48a-582d-44e4-8d6a-ad8ae1459a96",
+      "author": "derek",
+      "text": "Reproduced from user screenshot: date-range popover in ConfigurableParametersDialog is causing parent modal dismissal on date click. Applying fix to keep parent dialog open and make popover interaction modal-safe inside dialog.",
+      "created_at": "2026-04-21T18:11:10.242614444Z"
+    },
+    {
+      "id": "e2033c62-1683-419b-9d25-5a283ce5fa2e",
+      "author": "derek",
+      "text": "Applied fixes: (1) DateRange popover now uses modal mode and single-month layout to avoid overlay spill/interaction conflicts; (2) closing ConfigurableParametersDialog no longer auto-closes parent Run Report dialog. This prevents 'click date closes everything' failure mode.",
+      "created_at": "2026-04-21T18:11:28.660976097Z"
+    }
+  ],
+  "created_at": "2026-04-21T18:11:05.483970112Z",
+  "updated_at": "2026-04-21T18:11:34.781399457Z",
+  "closed_at": "2026-04-21T18:11:34.781399457Z",
+  "custom": {}
+}
