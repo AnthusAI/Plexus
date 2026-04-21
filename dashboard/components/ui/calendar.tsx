@@ -18,21 +18,22 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      navLayout={props.navLayout ?? "around"}
       className={cn("p-3", className)}
       classNames={{
         months: "flex flex-col sm:flex-row gap-4",
-        month: "flex flex-col gap-4",
-        month_caption: "relative flex h-7 items-center justify-center px-1",
+        month: "relative flex flex-col gap-4",
+        month_caption: "relative flex h-7 items-center justify-center px-10",
         caption: "relative flex h-7 items-center justify-center",
         caption_label: "text-sm font-medium",
-        nav: "absolute inset-x-0 top-0 flex items-center justify-between",
+        nav: "flex items-center",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
+          "absolute left-1 top-0 z-20 h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
         ),
         button_next: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
+          "absolute right-1 top-0 z-20 h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
         ),
         month_grid: "w-full border-collapse space-y-1",
         weekdays: "flex",
@@ -53,9 +54,10 @@ function Calendar({
         range_end: "range-end",
         selected:
           "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        today: "bg-accent text-accent-foreground",
+        today:
+          "font-semibold text-foreground [&:not(:has([aria-selected]))>button]:ring-1 [&:not(:has([aria-selected]))>button]:ring-border",
         outside:
-          "outside text-muted-foreground opacity-50 aria-selected:bg-accent/30 aria-selected:text-muted-foreground aria-selected:opacity-80",
+          "outside invisible aria-selected:bg-transparent aria-selected:text-foreground",
         disabled: "text-muted-foreground opacity-50",
         range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
