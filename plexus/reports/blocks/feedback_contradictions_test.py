@@ -101,6 +101,11 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
 
     output, _log = await block.generate()
     parsed = _parse_output(output)
+    assert parsed['report_type'] == 'feedback_contradictions'
+    assert parsed['scope'] == 'single_score'
+    assert parsed['scorecard_name'] == 'CMG EDU'
+    assert parsed['score_id'] == 'score-1'
+    assert parsed['block_title'] == 'Feedback Contradictions'
     assert parsed['mode'] == 'contradictions'
     assert parsed['contradictions_found'] == 1
     assert parsed['aligned_found'] == 0
@@ -172,6 +177,11 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
 
     output, _log = await block.generate()
     parsed = _parse_output(output)
+    assert parsed['report_type'] == 'feedback_contradictions'
+    assert parsed['scope'] == 'single_score'
+    assert parsed['scorecard_name'] == 'CMG EDU'
+    assert parsed['score_id'] == 'score-1'
+    assert parsed['block_title'] == 'Feedback Contradictions'
     assert parsed['mode'] == 'aligned'
     assert parsed['eligible_associated_feedback_item_ids'] == ['fi-2', 'fi-1']
     assert parsed['eligible_associated_feedback_items'] == [
@@ -254,6 +264,8 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
 
     output, _log = await block.generate()
     parsed = _parse_output(output)
+    assert parsed['scorecard_name'] == 'CMG EDU'
+    assert parsed['score_id'] == 'score-1'
     assert captured_item_ids == ['item-1']
     assert parsed['total_items_analyzed'] == 1
     assert parsed['block_configuration']['max_feedback_items'] == 1
