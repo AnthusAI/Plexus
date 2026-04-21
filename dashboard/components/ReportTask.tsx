@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import '@/components/blocks/registrySetup'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FileBarChart, Clock, Square, Columns2, X } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -366,7 +367,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       const classMatch = firstLine.match(/class:\s*(\S+)/);
       const blockClass = classMatch ? classMatch[1].trim() : '';
 
-      // Extract name from code fence meta string (e.g. ```block name="Feedback Analysis")
+      // Extract name from code fence meta string (e.g. ```block name="Feedback Alignment")
       const meta: string = node?.data?.meta || '';
       const nameFromMeta = meta.match(/name=["']([^"']+)["']/)?.[1] ?? '';
 
@@ -392,8 +393,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         // Set up enhanced props for the block when the report is not complete
         const displayName = blockData.name && !blockData.name.startsWith('block_')
           ? blockData.name
-          : blockData.type === 'FeedbackAnalysis'
-            ? 'Feedback Analysis'
+          : blockData.type === 'FeedbackAlignment'
+            ? 'Feedback Alignment'
             : blockData.type === 'VectorTopicMemory'
               ? 'Vector Topic Memory'
               : blockData.type === 'ActionItems'
@@ -454,8 +455,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         // No matching block - show placeholder
         const blockLabel = blockClass === 'VectorTopicMemory'
           ? 'Vector Topic Memory'
-          : blockClass === 'FeedbackAnalysis'
-          ? 'Feedback Analysis'
+          : blockClass === 'FeedbackAlignment'
+          ? 'Feedback Alignment'
           : blockClass === 'FeedbackAlignmentTimeline'
           ? 'Feedback Alignment Timeline'
           : blockClass === 'FeedbackVolumeTimeline'

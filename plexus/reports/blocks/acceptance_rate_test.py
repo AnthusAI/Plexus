@@ -2,10 +2,18 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 import time as pytime
+import json
 
 import pytest
 
 from plexus.reports.blocks.acceptance_rate import AcceptanceRate
+
+
+def _parse_output(payload):
+    if isinstance(payload, dict):
+        return payload
+    json_text = "\n".join(line for line in str(payload).split("\n") if not line.startswith("#"))
+    return json.loads(json_text)
 
 
 @pytest.fixture
@@ -112,6 +120,7 @@ async def test_acceptance_rate_computes_item_and_score_result_acceptance(mock_ap
         patch.object(block, "_fetch_feedback_items_window", new=AsyncMock(return_value=feedback_items)),
     ):
         output, _ = await block.generate()
+    output = _parse_output(output)
 
     summary = output["summary"]
     assert summary["total_items"] == 2
@@ -165,6 +174,7 @@ async def test_acceptance_rate_default_is_score_result_only(mock_api_client):
         patch.object(block, "_fetch_feedback_items_window", new=AsyncMock(return_value=feedback_items)),
     ):
         output, _ = await block.generate()
+    output = _parse_output(output)
 
     assert output["include_item_acceptance_rate"] is False
 
@@ -249,6 +259,7 @@ async def test_acceptance_rate_zero_max_items_means_no_cap(mock_api_client):
         patch.object(block, "_fetch_feedback_items_window", new=AsyncMock(return_value=[])),
     ):
         output, _ = await block.generate()
+    output = _parse_output(output)
 
     assert output["items_total"] == 2
     assert output["items_returned"] == 2
@@ -315,6 +326,8 @@ async def test_acceptance_rate_items_are_sorted_most_recent_first(mock_api_clien
         patch.object(block, "_fetch_feedback_items_window", new=AsyncMock(return_value=[])),
     ):
         output, _ = await block.generate()
+    assert " - All Scores - Score Result Acceptance Rate" in str(output)
+    output = _parse_output(output)
 
     assert [row["item_id"] for row in output["items"]] == ["item-new", "item-old"]
 
@@ -425,12 +438,12 @@ async def test_feedback_rates_base_resolves_hyphenated_scorecard_name(mock_api_c
     )
 
     with (
-        patch("plexus.reports.blocks.feedback_rates_base.Scorecard.get_by_key", return_value=None),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", return_value=None),
         patch(
-            "plexus.reports.blocks.feedback_rates_base.Scorecard.get_by_name",
+            "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name",
             return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
         ),
-        patch("plexus.reports.blocks.feedback_rates_base.Scorecard.get_by_external_id", return_value=None),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", return_value=None),
     ):
         resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
 
@@ -446,13 +459,9 @@ async def test_feedback_rates_base_resolves_score_by_name(mock_api_client):
         api_client=mock_api_client,
     )
 
-    with (
-        patch(
-            "plexus.reports.blocks.feedback_rates_base.Score.get_by_name",
-            return_value=SimpleNamespace(id="score-1", name="Agent Branding"),
-        ),
-        patch("plexus.reports.blocks.feedback_rates_base.Score.get_by_key", return_value=None),
-        patch("plexus.reports.blocks.feedback_rates_base.Score.get_by_external_id", return_value=None),
+    with patch(
+        "plexus.reports.blocks.feedback_rates_base.resolve_score_for_scorecard",
+        new=AsyncMock(return_value=SimpleNamespace(id="score-1", name="Agent Branding")),
     ):
         resolved = await block._resolve_score("Agent Branding", "sc-1")
 

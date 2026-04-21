@@ -15,7 +15,7 @@ Systematic process for improving score configurations using human feedback data 
 Use MCP tools for token-efficient structured output:
 - `get_plexus_documentation`: Always open this doc before starting alignment
 - `think`: Required planning step; enforces baseline-first workflow
-- `plexus_feedback_analysis`: Performance metrics and error patterns
+- `plexus_feedback_alignment`: Performance metrics and error patterns
 - `plexus_feedback_find`: Specific feedback items with human corrections
 - `plexus_predict`: Test predictions against known ground-truth (LOCAL YAML mode)
 - `run_plexus_evaluation`: Run evaluations (LOCAL mode) for baseline and post-change comparisons
@@ -27,7 +27,7 @@ Use MCP tools for token-efficient structured output:
 Get comprehensive performance summary:
 
 ```
-plexus_feedback_analysis(
+plexus_feedback_alignment(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     days=14,
@@ -192,7 +192,7 @@ plexus_dataset_load(
 
 ### 1. Baseline Summary
 ```
-plexus_feedback_analysis(
+plexus_feedback_alignment(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check", 
     days=30,
@@ -249,7 +249,7 @@ plexus_predict(
 
 ### 7. Impact Measurement
 ```
-plexus_feedback_analysis(
+plexus_feedback_alignment(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     days=7,
@@ -276,7 +276,7 @@ Task(
 # Get multiple pages of feedback items - ALWAYS use sub-agents!
 Task(
     subagent_type="plexus-alignment-analyzer",
-    description="Paginated feedback analysis",
+    description="Paginated feedback alignment",
     prompt="Analyze feedback across multiple pages using plexus_feedback_find pagination. Start with first page, then continue pagination as needed to build comprehensive analysis."
 )
 ```
@@ -289,7 +289,7 @@ Task(
 
 **Continuous Monitoring**: Weekly performance tracking
 ```
-plexus_feedback_analysis(
+plexus_feedback_alignment(
     scorecard_name="Quality Assurance v1.0",
     score_name="Compliance Check",
     days=7, 

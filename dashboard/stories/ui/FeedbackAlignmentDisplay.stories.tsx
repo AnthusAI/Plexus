@@ -1,12 +1,12 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { FeedbackAnalysisDisplay } from '@/components/ui/feedback-analysis-display';
+import { FeedbackAlignmentDisplay } from '@/components/ui/feedback-alignment-display';
 import { type ClassDistribution } from '@/components/ClassDistributionVisualizer';
 import { type ConfusionMatrixData } from '@/components/confusion-matrix';
 
-const meta: Meta<typeof FeedbackAnalysisDisplay> = {
-  title: 'UI/FeedbackAnalysisDisplay',
-  component: FeedbackAnalysisDisplay,
+const meta: Meta<typeof FeedbackAlignmentDisplay> = {
+  title: 'UI/FeedbackAlignmentDisplay',
+  component: FeedbackAlignmentDisplay,
   parameters: {
     layout: 'padded',
   },
@@ -27,7 +27,7 @@ const meta: Meta<typeof FeedbackAnalysisDisplay> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof FeedbackAnalysisDisplay>;
+type Story = StoryObj<typeof FeedbackAlignmentDisplay>;
 
 // Helper functions to create mock data
 const createClassDistribution = (labelDistribution: Record<string, number>): ClassDistribution[] => {
@@ -105,7 +105,7 @@ const createScoreData = (
   return baseScore;
 };
 
-const baseFeedbackAnalysisData = {
+const baseFeedbackAlignmentData = {
   total_items: 0,
   total_agreements: 0, 
   total_mismatches: 0,
@@ -121,7 +121,7 @@ export const SingleScore: Story = {
     title: 'Single Score Analysis',
     subtitle: 'Analysis of one score with good performance',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.75,
       scores: [
         createScoreData('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'Excellent': 30, 'Good': 15, 'Poor': 5 }),
@@ -140,7 +140,7 @@ export const MultipleScores: Story = {
     title: 'Multiple Scores Analysis',
     subtitle: 'Comprehensive scorecard analysis',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.82,
       scores: [
         createScoreData('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'High': 25, 'Medium': 15, 'Low': 10 }),
@@ -162,7 +162,7 @@ export const BinaryClassification: Story = {
     title: 'Binary Classification Analysis',
     subtitle: 'Simple yes/no classification performance',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.65,
       scores: [
         createScoreData('score1', 'Policy Violation', 0.65, 100, 25, 75.0, { 'Yes': 50, 'No': 50 }),
@@ -181,7 +181,7 @@ export const ImbalancedClasses: Story = {
     title: 'Imbalanced Classes Analysis',
     subtitle: 'Analysis with severely imbalanced class distribution',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.25,
       scores: [
         createScoreData('score1', 'Rare Event Detection', 0.25, 100, 5, 95.0, { 'Normal': 95, 'Anomaly': 5 }),
@@ -200,7 +200,7 @@ export const WithWarnings: Story = {
     title: 'Analysis with Warnings',
     subtitle: 'Scores with reliability concerns',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.45,
       scores: [
         createScoreData('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'High': 25, 'Medium': 15, 'Low': 10 }),
@@ -227,7 +227,7 @@ export const WithNotesAndDiscussion: Story = {
     title: 'Detailed Analysis Report',
     subtitle: 'Analysis with comprehensive notes and discussion',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.72,
       scores: [
         {
@@ -258,7 +258,7 @@ export const EmptyState: Story = {
     title: 'No Data Available',
     subtitle: 'Analysis when no feedback data is available',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: null,
       scores: [],
       total_items: 0,
@@ -276,7 +276,7 @@ export const WithoutDateRange: Story = {
     subtitle: 'Display without showing date range',
     showDateRange: false,
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.68,
       scores: [
         createScoreData('score1', 'Customer Satisfaction', 0.68, 80, 20, 75.0, { 'Satisfied': 50, 'Neutral': 20, 'Dissatisfied': 10 }),
@@ -296,7 +296,7 @@ export const WithPrecisionRecall: Story = {
     subtitle: 'Display including precision and recall gauges',
     showPrecisionRecall: true,
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.72,
       scores: [
         {
@@ -324,7 +324,7 @@ export const InteractiveConfusionMatrix: Story = {
     title: 'Interactive Analysis',
     subtitle: 'Click on confusion matrix cells to explore feedback items',
     data: {
-      ...baseFeedbackAnalysisData,
+      ...baseFeedbackAlignmentData,
       overall_ac1: 0.58,
       scores: [
         createScoreData('score1', 'Topic Classification', 0.58, 120, 35, 70.8, { 'Tech': 40, 'Billing': 35, 'General': 30, 'Urgent': 15 }),

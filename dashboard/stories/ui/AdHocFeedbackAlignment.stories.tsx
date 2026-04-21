@@ -1,10 +1,10 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { AdHocFeedbackAnalysis } from '@/components/ui/ad-hoc-feedback-analysis';
+import { AdHocFeedbackAlignment } from '@/components/ui/ad-hoc-feedback-alignment';
 
-const meta: Meta<typeof AdHocFeedbackAnalysis> = {
-  title: 'UI/AdHocFeedbackAnalysis',
-  component: AdHocFeedbackAnalysis,
+const meta: Meta<typeof AdHocFeedbackAlignment> = {
+  title: 'UI/AdHocFeedbackAlignment',
+  component: AdHocFeedbackAlignment,
   parameters: {
     layout: 'padded',
   },
@@ -40,7 +40,7 @@ const meta: Meta<typeof AdHocFeedbackAnalysis> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof AdHocFeedbackAnalysis>;
+type Story = StoryObj<typeof AdHocFeedbackAlignment>;
 
 // Mock Amplify client for Storybook
 const mockAmplifyClient = {
@@ -113,7 +113,7 @@ const originalGenerateClient = (global as any).generateClient;
 export const ScoreAnalysis: Story = {
   args: {
     scoreId: 'score1',
-    title: 'Score Feedback Analysis',
+    title: 'Score Feedback Alignment',
     showConfiguration: true,
     defaultDays: 30
   }
@@ -122,7 +122,7 @@ export const ScoreAnalysis: Story = {
 export const ScorecardAnalysis: Story = {
   args: {
     scorecardId: 'scorecard1',
-    title: 'Scorecard Feedback Analysis',
+    title: 'Scorecard Feedback Alignment',
     showConfiguration: true,
     defaultDays: 30
   }
@@ -192,7 +192,7 @@ const ErrorDemo = () => {
           {showError ? 'Show Success' : 'Show Error'}
         </button>
       </div>
-      <AdHocFeedbackAnalysis
+      <AdHocFeedbackAlignment
         scoreId="score1"
         title="Error State Demo"
         showConfiguration={true}
@@ -241,7 +241,7 @@ const LoadingDemo = () => {
           {slowMode ? 'Fast Mode' : 'Slow Mode (5s)'}
         </button>
       </div>
-      <AdHocFeedbackAnalysis
+      <AdHocFeedbackAlignment
         scoreId="score1"
         title="Loading State Demo"
         showConfiguration={true}
@@ -273,7 +273,7 @@ const EmptyDataDemo = () => {
   }, []);
   
   return (
-    <AdHocFeedbackAnalysis
+    <AdHocFeedbackAlignment
       scoreId="score1"
       title="Empty Data Demo"
       showConfiguration={true}
