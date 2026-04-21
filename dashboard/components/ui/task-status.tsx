@@ -46,7 +46,7 @@ export interface TaskStageConfig {
   color: string
   name: string
   order: number
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
   processedItems?: number
   totalItems?: number
   startedAt?: string
@@ -64,7 +64,7 @@ export interface TaskStatusProps {
   totalItems?: number
   startedAt?: string
   estimatedCompletionAt?: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
   command?: string
   statusMessage?: string
   errorMessage?: string
@@ -146,7 +146,6 @@ export const TaskStatus = React.memo(({
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
-  const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
 
   // Memoize timing calculations
@@ -225,7 +224,7 @@ export const TaskStatus = React.memo(({
     if (runningStage) return runningStage.name;
 
     // Only fall back to task-level status when no stage is actively running
-    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
+    if (status === 'FAILED' || status === 'STALLED' || status === 'COMPLETED') return 'completion';
 
     // If no running stage, find the first PENDING stage (sorted by order)
     const pendingStage = [...stageConfigs].sort((a, b) => a.order - b.order).find(s => s.status === 'PENDING');
@@ -253,6 +252,7 @@ export const TaskStatus = React.memo(({
             isCompleted ? 'bg-primary' :
             isRunning ? 'bg-secondary' :
             stage.status === 'FAILED' ? 'bg-false' :
+            stage.status === 'STALLED' ? 'bg-neutral' :
             'bg-neutral'
           ),
           status: stage.status,
@@ -265,12 +265,12 @@ export const TaskStatus = React.memo(({
     const hasStages = orderedStages.length > 0;
     const lastStageCompleted = hasStages && orderedStages[orderedStages.length - 1].status === 'COMPLETED';
     const allStagesCompleted = hasStages && orderedStages.every(s => s.status === 'COMPLETED');
-    const completionActive = (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
+    const completionActive = !['FAILED', 'STALLED'].includes(status) && (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
       label: 'Complete',
       color: completionActive ? 'bg-true' : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
-      status: completionActive ? 'COMPLETED' : (status === 'FAILED' ? 'FAILED' : 'PENDING'),
+      status: completionActive ? 'COMPLETED' : ((status === 'FAILED' || status === 'STALLED') ? status : 'PENDING'),
       completed: completionActive
     });
 

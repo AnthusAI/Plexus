@@ -170,8 +170,6 @@ const GET_TASK_STATUS_QUERY = `
   }
 `
 
-const API_KEY_AUTH_OPTIONS = { authMode: 'apiKey' as const }
-
 // Helper function to format JSON with proper newlines
 const formatJsonWithNewlines = (obj: any): string => {
   // If the object has a 'result' field that's a string, try to parse it as JSON
@@ -1455,7 +1453,6 @@ function ConversationViewer({
           const response = await client.graphql({
             query: GET_TASK_STATUS_QUERY,
             variables: { id: taskId },
-            authMode: 'apiKey',
           })
           if (cancelled) {
             return
@@ -1553,7 +1550,6 @@ function ConversationViewer({
         triggerMessageId,
         clientInstrumentation: JSON.stringify(clientInstrumentation),
       },
-      authMode: 'apiKey',
     })
 
     const result = response?.data?.startConsoleRun
@@ -1672,7 +1668,7 @@ function ConversationViewer({
         content: JSON.stringify({ value: responseValue }),
         metadata: JSON.stringify(responseMetadata),
         createdAt: respondedAt,
-      }, API_KEY_AUTH_OPTIONS)
+      })
       const responseMessageId = created?.data?.id
       if (!responseMessageId) {
         throw new Error('Failed to persist RESPONSE message')
@@ -1755,8 +1751,7 @@ function ConversationViewer({
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
-          authMode: 'apiKey',
-        }, API_KEY_AUTH_OPTIONS)
+        })
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
@@ -1766,7 +1761,7 @@ function ConversationViewer({
         // that's not in the index list yet, fetch by id and inject it.
         if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
           try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, API_KEY_AUTH_OPTIONS)
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId })
             const selectedSession = selectedSessionResponse?.data
             if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
               mergedSessions = [selectedSession, ...fetchedSessions]
@@ -1816,9 +1811,7 @@ function ConversationViewer({
             procedureId: effectiveId,
             limit: 1000,
             nextToken,
-            authMode: 'apiKey',
           }, {
-            authMode: 'apiKey',
             selectionSet: [
               'id',
               'content',
@@ -1886,8 +1879,7 @@ function ConversationViewer({
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
-          authMode: 'apiKey',
-        }, API_KEY_AUTH_OPTIONS)
+        })
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
@@ -1895,7 +1887,7 @@ function ConversationViewer({
 
         if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
           try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, API_KEY_AUTH_OPTIONS)
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId })
             const selectedSession = selectedSessionResponse?.data
             if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
               mergedSessions = [selectedSession, ...fetchedSessions]
@@ -1983,7 +1975,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatSession.onCreate(API_KEY_AUTH_OPTIONS as any).subscribe({
+      const subscription = getClient().models.ChatSession.onCreate().subscribe({
         next: () => {
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
@@ -2080,9 +2072,7 @@ function ConversationViewer({
             procedureId: effectiveId,
             limit: 1000,
             nextToken,
-            authMode: 'apiKey',
           }, {
-            authMode: 'apiKey',
             selectionSet: [
               'id',
               'content',
@@ -2154,7 +2144,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      createSubscription = getClient().models.ChatMessage.onCreate(API_KEY_AUTH_OPTIONS as any).subscribe({
+      createSubscription = getClient().models.ChatMessage.onCreate().subscribe({
         next: (payload: any) => {
           const incoming = extractSubscriptionMessage(payload)
           if (incoming) {
@@ -2178,7 +2168,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      updateSubscription = getClient().models.ChatMessage.onUpdate(API_KEY_AUTH_OPTIONS as any).subscribe({
+      updateSubscription = getClient().models.ChatMessage.onUpdate().subscribe({
         next: (payload: any) => {
           const incoming = extractSubscriptionMessage(payload)
           if (incoming) {
@@ -2315,7 +2305,7 @@ function ConversationViewer({
       category: STANDARD_SESSION_CATEGORY,
       createdAt,
       updatedAt: createdAt,
-    }, API_KEY_AUTH_OPTIONS)
+    })
 
     const sessionId = created?.data?.id
     if (!sessionId) {
@@ -2469,7 +2459,7 @@ function ConversationViewer({
                 client_send_started_at: clientSendStartedAt,
               },
             }),
-          }, API_KEY_AUTH_OPTIONS)
+          })
 
           const createdMessageId = created?.data?.id
           if (!createdMessageId) {

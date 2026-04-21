@@ -1543,6 +1543,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                     else:
                         logger.info("Running evaluation to establish baseline performance...")
                         evaluation_results = await self._run_evaluation_for_procedure(
+                            procedure_id=procedure_id,
                             scorecard_name=procedure_info.scorecard_name,
                             score_name=procedure_info.score_name,
                             score_version_id=score_version_id,
@@ -2194,6 +2195,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
     
     async def _run_evaluation_for_procedure(
         self,
+        procedure_id: str,
         scorecard_name: str,
         score_name: str,
         score_version_id: Optional[str],
@@ -2254,6 +2256,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                 score_name=score_name,
                 number_of_samples=n_samples,
                 sampling_method="random",
+                procedure_id=procedure_id,
                 fresh=True,
                 use_yaml=True  # Use local YAML configuration
             )
@@ -3312,6 +3315,7 @@ Based on this data, you should prioritize examining error types with the highest
 
             # Run the evaluation (reuse existing method)
             evaluation_results_json = await self._run_evaluation_for_procedure(
+                procedure_id=node.procedureId,
                 scorecard_name=scorecard_name,
                 score_name=score_name,
                 score_version_id=score_version_id,

@@ -681,6 +681,12 @@ async def run_experiment_with_task_tracking(
 
     try:
         _mark_run_started()
+        from plexus.cli.procedure.stale_timeout import launch_async_stale_timeout_scan
+
+        launch_async_stale_timeout_scan(
+            account_id=account_id,
+            exclude_procedure_id=procedure_id,
+        )
 
         # Start with Hypothesis stage (only if we have a tracker)
         if tracker:
