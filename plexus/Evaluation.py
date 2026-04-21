@@ -1443,31 +1443,18 @@ class Evaluation:
             for idx, (_, row) in enumerate(selected_sample_rows.iterrows())
         ]
         
-        # Wait for all tasks to complete
         results = []
-        error_count = 0
-        last_error = None
-        for task in asyncio.as_completed(tasks):
-            try:
+        try:
+            for task in asyncio.as_completed(tasks):
                 result = await task
                 if result:
                     results.append(result)
-            except Exception as e:
-                error_count += 1
-                last_error = e
-                logging.error(f"Error in task for {score_name}: {e}")
-
-        # If ALL items failed, raise so the evaluation reports failure
-        if error_count > 0 and len(results) == 0:
-            raise RuntimeError(
-                f"All {error_count}/{total_rows} predictions failed for {score_name}. "
-                f"Last error: {last_error}"
-            )
-        elif error_count > 0:
-            logging.warning(
-                f"{error_count}/{total_rows} predictions failed for {score_name}, "
-                f"{len(results)} succeeded"
-            )
+        except Exception:
+            for pending_task in tasks:
+                if not pending_task.done():
+                    pending_task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         return results
 
@@ -2455,6 +2442,21 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                 # Remove the result accumulation from here since it's now handled in _run_evaluation / score_all_texts_for_score
                 # We still need to track overall progress if only one score is being evaluated
+                for failed_score_identifier, failed_score_result in filtered_results.items():
+                    failed_value = getattr(failed_score_result, 'value', None)
+                    if isinstance(failed_value, str) and failed_value.upper() == "ERROR":
+                        underlying_error = getattr(failed_score_result, 'error', None) or getattr(failed_score_result, 'explanation', None)
+                        if not underlying_error:
+                            underlying_error = "Score execution returned ERROR value"
+                        failure_item_id = item_id or (getattr(item, 'id', None) if item else None) or content_id or 'unknown'
+                        failure_feedback_item_id = feedback_item_id or metadata.get('feedback_item_id') or 'unknown'
+                        raise RuntimeError(
+                            "Initial evaluation failed: "
+                            f"score '{failed_score_identifier}' returned ERROR for "
+                            f"feedback item '{failure_feedback_item_id}' item '{failure_item_id}': "
+                            f"{underlying_error}"
+                        )
+
                 if has_processed_scores and score_name: # Check if we are processing a specific score
                     self.processed_items_by_score[score_name] = self.processed_items_by_score.get(score_name, 0) + 1
                     self.processed_items = sum(self.processed_items_by_score.values())
@@ -5217,7 +5219,7 @@ class AccuracyEvaluation(Evaluation):
                     )
                 except Exception:
                     pass  # Don't mask the original error
-            raise e # Re-raise after logging
+            raise
         finally:
             self.should_stop = True
 
@@ -5542,7 +5544,7 @@ class AccuracyEvaluation(Evaluation):
             return metrics
         except Exception as e:
             self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
-            'raise e'
+            raise
         finally:
             pass
 
