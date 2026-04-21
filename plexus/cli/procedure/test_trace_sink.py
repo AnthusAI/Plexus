@@ -424,3 +424,101 @@ async def test_trace_sink_late_cost_event_updates_recent_assistant_message():
     assert isinstance(summary, dict)
     assert summary.get("total_usd") == pytest.approx(0.0125)
     assert summary.get("llm_calls") == 1
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_updates_started_tool_call_from_explicit_tool_response():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-tool-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    started_id = await sink.record(
+        {
+            "event_type": "tool_call_started",
+            "tool_name": "plexus_evaluation_run",
+            "tool_args": {"evaluation_type": "accuracy"},
+        }
+    )
+    completed_id = await sink.record(
+        {
+            "kind": "TOOL_RESPONSE",
+            "tool_name": "plexus_evaluation_run",
+            "tool_result": {"status": "FAILED", "errorMessage": "Initial evaluation failed"},
+        }
+    )
+
+    assert started_id == "msg-tool-1"
+    assert completed_id == "msg-tool-1"
+    recorder.update_message.assert_awaited_once()
+    update_kwargs = recorder.update_message.await_args.kwargs
+    assert update_kwargs["message_id"] == "msg-tool-1"
+    assert update_kwargs["tool_response"] == {"status": "FAILED", "errorMessage": "Initial evaluation failed"}
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_records_assistant_alert_for_failed_tool_result():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.side_effect = ["msg-tool-1", "msg-alert-1"]
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    await sink.record(
+        {
+            "event_type": "tool_call_started",
+            "tool_name": "plexus_evaluation_run",
+            "tool_args": {"evaluation_type": "accuracy"},
+        }
+    )
+    await sink.record(
+        {
+            "event_type": "tool_call",
+            "tool_name": "plexus_evaluation_run",
+            "tool_args": {"evaluation_type": "accuracy"},
+            "tool_result": {
+                "status": "FAILED",
+                "errorMessage": "Initial evaluation failed: score returned ERROR",
+            },
+        }
+    )
+
+    alert_call = recorder.record_message.await_args_list[-1]
+    assert alert_call.kwargs["role"] == "ASSISTANT"
+    assert alert_call.kwargs["human_interaction"] == "ALERT_ERROR"
+    assert "plexus_evaluation_run failed" in alert_call.kwargs["content"]
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_does_not_flag_successful_string_tool_output_as_failure():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-tool-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    await sink.record(
+        {
+            "event_type": "tool_call_started",
+            "tool_name": "get_plexus_documentation",
+            "tool_args": {"filename": "optimizer-cookbook"},
+        }
+    )
+    await sink.record(
+        {
+            "event_type": "tool_call",
+            "tool_name": "get_plexus_documentation",
+            "tool_args": {"filename": "optimizer-cookbook"},
+            "tool_result": "=== CHANGE COOKBOOK ===\nIf prior attempts failed, try a structural fix.",
+        }
+    )
+
+    recorder.update_message.assert_awaited_once()
+    assert recorder.record_message.await_count == 1

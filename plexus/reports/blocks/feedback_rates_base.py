@@ -5,11 +5,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import time
 
-from plexus.dashboard.api.models.score import Score
-from plexus.dashboard.api.models.scorecard import Scorecard
-
 from .base import BaseReportBlock
-from .identifier_utils import looks_like_uuid
+from .feedback_scope_resolver import (
+    resolve_score_for_scorecard,
+    resolve_scorecard,
+)
 
 
 class FeedbackRatesBase(BaseReportBlock):
@@ -136,61 +136,11 @@ class FeedbackRatesBase(BaseReportBlock):
             and str(result.get("code") or "") == "200"
         )
 
-    async def _resolve_scorecard(self, scorecard_identifier: str) -> Scorecard:
-        scorecard = None
-        if looks_like_uuid(scorecard_identifier):
-            try:
-                scorecard = await asyncio.to_thread(
-                    Scorecard.get_by_id,
-                    id=scorecard_identifier,
-                    client=self.api_client,
-                )
-            except Exception:
-                scorecard = None
-        if not scorecard:
-            for lookup, kwargs in [
-                (Scorecard.get_by_key, {"key": scorecard_identifier}),
-                (Scorecard.get_by_name, {"name": scorecard_identifier}),
-                (Scorecard.get_by_external_id, {"external_id": scorecard_identifier}),
-            ]:
-                try:
-                    scorecard = await asyncio.to_thread(lookup, client=self.api_client, **kwargs)
-                    if scorecard:
-                        break
-                except Exception:
-                    continue
-        if not scorecard:
-            raise ValueError(f"Scorecard not found for identifier '{scorecard_identifier}'.")
-        return scorecard
+    async def _resolve_scorecard(self, scorecard_identifier: str) -> Any:
+        return await resolve_scorecard(self.api_client, scorecard_identifier)
 
-    async def _resolve_score(self, score_identifier: str, scorecard_id: str) -> Score:
-        score = None
-        if looks_like_uuid(score_identifier):
-            try:
-                score = await asyncio.to_thread(
-                    Score.get_by_id,
-                    id=score_identifier,
-                    client=self.api_client,
-                )
-            except Exception:
-                score = None
-        if not score:
-            for lookup, kwargs in [
-                (Score.get_by_name, {"name": score_identifier, "scorecard_id": scorecard_id}),
-                (Score.get_by_key, {"key": score_identifier, "scorecard_id": scorecard_id}),
-                (Score.get_by_external_id, {"external_id": score_identifier, "scorecard_id": scorecard_id}),
-            ]:
-                try:
-                    score = await asyncio.to_thread(lookup, client=self.api_client, **kwargs)
-                    if score:
-                        break
-                except Exception:
-                    continue
-        if not score:
-            raise ValueError(
-                f"Score not found for identifier '{score_identifier}' on scorecard '{scorecard_id}'."
-            )
-        return score
+    async def _resolve_score(self, score_identifier: str, scorecard_id: str) -> Any:
+        return await resolve_score_for_scorecard(self.api_client, scorecard_id, score_identifier)
 
     async def _fetch_score_results_window(
         self,

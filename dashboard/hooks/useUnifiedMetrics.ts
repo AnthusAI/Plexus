@@ -563,11 +563,13 @@ export function useEvaluationMetrics(): UseUnifiedMetricsResult {
  * Hook for feedback items
  * Note: Feedback items are tracked in the FeedbackItem table, not as a filter on Items
  */
-export function useFeedbackMetrics(): UseUnifiedMetricsResult {
+export function useFeedbackMetrics(config: MetricsConfig = {}): UseUnifiedMetricsResult {
   return useUnifiedMetrics({
+    ...config,
     filters: {
-      useFeedbackItems: true  // Special flag to query feedbackItems instead of items
-    }
+      ...config.filters,
+      useFeedbackItems: true, // Special flag to query feedbackItems instead of items
+    },
   })
 }
 

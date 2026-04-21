@@ -253,7 +253,7 @@ def register_feedback_tools(mcp: FastMCP):
     """Register feedback tools with the MCP server"""
     
     @mcp.tool()
-    async def plexus_feedback_analysis(
+    async def plexus_feedback_alignment(
         scorecard_name: str,
         score_name: str,
         days: Union[int, float, str] = 7,
@@ -407,8 +407,8 @@ def register_feedback_tools(mcp: FastMCP):
             
             # Add command context
             result_dict["command_info"] = {
-                "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
-                "tool": f"plexus_feedback_analysis(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')"
+                "description": "Comprehensive feedback alignment with confusion matrix and agreement metrics",
+                "tool": f"plexus_feedback_alignment(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')"
             }
             
             # Output in requested format
@@ -434,7 +434,7 @@ def register_feedback_tools(mcp: FastMCP):
                 return json.dumps(result_dict, indent=2, default=str)
                 
         except Exception as e:
-            logger.error(f"[MCP] Error in plexus_feedback_analysis: {e}")
+            logger.error(f"[MCP] Error in plexus_feedback_alignment: {e}")
             import traceback
             logger.error(f"[MCP] Traceback: {traceback.format_exc()}")
             return f"Error generating feedback summary: {str(e)}"
@@ -442,7 +442,7 @@ def register_feedback_tools(mcp: FastMCP):
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
             if captured_output:
-                logger.warning(f"Captured unexpected stdout during plexus_feedback_analysis: {captured_output}")
+                logger.warning(f"Captured unexpected stdout during plexus_feedback_alignment: {captured_output}")
             # Restore original stdout
             sys.stdout = old_stdout
 

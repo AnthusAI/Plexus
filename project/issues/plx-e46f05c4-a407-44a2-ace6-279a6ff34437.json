@@ -1,0 +1,31 @@
+{
+  "id": "plx-e46f05c4-a407-44a2-ace6-279a6ff34437",
+  "title": "As a reviewer, I want Property Type and Home Value Metadata AI guidelines that distinguish correct metadata alignment, mismatches, and unsupported cases, so that scoring is consistent",
+  "description": "Feature: Property Type and Home Value Metadata AI guidelines for Suco - Home Improvement\n\nScenario: Metadata matches supported property type and home value evidence\nGiven a transcript where property type and home value are discussed and the metadata matches the supported value or valid mapping\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Metadata conflicts with the call or required probing is missing\nGiven a transcript where the metadata does not match the supported value or the agent failed to probe after a large value range\nWhen the reviewer evaluates the conversation\nThen the score should be No\n\nScenario: The metadata cannot be supported from the call\nGiven a transcript where property type or home value was not discussed or metadata appears blank or unsupported by the transcript\nWhen the reviewer evaluates the conversation\nThen the score should be NA",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fe57be96-46e2-4aa7-aad2-ec8b47db45ee",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f8cef59e-bae0-4c91-916f-a085f410452b",
+      "author": "ryan",
+      "text": "Pulled the current Property Type and Home Value Metadata AI score from Plexus. Existing guidelines are missing on the champion version, so I am drafting an initial Yes/No/NA guidelines document from the live score YAML and will validate it before any push.",
+      "created_at": "2026-04-21T01:05:20.345006Z"
+    },
+    {
+      "id": "74a45d3c-2e57-4ba1-a9bf-d84089934a1d",
+      "author": "ryan",
+      "text": "Validated the new Property Type and Home Value Metadata AI guidelines with skills/plexus-guidelines/validate_guidelines.py and pushed them to Plexus as score version af242924-9fe3-4246-ace3-37c151b62a62. The new version is not champion-promoted; this change adds the missing guidelines document.",
+      "created_at": "2026-04-21T01:05:57.568530Z"
+    }
+  ],
+  "created_at": "2026-04-21T01:05:13.095791Z",
+  "updated_at": "2026-04-21T01:05:57.585377Z",
+  "closed_at": "2026-04-21T01:05:57.585377Z",
+  "custom": {}
+}

@@ -19,11 +19,11 @@ const feedbackGaugesConfig: BaseGaugesConfig = {
   gauges: [
     {
       key: 'feedbackItems',
-      title: 'Feedback Items / hour',
-      valueKey: 'feedbackItemsPerHour',
-      averageKey: 'feedbackItemsAveragePerHour',
-      peakKey: 'feedbackItemsPeakHourly',
-      totalKey: 'feedbackItemsTotal24h',
+      title: 'Feedback Items / day',
+      valueKey: 'feedbackItemsPerDay',
+      averageKey: 'feedbackItemsAveragePerDay',
+      peakKey: 'feedbackItemsPeakDaily',
+      totalKey: 'feedbackItemsTotal7d',
       color: 'hsl(var(--chart-3))',
       unit: '',
       decimalPlaces: 0,
@@ -68,20 +68,63 @@ export function FeedbackItemsGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: FeedbackItemsGaugesProps) {
+  const feedbackWindow = React.useMemo(() => {
+    const end = new Date()
+    const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
+    return {
+      start,
+      end,
+      period: 'week' as const,
+    }
+  }, [])
+
   // Use real feedback metrics
   const { 
     metrics: metricsData, 
     isLoading, 
     error 
-  } = useFeedbackMetrics()
+  } = useFeedbackMetrics({
+    timeRange: feedbackWindow,
+  })
+
+  const dailyRollups = React.useMemo(() => {
+    const chartPoints = metricsData?.chartData || []
+    if (chartPoints.length === 0) {
+      return {
+        total7d: 0,
+        averagePerDay: 0,
+        peakDaily: 0,
+      }
+    }
+
+    const dailyTotals = new Map<string, number>()
+    for (const point of chartPoints) {
+      const bucketStart = point.bucketStart ? new Date(point.bucketStart) : null
+      if (!bucketStart || Number.isNaN(bucketStart.getTime())) continue
+
+      const dayKey = bucketStart.toLocaleDateString('en-CA')
+      dailyTotals.set(dayKey, (dailyTotals.get(dayKey) || 0) + (point.items || 0))
+    }
+
+    const totals = Array.from(dailyTotals.values())
+    const total7d = totals.reduce((sum, value) => sum + value, 0)
+    const averagePerDay = totals.length > 0 ? Math.round(total7d / totals.length) : 0
+    const peakDaily = totals.length > 0 ? Math.max(...totals) : 0
+
+    return {
+      total7d,
+      averagePerDay,
+      peakDaily,
+    }
+  }, [metricsData?.chartData])
 
   // Transform metrics data to BaseGaugesData format
   // For feedback metrics, we use the items data which contains feedbackItems counts
   const data: BaseGaugesData | null = metricsData ? {
-    feedbackItemsPerHour: metricsData.itemsPerHour || 0,
-    feedbackItemsAveragePerHour: metricsData.itemsAveragePerHour || 0,
-    feedbackItemsPeakHourly: metricsData.itemsPeakHourly || 10,
-    feedbackItemsTotal24h: metricsData.itemsTotal24h || 0,
+    feedbackItemsPerDay: metricsData.itemsTotal24h || 0,
+    feedbackItemsAveragePerDay: dailyRollups.averagePerDay || 0,
+    feedbackItemsPeakDaily: dailyRollups.peakDaily || Math.max(metricsData.itemsTotal24h || 0, 10),
+    feedbackItemsTotal7d: dailyRollups.total7d || 0,
     chartData: metricsData.chartData?.map((point: any) => ({
       time: point.time,
       feedbackItems: point.items || 0 // Map items to feedbackItems for chart display
@@ -98,7 +141,7 @@ export function FeedbackItemsGauges({
       data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
-      title="Feedback Items, Last 24 Hours"
+      title="Feedback Items, Last 7 Days"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}

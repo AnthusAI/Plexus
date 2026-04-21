@@ -232,20 +232,13 @@ async def test_resolve_scores_for_mode_uuid_checks_section_scorecard_membership(
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
-    score = MagicMock()
-    score.id = "score-1"
-    score.name = "Score 1"
-    score.sectionId = "section-1"
 
     with (
         patch(
-            "plexus.reports.blocks.feedback_alignment_timeline.Score.get_by_id",
-            return_value=score,
-        ),
-        patch.object(
-            block,
-            "_fetch_scorecard_id_for_section_id",
-            new=AsyncMock(return_value="sc-1"),
+            "plexus.reports.blocks.feedback_alignment_timeline.resolve_score_for_scorecard",
+            new=AsyncMock(
+                return_value=SimpleNamespace(id="score-1", name="Score 1")
+            ),
         ),
     ):
         output = await block._resolve_scores_for_mode(
@@ -265,12 +258,12 @@ async def test_resolve_scorecard_accepts_hyphenated_name(mock_api_client):
     )
 
     with (
-        patch("plexus.reports.blocks.feedback_alignment_timeline.Scorecard.get_by_key", return_value=None),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", return_value=None),
         patch(
-            "plexus.reports.blocks.feedback_alignment_timeline.Scorecard.get_by_name",
+            "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name",
             return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
         ),
-        patch("plexus.reports.blocks.feedback_alignment_timeline.Scorecard.get_by_external_id", return_value=None),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", return_value=None),
     ):
         resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
 
@@ -285,21 +278,10 @@ async def test_resolve_scores_for_mode_uuid_rejects_other_scorecard(mock_api_cli
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
-    score = MagicMock()
-    score.id = "score-1"
-    score.name = "Score 1"
-    score.sectionId = "section-1"
 
-    with (
-        patch(
-            "plexus.reports.blocks.feedback_alignment_timeline.Score.get_by_id",
-            return_value=score,
-        ),
-        patch.object(
-            block,
-            "_fetch_scorecard_id_for_section_id",
-            new=AsyncMock(return_value="sc-2"),
-        ),
+    with patch(
+        "plexus.reports.blocks.feedback_alignment_timeline.resolve_score_for_scorecard",
+        new=AsyncMock(side_effect=ValueError("Score 'id' does not belong to scorecard 'sc-1'.")),
     ):
         with pytest.raises(ValueError, match="does not belong to scorecard"):
             await block._resolve_scores_for_mode(

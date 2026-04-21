@@ -143,6 +143,43 @@ async def test_classifier_detects_turnip_absent(turnip_classifier_config):
         assert final_state.classification == "no"
 
 @pytest.mark.asyncio
+async def test_classifier_retries_on_transient_connection_closed(turnip_classifier_config):
+    mock_model = AsyncMock()
+    mock_model.ainvoke = AsyncMock(side_effect=[
+        Exception("the connection is closed"),
+        AIMessage(content="yes"),
+    ])
+
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model',
+               return_value=mock_model):
+        classifier = Classifier(**turnip_classifier_config)
+        classifier.model = mock_model
+
+        state = classifier.GraphState(
+            text="I love eating turnip soup.",
+            metadata={},
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            reasoning=None,
+            classification=None,
+            chat_history=[],
+            completion=None,
+        )
+
+        llm_prompt_node = classifier.get_llm_prompt_node()
+        llm_call_node = classifier.get_llm_call_node()
+        parse_node = classifier.get_parser_node()
+
+        state_after_prompt = await llm_prompt_node(state)
+        state_after_llm = await llm_call_node(state_after_prompt)
+        final_state = await parse_node(state_after_llm)
+
+        assert final_state.classification == "yes"
+        assert mock_model.ainvoke.call_count == 2
+
+@pytest.mark.asyncio
 async def test_classifier_succeeds_after_retry(turnip_classifier_config):
     mock_model = AsyncMock()
     responses = [

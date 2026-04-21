@@ -1,0 +1,43 @@
+{
+  "id": "plx-9ae05c29-6849-4d3c-b646-b9f3715b0d1b",
+  "title": "Resolve github-code-quality unused symbol findings on develop->main promotion PR",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-bdf46225-f6cd-441e-907f-ae08bfceb3bd",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3277de35-da1e-4e6b-802c-6eca7ec745ea",
+      "author": "derek",
+      "text": "Addressing github-code-quality review findings from PR #193: remove unused function in dashboard/components/scorecards-dashboard.tsx, remove unused import in dashboard/stories/blocks/FeedbackAlignment.stories.tsx, and remove unused patch import in plexus/Scorecard_test.py. Using a dedicated fix branch from develop.",
+      "created_at": "2026-04-21T19:04:10.624991498Z"
+    },
+    {
+      "id": "d3cc4493-a57d-46a8-a936-947c0f52dac2",
+      "author": "derek",
+      "text": "Implemented fixes on bugfix/code-quality-unused-symbols: removed unused handleCloseFeedbackAlignment function, removed unused FeedbackAlignment import in story, and removed unused patch import in plexus/Scorecard_test.py. Validation: npm test -- --runTestsByPath lib/__tests__/parameter-parser.test.ts (pass); python -m pytest -q plexus/Scorecard_test.py -k 'not integration' (9 passed).",
+      "created_at": "2026-04-21T19:05:04.556272235Z"
+    },
+    {
+      "id": "9c042b09-3d30-4712-b7d3-a07a28d6a2ef",
+      "author": "derek",
+      "text": "Opened fix PR to develop: https://github.com/AnthusAI/Plexus/pull/194 . This branch contains only the three unused-symbol removals requested by github-code-quality plus Kanbus artifacts.",
+      "created_at": "2026-04-21T19:05:41.191859245Z"
+    },
+    {
+      "id": "13ea96d2-dd96-4268-813c-012455b9340c",
+      "author": "derek",
+      "text": "Work completed and submitted: fix PR #194 (bugfix/code-quality-unused-symbols) addresses all github-code-quality findings cited on promotion PR #193. Moving issue to closed.",
+      "created_at": "2026-04-21T19:22:35.015511720Z"
+    }
+  ],
+  "created_at": "2026-04-21T19:04:06.607182990Z",
+  "updated_at": "2026-04-21T19:22:35.027672267Z",
+  "closed_at": "2026-04-21T19:22:35.027672267Z",
+  "custom": {}
+}
