@@ -3,7 +3,7 @@
   "title": "As a reviewer, I want Credit Score AI guidelines that distinguish valid credit-score inquiries from vague credit talk, so that scoring is consistent",
   "description": "Feature: Credit Score AI guidelines for Suco - Home Improvement\n\nScenario: Agent asks about credit score or rating explicitly\nGiven a transcript where the agent asks for the customer's credit score, rating, or qualitative credit quality\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Agent mentions credit vaguely without asking about score or quality\nGiven a transcript where the agent references credit but does not ask about score, rating, or qualitative quality\nWhen the reviewer evaluates the conversation\nThen the score should be No\n\nScenario: Agent never asks about credit score or rating\nGiven a transcript with no credit score inquiry\nWhen the reviewer evaluates the conversation\nThen the score should be No",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Validated the new Credit Score AI guidelines with skills/plexus-guidelines/validate_guidelines.py and pushed them to Plexus as score version 34c751a9-adc4-416e-b174-3027e89df178. The new version is not champion-promoted; this change adds the missing guidelines document.",
       "created_at": "2026-04-21T00:56:40.942430Z"
+    },
+    {
+      "id": "4b602a9d-6ad1-4a87-afd8-02f0350feb67",
+      "author": "ryan",
+      "text": "Validated and pushed initial Credit Score AI guidelines to Plexus as version 34c751a9-adc4-416e-b174-3027e89df178.",
+      "created_at": "2026-04-21T00:57:43.109508Z"
     }
   ],
   "created_at": "2026-04-21T00:55:33.519876Z",
-  "updated_at": "2026-04-21T00:56:40.942430Z",
-  "closed_at": null,
+  "updated_at": "2026-04-21T00:57:43.109508Z",
+  "closed_at": "2026-04-21T00:57:43.075862Z",
   "custom": {}
 }

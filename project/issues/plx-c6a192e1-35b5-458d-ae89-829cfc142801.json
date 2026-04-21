@@ -3,16 +3,23 @@
   "title": "Define Credit Score AI guidelines for Suco Home Improvement",
   "description": "Create and validate classifier guidelines for the Suco - Home Improvement Credit Score AI score so reviewers and the model share the same class definitions and decision criteria.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "7f0b394c-446a-4158-a71e-e84a633693db",
+      "author": "ryan",
+      "text": "Initial guidelines work completed for Suco - Home Improvement / Credit Score AI; see story plx-180e55 for validation and pushed version details.",
+      "created_at": "2026-04-21T00:57:43.123686Z"
+    }
+  ],
   "created_at": "2026-04-21T00:55:24.593814Z",
-  "updated_at": "2026-04-21T00:55:46.540705Z",
-  "closed_at": null,
+  "updated_at": "2026-04-21T00:57:43.123686Z",
+  "closed_at": "2026-04-21T00:57:43.094736Z",
   "custom": {}
 }
