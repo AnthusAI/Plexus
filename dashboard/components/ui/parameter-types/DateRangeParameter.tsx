@@ -90,6 +90,7 @@ export function DateRangeParameter({ definition, value, onChange, disabled, erro
           <Calendar
             mode="range"
             numberOfMonths={2}
+            showOutsideDays={false}
             selected={selectedRange}
             defaultMonth={selectedRange?.from}
             onSelect={handleRangeSelect}
