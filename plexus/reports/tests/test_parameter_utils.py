@@ -192,6 +192,26 @@ class TestParameterValidation:
         assert is_valid is False
         assert len(errors) == 2
 
+    def test_validate_date_range_valid(self):
+        """Test date_range validation accepts valid start/end range."""
+        param_def = {'name': 'window', 'type': 'date_range', 'required': True}
+        is_valid, error = validate_parameter_value(
+            param_def,
+            {'start': '2026-03-01', 'end': '2026-04-20'}
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_validate_date_range_ordering(self):
+        """Test date_range validation rejects end before start."""
+        param_def = {'name': 'window', 'type': 'date_range', 'required': True}
+        is_valid, error = validate_parameter_value(
+            param_def,
+            {'start': '2026-04-20', 'end': '2026-03-01'}
+        )
+        assert is_valid is False
+        assert 'before or equal' in error
+
 
 class TestJinja2Rendering:
     """Test Jinja2 template rendering with parameters."""
@@ -292,6 +312,24 @@ class TestParameterHelpers:
         
         assert normalize_parameter_value(param_def, 'hello') == 'hello'
         assert normalize_parameter_value(param_def, 123) == '123'
+
+    def test_normalize_date_range_from_dict(self):
+        """Test normalizing date_range from dictionary input."""
+        param_def = {'name': 'window', 'type': 'date_range'}
+        value = normalize_parameter_value(
+            param_def,
+            {'start': '2026-03-01', 'end': '2026-04-20'}
+        )
+        assert value == {'start': '2026-03-01', 'end': '2026-04-20'}
+
+    def test_normalize_date_range_from_json(self):
+        """Test normalizing date_range from JSON string input."""
+        param_def = {'name': 'window', 'type': 'date_range'}
+        value = normalize_parameter_value(
+            param_def,
+            '{"start":"2026-03-01","end":"2026-04-20"}'
+        )
+        assert value == {'start': '2026-03-01', 'end': '2026-04-20'}
 
 
 class TestParameterEnrichment:
@@ -515,4 +553,3 @@ class TestParameterEnrichment:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
-

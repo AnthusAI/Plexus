@@ -48,44 +48,42 @@ function normalizeParameterDefinition(name: string, raw: any): ParameterDefiniti
   }
 }
 
+function extractDefinitionsFromParsedConfig(
+  config: ParameterConfig & { params?: Record<string, any> } | undefined
+): ParameterDefinition[] {
+  if (Array.isArray(config?.parameters)) {
+    return config.parameters
+  }
+  if (config?.params && typeof config.params === 'object') {
+    return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
+  }
+  return []
+}
+
 /**
  * Extract parameter definitions from YAML content
  * Supports frontmatter format: parameters section before --- separator
  */
 export function parseParametersFromYaml(yamlContent: string): ParameterDefinition[] {
   try {
-    // Check for YAML frontmatter: only split on --- when the document starts with ---
-    // (Jekyll/Hugo style). Tactus YAMLs are full YAML documents and may contain ---
-    // inside block scalars (e.g. Lua string literals), so splitting on any occurrence
-    // would truncate the YAML mid-value and cause parse errors.
-    const trimmed = yamlContent.trimStart()
-    if (trimmed.startsWith('---')) {
-      const parts = yamlContent.split('---')
-      if (parts.length >= 2) {
-        // First part is the frontmatter
-        const frontmatter = parts[0].trim()
-        if (frontmatter) {
-          const config = yaml.load(frontmatter) as ParameterConfig & { params?: Record<string, any> }
-          if (Array.isArray(config?.parameters)) {
-            return config.parameters
-          }
-          if (config?.params && typeof config.params === 'object') {
-            return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
-          }
-          return []
+    // Support "YAML header + --- + markdown body" templates used by reports.
+    // We only treat the section before the first line containing exactly '---'
+    // as candidate parameter config; everything after can be markdown/code fences.
+    const separatorMatch = yamlContent.match(/^\s*---\s*$/m)
+    if (separatorMatch && separatorMatch.index !== undefined) {
+      const header = yamlContent.slice(0, separatorMatch.index).trim()
+      if (header) {
+        const parsedHeader = yaml.load(header) as ParameterConfig & { params?: Record<string, any> }
+        const headerDefinitions = extractDefinitionsFromParsedConfig(parsedHeader)
+        if (headerDefinitions.length > 0) {
+          return headerDefinitions
         }
       }
     }
 
     // Parse the full YAML document
     const config = yaml.load(yamlContent) as ParameterConfig & { params?: Record<string, any> }
-    if (Array.isArray(config?.parameters)) {
-      return config.parameters
-    }
-    if (config?.params && typeof config.params === 'object') {
-      return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
-    }
-    return []
+    return extractDefinitionsFromParsedConfig(config)
   } catch (error) {
     console.error('Error parsing parameters from YAML:', error)
     return []
