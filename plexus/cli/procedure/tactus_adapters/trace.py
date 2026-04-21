@@ -258,7 +258,14 @@ class PlexusTraceSink:
                     normalized_result = tool_result
             else:
                 lowered = stripped.lower()
-                if "tool execution error" in lowered or "failed" in lowered or "error" in lowered:
+                failure_prefixes = (
+                    "tool execution error",
+                    "error:",
+                    "failed:",
+                    "exception:",
+                    "traceback",
+                )
+                if lowered.startswith(failure_prefixes):
                     resolved_name = str(tool_name or "Tool")
                     return f"{resolved_name} failed: {stripped}"
                 return None
