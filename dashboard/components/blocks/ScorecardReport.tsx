@@ -35,6 +35,7 @@ export interface ScorecardReportProps extends ReportBlockProps {
   // Props for on-demand analysis drill-down
   scorecardId?: string;
   accountId?: string;
+  preserveScoreOrder?: boolean;
 }
 
 /**
@@ -52,6 +53,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   hideSummary = false,
   scorecardId,
   accountId,
+  preserveScoreOrder = false,
   children,
   ...restProps
 }) => {
@@ -115,8 +117,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                 originalIndex: originalIdx
               }))
               .sort((a, b) => {
-                // Sort by accuracy if available, otherwise sorting can be customized
-                // Now access accuracy via a.scoreData.accuracy
+                if (preserveScoreOrder) return 0;
                 if (a.scoreData.accuracy == null && b.scoreData.accuracy != null) return 1;
                 if (a.scoreData.accuracy != null && b.scoreData.accuracy == null) return -1;
                 if (a.scoreData.accuracy != null && b.scoreData.accuracy != null) {

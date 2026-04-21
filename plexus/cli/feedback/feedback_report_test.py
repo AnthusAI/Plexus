@@ -219,4 +219,5 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     assert block_definitions[0]["config"]["bucket_type"] == "trailing_7d"
     assert block_definitions[1]["config"]["show_bucket_details"] is True
     assert kwargs["display_title"] == "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview"
+    assert "Combined feedback overview with volume over time" in kwargs["display_description"]
     assert "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview" in kwargs["report_name"]

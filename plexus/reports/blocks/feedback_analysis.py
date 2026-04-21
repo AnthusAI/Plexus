@@ -305,7 +305,14 @@ class FeedbackAnalysis(BaseReportBlock):
                 msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID, or an error occurred during fetching/sorting)."
                 self._log(f"ERROR: {msg}", level="ERROR")
                 # Return a structure indicating no data, but not an error state for the report block itself.
+                scope = "single_score" if cc_question_id_param else "scorecard_all_scores"
                 return {
+                    "report_type": "feedback_analysis",
+                    "scope": scope,
+                    "scorecard_id": str(plexus_scorecard_obj.id),
+                    "scorecard_name": str(plexus_scorecard_obj.name),
+                    "score_id": None,
+                    "score_name": None,
                     "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": None,
                     "scores": [],
                     "total_feedback_items_retrieved": 0,
@@ -315,7 +322,9 @@ class FeedbackAnalysis(BaseReportBlock):
                     "warning": None,
                     "warnings": None,
                     "notes": None,
-                    "discussion": None
+                    "discussion": None,
+                    "block_title": self.DEFAULT_NAME,
+                    "block_description": self.DEFAULT_DESCRIPTION,
                 }, "\n".join(self.log_messages)
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
@@ -497,9 +506,35 @@ class FeedbackAnalysis(BaseReportBlock):
 
             # --- 6. Generate Summary Warning ---
             summary_warning = self._generate_summary_warning(per_score_analysis_results)
+
+            single_score_id: Optional[str] = None
+            single_score_name: Optional[str] = None
+            if len(scores_to_process) == 1:
+                single_score_id = str(scores_to_process[0].get("plexus_score_id") or "")
+                single_score_name = str(scores_to_process[0].get("plexus_score_name") or "")
+
+            order_scores = str(self.config.get("order_scores") or "best_to_worst").strip().lower()
+            if cc_question_id_param:
+                block_description = "Inter-rater reliability assessment for the selected score"
+                scope = "single_score"
+            else:
+                scope = "scorecard_all_scores"
+                if order_scores == "worst_to_best":
+                    block_description = "Inter-rater reliability across all scores (ordered worst to best)"
+                elif order_scores == "none":
+                    block_description = "Inter-rater reliability across all scores"
+                else:
+                    block_description = "Inter-rater reliability across all scores (ordered best to worst)"
             
             # --- 7. Structure Final Output ---
             final_output_data = {
+                "report_type": "feedback_analysis",
+                "scope": scope,
+                "scorecard_id": str(plexus_scorecard_obj.id),
+                "scorecard_name": str(plexus_scorecard_obj.name),
+                "score_id": single_score_id or None,
+                "score_name": single_score_name or None,
+                "order_scores": order_scores,
                 "scorecard_summary": {
                     "scorecard_id": str(plexus_scorecard_obj.id),
                     "scorecard_name": str(plexus_scorecard_obj.name),
@@ -539,7 +574,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 "discussion": overall_analysis.get("discussion"),
                 # Add block metadata for frontend display
                 "block_title": self.DEFAULT_NAME,
-                "block_description": self.DEFAULT_DESCRIPTION
+                "block_description": block_description,
             }
             # --- 7b. Optional Memory Analysis ---
             run_memory = self.config.get("memory_analysis", True)

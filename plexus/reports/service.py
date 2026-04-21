@@ -614,10 +614,16 @@ def _derive_programmatic_display_strings(
     scorecard_name: Optional[str] = None
     score_name: Optional[str] = None
     scope: Optional[str] = None
-    if isinstance(output_data, dict):
-        scorecard_name = output_data.get("scorecard_name") or None
-        score_name = output_data.get("score_name") or None
-        scope = output_data.get("scope") or None
+    parsed_output = _parse_programmatic_output_mapping(output_data)
+
+    if isinstance(parsed_output, dict):
+        scorecard_name = parsed_output.get("scorecard_name") or None
+        score_name = parsed_output.get("score_name") or None
+        scope = parsed_output.get("scope") or None
+
+        # FeedbackAnalysis now includes scorecard_summary; use it as a fallback source.
+        if not scorecard_name and isinstance(parsed_output.get("scorecard_summary"), dict):
+            scorecard_name = parsed_output["scorecard_summary"].get("scorecard_name") or None
 
     title_parts: List[str] = []
     if scorecard_name:
@@ -635,12 +641,70 @@ def _derive_programmatic_display_strings(
     if window_str:
         subtitle_parts.append(window_str)
 
-    config_str = json.dumps(block_config, sort_keys=True, separators=(",", ":"))
-    config_fingerprint = hashlib.sha1(config_str.encode("utf-8")).hexdigest()[:10]
-    subtitle_parts.append(f"cfg {config_fingerprint}")
-
     subtitle = " | ".join([part for part in subtitle_parts if part]) or None
     return title, subtitle
+
+
+def _build_programmatic_report_record_name(
+    *,
+    title: str,
+    subtitle: Optional[str] = None,
+) -> str:
+    timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    pieces: List[str] = [title.strip()]
+    if subtitle and subtitle.strip():
+        pieces.append(subtitle.strip())
+    pieces.append(timestamp_utc)
+    return " | ".join([p for p in pieces if p])
+
+
+def _parse_programmatic_output_mapping(output_data: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(output_data, dict):
+        return output_data
+    if isinstance(output_data, str):
+        text = output_data.strip()
+        if not text:
+            return None
+        try:
+            parsed_json = json.loads(text)
+            if isinstance(parsed_json, dict):
+                return parsed_json
+        except Exception:
+            pass
+        try:
+            parsed_yaml = yaml.safe_load(text)
+            if isinstance(parsed_yaml, dict):
+                return parsed_yaml
+        except Exception:
+            pass
+    return None
+
+
+def _derive_programmatic_display_description(
+    *,
+    block_class: str,
+    output_data: Any,
+) -> str:
+    parsed_output = _parse_programmatic_output_mapping(output_data)
+    if isinstance(parsed_output, dict):
+        block_description = parsed_output.get("block_description")
+        if isinstance(block_description, str) and block_description.strip():
+            return block_description.strip()
+    return f"{_humanize_block_class(block_class)} report."
+
+
+def _build_programmatic_markdown_header(
+    *,
+    title: str,
+    subtitle: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    parts: List[str] = [f"# {title}"]
+    if subtitle:
+        parts.append(f"*{subtitle}*")
+    if description:
+        parts.append(str(description).strip())
+    return "\n\n".join(parts).strip()
 
 
 def _programmatic_task_target(cache_key: str) -> str:
@@ -975,6 +1039,10 @@ def _persist_block_result(
         block_config=block_config or {},
         output_data=output_data,
     )
+    display_description = _derive_programmatic_display_description(
+        block_class=block_class,
+        output_data=output_data,
+    )
 
     task = Task.create(
         client=client,
@@ -986,17 +1054,23 @@ def _persist_block_result(
         dispatchStatus="COMPLETED",
     )
 
+    report_record_name = _build_programmatic_report_record_name(
+        title=display_title or _humanize_block_class(block_class),
+        subtitle=display_subtitle,
+    )
+
     report = Report.create(
         client=client,
         accountId=account_id,
         taskId=task.id,
-        name=cache_key,
+        name=report_record_name,
         reportConfigurationId=config_id,
         parameters={
             **(block_config or {}),
             "_cache_key": cache_key,
             "_display_title": display_title,
             "_display_subtitle": display_subtitle,
+            "_display_description": display_description,
         },
     )
 
@@ -1008,7 +1082,13 @@ def _persist_block_result(
     # expects. Report.output must contain ```block ... ``` syntax so ReportTask.tsx
     # can find the matching ReportBlock and render the FC component correctly.
     block_yaml = yaml.dump(block_config, default_flow_style=False).strip()
+    markdown_header = _build_programmatic_markdown_header(
+        title=display_title or _humanize_block_class(block_class),
+        subtitle=display_subtitle,
+        description=display_description,
+    )
     report_output = (
+        f"{markdown_header}\n\n"
         f'```block name="{display_name}"\n'
         f'class: {block_class}\n'
         f'{block_yaml}\n'
@@ -1090,6 +1170,7 @@ def run_programmatic_report_and_persist(
     report_parameters: Optional[Dict[str, Any]] = None,
     display_title: Optional[str] = None,
     display_subtitle: Optional[str] = None,
+    display_description: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Run multiple report blocks and persist them as a single Report with ordered ReportBlocks.
@@ -1137,6 +1218,8 @@ def run_programmatic_report_and_persist(
         parameters["_display_title"] = display_title
     if display_subtitle:
         parameters["_display_subtitle"] = display_subtitle
+    if display_description:
+        parameters["_display_description"] = display_description
 
     report = Report.create(
         client=client,
@@ -1146,7 +1229,13 @@ def run_programmatic_report_and_persist(
         reportConfigurationId=config_id,
         parameters=parameters,
     )
-    report.update(output=_build_programmatic_report_markdown(normalized_blocks))
+    resolved_title = (display_title or str(report_name).strip() or "Programmatic Report").strip()
+    markdown_header = _build_programmatic_markdown_header(
+        title=resolved_title,
+        subtitle=display_subtitle,
+        description=display_description,
+    )
+    report.update(output=f"{markdown_header}\n\n{_build_programmatic_report_markdown(normalized_blocks)}")
 
     report_params = {"account_id": account_id}
     first_error_message: Optional[str] = None

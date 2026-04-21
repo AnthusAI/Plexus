@@ -756,6 +756,10 @@ def overview(
         },
         display_title=display_title,
         display_subtitle=_window_label(days, start_date, end_date),
+        display_description=(
+            "Combined feedback overview with volume over time, alignment over time, "
+            "and contradiction analysis for the selected scope."
+        ),
     )
 
     if not report_id:
