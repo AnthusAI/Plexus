@@ -1,0 +1,31 @@
+{
+  "id": "plx-ac4de131-73a1-47b4-886e-fdbf9b4cadb5",
+  "title": "Apply Liz script-based rubric refinements to Information Accuracy scores",
+  "description": "Update the live SelectQuote HCS Medium-Risk Information Accuracy split scores to match Liz Fossen's authoritative meeting guidance and the 2026-04-01 SelectRx enrollment script.\n\nAcceptance criteria:\n- Update score code and official guidelines for the affected Information Accuracy scores in Plexus.\n- Validate updated guideline markdown before pushing each changed score version.\n- Verify changed scores execute with direct predictions on representative items.\n- Record any follow-up platform or policy issues in Kanbus.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "58bacafd-50b0-4b40-8792-2ab01da17c44",
+      "author": "ryan",
+      "text": "Started work. Source of truth for this update is Liz Fossen's meeting guidance plus the 2026-04-01 SelectRx Enrollment Script and FAQ. Planned scope: cost-language rubric refinements for Copay Guarantees / Savings Promises / Ambiguous Cost Language, plus any exact script-driven examples for other Information Accuracy sub-scores that materially change boundaries. Will validate guidelines before each push and verify with direct predictions.",
+      "created_at": "2026-04-21T21:22:30.845470Z"
+    },
+    {
+      "id": "8704da89-2f46-43e4-a46c-1e19486dd5ca",
+      "author": "ryan",
+      "text": "Implemented live score-version updates in Plexus.\n\nUpdated score versions:\n- Copay Guarantees -> 3e8afad4-273b-4c16-ad5d-64732dcdcc7f\n- Savings Promises -> 708ef9eb-c832-41eb-a8d6-32068aa2c18e\n- Ambiguous Cost Language -> f9c8ecc5-73d1-41ba-a50f-341265279a10\n- High-Pressure Tactics -> 64db3bb0-4edd-4aef-9b57-d59498407a5f\n- False Carrier Claims -> 86f79699-ba6f-419f-aeb0-c336c8e4b721\n- False Local Pharmacy Claims -> 37649fc7-9bc2-4a43-9ce1-db012604c1c3\n- False Service Claims -> bedd9779-0560-4721-8946-465d0aff2aca\n\nApplied changes:\n- Copay Guarantees: hypothetical/qualified copay phrasing is compliant unless turned into a guarantee.\n- Savings Promises: added exact prohibited script phrases and Healthcare Select membership carveout.\n- Ambiguous Cost Language: anchored compliant no-additional-cost language to the script plus explicit copay clarification.\n- High-Pressure Tactics: added coercive consent / membership-step examples and compliant consent language.\n- False Carrier Claims: added exact UHC/Aetna misattribution examples and compliant insurance-preservation language.\n- False Local Pharmacy Claims: added exact transition examples and temporary local-refill carveout.\n- False Service Claims: initially overfired on script-approved timing/updates; revised to allow conditional first-shipment timing up to 4 weeks and automated text/email delivery updates.\n\nValidation and verification:\n- Validated guideline markdown before each push with plexus_guidelines_validate.\n- Direct predictions succeeded on the updated versions.\n- Item 308889128: Savings Promises=No, Ambiguous Cost Language=Yes, High-Pressure Tactics=Yes, False Carrier Claims=Yes, False Local Pharmacy Claims=Yes, False Service Claims=Yes after the final refinement.\n- Item 308639116: False Carrier Claims=No, False Service Claims=No, Copay Guarantees=Yes, False Local Pharmacy Claims=Yes.",
+      "created_at": "2026-04-21T21:31:14.833106Z"
+    }
+  ],
+  "created_at": "2026-04-21T21:22:27.084330Z",
+  "updated_at": "2026-04-21T21:31:14.848930Z",
+  "closed_at": "2026-04-21T21:31:14.848930Z",
+  "custom": {}
+}

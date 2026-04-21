@@ -1,0 +1,18 @@
+{
+  "id": "plx-9ce67e1e-0190-44d1-ac8d-5bf0f45b1b7b",
+  "title": "Define behavior for split Agent Misrepresentation decision-element and composite scores",
+  "description": "# Feature\n\nRealign the split Agent Misrepresentation scores on the SelectQuote HCS Medium-Risk scorecard to the Information Accuracy rubric while keeping the legacy score in place.\n\n# Scenario: Composite passes when no phrase score fails\n\nGiven phrase-level Agent Misrepresentation scores exist for High-Pressure Tactics, Copay Guarantees, Savings Promises, Ambiguous Cost Language, False Carrier Claims, False Local Pharmacy Claims, and False Service Claims\nWhen a call transcript is evaluated and each phrase-level score returns Yes\nThen the composite score returns Yes\nAnd the composite explanation indicates that all phrase-level elements passed\n\n# Scenario: Composite fails when one phrase score fails\n\nGiven the CSV-aligned split Agent Misrepresentation scores exist\nWhen a transcript causes exactly one phrase-level score to return No\nThen the composite score returns No\nAnd the composite explanation names that failed phrase score\n\n# Scenario: Composite explanation concatenates multiple failed phrases in rubric order\n\nGiven the CSV-aligned split Agent Misrepresentation scores exist\nWhen a transcript causes multiple phrase-level scores to return No\nThen the composite score returns No\nAnd the composite explanation concatenates the failed phrase score names in the rubric row order\n\n# Scenario: Legacy score remains available\n\nGiven the original Agent Misrepresentation score exists on the scorecard\nWhen the CSV-aligned split scores are added or repurposed\nThen the original Agent Misrepresentation score remains present and unchanged",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-21T17:08:43.695807Z",
+  "updated_at": "2026-04-21T20:31:34.509870Z",
+  "closed_at": null,
+  "custom": {}
+}

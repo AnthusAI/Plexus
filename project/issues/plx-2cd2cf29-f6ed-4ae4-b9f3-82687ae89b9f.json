@@ -1,0 +1,31 @@
+{
+  "id": "plx-2cd2cf29-f6ed-4ae4-b9f3-82687ae89b9f",
+  "title": "Assign real external IDs to split Agent Misrepresentation scores",
+  "description": "Replace the temporary external IDs on the new split Agent Misrepresentation scores in SelectQuote HCS Medium-Risk with their real production identifiers once they are available.",
+  "type": "task",
+  "status": "closed",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "37f5c895-05ab-494a-b9f0-22d9801be5d4",
+      "author": "ryan",
+      "text": "User confirmed the non-numeric placeholder external IDs are causing runtime issues. Replacing the temporary string external IDs on the Information Accuracy split scores and composite with numeric placeholder values, keeping names/keys/logic unchanged.",
+      "created_at": "2026-04-21T21:05:35.025183Z"
+    },
+    {
+      "id": "7314a791-912e-48bb-8a3e-40f0c1ddda1c",
+      "author": "ryan",
+      "text": "Replaced the non-numeric placeholder external IDs on the Information Accuracy split-score set with numeric placeholders and updated the embedded YAML externalId fields to match. Final mapping: High-Pressure Tactics 910700, Copay Guarantees 910701, Savings Promises 910702, Ambiguous Cost Language 910703, False Carrier Claims 910704, False Local Pharmacy Claims 910705, False Service Claims 910706, Information Accuracy (Composite) 910707. Verified in the live scorecard listing that the score records now expose numeric external IDs across the full set.",
+      "created_at": "2026-04-21T21:08:02.840006Z"
+    }
+  ],
+  "created_at": "2026-04-21T17:22:41.525115Z",
+  "updated_at": "2026-04-21T21:08:02.889476Z",
+  "closed_at": "2026-04-21T21:08:02.889476Z",
+  "custom": {}
+}

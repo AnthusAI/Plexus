@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b4057f5b-ebd1-4565-9688-b1023aade22b",
+  "issue_id": "plx-2cd2cf29-f6ed-4ae4-b9f3-82687ae89b9f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:22:41.529Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Replace the temporary external IDs on the new split Agent Misrepresentation scores in SelectQuote HCS Medium-Risk with their real production identifiers once they are available.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 3,
+    "status": "open",
+    "title": "Assign real external IDs to split Agent Misrepresentation scores"
+  }
+}

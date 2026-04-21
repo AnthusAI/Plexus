@@ -1,0 +1,37 @@
+{
+  "id": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "title": "Implement Agent Misrepresentation split-score architecture in SelectQuote HCS Medium-Risk",
+  "description": "Implement the Agent Misrepresentation score split for the  scorecard, including six decision-element scores, one composite score, and verification that the legacy score remains unchanged.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c1faf1dd-aee0-4eed-8d68-4fb84d15a7c7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "66671589-4130-413e-93ad-a41ca2f0f3f1",
+      "author": "ryan",
+      "text": "Execution began under task `plx-51b273`. The implementation will create new Agent Misrepresentation decision-element scores plus a composite score in Plexus and verify the split behavior with predictions.",
+      "created_at": "2026-04-21T17:09:07.909765Z"
+    },
+    {
+      "id": "6e679ff4-2a7c-407e-ad34-89127d677433",
+      "author": "ryan",
+      "text": "Verification surfaced category-boundary drift: service-only no-cost language and normal primary-pharmacy transition language were leaking into False Service Claim / Ambiguous Cost Language. Narrowing those prompts so compliant calls can remain all-Yes while true category failures still register.",
+      "created_at": "2026-04-21T17:17:09.845311Z"
+    },
+    {
+      "id": "1ac89f43-38cb-481e-ac31-5ca4d8473751",
+      "author": "ryan",
+      "text": "Requested split-score implementation is now in Plexus. The implementation task is complete and closed. The epic remains open because two follow-ups were filed: `plx-2cd2cf` for real external IDs and `plx-b2349b` for composite/no-cache resolution when scores have no championVersionId.",
+      "created_at": "2026-04-21T17:22:55.580311Z"
+    }
+  ],
+  "created_at": "2026-04-21T17:08:36.213876Z",
+  "updated_at": "2026-04-21T17:22:55.580311Z",
+  "closed_at": null,
+  "custom": {}
+}

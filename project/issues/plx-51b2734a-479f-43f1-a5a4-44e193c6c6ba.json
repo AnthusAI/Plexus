@@ -1,0 +1,43 @@
+{
+  "id": "plx-51b2734a-479f-43f1-a5a4-44e193c6c6ba",
+  "title": "Create and verify split Agent Misrepresentation scores in Plexus",
+  "description": "Create six binary decision-element scores and one composite score in Plexus for SelectQuote HCS Medium-Risk, configure their YAML, verify prediction behavior, and leave the legacy Agent Misrepresentation score unchanged.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c2f5749d-dd33-4f23-9c93-b95255d8de98",
+      "author": "ryan",
+      "text": "Started implementation.\n\nPlanned sequence:\n1. Create seven new score records in Plexus with temporary external IDs.\n2. Push scoped score YAML for six binary decision-element scores.\n3. Push dependency-based composite YAML.\n4. Verify score metadata and run targeted predictions.\n5. Leave legacy Agent Misrepresentation unchanged.",
+      "created_at": "2026-04-21T17:09:07.909799Z"
+    },
+    {
+      "id": "bb67316c-c6d3-4bd7-bccb-efa3c548598a",
+      "author": "ryan",
+      "text": "Observed verification issue: the initial False Service Claim and Ambiguous Cost Language prompts over-classified standard service-only language and normal pharmacy-transition language as failures. Adjusting those two score configs to narrow scope and preserve the intended category boundaries before final verification.",
+      "created_at": "2026-04-21T17:17:09.845286Z"
+    },
+    {
+      "id": "f0ba0f03-f248-45fa-a8e0-9207de36530d",
+      "author": "ryan",
+      "text": "Implementation complete for the requested Plexus-side work.\n\nCreated score records:\n- Agent Misrepresentation: Copay Guarantee\n- Agent Misrepresentation: Free Medication Claim\n- Agent Misrepresentation: False Service Claim\n- Agent Misrepresentation: Unqualified Savings Promise\n- Agent Misrepresentation: Ambiguous Cost Language\n- Agent Misrepresentation: Pharmacy Confusion\n- Agent Misrepresentation (Composite)\n\nVerification summary:\n- All seven scores exist in the SelectQuote HCS Medium-Risk scorecard with placeholder external IDs.\n- Legacy Agent Misrepresentation remains present and unchanged.\n- Direct predictions validated a single-failure case for Ambiguous Cost Language and produced the composite explanation `Failed: Agent Misrepresentation: Ambiguous Cost Language`.\n- Direct sub-score predictions validated an all-Yes compliant case using item `294232132` after tightening False Service Claim and Ambiguous Cost Language scope boundaries.\n- Composite no-cache scorecard loading currently fails for these newly created scores because they have no `championVersionId`; filed follow-up bug `plx-b2349b`.\n- Placeholder external ID cleanup tracked in `plx-2cd2cf`.\n\nNo repo source files were edited for this work; implementation was done via Plexus MCP mutations only.",
+      "created_at": "2026-04-21T17:22:55.580218Z"
+    },
+    {
+      "id": "5418e5d1-4181-47c5-8d53-b04dc4cb0c96",
+      "author": "ryan",
+      "text": "Closing implementation task after creating the seven split Agent Misrepresentation scores in Plexus, pushing their initial configurations, verifying targeted prediction behavior, and filing follow-up issues for external IDs and unchampioned composite resolution.",
+      "created_at": "2026-04-21T17:23:03.733238Z"
+    }
+  ],
+  "created_at": "2026-04-21T17:08:47.443227Z",
+  "updated_at": "2026-04-21T17:23:03.733238Z",
+  "closed_at": "2026-04-21T17:23:03.732611Z",
+  "custom": {}
+}

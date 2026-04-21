@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8a503dfe-369a-4f89-b10a-f99d03096487",
+  "issue_id": "plx-b2349b2b-9690-4452-a6cc-acc4578c5f53",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:22:41.529Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Newly created split Agent Misrepresentation scores can be predicted individually when targeted directly, but no-cache scorecard loading for the composite path fails because dependent scores have no championVersionId. Investigate score configuration resolution for newly created unchampioned scores and align latest/version/no_cache behavior.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 2,
+    "status": "open",
+    "title": "Prediction resolver should handle unchampioned newly created scores consistently"
+  }
+}

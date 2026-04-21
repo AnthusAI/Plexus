@@ -51,3 +51,23 @@ def test_optimizer_yaml_bounds_report_context_and_output_shapes():
     assert 'render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 2)' in code
     assert 'render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 2)' in code
     assert 'render_items("OTHER MISCLASSIFICATIONS", other_items, 1)' in code
+
+
+def test_optimizer_yaml_uses_shared_score_version_test_tool():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'call_plexus_tool, "plexus_score_test"' in code
+    assert 'version              = candidate_id' in code
+    assert 'samples              = 3' in code
+
+
+def test_optimizer_yaml_defines_safe_encode_for_score_test_failure_details():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function safe_encode(value)" in code
+    assert "return Json.encode(value)" in code
+    assert "if test_result.failures and #test_result.failures > 0 then" in code
+    assert 'safe_encode(test_result.failures)' in code
+    assert 'safe_encode(test_result.predictions)' in code

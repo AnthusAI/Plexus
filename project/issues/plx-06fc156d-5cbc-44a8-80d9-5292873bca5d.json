@@ -1,0 +1,31 @@
+{
+  "id": "plx-06fc156d-5cbc-44a8-80d9-5292873bca5d",
+  "title": "Make optimizer target score fail on missing metadata instead of returning NA",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7e11890d-931f-4213-b328-17897fa28de2",
+      "author": "ryan",
+      "text": "Confirmed the immediate cause: the score YAML for Income and Name Alignment Metadata AI explicitly says 'Mark NA if one or more Metadata values appear blank'. This is score-level behavior, not optimizer-core behavior. Investigating the clean score-level way to raise a hard execution failure before classification when required metadata is blank.",
+      "created_at": "2026-04-21T15:11:15.301166Z"
+    },
+    {
+      "id": "4741ac0c-db3e-494c-9737-a4ffc1ea318c",
+      "author": "ryan",
+      "text": "User clarified the required distinction: missing metadata.other_data payload must hard-fail; missing/blank score-specific fields inside otherwise-present metadata can remain score-level logic (including NA if appropriate). Reworking the draft score patch to target only missing other_data, not every blank field.",
+      "created_at": "2026-04-21T15:14:15.057050Z"
+    }
+  ],
+  "created_at": "2026-04-21T15:10:45.743415Z",
+  "updated_at": "2026-04-21T15:14:15.057050Z",
+  "closed_at": null,
+  "custom": {}
+}
