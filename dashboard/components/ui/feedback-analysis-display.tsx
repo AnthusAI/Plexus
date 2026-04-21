@@ -141,6 +141,7 @@ export const FeedbackAnalysisDisplay: React.FC<FeedbackAnalysisDisplayProps & { 
         showDateRange={showDateRange}
         showPrecisionRecall={showPrecisionRecall}
         onCellSelection={handleOnDemandCellSelection}
+        alwaysShowSummary={true}
         preserveScoreOrder={true}
         showTitle={showHeader}
         hideSummary={hideSummary}
