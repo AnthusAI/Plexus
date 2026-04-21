@@ -168,7 +168,7 @@ class TestSOPAgentConversationFiltering:
         # Create AI message with tool calls
         ai_message_with_tools = AIMessage(
             content="I'm analyzing the feedback data to find patterns in scoring mistakes.",
-            tool_calls=[{"name": "plexus_feedback_analysis", "args": {"scorecard_name": "test"}, "id": "call_1"}]
+            tool_calls=[{"name": "plexus_feedback_alignment", "args": {"scorecard_name": "test"}, "id": "call_1"}]
         )
         
         # Create AI message with hypothesis content
@@ -187,7 +187,7 @@ class TestSOPAgentConversationFiltering:
         
         # Check that tool usage is captured in summary
         tool_summary = filtered_history[1].content
-        assert "plexus_feedback_analysis" in tool_summary
+        assert "plexus_feedback_alignment" in tool_summary
         assert "[1]" in tool_summary
         
         # Check that hypothesis stage is detected
@@ -271,7 +271,7 @@ class TestSOPAgentSystemMessageHandling:
         # state_data = {
         #     'current_state': 'exploration',
         #     'round_in_stage': 2,
-        #     'tools_used': ['plexus_feedback_analysis']
+        #     'tools_used': ['plexus_feedback_alignment']
         # }
         
         # Get both prompts
@@ -328,7 +328,7 @@ class TestSOPAgentIntegrationBehavior:
         # conversation_history = [
         #     SystemMessage(content="Initial system setup"),
         #     HumanMessage(content="Start procedure analysis"),
-        #     AIMessage(content="I've analyzed the feedback using plexus_feedback_analysis"),
+        #     AIMessage(content="I've analyzed the feedback using plexus_feedback_alignment"),
         #     HumanMessage(content="Continue with synthesis"),
         #     AIMessage(content="Based on patterns, I found systematic issues with classification")
         # ]
@@ -366,7 +366,7 @@ class TestSOPAgentIntegrationBehavior:
         conversation_history = [
             SystemMessage(content="System setup"),
             HumanMessage(content="Analyze feedback for SelectQuote score"),
-            AIMessage(content="Examining feedback data using plexus_feedback_analysis"),
+            AIMessage(content="Examining feedback data using plexus_feedback_alignment"),
             AIMessage(content="Found patterns in scoring mistakes - synthesis shows root causes"),
             AIMessage(content="Proposing procedure configuration changes to test hypothesis")
         ]

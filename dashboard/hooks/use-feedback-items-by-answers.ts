@@ -95,7 +95,7 @@ export interface FeedbackItemWithRelations {
 
 /**
  * Hook for fetching feedback items by predicted and actual answer values
- * Used for confusion matrix drill-down functionality in on-demand feedback analysis
+ * Used for confusion matrix drill-down functionality in on-demand feedback alignment
  */
 export const useFeedbackItemsByAnswers = () => {
   const [loading, setLoading] = useState(false);

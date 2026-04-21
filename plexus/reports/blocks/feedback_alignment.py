@@ -16,7 +16,7 @@ from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
 from . import feedback_utils
-from .identifier_utils import looks_like_uuid
+from .feedback_scope_resolver import resolve_score_for_scorecard, resolve_scorecard
 from .reinforcement_helpers import fetch_item_identifiers
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ _ORDER_SCORES_NONE = "none"
 _ORDER_SCORES_BEST_TO_WORST = "best_to_worst"
 
 
-class FeedbackAnalysis(BaseReportBlock):
+class FeedbackAlignment(BaseReportBlock):
     """
     Analyzes feedback data using Gwet's AC1 agreement coefficient.
     
@@ -51,8 +51,12 @@ class FeedbackAnalysis(BaseReportBlock):
     """
     
     # Class-level defaults for name and description
-    DEFAULT_NAME = "Feedback Analysis"
+    DEFAULT_NAME = "Feedback Alignment"
     DEFAULT_DESCRIPTION = "Inter-rater Reliability Assessment"
+
+    @staticmethod
+    def _looks_like_lua_table_pointer(text: str) -> bool:
+        return "<lua table at " in str(text or "").lower()
 
     def _sort_score_results(self, scores: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Order per-score results for scorecard-wide runs.
@@ -115,7 +119,7 @@ class FeedbackAnalysis(BaseReportBlock):
         final_output_data = None
 
         try:
-            self._log("Starting FeedbackAnalysis block generation.")
+            self._log("Starting FeedbackAlignment block generation.")
             # Only log config keys, not full values
             self._log(f"Config keys: {list(self.config.keys())}")
 
@@ -141,7 +145,7 @@ class FeedbackAnalysis(BaseReportBlock):
             detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(ve)}"
             return final_output_data, detailed_log
         except Exception as e:
-            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
+            self._log(f"ERROR during FeedbackAlignment generation: {str(e)}", level="ERROR")
             import traceback
             self._log(traceback.format_exc())
             final_output_data = {"error": str(e), "scores": []}
@@ -201,42 +205,11 @@ class FeedbackAnalysis(BaseReportBlock):
             # --- 2. Resolve Plexus Scorecard ---
             self._log(f"Resolving Plexus Scorecard for parameter: {cc_scorecard_id_param}...")
             try:
-                scorecard_identifier = str(cc_scorecard_id_param)
-                plexus_scorecard_obj = None
-
-                if looks_like_uuid(scorecard_identifier):
-                    self._log("Parameter appears to be a UUID, fetching by ID...")
-                    try:
-                        plexus_scorecard_obj = await asyncio.to_thread(
-                            Scorecard.get_by_id,
-                            id=scorecard_identifier,
-                            client=self.api_client
-                        )
-                    except Exception:
-                        plexus_scorecard_obj = None
-
-                if not plexus_scorecard_obj:
-                    for label, lookup, kwargs in [
-                        ("key", Scorecard.get_by_key, {"key": scorecard_identifier}),
-                        ("name", Scorecard.get_by_name, {"name": scorecard_identifier}),
-                        ("external_id", Scorecard.get_by_external_id, {"external_id": scorecard_identifier}),
-                    ]:
-                        self._log(f"Trying scorecard lookup by {label}...")
-                        try:
-                            plexus_scorecard_obj = await asyncio.to_thread(
-                                lookup,
-                                client=self.api_client,
-                                **kwargs,
-                            )
-                            if plexus_scorecard_obj:
-                                break
-                        except Exception:
-                            continue
-
-                if not plexus_scorecard_obj:
-                    msg = f"Plexus Scorecard not found for parameter: {cc_scorecard_id_param}"
-                    self._log(f"ERROR: {msg}", level="ERROR")
-                    raise ValueError(msg)
+                scorecard_identifier = str(cc_scorecard_id_param).strip()
+                plexus_scorecard_obj = await resolve_scorecard(
+                    self.api_client,
+                    scorecard_identifier,
+                )
                 self._log(f"Found Plexus Scorecard: '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id})")
             except Exception as e:
                 self._log(f"ERROR resolving Plexus Scorecard: {e}", level="ERROR")
@@ -248,46 +221,17 @@ class FeedbackAnalysis(BaseReportBlock):
             if cc_question_id_param:
                 self._log(f"Looking up specific Plexus Score for identifier: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
                 try:
-                    # Accept Plexus score UUID, name, key, or external ID.
-                    is_uuid_like = looks_like_uuid(cc_question_id_param)
-                    if is_uuid_like:
-                        plexus_score_obj = await asyncio.to_thread(
-                            Score.get_by_id,
-                            id=cc_question_id_param,
-                            client=self.api_client
-                        )
-                        if plexus_score_obj and plexus_score_obj.scorecard_id != plexus_scorecard_obj.id:
-                            self._log(
-                                f"WARNING: Score {cc_question_id_param} belongs to a different scorecard. Skipping.",
-                                level="WARNING"
-                            )
-                            plexus_score_obj = None
-                    else:
-                        plexus_score_obj = None
-                        for lookup, kwargs in [
-                            (Score.get_by_name, {"name": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
-                            (Score.get_by_key, {"key": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
-                            (Score.get_by_external_id, {"external_id": str(cc_question_id_param), "scorecard_id": plexus_scorecard_obj.id}),
-                        ]:
-                            try:
-                                plexus_score_obj = await asyncio.to_thread(
-                                    lookup,
-                                    client=self.api_client,
-                                    **kwargs,
-                                )
-                                if plexus_score_obj:
-                                    break
-                            except Exception:
-                                continue
-                    if plexus_score_obj:
-                        scores_to_process.append({
-                            'plexus_score_id': plexus_score_obj.id,
-                            'plexus_score_name': plexus_score_obj.name,
-                            'cc_question_id': str(cc_question_id_param)
-                        })
-                        self._log(f"Found specific Plexus Score: '{plexus_score_obj.name}' (ID: {plexus_score_obj.id})")
-                    else:
-                        self._log(f"WARNING: Plexus Score not found for identifier: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.", level="WARNING")
+                    plexus_score_obj = await resolve_score_for_scorecard(
+                        self.api_client,
+                        str(plexus_scorecard_obj.id),
+                        str(cc_question_id_param),
+                    )
+                    scores_to_process.append({
+                        'plexus_score_id': plexus_score_obj.id,
+                        'plexus_score_name': plexus_score_obj.name,
+                        'cc_question_id': str(cc_question_id_param)
+                    })
+                    self._log(f"Found specific Plexus Score: '{plexus_score_obj.name}' (ID: {plexus_score_obj.id})")
                 except Exception as e:
                     self._log(f"ERROR looking up specific Plexus Score (identifier: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
             else:
@@ -306,7 +250,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 # Return a structure indicating no data, but not an error state for the report block itself.
                 scope = "single_score" if cc_question_id_param else "scorecard_all_scores"
                 return {
-                    "report_type": "feedback_analysis",
+                    "report_type": "feedback_alignment",
                     "scope": scope,
                     "scorecard_id": str(plexus_scorecard_obj.id),
                     "scorecard_name": str(plexus_scorecard_obj.name),
@@ -527,7 +471,7 @@ class FeedbackAnalysis(BaseReportBlock):
             
             # --- 7. Structure Final Output ---
             final_output_data = {
-                "report_type": "feedback_analysis",
+                "report_type": "feedback_alignment",
                 "scope": scope,
                 "scorecard_id": str(plexus_scorecard_obj.id),
                 "scorecard_name": str(plexus_scorecard_obj.name),
@@ -618,7 +562,7 @@ class FeedbackAnalysis(BaseReportBlock):
             summary_log = f"Error: {str(ve)}"
             detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(ve)}"
         except Exception as e:
-            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
+            self._log(f"ERROR during FeedbackAlignment generation: {str(e)}", level="ERROR")
             import traceback
             self._log(traceback.format_exc())
             final_output_data = {"error": str(e), "scores": []}
@@ -628,9 +572,9 @@ class FeedbackAnalysis(BaseReportBlock):
         # Return YAML formatted output with contextual comments
         if final_output_data and not final_output_data.get("error"):
             try:
-                contextual_comment = """# Feedback Analysis Report Output
+                contextual_comment = """# Feedback Alignment Report Output
 # 
-# This is the structured output from a feedback analysis process that:
+# This is the structured output from a feedback alignment process that:
 # 1. Retrieves feedback items from scorecards within a specified time range
 # 2. Analyzes agreement between initial and final answer values using Gwet's AC1 coefficient
 # 3. Provides statistical measures of inter-rater reliability and agreement
@@ -701,13 +645,27 @@ class FeedbackAnalysis(BaseReportBlock):
                 raw_text = procedure_output.get("text", "")
             else:
                 raw_text = str(procedure_output) if procedure_output else ""
-            # Chat models: done.last_result() returns {status, reason, tool} dict
-            # Reasoning models: result.output is a plain string
+            # Chat models: done.last_result() often returns {status, reason, ...}
+            # Reasoning models: result.output is typically a plain string.
             if isinstance(raw_text, dict):
                 text = raw_text.get("reason", "") or ""
             else:
                 text = str(raw_text or "")
-            return text.strip() if text else None
+
+            normalized = text.strip() if text else ""
+            if not normalized:
+                return None
+
+            # Defensive guard: reject leaked Lua table pointer strings.
+            # These appear when table values are stringified before extraction.
+            if self._looks_like_lua_table_pointer(normalized):
+                self._log(
+                    "Tactus inference returned a Lua table pointer string; treating as empty result.",
+                    level="WARNING",
+                )
+                return None
+
+            return normalized
         except Exception as e:
             self._log(f"Tactus inference failed: {e}", level="WARNING")
             return None
@@ -724,7 +682,12 @@ class FeedbackAnalysis(BaseReportBlock):
             f"Keywords: {keyword_str}\n\nExample comments:\n{exemplar_str}\n\nTopic label:"
         )
         label = await self._run_tac_inference(prompt)
-        return label.strip('"').strip("'") if label else None
+        if not label:
+            return None
+        sanitized = label.strip('"').strip("'").strip()
+        if self._looks_like_lua_table_pointer(sanitized):
+            return None
+        return sanitized or None
 
     async def _run_memory_analysis(self, per_score_raw_texts: List[Dict]) -> Optional[Dict]:
         """Run topic clustering on edit comments and return memories structure."""
@@ -821,7 +784,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         )
                         days_inactive = max(0, (now - most_recent).days)
 
-                    weight = 0.5  # Baseline for FeedbackAnalysis memories
+                    weight = 0.5  # Baseline for FeedbackAlignment memories
                     tier = tier_from_weight(weight)
 
                     member_ts_iso = [
@@ -1330,10 +1293,10 @@ class FeedbackAnalysis(BaseReportBlock):
 
         # Format as YAML with comments
         try:
-            contextual_comment = """# All Scorecards Feedback Analysis Report
+            contextual_comment = """# All Scorecards Feedback Alignment Report
 #
 # This report analyzes every scorecard in the account that has feedback data,
-# running full feedback analysis on each one and ranking them by overall AC1
+# running full feedback alignment on each one and ranking them by overall AC1
 # (agreement coefficient).
 #
 # Scorecards with no feedback data in the specified time period are automatically
@@ -1342,7 +1305,7 @@ class FeedbackAnalysis(BaseReportBlock):
 # Scorecards are sorted from best to worst performing (by AC1).
 #
 # Each scorecard entry contains the complete per-score analysis, just like a
-# single-scorecard feedback analysis report.
+# single-scorecard feedback alignment report.
 
 """
             yaml_output = yaml.dump(final_output, indent=2, allow_unicode=True, sort_keys=False)
@@ -1850,11 +1813,11 @@ class FeedbackAnalysis(BaseReportBlock):
         # Only store non-DEBUG messages in the log output
         if level == "DEBUG":
             # Just log to system logger but don't add to block log
-            logger.debug(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+            logger.debug(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAlignment)] {message}")
         else:
             # For all other levels (INFO, WARNING, ERROR), log to both system and block log
             log_method = getattr(logger, level.lower(), logger.info)
-            log_method(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+            log_method(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAlignment)] {message}")
             
             # Add to block log with level prefix for important messages
             if level in ("WARNING", "ERROR"):
@@ -2103,7 +2066,7 @@ class FeedbackAnalysis(BaseReportBlock):
 # Example of how this block might be configured in a ReportConfiguration:
 """
 ```block name="Feedback Agreement Analysis"
-class: FeedbackAnalysis
+class: FeedbackAlignment
 scorecard: "1438" # Call Criteria Scorecard ID
 days: 30 # Analyze feedback from the last 30 days
 # score_id: "44246" # Optional: Call Criteria Question ID to analyze a specific score

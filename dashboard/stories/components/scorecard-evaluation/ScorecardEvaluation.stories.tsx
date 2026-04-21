@@ -515,7 +515,7 @@ export const WithAllWarningTypes: Story = {
     (Story) => (
       <div className="w-full space-y-6">
         <div className="text-sm text-muted-foreground">
-          ⚠️ This story shows all four warning types from the Python feedback analysis:
+          ⚠️ This story shows all four warning types from the Python feedback alignment:
         </div>
         <div className="space-y-4">
           <div className="space-y-2">

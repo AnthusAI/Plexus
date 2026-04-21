@@ -165,11 +165,17 @@ def test_feedback_volume_uses_dedicated_block_and_show_bucket_details(mock_run_f
 
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
 @patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
+@patch("plexus.cli.feedback.feedback_report.memoized_resolve_score_identifier")
+@patch("plexus.cli.feedback.feedback_report.memoized_resolve_scorecard_identifier")
+@patch("plexus.cli.feedback.feedback_report._score_has_nonempty_champion_guidelines")
 @patch("plexus.cli.feedback.feedback_report.run_programmatic_report_and_persist")
 @patch("plexus.cli.feedback.feedback_report.create_client")
 def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     mock_create_client,
     mock_run_programmatic_report_and_persist,
+    mock_score_has_nonempty_champion_guidelines,
+    mock_memoized_resolve_scorecard_identifier,
+    mock_memoized_resolve_score_identifier,
     mock_enrich_parameters_with_names,
     mock_resolve_account_id_for_command,
 ):
@@ -178,6 +184,9 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     mock_client.generate_deep_link.return_value = "https://app.plexus.ai/lab/reports/report-123"
     mock_create_client.return_value = mock_client
     mock_resolve_account_id_for_command.return_value = "acct-1"
+    mock_memoized_resolve_scorecard_identifier.return_value = "1438"
+    mock_memoized_resolve_score_identifier.return_value = "45813"
+    mock_score_has_nonempty_champion_guidelines.return_value = (True, None)
     mock_enrich_parameters_with_names.return_value = {
         "scorecard": "1438",
         "score": "45813",
@@ -206,7 +215,7 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     block_definitions = kwargs["block_definitions"]
     assert [block["class_name"] for block in block_definitions] == [
         "FeedbackVolumeTimeline",
-        "FeedbackAlignmentTimeline",
+        "FeedbackAlignment",
         "FeedbackContradictions",
     ]
 
@@ -217,7 +226,120 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
 
     assert block_definitions[0]["config"]["show_bucket_details"] is True
     assert block_definitions[0]["config"]["bucket_type"] == "trailing_7d"
-    assert block_definitions[1]["config"]["show_bucket_details"] is True
+    assert "show_bucket_details" not in block_definitions[1]["config"]
     assert kwargs["display_title"] == "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview"
-    assert "Combined feedback overview with volume over time" in kwargs["display_description"]
+    assert "Includes contradiction analysis." in kwargs["display_description"]
     assert "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview" in kwargs["report_name"]
+
+
+@patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
+@patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
+@patch("plexus.cli.feedback.feedback_report.memoized_resolve_score_identifier")
+@patch("plexus.cli.feedback.feedback_report.memoized_resolve_scorecard_identifier")
+@patch("plexus.cli.feedback.feedback_report._score_has_nonempty_champion_guidelines")
+@patch("plexus.cli.feedback.feedback_report.run_programmatic_report_and_persist")
+@patch("plexus.cli.feedback.feedback_report.create_client")
+def test_overview_skips_contradictions_when_champion_guidelines_missing(
+    mock_create_client,
+    mock_run_programmatic_report_and_persist,
+    mock_score_has_nonempty_champion_guidelines,
+    mock_memoized_resolve_scorecard_identifier,
+    mock_memoized_resolve_score_identifier,
+    mock_enrich_parameters_with_names,
+    mock_resolve_account_id_for_command,
+):
+    runner = CliRunner()
+    mock_client = MagicMock()
+    mock_client.generate_deep_link.return_value = "https://app.plexus.ai/lab/reports/report-123"
+    mock_create_client.return_value = mock_client
+    mock_resolve_account_id_for_command.return_value = "acct-1"
+    mock_memoized_resolve_scorecard_identifier.return_value = "1438"
+    mock_memoized_resolve_score_identifier.return_value = "45813"
+    mock_enrich_parameters_with_names.return_value = {
+        "scorecard": "1438",
+        "score": "45813",
+        "days": 90,
+        "scorecard_name": "SelectQuote HCS Medium-Risk",
+        "score_name": "Agent Misrepresentation",
+    }
+    mock_score_has_nonempty_champion_guidelines.return_value = (
+        False,
+        "Skipped Feedback Contradictions: champion version guidelines are empty.",
+    )
+    mock_run_programmatic_report_and_persist.return_value = ("report-123", None)
+
+    result = runner.invoke(
+        report,
+        [
+            "overview",
+            "--scorecard",
+            "1438",
+            "--score",
+            "45813",
+            "--days",
+            "90",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_programmatic_report_and_persist.call_args
+    block_definitions = kwargs["block_definitions"]
+    assert [block["class_name"] for block in block_definitions] == [
+        "FeedbackVolumeTimeline",
+        "FeedbackAlignment",
+    ]
+    assert "skipped because champion guidelines are missing" in kwargs["display_description"]
+
+
+@patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
+@patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
+@patch("plexus.cli.feedback.feedback_report.memoized_resolve_score_identifier")
+@patch("plexus.cli.feedback.feedback_report.memoized_resolve_scorecard_identifier")
+@patch("plexus.cli.feedback.feedback_report._score_has_nonempty_champion_guidelines")
+@patch("plexus.cli.feedback.feedback_report.run_programmatic_report_and_persist")
+@patch("plexus.cli.feedback.feedback_report.create_client")
+def test_overview_uses_canonical_resolved_ids_in_block_configs(
+    mock_create_client,
+    mock_run_programmatic_report_and_persist,
+    mock_score_has_nonempty_champion_guidelines,
+    mock_memoized_resolve_scorecard_identifier,
+    mock_memoized_resolve_score_identifier,
+    mock_enrich_parameters_with_names,
+    mock_resolve_account_id_for_command,
+):
+    runner = CliRunner()
+    mock_client = MagicMock()
+    mock_client.generate_deep_link.return_value = "https://app.plexus.ai/lab/reports/report-123"
+    mock_create_client.return_value = mock_client
+    mock_resolve_account_id_for_command.return_value = "acct-1"
+    mock_memoized_resolve_scorecard_identifier.return_value = "sc-canonical"
+    mock_memoized_resolve_score_identifier.return_value = "score-canonical"
+    mock_score_has_nonempty_champion_guidelines.return_value = (True, None)
+    mock_enrich_parameters_with_names.return_value = {
+        "scorecard": "sc-canonical",
+        "score": "score-canonical",
+        "days": 30,
+        "scorecard_name": "SelectQuote HCS Medium-Risk",
+        "score_name": "Agent Misrepresentation",
+    }
+    mock_run_programmatic_report_and_persist.return_value = ("report-123", None)
+
+    result = runner.invoke(
+        report,
+        [
+            "overview",
+            "--scorecard",
+            "SelectQuote HCS Medium-Risk",
+            "--score",
+            "Agent Misrepresentation",
+            "--days",
+            "30",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_programmatic_report_and_persist.call_args
+    block_definitions = kwargs["block_definitions"]
+    for block in block_definitions:
+        assert block["config"]["scorecard"] == "sc-canonical"
+        assert block["config"]["score"] == "score-canonical"
