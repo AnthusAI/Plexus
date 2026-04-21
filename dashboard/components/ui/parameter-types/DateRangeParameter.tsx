@@ -1,8 +1,14 @@
 "use client"
 
 import React from "react"
-import { Input } from "@/components/ui/input"
+import { format, parseISO } from "date-fns"
+import { CalendarIcon } from "lucide-react"
+import { type DateRange } from "react-day-picker"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 import { ParameterDefinition, DateRangeValue } from "@/types/parameters"
 
 interface DateRangeParameterProps {
@@ -16,46 +22,82 @@ interface DateRangeParameterProps {
 export function DateRangeParameter({ definition, value, onChange, disabled, error }: DateRangeParameterProps) {
   const start = value?.start || ""
   const end = value?.end || ""
+  const today = new Date()
+  today.setHours(23, 59, 59, 999)
+
+  const selectedRange: DateRange | undefined = start
+    ? {
+        from: parseISO(start),
+        to: end ? parseISO(end) : undefined,
+      }
+    : undefined
+
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    if (!range?.from) {
+      onChange({ start: "", end: "" })
+      return
+    }
+
+    onChange({
+      start: format(range.from, "yyyy-MM-dd"),
+      end: range.to ? format(range.to, "yyyy-MM-dd") : "",
+    })
+  }
+
+  const formatLabelDate = (raw: string): string => {
+    const parsed = parseISO(raw)
+    if (Number.isNaN(parsed.getTime())) return raw
+    return format(parsed, "LLL dd, y")
+  }
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={`${definition.name}-start`}>
+      <Label htmlFor={`${definition.name}-range`}>
         {definition.label}
         {definition.required && <span className="text-destructive ml-1">*</span>}
       </Label>
       {definition.description && (
         <p className="text-xs text-muted-foreground">{definition.description}</p>
       )}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground" htmlFor={`${definition.name}-start`}>
-            Start Date
-          </Label>
-          <Input
-            id={`${definition.name}-start`}
-            type="date"
-            value={start}
-            onChange={(e) => onChange({ start: e.target.value, end })}
-            max={end || undefined}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            id={`${definition.name}-range`}
+            type="button"
+            variant="outline"
             disabled={disabled}
-            className={error ? "border-destructive" : ""}
+            className={cn(
+              "w-full justify-start text-left font-normal",
+              !start && "text-muted-foreground",
+              error && "border-destructive"
+            )}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {start ? (
+              end ? (
+                <>
+                  {formatLabelDate(start)} - {formatLabelDate(end)}
+                </>
+              ) : (
+                formatLabelDate(start)
+              )
+            ) : (
+              "Pick date range"
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="range"
+            numberOfMonths={2}
+            selected={selectedRange}
+            defaultMonth={selectedRange?.from}
+            onSelect={handleRangeSelect}
+            disabled={(date) => date > today}
+            initialFocus
           />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground" htmlFor={`${definition.name}-end`}>
-            End Date
-          </Label>
-          <Input
-            id={`${definition.name}-end`}
-            type="date"
-            value={end}
-            onChange={(e) => onChange({ start, end: e.target.value })}
-            min={start || undefined}
-            disabled={disabled}
-            className={error ? "border-destructive" : ""}
-          />
-        </div>
-      </div>
+        </PopoverContent>
+      </Popover>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
