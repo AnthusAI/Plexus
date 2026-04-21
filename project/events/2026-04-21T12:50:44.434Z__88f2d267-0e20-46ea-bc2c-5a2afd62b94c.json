@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "88f2d267-0e20-46ea-bc2c-5a2afd62b94c",
+  "issue_id": "plx-e523d036-c8f4-4bd5-996e-cb6ae9b9fdeb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T12:50:44.434Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Income and Name Alignment Metadata AI guidelines for Suco - Home Improvement\n\nScenario: Income and name metadata align with supported call evidence\nGiven a transcript where annual income and the relevant speaker name are stated or confirmed and the metadata matches the supported result\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Income or name metadata conflicts with the call or income was guessed or suggested\nGiven a transcript where the metadata conflicts with the supported answer or the agent guessed, suggested, or populated income without a direct answer\nWhen the reviewer evaluates the conversation\nThen the score should be No\n\nScenario: The metadata cannot be supported from the call\nGiven a transcript where the required fields are blank or there is no transcript support for one or both fields\nWhen the reviewer evaluates the conversation\nThen the score should be NA",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-1fe88ce0-c394-4f5f-8286-a4abe55ad2ee",
+    "priority": 2,
+    "status": "open",
+    "title": "As a reviewer, I want Income and Name Alignment Metadata AI guidelines that distinguish correct metadata alignment, mismatches, and unsupported cases, so that scoring is consistent"
+  }
+}

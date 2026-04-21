@@ -1,0 +1,31 @@
+{
+  "id": "plx-e523d036-c8f4-4bd5-996e-cb6ae9b9fdeb",
+  "title": "As a reviewer, I want Income and Name Alignment Metadata AI guidelines that distinguish correct metadata alignment, mismatches, and unsupported cases, so that scoring is consistent",
+  "description": "Feature: Income and Name Alignment Metadata AI guidelines for Suco - Home Improvement\n\nScenario: Income and name metadata align with supported call evidence\nGiven a transcript where annual income and the relevant speaker name are stated or confirmed and the metadata matches the supported result\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Income or name metadata conflicts with the call or income was guessed or suggested\nGiven a transcript where the metadata conflicts with the supported answer or the agent guessed, suggested, or populated income without a direct answer\nWhen the reviewer evaluates the conversation\nThen the score should be No\n\nScenario: The metadata cannot be supported from the call\nGiven a transcript where the required fields are blank or there is no transcript support for one or both fields\nWhen the reviewer evaluates the conversation\nThen the score should be NA",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1fe88ce0-c394-4f5f-8286-a4abe55ad2ee",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e14076ba-b1df-41e4-9d5e-c57eff2a7426",
+      "author": "ryan",
+      "text": "Resolved the score from the provided Plexus version URL, reused the prior rough guidelines text as source material, and am converting it into a validated Yes/No/NA classifier document before pushing a new version.",
+      "created_at": "2026-04-21T12:51:00.287012Z"
+    },
+    {
+      "id": "91e3ec77-0c95-49d2-9e09-47968e7cc1dd",
+      "author": "ryan",
+      "text": "Validated the new Income and Name Alignment Metadata AI guidelines with skills/plexus-guidelines/validate_guidelines.py and pushed them to Plexus as score version 56ee7281-2ac2-4dca-b5e0-ab228fa3e522. The new version is not champion-promoted; this change adds the missing structured guidelines document.",
+      "created_at": "2026-04-21T12:52:00.155936Z"
+    }
+  ],
+  "created_at": "2026-04-21T12:50:44.434310Z",
+  "updated_at": "2026-04-21T12:52:00.167933Z",
+  "closed_at": "2026-04-21T12:52:00.167933Z",
+  "custom": {}
+}

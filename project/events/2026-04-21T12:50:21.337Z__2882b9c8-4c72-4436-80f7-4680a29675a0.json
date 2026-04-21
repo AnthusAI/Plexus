@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2882b9c8-4c72-4436-80f7-4680a29675a0",
+  "issue_id": "plx-1fe88ce0-c394-4f5f-8286-a4abe55ad2ee",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T12:50:21.337Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create and validate classifier guidelines for the Suco - Home Improvement Income and Name Alignment Metadata AI score so reviewers and the model share the same class definitions and decision criteria.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Define Income and Name Alignment Metadata AI guidelines for Suco Home Improvement"
+  }
+}

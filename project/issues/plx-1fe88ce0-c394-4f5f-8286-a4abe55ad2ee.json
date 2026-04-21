@@ -1,0 +1,25 @@
+{
+  "id": "plx-1fe88ce0-c394-4f5f-8286-a4abe55ad2ee",
+  "title": "Define Income and Name Alignment Metadata AI guidelines for Suco Home Improvement",
+  "description": "Create and validate classifier guidelines for the Suco - Home Improvement Income and Name Alignment Metadata AI score so reviewers and the model share the same class definitions and decision criteria.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "49059d9d-aa7c-4559-ab77-f3eb0bc34f35",
+      "author": "ryan",
+      "text": "Initial guidelines work completed for Suco - Home Improvement / Income and Name Alignment Metadata AI; see story plx-e523d0 for validation and pushed version details.",
+      "created_at": "2026-04-21T12:52:00.194575Z"
+    }
+  ],
+  "created_at": "2026-04-21T12:50:21.337505Z",
+  "updated_at": "2026-04-21T12:52:00.194575Z",
+  "closed_at": "2026-04-21T12:52:00.184877Z",
+  "custom": {}
+}
