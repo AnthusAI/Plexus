@@ -40,7 +40,7 @@ export async function listAllReportConfigurationsByAccount(
   let nextToken: string | null = null
 
   do {
-    const response = await getClient().graphql({
+    const response: any = await getClient().graphql({
       query: LIST_REPORT_CONFIGURATIONS,
       variables: {
         accountId,
@@ -54,7 +54,7 @@ export async function listAllReportConfigurationsByAccount(
       "data" in response &&
       response.data?.listReportConfigurationByAccountIdAndUpdatedAt?.items
     ) {
-      const page = response.data.listReportConfigurationByAccountIdAndUpdatedAt
+      const page: any = response.data.listReportConfigurationByAccountIdAndUpdatedAt
       allConfigs.push(...page.items.filter(Boolean))
       nextToken = page.nextToken ?? null
     } else {
