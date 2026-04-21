@@ -302,7 +302,7 @@ class FeedbackService:
     @staticmethod
     def _generate_recommendation(analysis: Dict[str, Any]) -> str:
         """
-        Generate actionable recommendations based on feedback analysis.
+        Generate actionable recommendations based on feedback alignment.
         
         Args:
             analysis: Dictionary containing analysis results

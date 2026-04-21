@@ -149,7 +149,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/advanced/universal-code',
     '/documentation/advanced/mcp-server',
     '/documentation/report-blocks',
-    '/documentation/report-blocks/feedback-analysis',
+    '/documentation/report-blocks/feedback-alignment',
     '/documentation/report-blocks/topic-analysis',
     '/login',
     '/signup',

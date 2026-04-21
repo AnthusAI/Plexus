@@ -135,7 +135,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onToggleFullWidth?: () => void
   isFullWidth?: boolean
   onSave?: () => void
-  onFeedbackAnalysis?: () => void
+  onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
   onDelete?: () => void
   exampleItems?: Array<{
@@ -167,7 +167,7 @@ interface DetailContentProps {
   onEditChange?: (changes: Partial<ScoreData>) => void
   onSave?: () => void
   onCancel?: () => void
-  onFeedbackAnalysis?: () => void
+  onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
   onDelete?: () => void
   hasChanges?: boolean
@@ -593,7 +593,7 @@ const DetailContent = React.memo(({
   onEditChange,
   onSave,
   onCancel,
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   onDelete,
   hasChanges,
@@ -1096,8 +1096,8 @@ const DetailContent = React.memo(({
                       <TestTubes className="mr-2 h-4 w-4" />
                       Evaluate Alignment
                     </DropdownMenuItem>
-                    {onFeedbackAnalysis && (
-                      <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                    {onFeedbackAlignment && (
+                      <DropdownMenuItem onClick={onFeedbackAlignment}>
                         <MessageCircleMore className="mr-2 h-4 w-4" />
                         Analyze Feedback
                       </DropdownMenuItem>
@@ -1766,7 +1766,7 @@ export function ScoreComponent({
   onToggleFullWidth,
   isFullWidth = false,
   onSave,
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   onDelete,
   exampleItems = [],
@@ -2562,7 +2562,7 @@ export function ScoreComponent({
               onEditChange={handleEditChange}
               onSave={handleSave}
               onCancel={handleCancel}
-              onFeedbackAnalysis={onFeedbackAnalysis}
+              onFeedbackAlignment={onFeedbackAlignment}
               onCostAnalysis={onCostAnalysis}
               onDelete={onDelete}
               hasChanges={hasChanges}

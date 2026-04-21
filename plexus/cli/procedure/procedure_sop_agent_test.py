@@ -595,7 +595,7 @@ class TestProcedureSOPAgent:
         mock_sop_agent.execute_procedure = AsyncMock(return_value={
             "success": True,
             "rounds_completed": 5,
-            "tools_used": ["plexus_feedback_analysis", "upsert_procedure_node", "upsert_procedure_node"],
+            "tools_used": ["plexus_feedback_alignment", "upsert_procedure_node", "upsert_procedure_node"],
             "completion_summary": "Test completed"
         })
         experiment_agent.sop_agent = mock_sop_agent
@@ -606,7 +606,7 @@ class TestProcedureSOPAgent:
         assert result["procedure_id"] == "test_exp"
         assert result["nodes_created"] == 2  # Two upsert_procedure_node calls
         assert result["rounds_completed"] == 5
-        assert "plexus_feedback_analysis" in result["tool_names"]
+        assert "plexus_feedback_alignment" in result["tool_names"]
         
         mock_sop_agent.execute_procedure.assert_called_once()
     
@@ -754,7 +754,7 @@ async def test_procedure_sop_agent_story():
             "procedure_id": "story_exp",
             "rounds_completed": 8,
             "tools_used": [
-                "plexus_feedback_analysis",
+                "plexus_feedback_alignment",
                 "plexus_feedback_find", 
                 "plexus_item_info",
                 "upsert_procedure_node",
@@ -800,7 +800,7 @@ async def test_procedure_sop_agent_story():
         assert result["rounds_completed"] == 8
         
         # Verify procedure tools were used
-        expected_tools = ["plexus_feedback_analysis", "plexus_feedback_find", "plexus_item_info", "upsert_procedure_node"]
+        expected_tools = ["plexus_feedback_alignment", "plexus_feedback_find", "plexus_item_info", "upsert_procedure_node"]
         for tool in expected_tools:
             assert tool in result["tool_names"]
         
