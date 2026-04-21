@@ -263,6 +263,62 @@ agents:
       - submit_score_version
       - done
 
+  cycle_analyst:
+    provider: openai
+    model: gpt-5.4
+    max_tokens: 1200
+    verbosity: low
+    system_prompt: |
+      You analyze optimization results and produce compact planning guidance.
+
+      Your output must be brief, concrete, and tightly structured.
+      You are not editing code. You are not writing long reports.
+
+      Required output structure:
+      ## EXECUTIVE SUMMARY
+      - Maximum 4 sentences.
+      - Plain English for any audience.
+
+      ## WHAT WORKED
+      - Maximum 3 bullets.
+      - Each bullet: one short sentence.
+
+      ## WHAT FAILED
+      - Maximum 3 bullets.
+      - Each bullet: one short sentence.
+
+      ## NEXT CYCLE TARGET
+      - Maximum 3 bullets.
+      - Each bullet: one short sentence naming the next best territory to explore.
+
+      Rules:
+      - No long prose blocks.
+      - No repeated points.
+      - Prefer sharp conclusions over explanation.
+      - If contradictory labels are the blocker, say so directly.
+
+    initial_message: "Ready to analyze cycle results."
+
+  report_writer:
+    provider: openai
+    model: gpt-5.2
+    max_tokens: 900
+    verbosity: low
+    system_prompt: |
+      You write short optimizer reports for humans and downstream tooling.
+
+      Your job is to be concise, structured, and cheap in output tokens.
+      Never write long essays. Follow every hard limit exactly.
+
+      Rules:
+      - Respect all sentence, bullet, item, and word limits.
+      - Prefer shorter wording when either phrasing would work.
+      - Do not add sections that were not requested.
+      - Do not restate the prompt.
+      - If there is little to say, say less.
+
+    initial_message: "Ready to write concise reports."
+
   reviewer:
     provider: openai
     model: gpt-5.4
@@ -1230,7 +1286,8 @@ code: |
   -- Generate the Feedback Landscape Diagnostic — an LLM-synthesized multi-level analysis
   -- of cross-cycle item recurrence patterns. Runs after cycle 3+ every 2 cycles.
   -- Returns {compact_summary, full_report, generated_at_cycle} or nil on failure.
-  -- Requires code_editor to be set up in calling context.
+  local safe_agent_call
+  local safe_editor_call
   local function generate_feedback_landscape_diagnostic(cycle, item_recurrence, iterations, current_guidelines)
     if type(item_recurrence) ~= "table" then return nil end
 
@@ -1360,14 +1417,14 @@ code: |
     table.insert(dp, "=== END ANALYSIS TASK ===")
 
     Tool.reset()
-    code_editor.clear_history()
-    local ok, err = safe_editor_call(table.concat(dp, "\n"), nil)
+    report_writer.clear_history()
+    local ok, err = safe_agent_call(report_writer, "report_writer", table.concat(dp, "\n"), nil)
     if not ok then
       diag(string.format("Feedback landscape diagnostic failed: %s", tostring(err)))
       return nil
     end
 
-    local full_report = code_editor_ref.output or ""
+    local full_report = report_writer.output or ""
     if not has_text(full_report) then return nil end
 
     -- Build compact summary for planning context injection
@@ -3640,21 +3697,21 @@ code: |
       token_count, #kept, running_tokens))
   end
 
-  -- Retry wrapper for code_editor calls with error-type-specific recovery
+  -- Retry wrapper for agent calls with error-type-specific recovery
   -- recovery_context: {file_content = string, task_description = string} or nil
   local MAX_EDITOR_RETRIES = 2
 
-  local function safe_editor_call(msg, recovery_context)
+  safe_agent_call = function(agent, agent_name, msg, recovery_context)
     for attempt = 1, MAX_EDITOR_RETRIES + 1 do
       Tool.reset()
       local ok, err = pcall(function()
-        code_editor({message = msg})
+        agent({message = msg})
       end)
       if ok then return true, nil end
 
       local err_type = classify_error(err)
-      diag(string.format("code_editor error (attempt %d/%d, type=%s): %s",
-        attempt, MAX_EDITOR_RETRIES + 1, err_type, trunc(tostring(err), 300)))
+      diag(string.format("%s error (attempt %d/%d, type=%s): %s",
+        agent_name, attempt, MAX_EDITOR_RETRIES + 1, err_type, trunc(tostring(err), 300)))
 
       if err_type == "permanent" then
         return false, tostring(err)
@@ -3666,10 +3723,10 @@ code: |
 
       if err_type == "context_window" then
         -- Recovery: clear history, re-inject just essential context
-        code_editor.clear_history()
+        agent.clear_history()
         if recovery_context then
           if recovery_context.file_content then
-            code_editor.history:add({
+            agent.history:add({
               role = "system",
               content = "=== CURRENT score_config.yaml ===\n"
                 .. recovery_context.file_content
@@ -3680,7 +3737,9 @@ code: |
             msg = recovery_context.task_description
           end
         end
-        diag("Recovered from context window error: cleared history, re-injected context")
+        diag(string.format(
+          "Recovered from %s context window error: cleared history, re-injected context",
+          agent_name))
 
       elseif err_type == "rate_limit" or err_type == "transient" then
         local wait_seconds = attempt * 5
@@ -3690,9 +3749,9 @@ code: |
 
       else
         -- Unknown error: clear history and retry with context
-        code_editor.clear_history()
+        agent.clear_history()
         if recovery_context and recovery_context.file_content then
-          code_editor.history:add({
+          agent.history:add({
             role = "system",
             content = "=== CURRENT score_config.yaml ===\n"
               .. recovery_context.file_content
@@ -3702,6 +3761,53 @@ code: |
       end
     end
     return false, "max retries exceeded"
+  end
+
+  safe_editor_call = function(msg, recovery_context)
+    return safe_agent_call(code_editor, "code_editor", msg, recovery_context)
+  end
+
+  local function extract_markdown_section(text, heading)
+    if not has_text(text) or not has_text(heading) then return "" end
+    local _, hdr_end = text:find(heading .. "\n", 1, true)
+    if not hdr_end then return "" end
+    local next_hdr = text:find("\n## ", hdr_end + 1)
+    local content = next_hdr and text:sub(hdr_end + 1, next_hdr - 1) or text:sub(hdr_end + 1)
+    return (content:match("^(.-)%s*$") or content)
+  end
+
+  local function build_compact_contradiction_summary(kc, max_topics)
+    if type(kc) ~= "table" then return "" end
+    local total_items = kc.total_items_analyzed or 0
+    local contradictions_found = kc.contradictions_found or 0
+    local policy_gap_count = kc.policy_gap_count or 0
+    local parts = {}
+    if total_items > 0 then
+      table.insert(parts, string.format(
+        "Contradictions: %d/%d items (%.0f%%). Policy gaps: %d. True contradictions: %d.",
+        contradictions_found,
+        total_items,
+        contradictions_found / total_items * 100,
+        policy_gap_count,
+        math.max(0, contradictions_found - policy_gap_count)))
+    end
+    local topics = kc.topics or {}
+    if type(topics) == "table" and #topics > 0 then
+      table.insert(parts, "Top topics:")
+      for i = 1, math.min(max_topics or 3, #topics) do
+        local topic = topics[i] or {}
+        local label = topic.label or ("Topic " .. tostring(i))
+        local count = topic.count or 0
+        local kind = topic.is_policy_gap and "policy gap" or "contradiction"
+        table.insert(parts, string.format(
+          "- %s (%s, %d items): %s",
+          label,
+          kind,
+          count,
+          trunc(topic.summary or "", 180)))
+      end
+    end
+    return table.concat(parts, "\n")
   end
 
   local max_cycles = params.max_iterations
@@ -6071,157 +6177,98 @@ code: |
           "Cycle %d — generating per-cycle report...", cycle), level = "info"})
 
         local syn = {}
+        local cur_iter = iterations[#iterations]
+        local prior_insights = State.get("cycle_insights") or {}
+        local known_contra = State.get("known_contradictions")
 
-        -- ---- Call 1: Planning analysis + executive summary ----
-        -- This is the main analytical call. The agent has full cycle history and reasons
-        -- through what happened, why, and what to try next. Produces:
-        --   ## EXECUTIVE SUMMARY  — 4-6 sentence plain-English summary
-        --   === PLANNING ANALYSIS === — detailed technical reasoning for next cycle
         table.insert(syn, string.format(
-          "You must produce output in exactly this order:\n\n"
+          "Analyze Cycle %d and produce exactly four sections in this order:\n"
           .. "## EXECUTIVE SUMMARY\n"
-          .. "4-6 sentences of plain English prose. No headers, no bullets. Write for any audience.\n"
-          .. "Cover: what improved (or didn't), what the main blocker is, what AC1 is now.\n"
-          .. "Copy-pasteable into an email or Slack message. DO NOT exceed 6 sentences.\n\n"
-          .. "=== PLANNING ANALYSIS ===\n"
-          .. "(everything after this line is technical reasoning for the next cycle's hypotheses)\n\n",
-          cycle))
+          .. "- Plain English only\n"
+          .. "- Maximum 4 sentences total\n"
+          .. "- Cover what improved or failed, the main blocker, and the next target\n\n"
+          .. "## WHAT WORKED\n"
+          .. "- Maximum 3 bullets\n"
+          .. "- Each bullet must cite one concrete hypothesis result\n\n"
+          .. "## WHAT FAILED\n"
+          .. "- Maximum 3 bullets\n"
+          .. "- Each bullet must name the blocker and why it matters\n\n"
+          .. "## NEXT CYCLE TARGET\n"
+          .. "- Maximum 3 bullets\n"
+          .. "- Each bullet must name one specific next-cycle direction\n"
+          .. "- No long paragraphs anywhere\n"))
 
-        -- ---- Cycle history ----
-        table.insert(syn, string.format(
-          "=== CYCLE %d — LESSONS LEARNED ===\n", cycle))
-        table.insert(syn,
-          "Review ALL cycles so far, then write the report above.\n")
+        table.insert(syn, string.format("\n=== CURRENT CYCLE %d RESULTS ===", cycle))
+        if cur_iter and cur_iter.exploration_results and type(cur_iter.exploration_results) == "table" then
+          for _, r in ipairs(cur_iter.exploration_results) do
+            local r_fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
+            local r_acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
+            local hyp_label = r.hypothesis
+              and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
+              or ("Hypothesis " .. tostring(r.index))
+            table.insert(syn, string.format(
+              "- %s | Recent AC1 %+.3f | Regression AC1 %+.3f | %s | %s",
+              hyp_label,
+              r_fb_d,
+              r_acc_d,
+              r.succeeded and "PASS" or "FAIL",
+              trunc(r.done_reason or "(no note)", 220)))
+          end
+        else
+          table.insert(syn, "- No structured exploration results were recorded for this cycle.")
+        end
 
-        for _, prev in ipairs(iterations) do
-          local status = prev.accepted and "ACCEPTED" or "REJECTED"
-          local fb_d = prev.recent_deltas and prev.recent_deltas.alignment or 0
-          table.insert(syn, string.format("--- Cycle %d (%s, Recent AC1 %+.3f) ---",
-            prev.iteration, status, fb_d))
-          if prev.exploration_results and type(prev.exploration_results) == "table" then
-            for _, r in ipairs(prev.exploration_results) do
-              local r_fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
-              local r_acc_d = r.acc_deltas and r.acc_deltas.alignment or 0
-              local hyp_label = r.hypothesis
-                and (r.hypothesis.name .. ": " .. (r.hypothesis.description or ""))
-                or ("Hypothesis " .. tostring(r.index))
-              table.insert(syn, string.format(
-                "  %d. %s\n     Implemented: %s\n     Recent AC1 %+.3f   Regression AC1 %+.3f  %s\n",
-                r.index, hyp_label, r.done_reason or "(no note)",
-                r_fb_d, r_acc_d, r.succeeded and "SUCCEEDED" or "FAILED"))
+        if #prior_insights > 0 then
+          table.insert(syn, "\n=== PRIOR CYCLE SUMMARIES ===")
+          for i = math.max(1, #prior_insights - 2), #prior_insights do
+            local ci = prior_insights[i]
+            if ci then
+              table.insert(syn, string.format("Cycle %d executive summary: %s",
+                ci.cycle, trunc(ci.executive_summary or ci.diagnosis_summary or "", 320)))
+              if has_text(ci.prescription_summary) then
+                table.insert(syn, string.format("Cycle %d next actions: %s",
+                  ci.cycle, trunc(ci.prescription_summary, 220)))
+              end
             end
           end
         end
 
-        -- Include accumulated insights from prior cycle reports
-        local prior_insights = State.get("cycle_insights") or {}
-        if #prior_insights > 0 then
-          table.insert(syn, "\n=== PRIOR CYCLE REPORTS (your analysis from previous cycles) ===")
-          for _, ci in ipairs(prior_insights) do
-            table.insert(syn, string.format("\nCycle %d analysis:\n%s", ci.cycle, ci.analysis or ""))
-          end
+        local compact_contra = build_compact_contradiction_summary(known_contra, 3)
+        if has_text(compact_contra) then
+          table.insert(syn, "\n=== CONTRADICTION SUMMARY ===")
+          table.insert(syn, compact_contra)
         end
 
-        -- Stagnation diagnostic: when consecutive failures hit, prompt for structural diagnosis
         if consecutive_failed_cycles >= 3 then
           table.insert(syn, string.format(
-            "\n⚠ WARNING: %d consecutive cycles have failed to improve.\n\n"
-            .. "PLATEAU DIAGNOSIS REQUIRED. The most common reason for a sustained plateau is "
-            .. "CONTRADICTORY FEEDBACK LABELS — human reviewers disagree, so one wave of labels says "
-            .. "policy is A and another wave says policy is the opposite of A. When this happens, "
-            .. "ANY prompt change that aligns with one group will misalign with the other. "
-            .. "This is NOT solvable with more prompt engineering.\n\n"
-            .. "Before proposing new approaches, explicitly diagnose:\n"
-            .. "1. CONTRADICTORY LABELS: Are there feedback items that directly contradict each other "
-            .. "about what the correct classification should be for similar scenarios? If so, name them. "
-            .. "This is the #1 cause of plateaus and must be identified before continuing.\n"
-            .. "2. POLICY GAPS EXHAUSTED: Have all obvious missing or ambiguous policies already been "
-            .. "addressed? If so, there may be no more prompt-level wins available.\n"
-            .. "3. STRUCTURAL: Wrong model, missing preprocessing, or inherent task ambiguity?\n"
-            .. "4. TACTICAL: Is there still untried policy clarification territory?\n\n"
-            .. "If the diagnosis is contradictory labels or exhausted policy space, say so clearly "
-            .. "rather than proposing another prompt tweak that cannot possibly help.\n",
+            "\n=== STAGNATION WARNING ===\n"
+            .. "%d consecutive cycles failed to improve. Explicitly state whether the plateau looks like:\n"
+            .. "- contradictory labels,\n"
+            .. "- exhausted policy space,\n"
+            .. "- structural/model limitations, or\n"
+            .. "- an implementation miss worth refining.\n",
             consecutive_failed_cycles))
         end
 
-        table.insert(syn, "\n\nFor the PLANNING ANALYSIS section, reason through each hypothesis:\n")
-        table.insert(syn, "  - What did this change actually do to the score's behavior?\n")
-        table.insert(syn, "  - Did the metric results match what you expected? Why or why not?\n")
-        table.insert(syn, "  - CLASSIFY: Is this approach (a) fundamentally wrong — the premise was flawed,\n")
-        table.insert(syn, "    (b) directionally right but implementation was off — worth refining, or\n")
-        table.insert(syn, "    (c) inconclusive — too small an effect to learn from?\n")
-        table.insert(syn, "  - What does this tell us about what this score's evaluation data actually rewards?\n")
-        table.insert(syn, "  - POLICY AUDIT: Are there still missing or ambiguous policies in the rubric that\n")
-        table.insert(syn, "    the RCA reveals? Policy gaps are the highest-value target. List any you see.\n")
-        table.insert(syn, "  - CONTRADICTIONS: Do any feedback items contradict each other about what the\n")
-        table.insert(syn, "    correct label should be for similar scenarios? If so, describe the contradiction.\n")
-        table.insert(syn, "    Contradictory labels are the most common cause of plateaus — naming them is more\n")
-        table.insert(syn, "    useful than trying yet another prompt change that cannot resolve them.\n")
-        table.insert(syn, "  - FEW-SHOT EXAMPLES: Did any hypothesis rely primarily on adding examples?\n")
-        table.insert(syn, "    If so, reflect on whether a policy rule would have been more durable.\n")
-        table.insert(syn, "  - Looking at the FULL trajectory across all cycles, what patterns emerge?\n")
-        table.insert(syn, "  - What SPECIFIC territory has NOT been explored yet?\n")
-        table.insert(syn, "  - If dual synthesis was used: which strategy (A=cycle-focused, B=arc-focused) worked better and why?\n")
-
-        -- Contradiction audit: wire the landscape data into synthesis reasoning
-        local known_contra = State.get("known_contradictions")
-        if known_contra and (known_contra.contradictions_found or 0) > 0 then
-          table.insert(syn, string.format(
-            "\nCONTRADICTION AUDIT — %d contradiction items detected in the current feedback window:\n",
-            known_contra.contradictions_found))
-          table.insert(syn, "  1. For each accepted cycle so far: did it target a POLICY GAP (could succeed)\n")
-          table.insert(syn, "     or a GUIDELINE CONTRADICTION (cannot succeed via prompt editing)?\n")
-          table.insert(syn, "     Policy gap fixes should produce durable gains. Contradiction-targeting fixes\n")
-          table.insert(syn, "     may show short-term gains that regress when evaluated on new feedback.\n")
-          table.insert(syn, "  2. Are any hypotheses you would consider for the next cycle targeting items\n")
-          table.insert(syn, "     in the contradiction topics listed in the CONTRADICTION LANDSCAPE above?\n")
-          table.insert(syn, "     If so, flag this explicitly — those hypotheses cannot reliably succeed.\n")
-          table.insert(syn, "  3. Has the contradiction rate changed since the run started, or is it stable?\n")
-          table.insert(syn, "     A rising contradiction rate may indicate the score's guidelines have become\n")
-          table.insert(syn, "     inconsistent with current reviewer behavior.\n")
-          if known_contra.policy_gap_count and known_contra.policy_gap_count > 0 then
-            table.insert(syn, string.format(
-              "  NOTE: %d of the contradiction items are POLICY GAPS — these CAN be addressed\n"
-              .. "  by adding explicit guideline rules. Focus on these first.\n",
-              known_contra.policy_gap_count))
-          end
-        end
-
-        table.insert(syn, "\nWrite out your analysis. Be specific — name the exact criteria/lines you'd change next.\n")
-        table.insert(syn,
-          "The PLANNING ANALYSIS will shape hypotheses for cycle "
-          .. tostring(cycle + 1) .. " and will be preserved for future cycles.")
-
-        guard_context_budget(code_editor)
-        local syn_ok, syn_err = safe_editor_call(table.concat(syn, ""), nil)
+        cycle_analyst.clear_history()
+        guard_context_budget(cycle_analyst)
+        local syn_ok, syn_err = safe_agent_call(cycle_analyst, "cycle_analyst", table.concat(syn, "\n"), nil)
         if not syn_ok then
-          diag(string.format("CODE_EDITOR FAILED in per-cycle report: %s", tostring(syn_err)))
+          diag(string.format("CYCLE_ANALYST FAILED in per-cycle report: %s", tostring(syn_err)))
         end
-        local syn_text = code_editor.output or "(cycle report complete)"
+        local syn_text = cycle_analyst.output or "(cycle report complete)"
 
-        -- Extract executive summary from call 1 output.
-        -- Stop before === PLANNING ANALYSIS === boundary.
-        local exec_summary = ""
-        do
-          local search = "## EXECUTIVE SUMMARY\n"
-          local _, hdr_end = syn_text:find(search, 1, true)
-          if hdr_end then
-            local stop = syn_text:find("\n===", hdr_end + 1)
-            local raw = stop and syn_text:sub(hdr_end + 1, stop - 1) or syn_text:sub(hdr_end + 1)
-            exec_summary = (raw:match("^(.-)%s*$") or raw)
-          end
-        end
+        local exec_summary = extract_markdown_section(syn_text, "## EXECUTIVE SUMMARY")
 
         -- ---- Call 2: Lab Report ----
-        -- Separate focused call so the model isn't context-shifting from analysis to SME writing.
-        -- Concise: what we tried, main error pattern still present, ≤3 next actions.
         local lab_report = ""
         do
           local lr_parts = {}
           table.insert(lr_parts, string.format(
-            "Write a concise lab report for Cycle %d of an optimization run. "
-            .. "Audience: technical operators and the next optimizer run.\n\n"
-            .. "HARD LIMIT: under 250 words total. Be terse.\n\n"
+            "Write a concise lab report for Cycle %d of an optimization run.\n"
+            .. "Audience: technical operators and the next optimizer run.\n"
+            .. "HARD LIMIT: under 250 words total.\n"
+            .. "Use only the sections below. No extra commentary.\n\n"
             .. "## LAB REPORT\n\n"
             .. "### What happened\n"
             .. "One line per hypothesis: name, change type (prompt/structural/model), "
@@ -6232,9 +6279,7 @@ code: |
             .. "≤3 bullet points. Specific, operator-executable actions for the next cycle. "
             .. "Each: what exactly to try, why (evidence), expected impact.\n",
             cycle))
-          -- Provide just enough context: cycle results summary
           table.insert(lr_parts, "\n=== CYCLE RESULTS ===\n")
-          local cur_iter = iterations[#iterations]
           if cur_iter and cur_iter.exploration_results then
             for _, r in ipairs(cur_iter.exploration_results) do
               local fb_d = r.fb_deltas and r.fb_deltas.alignment or 0
@@ -6247,15 +6292,14 @@ code: |
             end
           end
           table.insert(lr_parts, "\n=== PLANNING ANALYSIS (context only) ===\n")
-          table.insert(lr_parts, trunc(syn_text, 2000))
+          table.insert(lr_parts, trunc(syn_text, 800))
 
           Tool.reset()
-          code_editor.clear_history()
-          guard_context_budget(code_editor)
-          local lr_ok, lr_err = safe_editor_call(table.concat(lr_parts, "\n"), nil)
+          report_writer.clear_history()
+          guard_context_budget(report_writer)
+          local lr_ok, lr_err = safe_agent_call(report_writer, "report_writer", table.concat(lr_parts, "\n"), nil)
           if lr_ok then
-            local lr_raw = code_editor.output or ""
-            -- Extract the ## LAB REPORT section
+            local lr_raw = report_writer.output or ""
             local _, hdr_end = lr_raw:find("## LAB REPORT\n", 1, true)
             if hdr_end then
               local stop = lr_raw:find("\n===", hdr_end + 1) or lr_raw:find("\n## ", hdr_end + 1)
@@ -6271,15 +6315,13 @@ code: |
         end
 
         -- ---- Call 3: SME Agenda ----
-        -- Entirely separate call with minimal context — the agent should not be
-        -- thinking about technical details, only about decisions for domain experts.
         local sme_agenda = ""
         do
           local sme_parts = {}
           table.insert(sme_parts, string.format(
             "Write a short meeting agenda for domain experts (Subject Matter Experts). "
             .. "They are NOT technical. They do NOT know what AC1 means.\n\n"
-            .. "HARD LIMIT: max 3 agenda items. Under 200 words total.\n\n"
+            .. "HARD LIMIT: max 3 agenda items. Under 150 words total.\n\n"
             .. "## SME AGENDA\n\n"
             .. "Format each item exactly as:\n"
             .. "### Title of the decision\n"
@@ -6292,22 +6334,22 @@ code: |
             .. "- No technical jargon, no model names, no metric names\n"
             .. "- If there are no SME decisions needed, write: (No SME decisions needed this cycle)\n",
             cycle))
-          -- Provide only the key error patterns and planning analysis — not the full cycle history
           table.insert(sme_parts, "\n=== KEY FINDINGS FROM THIS CYCLE ===\n")
-          table.insert(sme_parts, trunc(exec_summary, 500))
+          table.insert(sme_parts, trunc(exec_summary, 300))
           table.insert(sme_parts, "\n\nTop patterns from planning analysis:\n")
-          -- Extract just the first 1500 chars of planning analysis
-          local pa_start = syn_text:find("=== PLANNING ANALYSIS", 1, true)
-          if pa_start then
-            table.insert(sme_parts, trunc(syn_text:sub(pa_start), 1500))
-          end
+          table.insert(sme_parts, trunc(
+            table.concat({
+              extract_markdown_section(syn_text, "## WHAT FAILED"),
+              extract_markdown_section(syn_text, "## NEXT CYCLE TARGET")
+            }, "\n"),
+            600))
 
           Tool.reset()
-          code_editor.clear_history()
-          guard_context_budget(code_editor)
-          local sme_ok, sme_err = safe_editor_call(table.concat(sme_parts, "\n"), nil)
+          report_writer.clear_history()
+          guard_context_budget(report_writer)
+          local sme_ok, sme_err = safe_agent_call(report_writer, "report_writer", table.concat(sme_parts, "\n"), nil)
           if sme_ok then
-            local sme_raw = code_editor.output or ""
+            local sme_raw = report_writer.output or ""
             local _, hdr_end = sme_raw:find("## SME AGENDA\n", 1, true)
             if hdr_end then
               local stop = sme_raw:find("\n===", hdr_end + 1) or sme_raw:find("\n## ", hdr_end + 1)
@@ -6381,10 +6423,8 @@ code: |
           cycle, #(syn_text or ""), insight_entry.hypotheses_tested and #insight_entry.hypotheses_tested or 0))
 
         -- =============================================================
-        -- Accumulated Lessons: LLM-synthesized living document that
-        -- provides a supplementary cross-cycle summary.  Updated each
-        -- cycle, bounded at 3000 chars.  Injected alongside raw per-cycle
-        -- data (not as a replacement) at all read sites.
+        -- Accumulated Lessons: terse living document updated each cycle.
+        -- Kept intentionally compact to avoid expensive report synthesis.
         -- =============================================================
         diag("Updating accumulated lessons document...")
         do
@@ -6419,7 +6459,7 @@ code: |
           end
           table.insert(lp, string.format("Synthesis outcome: %s", cycle_outcome))
           table.insert(lp, string.format("Synthesis description: %s\n", trunc(final_done_reason or "", 500)))
-          table.insert(lp, "Cycle analysis:\n" .. trunc(syn_text, 4000))
+          table.insert(lp, "Cycle analysis:\n" .. trunc(syn_text, 1200))
           table.insert(lp, "\n=== INSTRUCTIONS ===")
           table.insert(lp, "Output the COMPLETE updated lessons document. Structure:")
           table.insert(lp, "## What Works")
@@ -6429,14 +6469,15 @@ code: |
           table.insert(lp, "## Open Questions")
           table.insert(lp, "- [question]: [what we've tried], [what hasn't been tried]")
           table.insert(lp, "## Current Understanding")
-          table.insert(lp, "[1-2 paragraph synthesis of where we are and what to try next]\n")
+          table.insert(lp, "- 2-3 bullets only summarizing where we are and what to try next\n")
           table.insert(lp, "Rules:")
           table.insert(lp, "- PRESERVE valid existing lessons, ADDING new evidence citations")
           table.insert(lp, "- ADD new lessons discovered this cycle")
           table.insert(lp, "- UPDATE confidence levels based on accumulated evidence")
           table.insert(lp, "- For 'doesn't work' items, note conditions under which they MIGHT work")
           table.insert(lp, "- MOVE lessons between sections if new evidence changes your assessment")
-          table.insert(lp, "- Total document MUST be under 3000 characters")
+          table.insert(lp, "- Use bullets, not paragraphs")
+          table.insert(lp, "- Total document MUST be under 1500 characters")
           table.insert(lp, "- Be specific: name exact config changes, not vague categories")
           -- Contradiction trend instructions (added when we have per-cycle trend data)
           local has_trend_data = false
@@ -6468,11 +6509,11 @@ code: |
           end
 
           Tool.reset()
-          code_editor.clear_history()
-          guard_context_budget(code_editor)
-          local lessons_ok, lessons_err = safe_editor_call(table.concat(lp, "\n"), nil)
+          report_writer.clear_history()
+          guard_context_budget(report_writer)
+          local lessons_ok, lessons_err = safe_agent_call(report_writer, "report_writer", table.concat(lp, "\n"), nil)
           if lessons_ok then
-            local lessons_text = code_editor.output or ""
+            local lessons_text = report_writer.output or ""
             State.set("accumulated_lessons", lessons_text)
             diag(string.format("Accumulated lessons updated (%d chars)", #lessons_text))
           else
@@ -6532,21 +6573,18 @@ code: |
         end
         table.insert(summary_parts, "Write exactly two sections:\n")
         table.insert(summary_parts, "## PROGRESS")
-        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing what the optimization has learned across ALL cycles.")
-        table.insert(summary_parts, "What improved? What patterns are confirmed? What is blocking further gains?")
-        table.insert(summary_parts, "Write in plain English — no jargon. A non-technical stakeholder should understand it.\n")
+        table.insert(summary_parts, "Maximum 4 sentences summarizing what the optimization has learned across all cycles.")
+        table.insert(summary_parts, "Use only the compact cycle summaries below. Plain English only.\n")
         table.insert(summary_parts, "## NEXT STEPS")
-        table.insert(summary_parts, "One paragraph (3-5 sentences) summarizing the most important actions needed right now.")
-        table.insert(summary_parts, "Combine and prioritize across all cycles. Who needs to do what, and why?")
-        table.insert(summary_parts, "Focus on what matters NOW — not everything that was ever suggested.\n")
-        table.insert(summary_parts, "Keep each section to ONE paragraph. No bullet points. No sub-headers.")
+        table.insert(summary_parts, "Maximum 4 sentences summarizing the most important actions needed right now.")
+        table.insert(summary_parts, "Prioritize only what matters now. No bullet points. No sub-headers.")
 
         Tool.reset()
-        code_editor.clear_history()
-        guard_context_budget(code_editor)
-        local sum_ok, sum_err = safe_editor_call(table.concat(summary_parts, "\n"), nil)
+        report_writer.clear_history()
+        guard_context_budget(report_writer)
+        local sum_ok, sum_err = safe_agent_call(report_writer, "report_writer", table.concat(summary_parts, "\n"), nil)
         if sum_ok then
-          local sum_text = code_editor.output or ""
+          local sum_text = report_writer.output or ""
           local sum_prog = sum_text:match("## PROGRESS\n(.-)\n## NEXT STEPS")
           local sum_next = sum_text:match("## NEXT STEPS\n(.*)")
           State.set("procedure_summary", {
@@ -7007,10 +7045,10 @@ code: |
       end
     end
 
-    render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 5)
-    render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 5)
+    render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 2)
+    render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 2)
     if #other_items > 0 then
-      render_items("OTHER MISCLASSIFICATIONS", other_items, 3)
+      render_items("OTHER MISCLASSIFICATIONS", other_items, 1)
     end
 
     table.insert(parts, "These are items remaining after optimization. The root causes and fixability ratings")
@@ -7048,7 +7086,7 @@ code: |
     local history_text = build_version_history(iterations, baseline_version_id, recent_baseline_metrics, regression_baseline_metrics, last_accepted_version_id)
     if has_text(history_text) then
       table.insert(full_ctx_parts, "=== CYCLE HISTORY ===")
-      table.insert(full_ctx_parts, trunc(history_text, 5000))
+      table.insert(full_ctx_parts, trunc(history_text, 2000))
       table.insert(full_ctx_parts, "")
     end
 
@@ -7058,17 +7096,10 @@ code: |
     end
 
     local kc = State.get("known_contradictions")
-    if kc and has_text(kc.summary) then
+    local compact_contra = build_compact_contradiction_summary(kc, 3)
+    if has_text(compact_contra) then
       table.insert(full_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
-      local total_kc = kc.total_items_analyzed or 0
-      local contra_kc = kc.contradictions_found or 0
-      if total_kc > 0 and contra_kc > 0 then
-        local ceiling = math.max(0, (total_kc - contra_kc) / total_kc - 0.05)
-        table.insert(full_ctx_parts, string.format(
-          "OPTIMIZATION CEILING: With %d contradictions in %d items (%.0f%%), ceiling ~%.2f",
-          contra_kc, total_kc, contra_kc / total_kc * 100, ceiling))
-      end
-      table.insert(full_ctx_parts, kc.summary)
+      table.insert(full_ctx_parts, compact_contra)
       table.insert(full_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
       table.insert(full_ctx_parts, "")
     end
@@ -7084,18 +7115,18 @@ code: |
     end
 
     if has_text(hypothesis_eff_text) then
-      table.insert(full_ctx_parts, hypothesis_eff_text)
+      table.insert(full_ctx_parts, trunc(hypothesis_eff_text, 1500))
       table.insert(full_ctx_parts, "")
     end
 
     local insights = State.get("cycle_insights")
     if insights and type(insights) == "table" and #insights > 0 then
       table.insert(full_ctx_parts, "=== AGENT SYNTHESIS ACROSS CYCLES (most recent first) ===")
-      for i = #insights, math.max(1, #insights - 4), -1 do
+      for i = #insights, math.max(1, #insights - 2), -1 do
         local ins = insights[i]
         if ins and has_text(ins.analysis) then
           table.insert(full_ctx_parts, string.format("--- Cycle %d Analysis ---", ins.cycle or i))
-          table.insert(full_ctx_parts, trunc(ins.analysis, 2000))
+          table.insert(full_ctx_parts, trunc(ins.analysis, 800))
         end
       end
       table.insert(full_ctx_parts, "=== END CYCLE INSIGHTS ===")
@@ -7108,13 +7139,13 @@ code: |
   Human.notify({message = "  Phase 1: Generating executive summary...", level = "info"})
   local executive_summary_text = "(executive summary not available)"
   pcall(function()
-    code_editor.clear_history()
-    code_editor.history:add({role = "system", content = full_ctx})
+    report_writer.clear_history()
+    report_writer.history:add({role = "system", content = full_ctx})
 
     local exec_prompt = table.concat({
       "=== END-OF-RUN EXECUTIVE SUMMARY ===\n",
       "\nYou are writing a brief executive summary of an optimization run for any audience",
-      "\n— technical or non-technical. Write exactly 4-6 sentences.",
+      "\n— technical or non-technical. Write exactly 4 sentences.",
       "\nNo markdown headers. No bullet points. Flowing prose.",
       "\nThis should be copy-paste ready for a brief email to stakeholders.",
       "\n\nCover in this order:",
@@ -7122,12 +7153,12 @@ code: |
       "\n2. How many cycles ran and what the overall trajectory was.",
       "\n3. The single main reason we cannot improve further (specific, not generic).",
       "\n4. What decisions or clarifications are needed from subject-matter experts to unblock next steps.",
-      "\n\nWrite nothing else. Just the 4-6 sentences."
+      "\n\nWrite nothing else. Just the 4 sentences."
     }, "")
 
-    guard_context_budget(code_editor)
-    local ok, err = safe_editor_call(exec_prompt, nil)
-    executive_summary_text = code_editor.output or "(no executive summary generated)"
+    guard_context_budget(report_writer)
+    local ok, err = safe_agent_call(report_writer, "report_writer", exec_prompt, nil)
+    executive_summary_text = report_writer.output or "(no executive summary generated)"
     if not ok then
       executive_summary_text = "Executive summary generation failed: " .. tostring(err)
     end
@@ -7137,24 +7168,23 @@ code: |
   Human.notify({message = "  Phase 2: Generating lab report...", level = "info"})
   local lab_report_text = "(lab report not available)"
   pcall(function()
-    code_editor.clear_history()
-    code_editor.history:add({role = "system", content = full_ctx})
+    report_writer.clear_history()
+    report_writer.history:add({role = "system", content = full_ctx})
 
     local lab_prompt = table.concat({
       "=== END-OF-RUN LAB REPORT ===\n",
       "\nYou are writing a technical report for operators and AI agents who will work on",
       "\nthis score next. This document feeds the next optimization run as prior_run_prescription.",
       "\nInclude ONLY actions that lab operators or AI agents can take without SME input.",
-      "\n\nWrite a complete technical analysis. Readable in under 3 minutes.",
+      "\n\nKeep the entire report under 450 words.",
       "\nDo not pad. Do not repeat the same finding in multiple sections.",
+      "\nUse exactly the sections below and nothing else.",
       "\n\nStructure your output with THREE top-level sections:",
       "\n\n## SUMMARY",
-      "\n5-7 bullets, one sentence each. Cover: overall trajectory (AC1 deltas, cycles run,",
-      "\nstop reason), where improvements stalled and why, whether the two datasets",
-      "\ndiverged or moved together, the single most important technical blocking factor,",
-      "\nand the realistic ceiling estimate.",
+      "\nExactly 4 bullets, one sentence each. Cover: overall trajectory, stall reason,",
+      "\ndataset divergence or alignment, and the realistic ceiling estimate.",
       "\n\n## ANALYSIS",
-      "\nFour short sections. Each must be 2-5 sentences — no more.",
+      "\nExactly 3 short subsections. Each must be exactly 2 sentences.",
       "\n\n### What happened",
       "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
       "\nand the stop reason. Include the key AC1 numbers.",
@@ -7164,21 +7194,15 @@ code: |
       "\nconflict is between what the model does and what reviewers expect.",
       "\nIf the datasets diverged, explain what that reveals about the ground truth.",
       "\n\n### Error patterns",
-      "\nDescribe 2-3 distinct patterns across the residual errors.",
-      "\nFor each pattern (one sentence): what the model does, what reviewers expect,",
-      "\nwhether it is a guideline contradiction, a policy gap, or a noisy label.",
-      "\nDo NOT list individual items. Describe the pattern.",
-      "\n\n### Ceiling",
-      "\nState the realistic maximum AC1 achievable through further optimization,",
-      "\nand the primary reason it cannot go higher. Cite the contradiction rate",
-      "\nor fixable% if available. One or two sentences.",
+      "\nDescribe the top 3 residual patterns total. Keep this subsection to exactly 2 sentences.",
+      "\nName whether each pattern is a contradiction, policy gap, or noisy label cluster.",
       "\n\n## NEXT ACTIONS (LAB ONLY)",
       "\nActions that lab operators or AI agents can take without SME input.",
       "\nInclude ONLY things under lab control: prompt engineering, model swaps,",
       "\narchitecture changes, data quality fixes.",
       "\nDo NOT include anything requiring a policy decision — those go in the SME Agenda.",
       "\nFormat each as: [PRIORITY] [WHAT]: [evidence/rationale]",
-      "\nCap at 5 items. No padding.",
+      "\nCap at 3 items. No padding.",
       "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
       "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
       "\nList them here. For each item:",
@@ -7190,24 +7214,25 @@ code: |
 
     -- Also include the feedback landscape diagnostic for label analysis
     local kc = State.get("known_contradictions")
-    if kc and has_text(kc.summary) then
-      code_editor.history:add({role = "system", content =
-        "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. kc.summary
+    local compact_contra = build_compact_contradiction_summary(kc, 3)
+    if has_text(compact_contra) then
+      report_writer.history:add({role = "system", content =
+        "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. compact_contra
         .. "\n=== END CONTRADICTION DETAILS ==="})
     end
     local final_diag = State.get("recent_landscape_diagnostic")
-    if final_diag and has_text(final_diag.full_report) then
-      code_editor.history:add({role = "system", content =
+    if final_diag and has_text(final_diag.compact_summary) then
+      report_writer.history:add({role = "system", content =
         "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
         .. string.format("(Generated from %d cycles; %d notable items)\n",
             final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0)
-        .. final_diag.full_report
+        .. trunc(final_diag.compact_summary, 800)
         .. "\n=== END FEEDBACK LANDSCAPE DIAGNOSTIC ==="})
     end
 
-    guard_context_budget(code_editor)
-    local ok, err = safe_editor_call(lab_prompt, nil)
-    lab_report_text = code_editor.output or "(no lab report generated)"
+    guard_context_budget(report_writer)
+    local ok, err = safe_agent_call(report_writer, "report_writer", lab_prompt, nil)
+    lab_report_text = report_writer.output or "(no lab report generated)"
     if not ok then
       lab_report_text = "Lab report generation failed: " .. tostring(err)
     end
@@ -7217,7 +7242,7 @@ code: |
   Human.notify({message = "  Phase 3: Generating SME agenda...", level = "info"})
   local sme_agenda_text = "(SME agenda not available)"
   pcall(function()
-    code_editor.clear_history()
+    report_writer.clear_history()
 
     -- SME Agenda gets: executive summary + lab report + contradiction details + feedback landscape
     local sme_ctx_parts = {}
@@ -7227,32 +7252,33 @@ code: |
     table.insert(sme_ctx_parts, "")
 
     table.insert(sme_ctx_parts, "=== LAB REPORT ===")
-    table.insert(sme_ctx_parts, trunc(lab_report_text, 6000))
+    table.insert(sme_ctx_parts, trunc(lab_report_text, 600))
     table.insert(sme_ctx_parts, "=== END LAB REPORT ===")
     table.insert(sme_ctx_parts, "")
 
     local kc = State.get("known_contradictions")
-    if kc and has_text(kc.summary) then
+    local compact_contra = build_compact_contradiction_summary(kc, 3)
+    if has_text(compact_contra) then
       table.insert(sme_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
-      table.insert(sme_ctx_parts, kc.summary)
+      table.insert(sme_ctx_parts, compact_contra)
       table.insert(sme_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
       table.insert(sme_ctx_parts, "")
     end
 
     local final_diag = State.get("recent_landscape_diagnostic")
-    if final_diag and has_text(final_diag.full_report) then
+    if final_diag and has_text(final_diag.compact_summary) then
       table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
-      table.insert(sme_ctx_parts, final_diag.full_report)
+      table.insert(sme_ctx_parts, trunc(final_diag.compact_summary, 600))
       table.insert(sme_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
       table.insert(sme_ctx_parts, "")
     end
 
     if has_text(residual_errors_text) then
-      table.insert(sme_ctx_parts, residual_errors_text)
+      table.insert(sme_ctx_parts, trunc(residual_errors_text, 900))
       table.insert(sme_ctx_parts, "")
     end
 
-    code_editor.history:add({role = "system", content = table.concat(sme_ctx_parts, "\n")})
+    report_writer.history:add({role = "system", content = table.concat(sme_ctx_parts, "\n")})
 
     -- Extract score name for the agenda header if available
     local score_name_for_agenda = score_id or "Score"
@@ -7271,7 +7297,8 @@ code: |
       "\n- Each item is a question to answer, not a finding to read.",
       "\n- Include: what the question is, why it matters (in plain language), concrete examples.",
       "\n- Prioritize by how many items the decision would unblock.",
-      "\n- Maximum 5 agenda items — pick the most important ones.",
+      "\n- Maximum 3 agenda items — pick the most important ones.",
+      "\n- Keep the entire agenda under 150 words total.",
       "\n- Use plain English throughout.",
       "\n- Do NOT include anything the lab can fix without SME input.",
       "\n- Do NOT explain what agreement or AC1 means.",
@@ -7284,14 +7311,14 @@ code: |
       "\n**Options:** (a) first option (b) second option (c) third option if applicable",
       "\n**Resolves:** ~N disputed reviews",
       "\n\n### Title of the second decision",
-      "\n(repeat the same structure for each item, up to 5 total)",
+      "\n(repeat the same structure for each item, up to 3 total)",
       "\n\n## Background",
       "\n1-2 sentences only: overall performance trend in plain language"
     }, "")
 
-    guard_context_budget(code_editor)
-    local ok, err = safe_editor_call(sme_prompt, nil)
-    sme_agenda_text = code_editor.output or "(no SME agenda generated)"
+    guard_context_budget(report_writer)
+    local ok, err = safe_agent_call(report_writer, "report_writer", sme_prompt, nil)
+    sme_agenda_text = report_writer.output or "(no SME agenda generated)"
     if not ok then
       sme_agenda_text = "SME agenda generation failed: " .. tostring(err)
     end

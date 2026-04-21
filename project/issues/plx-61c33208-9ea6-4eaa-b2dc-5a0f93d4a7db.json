@@ -1,0 +1,31 @@
+{
+  "id": "plx-61c33208-9ea6-4eaa-b2dc-5a0f93d4a7db",
+  "title": "Fix procedure chat toolResponse + actionable score update errors",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "codex",
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6f1dfcf9-1e39-44cb-a86f-957a4a61e7a3",
+      "author": "ryan",
+      "text": "Implementing: (1) MCP plexus_procedure_chat_messages should surface toolResponse stored on TOOL_CALL rows and count responses correctly, including list-query selecting toolResponse; (2) ScoreEditorToolset.submit_score_version should unwrap MCP envelopes from plexus_score_update and return actionable YAML/schema validation errors instead of 'unexpected format'; plus targeted tests.",
+      "created_at": "2026-04-21T12:40:12.175211Z"
+    },
+    {
+      "id": "79f9386d-a3dd-40a2-bd07-34f467634f21",
+      "author": "ryan",
+      "text": "Implemented fixes + tests. MCP plexus_procedure_chat_messages now selects toolResponse in list query and surfaces tool_response on TOOL_CALL rows, with tool_calls/tool_responses/missing_responses counted from inline toolResponse + legacy child responses. ScoreEditorToolset.submit_score_version now unwraps plexus_score_update MCP envelope and returns actionable validation errors. Tests: pytest -q MCP/tools/procedure/procedures_test.py -k chat_messages; pytest -q plexus/cli/procedure/test_score_editor_toolset.py",
+      "created_at": "2026-04-21T12:44:07.751144Z"
+    }
+  ],
+  "created_at": "2026-04-21T12:40:06.736755Z",
+  "updated_at": "2026-04-21T12:44:07.751144Z",
+  "closed_at": null,
+  "custom": {}
+}
