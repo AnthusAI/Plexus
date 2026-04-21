@@ -914,6 +914,19 @@ def _find_report_by_task_id(
     return None
 
 
+def _find_report_by_cache_key(
+    *,
+    cache_key: str,
+    account_id: str,
+    client: PlexusDashboardClient,
+) -> Optional[Report]:
+    for report in Report.list_by_account_id(account_id, client, limit=200, max_items=200):
+        parameters = report.parameters if isinstance(report.parameters, dict) else {}
+        if parameters.get("_cache_key") == cache_key:
+            return report
+    return None
+
+
 def _load_programmatic_report_result(
     *,
     report: Report,
@@ -1480,7 +1493,11 @@ def _check_db_cache(
     """
     from datetime import timedelta
 
-    existing = Report.get_by_name(cache_key, account_id, client)
+    existing = _find_report_by_cache_key(
+        cache_key=cache_key,
+        account_id=account_id,
+        client=client,
+    )
     if not existing or not existing.createdAt:
         return None
     age = datetime.now(timezone.utc) - existing.createdAt
