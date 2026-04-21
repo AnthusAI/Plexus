@@ -1,0 +1,31 @@
+{
+  "id": "plx-0c45b58c-0425-4935-8b2e-58d1042b42a8",
+  "title": "Make dashboard dev script web-only and require explicit dispatcher start",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-88d8f8c6-72b2-4f34-8a65-9818f9673ab7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4afd818b-3515-4507-a34c-26eb78269f6b",
+      "author": "derek",
+      "text": "Starting implementation. Plan: change dashboard npm scripts so dev starts web only, add explicit dispatcher script (dev:dispatch), and update local-dev docs to match. Then run targeted validation and push.",
+      "created_at": "2026-04-21T17:55:01.078195557Z"
+    },
+    {
+      "id": "1d588ce8-0861-4615-ae4e-deede730da31",
+      "author": "derek",
+      "text": "Implemented. Updated dashboard scripts so  now runs web only and dispatcher requires explicit . Updated dashboard/README.md and root README.md to document the new local workflow and avoid accidental local dispatcher collisions.",
+      "created_at": "2026-04-21T17:55:42.573150014Z"
+    }
+  ],
+  "created_at": "2026-04-21T17:54:51.922012328Z",
+  "updated_at": "2026-04-21T17:55:42.573150014Z",
+  "closed_at": "2026-04-21T17:55:42.111195137Z",
+  "custom": {}
+}
