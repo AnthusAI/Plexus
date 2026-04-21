@@ -22,10 +22,16 @@
       "author": "derek",
       "text": "Implemented fixes on bugfix/code-quality-unused-symbols: removed unused handleCloseFeedbackAlignment function, removed unused FeedbackAlignment import in story, and removed unused patch import in plexus/Scorecard_test.py. Validation: npm test -- --runTestsByPath lib/__tests__/parameter-parser.test.ts (pass); python -m pytest -q plexus/Scorecard_test.py -k 'not integration' (9 passed).",
       "created_at": "2026-04-21T19:05:04.556272235Z"
+    },
+    {
+      "id": "9c042b09-3d30-4712-b7d3-a07a28d6a2ef",
+      "author": "derek",
+      "text": "Opened fix PR to develop: https://github.com/AnthusAI/Plexus/pull/194 . This branch contains only the three unused-symbol removals requested by github-code-quality plus Kanbus artifacts.",
+      "created_at": "2026-04-21T19:05:41.191859245Z"
     }
   ],
   "created_at": "2026-04-21T19:04:06.607182990Z",
-  "updated_at": "2026-04-21T19:05:04.556272235Z",
+  "updated_at": "2026-04-21T19:05:41.191859245Z",
   "closed_at": null,
   "custom": {}
 }
