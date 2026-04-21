@@ -466,6 +466,19 @@ code: |
     return nil, value
   end
 
+  local function safe_encode(value)
+    if value == nil then
+      return nil
+    end
+    local ok, encoded = pcall(function()
+      return Json.encode(value)
+    end)
+    if ok then
+      return encoded
+    end
+    return string.format("<encode_error: %s>", tostring(encoded))
+  end
+
   local function safe_get_metric(metrics, name)
     if type(metrics) ~= "table" then return nil end
     for _, m in ipairs(metrics) do
@@ -2777,7 +2790,6 @@ code: |
   -- are used after ::start_cycling:: must be declared before the goto.)
   -- ================================================================
   local dataset_id              = nil
-  local smoke_test_item_ids     = nil
   local champion_version_id     = nil
   local regression_baseline       = nil
   local regression_baseline_id    = nil
@@ -3031,7 +3043,6 @@ code: |
     regression_baseline_rca   = State.get("last_regression_rca") or {}
     recent_baseline_rca   = State.get("last_recent_rca") or {}
     regression_available      = regression_baseline_metrics ~= nil
-    smoke_test_item_ids     = State.get("smoke_test_item_ids")
 
     -- Re-pull current config from last accepted version
     do
@@ -3149,8 +3160,6 @@ code: |
 
   State.set("dataset_id", dataset_id)
   Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
-
-  -- smoke_test_item_ids is pre-declared above the continuation check; populated below.
 
   -- Pull starting version (champion or specified start_version)
   local pull_args = {
@@ -3461,41 +3470,6 @@ code: |
 
   -- Consume feedback contradictions results (blocks until background dispatch finishes)
   pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = false})
-
-  -- Fetch smoke test items from the regression dataset (regression baseline eval).
-  -- Using items from the actual regression dataset ensures they are EDU items
-  -- with real school metadata, so the LLM path is exercised during smoke tests.
-  if regression_baseline_id then
-    local ids = {}
-    -- Sample at three spread offsets to get variety across the dataset
-    -- Use small offsets since some evals have 50+ items; avoid going past end
-    for _, offset in ipairs({0, 15, 30}) do
-      local ok, res = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
-        evaluation_id = regression_baseline_id,
-        limit         = 1,
-        offset        = offset
-      })
-      -- Tool returns {"score_results": [...], "pagination": {...}, ...}
-      local sr = res and res.score_results
-      if ok and sr and type(sr) == "table" and sr[1] and sr[1].item_id then
-        ids[#ids+1] = sr[1].item_id
-      end
-    end
-    if #ids > 0 then
-      smoke_test_item_ids = table.concat(ids, ",")
-      Human.notify({message = string.format(
-        "Smoke test items from regression dataset (%d): %s", #ids, smoke_test_item_ids),
-        level = "info"})
-    else
-      Human.notify({message = "WARNING: could not fetch smoke test items from baseline eval — smoke tests will be skipped",
-        level = "warning"})
-    end
-  else
-    Human.notify({message = "WARNING: no regression baseline available — smoke tests will be skipped",
-      level = "warning"})
-  end
-  -- Persist so continuation runs can restore it
-  State.set("smoke_test_item_ids", smoke_test_item_ids)
 
   -- Early exit: if feedback alignment is already perfect or no RCA data
   local fb_rca_topics = (type(recent_baseline_rca) == "table" and recent_baseline_rca.topics) or {}
@@ -4370,77 +4344,46 @@ code: |
               "    Hypothesis %d: version %s created (step %d) — smoke testing...",
               h, candidate_id, react_step), level = "info"})
 
+            local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
+              scorecard_identifier = params.scorecard,
+              score_identifier     = params.score,
+              version              = candidate_id,
+              samples              = 3
+            })
             local smoke_passed = false
             local smoke_detail = ""
-
-            if not smoke_test_item_ids then
-              smoke_passed = true
-              Human.notify({message = "    Smoke test skipped (no item IDs available)", level = "warning"})
-            end
-
-            local smoke_ok, smoke = true, nil
-            if smoke_test_item_ids then
-              smoke_ok, smoke = pcall(call_plexus_tool, "plexus_predict", {
-                scorecard_name = params.scorecard,
-                score_name     = params.score,
-                version        = candidate_id,
-                item_ids       = smoke_test_item_ids,
-                include_trace  = false,
-                no_cache       = true
-              })
-              if not smoke_ok then
-                smoke_detail = "Smoke test call error: " .. tostring(smoke)
-                smoke = nil
-              end
-            end
-
-            -- Pass if at least one prediction reached the LLM (value is not ERROR/nil/NA)
-            if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
-              local all_details = {}
-              for _, pred in ipairs(smoke.predictions) do
-                local sc = pred.scores and pred.scores[1]
-                if sc and sc.value ~= "ERROR" and sc.value ~= nil and sc.value ~= "NA" then
-                  smoke_passed = true
-                  Human.notify({message = string.format(
-                    "    Smoke test PASSED (item=%s value=%s)",
-                    tostring(pred.item_id or "?"), tostring(sc.value)), level = "info"})
-                  diag(string.format("Hyp %d smoke PASSED (version=%s item=%s value=%s)",
-                    h, tostring(candidate_id), tostring(pred.item_id or "?"), tostring(sc.value)))
-                  break
-                else
-                  local ed = sc and sc.error_details
-                  local detail = (sc and sc.explanation) or (ed and ed.error_message)
-                    or string.format("value=%s", tostring(sc and sc.value or "nil"))
-                  if ed and ed.traceback then
-                    detail = detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
-                  end
-                  all_details[#all_details+1] = string.format("item=%s: %s",
-                    tostring(pred.item_id or "?"), detail)
+            if not test_ok then
+              smoke_detail = "Score test call error: " .. tostring(test_result)
+            elseif type(test_result) ~= "table" then
+              smoke_detail = "Score test returned non-table response: " .. tostring(test_result)
+            else
+              smoke_passed = test_result.passed == true
+              if not smoke_passed then
+                local base = tostring(test_result.message or "Score test failed")
+                local fc = tostring(test_result.failure_code or "unknown")
+                smoke_detail = string.format("%s (failure_code=%s)", base, fc)
+                if test_result.failures and #test_result.failures > 0 then
+                  smoke_detail = smoke_detail .. "\n\nFailure details:\n" .. tostring(safe_encode(test_result.failures) or "[]")
+                elseif test_result.predictions and #test_result.predictions > 0 then
+                  smoke_detail = smoke_detail .. "\n\nPrediction details:\n" .. tostring(safe_encode(test_result.predictions) or "[]")
                 end
               end
-              if not smoke_passed then
-                smoke_detail = "All smoke test items failed LLM invocation:\n" .. table.concat(all_details, "\n")
-              end
-            elseif smoke and smoke.error then
-              smoke_detail = "Prediction call failed: " .. tostring(smoke.error)
-            elseif smoke and not smoke_passed then
-              smoke_detail = "Prediction returned no results: " .. (safe_encode(smoke) or "{}")
             end
 
             if smoke_passed then
               version_id = candidate_id
-              diag(string.format("Hyp %d smoke passed, setting version_id=%s", h, tostring(candidate_id)))
+              diag(string.format("Hyp %d score test passed, setting version_id=%s", h, tostring(candidate_id)))
               local ok_a, vn = pcall(function() return submit_call.args.version_note end)
               if ok_a and has_text(vn) then hyp_done_reason = vn end
               hypothesis_done = true
             else
               Human.notify({message = string.format(
-                "    Hypothesis %d: smoke test FAILED — %s",
+                "    Hypothesis %d: score test FAILED — %s",
                 h, trunc(smoke_detail, 120)), level = "warning"})
-              diag(string.format("Hyp %d smoke FAILED (version=%s): %s",
+              diag(string.format("Hyp %d score test FAILED (version=%s): %s",
                 h, tostring(candidate_id), trunc(smoke_detail, 200)))
               smoke_test_failure = string.format(
-                "Version %s was created but FAILED the smoke test.\n\nError detail:\n%s\n\n"
+                "Version %s was created but FAILED the mechanical score test.\n\nError detail:\n%s\n\n"
                 .. "The score_config.yaml has an execution error. Diagnose and fix it, "
                 .. "then call submit_score_version again.",
                 candidate_id, smoke_detail)
@@ -4913,60 +4856,30 @@ code: |
               Human.notify({message = string.format(
                 "  %s version %s created — smoke testing...", strategy_label, candidate_id), level = "info"})
 
+              local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
+                scorecard_identifier = params.scorecard,
+                score_identifier     = params.score,
+                version              = candidate_id,
+                samples              = 3
+              })
               local smoke_passed = false
               local smoke_detail = ""
-
-              if not smoke_test_item_ids then
-                smoke_passed = true
-                Human.notify({message = "    Smoke test skipped (no item IDs)", level = "warning"})
-              end
-
-              local smoke_ok, smoke = true, nil
-              if smoke_test_item_ids then
-                smoke_ok, smoke = pcall(call_plexus_tool, "plexus_predict", {
-                  scorecard_name = params.scorecard,
-                  score_name     = params.score,
-                  version        = candidate_id,
-                  item_ids       = smoke_test_item_ids,
-                  include_trace  = false,
-                  no_cache       = true
-                })
-                if not smoke_ok then
-                  smoke_detail = "Smoke test call error: " .. tostring(smoke)
-                  smoke = nil
-                end
-              end
-
-              if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
-                local all_details = {}
-                for _, pred in ipairs(smoke.predictions) do
-                  local sc = pred.scores and pred.scores[1]
-                  if sc and sc.value ~= "ERROR" and sc.value ~= nil and sc.value ~= "NA" then
-                    smoke_passed = true
-                    Human.notify({message = string.format(
-                      "    Smoke test PASSED (item=%s value=%s)",
-                      tostring(pred.item_id or "?"), tostring(sc.value)), level = "info"})
-                    diag(string.format("%s smoke PASSED (version=%s item=%s value=%s)",
-                      strategy_label, tostring(candidate_id), tostring(pred.item_id or "?"), tostring(sc.value)))
-                    break
-                  else
-                    local ed = sc and sc.error_details
-                    local detail = (sc and sc.explanation) or (ed and ed.error_message)
-                      or string.format("value=%s", tostring(sc and sc.value or "nil"))
-                    if ed and ed.traceback then
-                      detail = detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
-                    end
-                    all_details[#all_details+1] = string.format("item=%s: %s",
-                      tostring(pred.item_id or "?"), detail)
+              if not test_ok then
+                smoke_detail = "Score test call error: " .. tostring(test_result)
+              elseif type(test_result) ~= "table" then
+                smoke_detail = "Score test returned non-table response: " .. tostring(test_result)
+              else
+                smoke_passed = test_result.passed == true
+                if not smoke_passed then
+                  local base = tostring(test_result.message or "Score test failed")
+                  local fc = tostring(test_result.failure_code or "unknown")
+                  smoke_detail = string.format("%s (failure_code=%s)", base, fc)
+                  if test_result.failures and #test_result.failures > 0 then
+                    smoke_detail = smoke_detail .. "\n\nFailure details:\n" .. tostring(safe_encode(test_result.failures) or "[]")
+                  elseif test_result.predictions and #test_result.predictions > 0 then
+                    smoke_detail = smoke_detail .. "\n\nPrediction details:\n" .. tostring(safe_encode(test_result.predictions) or "[]")
                   end
                 end
-                if not smoke_passed then
-                  smoke_detail = "All smoke test items failed LLM invocation:\n" .. table.concat(all_details, "\n")
-                end
-              elseif smoke and smoke.error then
-                smoke_detail = "Prediction call failed: " .. tostring(smoke.error)
-              elseif smoke and not smoke_passed then
-                smoke_detail = "Prediction returned no results"
               end
 
               if smoke_passed then
@@ -4979,9 +4892,9 @@ code: |
                 done = true
               else
                 Human.notify({message = string.format(
-                  "  %s smoke test FAILED: %s", strategy_label, trunc(smoke_detail, 120)), level = "warning"})
+                  "  %s score test FAILED: %s", strategy_label, trunc(smoke_detail, 120)), level = "warning"})
                 smoke_failure = string.format(
-                  "Version %s was created but FAILED the smoke test.\n\nError detail:\n%s\n\n"
+                  "Version %s was created but FAILED the mechanical score test.\n\nError detail:\n%s\n\n"
                   .. "The score_config.yaml has an execution error. Diagnose and fix it, "
                   .. "then call submit_score_version again.",
                   candidate_id, smoke_detail)
