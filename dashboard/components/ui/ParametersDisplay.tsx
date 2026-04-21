@@ -116,6 +116,14 @@ export function ParametersDisplay({
         } catch {
           return String(value)
         }
+      case 'date_range': {
+        const start = value?.start ? new Date(value.start).toLocaleDateString() : ''
+        const end = value?.end ? new Date(value.end).toLocaleDateString() : ''
+        if (start && end) return `${start} - ${end}`
+        if (start) return `${start} -`
+        if (end) return `- ${end}`
+        return '—'
+      }
       case 'select':
         // Find the option label if options are defined
         if (param.options) {
@@ -230,4 +238,3 @@ export function ParametersDisplay({
     </Card>
   )
 }
-

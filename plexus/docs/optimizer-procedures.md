@@ -332,7 +332,7 @@ After reviewing an optimizer run's output:
    The output of the meeting feeds back as a `hint` or guideline update for the next run.
 
 7. **If run succeeded and promoted champion:**
-   - Verify in production via `plexus_feedback_analysis`
+   - Verify in production via `plexus_feedback_alignment`
    - Monitor for regression over next few days
    - Use findings to inform future runs on related scores
 

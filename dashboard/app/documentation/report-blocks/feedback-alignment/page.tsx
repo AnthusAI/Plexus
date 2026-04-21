@@ -5,12 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import Link from "next/link"
 import { BarChart3, Code, FileText, TrendingUp, AlertCircle } from 'lucide-react'
-import FeedbackAnalysis from '@/components/blocks/FeedbackAnalysis'
+import FeedbackAlignment from '@/components/blocks/FeedbackAlignment'
 
-// Example output data that matches the actual structure from the FeedbackAnalysis block
-const exampleOutput = `# Feedback Analysis Report Output
+// Example output data that matches the actual structure from the FeedbackAlignment block
+const exampleOutput = `# Feedback Alignment Report Output
 # 
-# This is the structured output from a feedback analysis process that:
+# This is the structured output from a feedback alignment process that:
 # 1. Retrieves feedback items from scorecards within a specified time range
 # 2. Analyzes agreement between initial and final answer values using Gwet's AC1 coefficient
 # 3. Provides statistical measures of inter-rater reliability and agreement
@@ -89,20 +89,20 @@ confusion_matrix:
 precision: 84.07
 recall: 92.82
 warning: null
-block_title: "Feedback Analysis"
+block_title: "Feedback Alignment"
 block_description: "Inter-rater Reliability Assessment"`;
 
-export default function FeedbackAnalysisPage() {
+export default function FeedbackAlignmentPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <BarChart3 className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">FeedbackAnalysis</h1>
+          <h1 className="text-3xl font-bold">FeedbackAlignment</h1>
           <Badge variant="secondary">Analytics</Badge>
         </div>
         <p className="text-lg text-muted-foreground leading-relaxed">
-          The FeedbackAnalysis report block analyzes feedback data and calculates inter-rater reliability 
+          The FeedbackAlignment report block analyzes feedback data and calculates inter-rater reliability 
           using Gwet's AC1 agreement coefficient. It provides comprehensive insights into agreement between 
           evaluators and helps assess the quality and consistency of feedback data.
         </p>
@@ -113,7 +113,7 @@ export default function FeedbackAnalysisPage() {
           <h2 className="text-2xl font-semibold mb-4">Overview</h2>
           <div className="space-y-4 text-muted-foreground">
             <p>
-              The FeedbackAnalysis block retrieves FeedbackItem records and compares initial and final 
+              The FeedbackAlignment block retrieves FeedbackItem records and compares initial and final 
               answer values to calculate agreement scores using Gwet's AC1 coefficient. This provides 
               a robust measure of inter-rater reliability that accounts for chance agreement.
             </p>
@@ -170,11 +170,11 @@ export default function FeedbackAnalysisPage() {
           <h2 className="text-2xl font-semibold mb-4">Configuration</h2>
           <div className="space-y-4">
             <p className="text-muted-foreground">
-              Configure the FeedbackAnalysis block in your report configuration:
+              Configure the FeedbackAlignment block in your report configuration:
             </p>
             <div className="bg-muted p-4 rounded-lg font-mono text-sm">
               <div className="text-foreground">```block</div>
-              <div className="text-foreground">class: FeedbackAnalysis</div>
+              <div className="text-foreground">class: FeedbackAlignment</div>
               <div className="text-foreground">scorecard: "1438"          # Required: Call Criteria Scorecard ID</div>
               <div className="text-foreground">days: 30                   # Optional: Number of days to analyze (default: 14)</div>
               <div className="text-foreground">start_date: "2024-01-01"   # Optional: Start date (YYYY-MM-DD format)</div>
@@ -252,7 +252,7 @@ export default function FeedbackAnalysisPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Example Output</h2>
           <p className="text-muted-foreground mb-4">
-            Here's an example of how the FeedbackAnalysis block output appears in a report:
+            Here's an example of how the FeedbackAlignment block output appears in a report:
           </p>
           <Card className="border-2">
             <CardHeader>
@@ -261,18 +261,18 @@ export default function FeedbackAnalysisPage() {
                 Live Example
               </CardTitle>
               <CardDescription>
-                This is a live rendering of the FeedbackAnalysis component using example data
+                This is a live rendering of the FeedbackAlignment component using example data
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="border-t">
-                <FeedbackAnalysis 
+                <FeedbackAlignment 
                   output={exampleOutput}
-                  name="Feedback Analysis Example"
-                  type="FeedbackAnalysis"
+                  name="Feedback Alignment Example"
+                  type="FeedbackAlignment"
                   config={{}}
                   position={0}
-                  id="feedback-analysis-example"
+                  id="feedback-alignment-example"
                 />
               </div>
             </CardContent>

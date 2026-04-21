@@ -808,6 +808,14 @@ class Scorecard:
                     f"BatchProcessingPause caught in get_score_result for {score}"
                 )
                 raise
+            finally:
+                if hasattr(score_instance, "cleanup"):
+                    try:
+                        await score_instance.cleanup()
+                    except Exception as cleanup_error:
+                        logging.error(
+                            f"Error cleaning up score instance for '{score}': {cleanup_error}"
+                        )
         else:
             # Defensive fallback to guarantee list return contract.
             return [

@@ -40,7 +40,7 @@ exploration: |
   Your role is to analyze feedback alignment data and generate testable hypotheses 
   for improving AI score accuracy based on human reviewer corrections.
   
-  You have access to feedback analysis tools that show where human reviewers 
+  You have access to feedback alignment tools that show where human reviewers 
   corrected AI scores, plus detailed item information for understanding the 
   underlying content that caused misalignment.
   

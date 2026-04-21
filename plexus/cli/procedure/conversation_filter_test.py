@@ -629,7 +629,7 @@ class TestManagerAgentConversationFilter:
             MockSystemMessage("System initialization with procedure context"),
             MockHumanMessage("User request: Please analyze the feedback data for medical classification"),
             MockAIMessage("I'll analyze this systematically. Let me start with the overview.", 
-                         tool_calls=[{"name": "plexus_feedback_analysis", "args": {}}]),
+                         tool_calls=[{"name": "plexus_feedback_alignment", "args": {}}]),
             MockToolMessage("Analysis results: Found 45 feedback corrections with 78% accuracy..."),
             MockAIMessage("Based on the analysis, I can see several patterns emerging in the data.")
         ]
@@ -688,8 +688,8 @@ class TestManagerAgentConversationFilter:
         """
         conversation = [
             MockSystemMessage("System setup"),
-            MockAIMessage("I'll use feedback analysis tools.", 
-                         tool_calls=[{"name": "plexus_feedback_analysis", "args": {}}, 
+            MockAIMessage("I'll use feedback alignment tools.", 
+                         tool_calls=[{"name": "plexus_feedback_alignment", "args": {}}, 
                                    {"name": "plexus_feedback_find", "args": {}}]),
             MockToolMessage("Feedback analysis complete"),
             MockAIMessage("Now examining specific cases.", 
@@ -706,7 +706,7 @@ class TestManagerAgentConversationFilter:
         # Check that context message contains tool information
         context_msg = result[1]
         assert "Tools:" in context_msg.content  # Should show tool names in AI message summaries
-        assert "plexus_feedback_analysis" in context_msg.content
+        assert "plexus_feedback_alignment" in context_msg.content
         assert "plexus_feedback_find" in context_msg.content
     
     def test_given_conversation_in_exploration_stage_when_filtering_then_preserves_exploration_context(self):

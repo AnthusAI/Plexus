@@ -8,12 +8,14 @@ from zoneinfo import ZoneInfo
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
-from plexus.dashboard.api.models.score import Score
-from plexus.dashboard.api.models.scorecard import Scorecard
 
 from . import feedback_utils
 from .base import BaseReportBlock
-from .identifier_utils import looks_like_uuid
+from .feedback_scope_resolver import (
+    list_scores_for_scorecard,
+    resolve_score_for_scorecard,
+    resolve_scorecard,
+)
 
 
 @dataclass(frozen=True)
@@ -338,32 +340,8 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             raise ValueError("'end_date' must be after 'start_date'.")
         return start_date, end_date
 
-    async def _resolve_scorecard(self, scorecard_identifier: str) -> Scorecard:
-        scorecard = None
-        if looks_like_uuid(scorecard_identifier):
-            try:
-                scorecard = await self._to_thread(
-                    Scorecard.get_by_id,
-                    id=scorecard_identifier,
-                    client=self.api_client,
-                )
-            except Exception:
-                scorecard = None
-        if not scorecard:
-            for lookup, kwargs in [
-                (Scorecard.get_by_key, {"key": scorecard_identifier}),
-                (Scorecard.get_by_name, {"name": scorecard_identifier}),
-                (Scorecard.get_by_external_id, {"external_id": scorecard_identifier}),
-            ]:
-                try:
-                    scorecard = await self._to_thread(lookup, client=self.api_client, **kwargs)
-                    if scorecard:
-                        break
-                except Exception:
-                    continue
-        if not scorecard:
-            raise ValueError(f"Scorecard not found for identifier '{scorecard_identifier}'.")
-        return scorecard
+    async def _resolve_scorecard(self, scorecard_identifier: str) -> Any:
+        return await resolve_scorecard(self.api_client, scorecard_identifier)
 
     async def _resolve_scores_for_mode(
         self,
@@ -371,96 +349,15 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         score_identifier: Optional[str],
     ) -> List[Dict[str, str]]:
         if score_identifier:
-            is_uuid_like = looks_like_uuid(score_identifier)
-            if is_uuid_like:
-                score = await self._to_thread(
-                    Score.get_by_id,
-                    id=score_identifier,
-                    client=self.api_client,
-                )
-                if score:
-                    resolved_scorecard_id = await self._fetch_scorecard_id_for_section_id(score.sectionId)
-                    if resolved_scorecard_id != scorecard_id:
-                        raise ValueError(
-                            f"Score '{score_identifier}' does not belong to scorecard '{scorecard_id}'."
-                        )
-            else:
-                score = None
-                for lookup, kwargs in [
-                    (Score.get_by_name, {"name": score_identifier, "scorecard_id": scorecard_id}),
-                    (Score.get_by_key, {"key": score_identifier, "scorecard_id": scorecard_id}),
-                    (Score.get_by_external_id, {"external_id": score_identifier, "scorecard_id": scorecard_id}),
-                ]:
-                    try:
-                        score = await self._to_thread(lookup, client=self.api_client, **kwargs)
-                        if score:
-                            break
-                    except Exception:
-                        continue
-            if not score:
-                raise ValueError(
-                    f"Score not found for identifier '{score_identifier}' on scorecard '{scorecard_id}'."
-                )
+            score = await resolve_score_for_scorecard(
+                self.api_client,
+                scorecard_id,
+                score_identifier,
+            )
             return [{"score_id": score.id, "score_name": score.name}]
 
-        return await self._fetch_all_scores_for_scorecard(scorecard_id)
-
-    async def _fetch_scorecard_id_for_section_id(self, section_id: str) -> str:
-        query = """
-        query GetSectionForScore($sectionId: ID!) {
-            getSection(id: $sectionId) {
-                scorecardId
-            }
-        }
-        """
-        result = await self._to_thread(self.api_client.execute, query, {"sectionId": section_id})
-        section = (result or {}).get("getSection") or {}
-        resolved_scorecard_id = section.get("scorecardId")
-        if not resolved_scorecard_id:
-            raise ValueError(f"Could not resolve scorecard for section '{section_id}'.")
-        return str(resolved_scorecard_id)
-
-    async def _fetch_all_scores_for_scorecard(self, scorecard_id: str) -> List[Dict[str, str]]:
-        query = """
-        query GetScorecardScores($scorecardId: ID!) {
-            getScorecard(id: $scorecardId) {
-                sections {
-                    items {
-                        id
-                        scores {
-                            items {
-                                id
-                                name
-                                order
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        """
-        result = await self._to_thread(self.api_client.execute, query, {"scorecardId": scorecard_id})
-        scorecard_data = (result or {}).get("getScorecard") or {}
-
-        raw_scores: List[Dict[str, Any]] = []
-        sections = (scorecard_data.get("sections") or {}).get("items") or []
-        for section_index, section in enumerate(sections):
-            scores = (section.get("scores") or {}).get("items") or []
-            for score_index, score in enumerate(scores):
-                score_id = score.get("id")
-                if not score_id:
-                    continue
-                raw_scores.append(
-                    {
-                        "score_id": score_id,
-                        "score_name": score.get("name") or score_id,
-                        "section_order": section_index,
-                        "score_order": score.get("order", score_index),
-                    }
-                )
-
-        raw_scores.sort(key=lambda item: (item["section_order"], item["score_order"]))
-        return [{"score_id": s["score_id"], "score_name": s["score_name"]} for s in raw_scores]
+        scores = await list_scores_for_scorecard(self.api_client, scorecard_id)
+        return [{"score_id": score.id, "score_name": score.name} for score in scores]
 
     async def _fetch_feedback_items_for_score(
         self,

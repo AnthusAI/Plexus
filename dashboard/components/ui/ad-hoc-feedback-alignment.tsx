@@ -1,9 +1,9 @@
 /**
- * Ad-hoc Feedback Analysis Component
+ * Ad-hoc Feedback Alignment Component
  * 
- * This component provides on-demand feedback analysis for scorecards and scores.
+ * This component provides on-demand feedback alignment for scorecards and scores.
  * It fetches feedback data client-side, computes analysis metrics, and displays
- * the results using the reusable FeedbackAnalysisDisplay component.
+ * the results using the reusable FeedbackAlignmentDisplay component.
  */
 
 "use client";
@@ -15,8 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, RefreshCw, Calendar, BarChart3, AlertCircle, MessageCircleMore } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useFeedbackAnalysis, type FeedbackAnalysisConfig } from '@/hooks/use-feedback-analysis';
-import { FeedbackAnalysisDisplay } from './feedback-analysis-display';
+import { useFeedbackAlignment, type FeedbackAlignmentConfig } from '@/hooks/use-feedback-alignment';
+import { FeedbackAlignmentDisplay } from './feedback-alignment-display';
 import { useAccount } from '@/app/contexts/AccountContext';
 import {
   Select,
@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export interface AdHocFeedbackAnalysisProps {
+export interface AdHocFeedbackAlignmentProps {
   // Pre-configure the analysis
   scorecardId?: string;
   scoreId?: string;
@@ -46,8 +46,8 @@ export interface AdHocFeedbackAnalysisProps {
  * Header with period selector and refresh
  */
 const AnalysisHeader: React.FC<{
-  config: FeedbackAnalysisConfig;
-  onConfigChange: (config: FeedbackAnalysisConfig) => void;
+  config: FeedbackAlignmentConfig;
+  onConfigChange: (config: FeedbackAlignmentConfig) => void;
   onRefresh: () => void;
   isLoading: boolean;
 }> = ({ config, onConfigChange, onRefresh, isLoading }) => {
@@ -90,9 +90,9 @@ const AnalysisHeader: React.FC<{
 
 
 /**
- * Main Ad-hoc Feedback Analysis Component
+ * Main Ad-hoc Feedback Alignment Component
  */
-export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
+export const AdHocFeedbackAlignment: React.FC<AdHocFeedbackAlignmentProps> = ({
   scorecardId,
   scoreId,
   scoreIds,
@@ -105,7 +105,7 @@ export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
 }) => {
   const { selectedAccount } = useAccount();
   
-  const [config, setConfig] = useState<FeedbackAnalysisConfig>({
+  const [config, setConfig] = useState<FeedbackAlignmentConfig>({
     accountId: selectedAccount?.id,
     scorecardId,
     scoreId,
@@ -114,7 +114,7 @@ export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
     days: defaultDays
   });
 
-  const { data, isLoading, error, refresh } = useFeedbackAnalysis(config);
+  const { data, isLoading, error, refresh } = useFeedbackAlignment(config);
 
   // Update accountId when selectedAccount changes
   useEffect(() => {
@@ -123,7 +123,7 @@ export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
     }
   }, [selectedAccount?.id, config.accountId]);
 
-  const handleConfigChange = (newConfig: FeedbackAnalysisConfig) => {
+  const handleConfigChange = (newConfig: FeedbackAlignmentConfig) => {
     setConfig({ ...newConfig, accountId: selectedAccount?.id });
   };
 
@@ -168,7 +168,7 @@ export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
 
       {/* Results */}
       {data && (
-        <FeedbackAnalysisDisplay
+        <FeedbackAlignmentDisplay
           data={data}
           title={title}
           showDateRange={true}
@@ -195,4 +195,4 @@ export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
   );
 };
 
-export default AdHocFeedbackAnalysis;
+export default AdHocFeedbackAlignment;

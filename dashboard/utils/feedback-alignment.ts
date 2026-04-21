@@ -1,5 +1,5 @@
 /**
- * Feedback Analysis Utility Functions
+ * Feedback Alignment Utility Functions
  * 
  * This file contains TypeScript implementations of statistical analysis functions
  * for feedback data, including GWETS AC1 agreement coefficients, accuracy metrics,
