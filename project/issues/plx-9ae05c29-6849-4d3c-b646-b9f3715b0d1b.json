@@ -3,7 +3,7 @@
   "title": "Resolve github-code-quality unused symbol findings on develop->main promotion PR",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,16 @@
       "author": "derek",
       "text": "Opened fix PR to develop: https://github.com/AnthusAI/Plexus/pull/194 . This branch contains only the three unused-symbol removals requested by github-code-quality plus Kanbus artifacts.",
       "created_at": "2026-04-21T19:05:41.191859245Z"
+    },
+    {
+      "id": "13ea96d2-dd96-4268-813c-012455b9340c",
+      "author": "derek",
+      "text": "Work completed and submitted: fix PR #194 (bugfix/code-quality-unused-symbols) addresses all github-code-quality findings cited on promotion PR #193. Moving issue to closed.",
+      "created_at": "2026-04-21T19:22:35.015511720Z"
     }
   ],
   "created_at": "2026-04-21T19:04:06.607182990Z",
-  "updated_at": "2026-04-21T19:05:41.191859245Z",
-  "closed_at": null,
+  "updated_at": "2026-04-21T19:22:35.027672267Z",
+  "closed_at": "2026-04-21T19:22:35.027672267Z",
   "custom": {}
 }
