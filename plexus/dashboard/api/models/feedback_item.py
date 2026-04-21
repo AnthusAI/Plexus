@@ -54,6 +54,9 @@ class FeedbackItem(BaseModel):
         'initialAnswerValue', 'finalAnswerValue', 'initialCommentValue',
         'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName', 'isAgreement', 'isInvalid', 'createdAt', 'updatedAt'
     ]
+    GRAPHQL_ITEM_FIELDS = [
+        'id', 'identifiers', 'externalId', 'description', 'text', 'metadata'
+    ]
     GRAPHQL_RELATIONSHIP_FIELDS = {
         # Relationship fields can be added here if needed
     }

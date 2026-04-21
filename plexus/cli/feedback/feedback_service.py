@@ -19,6 +19,10 @@ from plexus.analysis.metrics.metric import Metric
 logger = logging.getLogger(__name__)
 
 
+def _feedback_item_relationship_fields() -> Dict[str, List[str]]:
+    return {"item": list(FeedbackItem.GRAPHQL_ITEM_FIELDS)}
+
+
 @dataclass
 class FeedbackItemSummary:
     """Token-efficient summary of a feedback item for alignment work."""
@@ -545,7 +549,8 @@ class FeedbackService:
                 client=client,
                 limit=1000,  # Use a large limit to get all matching items
                 filter=filter_condition,
-                fields=FeedbackItem.GRAPHQL_BASE_FIELDS
+                fields=FeedbackItem.GRAPHQL_BASE_FIELDS,
+                relationship_fields=_feedback_item_relationship_fields(),
             )
             
             logger.info(f"Retrieved {len(all_feedback_items)} feedback items from standard query (all time)")
@@ -658,27 +663,11 @@ class FeedbackService:
                 logger.info(f"Retrieved {len(all_feedback_items)} feedback items from GSI")
                 
             except Exception as e:
-                logger.warning(f"GSI query failed, falling back to standard query: {str(e)}")
-                
-                # Fallback to the original method
-                cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-                filter_condition = {
-                    "and": [
-                        {"accountId": {"eq": account_id}},
-                        {"scorecardId": {"eq": scorecard_id}},
-                        {"scoreId": {"eq": score_id}},
-                        {"editedAt": {"ge": cutoff_date}}
-                    ]
-                }
-                
-                all_feedback_items, _ = FeedbackItem.list(
-                    client=client,
-                    limit=1000,  # Use a large limit to get all matching items
-                    filter=filter_condition,
-                    fields=FeedbackItem.GRAPHQL_BASE_FIELDS
-                )
-                
-                logger.info(f"Retrieved {len(all_feedback_items)} feedback items from fallback query")
+                logger.error("GSI query failed for feedback item loading: %s", str(e))
+                raise RuntimeError(
+                    "Failed to load feedback items with related item metadata "
+                    f"for scorecard {scorecard_id}, score {score_id}: {e}"
+                ) from e
         
         # Apply value filters if specified
         if initial_value or final_value:
