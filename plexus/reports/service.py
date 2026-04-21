@@ -669,14 +669,14 @@ def _parse_programmatic_output_mapping(output_data: Any) -> Optional[Dict[str, A
             parsed_json = json.loads(text)
             if isinstance(parsed_json, dict):
                 return parsed_json
-        except Exception:
-            pass
+        except (json.JSONDecodeError, TypeError):
+            logger.debug("Programmatic output is not valid JSON; attempting YAML parse.")
         try:
             parsed_yaml = yaml.safe_load(text)
             if isinstance(parsed_yaml, dict):
                 return parsed_yaml
-        except Exception:
-            pass
+        except (yaml.YAMLError, TypeError):
+            logger.debug("Programmatic output is not valid YAML.")
     return None
 
 

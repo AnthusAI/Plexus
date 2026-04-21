@@ -146,7 +146,6 @@ export const TaskStatus = React.memo(({
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
-  const isFinished = status === 'COMPLETED' || status === 'FAILED' || status === 'STALLED'
   const isError = status === 'FAILED'
 
   // Memoize timing calculations
