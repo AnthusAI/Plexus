@@ -1033,16 +1033,16 @@ def _persist_block_result(
 ) -> None:
     """Persist a block result as Report + ReportBlock records."""
     config_id = _get_programmatic_config_id(account_id, client)
-    display_title, display_subtitle = _derive_programmatic_display_strings(
+    display_title, _ = _derive_programmatic_display_strings(
         cache_key=cache_key,
         block_class=block_class,
         block_config=block_config or {},
         output_data=output_data,
     )
-    display_description = _derive_programmatic_display_description(
-        block_class=block_class,
-        output_data=output_data,
-    )
+    # Single-block programmatic reports should stay concise at the report level.
+    # The block itself already carries detailed scope/metric explanations.
+    report_level_subtitle: Optional[str] = None
+    report_level_description: Optional[str] = None
 
     task = Task.create(
         client=client,
@@ -1056,8 +1056,18 @@ def _persist_block_result(
 
     report_record_name = _build_programmatic_report_record_name(
         title=display_title or _humanize_block_class(block_class),
-        subtitle=display_subtitle,
+        subtitle=report_level_subtitle,
     )
+
+    report_parameters: Dict[str, Any] = {
+        **(block_config or {}),
+        "_cache_key": cache_key,
+        "_display_title": display_title,
+    }
+    if report_level_subtitle:
+        report_parameters["_display_subtitle"] = report_level_subtitle
+    if report_level_description:
+        report_parameters["_display_description"] = report_level_description
 
     report = Report.create(
         client=client,
@@ -1065,13 +1075,7 @@ def _persist_block_result(
         taskId=task.id,
         name=report_record_name,
         reportConfigurationId=config_id,
-        parameters={
-            **(block_config or {}),
-            "_cache_key": cache_key,
-            "_display_title": display_title,
-            "_display_subtitle": display_subtitle,
-            "_display_description": display_description,
-        },
+        parameters=report_parameters,
     )
 
     # Derive a human-readable display name from the class name
@@ -1084,8 +1088,8 @@ def _persist_block_result(
     block_yaml = yaml.dump(block_config, default_flow_style=False).strip()
     markdown_header = _build_programmatic_markdown_header(
         title=display_title or _humanize_block_class(block_class),
-        subtitle=display_subtitle,
-        description=display_description,
+        subtitle=report_level_subtitle,
+        description=report_level_description,
     )
     report_output = (
         f"{markdown_header}\n\n"
