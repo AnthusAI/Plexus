@@ -162,14 +162,28 @@ class FeedbackContradictions(BaseReportBlock):
             )
 
         if not valid_items:
+            date_range = {"start": start_date.isoformat(), "end": end_date.isoformat()}
+            block_description = (
+                "Guideline contradiction analysis for the selected score"
+                if mode == "contradictions"
+                else "Guideline alignment analysis for the selected score"
+            )
             base_output: Dict[str, Any] = {
+                "report_type": "feedback_contradictions",
+                "scope": "single_score",
+                "scorecard_id": scorecard_obj.id,
+                "scorecard_name": scorecard_obj.name,
+                "score_id": score_obj.id,
                 "mode": mode,
                 "score_name": score_obj.name,
+                "date_range": date_range,
                 "total_items_analyzed": 0,
                 "items_vetted": 0,
                 "contradictions_found": 0,
                 "aligned_found": 0,
                 "selected_items_count": 0,
+                "block_title": self.DEFAULT_NAME,
+                "block_description": block_description,
                 "topics": [],
             }
             if mode == "aligned":
@@ -221,14 +235,30 @@ class FeedbackContradictions(BaseReportBlock):
             topics = await self._cluster_topics(selected_items, num_topics, guidelines, mode=mode)
             self._log(f"Produced {len(topics)} topic clusters.")
 
+        block_description = (
+            "Guideline contradiction analysis for the selected score"
+            if mode == "contradictions"
+            else "Guideline alignment analysis for the selected score"
+        )
         output: Dict[str, Any] = {
+            "report_type": "feedback_contradictions",
+            "scope": "single_score",
+            "scorecard_id": scorecard_obj.id,
+            "scorecard_name": scorecard_obj.name,
+            "score_id": score_obj.id,
             "mode": mode,
             "score_name": score_obj.name,
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat(),
+            },
             "total_items_analyzed": len(valid_items),
             "items_vetted": len(analyzed_items),
             "contradictions_found": len(contradictions),
             "aligned_found": len(aligned_items),
             "selected_items_count": len(selected_items),
+            "block_title": self.DEFAULT_NAME,
+            "block_description": block_description,
             "guidelines": guidelines,
             "topics": topics,
             "block_configuration": {
@@ -277,7 +307,8 @@ class FeedbackContradictions(BaseReportBlock):
             "#   - aligned: non-contradicting vetted items\n"
             "#\n"
             "# Key fields:\n"
-            "#   mode, score_name, total_items_analyzed, items_vetted\n"
+            "#   scorecard_name, score_name, mode, date_range\n"
+            "#   total_items_analyzed, items_vetted\n"
             "#   contradictions_found, aligned_found, selected_items_count\n"
             "#   topics[*].exemplars[*].voting/confidence/verdict/associated_dataset_eligible\n"
             "#   aligned mode also includes eligible_associated_feedback_item_ids payload\n"
