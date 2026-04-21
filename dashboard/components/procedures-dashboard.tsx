@@ -227,7 +227,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       let newNextToken: string | null = null
 
       do {
-        const proceduresResult = await getAmplifyClient().graphql({
+        const proceduresResult: any = await getAmplifyClient().graphql({
           query: `
             query ListProcedureByAccountIdAndUpdatedAt(
               $accountId: String!
@@ -274,7 +274,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           }
         })
 
-        const procedureResponse = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt
+        const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt
         proceduresData.push(...(procedureResponse?.items || []))
         newNextToken = procedureResponse?.nextToken ?? null
       } while (newNextToken && proceduresData.length < INITIAL_VISIBLE_PROCEDURE_COUNT)

@@ -176,7 +176,7 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     totalItems?: number
     startedAt?: string
     estimatedCompletionAt?: string
-    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
     dispatchStatus?: 'DISPATCHED'
     celeryTaskId?: string
     workerNodeId?: string
