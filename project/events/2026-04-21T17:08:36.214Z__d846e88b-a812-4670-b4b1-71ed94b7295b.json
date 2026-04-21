@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d846e88b-a812-4670-b4b1-71ed94b7295b",
+  "issue_id": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:08:36.214Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the Agent Misrepresentation score split for the  scorecard, including six decision-element scores, one composite score, and verification that the legacy score remains unchanged.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-c1faf1dd-aee0-4eed-8d68-4fb84d15a7c7",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement Agent Misrepresentation split-score architecture in SelectQuote HCS Medium-Risk"
+  }
+}

@@ -1611,6 +1611,113 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
+    async def plexus_score_test(
+        scorecard_identifier: str,
+        score_identifier: str,
+        version: Optional[str] = None,
+        samples: int = 3,
+        item_ids: Optional[str] = None,
+        days: int = 90,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Run a mechanical score-version test on sampled items.
+
+        Parameters:
+        - scorecard_identifier: Scorecard identifier (ID, key, name, or external ID)
+        - score_identifier: Score identifier (ID, key, name, or external ID)
+        - version: Optional score version ID to test (defaults to champion)
+        - samples: Number of samples to test (default: 3)
+        - item_ids: Optional comma-separated item identifiers; when provided, count overrides samples
+        - days: Lookback window in days for auto sample discovery (default: 90)
+
+        Returns:
+        - Structured machine-readable test result with pass/fail and per-item details
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+
+        try:
+            if samples <= 0:
+                return _structured_error(
+                    "samples must be a positive integer",
+                    error="invalid_samples",
+                )
+
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.shared.score_version_test import run_score_version_test
+            except ImportError as e:
+                return _structured_error(
+                    f"Could not import required modules: {e}",
+                    error="import_error",
+                )
+
+            api_url = os.environ.get("PLEXUS_API_URL", "")
+            api_key = os.environ.get("PLEXUS_API_KEY", "")
+            if not api_url or not api_key:
+                return _structured_error(
+                    "Missing API credentials. Use --env-file to specify your .env file path.",
+                    error="missing_credentials",
+                )
+
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    client_output = client_stdout.getvalue()
+                    if client_output:
+                        logger.warning(
+                            "Captured unexpected stdout during client creation in plexus_score_test: %s",
+                            client_output,
+                        )
+                    sys.stdout = saved_stdout
+            except Exception as client_err:
+                return _structured_error(
+                    f"Error creating dashboard client: {client_err}",
+                    error="client_error",
+                )
+
+            if not client:
+                return _structured_error(
+                    "Could not create dashboard client.",
+                    error="client_error",
+                )
+
+            parsed_item_ids = None
+            if item_ids:
+                parsed_item_ids = [v.strip() for v in item_ids.split(",") if v.strip()]
+
+            result = await run_score_version_test(
+                client=client,
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                version=version,
+                samples=samples,
+                item_identifiers=parsed_item_ids,
+                days=days,
+            )
+            return result
+
+        except Exception as e:
+            logger.error("Error running plexus_score_test: %s", str(e), exc_info=True)
+            return _structured_error(
+                f"Error running score mechanical test: {str(e)}",
+                error="tool_error",
+            )
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_score_test: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
     async def plexus_score_set_champion(
         score_id: str,
         version_id: str

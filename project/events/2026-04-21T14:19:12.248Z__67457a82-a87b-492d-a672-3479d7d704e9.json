@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "67457a82-a87b-492d-a672-3479d7d704e9",
+  "issue_id": "plx-297811ff-ea56-4dd5-98dd-b3563b6aa8a4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T14:19:12.248Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Rebase local develop commits and restore green CI on develop"
+  }
+}

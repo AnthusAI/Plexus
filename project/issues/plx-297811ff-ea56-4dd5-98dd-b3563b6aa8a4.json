@@ -1,0 +1,37 @@
+{
+  "id": "plx-297811ff-ea56-4dd5-98dd-b3563b6aa8a4",
+  "title": "Rebase local develop commits and restore green CI on develop",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "abfb2dd3-5759-4f42-9c5c-c68e5f482330",
+      "author": "ryan",
+      "text": "Reproduced current develop CI failures locally (reports service + feedback service tests), restored GSI->standard query fallback in feedback loading, and fixed report block error-log string coercion. Targeted failing tests are now passing locally; preparing commit/push and CI rerun.",
+      "created_at": "2026-04-21T14:22:03.061687Z"
+    },
+    {
+      "id": "9ba93355-e879-4e5d-bb6b-7865f5587506",
+      "author": "ryan",
+      "text": "Follow-up fix: keep fail-fast behavior for explicit GraphQL GSI errors (raise RuntimeError, no fallback query), while retaining fallback only for non-dict/transport failures. Full local pytest now passes: 3193 passed, 0 failed.",
+      "created_at": "2026-04-21T14:37:34.922125Z"
+    },
+    {
+      "id": "6c5d70cf-3228-4804-a27a-8c8affb6e0fc",
+      "author": "ryan",
+      "text": "Completed: rebased/pushed develop fixes, resolved CI regressions in feedback/report error paths, and verified GitHub Actions run 24728543456 passed on commit 87456188d (all required jobs green).",
+      "created_at": "2026-04-21T14:50:20.800462Z"
+    }
+  ],
+  "created_at": "2026-04-21T14:19:12.247427Z",
+  "updated_at": "2026-04-21T14:50:21.325567Z",
+  "closed_at": "2026-04-21T14:50:21.325567Z",
+  "custom": {}
+}

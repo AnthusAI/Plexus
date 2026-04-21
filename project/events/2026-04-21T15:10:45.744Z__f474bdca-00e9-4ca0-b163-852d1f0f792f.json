@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f474bdca-00e9-4ca0-b163-852d1f0f792f",
+  "issue_id": "plx-06fc156d-5cbc-44a8-80d9-5292873bca5d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T15:10:45.744Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Make optimizer target score fail on missing metadata instead of returning NA"
+  }
+}

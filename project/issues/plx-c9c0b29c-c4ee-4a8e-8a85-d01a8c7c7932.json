@@ -1,0 +1,31 @@
+{
+  "id": "plx-c9c0b29c-c4ee-4a8e-8a85-d01a8c7c7932",
+  "title": "Update official Information Accuracy guidelines and validate rubric format",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6dd14bf7-59dc-4998-b740-45785e87948a",
+      "author": "ryan",
+      "text": "Using the local skills/plexus-guidelines skill as the rubric-format reference. Plan: draft official guideline markdown for the seven Information Accuracy phrase scores plus Information Accuracy (Composite), validate each document with the Plexus guideline validator, then push the validated guidelines to the live scores.",
+      "created_at": "2026-04-21T21:02:16.314861Z"
+    },
+    {
+      "id": "8b2a316d-2f20-439e-976c-3fe4193bd862",
+      "author": "ryan",
+      "text": "Used the local skills/plexus-guidelines/SKILL.md workflow to draft classifier-format rubric documents for the Information Accuracy split scores and composite. Validated all guideline drafts with the Plexus guideline validator before pushing. New guideline-bearing versions created: High-Pressure Tactics 1498f68e-b804-45e1-9be9-153121b9ad6d, Copay Guarantees 69dcb870-1a64-4ce8-b9e7-e306e42001c6, Savings Promises 8475e4e9-63fe-4017-b488-e27fde06c758, Ambiguous Cost Language dac33f37-4560-479a-a6ae-664e69b1640c, False Local Pharmacy Claims 61d57e8d-c62d-47b8-890d-fb943a3f2d5b, False Service Claims f19758bf-90cf-48a5-9b93-e35801624467, Information Accuracy (Composite) 1cbe62c0-9cdb-4657-bb9c-29637db11898. False Carrier Claims already had identical guideline content, so the update correctly skipped with no new version and its current version 193c2934-1711-4b41-898c-d80e5e448667 remains the active guideline-bearing version. Verified by fetching specific versions and confirming non-empty guidelines payloads.",
+      "created_at": "2026-04-21T21:05:09.050921Z"
+    }
+  ],
+  "created_at": "2026-04-21T21:02:11.036608Z",
+  "updated_at": "2026-04-21T21:05:09.067042Z",
+  "closed_at": "2026-04-21T21:05:09.067042Z",
+  "custom": {}
+}
