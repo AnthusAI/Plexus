@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -152,6 +153,35 @@ async def test_generate_filters_and_groups_score_result_explanations(explanation
     assert output["total_explanations_retained"] == 2
     assert "Processed 2 production ScoreResult explanations" in output["summary"]
     assert "Retained 2 production ScoreResult explanations" in logs
+
+
+@pytest.mark.asyncio
+async def test_resolve_scores_to_process_accepts_uuid_via_section_scorecard_lookup(explanation_block):
+    scorecard = MagicMock(id="scorecard-1", name="Test Scorecard")
+    explanation_block.api_client.execute.return_value = {
+        "getScorecard": {"sections": {"items": [{"id": "section-1"}]}}
+    }
+
+    with patch(
+        "plexus.reports.blocks.score_resolution.Score.get_by_id",
+        return_value=SimpleNamespace(
+            id="72db3535-2a93-48f3-8900-bb275490cc28",
+            name="Property Type and Home Value Metadata AI",
+            sectionId="section-1",
+        ),
+    ):
+        scores = await explanation_block._resolve_scores_to_process(
+            scorecard,
+            "72db3535-2a93-48f3-8900-bb275490cc28",
+        )
+
+    assert scores == [
+        {
+            "plexus_score_id": "72db3535-2a93-48f3-8900-bb275490cc28",
+            "plexus_score_name": "Property Type and Home Value Metadata AI",
+            "cc_question_id": "72db3535-2a93-48f3-8900-bb275490cc28",
+        }
+    ]
 
 
 @pytest.mark.asyncio

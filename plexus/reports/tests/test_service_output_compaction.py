@@ -54,6 +54,20 @@ def test_compact_output_json_for_storage_includes_attachment_and_preview():
     assert compact["preview"]["summary"] == "Done"
 
 
+def test_compact_output_json_for_storage_marks_error_status():
+    compact_json = service._compact_output_json_for_storage(
+        output_payload={"status": "error", "error": "Score not found"},
+        output_attachment_path="reportblocks/rb-err/output-rb-err.json",
+        status="error",
+        error_message="Score not found",
+    )
+    compact = json.loads(compact_json)
+
+    assert compact["status"] == "error"
+    assert compact["error"] == "Score not found"
+    assert compact["preview"]["error"] == "Score not found"
+
+
 def test_persist_output_artifact_compacts_with_attachment(monkeypatch):
     monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
     upload_mock = Mock(return_value="reportblocks/rb-1/output-rb-1.json")
@@ -94,6 +108,52 @@ def test_persist_output_artifact_handles_dict_payload(monkeypatch):
     upload_mock.assert_called_once()
     content_arg = upload_mock.call_args.kwargs["content"]
     assert isinstance(content_arg, bytes)
+
+
+def test_fetch_first_block_result_surfaces_failed_compacted_payload(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
+    client = Mock()
+    client.execute.return_value = {
+        "getReport": {
+            "reportBlocks": {
+                "items": [
+                    {
+                        "output": json.dumps(
+                            {
+                                "status": "error",
+                                "output_compacted": True,
+                                "error": "Score not found",
+                                "output_attachment": "reportblocks/rb-err/output.json",
+                            }
+                        )
+                    }
+                ]
+            }
+        }
+    }
+    monkeypatch.setattr(
+        "plexus.reports.s3_utils.download_report_block_file",
+        Mock(return_value=(json.dumps({"error": "Score not found"}), "application/json")),
+    )
+
+    output, error = service._fetch_first_block_result("report-err", client)
+
+    assert output is None
+    assert error == "Score not found"
+
+
+def test_check_db_cache_ignores_failed_compacted_report(monkeypatch):
+    report = Mock()
+    report.id = "report-err"
+    report.createdAt = service.datetime.now(service.timezone.utc)
+    report.output = "```block\nclass: FeedbackContradictions\n```"
+
+    monkeypatch.setattr(service.Report, "get_by_name", Mock(return_value=report))
+    monkeypatch.setattr(service, "_fetch_first_block_result", Mock(return_value=(None, "Score not found")))
+
+    cached = service._check_db_cache("cache-key", "acct-1", Mock(), ttl_hours=24)
+
+    assert cached is None
 
 
 def test_persist_output_artifact_raises_when_s3_unavailable(monkeypatch):

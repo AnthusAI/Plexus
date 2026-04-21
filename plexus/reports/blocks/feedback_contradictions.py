@@ -18,10 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import BaseReportBlock
 from . import feedback_utils
 from .guideline_vetting import GuidelineVettingService
-from .feedback_scope_resolver import (
-    resolve_score_for_scorecard,
-    resolve_scorecard,
-)
+from .feedback_scope_resolver import resolve_scorecard
+from .score_resolution import resolve_score_for_scorecard
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +32,7 @@ class FeedbackContradictions(BaseReportBlock):
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self._orm.log_messages.clear()
-        try:
-            return await self._run()
-        except Exception as exc:
-            import traceback
-
-            self._log(f"ERROR: {exc}", level="ERROR")
-            self._log(traceback.format_exc())
-            error_data = {"error": str(exc), "topics": []}
-            return error_data, "\n".join(self._orm.log_messages)
+        return await self._run()
 
     async def _run(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         scorecard_param = self.config.get("scorecard")
@@ -316,7 +306,16 @@ class FeedbackContradictions(BaseReportBlock):
         return await resolve_scorecard(self.api_client, scorecard_param)
 
     async def _resolve_score(self, score_param: str, scorecard_id: str) -> Any:
-        return await resolve_score_for_scorecard(self.api_client, scorecard_id, score_param)
+        score_obj = await resolve_score_for_scorecard(
+            api_client=self.api_client,
+            score_identifier=score_param,
+            scorecard_id=scorecard_id,
+        )
+        if not score_obj:
+            raise ValueError(
+                f"Score not found for identifier '{score_param}' on scorecard '{scorecard_id}'."
+            )
+        return score_obj
 
     async def _fetch_guidelines(self, score_id: str) -> Optional[str]:
         try:

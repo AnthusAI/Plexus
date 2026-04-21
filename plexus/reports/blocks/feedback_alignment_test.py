@@ -1,6 +1,7 @@
 import pytest
 import asyncio
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta, timezone
 import yaml
 
@@ -245,6 +246,39 @@ class TestFeedbackAlignment:
                 assert logs is not None
                 # Updated to match actual log message
                 assert "No date-filtered items available for overall analysis" in logs
+
+    @pytest.mark.asyncio
+    async def test_generate_with_score_uuid_uses_section_scorecard_membership(self, mock_api_client):
+        config = {
+            "scorecard": "00000000-0000-0000-0000-000000000001",
+            "score": "72db3535-2a93-48f3-8900-bb275490cc28",
+            "days": 14,
+        }
+        block = FeedbackAlignment(config, {}, mock_api_client)
+        mock_api_client.execute = MagicMock(
+            return_value={"getScorecard": {"sections": {"items": [{"id": "section-1"}]}}}
+        )
+
+        with (
+            patch(
+                "plexus.dashboard.api.models.scorecard.Scorecard.get_by_id",
+                return_value=SimpleNamespace(id="test-scorecard-id", name="Test Scorecard"),
+            ),
+            patch(
+                "plexus.reports.blocks.score_resolution.Score.get_by_id",
+                return_value=SimpleNamespace(
+                    id="72db3535-2a93-48f3-8900-bb275490cc28",
+                    name="Score 1",
+                    sectionId="section-1",
+                ),
+            ),
+            patch.object(block, "_fetch_feedback_items_for_score", new=AsyncMock(return_value=[])),
+        ):
+            output, logs = await block.generate()
+
+        parsed_output = parse_yaml_output(output)
+        assert parsed_output["scores"][0]["score_id"] == "72db3535-2a93-48f3-8900-bb275490cc28"
+        assert "Found specific Plexus Score: 'Score 1'" in logs
     
     @pytest.mark.asyncio
     async def test_generate_with_missing_config(self, mock_api_client):
