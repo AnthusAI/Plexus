@@ -40,10 +40,16 @@
       "author": "ryan",
       "text": "Addressing CI lint failure on develop: fix undefined procedure_info reference in plexus/cli/procedure/service.py, rerun lint/tests, push, and verify GitHub Actions green.",
       "created_at": "2026-04-20T23:55:27.401679Z"
+    },
+    {
+      "id": "449b11df-3b81-488f-b1c6-bbcae14d1e2a",
+      "author": "ryan",
+      "text": "Post-push CI failed in dashboard typecheck (TS2322/TS7022). Applied fixes: allow STALLED status in EvaluationTask props and add explicit any annotations for procedures GraphQL pagination response variables in procedures-dashboard.",
+      "created_at": "2026-04-21T00:12:09.964902Z"
     }
   ],
   "created_at": "2026-04-20T22:53:25.728209Z",
-  "updated_at": "2026-04-20T23:55:27.401679Z",
+  "updated_at": "2026-04-21T00:12:09.964902Z",
   "closed_at": null,
   "custom": {}
 }
