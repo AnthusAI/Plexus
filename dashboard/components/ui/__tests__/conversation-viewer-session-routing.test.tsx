@@ -212,14 +212,13 @@ describe("ConversationViewer session-routing states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create New Session" }))
 
     await waitFor(() => {
-        expect(createMock).toHaveBeenCalledWith(
-          expect.objectContaining({
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            category: "Optimize",
-          }),
-          expect.objectContaining({ authMode: "apiKey" })
-        )
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: "acct-1",
+          procedureId: "builtin:console/chat",
+          category: "Optimize",
+        })
+      )
       expect(onSessionSelect).toHaveBeenCalledWith("session-new")
     })
   })

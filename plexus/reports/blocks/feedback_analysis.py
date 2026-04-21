@@ -21,6 +21,9 @@ from .reinforcement_helpers import fetch_item_identifiers
 
 logger = logging.getLogger(__name__)
 
+_ORDER_SCORES_NONE = "none"
+_ORDER_SCORES_BEST_TO_WORST = "best_to_worst"
+
 
 class FeedbackAnalysis(BaseReportBlock):
     """
@@ -50,6 +53,61 @@ class FeedbackAnalysis(BaseReportBlock):
     # Class-level defaults for name and description
     DEFAULT_NAME = "Feedback Analysis"
     DEFAULT_DESCRIPTION = "Inter-rater Reliability Assessment"
+
+    def _sort_score_results(self, scores: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Order per-score results for scorecard-wide runs.
+
+        Default behavior is best-to-worst by AC1 (tie-break: accuracy, item_count).
+        """
+        order_scores = str(self.config.get("order_scores") or _ORDER_SCORES_BEST_TO_WORST).strip().lower()
+        if order_scores in {"", "null", "none"}:
+            order_scores = _ORDER_SCORES_NONE
+
+        if order_scores == _ORDER_SCORES_NONE:
+            return scores
+
+        reverse = order_scores == _ORDER_SCORES_BEST_TO_WORST
+
+        def _norm_float(v: Any) -> Optional[float]:
+            try:
+                if v is None:
+                    return None
+                return float(v)
+            except Exception:
+                return None
+
+        def _norm_int(v: Any) -> int:
+            try:
+                if v is None:
+                    return 0
+                return int(v)
+            except Exception:
+                return 0
+
+        def _key(d: Dict[str, Any]) -> Tuple[int, float, float, int, str]:
+            # Put missing AC1 at the end regardless of direction.
+            ac1 = _norm_float(d.get("ac1"))
+            acc = _norm_float(d.get("accuracy"))
+            n = _norm_int(d.get("item_count"))
+            missing = 1 if ac1 is None else 0
+
+            # For descending, use negative values and still sort ascending.
+            if reverse:
+                ac1_sort = -(ac1 if ac1 is not None else -1e9)
+                acc_sort = -(acc if acc is not None else -1e9)
+                n_sort = -n
+            else:
+                ac1_sort = (ac1 if ac1 is not None else 1e9)
+                acc_sort = (acc if acc is not None else 1e9)
+                n_sort = n
+
+            name = str(d.get("score_name") or d.get("plexus_score_name") or "")
+            return (missing, ac1_sort, acc_sort, n_sort, name)
+
+        try:
+            return sorted(scores, key=_key)
+        except Exception:
+            return scores
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches feedback data and performs agreement analysis."""
@@ -246,7 +304,14 @@ class FeedbackAnalysis(BaseReportBlock):
                 msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID, or an error occurred during fetching/sorting)."
                 self._log(f"ERROR: {msg}", level="ERROR")
                 # Return a structure indicating no data, but not an error state for the report block itself.
+                scope = "single_score" if cc_question_id_param else "scorecard_all_scores"
                 return {
+                    "report_type": "feedback_analysis",
+                    "scope": scope,
+                    "scorecard_id": str(plexus_scorecard_obj.id),
+                    "scorecard_name": str(plexus_scorecard_obj.name),
+                    "score_id": None,
+                    "score_name": None,
                     "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": None,
                     "scores": [],
                     "total_feedback_items_retrieved": 0,
@@ -256,7 +321,9 @@ class FeedbackAnalysis(BaseReportBlock):
                     "warning": None,
                     "warnings": None,
                     "notes": None,
-                    "discussion": None
+                    "discussion": None,
+                    "block_title": self.DEFAULT_NAME,
+                    "block_description": self.DEFAULT_DESCRIPTION,
                 }, "\n".join(self.log_messages)
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
@@ -427,6 +494,10 @@ class FeedbackAnalysis(BaseReportBlock):
             else:
                 # Use a generic score_id_info for the overall log
                 overall_analysis = self._analyze_feedback_data_gwet(all_date_filtered_feedback_items, "Overall") 
+
+            # --- 5b. Sort Per-score Results (Scorecard-level runs only) ---
+            if not cc_question_id_param:
+                per_score_analysis_results = self._sort_score_results(per_score_analysis_results)
             
             # Log a summary of the overall analysis instead of full details
             accuracy_str = f"{overall_analysis.get('accuracy'):.2f}%" if overall_analysis.get('accuracy') is not None else "N/A"
@@ -434,9 +505,48 @@ class FeedbackAnalysis(BaseReportBlock):
 
             # --- 6. Generate Summary Warning ---
             summary_warning = self._generate_summary_warning(per_score_analysis_results)
+
+            single_score_id: Optional[str] = None
+            single_score_name: Optional[str] = None
+            if len(scores_to_process) == 1:
+                single_score_id = str(scores_to_process[0].get("plexus_score_id") or "")
+                single_score_name = str(scores_to_process[0].get("plexus_score_name") or "")
+
+            order_scores = str(self.config.get("order_scores") or "best_to_worst").strip().lower()
+            if cc_question_id_param:
+                block_description = "Inter-rater reliability assessment for the selected score"
+                scope = "single_score"
+            else:
+                scope = "scorecard_all_scores"
+                if order_scores == "worst_to_best":
+                    block_description = "Inter-rater reliability across all scores (ordered worst to best)"
+                elif order_scores == "none":
+                    block_description = "Inter-rater reliability across all scores"
+                else:
+                    block_description = "Inter-rater reliability across all scores (ordered best to worst)"
             
             # --- 7. Structure Final Output ---
             final_output_data = {
+                "report_type": "feedback_analysis",
+                "scope": scope,
+                "scorecard_id": str(plexus_scorecard_obj.id),
+                "scorecard_name": str(plexus_scorecard_obj.name),
+                "score_id": single_score_id or None,
+                "score_name": single_score_name or None,
+                "order_scores": order_scores,
+                "scorecard_summary": {
+                    "scorecard_id": str(plexus_scorecard_obj.id),
+                    "scorecard_name": str(plexus_scorecard_obj.name),
+                    "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+                    "processed_scores": len(scores_to_process),
+                    "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
+                    "overall_ac1": overall_analysis.get("ac1"),
+                    "accuracy": overall_analysis.get("accuracy"),
+                    "total_items": overall_analysis.get("item_count"),
+                    "total_agreements": overall_analysis.get("agreements"),
+                    "total_mismatches": overall_analysis.get("mismatches"),
+                    "classes_count": overall_analysis.get("classes_count", 2),
+                },
                 "overall_ac1": overall_analysis.get("ac1"), # Renamed from overall_ac1
                 "total_items": overall_analysis.get("item_count"), # Renamed from item_count
                 "total_mismatches": overall_analysis.get("mismatches"), # Renamed from mismatches
@@ -463,7 +573,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 "discussion": overall_analysis.get("discussion"),
                 # Add block metadata for frontend display
                 "block_title": self.DEFAULT_NAME,
-                "block_description": self.DEFAULT_DESCRIPTION
+                "block_description": block_description,
             }
             # --- 7b. Optional Memory Analysis ---
             run_memory = self.config.get("memory_analysis", True)

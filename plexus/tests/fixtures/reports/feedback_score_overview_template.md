@@ -65,11 +65,6 @@ parameters:
     type: boolean
     required: true
     default: false
-  - name: max_items
-    label: Acceptance Max Items
-    type: number
-    required: true
-    default: 200
   - name: mode
     label: Contradictions Mode
     type: select
@@ -97,8 +92,8 @@ parameters:
     default: 20
 ---
 
-```block name="Feedback Alignment Timeline"
-class: FeedbackAlignmentTimeline
+```block name="Feedback Volume Timeline"
+class: FeedbackVolumeTimeline
 scorecard: {{ scorecard }}
 score: {{ score }}
 {% if start_date and end_date %}
@@ -113,8 +108,8 @@ week_start: {{ week_start }}
 show_bucket_details: {{ show_bucket_details }}
 ```
 
-```block name="Acceptance Rate"
-class: AcceptanceRate
+```block name="Feedback Alignment Timeline"
+class: FeedbackAlignmentTimeline
 scorecard: {{ scorecard }}
 score: {{ score }}
 {% if start_date and end_date %}
@@ -123,8 +118,10 @@ end_date: {{ end_date }}
 {% elif days %}
 days: {{ days }}
 {% endif %}
-include_item_acceptance_rate: true
-max_items: {{ max_items }}
+bucket_type: {{ bucket_type }}
+timezone: {{ timezone }}
+week_start: {{ week_start }}
+show_bucket_details: {{ show_bucket_details }}
 ```
 
 ```block name="Feedback Contradictions"
