@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from plexus.Scorecard import Scorecard
 import pytest
 import logging
@@ -739,6 +739,65 @@ class TestScorecard:
         finally:
             self.scorecard.score_names_to_process = original_method
             self.scorecard.get_score_result = original_get_score_result
+
+    @pytest.mark.asyncio
+    async def test_get_score_result_cleans_up_score_instance(self):
+        """Regression: score instances should be cleaned up after each execution."""
+        simple_config = {
+            'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
+            'scores': [
+                {'name': 'CleanupScore', 'id': 1}
+            ]
+        }
+        self.scorecard.properties = simple_config
+        self.scorecard.scores = simple_config['scores']
+
+        def get_properties_side_effect(score_name):
+            for score in simple_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+
+        mock_score_class = MagicMock()
+        mock_score_instance = MagicMock()
+        cleanup_mock = AsyncMock()
+
+        async def mock_predict(*args, **kwargs):
+            return Mock(value='Pass')
+
+        mock_score_instance.predict = mock_predict
+        mock_score_instance.cleanup = cleanup_mock
+        mock_score_instance.get_accumulated_costs = lambda: {
+            'prompt_tokens': 0,
+            'completion_tokens': 0,
+            'cached_tokens': 0,
+            'llm_calls': 0,
+            'input_cost': Decimal('0'),
+            'output_cost': Decimal('0'),
+            'total_cost': Decimal('0'),
+        }
+
+        async def mock_create(**kwargs):
+            return mock_score_instance
+
+        mock_score_class.create = mock_create
+        self.mock_registry.get.side_effect = lambda score_name: mock_score_class
+
+        result = await Scorecard.get_score_result(
+            self.scorecard,
+            scorecard='TestScorecard',
+            score='CleanupScore',
+            text='Sample text',
+            metadata={},
+            modality='test',
+            results=[],
+        )
+
+        assert len(result) == 1
+        assert result[0].value == 'Pass'
+        cleanup_mock.assert_awaited_once()
 
 if __name__ == '__main__':
     pytest.main()

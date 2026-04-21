@@ -599,6 +599,7 @@ def register_procedure_tools(mcp):
                                     messageType
                                     toolName
                                     content
+                                    toolResponse
                                     sequenceNumber
                                     parentMessageId
                                     createdAt
@@ -643,17 +644,16 @@ def register_procedure_tools(mcp):
                 session_tool_calls = []
                 session_tool_responses = []
                 processed_messages = []
-                
+
                 for msg in messages[:request.limit]:
                     msg_type = msg.get('messageType', 'MESSAGE')
                     role = msg.get('role', '')
 
-                    # Tool responses are stored in toolResponse field; content may be empty
-                    raw = msg.get('content', '') or msg.get('toolResponse', '') or ''
-                    parsed_content = raw
+                    raw_content = msg.get('content', '') or ''
+                    parsed_content = raw_content
                     try:
-                        if raw.startswith('{') and raw.endswith('}'):
-                            parsed_content = json.loads(raw)
+                        if raw_content.startswith('{') and raw_content.endswith('}'):
+                            parsed_content = json.loads(raw_content)
                     except:
                         pass  # Keep as string if not valid JSON
 
@@ -670,11 +670,23 @@ def register_procedure_tools(mcp):
                     # Tool responses: SYSTEM role messages are tool responses in this schema
                     is_tool_response = (role == 'SYSTEM' and msg.get('parentMessageId'))
 
-                    # Add tool-specific fields if requested
-                    if msg_type == 'TOOL_CALL' and request.show_tool_calls:
+                    # Tool calls: toolResponse is stored on the TOOL_CALL row in this schema
+                    if msg_type == 'TOOL_CALL':
                         processed_msg["tool_name"] = msg.get("toolName")
                         session_tool_calls.append(msg["id"])
                         tool_calls += 1
+
+                        tool_response_raw = msg.get('toolResponse') or ''
+                        if request.show_tool_responses and tool_response_raw:
+                            tool_response_parsed = tool_response_raw
+                            try:
+                                if tool_response_raw.startswith('{') and tool_response_raw.endswith('}'):
+                                    tool_response_parsed = json.loads(tool_response_raw)
+                            except:
+                                pass
+                            processed_msg["tool_response"] = tool_response_parsed
+                            session_tool_responses.append(msg["id"])
+                            tool_responses += 1
 
                     elif (msg_type == 'TOOL_RESPONSE' or is_tool_response) and request.show_tool_responses:
                         processed_msg["tool_name"] = msg.get("toolName", "Unknown")
@@ -687,13 +699,17 @@ def register_procedure_tools(mcp):
                 # Check for missing tool responses
                 session_missing = 0
                 for call_id in session_tool_calls:
-                    # Find if there's a response with this call as parent
-                    has_response = any(
+                    # Tool response is either stored on the TOOL_CALL row (toolResponse)
+                    # or as a separate TOOL_RESPONSE / SYSTEM message referencing the call.
+                    call_msg = next((m for m in messages if m.get("id") == call_id), None)
+                    has_inline_response = bool(call_msg and (call_msg.get("toolResponse") or ""))
+                    has_child_response = any(
                         resp_msg.get('parentMessageId') == call_id
                         for resp_msg in messages
                         if resp_msg.get('messageType') == 'TOOL_RESPONSE'
                         or (resp_msg.get('role') == 'SYSTEM' and resp_msg.get('parentMessageId'))
                     )
+                    has_response = has_inline_response or has_child_response
                     if not has_response:
                         session_missing += 1
                 

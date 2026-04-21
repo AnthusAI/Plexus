@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d27dbdb1-b8cc-4d2e-b512-3b9d71a42951",
+  "issue_id": "plx-1e188543-aa1a-4ea1-8d0f-a7cf4fbcf33c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T01:41:02.072Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As an operator, I want feedback-backed optimizer runs to fail immediately when required item metadata is missing or a score returns ERROR, so that ProcedureTask, Evaluation, and procedure chat clearly explain why no cycles ran.\n\n## Behavior\nFeature: Optimizer run failure visibility for broken feedback-backed evaluations\n\nScenario: Feedback-backed evaluation loses required item metadata\nGiven an optimizer run starts an initial evaluation from feedback items\nAnd the feedback loading path does not provide the related item metadata payload\nWhen dataset rows are built for evaluation\nThen the run fails immediately\nAnd the failure message identifies the feedback item or item id with missing metadata\nAnd TaskStage, Task, Evaluation, and procedure chat show that failure reason\n\nScenario: Score execution returns ERROR during initial evaluation\nGiven an optimizer run starts an initial evaluation\nWhen any score execution returns value ERROR\nThen the evaluation fails immediately\nAnd the initial evaluation stage is marked failed with the execution error details\nAnd the procedure does not continue to RCA or optimization cycles\nAnd the same failure reason is visible in ProcedureTask, Evaluation, and procedure chat\n\nScenario: Feedback item loading query fails\nGiven a date-bounded feedback-backed evaluation\nWhen the GSI query for feedback items fails\nThen the run fails instead of falling back to a lower-fidelity metadata-dropping query\n",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Fail fast on missing feedback item metadata and surface optimizer evaluation errors"
+  }
+}

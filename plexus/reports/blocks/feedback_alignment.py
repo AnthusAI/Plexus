@@ -16,8 +16,9 @@ from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
 from . import feedback_utils
-from .feedback_scope_resolver import resolve_score_for_scorecard, resolve_scorecard
+from .feedback_scope_resolver import resolve_scorecard
 from .reinforcement_helpers import fetch_item_identifiers
+from .score_resolution import resolve_score_for_scorecard
 
 logger = logging.getLogger(__name__)
 
@@ -222,10 +223,14 @@ class FeedbackAlignment(BaseReportBlock):
                 self._log(f"Looking up specific Plexus Score for identifier: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
                 try:
                     plexus_score_obj = await resolve_score_for_scorecard(
-                        self.api_client,
-                        str(plexus_scorecard_obj.id),
-                        str(cc_question_id_param),
+                        api_client=self.api_client,
+                        score_identifier=str(cc_question_id_param),
+                        scorecard_id=str(plexus_scorecard_obj.id),
                     )
+                    if not plexus_score_obj:
+                        raise ValueError(
+                            f"Score not found for identifier '{cc_question_id_param}' on scorecard '{plexus_scorecard_obj.id}'."
+                        )
                     scores_to_process.append({
                         'plexus_score_id': plexus_score_obj.id,
                         'plexus_score_name': plexus_score_obj.name,

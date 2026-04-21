@@ -499,8 +499,25 @@ class ScoreEditorToolset:
                 },
             )
 
+            payload = self._extract_json_payload(update_result) or {}
+
+            # Surface validation failures as actionable errors (avoid "unexpected format")
+            if payload.get("success") is False:
+                err = payload.get("error") or "plexus_score_update failed"
+                validation_errors = (
+                    payload.get("validation_errors")
+                    or payload.get("validationErrors")
+                    or payload.get("validationErrorsList")
+                )
+                if isinstance(validation_errors, list) and validation_errors:
+                    preview = "\n".join(str(e) for e in validation_errors[:10])
+                    # Keep this short enough for chat storage and UI.
+                    preview = preview[:1500]
+                    err = f"{err}\n\nValidation errors:\n{preview}"
+                return {"success": False, "error": err}
+
             # Extract version ID from MCP response envelope
-            version_id = self._extract_version_id(update_result)
+            version_id = self._extract_version_id(payload or update_result)
             if version_id:
                 self._last_version_id = version_id
                 return {
@@ -508,11 +525,12 @@ class ScoreEditorToolset:
                     "version_id": version_id,
                     "message": f"Score version created: {version_id}",
                 }
-            else:
-                return {
-                    "success": False,
-                    "error": f"plexus_score_update returned unexpected format: {update_result}",
-                }
+
+            # success==true but no version id, or unparsable payload
+            return {
+                "success": False,
+                "error": f"plexus_score_update returned unexpected format: {update_result}",
+            }
 
         except Exception as exc:
             logger.error("ScoreEditorToolset.submit_score_version error: %s", exc)
@@ -684,6 +702,37 @@ class ScoreEditorToolset:
                             return data[key]
             except (ValueError, TypeError):
                 pass
+
+        return None
+
+    def _extract_json_payload(self, mcp_response: Any) -> Optional[dict]:
+        """
+        Extract the JSON dict payload from MCP tool responses.
+
+        MCP tools commonly return either:
+          - direct dict payloads, or
+          - {"content": [{"type": "text", "text": "{...json...}"}]}
+        """
+        import json
+
+        if isinstance(mcp_response, dict):
+            # Direct payload already
+            if "success" in mcp_response:
+                return mcp_response
+
+            # MCP envelope
+            for item in mcp_response.get("content", []):
+                if not isinstance(item, dict) or item.get("type") != "text":
+                    continue
+                text = item.get("text", "")
+                if not text:
+                    continue
+                try:
+                    data = json.loads(text)
+                    if isinstance(data, dict):
+                        return data
+                except (ValueError, TypeError):
+                    continue
 
         return None
 
