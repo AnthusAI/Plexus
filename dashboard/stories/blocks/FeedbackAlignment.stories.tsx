@@ -1,7 +1,6 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { BlockRenderer } from '@/components/blocks/BlockRegistry';
-import FeedbackAlignment from '@/components/blocks/FeedbackAlignment';
 import { type ClassDistribution } from '@/components/ClassDistributionVisualizer';
 import { type ConfusionMatrixData } from '@/components/confusion-matrix';
 
