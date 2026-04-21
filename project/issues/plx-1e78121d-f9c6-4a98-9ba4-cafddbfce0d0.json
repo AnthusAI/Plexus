@@ -46,10 +46,22 @@
       "author": "derek",
       "text": "Implemented hide-outside-days tweak on DateRangeParameter calendar () per UX feedback; this removes prior/next month day bleed in each month panel.",
       "created_at": "2026-04-21T18:18:58.701277848Z"
+    },
+    {
+      "id": "139eb3cf-2c98-4d2c-bc66-46f5fed87f5e",
+      "author": "derek",
+      "text": "UX polish: adjust Calendar today styling so non-selected today is visually distinct (subtle ring/text emphasis) while selected/range states remain blue. This reduces confusion between 'today' and 'selected'.",
+      "created_at": "2026-04-21T18:26:27.892253758Z"
+    },
+    {
+      "id": "cf694abc-e974-424d-ab8d-e9535bdfc309",
+      "author": "derek",
+      "text": "Finalized per user validation: month-nav click targets fixed (left/right), outside-day bleed removed while preserving grid alignment, and today styling differentiated from selection. Ready for commit/push.",
+      "created_at": "2026-04-21T18:29:28.823238451Z"
     }
   ],
   "created_at": "2026-04-21T18:11:05.483970112Z",
-  "updated_at": "2026-04-21T18:18:58.713163872Z",
-  "closed_at": "2026-04-21T18:18:58.713163872Z",
+  "updated_at": "2026-04-21T18:29:28.835105330Z",
+  "closed_at": "2026-04-21T18:29:28.835105330Z",
   "custom": {}
 }
