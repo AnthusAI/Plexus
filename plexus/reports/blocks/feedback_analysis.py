@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 _ORDER_SCORES_NONE = "none"
 _ORDER_SCORES_BEST_TO_WORST = "best_to_worst"
-_ORDER_SCORES_WORST_TO_BEST = "worst_to_best"
 
 
 class FeedbackAnalysis(BaseReportBlock):
