@@ -14,11 +14,11 @@ import yaml
 from plexus.cli.feedback.report_runner import (
     build_window_config,
     run_feedback_report_block,
-    summarize_timeline_feedback_volume,
 )
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
+from plexus.reports.parameter_utils import enrich_parameters_with_names
 from plexus.reports.service import (
     decode_programmatic_run_payload,
     run_programmatic_block_and_persist,
@@ -34,7 +34,7 @@ def _print_result(
     include_log: bool,
 ) -> None:
     if result.get("status") in {"dispatched", "already_dispatched"}:
-        console.print(
+        click.echo(
             json.dumps(
                 {
                     "status": result["status"],
@@ -54,12 +54,13 @@ def _print_result(
         payload = result.copy()
         if not include_log:
             payload.pop("log", None)
-        console.print(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
+        click.echo(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
     else:
         payload = result.copy()
         if not include_log:
             payload.pop("log", None)
-        console.print(json.dumps(payload, indent=2, default=str))
+        # Use plain stdout writes for machine-readable output; Rich may wrap long strings.
+        click.echo(json.dumps(payload, indent=2, default=str))
 
 
 def _coerce_optional_int(value: Optional[int], name: str) -> Optional[int]:
@@ -297,6 +298,18 @@ def recent(
 @report.command(name="analysis")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
+@click.option(
+    "--order-scores",
+    type=click.Choice(["best_to_worst", "worst_to_best", "none"]),
+    default="best_to_worst",
+    show_default=True,
+    help="Scorecard-level only: order per-score results by AC1/accuracy.",
+)
+@click.option(
+    "--memory-analysis",
+    is_flag=True,
+    help="Enable optional LLM-backed topic clustering for mismatch comments (slow/expensive).",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -310,6 +323,8 @@ def recent(
 def analysis(
     scorecard: str,
     score: Optional[str],
+    order_scores: str,
+    memory_analysis: bool,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -334,6 +349,7 @@ def analysis(
         ttl_hours=ttl_hours,
         fresh=fresh,
         background=background,
+        extra_config={"order_scores": order_scores, "memory_analysis": bool(memory_analysis)},
     )
     _print_result(title="FeedbackAnalysis", result=result, output_format=output_format, include_log=include_log)
 
@@ -475,6 +491,12 @@ def timeline(
 @click.option("--bucket-count", type=int, default=12, show_default=True)
 @click.option("--timezone", "timezone_name", default="UTC", show_default=True)
 @click.option("--week-start", type=click.Choice(["monday", "sunday"]), default="monday", show_default=True)
+@click.option(
+    "--show-bucket-details/--chart-only",
+    default=False,
+    show_default=True,
+    help="Show or hide per-bucket metrics details below the chart.",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -492,6 +514,7 @@ def volume(
     bucket_count: int,
     timezone_name: str,
     week_start: str,
+    show_bucket_details: bool,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -503,9 +526,9 @@ def volume(
     output_format: str,
     include_log: bool,
 ) -> None:
-    """Run timeline and return a feedback-volume-focused payload."""
+    """Run the FeedbackVolumeTimeline report block."""
     result = run_feedback_report_block(
-        block_class="FeedbackAlignmentTimeline",
+        block_class="FeedbackVolumeTimeline",
         scorecard=scorecard,
         score=score,
         days=_coerce_optional_int(days, "days"),
@@ -521,16 +544,11 @@ def volume(
             "bucket_count": bucket_count,
             "timezone": timezone_name,
             "week_start": week_start,
+            "show_bucket_details": show_bucket_details,
         },
     )
 
-    if result.get("status") == "success":
-        result = {
-            **result,
-            "output": summarize_timeline_feedback_volume(result["output"]),
-        }
-
-    _print_result(title="FeedbackVolume", result=result, output_format=output_format, include_log=include_log)
+    _print_result(title="FeedbackVolumeTimeline", result=result, output_format=output_format, include_log=include_log)
 
 
 @report.command(name="acceptance-rate-timeline")
@@ -612,9 +630,8 @@ def acceptance_rate_timeline(
     "--show-bucket-details/--chart-only",
     default=False,
     show_default=True,
-    help="Show or hide per-bucket details for the top timeline block.",
+    help="Show or hide per-bucket details for the timeline blocks.",
 )
-@click.option("--max-items", type=int, default=200, show_default=True, help="Maximum acceptance-rate item rows.")
 @click.option(
     "--mode",
     type=click.Choice(["contradictions", "aligned"]),
@@ -638,7 +655,6 @@ def overview(
     timezone_name: str,
     week_start: str,
     show_bucket_details: bool,
-    max_items: int,
     mode: str,
     max_feedback_items: int,
     num_topics: int,
@@ -649,7 +665,7 @@ def overview(
 ) -> None:
     """
     Generate a 3-block score overview report:
-    FeedbackAlignmentTimeline, AcceptanceRate, FeedbackContradictions.
+    FeedbackVolumeTimeline, FeedbackAlignmentTimeline, FeedbackContradictions.
     """
     client = create_client()
     if not client:
@@ -666,6 +682,14 @@ def overview(
         "score": str(score).strip(),
         **window_config,
     }
+    named_scope = enrich_parameters_with_names(
+        [
+            {"name": "scorecard", "type": "scorecard_select"},
+            {"name": "score", "type": "score_select", "depends_on": "scorecard"},
+        ],
+        shared_scope,
+        client,
+    )
 
     timeline_config: Dict[str, Any] = {
         **shared_scope,
@@ -674,10 +698,12 @@ def overview(
         "week_start": week_start,
         "show_bucket_details": show_bucket_details,
     }
-    acceptance_config: Dict[str, Any] = {
+    volume_timeline_config: Dict[str, Any] = {
         **shared_scope,
-        "include_item_acceptance_rate": True,
-        "max_items": max_items,
+        "bucket_type": bucket_type,
+        "timezone": timezone_name,
+        "week_start": week_start,
+        "show_bucket_details": show_bucket_details,
     }
     contradictions_config: Dict[str, Any] = {
         **shared_scope,
@@ -688,9 +714,11 @@ def overview(
     }
 
     timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    scorecard_title = str(named_scope.get("scorecard_name") or shared_scope["scorecard"]).strip()
+    score_title = str(named_scope.get("score_name") or shared_scope["score"]).strip()
+    display_title = f"{scorecard_title} - {score_title} - Feedback Overview"
     generated_name = (
-        f"Scorecard {shared_scope['scorecard']} | Score {shared_scope['score']} | "
-        f"Feedback Overview | {_window_label(days, start_date, end_date)} | {timestamp_utc}"
+        f"{display_title} | {_window_label(days, start_date, end_date)} | {timestamp_utc}"
     )
     final_report_name = str(report_name).strip() if report_name and str(report_name).strip() else generated_name
 
@@ -698,14 +726,14 @@ def overview(
         report_name=final_report_name,
         block_definitions=[
             {
+                "class_name": "FeedbackVolumeTimeline",
+                "block_name": "Feedback Volume Timeline",
+                "config": volume_timeline_config,
+            },
+            {
                 "class_name": "FeedbackAlignmentTimeline",
                 "block_name": "Feedback Alignment Timeline",
                 "config": timeline_config,
-            },
-            {
-                "class_name": "AcceptanceRate",
-                "block_name": "Acceptance Rate",
-                "config": acceptance_config,
             },
             {
                 "class_name": "FeedbackContradictions",
@@ -716,19 +744,22 @@ def overview(
         account_id=account_id,
         client=client,
         report_parameters={
-            **shared_scope,
+            **named_scope,
             "bucket_type": bucket_type,
             "timezone": timezone_name,
             "week_start": week_start,
             "show_bucket_details": show_bucket_details,
-            "acceptance_max_items": max_items,
             "contradictions_mode": mode,
             "max_feedback_items": max_feedback_items,
             "num_topics": num_topics,
             "max_concurrent": max_concurrent,
         },
-        display_title="Feedback Overview",
+        display_title=display_title,
         display_subtitle=_window_label(days, start_date, end_date),
+        display_description=(
+            "Combined feedback overview with volume over time, alignment over time, "
+            "and contradiction analysis for the selected scope."
+        ),
     )
 
     if not report_id:
@@ -741,8 +772,8 @@ def overview(
         "report_name": final_report_name,
         "dashboard_url": dashboard_url,
         "blocks": [
+            "FeedbackVolumeTimeline",
             "FeedbackAlignmentTimeline",
-            "AcceptanceRate",
             "FeedbackContradictions",
         ],
         "shared_scope": shared_scope,

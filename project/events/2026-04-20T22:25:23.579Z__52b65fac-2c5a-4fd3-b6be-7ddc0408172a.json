@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "52b65fac-2c5a-4fd3-b6be-7ddc0408172a",
+  "issue_id": "plx-855543e0-c976-47f1-b03d-5780539f95a8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-20T22:25:23.579Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implementation task for the runtime scoring architecture diagram.\n\nScope:\n- Inspect existing diagram palette and related architecture diagrams.\n- Create a new Excalidraw file in the documentation diagrams area.\n- Show Azure-hosted Tethr Kubernetes runtime placement, AWS-hosted GraphQL control plane, and the in-cluster data API for Items, Score Results, and Feedback Items.\n- Keep the styling consistent with the existing documentation diagrams.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-29862d34-7e20-4dde-981a-46487c231fce",
+    "priority": 2,
+    "status": "open",
+    "title": "Create Excalidraw runtime scoring architecture diagram"
+  }
+}

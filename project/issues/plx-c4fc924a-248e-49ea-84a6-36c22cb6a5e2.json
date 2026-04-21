@@ -1,0 +1,21 @@
+{
+  "id": "plx-c4fc924a-248e-49ea-84a6-36c22cb6a5e2",
+  "title": "Specify behavior for runtime scoring architecture diagram",
+  "description": "As a Plexus developer, I want a runtime architecture diagram for scoring operations, so that I can understand where the scoring pod runs and which control-plane and data-plane services it depends on.\n\nFeature: runtime scoring architecture documentation\n\nScenario: show the deployed control-plane and data-plane boundaries\nGiven Plexus scoring runs in a container inside the Tethr Kubernetes cluster hosted in Azure\nWhen a reader opens the runtime scoring architecture diagram\nThen the diagram shows the Plexus scoring pod inside the Azure Kubernetes environment\nAnd the diagram shows a GraphQL API in AWS for the control plane\nAnd the diagram identifies Scorecards, Scores, and related control-plane records as living in that AWS GraphQL layer\nAnd the diagram shows an in-cluster API used to access Items, Score Results, and Feedback Items\nAnd the diagram uses the repository's established Excalidraw styling conventions.",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-29862d34-7e20-4dde-981a-46487c231fce",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-20T22:25:16.632728Z",
+  "updated_at": "2026-04-20T22:25:23.569041Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
