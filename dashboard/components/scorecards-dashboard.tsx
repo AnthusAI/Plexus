@@ -366,11 +366,6 @@ export default function ScorecardsComponent({
     setIsTaskViewActive(false);
   };
 
-  // Handle closing feedback alignment panel
-  const handleCloseFeedbackAlignment = () => {
-    setFeedbackAlignmentPanel(null);
-  };
-
   // Handle task closure
   const handleCloseTask = () => {
     setSelectedTask(null);
