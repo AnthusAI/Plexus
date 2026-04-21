@@ -170,6 +170,31 @@ describe('ParametersDisplay', () => {
     expect(screen.queryByText('2025-12-31')).not.toBeInTheDocument()
   })
 
+  it('renders date_range parameter formatted', () => {
+    const parameters: ParameterDefinition[] = [
+      {
+        name: 'window',
+        label: 'Analysis Window',
+        type: 'date_range',
+        required: true
+      }
+    ]
+
+    const values: ParameterValues = {
+      window: { start: '2026-01-01', end: '2026-01-31' }
+    }
+
+    render(
+      <ParametersDisplay
+        parameters={parameters}
+        values={values}
+      />
+    )
+
+    expect(screen.getByText('Analysis Window')).toBeInTheDocument()
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument()
+  })
+
   it('displays em dash for missing values', () => {
     const parameters: ParameterDefinition[] = [
       {
@@ -381,4 +406,3 @@ describe('ParametersDisplay', () => {
     expect(emDashes).toHaveLength(2)
   })
 })
-

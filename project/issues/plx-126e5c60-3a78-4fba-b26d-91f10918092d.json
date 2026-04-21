@@ -1,0 +1,43 @@
+{
+  "id": "plx-126e5c60-3a78-4fba-b26d-91f10918092d",
+  "title": "Implement date_range parameter parsing, UI rendering, validation, and dispatch flattening",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-88d8f8c6-72b2-4f34-8a65-9818f9673ab7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "24de20ea-640b-4145-b592-7ce249f08662",
+      "author": "derek",
+      "text": "Starting implementation on feature/report-date-range-parameter. Scope: add date_range ParameterType, parser normalization/validation/default handling, parameter form/dialog rendering with date-range control, and flattening to <name>_start/<name>_end in report dispatch command.",
+      "created_at": "2026-04-21T16:23:30.850949993Z"
+    },
+    {
+      "id": "c093e0f4-bdc0-4de4-be61-346a8d8643e2",
+      "author": "derek",
+      "text": "Implemented date_range support in dashboard parameter system: added ParameterType/date-range value shape, parser normalization + validation + defaults, new DateRangeParameter control, dialog/form render wiring, report dispatch flattening to <name>_start/<name>_end, and display formatting updates. Added/updated tests in parameter-parser and ParametersDisplay. Local quality gate: npm test -- parameter-parser.test.ts ParametersDisplay.test.tsx --runInBand (pass).",
+      "created_at": "2026-04-21T16:25:29.767574425Z"
+    },
+    {
+      "id": "dc6e782b-a5a1-49c0-91fa-9b4db980efe4",
+      "author": "derek",
+      "text": "Follow-up requested by user: task requires FeedbackAnalysis block class support specifically. Plan: add FeedbackAnalysis backend block alias to FeedbackAlignment, register frontend block type alias, and add tests confirming class registration and inherited date-window behavior (start_date/end_date). No push until user asks.",
+      "created_at": "2026-04-21T16:32:28.545229461Z"
+    },
+    {
+      "id": "cf0efaf6-4cb6-4d5f-859d-b7dd9d46ec1e",
+      "author": "derek",
+      "text": "Completed implementation and DRY cleanup. Added shared report-configuration pagination helper used by ReportConfigurationSelector and ReportConfigurationDialog, date_range parser/frontmatter support, UI date-range bounds, backend date_range normalization/validation + companion key mapping, FeedbackAnalysis alias class registration, and tests. Verification: npm test -- --runTestsByPath lib/__tests__/parameter-parser.test.ts (pass); python -m pytest -q plexus/reports/tests/test_parameter_utils.py plexus/reports/tests/test_feedback_analysis_alias.py (pass). Note: dashboard typecheck currently fails in existing generated file .next/dev/types/routes.d.ts with TS1128/TS1434 unrelated to this change.",
+      "created_at": "2026-04-21T17:51:25.226415920Z"
+    }
+  ],
+  "created_at": "2026-04-21T16:23:23.632488557Z",
+  "updated_at": "2026-04-21T17:51:32.617056914Z",
+  "closed_at": "2026-04-21T17:51:32.617056914Z",
+  "custom": {}
+}

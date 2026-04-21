@@ -32,6 +32,7 @@ registerBlock('default', ReportBlock);
 // Register specific block types - use type casting to satisfy BlockComponent interface
 registerBlock('ScorecardReport', ScorecardReport as BlockComponent);
 registerBlock('FeedbackAlignment', FeedbackAlignment as BlockComponent);
+registerBlock('FeedbackAnalysis', FeedbackAlignment as BlockComponent);
 registerBlock('ExplanationAnalysis', ExplanationAnalysis as BlockComponent);
 registerBlock('text', TextBlock as BlockComponent);
 registerBlock('ScoreInfo', ScoreInfo as BlockComponent);

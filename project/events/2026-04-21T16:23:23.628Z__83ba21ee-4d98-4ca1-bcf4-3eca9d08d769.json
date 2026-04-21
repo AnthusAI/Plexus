@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "83ba21ee-4d98-4ca1-bcf4-3eca9d08d769",
+  "issue_id": "plx-c9cfb739-cbbf-4669-9927-f94bfd6ebdca",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T16:23:23.628Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-88d8f8c6-72b2-4f34-8a65-9818f9673ab7",
+    "priority": 2,
+    "status": "open",
+    "title": "Report run dialog supports date range parameter entry"
+  }
+}
