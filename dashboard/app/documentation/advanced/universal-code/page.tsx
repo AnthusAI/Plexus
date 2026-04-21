@@ -2,7 +2,7 @@
 
 import { MessageSquareCode } from 'lucide-react';
 import { CodeSnippet } from '@/components/ui/code-snippet';
-import FeedbackAnalysis from '@/components/blocks/FeedbackAnalysis';
+import FeedbackAlignment from '@/components/blocks/FeedbackAlignment';
 
 export default function YAMLCodeStandardPage() {
   // Create the YAML data but also parse it into the object structure for the component
@@ -240,11 +240,11 @@ scores:
               </div>
             </div>
             <div className="rounded-lg p-4 bg-muted universal-code-demo">
-              <FeedbackAnalysis
+              <FeedbackAlignment
                 config={{}}
                 output={sampleYAMLCode as any}
                 position={1}
-                type="FeedbackAnalysis"
+                type="FeedbackAlignment"
                 id="sales-lead-routing-example"
                 name="Sales Lead Routing Quality Analysis"
                 className="border-0 p-0"
@@ -266,7 +266,7 @@ scores:
           <h2 className="text-2xl font-semibold mb-4">Available Everywhere</h2>
           <p className="text-muted-foreground mb-6">
             Every report block in Plexus automatically generates Universal Code Snippets. Whether you're working with 
-            topic analysis, feedback analysis, confusion matrices, or any other analytical output, the distinctive 
+            topic analysis, feedback alignment, confusion matrices, or any other analytical output, the distinctive 
             code icon gives you instant access to structured, contextual data.
           </p>
           

@@ -24,15 +24,15 @@ async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "plexus.reports.blocks.feedback_contradictions.Scorecard.list_by_key",
+        "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key",
         lambda key, client: None,
     )
     monkeypatch.setattr(
-        "plexus.reports.blocks.feedback_contradictions.Scorecard.list_by_name",
+        "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name",
         lambda name, client: SimpleNamespace(id="scorecard-1", name=name),
     )
     monkeypatch.setattr(
-        "plexus.reports.blocks.feedback_contradictions.Scorecard.list_by_external_id",
+        "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id",
         lambda external_id, client: None,
     )
 
@@ -57,7 +57,7 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     block.report_block_id = 'block-123'
 
     monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_name',
+        'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
         lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
     )
     monkeypatch.setattr(
@@ -100,6 +100,7 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     )
 
     output, _log = await block.generate()
+    assert output.startswith("# CMG EDU - Branding and Matching - Feedback Contradictions")
     parsed = _parse_output(output)
     assert parsed['report_type'] == 'feedback_contradictions'
     assert parsed['scope'] == 'single_score'
@@ -122,7 +123,7 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     block.report_block_id = 'block-456'
 
     monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_name',
+        'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
         lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
     )
     monkeypatch.setattr(
@@ -176,6 +177,7 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     )
 
     output, _log = await block.generate()
+    assert output.startswith("# CMG EDU - Branding and Matching - Feedback Aligned Items")
     parsed = _parse_output(output)
     assert parsed['report_type'] == 'feedback_contradictions'
     assert parsed['scope'] == 'single_score'
@@ -216,7 +218,7 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
     block.report_block_id = 'block-789'
 
     monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.Scorecard.get_by_name',
+        'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
         lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
     )
     monkeypatch.setattr(

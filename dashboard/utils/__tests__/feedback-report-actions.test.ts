@@ -7,7 +7,7 @@ describe("feedback-report-actions", () => {
   it("exposes score-optional actions without score-only reports", () => {
     expect(getFeedbackReportActions(false).map((action) => action.id)).toEqual([
       "recent",
-      "analysis",
+      "alignment",
       "timeline",
       "volume",
       "acceptance-rate",

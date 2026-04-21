@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import click
 import yaml
@@ -17,6 +17,10 @@ from plexus.cli.feedback.report_runner import (
 )
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.cli.shared.client_utils import create_client
+from plexus.cli.shared.memoized_resolvers import (
+    memoized_resolve_score_identifier,
+    memoized_resolve_scorecard_identifier,
+)
 from plexus.cli.shared.console import console
 from plexus.reports.parameter_utils import enrich_parameters_with_names
 from plexus.reports.service import (
@@ -79,6 +83,60 @@ def _window_label(days: Optional[int], start_date: Optional[str], end_date: Opti
     if days is not None:
         return f"Last {days} days"
     return "Default window"
+
+
+def _score_has_nonempty_champion_guidelines(
+    *,
+    client: Any,
+    scorecard_identifier: str,
+    score_identifier: str,
+) -> Tuple[bool, Optional[str]]:
+    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_identifier).strip())
+    if not scorecard_id:
+        return False, f"Skipped Feedback Contradictions: could not resolve scorecard '{scorecard_identifier}'."
+
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, str(score_identifier).strip())
+    if not score_id:
+        return False, f"Skipped Feedback Contradictions: could not resolve score '{score_identifier}'."
+
+    try:
+        score_result = client.execute(
+            """
+            query GetScoreChampionVersion($id: ID!) {
+                getScore(id: $id) {
+                    championVersionId
+                }
+            }
+            """,
+            {"id": score_id},
+        )
+        champion_version_id = (
+            (score_result or {})
+            .get("getScore", {})
+            .get("championVersionId")
+        )
+        if not champion_version_id:
+            return False, "Skipped Feedback Contradictions: score has no champion version."
+
+        version_result = client.execute(
+            """
+            query GetScoreVersionGuidelines($id: ID!) {
+                getScoreVersion(id: $id) {
+                    guidelines
+                }
+            }
+            """,
+            {"id": champion_version_id},
+        )
+        guidelines = str(
+            ((version_result or {}).get("getScoreVersion", {}) or {}).get("guidelines") or ""
+        ).strip()
+        if not guidelines:
+            return False, "Skipped Feedback Contradictions: champion version guidelines are empty."
+
+        return True, None
+    except Exception as exc:
+        return False, f"Skipped Feedback Contradictions: failed to resolve champion guidelines ({exc})."
 
 
 @click.group(name="report")
@@ -295,7 +353,7 @@ def recent(
     _print_result(title="RecentFeedback", result=result, output_format=output_format, include_log=include_log)
 
 
-@report.command(name="analysis")
+@report.command(name="alignment")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
 @click.option(
@@ -320,7 +378,7 @@ def recent(
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
-def analysis(
+def alignment(
     scorecard: str,
     score: Optional[str],
     order_scores: str,
@@ -336,9 +394,9 @@ def analysis(
     output_format: str,
     include_log: bool,
 ) -> None:
-    """Run the FeedbackAnalysis report block directly."""
+    """Run the FeedbackAlignment report block directly."""
     result = run_feedback_report_block(
-        block_class="FeedbackAnalysis",
+        block_class="FeedbackAlignment",
         scorecard=scorecard,
         score=score,
         days=_coerce_optional_int(days, "days"),
@@ -351,7 +409,7 @@ def analysis(
         background=background,
         extra_config={"order_scores": order_scores, "memory_analysis": bool(memory_analysis)},
     )
-    _print_result(title="FeedbackAnalysis", result=result, output_format=output_format, include_log=include_log)
+    _print_result(title="FeedbackAlignment", result=result, output_format=output_format, include_log=include_log)
 
 
 @report.command(name="contradictions")
@@ -665,12 +723,24 @@ def overview(
 ) -> None:
     """
     Generate a 3-block score overview report:
-    FeedbackVolumeTimeline, FeedbackAlignmentTimeline, FeedbackContradictions.
+    FeedbackVolumeTimeline, FeedbackAlignment, and FeedbackContradictions
+    (when champion guidelines are present).
     """
     client = create_client()
     if not client:
         raise click.ClickException("Could not create dashboard client.")
     account_id = resolve_account_id_for_command(client, account_identifier)
+
+    scorecard_input = str(scorecard).strip()
+    score_input = str(score).strip()
+    resolved_scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_input)
+    if not resolved_scorecard_id:
+        raise click.ClickException(f"Could not resolve scorecard '{scorecard_input}'.")
+    resolved_score_id = memoized_resolve_score_identifier(client, resolved_scorecard_id, score_input)
+    if not resolved_score_id:
+        raise click.ClickException(
+            f"Could not resolve score '{score_input}' in scorecard '{scorecard_input}'."
+        )
 
     window_config = build_window_config(
         days=_coerce_optional_int(days, "days"),
@@ -678,8 +748,8 @@ def overview(
         end_date=end_date,
     )
     shared_scope: Dict[str, Any] = {
-        "scorecard": str(scorecard).strip(),
-        "score": str(score).strip(),
+        "scorecard": resolved_scorecard_id,
+        "score": resolved_score_id,
         **window_config,
     }
     named_scope = enrich_parameters_with_names(
@@ -691,13 +761,7 @@ def overview(
         client,
     )
 
-    timeline_config: Dict[str, Any] = {
-        **shared_scope,
-        "bucket_type": bucket_type,
-        "timezone": timezone_name,
-        "week_start": week_start,
-        "show_bucket_details": show_bucket_details,
-    }
+    alignment_config: Dict[str, Any] = {**shared_scope}
     volume_timeline_config: Dict[str, Any] = {
         **shared_scope,
         "bucket_type": bucket_type,
@@ -712,6 +776,11 @@ def overview(
         "num_topics": num_topics,
         "max_concurrent": max_concurrent,
     }
+    include_contradictions, contradictions_skip_reason = _score_has_nonempty_champion_guidelines(
+        client=client,
+        scorecard_identifier=resolved_scorecard_id,
+        score_identifier=resolved_score_id,
+    )
 
     timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     scorecard_title = str(named_scope.get("scorecard_name") or shared_scope["scorecard"]).strip()
@@ -722,25 +791,39 @@ def overview(
     )
     final_report_name = str(report_name).strip() if report_name and str(report_name).strip() else generated_name
 
-    report_id, first_error = run_programmatic_report_and_persist(
-        report_name=final_report_name,
-        block_definitions=[
-            {
-                "class_name": "FeedbackVolumeTimeline",
-                "block_name": "Feedback Volume Timeline",
-                "config": volume_timeline_config,
-            },
-            {
-                "class_name": "FeedbackAlignmentTimeline",
-                "block_name": "Feedback Alignment Timeline",
-                "config": timeline_config,
-            },
+    block_definitions: list[dict[str, Any]] = [
+        {
+            "class_name": "FeedbackVolumeTimeline",
+            "block_name": "Feedback Volume Timeline",
+            "config": volume_timeline_config,
+        },
+        {
+            "class_name": "FeedbackAlignment",
+            "block_name": "Feedback Alignment",
+            "config": alignment_config,
+        },
+    ]
+    if include_contradictions:
+        block_definitions.append(
             {
                 "class_name": "FeedbackContradictions",
                 "block_name": "Feedback Contradictions",
                 "config": contradictions_config,
-            },
-        ],
+            }
+        )
+
+    report_description = (
+        "Combined feedback overview with volume over time and alignment metrics "
+        "for the selected scope."
+    )
+    if include_contradictions:
+        report_description += " Includes contradiction analysis."
+    else:
+        report_description += " Feedback contradictions were skipped because champion guidelines are missing."
+
+    report_id, first_error = run_programmatic_report_and_persist(
+        report_name=final_report_name,
+        block_definitions=block_definitions,
         account_id=account_id,
         client=client,
         report_parameters={
@@ -753,13 +836,12 @@ def overview(
             "max_feedback_items": max_feedback_items,
             "num_topics": num_topics,
             "max_concurrent": max_concurrent,
+            "include_contradictions": include_contradictions,
+            "contradictions_skipped_reason": contradictions_skip_reason if not include_contradictions else None,
         },
         display_title=display_title,
         display_subtitle=_window_label(days, start_date, end_date),
-        display_description=(
-            "Combined feedback overview with volume over time, alignment over time, "
-            "and contradiction analysis for the selected scope."
-        ),
+        display_description=report_description,
     )
 
     if not report_id:
@@ -771,11 +853,7 @@ def overview(
         "report_id": report_id,
         "report_name": final_report_name,
         "dashboard_url": dashboard_url,
-        "blocks": [
-            "FeedbackVolumeTimeline",
-            "FeedbackAlignmentTimeline",
-            "FeedbackContradictions",
-        ],
+        "blocks": [block["class_name"] for block in block_definitions],
         "shared_scope": shared_scope,
         "timeline": {
             "bucket_type": bucket_type,
@@ -784,6 +862,8 @@ def overview(
             "show_bucket_details": show_bucket_details,
         },
     }
+    if not include_contradictions and contradictions_skip_reason:
+        payload["warnings"] = [contradictions_skip_reason]
     if first_error:
         payload["error"] = first_error
 

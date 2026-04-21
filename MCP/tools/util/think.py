@@ -49,7 +49,7 @@ def register_think_tool(mcp: FastMCP):
 
         REQUIRED BASELINE STEPS (no edits yet):
         1) Pull champion YAML locally (score pull). Confirm the local path.
-        2) Collect recent metrics: plexus_feedback_analysis (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
+        2) Collect recent metrics: plexus_feedback_alignment (e.g., 30 days) and plexus_feedback_find for FP (Yes→No) and FN (No→Yes).
         3) Run a LOCAL baseline evaluation using ONLY local YAML:
            - Evaluations must set remote=false and yaml=true.
            - Path overrides are handled automatically; you do not need to pass any folder parameters.

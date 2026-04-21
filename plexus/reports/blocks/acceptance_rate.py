@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from .feedback_rates_base import FeedbackRatesBase
@@ -30,6 +31,15 @@ class AcceptanceRate(FeedbackRatesBase):
         if normalized in {"0", "false", "f", "no", "n", "off"}:
             return False
         return default
+
+    @staticmethod
+    def _clean_display_label(value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        if text.startswith("<MagicMock"):
+            return ""
+        return text
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self.log_messages = []
@@ -115,6 +125,18 @@ class AcceptanceRate(FeedbackRatesBase):
                     }
                 )
 
+            scorecard_name = self._clean_display_label(dataset.get("scorecard_name"))
+            if not scorecard_name:
+                scorecard_name = self._clean_display_label(dataset.get("scorecard_id"))
+            score_name_raw = dataset.get("score_name")
+            score_name = (
+                None
+                if dataset.get("scope") == "scorecard_all_scores"
+                else self._clean_display_label(score_name_raw)
+                or self._clean_display_label(dataset.get("score_id"))
+                or None
+            )
+
             output = {
                 "report_type": "acceptance_rate",
                 "block_title": self.DEFAULT_NAME,
@@ -126,9 +148,9 @@ class AcceptanceRate(FeedbackRatesBase):
                 "include_item_acceptance_rate": include_item_acceptance_rate,
                 "scope": dataset["scope"],
                 "scorecard_id": dataset["scorecard_id"],
-                "scorecard_name": dataset["scorecard_name"],
+                "scorecard_name": scorecard_name,
                 "score_id": dataset["score_id"],
-                "score_name": dataset["score_name"],
+                "score_name": score_name,
                 "distinct_score_ids": dataset["distinct_score_ids"],
                 "date_range": dataset["date_range"],
                 "summary": summary,
@@ -139,7 +161,36 @@ class AcceptanceRate(FeedbackRatesBase):
                 "items_truncated": len(items_out) < items_total,
                 "raw_counts": dataset["raw_counts"],
             }
-            return output, self._get_log_string()
+
+            score_label = "All Scores" if dataset.get("scope") == "scorecard_all_scores" else str(score_name or "Unknown Score")
+            scorecard_label = scorecard_name or self._clean_display_label(dataset.get("scorecard_id"))
+            date_range = output.get("date_range") or {}
+            start_label = str(date_range.get("start") or "").strip()
+            end_label = str(date_range.get("end") or "").strip()
+            if start_label:
+                start_label = start_label[:10]
+            if end_label:
+                end_label = end_label[:10]
+            window_label = f"{start_label} to {end_label}" if start_label and end_label else "Requested window"
+
+            mode_label = (
+                "Acceptance Rate (Item + Score Result)"
+                if include_item_acceptance_rate
+                else "Score Result Acceptance Rate"
+            )
+            context_header = (
+                f"# {scorecard_label} - {score_label} - {mode_label}\n"
+                f"# {window_label}\n"
+                "#\n"
+                "# This report summarizes acceptance metrics from score results and feedback edits.\n"
+                "#\n"
+                "# Key fields:\n"
+                "#   summary.score_result_acceptance_rate\n"
+                "#   summary.feedback_items_total / feedback_items_valid / feedback_items_changed\n"
+                "#   items[*].accepted_score_results / corrected_score_results\n"
+            )
+            formatted_output = context_header + "\n" + json.dumps(output, indent=2, ensure_ascii=False)
+            return formatted_output, self._get_log_string()
         except Exception as exc:
             self._log(f"ERROR generating AcceptanceRate: {exc}", level="ERROR")
             return {"error": str(exc), "items": []}, self._get_log_string()
