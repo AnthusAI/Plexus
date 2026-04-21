@@ -32,6 +32,28 @@ interface ReportConfiguration {
   configuration?: string | null
 }
 
+function flattenReportParameters(parameters: Record<string, any>): Record<string, any> {
+  const flattened: Record<string, any> = {}
+
+  Object.entries(parameters).forEach(([key, value]) => {
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      ('start' in value || 'end' in value)
+    ) {
+      const start = typeof value.start === 'string' ? value.start : ''
+      const end = typeof value.end === 'string' ? value.end : ''
+      if (start) flattened[`${key}_start`] = start
+      if (end) flattened[`${key}_end`] = end
+      return
+    }
+    flattened[key] = value
+  })
+
+  return flattened
+}
+
 // GraphQL query to list report configurations
 const LIST_REPORT_CONFIGURATIONS = `
   query ListReportConfigurations($accountId: String!) {
@@ -166,13 +188,15 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   
   const handleDispatchReport = async (parameters?: Record<string, any>) => {
     if (!selectedConfigId) return
+
+    const flattenedParameters = parameters ? flattenReportParameters(parameters) : undefined
     
     // Build the command for running this report
     let command = `report run --config ${selectedConfigId}`
     
     // Add parameter options if provided
-    if (parameters) {
-      Object.entries(parameters).forEach(([key, value]) => {
+    if (flattenedParameters) {
+      Object.entries(flattenedParameters).forEach(([key, value]) => {
         command += ` --param-${key}=${value}`
       })
     }
@@ -181,7 +205,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
     const metadata = {
       reportConfigurationId: selectedConfigId,
       reportConfigurationName: selectedConfig?.name || 'Report',
-      parameters: parameters || {}
+      parameters: flattenedParameters || {}
     }
     
     // Dispatch the task once and close only after dispatch attempt completes.
