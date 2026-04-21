@@ -173,6 +173,8 @@ class TestFeedbackAnalysis:
                 assert parsed_output is not None
                 assert "overall_ac1" in parsed_output
                 assert "scores" in parsed_output
+                assert "scorecard_summary" in parsed_output
+                assert parsed_output["scorecard_summary"]["scorecard_id"] == "test-scorecard-id"
                 
                 # Now with proper filtering: score1 has 10 items, score2 has 5 items = 15 total
                 assert parsed_output["total_items"] == 15
@@ -185,6 +187,31 @@ class TestFeedbackAnalysis:
                 # Verify logs were generated
                 assert logs is not None
                 assert "Starting FeedbackAnalysis block generation" in logs
+
+                # Default ordering is best_to_worst by AC1; score2 has higher agreement than score1.
+                assert parsed_output["scores"][0]["score_id"] == "score2"
+                assert parsed_output["scores"][1]["score_id"] == "score1"
+
+    @pytest.mark.asyncio
+    async def test_generate_orders_scores_worst_to_best(self, mock_api_client, mock_feedback_items):
+        config = {
+            "scorecard": "test-scorecard-id",
+            "days": 14,
+            "order_scores": "worst_to_best",
+        }
+        block = FeedbackAnalysis(config, {}, mock_api_client)
+
+        with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_external_id', return_value=MagicMock(id="test-scorecard-id", name="Test Scorecard")):
+            def mock_fetch_items(plexus_scorecard_id, plexus_score_id, start_date=None, end_date=None):
+                return [item for item in mock_feedback_items if item.scoreId == plexus_score_id]
+
+            with patch.object(block, '_fetch_feedback_items_for_score', side_effect=mock_fetch_items):
+                output, _logs = await block.generate()
+                parsed_output = parse_yaml_output(output)
+
+                assert parsed_output is not None
+                assert parsed_output["scores"][0]["score_id"] == "score1"
+                assert parsed_output["scores"][1]["score_id"] == "score2"
     
     @pytest.mark.asyncio
     async def test_generate_with_no_data(self, mock_api_client):

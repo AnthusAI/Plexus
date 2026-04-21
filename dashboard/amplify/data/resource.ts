@@ -749,7 +749,7 @@ const schema = a.schema({
         .model({
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
-            compositeKey: a.string().required(), // "recordType#timeRangeStart#numberOfMinutes"
+            compositeKey: a.string().required(), // "recordType[#scopeId]#timeRangeStart#numberOfMinutes"
             scorecardId: a.string(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),

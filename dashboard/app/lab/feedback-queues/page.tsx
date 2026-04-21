@@ -1,7 +1,5 @@
-'use client'
+import { redirect } from "next/navigation";
 
-import FeedbackQueuesDashboard from '@/components/feedback-queues-dashboard'
-
-export default function LabFeedbackQueues() {
-  return <FeedbackQueuesDashboard />
-} 
+export default function LabFeedbackQueuesPage() {
+  redirect("/lab/feedback");
+}
