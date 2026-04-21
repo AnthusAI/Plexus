@@ -235,7 +235,7 @@ def convert_mcp_tools_to_langchain(mcp_tools):
     
     # Known tool schemas for proper argument handling
     known_tool_schemas = {
-        'plexus_feedback_analysis': {
+        'plexus_feedback_alignment': {
             'scorecard_name': 'Name of the scorecard',
             'score_name': 'Name of the score',
             'days': 'Number of days back to analyze'

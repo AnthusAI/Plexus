@@ -22,13 +22,13 @@ class TestReportParameterRendering:
     default: 30
 ---
 
-# Feedback Analysis Report
+# Feedback Alignment Report
 ## SelectQuote MEL HRA
 
 These agreement metrics are based on comparing the feedback edits from Selectquote over the last {{ days }} days.
 
-```block name="Feedback Analysis"
-class: FeedbackAnalysis
+```block name="Feedback Alignment"
+class: FeedbackAlignment
 scorecard: 1461
 days: {{ days }}
 ```
@@ -57,7 +57,7 @@ days: {{ days }}
         try:
             parsed = yaml.safe_load(yaml_content)
             assert parsed['days'] == 60, "Days should be integer 60, not template"
-            assert parsed['class'] == 'FeedbackAnalysis'
+            assert parsed['class'] == 'FeedbackAlignment'
             assert parsed['scorecard'] == 1461
         except yaml.YAMLError as e:
             pytest.fail(f"Rendered YAML should be valid: {e}")

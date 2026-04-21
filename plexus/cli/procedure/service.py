@@ -2372,7 +2372,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
         ac1 = analysis.get('ac1', 0)
         
         # Build clean, focused format for confusion matrix interpretation
-        feedback_analysis = f"""## FEEDBACK ANALYSIS - CONFUSION MATRIX DATA
+        feedback_alignment = f"""## FEEDBACK ANALYSIS - CONFUSION MATRIX DATA
 
 **Scorecard:** {scorecard_name}
 **Score:** {score_name}
@@ -2391,7 +2391,7 @@ You can query the current guidelines using the `plexus_score_info` tool with the
             labels = confusion_matrix.get('labels', [])
             matrix = confusion_matrix.get('matrix', [])
             
-            feedback_analysis += "**Error Patterns (AI Prediction → Human Correction):**\n\n"
+            feedback_alignment += "**Error Patterns (AI Prediction → Human Correction):**\n\n"
             
             total_errors = 0
             error_details = []
@@ -2405,23 +2405,23 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                         # This is an error - AI predicted wrong
                         error_details.append((predicted_label, actual_label, count))
                         total_errors += count
-                        feedback_analysis += f"- **{predicted_label} → {actual_label}:** {count} corrections (AI said '{predicted_label}', human corrected to '{actual_label}')\n"
+                        feedback_alignment += f"- **{predicted_label} → {actual_label}:** {count} corrections (AI said '{predicted_label}', human corrected to '{actual_label}')\n"
             
             if total_errors == 0:
-                feedback_analysis += "- No scoring errors found in this period\n"
+                feedback_alignment += "- No scoring errors found in this period\n"
             
-            feedback_analysis += f"\n**Total Corrections:** {total_errors}\n"
+            feedback_alignment += f"\n**Total Corrections:** {total_errors}\n"
             
             # Add correct predictions summary
-            feedback_analysis += "\n**Correct Predictions (for context):**\n"
+            feedback_alignment += "\n**Correct Predictions (for context):**\n"
             for row in matrix:
                 actual_label = row.get('actualClassLabel', '')
                 predicted_counts = row.get('predictedClassCounts', {})
                 correct_count = predicted_counts.get(actual_label, 0)
                 if correct_count > 0:
-                    feedback_analysis += f"- **{actual_label} → {actual_label}:** {correct_count} correct\n"
+                    feedback_alignment += f"- **{actual_label} → {actual_label}:** {correct_count} correct\n"
         
-        feedback_analysis += f"""
+        feedback_alignment += f"""
 
 ### ANALYSIS PRIORITIES
 Based on this data, you should prioritize examining error types with the highest correction counts first.
@@ -2433,7 +2433,7 @@ Based on this data, you should prioritize examining error types with the highest
 """
         
         logger.info(f"Retrieved feedback summary for {scorecard_name}/{score_name} (last {days} days)")
-        return feedback_analysis
+        return feedback_alignment
     
     def _update_node_status(self, node_id: str, new_status: str) -> bool:
         """

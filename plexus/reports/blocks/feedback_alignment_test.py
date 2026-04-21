@@ -4,12 +4,12 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
 import yaml
 
-from plexus.reports.blocks.feedback_analysis import FeedbackAnalysis
+from plexus.reports.blocks.feedback_alignment import FeedbackAlignment
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 
 def parse_yaml_output(output):
-    """Helper function to parse YAML output from FeedbackAnalysis."""
+    """Helper function to parse YAML output from FeedbackAlignment."""
     if isinstance(output, dict):
         # Already a dictionary (error case)
         return output
@@ -141,8 +141,8 @@ def mock_feedback_items():
     return items
 
 
-class TestFeedbackAnalysis:
-    """Tests for the FeedbackAnalysis class."""
+class TestFeedbackAlignment:
+    """Tests for the FeedbackAlignment class."""
     
     @pytest.mark.asyncio
     async def test_generate_with_data(self, mock_api_client, mock_feedback_items):
@@ -153,7 +153,7 @@ class TestFeedbackAnalysis:
             "scorecard": "test-scorecard-id",
             "days": 14
         }
-        block = FeedbackAnalysis(config, {}, mock_api_client)
+        block = FeedbackAlignment(config, {}, mock_api_client)
         
         # Mock Scorecard get_by_external_id
         with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_external_id', return_value=MagicMock(id="test-scorecard-id", name="Test Scorecard")):
@@ -186,7 +186,7 @@ class TestFeedbackAnalysis:
                 
                 # Verify logs were generated
                 assert logs is not None
-                assert "Starting FeedbackAnalysis block generation" in logs
+                assert "Starting FeedbackAlignment block generation" in logs
 
                 # Default ordering is best_to_worst by AC1; score2 has higher agreement than score1.
                 assert parsed_output["scores"][0]["score_id"] == "score2"
@@ -199,7 +199,7 @@ class TestFeedbackAnalysis:
             "days": 14,
             "order_scores": "worst_to_best",
         }
-        block = FeedbackAnalysis(config, {}, mock_api_client)
+        block = FeedbackAlignment(config, {}, mock_api_client)
 
         with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_external_id', return_value=MagicMock(id="test-scorecard-id", name="Test Scorecard")):
             def mock_fetch_items(plexus_scorecard_id, plexus_score_id, start_date=None, end_date=None):
@@ -222,7 +222,7 @@ class TestFeedbackAnalysis:
             "scorecard": "test-scorecard-id",
             "days": 14
         }
-        block = FeedbackAnalysis(config, {}, mock_api_client)
+        block = FeedbackAlignment(config, {}, mock_api_client)
         
         # Mock Scorecard get_by_external_id
         with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_external_id', return_value=MagicMock(id="test-scorecard-id", name="Test Scorecard")):
@@ -254,11 +254,11 @@ class TestFeedbackAnalysis:
         config = {
             "days": 14
         }
-        block = FeedbackAnalysis(config, {}, mock_api_client)
+        block = FeedbackAlignment(config, {}, mock_api_client)
         
         # Call the generate method and check that it returns an error structure
         output, logs = await block.generate()
-        
+
         # For error cases, output should be a dictionary (not YAML)
         assert output is not None
         assert isinstance(output, dict)
@@ -268,13 +268,49 @@ class TestFeedbackAnalysis:
         # Verify logs were generated
         assert logs is not None
         assert "Configuration or Value Error: 'scorecard' is required in the block configuration." in logs
+
+    @pytest.mark.asyncio
+    async def test_generate_topic_label_llm_filters_lua_table_pointer(self, mock_api_client):
+        block = FeedbackAlignment({"scorecard": "test-scorecard-id"}, {}, mock_api_client)
+
+        with patch.object(block, "_run_tac_inference", return_value="<Lua table at 0x1234abcd>"):
+            label = await block._generate_topic_label_llm(
+                keywords=["foo", "bar"],
+                exemplars=["example text"],
+            )
+
+        assert label is None
+
+    @pytest.mark.asyncio
+    async def test_generate_topic_label_llm_filters_embedded_lua_table_pointer(self, mock_api_client):
+        block = FeedbackAlignment({"scorecard": "test-scorecard-id"}, {}, mock_api_client)
+
+        with patch.object(block, "_run_tac_inference", return_value="Topic label: <Lua table at 0x1234abcd>"):
+            label = await block._generate_topic_label_llm(
+                keywords=["foo", "bar"],
+                exemplars=["example text"],
+            )
+
+        assert label is None
+
+    @pytest.mark.asyncio
+    async def test_generate_topic_label_llm_strips_quotes(self, mock_api_client):
+        block = FeedbackAlignment({"scorecard": "test-scorecard-id"}, {}, mock_api_client)
+
+        with patch.object(block, "_run_tac_inference", return_value='"Home value mismatch"'):
+            label = await block._generate_topic_label_llm(
+                keywords=["home", "value"],
+                exemplars=["customer said 300k"],
+            )
+
+        assert label == "Home value mismatch"
     
     def test_analyze_feedback_data_gwet(self, mock_api_client, mock_feedback_items):
         """Tests the _analyze_feedback_data_gwet method directly."""
         
         # Create the block
         config = {"scorecard": "test-scorecard-id"}
-        block = FeedbackAnalysis(config, {}, mock_api_client)
+        block = FeedbackAlignment(config, {}, mock_api_client)
         
         # Call the _analyze_feedback_data_gwet method
         results = block._analyze_feedback_data_gwet(mock_feedback_items, "test-score")
@@ -322,7 +358,7 @@ class TestEnrichedExemplars:
         )
         fi.editedAt = datetime.now(timezone.utc) - timedelta(days=5)
 
-        # Re-run the same construction logic used in feedback_analysis.py
+        # Re-run the same construction logic used in feedback_alignment.py
         score_edit_comments = []
         for mfi in [fi]:
             _raw = mfi.editCommentValue or mfi.finalCommentValue or ""
@@ -355,7 +391,7 @@ class TestEnrichedExemplars:
             "memory_llm_labels": False,
             "memory_causal_inference": False,
         }
-        block = FeedbackAnalysis(config, {}, MagicMock())
+        block = FeedbackAlignment(config, {}, MagicMock())
         block.report_block_id = None
 
         score_data = {
@@ -386,7 +422,7 @@ class TestEnrichedExemplars:
                    return_value=mock_embedder), \
              patch("biblicus.analysis.reinforcement_memory._clusterer.TopicClusterer",
                    return_value=mock_clusterer), \
-             patch("plexus.reports.blocks.feedback_analysis.fetch_item_identifiers",
+             patch("plexus.reports.blocks.feedback_alignment.fetch_item_identifiers",
                    side_effect=fake_identifiers):
             result = await block._run_memory_analysis([score_data])
 

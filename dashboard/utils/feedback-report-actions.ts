@@ -1,6 +1,6 @@
 export type FeedbackReportActionId =
   | "recent"
-  | "analysis"
+  | "alignment"
   | "timeline"
   | "volume"
   | "acceptance-rate"
@@ -30,7 +30,7 @@ export interface BuildFeedbackReportCommandInput extends FeedbackReportWindowPar
 
 const SCORE_OPTIONAL_ACTIONS: FeedbackReportActionDefinition[] = [
   { id: "recent", label: "Recent Feedback", requiresScore: false },
-  { id: "analysis", label: "Feedback Analysis", requiresScore: false },
+  { id: "alignment", label: "Feedback Alignment", requiresScore: false },
   { id: "timeline", label: "Feedback Alignment Timeline", requiresScore: false },
   { id: "volume", label: "Feedback Volume Timeline", requiresScore: false },
   { id: "acceptance-rate", label: "Acceptance Rate", requiresScore: false },
@@ -138,7 +138,7 @@ export function buildFeedbackReportCommand({
 
   switch (actionId) {
     case "recent":
-    case "analysis":
+    case "alignment":
       return stringifyCommand([...baseParts, ...scoreParts, ...windowParts]);
 
     case "acceptance-rate":
