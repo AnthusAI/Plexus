@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d6969d9e-396a-4b4b-89db-1741e1ba2052",
+  "issue_id": "plx-180e55bb-2faa-4eea-af10-ae8e03a5e633",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T00:55:33.521Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Credit Score AI guidelines for Suco - Home Improvement\n\nScenario: Agent asks about credit score or rating explicitly\nGiven a transcript where the agent asks for the customer's credit score, rating, or qualitative credit quality\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Agent mentions credit vaguely without asking about score or quality\nGiven a transcript where the agent references credit but does not ask about score, rating, or qualitative quality\nWhen the reviewer evaluates the conversation\nThen the score should be No\n\nScenario: Agent never asks about credit score or rating\nGiven a transcript with no credit score inquiry\nWhen the reviewer evaluates the conversation\nThen the score should be No",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-c6a192e1-35b5-458d-ae89-829cfc142801",
+    "priority": 2,
+    "status": "open",
+    "title": "As a reviewer, I want Credit Score AI guidelines that distinguish valid credit-score inquiries from vague credit talk, so that scoring is consistent"
+  }
+}
