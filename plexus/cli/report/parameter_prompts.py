@@ -50,13 +50,33 @@ def collect_parameters_interactively(
         if not param_name:
             continue
         
+        param_type = param_def.get('type', 'text')
+
         # Skip if already provided
         if param_name in provided_params:
             value = provided_params[param_name]
             collected_params[param_name] = value
             console.print(f"[dim]✓ {param_def.get('label', param_name)}: {value} (provided)[/dim]")
             continue
-        
+
+        # date_range can be provided as companion keys: <name>_start / <name>_end
+        if param_type == 'date_range':
+            start_key = f"{param_name}_start"
+            end_key = f"{param_name}_end"
+            start_val = provided_params.get(start_key)
+            end_val = provided_params.get(end_key)
+            if start_val is not None or end_val is not None:
+                range_value = {
+                    'start': str(start_val or '').strip(),
+                    'end': str(end_val or '').strip(),
+                }
+                collected_params[param_name] = range_value
+                console.print(
+                    f"[dim]✓ {param_def.get('label', param_name)}: "
+                    f"{range_value['start']} to {range_value['end']} (provided)[/dim]"
+                )
+                continue
+
         # Prompt for value
         value = prompt_for_parameter(param_def)
         
@@ -98,6 +118,9 @@ def prompt_for_parameter(param_def: Dict[str, Any]) -> Any:
     elif param_type == 'select':
         return prompt_select(param_label, param_def, required, default)
     
+    elif param_type == 'date_range':
+        return prompt_date_range(param_label, required, default)
+
     elif param_type in ('scorecard_select', 'score_select', 'score_version_select'):
         # These would need API calls - for now, just collect as text/ID
         console.print(f"[yellow]Note: '{param_type}' requires manual entry in CLI mode[/yellow]")
@@ -224,6 +247,31 @@ def prompt_select(label: str, param_def: Dict[str, Any], required: bool = False,
             console.print("[red]Please enter a valid number[/red]")
 
 
+def prompt_date_range(label: str, required: bool = False, default: Any = None) -> Optional[Dict[str, str]]:
+    """Prompt for start/end dates as ISO date strings."""
+    default_start = ""
+    default_end = ""
+    if isinstance(default, dict):
+        default_start = str(default.get('start') or "")
+        default_end = str(default.get('end') or "")
+
+    while True:
+        start = Prompt.ask(f"{label} start (YYYY-MM-DD)", default=default_start)
+        end = Prompt.ask(f"{label} end (YYYY-MM-DD)", default=default_end)
+
+        start = str(start or "").strip()
+        end = str(end or "").strip()
+
+        if not start and not end and not required:
+            return None
+
+        if not start or not end:
+            console.print("[red]This parameter requires both start and end dates[/red]")
+            continue
+
+        return {"start": start, "end": end}
+
+
 def parse_cli_parameter_options(ctx_params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract --param-* options from click context parameters.
@@ -260,4 +308,3 @@ def display_collected_parameters(parameters: Dict[str, Any]):
     for name, value in parameters.items():
         console.print(f"  [cyan]{name}[/cyan]: {value}")
     console.print()
-
