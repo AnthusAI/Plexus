@@ -492,12 +492,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     <div className="prose dark:prose-invert max-w-none">
       <ReactMarkdown
         components={{
-          p: ({node, ...props}) => <p className="mb-2" {...props} />,
+          p: ({node, ...props}) => <p className="mb-1 leading-snug" {...props} />,
           strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
           ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
           li: ({node, ...props}) => <li className="mb-1" {...props} />,
-          h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-2 mb-2" {...props} />,
-          h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-2 mb-2" {...props} />,
+          h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
+          h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
           h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
           h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
           code: ({node, className, children, ...props}: any) => {
@@ -640,12 +640,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
                   components={{
-                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                    p: ({node, ...props}) => <p className="mb-1 leading-snug" {...props} />,
                     strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
                     ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
                     li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-2 mb-2" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-2 mb-2" {...props} />,
+                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
                     h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
                     h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
                     code: ({node, className, children, ...props}: any) => {
