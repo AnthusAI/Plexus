@@ -16,10 +16,70 @@
       "author": "ryan",
       "text": "Implemented fail-fast handling for broken feedback-backed optimizer evaluations.\n\nCompleted:\n- feedback loading now keeps related Item metadata on supported paths and date-bounded GSI failures raise instead of silently falling back\n- FeedbackItems dataset construction now fails fast when related Item metadata is missing or unparsable\n- Evaluation now treats any score result with value=ERROR as fatal, preserves the underlying score error text, and aborts the run instead of continuing to metrics/RCA\n- CLI evaluation failure path now updates Evaluation.errorMessage/status in addition to Task/TaskStage failure state\n- Tactus trace sink now records terminal tool responses for started tool calls and emits assistant-visible ALERT_ERROR chat messages for failed tool executions\n- targeted tests added/updated for feedback loading, dataset metadata validation, evaluation fail-fast behavior, and trace sink failure visibility\n\nVerification:\n- pytest -q plexus/cli/feedback/feedback_service_test.py plexus/data/test_feedback_items.py plexus/test_evaluation_metrics.py plexus/cli/procedure/test_trace_sink.py\n- result: 57 passed\n",
       "created_at": "2026-04-21T01:49:26.997089Z"
+    },
+    {
+      "id": "21972953-3d88-4b19-a2f9-566989b3d21e",
+      "author": "ryan",
+      "text": "Manual verification complete. Fixed AccuracyEvaluation exception propagation so feedback-backed runs now fail hard instead of drifting into RCA. Verified direct CLI run fails persisted records correctly: evaluation 08a811c0-94f2-49ef-9f6d-91adb0047c3f is FAILED, task 2000e358-6ed2-48d1-bc7c-6a17df5b2c7b is FAILED, Processing stage statusMessage contains the concrete error, and RCA did not start. Root data finding: fetched 307 feedback items through the correct GSI path; 306 item.metadata values are the string '{}' and only 1 includes populated other_data, so the remaining failure is source item metadata for this client rather than Plexus dropping metadata.",
+      "created_at": "2026-04-21T02:15:45.196573Z"
+    },
+    {
+      "id": "6806465e-fdee-4926-ab42-3289284d2794",
+      "author": "ryan",
+      "text": "Starting a fresh manual optimizer rerun from develop to verify whether the item-metadata backfill resolves the previous fail-fast evaluation error for score 72db3535-2a93-48f3-8900-bb275490cc28 on scorecard 0e48be55-1682-4949-9e7e-3c5b5da1e00a.",
+      "created_at": "2026-04-21T02:51:29.517291Z"
+    },
+    {
+      "id": "f4098142-26ac-4869-b6c2-0bc1959c612d",
+      "author": "ryan",
+      "text": "Manual optimizer rerun from clean develop failed for a new reason, not the previous metadata fail-fast error. Procedure ba3cbea3-a9ba-433e-ae5c-7a46c1b02a1d / task 0e4b914f-1eac-43e3-a4bd-60b1b3cd31d3 reached Evaluation and found the associated 200-row dataset. Preflight check on the same 30-day feedback window now shows 42/307 items with populated other_data, up from 1/307 previously, so the backfill is helping. The actual failure was plexus_score_pull inside the optimizer: stray stdout polluted the tool result, and the pull itself errored with [Errno 17] File exists: 'scorecards'. Persisted task errorMessage reflects that Lua/plexus_score_pull failure. Separate visibility bug still evident: task ended FAILED but later stages were marked COMPLETED generically instead of stopping at the failing stage.",
+      "created_at": "2026-04-21T02:54:27.158077Z"
+    },
+    {
+      "id": "8bff1ab1-0fc5-403a-8528-e29cdbed8a49",
+      "author": "ryan",
+      "text": "Implementing the next fix set now: normalize plexus_score_pull to dict-shaped MCP-safe responses, unify local path creation for pulled score files, and correct procedure failure-stage finalization so failed runs do not mark later stages completed.",
+      "created_at": "2026-04-21T03:13:09.585954Z"
+    },
+    {
+      "id": "bdcf8e30-0518-4b4d-a66b-c1cfae18d421",
+      "author": "ryan",
+      "text": "Implementing the contradictions-report fix set now: shared score-in-scorecard resolution for score IDs, explicit failed ReportBlock/report status instead of fake empty success, and optimizer warnings that distinguish report failure from zero contradictions.",
+      "created_at": "2026-04-21T03:32:02.842202Z"
+    },
+    {
+      "id": "54ae59e9-a8d1-4245-a835-a3ee3904c03d",
+      "author": "ryan",
+      "text": "Rerunning procedure 23686f8a-6496-4878-9d39-05f206018a20 directly via CLI with max_iterations=20 for manual verification after contradictions-report fixes.",
+      "created_at": "2026-04-21T03:48:51.188869Z"
+    },
+    {
+      "id": "c0f88ff2-c793-4adc-85b4-169d1c030e2a",
+      "author": "ryan",
+      "text": "Stopping active procedure runs and investigating regression causing Agent Misrepresentation evaluations to fail while client-specific missing-metadata failures remain expected.",
+      "created_at": "2026-04-21T04:14:38.668755Z"
+    },
+    {
+      "id": "a150cd30-e23c-4480-9562-a1badd3687b0",
+      "author": "ryan",
+      "text": "Removed LangGraph score-runtime checkpointing, added cleanup regression coverage, and manually verified the Agent Misrepresentation feedback evaluation passes the prior failure point (processed_items=61 with no error). Preparing a focused commit and then proceeding to procedure testing.",
+      "created_at": "2026-04-21T04:33:40.130767Z"
+    },
+    {
+      "id": "f5b602f0-bb9e-4a89-8547-ff85d09d6b2e",
+      "author": "ryan",
+      "text": "Removed LangGraph score-runtime checkpointing from score execution. Manual verification: direct Agent Misrepresentation predict still returns a normal result for item 9c929f25-a91f-4db7-8943-5aa93498b8e9--297191731 on version 2ca16cc5-d66d-4065-b875-7d35cedb9be6, and replacement feedback evaluation 98e9535e-70b1-4e08-a282-da9f455bad8d advanced past the old closed-connection failure point (old run failed at processed_items=58; new run observed at processed_items=61 with no error). Proceeding to commit and procedure-level testing.",
+      "created_at": "2026-04-21T04:34:38.639833Z"
+    },
+    {
+      "id": "f8f88cfe-359d-4809-b33c-216e0ca9e835",
+      "author": "ryan",
+      "text": "Consolidating all current worktree changes into one local-only commit on fix/optimizer-fail-fast-metadata-errors per user request. No push yet. Will monitor running procedure a271b380-51d2-4a17-b097-9ca7ea6386b6 / task f94aeb00-3050-4f46-bea9-1caac770158b on a 25-minute heartbeat and intervene if it hits a major failure.",
+      "created_at": "2026-04-21T04:42:31.500135Z"
     }
   ],
   "created_at": "2026-04-21T01:41:02.072108Z",
-  "updated_at": "2026-04-21T01:49:26.997089Z",
+  "updated_at": "2026-04-21T04:42:31.500135Z",
   "closed_at": null,
   "custom": {}
 }

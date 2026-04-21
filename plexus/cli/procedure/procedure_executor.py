@@ -1140,12 +1140,19 @@ async def _execute_tactus(
             await log_bridge.flush()
             _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
 
-        # Mark all remaining task stages as COMPLETED now that execution has finished.
+        execution_succeeded = bool(isinstance(result, dict) and result.get("success"))
+
         if _task_id:
             try:
-                _complete_all_task_stages(client, _task_id)
+                if execution_succeeded:
+                    _complete_all_task_stages(client, _task_id)
+                else:
+                    task_error = ""
+                    if isinstance(result, dict):
+                        task_error = str(result.get("error") or result.get("message") or "")
+                    _fail_all_task_stages(client, _task_id, task_error)
             except Exception as _ce:
-                logger.warning("Could not complete task stages after execution: %s", _ce, exc_info=True)
+                logger.warning("Could not finalize task stages after execution: %s", _ce, exc_info=True)
 
         # Ensure Console receives a meaningful assistant message from procedure output.
         # Some runtime/trace combinations emit only placeholder completion events.

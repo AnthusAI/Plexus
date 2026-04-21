@@ -74,7 +74,7 @@ def _safe_output_preview(output_payload: Any) -> Dict[str, Any]:
         if not isinstance(parsed, dict):
             return {"raw_preview": str(parsed)[:MAX_REPORT_BLOCK_OUTPUT_PREVIEW_CHARS]}
         preview: Dict[str, Any] = {}
-        for key in ("type", "status", "summary", "items_processed", "index_name", "cluster_version"):
+        for key in ("type", "status", "summary", "message", "error", "items_processed", "index_name", "cluster_version"):
             if key in parsed:
                 preview[key] = parsed[key]
         return preview
@@ -85,15 +85,20 @@ def _safe_output_preview(output_payload: Any) -> Dict[str, Any]:
 def _compact_output_json_for_storage(
     output_payload: Any,
     output_attachment_path: Optional[str],
+    *,
+    status: str = "ok",
+    error_message: Optional[str] = None,
 ) -> str:
     """
     Return a compact inline output payload that points at attached output JSON.
     """
     compact_payload: Dict[str, Any] = {
-        "status": "ok",
+        "status": status,
         "output_compacted": True,
         "preview": _safe_output_preview(output_payload),
     }
+    if error_message:
+        compact_payload["error"] = error_message
     if output_attachment_path:
         compact_payload["output_attachment"] = output_attachment_path
     return json.dumps(compact_payload)
@@ -104,6 +109,9 @@ def _persist_output_artifact_and_compact(
     output_payload: Any,
     existing_details_files_list: List[str],
     log_prefix: str,
+    *,
+    status: str = "ok",
+    error_message: Optional[str] = None,
 ) -> Tuple[str, List[str], str]:
     """
     Persist output JSON as an attached artifact and return a compact inline envelope.
@@ -127,7 +135,12 @@ def _persist_output_artifact_and_compact(
     if output_path not in existing_details_files_list:
         existing_details_files_list.append(output_path)
 
-    compact_output = _compact_output_json_for_storage(normalized_output, output_path)
+    compact_output = _compact_output_json_for_storage(
+        normalized_output,
+        output_path,
+        status=status,
+        error_message=error_message,
+    )
     return compact_output, existing_details_files_list, output_path
 
 
@@ -151,6 +164,31 @@ def _persist_log_artifact_if_present(
     if log_path not in existing_details_files_list:
         existing_details_files_list.append(log_path)
     return "See log.txt in attachedFiles.", existing_details_files_list, log_path
+
+
+def _extract_error_message_from_output(output_payload: Any) -> Optional[str]:
+    if isinstance(output_payload, dict):
+        for key in ("error", "message", "summary"):
+            value = output_payload.get(key)
+            if value:
+                return str(value)
+        return None
+    if isinstance(output_payload, str):
+        stripped = output_payload.strip()
+        return stripped or None
+    return None
+
+
+def _summarize_error_message(error_payload: Any, fallback: str) -> str:
+    extracted = _extract_error_message_from_output(error_payload)
+    if extracted:
+        first_line = next(
+            (line.strip() for line in extracted.splitlines() if line.strip()),
+            extracted.strip(),
+        )
+        if first_line:
+            return first_line[:500]
+    return fallback[:500]
 
 
 
@@ -490,8 +528,19 @@ def _instantiate_and_run_block(
         error_msg = f"Error running block {block_display_name} ({class_name}): {e}"
         detailed_error = traceback.format_exc()
         logger.exception(f"{error_msg}")
+        block_log_output = None
+        try:
+            block_log_output = block_instance._get_log_string()
+        except Exception:
+            block_log_output = None
         # Return None for JSON output and the error message as the log string
-        return None, f"{error_msg}\nDetails:\n{detailed_error}", None
+        combined_log = [error_msg]
+        if block_log_output:
+            combined_log.append("Block logs:")
+            combined_log.append(block_log_output)
+        combined_log.append("Details:")
+        combined_log.append(detailed_error)
+        return None, "\n".join(combined_log), None
 
 _PROGRAMMATIC_CONFIG_NAME = "Programmatic Reports"
 _programmatic_config_id_cache: Optional[str] = None
@@ -865,23 +914,24 @@ def _find_report_by_task_id(
     return None
 
 
-def _load_programmatic_report_output(
+def _load_programmatic_report_result(
     *,
     report: Report,
     client: PlexusDashboardClient,
-) -> Optional[Any]:
+) -> Tuple[Optional[Any], Optional[str]]:
     output_raw = report.output
     if not output_raw:
-        return None
+        return None, None
     if isinstance(output_raw, str):
         stripped = output_raw.strip()
         if not stripped.startswith("{") and not stripped.startswith("["):
-            return _fetch_first_block_output(report.id, client)
+            return _fetch_first_block_result(report.id, client)
         try:
-            return json.loads(output_raw)
+            parsed = json.loads(output_raw)
+            return parsed, _extract_error_message_from_output(parsed) if isinstance(parsed, dict) and parsed.get("status") == "error" else None
         except json.JSONDecodeError:
-            return output_raw
-    return output_raw
+            return output_raw, None
+    return output_raw, None
 
 
 def _create_programmatic_report_task(
@@ -933,9 +983,11 @@ def _wait_for_programmatic_task_result(
     while time.monotonic() < deadline:
         report = _find_report_by_task_id(task_id=task.id, account_id=account_id, client=client)
         if report is not None:
-            output_data = _load_programmatic_report_output(report=report, client=client)
+            output_data, output_error = _load_programmatic_report_result(report=report, client=client)
             if output_data is not None:
                 return output_data, None, True
+            if output_error:
+                return None, output_error, False
 
         refreshed_task = Task.get_by_id(task.id, client)
         last_task_status = (refreshed_task.status or "").upper()
@@ -955,9 +1007,11 @@ def _wait_for_programmatic_task_result(
 
         report = _find_report_by_task_id(task_id=task.id, account_id=account_id, client=client)
         if report is not None:
-            output_data = _load_programmatic_report_output(report=report, client=client)
+            output_data, output_error = _load_programmatic_report_result(report=report, client=client)
             if output_data is not None:
                 return output_data, None, True
+            if output_error:
+                return None, output_error, False
 
         time.sleep(_PROGRAMMATIC_WAIT_POLL_SECONDS)
 
@@ -1000,24 +1054,43 @@ def run_programmatic_block_and_persist(
         report_params=report_params,
         api_client=client,
     )
-
-    if output_data is None:
-        return None, log_output
+    failure_output = (
+        output_data
+        if output_data is not None
+        else {
+            "status": "error",
+            "error": _summarize_error_message(
+                log_output,
+                f"Block {block_class} failed.",
+            ),
+            "block_class": block_class,
+        }
+    )
+    error_message = (
+        _summarize_error_message(failure_output, f"Block {block_class} failed.")
+        if output_data is None
+        else None
+    )
 
     try:
         _persist_block_result(
             cache_key,
             block_class,
             block_config,
-            output_data,
+            output_data if output_data is not None else failure_output,
             log_output,
             account_id,
             client,
+            success=output_data is not None,
+            error_message=error_message,
         )
     except Exception as exc:
         logger.warning("Failed to cache block result: %s", exc)
         if persist_required:
             raise
+
+    if output_data is None:
+        return None, log_output
 
     return output_data, log_output
 
@@ -1030,6 +1103,9 @@ def _persist_block_result(
     log_output: Optional[str],
     account_id: str,
     client: PlexusDashboardClient,
+    *,
+    success: bool = True,
+    error_message: Optional[str] = None,
 ) -> None:
     """Persist a block result as Report + ReportBlock records."""
     config_id = _get_programmatic_config_id(account_id, client)
@@ -1050,8 +1126,10 @@ def _persist_block_result(
         target=cache_key,
         command="run_block_cached",
         accountId=account_id,
-        status="COMPLETED",
+        status="COMPLETED" if success else "FAILED",
         dispatchStatus="COMPLETED",
+        errorMessage=error_message if not success else None,
+        completedAt=datetime.now(timezone.utc).isoformat(),
     )
 
     report_record_name = _build_programmatic_report_record_name(
@@ -1117,6 +1195,8 @@ def _persist_block_result(
         output_payload=output_data,
         existing_details_files_list=[],
         log_prefix="[run_block_cached]",
+        status="ok" if success else "error",
+        error_message=error_message,
     )
     final_log_message, attached_files, _ = _persist_log_artifact_if_present(
         report_block_id=rb.id,
@@ -1322,12 +1402,11 @@ def run_programmatic_report_and_persist(
     return report.id, first_error_message
 
 
-def _fetch_first_block_output(report_id: str, client: PlexusDashboardClient) -> Optional[Any]:
-    """Fetch block data from the first ReportBlock of a report.
-
-    Used by _check_db_cache when Report.output is a markdown block template
-    (new format) rather than raw JSON (old format).
-    """
+def _fetch_first_block_result(
+    report_id: str,
+    client: PlexusDashboardClient,
+) -> Tuple[Optional[Any], Optional[str]]:
+    """Fetch the first ReportBlock payload and distinguish success from persisted failure."""
     query = """
     query GetReportBlocks($id: ID!) {
       getReport(id: $id) { reportBlocks { items { output } } }
@@ -1339,36 +1418,53 @@ def _fetch_first_block_output(report_id: str, client: PlexusDashboardClient) -> 
                  .get("reportBlocks", {})
                  .get("items", []))
         if not items:
-            return None
+            return None, None
         block_output = items[0].get("output", "")
         if not block_output:
-            return None
+            return None, None
         if not isinstance(block_output, str):
-            return block_output
+            return block_output, None
         parsed = json.loads(block_output)
         if isinstance(parsed, dict) and parsed.get("output_compacted") and S3_UTILS_AVAILABLE:
             attachment = parsed.get("output_attachment", "")
+            status = str(parsed.get("status") or "ok").lower()
             if attachment:
                 from plexus.reports.s3_utils import download_report_block_file
                 content, _ = download_report_block_file(attachment)
                 if not content:
-                    return None
+                    return None, parsed.get("error") if status == "error" else None
                 try:
-                    return json.loads(content)
+                    content_payload = json.loads(content)
+                    if status == "error":
+                        return None, (
+                            parsed.get("error")
+                            or _extract_error_message_from_output(content_payload)
+                            or f"Report block failed for report {report_id}."
+                        )
+                    return content_payload, None
                 except json.JSONDecodeError:
-                    # S3 file may contain raw block output (not JSON-wrapped) from an
-                    # older persist path — return it as-is; callers accept either type.
+                    if status == "error":
+                        return None, parsed.get("error") or content
                     logger.debug(
                         "Block output S3 file is not JSON (report %s, attachment %s); "
                         "returning raw content",
                         report_id,
                         attachment,
                     )
-                    return content
-        return parsed
+                    return content, None
+            if status == "error":
+                return None, parsed.get("error") or "Report block failed."
+        if isinstance(parsed, dict) and parsed.get("status") == "error":
+            return None, _extract_error_message_from_output(parsed) or "Report block failed."
+        return parsed, None
     except Exception as exc:
         logger.warning("Failed to fetch block output for report %s: %s", report_id, exc)
-        return None
+        return None, None
+
+
+def _fetch_first_block_output(report_id: str, client: PlexusDashboardClient) -> Optional[Any]:
+    output_data, _ = _fetch_first_block_result(report_id, client)
+    return output_data
 
 
 def _check_db_cache(
@@ -1397,9 +1493,12 @@ def _check_db_cache(
         stripped = output_raw.strip()
         # Markdown block template (new format) — actual data is in the ReportBlock
         if not stripped.startswith('{') and not stripped.startswith('['):
-            return _fetch_first_block_output(existing.id, client)
+            output_data, _ = _fetch_first_block_result(existing.id, client)
+            return output_data
         try:
             parsed = json.loads(output_raw)
+            if isinstance(parsed, dict) and parsed.get("status") == "error":
+                return None
             return parsed
         except json.JSONDecodeError:
             return output_raw
@@ -1727,6 +1826,12 @@ def _generate_report_core(
             # Final update to the ReportBlock record.
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
+                block_error_message = log_string if output_json is None else None
+                block_output_payload = output_json if output_json is not None else {
+                    "status": "error",
+                    "error": block_error_message or f"Block {block_display_name} failed.",
+                    "block_class": block_class_name,
+                }
 
                 final_log_message_for_db, existing_details_files_list, _ = _persist_log_artifact_if_present(
                     report_block_id=current_report_block.id,
@@ -1736,9 +1841,11 @@ def _generate_report_core(
                 )
                 compact_output_json, existing_details_files_list, _ = _persist_output_artifact_and_compact(
                     report_block_id=current_report_block.id,
-                    output_payload=output_json,
+                    output_payload=block_output_payload,
                     existing_details_files_list=existing_details_files_list,
                     log_prefix=log_prefix,
+                    status="ok" if output_json is not None else "error",
+                    error_message=block_error_message,
                 )
 
                 update_params = {
