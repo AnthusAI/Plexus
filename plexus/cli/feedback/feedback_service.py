@@ -641,10 +641,16 @@ class FeedbackService:
                     # Execute the query (async operation)
                     response = await asyncio.to_thread(client.execute, query, variables)
                     
+                    if not isinstance(response, dict):
+                        raise TypeError(f"Unexpected GSI response type: {type(response).__name__}")
+
                     if 'errors' in response:
                         logger.error(f"GraphQL errors in GSI query: {response['errors']}")
-                        # Fall back to the standard method if GSI fails
-                        raise Exception(f"GSI query failed: {response['errors']}")
+                        raise RuntimeError(
+                            "Failed to load feedback items with related item metadata "
+                            f"for scorecard {scorecard_id}, score {score_id}: "
+                            f"GSI query failed: {response['errors']}"
+                        )
                     
                     result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt', {})
                     items_data = result_data.get('items', [])
@@ -662,6 +668,8 @@ class FeedbackService:
                 
                 logger.info(f"Retrieved {len(all_feedback_items)} feedback items from GSI")
                 
+            except RuntimeError:
+                raise
             except Exception as e:
                 logger.warning("GSI query failed, falling back to standard query: %s", str(e))
 
