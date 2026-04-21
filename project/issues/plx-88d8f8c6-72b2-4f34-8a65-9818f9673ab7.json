@@ -16,10 +16,22 @@
       "author": "derek",
       "text": "Epic progress: delivered date_range support across dashboard parameter parsing/rendering/validation, report dispatch flattening, backend parameter ingestion/validation, and FeedbackAnalysis compatibility alias. Pending only final review/merge.",
       "created_at": "2026-04-21T17:51:25.265668358Z"
+    },
+    {
+      "id": "ea4a34b2-590f-4cc8-958b-7aa85971dbd9",
+      "author": "derek",
+      "text": "Added semantic-release safeguard: creating a final Conventional Commit () on feature branch so version bump intent is explicit when changes eventually reach main.",
+      "created_at": "2026-04-21T18:51:49.204323669Z"
+    },
+    {
+      "id": "cee1f12e-30f4-491b-b5a7-ed24d04766ef",
+      "author": "derek",
+      "text": "Added semantic-release safeguard: creating a final Conventional Commit (feat(reports): add date-range report parameters and calendar UX) on this branch so bump intent is explicit when changes eventually reach main.",
+      "created_at": "2026-04-21T18:51:54.304550910Z"
     }
   ],
   "created_at": "2026-04-21T16:23:20.515463843Z",
-  "updated_at": "2026-04-21T17:51:32.654179424Z",
+  "updated_at": "2026-04-21T18:51:54.304550910Z",
   "closed_at": null,
   "custom": {}
 }
