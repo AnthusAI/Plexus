@@ -5,6 +5,7 @@ Plexus Trace Sink for Tactus trace event persistence.
 import logging
 import inspect
 import time
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
