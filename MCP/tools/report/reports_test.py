@@ -461,3 +461,51 @@ class TestReportToolsSharedPatterns:
             filter_condition = f'accountId: {{eq: "{default_account_id}"}}'
             assert 'account-123' in filter_condition
             assert 'eq:' in filter_condition
+
+
+class TestReportRunTool:
+    @pytest.mark.asyncio
+    @patch("plexus.cli.shared.client_utils.create_client")
+    @patch("shared.utils.get_default_account_id")
+    @patch("plexus.reports.service.run_block_cached")
+    async def test_single_block_run_returns_failed_status_for_failed_block(
+        self,
+        mock_run_block_cached,
+        mock_get_default_account_id,
+        mock_create_client,
+    ):
+        from MCP.tools.report.reports import register_report_tools
+
+        mock_mcp = Mock()
+        tool_functions = {}
+
+        def mock_tool_decorator():
+            def decorator(func):
+                tool_functions[func.__name__] = func
+                return func
+            return decorator
+
+        mock_mcp.tool = mock_tool_decorator
+        register_report_tools(mock_mcp)
+        plexus_report_run = tool_functions["plexus_report_run"]
+
+        mock_create_client.return_value = Mock()
+        mock_get_default_account_id.return_value = "acct-1"
+        mock_run_block_cached.return_value = (None, "Score not found", False)
+
+        with patch.dict(
+            os.environ,
+            {
+                "PLEXUS_API_URL": "https://api.example.com/graphql",
+                "PLEXUS_API_KEY": "test-key",
+            },
+            clear=True,
+        ):
+            result = await plexus_report_run(
+                block_class="FeedbackContradictions",
+                block_config={"scorecard": "sc-1", "score": "score-1"},
+                cache_key="cache-key",
+            )
+
+        assert result["status"] == "failed"
+        assert result["error"] == "Score not found"

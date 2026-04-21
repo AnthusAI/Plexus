@@ -19,7 +19,7 @@ from .base import BaseReportBlock
 from . import feedback_utils
 from .guideline_vetting import GuidelineVettingService
 from .identifier_utils import looks_like_uuid
-from plexus.dashboard.api.models.score import Score
+from .score_resolution import resolve_score_for_scorecard
 from plexus.dashboard.api.models.scorecard import Scorecard
 
 logger = logging.getLogger(__name__)
@@ -33,15 +33,7 @@ class FeedbackContradictions(BaseReportBlock):
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self._orm.log_messages.clear()
-        try:
-            return await self._run()
-        except Exception as exc:
-            import traceback
-
-            self._log(f"ERROR: {exc}", level="ERROR")
-            self._log(traceback.format_exc())
-            error_data = {"error": str(exc), "topics": []}
-            return error_data, "\n".join(self._orm.log_messages)
+        return await self._run()
 
     async def _run(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         scorecard_param = self.config.get("scorecard")
@@ -339,29 +331,15 @@ class FeedbackContradictions(BaseReportBlock):
 
     async def _resolve_score(self, score_param: str, scorecard_id: str) -> Optional[Any]:
         """Resolve a score by ID, name, key, or externalId using existing model methods."""
-        is_uuid_like = looks_like_uuid(score_param)
-        if is_uuid_like:
-            try:
-                score_obj = await asyncio.to_thread(Score.get_by_id, id=score_param, client=self.api_client)
-                scorecard_link = getattr(score_obj, "scorecardId", None) or getattr(score_obj, "scorecard_id", None)
-                if score_obj and scorecard_link == scorecard_id:
-                    return score_obj
-            except Exception as exc:  # ID lookup failed; fall through to name/key lookups
-                logger.debug("Score UUID lookup failed for %r: %s", score_param, exc)
-
-        for lookup in [
-            lambda p: asyncio.to_thread(Score.get_by_name, name=p, scorecard_id=scorecard_id, client=self.api_client),
-            lambda p: asyncio.to_thread(Score.get_by_key, key=p, scorecard_id=scorecard_id, client=self.api_client),
-            lambda p: asyncio.to_thread(Score.get_by_external_id, external_id=p, scorecard_id=scorecard_id, client=self.api_client),
-        ]:
-            try:
-                result = await lookup(score_param)
-                if result:
-                    return result
-            except Exception as exc:  # lookup method not supported or lookup failed; try next
-                logger.debug("Score lookup failed for %r: %s", score_param, exc)
-
-        return None
+        try:
+            return await resolve_score_for_scorecard(
+                api_client=self.api_client,
+                score_identifier=score_param,
+                scorecard_id=scorecard_id,
+            )
+        except Exception as exc:
+            logger.debug("Score lookup failed for %r: %s", score_param, exc)
+            raise
 
     async def _fetch_guidelines(self, score_id: str) -> Optional[str]:
         try:

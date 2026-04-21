@@ -6,6 +6,19 @@ import re
 from pathlib import Path
 from plexus.CustomLogging import logging
 
+
+def _ensure_directory_path(path: Path) -> None:
+    """Ensure a path exists as a real directory, replacing broken links/files."""
+    if path.is_symlink():
+        # Broken symlinks make Path.exists() return False but still block mkdir().
+        if path.exists() and path.is_dir():
+            return
+        path.unlink()
+    elif path.exists() and not path.is_dir():
+        path.unlink()
+
+    path.mkdir(parents=True, exist_ok=True)
+
 def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
     """Compute the YAML file path for a score based on scorecard and score names.
     
@@ -30,21 +43,12 @@ def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
     scorecards_base = os.environ.get('SCORECARD_CACHE_DIR', 'scorecards')
     scorecards_dir = Path(scorecards_base)
     
-    # Handle case where 'scorecards' exists as a file instead of directory
-    if scorecards_dir.exists() and not scorecards_dir.is_dir():
-        # Remove the file if it exists
-        scorecards_dir.unlink()
-    
-    scorecards_dir.mkdir(exist_ok=True)
+    _ensure_directory_path(scorecards_dir)
     
     # Create sanitized directory names
     scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)
     
-    # Handle case where scorecard dir exists as a file instead of directory  
-    if scorecard_dir.exists() and not scorecard_dir.is_dir():
-        scorecard_dir.unlink()
-    
-    scorecard_dir.mkdir(exist_ok=True)
+    _ensure_directory_path(scorecard_dir)
     
     # Create the YAML file path
     return scorecard_dir / f"{sanitize_path_name(score_name)}.yaml"
@@ -73,30 +77,17 @@ def get_score_guidelines_path(scorecard_name: str, score_name: str) -> Path:
     scorecards_base = os.environ.get('SCORECARD_CACHE_DIR', 'scorecards')
     scorecards_dir = Path(scorecards_base)
 
-    # Handle case where 'scorecards' exists as a file instead of directory
-    if scorecards_dir.exists() and not scorecards_dir.is_dir():
-        # Remove the file if it exists
-        scorecards_dir.unlink()
-
-    scorecards_dir.mkdir(exist_ok=True)
+    _ensure_directory_path(scorecards_dir)
 
     # Create sanitized directory names
     scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)
 
-    # Handle case where scorecard dir exists as a file instead of directory
-    if scorecard_dir.exists() and not scorecard_dir.is_dir():
-        scorecard_dir.unlink()
-
-    scorecard_dir.mkdir(exist_ok=True)
+    _ensure_directory_path(scorecard_dir)
 
     # Create guidelines subdirectory
     guidelines_dir = scorecard_dir / "guidelines"
 
-    # Handle case where guidelines dir exists as a file instead of directory
-    if guidelines_dir.exists() and not guidelines_dir.is_dir():
-        guidelines_dir.unlink()
-
-    guidelines_dir.mkdir(exist_ok=True)
+    _ensure_directory_path(guidelines_dir)
 
     # Create the guidelines markdown file path
     return guidelines_dir / f"{sanitize_path_name(score_name)}.md"

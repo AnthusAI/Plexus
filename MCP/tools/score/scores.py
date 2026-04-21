@@ -15,6 +15,53 @@ logger = logging.getLogger(__name__)
 
 def register_score_tools(mcp: FastMCP):
     """Register score tools with the MCP server"""
+
+    def _structured_error(message: str, error: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "success": False,
+            "error": error or message,
+            "message": message,
+        }
+        payload.update(extra)
+        return payload
+
+    def _resolve_scorecard_identifier_quiet(client, identifier: str) -> Optional[str]:
+        """Resolve a scorecard identifier without printing CLI-oriented status lines."""
+        try:
+            result = client.execute(
+                f"""
+                query GetScorecard {{
+                    getScorecard(id: "{identifier}") {{
+                        id
+                    }}
+                }}
+                """
+            )
+            if result.get("getScorecard"):
+                return identifier
+        except Exception:
+            pass
+
+        for field in ("key", "name", "externalId"):
+            try:
+                result = client.execute(
+                    f"""
+                    query ListScorecardsForIdentifier {{
+                        listScorecards(filter: {{ {field}: {{ eq: "{identifier}" }} }}, limit: 10) {{
+                            items {{
+                                id
+                            }}
+                        }}
+                    }}
+                    """
+                )
+                items = result.get("listScorecards", {}).get("items", [])
+                if items:
+                    return items[0].get("id")
+            except Exception:
+                continue
+
+        return None
     
     @mcp.tool()
     async def plexus_score_info(
@@ -410,10 +457,9 @@ def register_score_tools(mcp: FastMCP):
         try:
             from plexus.dashboard.api.models.score import Score
             from plexus.dashboard.api.models.scorecard import Scorecard
-            from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
             
             # Resolve scorecard identifier
-            scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+            scorecard_id = _resolve_scorecard_identifier_quiet(client, scorecard_identifier)
             if not scorecard_id:
                 return {
                     "success": False,
@@ -512,7 +558,7 @@ def register_score_tools(mcp: FastMCP):
         scorecard_identifier: str,
         score_identifier: str,
         version_id: Optional[str] = None
-    ) -> Union[str, Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Pulls a score's champion version code and guidelines to local files.
         Uses the reusable Score.pull_code_and_guidelines() method for implementation.
@@ -535,15 +581,10 @@ def register_score_tools(mcp: FastMCP):
             try:
                 from plexus.cli.shared.client_utils import create_client as create_dashboard_client
             except ImportError as e:
-                return f"Error: Could not import required modules: {e}. Core modules may not be available."
-            
-            # Check if we have the necessary credentials
-            api_url = os.environ.get('PLEXUS_API_URL', '')
-            api_key = os.environ.get('PLEXUS_API_KEY', '')
-            
-            if not api_url or not api_key:
-                logger.warning("Missing API credentials. Ensure .env file is loaded.")
-                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+                return _structured_error(
+                    f"Could not import required modules: {e}. Core modules may not be available.",
+                    error="IMPORT_ERROR",
+                )
             
             # Create the client
             try:
@@ -560,15 +601,30 @@ def register_score_tools(mcp: FastMCP):
                     sys.stdout = saved_stdout
             except Exception as client_err:
                 logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
-                return f"Error creating dashboard client: {str(client_err)}"
+                client_error = str(client_err)
+                if "missing" in client_error.lower() and "credential" in client_error.lower():
+                    return _structured_error(
+                        "Missing API credentials. Use --env-file to specify your .env file path.",
+                        error="MISSING_API_CREDENTIALS",
+                    )
+                return _structured_error(
+                    f"Error creating dashboard client: {client_error}",
+                    error="CLIENT_CREATION_ERROR",
+                )
                 
             if not client:
-                return "Error: Could not create dashboard client."
+                return _structured_error(
+                    "Could not create dashboard client.",
+                    error="CLIENT_CREATION_ERROR",
+                )
 
             # Find the score instance
             find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
             if not find_result["success"]:
-                return find_result["error"]
+                return _structured_error(
+                    find_result["error"],
+                    error="SCORE_NOT_FOUND",
+                )
             
             score = find_result["score"]
             scorecard_name = find_result["scorecard_name"]
@@ -583,10 +639,16 @@ def register_score_tools(mcp: FastMCP):
                 pull_result = _pull_champion_with_backup(score, scorecard_name)
 
             if pull_result is None:
-                return "Error: Failed to pull score configuration"
+                return _structured_error(
+                    "Failed to pull score configuration",
+                    error="PULL_FAILED",
+                )
 
             if not pull_result["success"]:
-                return f"Error: {pull_result.get('message', 'Failed to pull code and guidelines')}"
+                return _structured_error(
+                    pull_result.get("message", "Failed to pull code and guidelines"),
+                    error=pull_result.get("error", "PULL_FAILED"),
+                )
             
             # Return absolute paths so callers can read the files without
             # path-traversal issues regardless of their working directory
@@ -606,7 +668,10 @@ def register_score_tools(mcp: FastMCP):
             
         except Exception as e:
             logger.error(f"Error pulling score code and guidelines: {str(e)}", exc_info=True)
-            return f"Error pulling score code and guidelines: {str(e)}"
+            return _structured_error(
+                f"Error pulling score code and guidelines: {str(e)}",
+                error="UNEXPECTED_ERROR",
+            )
         finally:
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
@@ -1880,16 +1945,11 @@ def _pull_champion_with_backup(score, scorecard_name: str) -> Dict[str, Any]:
     Returns:
     - Dict with success status, file paths, and backup information
     """
-    import os
     import shutil
 
     try:
-        # Prepare file paths
-        scorecard_dir = f"scorecards/{scorecard_name}"
-        yaml_filename = f"{score.name}.yaml"
-        guidelines_filename = f"{score.name}.md"
-        code_file_path = os.path.join(scorecard_dir, yaml_filename)
-        guidelines_file_path = os.path.join(scorecard_dir, guidelines_filename)
+        code_file_path = str(score.get_local_code_path(scorecard_name))
+        guidelines_file_path = str(score.get_local_guidelines_path(scorecard_name))
 
         # Create backups if files exist
         backup_created = False
@@ -1966,10 +2026,8 @@ async def _pull_specific_version(score, scorecard_name: str, version_id: str, cl
                 "message": f"Version {version_id} not found"
             }
 
-        # Use the shared path helpers so names are filesystem-safe
-        from plexus.cli.shared.shared import get_score_yaml_path, get_score_guidelines_path
-        code_file_path = str(get_score_yaml_path(scorecard_name, score.name))
-        guidelines_file_path = str(get_score_guidelines_path(scorecard_name, score.name))
+        code_file_path = str(score.get_local_code_path(scorecard_name))
+        guidelines_file_path = str(score.get_local_guidelines_path(scorecard_name))
 
         # Create backups of existing files before overwriting
         backup_created = False
