@@ -90,6 +90,31 @@ parameters:
       expect(result[1].depends_on).toBe('scorecard_id')
     })
 
+    it('should parse parameters from markdown report template header', () => {
+      const yaml = `
+parameters:
+  - name: window
+    label: Analysis Window
+    type: date_range
+    required: true
+
+---
+
+# Sample Report
+
+\`\`\`block name="Feedback Analysis"
+class: FeedbackAnalysis
+scorecard: 1481
+start_date: {{ window_start }}
+end_date: {{ window_end }}
+\`\`\`
+`
+      const result = parseParametersFromYaml(yaml)
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('window')
+      expect(result[0].type).toBe('date_range')
+    })
+
     it('should parse Tactus params mapping format', () => {
       const yaml = `
 params:

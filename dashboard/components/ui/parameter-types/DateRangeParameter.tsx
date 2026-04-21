@@ -36,6 +36,7 @@ export function DateRangeParameter({ definition, value, onChange, disabled, erro
             type="date"
             value={start}
             onChange={(e) => onChange({ start: e.target.value, end })}
+            max={end || undefined}
             disabled={disabled}
             className={error ? "border-destructive" : ""}
           />
@@ -49,6 +50,7 @@ export function DateRangeParameter({ definition, value, onChange, disabled, erro
             type="date"
             value={end}
             onChange={(e) => onChange({ start, end: e.target.value })}
+            min={start || undefined}
             disabled={disabled}
             className={error ? "border-destructive" : ""}
           />

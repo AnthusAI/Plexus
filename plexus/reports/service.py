@@ -2133,14 +2133,32 @@ def generate_report_with_parameters(
     if param_defs:
         logger.info(f"{log_prefix} Configuration requires {len(param_defs)} parameters")
 
+        # Allow date_range companion inputs (<name>_start/<name>_end) and map
+        # them into the canonical <name> object expected by parameter definitions.
+        raw_parameters = dict(parameters)
+        for param_def in param_defs:
+            param_name = param_def.get('name')
+            if not param_name or param_def.get('type') != 'date_range':
+                continue
+            if param_name in raw_parameters:
+                continue
+
+            start_key = f"{param_name}_start"
+            end_key = f"{param_name}_end"
+            if start_key in raw_parameters or end_key in raw_parameters:
+                raw_parameters[param_name] = {
+                    'start': raw_parameters.get(start_key, ''),
+                    'end': raw_parameters.get(end_key, ''),
+                }
+
         # Normalize parameter values to correct types
         normalized_params = {}
         for param_def in param_defs:
             param_name = param_def.get('name')
-            if param_name and param_name in parameters:
+            if param_name and param_name in raw_parameters:
                 normalized_params[param_name] = normalize_parameter_value(
                     param_def,
-                    parameters[param_name]
+                    raw_parameters[param_name]
                 )
             elif param_name:
                 # Check if required but missing
@@ -2160,6 +2178,18 @@ def generate_report_with_parameters(
 
         # Enrich parameters with resolved names for scorecard_select and score_select
         enriched_params = enrich_parameters_with_names(param_defs, normalized_params, client)
+
+        # Expose companion variables for date_range definitions so templates can
+        # reference either `window.start/end` or `window_start/window_end`.
+        for param_def in param_defs:
+            param_name = param_def.get('name')
+            if not param_name or param_def.get('type') != 'date_range':
+                continue
+            value = normalized_params.get(param_name)
+            if isinstance(value, dict):
+                enriched_params.setdefault(f"{param_name}_start", str(value.get('start') or ''))
+                enriched_params.setdefault(f"{param_name}_end", str(value.get('end') or ''))
+
         logger.info(f"{log_prefix} Parameters enriched with names: {enriched_params}")
 
         # Render configuration with Jinja2 using enriched parameters
