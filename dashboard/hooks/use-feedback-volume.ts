@@ -234,6 +234,27 @@ function normalizeMetricRecord(record: AggregatedMetricsRecord): FeedbackVolumeM
     return null;
   }
 
+  let metadata: FeedbackVolumeMetricRecord["metadata"];
+  if (record.metadata && typeof record.metadata === "object") {
+    const raw = record.metadata as Record<string, unknown>;
+    metadata = {
+      changedCount: typeof raw.changedCount === "number" ? raw.changedCount : 0,
+      unchangedCount: typeof raw.unchangedCount === "number" ? raw.unchangedCount : 0,
+      invalidCount: typeof raw.invalidCount === "number" ? raw.invalidCount : 0,
+    };
+  } else if (typeof record.metadata === "string" && record.metadata.trim()) {
+    try {
+      const raw = JSON.parse(record.metadata) as Record<string, unknown>;
+      metadata = {
+        changedCount: typeof raw.changedCount === "number" ? raw.changedCount : 0,
+        unchangedCount: typeof raw.unchangedCount === "number" ? raw.unchangedCount : 0,
+        invalidCount: typeof raw.invalidCount === "number" ? raw.invalidCount : 0,
+      };
+    } catch {
+      metadata = undefined;
+    }
+  }
+
   return {
     accountId: record.accountId,
     compositeKey: record.compositeKey,
@@ -244,23 +265,7 @@ function normalizeMetricRecord(record: AggregatedMetricsRecord): FeedbackVolumeM
     timeRangeEnd: record.timeRangeEnd,
     numberOfMinutes: record.numberOfMinutes,
     count: record.count,
-    metadata:
-      record.metadata && typeof record.metadata === "object"
-        ? {
-            changedCount:
-              typeof (record.metadata as Record<string, unknown>).changedCount === "number"
-                ? ((record.metadata as Record<string, unknown>).changedCount as number)
-                : 0,
-            unchangedCount:
-              typeof (record.metadata as Record<string, unknown>).unchangedCount === "number"
-                ? ((record.metadata as Record<string, unknown>).unchangedCount as number)
-                : 0,
-            invalidCount:
-              typeof (record.metadata as Record<string, unknown>).invalidCount === "number"
-                ? ((record.metadata as Record<string, unknown>).invalidCount as number)
-                : 0,
-          }
-        : undefined,
+    metadata,
     complete: record.complete,
   };
 }
