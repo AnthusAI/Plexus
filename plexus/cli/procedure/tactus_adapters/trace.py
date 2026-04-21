@@ -232,6 +232,86 @@ class PlexusTraceSink:
         self._message_metadata_cache[message_id] = merged
         return merged if merged else None
 
+    def _tool_metadata_patch(self, tool_result: Any) -> Optional[Dict[str, Any]]:
+        tool_cost_summary, tool_billing_mode = self._tool_cost_summary(tool_result)
+        if not isinstance(tool_cost_summary, dict):
+            return None
+        return {
+            "cost": {
+                "kind": "tool_execution",
+                "billing_mode": tool_billing_mode,
+                "live": False,
+                "summary": self._finalize_summary(tool_cost_summary),
+            }
+        }
+
+    def _tool_failure_message(self, tool_name: Any, tool_result: Any) -> Optional[str]:
+        normalized_result = tool_result
+        if isinstance(tool_result, str):
+            stripped = tool_result.strip()
+            if not stripped:
+                return None
+            if stripped.startswith("{") or stripped.startswith("["):
+                try:
+                    normalized_result = json.loads(stripped)
+                except Exception:
+                    normalized_result = tool_result
+            else:
+                lowered = stripped.lower()
+                failure_prefixes = (
+                    "tool execution error",
+                    "error:",
+                    "failed:",
+                    "exception:",
+                    "traceback",
+                )
+                if lowered.startswith(failure_prefixes):
+                    resolved_name = str(tool_name or "Tool")
+                    return f"{resolved_name} failed: {stripped}"
+                return None
+
+        if not isinstance(normalized_result, dict):
+            return None
+
+        status = str(
+            normalized_result.get("status")
+            or normalized_result.get("dispatchStatus")
+            or ""
+        ).strip().upper()
+        error_message = normalized_result.get("errorMessage") or normalized_result.get("error")
+        if isinstance(error_message, str):
+            error_message = error_message.strip()
+
+        if status in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
+            resolved_name = str(tool_name or "Tool")
+            detail = error_message or f"terminal status {status.lower()}"
+            return f"{resolved_name} failed: {detail}"
+
+        if isinstance(error_message, str) and error_message:
+            resolved_name = str(tool_name or "Tool")
+            return f"{resolved_name} failed: {error_message}"
+
+        return None
+
+    async def _record_tool_failure_notice(self, tool_name: Any, tool_result: Any) -> None:
+        failure_message = self._tool_failure_message(tool_name, tool_result)
+        if not failure_message:
+            return
+
+        await self.chat_recorder.record_message(
+            role="ASSISTANT",
+            content=failure_message,
+            message_type="MESSAGE",
+            human_interaction="ALERT_ERROR",
+            metadata={
+                "tool_failure": {
+                    "tool_name": str(tool_name or ""),
+                    "message": failure_message,
+                }
+            },
+        )
+        self.assistant_message_texts.append(failure_message)
+
     def _agent_cost_metadata(self, agent_name: str, *, live: bool) -> Optional[Dict[str, Any]]:
         summary = self._agent_cost_summaries.get(agent_name)
         if not isinstance(summary, dict):
@@ -686,17 +766,7 @@ class PlexusTraceSink:
         if event_kind == "TOOL_CALL":
             tool_parameters = _event_field(event, "tool_parameters", "tool_args")
             tool_result = _event_field(event, "tool_response", "tool_result")
-            tool_cost_summary, tool_billing_mode = self._tool_cost_summary(tool_result)
-            tool_metadata_patch = None
-            if isinstance(tool_cost_summary, dict):
-                tool_metadata_patch = {
-                    "cost": {
-                        "kind": "tool_execution",
-                        "billing_mode": tool_billing_mode,
-                        "live": False,
-                        "summary": self._finalize_summary(tool_cost_summary),
-                    }
-                }
+            tool_metadata_patch = self._tool_metadata_patch(tool_result)
 
             # Check if we have an in-progress record to update
             in_progress_id = None
@@ -713,6 +783,7 @@ class PlexusTraceSink:
                     tool_response=tool_result,
                     metadata=merged_metadata,
                 )
+                await self._record_tool_failure_notice(tool_name, tool_result)
                 return in_progress_id
             else:
                 # No in-progress record (e.g., replayed or short-lived tool) — create new
@@ -732,6 +803,7 @@ class PlexusTraceSink:
                 )
                 if call_id and isinstance(metadata, dict):
                     self._message_metadata_cache[call_id] = metadata
+                await self._record_tool_failure_notice(tool_name, tool_result)
                 return call_id
 
         # For explicit TOOL_RESPONSE events (non-Tactus paths), link via parentMessageId.
@@ -742,7 +814,19 @@ class PlexusTraceSink:
         if event_kind == "TOOL_RESPONSE" and tool_name:
             queue = self._pending_tool_call_ids.get(str(tool_name))
             if not queue:
-                return None
+                in_progress_queue = self._in_progress_tool_calls.get(str(tool_name))
+                if not in_progress_queue:
+                    return None
+                in_progress_id = in_progress_queue.pop(0)
+                tool_result = _event_field(event, "tool_response", "tool_result")
+                merged_metadata = self._merged_metadata(in_progress_id, self._tool_metadata_patch(tool_result))
+                await self.chat_recorder.update_message(
+                    message_id=in_progress_id,
+                    tool_response=tool_result,
+                    metadata=merged_metadata,
+                )
+                await self._record_tool_failure_notice(tool_name, tool_result)
+                return in_progress_id
             parent_message_id = queue.pop(0)
 
         message_id = await self.chat_recorder.record_message(
@@ -758,6 +842,8 @@ class PlexusTraceSink:
         )
         if message_id and isinstance(message_metadata, dict):
             self._message_metadata_cache[message_id] = message_metadata
+        if event_kind == "TOOL_RESPONSE":
+            await self._record_tool_failure_notice(tool_name, _event_field(event, "tool_response", "tool_result"))
         if message_id and role == "ASSISTANT" and message_type == "MESSAGE":
             agent_name = self._resolve_agent_name(event)
             self._recent_assistant_message_ids[agent_name] = (message_id, time.monotonic())

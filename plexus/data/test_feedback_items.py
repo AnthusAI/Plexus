@@ -7,6 +7,7 @@ This module validates that the class can be instantiated and parameters are vali
 import pytest
 import logging
 import pandas as pd
+import json
 from pydantic import ValidationError
 from unittest.mock import patch, Mock
 
@@ -332,7 +333,10 @@ def test_create_dataset_rows_with_data():
         mock_item.externalId = 'ext-456'
         mock_item.createdAt = '2024-01-01T00:00:00Z'
         mock_item.updatedAt = '2024-01-01T00:00:00Z'
-        mock_item.metadata = None
+        mock_item.metadata = {
+            'client_payload': {'client_field': 'value'},
+            'source': 'test-item-metadata',
+        }
         mock_item.identifiers = None
 
         mock_feedback_item = Mock()
@@ -384,15 +388,65 @@ def test_create_dataset_rows_with_data():
         assert row['Test Score edit comment'] == 'This is an edit comment'
         
         # Verify metadata is JSON string
-        import json
         metadata = json.loads(row['metadata'])
         assert metadata['feedback_item_id'] == 'feedback-789'
         assert metadata['scorecard_id'] == 'scorecard-123'
         assert metadata['score_id'] == 'score-456'
+        assert metadata['source'] == 'test-item-metadata'
+        assert metadata['client_payload']['client_field'] == 'value'
         
         # Verify IDs is JSON string
         ids = json.loads(row['IDs'])
         assert isinstance(ids, list)
+
+
+def test_create_dataset_rows_fails_when_item_metadata_missing():
+    """Feedback-backed evaluation rows must fail fast if related item metadata is missing."""
+
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+
+        feedback_items = FeedbackItems(
+            scorecard='test_scorecard',
+            score='test_score',
+            days=14,
+            limit=100,
+        )
+
+        mock_item = Mock()
+        mock_item.id = 'item-123'
+        mock_item.text = 'This is a test transcript'
+        mock_item.externalId = 'ext-456'
+        mock_item.createdAt = '2024-01-01T00:00:00Z'
+        mock_item.updatedAt = '2024-01-01T00:00:00Z'
+        mock_item.metadata = None
+        mock_item.identifiers = None
+
+        mock_feedback_item = Mock()
+        mock_feedback_item.id = 'feedback-789'
+        mock_feedback_item.itemId = 'item-123'
+        mock_feedback_item.item = mock_item
+        mock_feedback_item.initialAnswerValue = 'No'
+        mock_feedback_item.finalAnswerValue = 'Yes'
+        mock_feedback_item.editCommentValue = 'This is an edit comment'
+        mock_feedback_item.initialCommentValue = 'Initial comment'
+        mock_feedback_item.finalCommentValue = 'Final comment'
+        mock_feedback_item.scorecardId = 'scorecard-123'
+        mock_feedback_item.scoreId = 'score-456'
+        mock_feedback_item.accountId = 'account-789'
+        mock_feedback_item.createdAt = '2024-01-01T00:00:00Z'
+        mock_feedback_item.updatedAt = '2024-01-01T00:00:00Z'
+        mock_feedback_item.editedAt = '2024-01-01T01:00:00Z'
+        mock_feedback_item.editorName = 'Test Editor'
+        mock_feedback_item.isAgreement = False
+        mock_feedback_item.cacheKey = 'cache-key-123'
+
+        with pytest.raises(ValueError, match="feedback item feedback-789 item item-123 had no metadata"):
+            feedback_items._create_dataset_rows([mock_feedback_item], "Test Score")
 
 
 def test_reference_label_resolution_priority():
@@ -498,7 +552,7 @@ def test_create_dataset_rows_skips_unresolved_labels_and_reports_ids():
         resolvable_item_ref.externalId = 'ext-1'
         resolvable_item_ref.createdAt = '2024-01-01T00:00:00Z'
         resolvable_item_ref.updatedAt = '2024-01-01T00:00:00Z'
-        resolvable_item_ref.metadata = None
+        resolvable_item_ref.metadata = {'source': 'resolvable'}
         resolvable_item_ref.identifiers = None
 
         resolvable_feedback = Mock()
@@ -527,7 +581,7 @@ def test_create_dataset_rows_skips_unresolved_labels_and_reports_ids():
         unresolved_item_ref.externalId = 'ext-2'
         unresolved_item_ref.createdAt = '2024-01-01T00:00:00Z'
         unresolved_item_ref.updatedAt = '2024-01-01T00:00:00Z'
-        unresolved_item_ref.metadata = {}
+        unresolved_item_ref.metadata = {'source': 'unresolved'}
         unresolved_item_ref.identifiers = None
 
         unresolved_feedback = Mock()
@@ -582,7 +636,7 @@ def test_create_dataset_rows_comment_logic():
         mock_item1.externalId = 'ext-1'
         mock_item1.createdAt = '2024-01-01T00:00:00Z'
         mock_item1.updatedAt = '2024-01-01T00:00:00Z'
-        mock_item1.metadata = None
+        mock_item1.metadata = {'source': 'case-1'}
         mock_item1.identifiers = None
         
         mock_feedback_item1 = Mock()
@@ -612,7 +666,7 @@ def test_create_dataset_rows_comment_logic():
         mock_item2.externalId = 'ext-2'
         mock_item2.createdAt = '2024-01-01T00:00:00Z'
         mock_item2.updatedAt = '2024-01-01T00:00:00Z'
-        mock_item2.metadata = None
+        mock_item2.metadata = {'source': 'case-2'}
         mock_item2.identifiers = None
         
         mock_feedback_item2 = Mock()
@@ -661,7 +715,7 @@ def test_create_dataset_rows_handles_missing_edit_comment():
         mock_item.externalId = 'ext-123'
         mock_item.createdAt = '2024-01-01T00:00:00Z'
         mock_item.updatedAt = '2024-01-01T00:00:00Z'
-        mock_item.metadata = None
+        mock_item.metadata = {'source': 'missing-edit-comment'}
         mock_item.identifiers = None
         
         mock_feedback_item = Mock()
@@ -768,7 +822,7 @@ def test_column_mappings_applied_to_dataset():
         mock_item.externalId = 'ext-456'
         mock_item.createdAt = '2024-01-01T00:00:00Z'
         mock_item.updatedAt = '2024-01-01T00:00:00Z'
-        mock_item.metadata = None
+        mock_item.metadata = {'source': 'column-mapping'}
         mock_item.identifiers = None
         
         mock_feedback_item = Mock()
