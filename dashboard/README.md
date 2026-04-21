@@ -33,9 +33,9 @@ PLEXUS_API_KEY=...
 PLEXUS_ACCOUNT_KEY=...
 ```
 
-For local procedure runs from the dashboard UI, `npm run dev` now starts both:
-- Next.js dev server
-- Local task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+For local procedure runs from the dashboard UI:
+- `npm run dev` starts only the Next.js dev server
+- `npm run dev:dispatch` starts the local task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
 
 `PLEXUS_ACCOUNT_KEY` is required for this local auto-dispatch flow.
 Console chat now targets the built-in procedure key `builtin:console/chat` backed by source-controlled Tactus code under `plexus/procedures/console/`.
