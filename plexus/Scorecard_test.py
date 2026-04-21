@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import Mock, MagicMock, AsyncMock
 from plexus.Scorecard import Scorecard
 import pytest
 import logging
