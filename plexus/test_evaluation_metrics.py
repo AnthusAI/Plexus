@@ -310,6 +310,38 @@ class TestLabelStandardization:
         
         metrics = mock_evaluation.calculate_metrics(results)
         assert metrics['accuracy'] == 1.0
+
+
+class TestAccuracyEvaluationRun:
+    @pytest.mark.asyncio
+    async def test_accuracy_evaluation_run_re_raises_run_failures(self):
+        with patch('plexus.Evaluation.PlexusDashboardClient') as mock_client:
+            mock_client.return_value = MagicMock()
+            mock_client.for_account.return_value = MagicMock()
+
+            evaluation = AccuracyEvaluation(
+                scorecard_name="test_scorecard",
+                scorecard=MockScorecard(),
+                labeled_samples=[{"text": "hello", "test_score_label": "yes"}],
+                evaluation_id="eval-123",
+                account_key="test-account",
+                subset_of_score_names=["test_score"],
+                skip_local_reports=True,
+            )
+
+        evaluation._run_evaluation = AsyncMock(side_effect=RuntimeError("Initial evaluation failed: score returned ERROR"))
+
+        with patch("plexus.dashboard.api.models.evaluation.Evaluation.get_by_id") as mock_get_by_id:
+            mock_record = MagicMock()
+            mock_get_by_id.return_value = mock_record
+
+            with pytest.raises(RuntimeError, match="Initial evaluation failed: score returned ERROR"):
+                await evaluation.run()
+
+        mock_record.update.assert_called_once_with(
+            status="FAILED",
+            errorMessage="Initial evaluation failed: score returned ERROR",
+        )
     
     def test_whitespace_handling(self, mock_evaluation):
         """Test whitespace is handled in label comparison"""

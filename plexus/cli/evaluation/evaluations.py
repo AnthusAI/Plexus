@@ -4516,7 +4516,30 @@ def feedback(
                     logging.info("==== STAGE: Processing ====")
 
                 # Run the evaluation
-                asyncio.run(accuracy_eval.run(tracker=tracker))
+                try:
+                    asyncio.run(accuracy_eval.run(tracker=tracker))
+                except Exception as e:
+                    raw_error_msg = str(e)
+                    error_msg = raw_error_msg if raw_error_msg.startswith("Initial evaluation failed:") else f"Initial evaluation failed: {raw_error_msg}"
+                    logging.error("Feedback-backed accuracy evaluation failed: %s", error_msg, exc_info=True)
+
+                    if evaluation_record:
+                        try:
+                            evaluation_record.update(
+                                status="FAILED",
+                                errorMessage=error_msg,
+                            )
+                        except Exception as update_error:
+                            logging.error(
+                                "Failed to update feedback evaluation failure status for %s: %s",
+                                getattr(evaluation_record, 'id', 'unknown'),
+                                update_error,
+                            )
+
+                    if tracker:
+                        tracker.fail_processing(error_msg, traceback.format_exc())
+
+                    raise RuntimeError(error_msg) from e
 
                 # Update Analyzing stage status for root-cause analysis
                 # (AccuracyEvaluation.run() already advanced to Analyzing stage)
@@ -4736,4 +4759,3 @@ def feedback_runner(
         "summary": summary,
         "kanbus_comment": format_feedback_run_kanbus_comment(summary),
     }))
-
