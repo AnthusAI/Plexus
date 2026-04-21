@@ -46,10 +46,16 @@
       "author": "ryan",
       "text": "Post-push CI failed in dashboard typecheck (TS2322/TS7022). Applied fixes: allow STALLED status in EvaluationTask props and add explicit any annotations for procedures GraphQL pagination response variables in procedures-dashboard.",
       "created_at": "2026-04-21T00:12:09.964902Z"
+    },
+    {
+      "id": "bbd2e82e-3e03-45ce-ad75-6c7b4e4f4acc",
+      "author": "ryan",
+      "text": "Applying CodeQL PR #189 suggestions: removed unused task-status variable, removed unused feedback_analysis constant, and replaced empty parse except blocks in reports/service with narrow exceptions + debug logs.",
+      "created_at": "2026-04-21T00:20:59.386929Z"
     }
   ],
   "created_at": "2026-04-20T22:53:25.728209Z",
-  "updated_at": "2026-04-21T00:12:09.964902Z",
+  "updated_at": "2026-04-21T00:20:59.386929Z",
   "closed_at": null,
   "custom": {}
 }
