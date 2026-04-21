@@ -537,7 +537,7 @@ def _instantiate_and_run_block(
         combined_log = [error_msg]
         if block_log_output:
             combined_log.append("Block logs:")
-            combined_log.append(block_log_output)
+            combined_log.append(str(block_log_output))
         combined_log.append("Details:")
         combined_log.append(detailed_error)
         return None, "\n".join(combined_log), None
