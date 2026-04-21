@@ -46,10 +46,10 @@ export default function ReportBlocksPage() {
                 <div>
                   <CardTitle className="text-xl">
                     <Link 
-                      href="/documentation/report-blocks/feedback-analysis"
+                      href="/documentation/report-blocks/feedback-alignment"
                       className="hover:text-primary transition-colors"
                     >
-                      FeedbackAnalysis
+                      FeedbackAlignment
                     </Link>
                   </CardTitle>
                   <Badge className="mt-1">Analytics</Badge>
@@ -81,7 +81,7 @@ export default function ReportBlocksPage() {
                   </li>
                 </ul>
                 <div className="pt-2">
-                  <Link href="/documentation/report-blocks/feedback-analysis">
+                  <Link href="/documentation/report-blocks/feedback-alignment">
                     <DocButton>View Documentation →</DocButton>
                   </Link>
                 </div>
@@ -201,7 +201,7 @@ export default function ReportBlocksPage() {
               <div className="text-muted-foreground">This report analyzes feedback data.</div>
               <br />
               <div className="text-foreground">```block</div>
-              <div className="text-foreground">class: FeedbackAnalysis</div>
+              <div className="text-foreground">class: FeedbackAlignment</div>
               <div className="text-foreground">scorecard: example_scorecard</div>
               <div className="text-foreground">days: 30</div>
               <div className="text-foreground">```</div>

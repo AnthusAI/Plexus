@@ -97,6 +97,19 @@ const getCategoryBadgeClass = (category?: string | null): string => {
   }
 }
 
+const containsLuaTablePointer = (value: unknown): boolean => {
+  if (typeof value !== "string") return false;
+  return value.toLowerCase().includes("<lua table at ");
+};
+
+const normalizeTopicText = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (containsLuaTablePointer(trimmed)) return null;
+  return trimmed;
+};
+
 function getTopicItemIds(topic: Topic): string[] {
   const exemplars = (topic.exemplars ?? []).filter(
     (ex): ex is TopicExemplar => typeof ex !== "string"
@@ -116,12 +129,14 @@ function TopicItem({
   topicCategoryInfo,
 }: TopicItemProps) {
   const [showCode, setShowCode] = useState(false);
+  const topicLabel = normalizeTopicText(topic.label) ?? "Unlabeled topic";
+  const topicCause = normalizeTopicText(topic.cause);
   const topicItemIds = getTopicItemIds(topic);
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
     topic.days_inactive !== undefined ||
-    !!topic.cause ||
+    !!topicCause ||
     !!topic.detailed_explanation ||
     !!topic.improvement_suggestion;
 
@@ -141,7 +156,7 @@ function TopicItem({
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               )
             ) : null}
-            <span className="font-medium truncate">{topic.label}</span>
+            <span className="font-medium truncate">{topicLabel}</span>
           </div>
           <div className="flex gap-2 text-sm text-muted-foreground shrink-0 ml-2">
             {topic.days_inactive !== undefined && (
@@ -228,10 +243,10 @@ function TopicItem({
                   </div>
                 </div>
               )}
-              {!topic.detailed_explanation && topic.cause && (
+              {!topic.detailed_explanation && topicCause && (
                 <div>
                   <span className="font-medium text-muted-foreground">Root cause: </span>
-                  <span className="text-foreground">{topic.cause}</span>
+                  <span className="text-foreground">{topicCause}</span>
                 </div>
               )}
               {topic.keywords && topic.keywords.length > 0 && (
@@ -315,7 +330,7 @@ export function TopicList({ topics, label, topicCategoryInfoByKey, onTopicFilter
 
   const handleViewItems = (topic: Topic) => {
     if (!onTopicFilter) return;
-    onTopicFilter(getTopicItemIds(topic), topic.label);
+    onTopicFilter(getTopicItemIds(topic), normalizeTopicText(topic.label) ?? "Unlabeled topic");
   };
 
   const handleClearTopicFilter = () => {
@@ -331,6 +346,7 @@ export function TopicList({ topics, label, topicCategoryInfoByKey, onTopicFilter
       <ul className="space-y-2">
         {sorted.map((t) => {
           const key = t.topic_id ?? t.cluster_id ?? t.label;
+          const normalizedLabel = normalizeTopicText(t.label) ?? "Unlabeled topic";
           return (
             <TopicItem
               key={key}
@@ -339,7 +355,7 @@ export function TopicList({ topics, label, topicCategoryInfoByKey, onTopicFilter
               onToggle={handleToggle}
               onViewItems={onTopicFilter ? handleViewItems : undefined}
               onClearTopicFilter={onTopicFilter ? handleClearTopicFilter : undefined}
-              isTopicFiltered={Boolean(activeTopicLabel && activeTopicLabel === t.label)}
+              isTopicFiltered={Boolean(activeTopicLabel && activeTopicLabel === normalizedLabel)}
               topicCategoryInfo={topicCategoryInfoByKey?.[String(key)]}
             />
           );

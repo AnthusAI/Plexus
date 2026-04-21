@@ -5,7 +5,7 @@ Rebuilds topic memory by re-indexing datasets into S3 Vectors.
 Uses S3 embedding cache, global clustering, and memory weights.
 
 Supports two data sources:
-- Feedback items: scorecard + days (same as FeedbackAnalysis) — uses transcript text from Items
+- Feedback items: scorecard + days (same as FeedbackAlignment) — uses transcript text from Items
 - ScoreResults: scorecard + days with content_source=score_result_no_explanation —
   uses ScoreResult.explanation where value='No' from normal production predictions
 - DataSource/DataSet: data.source or data.dataset — uses Parquet from DatasetResolver
@@ -33,7 +33,7 @@ class VectorTopicMemory(BaseReportBlock):
     datasets into an AWS S3 Vectors index.
 
     Config:
-        scorecard (str): Scorecard identifier. When provided with days, uses feedback items (same as FeedbackAnalysis).
+        scorecard (str): Scorecard identifier. When provided with days, uses feedback items (same as FeedbackAlignment).
         days (int): Number of days of feedback to include. Used with scorecard.
         data: { source?: str, dataset?: str, content_column?: str, fresh?: bool, content_source?: str }
           content_source:

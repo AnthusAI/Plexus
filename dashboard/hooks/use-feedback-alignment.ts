@@ -1,8 +1,8 @@
 /**
- * Hook for Ad-hoc Feedback Analysis
+ * Hook for Ad-hoc Feedback Alignment
  * 
  * This hook handles fetching feedback data from GraphQL and computing
- * analysis metrics client-side using the feedback-analysis utilities.
+ * analysis metrics client-side using the feedback-alignment utilities.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -16,12 +16,12 @@ import {
   type FeedbackItem,
   type ScoreAnalysisResult,
   type AnalysisResult
-} from '@/utils/feedback-analysis';
-import type { FeedbackAnalysisDisplayData } from '@/components/ui/feedback-analysis-display';
+} from '@/utils/feedback-alignment';
+import type { FeedbackAlignmentDisplayData } from '@/components/ui/feedback-alignment-display';
 
 const client = generateClient<Schema>();
 
-export interface FeedbackAnalysisConfig {
+export interface FeedbackAlignmentConfig {
   accountId?: string;
   scorecardId?: string;
   scoreId?: string;
@@ -32,10 +32,10 @@ export interface FeedbackAnalysisConfig {
   endDate?: Date;
 }
 
-export interface FeedbackAnalysisState {
+export interface FeedbackAlignmentState {
   isLoading: boolean;
   error: string | null;
-  data: FeedbackAnalysisDisplayData | null;
+  data: FeedbackAlignmentDisplayData | null;
   rawFeedback: FeedbackItem[];
 }
 
@@ -76,10 +76,10 @@ const listFeedbackItemsQuery = `
 `;
 
 /**
- * Hook for performing ad-hoc feedback analysis
+ * Hook for performing ad-hoc feedback alignment
  */
-export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
-  const [state, setState] = useState<FeedbackAnalysisState>({
+export function useFeedbackAlignment(config: FeedbackAlignmentConfig) {
+  const [state, setState] = useState<FeedbackAlignmentState>({
     isLoading: false,
     error: null,
     data: null,
@@ -396,11 +396,11 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
 
       const displayData = convertToScorecardReportFormat(analysisResult, dateRange);
 
-      const feedbackAnalysisData: FeedbackAnalysisDisplayData = {
+      const feedbackAnalysisData: FeedbackAlignmentDisplayData = {
         ...displayData,
         overall_ac1: displayData.overall_ac1,
         date_range: dateRange,
-        block_title: config.scoreId ? 'Score Feedback Analysis' : 'Scorecard Feedback Analysis',
+        block_title: config.scoreId ? 'Score Feedback Alignment' : 'Scorecard Feedback Alignment',
         block_description: `Analysis of ${filteredItems.length} feedback items over ${config.days || 30} days`
       };
 
@@ -440,13 +440,13 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
 /**
  * Simplified hook for score-level analysis
  */
-export function useScoreFeedbackAnalysis(scoreId: string, days: number = 30) {
-  return useFeedbackAnalysis({ scoreId, days });
+export function useScoreFeedbackAlignment(scoreId: string, days: number = 30) {
+  return useFeedbackAlignment({ scoreId, days });
 }
 
 /**
  * Simplified hook for scorecard-level analysis
  */
-export function useScorecardFeedbackAnalysis(scorecardId: string, days: number = 30) {
-  return useFeedbackAnalysis({ scorecardId, days });
+export function useScorecardFeedbackAlignment(scorecardId: string, days: number = 30) {
+  return useFeedbackAlignment({ scorecardId, days });
 }

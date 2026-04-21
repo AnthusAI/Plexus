@@ -136,7 +136,7 @@ def feedback_summary(scorecard: str, score: str, days: int, output_format: str):
         
         # Add command context
         result_dict["command_info"] = {
-            "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
+            "description": "Comprehensive feedback alignment with confusion matrix and agreement metrics",
             "command": f"plexus feedback summary --scorecard \"{scorecard}\" --score \"{score}\" --days {days} --format {output_format}",
             "next_steps": result_dict["recommendation"]
         }

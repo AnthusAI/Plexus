@@ -155,7 +155,7 @@ export const JSONLegacy: Story = {
   args: {
     code: sampleJSONCode,
     type: 'JSON',
-    title: 'Legacy Feedback Analysis',
+    title: 'Legacy Feedback Alignment',
     description: 'Legacy JSON code output from the report block execution',
     autoExpandCopy: false,
   },

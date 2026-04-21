@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from .base import BaseReportBlock
 from .score_info import ScoreInfo
-from .feedback_analysis import FeedbackAnalysis
+from .feedback_alignment import FeedbackAlignment
 from .explanation_analysis import ExplanationAnalysis
 from .topic_analysis import TopicAnalysis
 from .cost_analysis import CostAnalysis
@@ -19,7 +19,7 @@ from .recent_feedback import RecentFeedback
 __all__ = [
     "BaseReportBlock",
     "ScoreInfo",
-    "FeedbackAnalysis",
+    "FeedbackAlignment",
     "ExplanationAnalysis",
     "TopicAnalysis",
     "CostAnalysis",
