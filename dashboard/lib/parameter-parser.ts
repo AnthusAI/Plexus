@@ -3,9 +3,9 @@
  */
 
 import yaml from 'js-yaml'
-import { ParameterConfig, ParameterDefinition } from '@/types/parameters'
+import { ParameterConfig, ParameterDefinition, DateRangeValue } from '@/types/parameters'
 
-type RawParameterType = 'string' | 'text' | 'number' | 'boolean' | 'select' | string
+type RawParameterType = 'string' | 'text' | 'number' | 'boolean' | 'select' | 'date' | 'date_range' | string
 
 function toTitleCase(value: string): string {
   return value
@@ -20,6 +20,8 @@ function normalizeParameterType(type: RawParameterType): ParameterDefinition['ty
   if (type === 'number') return 'number'
   if (type === 'boolean') return 'boolean'
   if (type === 'select') return 'select'
+  if (type === 'date') return 'date'
+  if (type === 'date_range') return 'date_range'
   return 'text'
 }
 
@@ -160,6 +162,45 @@ export function validateParameters(
             })
           }
           break
+
+        case 'date':
+          if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} must be a valid date`
+            })
+          }
+          break
+
+        case 'date_range': {
+          const range = value as DateRangeValue
+          const start = typeof range?.start === 'string' ? range.start : ''
+          const end = typeof range?.end === 'string' ? range.end : ''
+
+          if (def.required && (!start || !end)) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} requires both start and end dates`
+            })
+            break
+          }
+
+          if ((start && Number.isNaN(Date.parse(start))) || (end && Number.isNaN(Date.parse(end)))) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} must include valid start and end dates`
+            })
+            break
+          }
+
+          if (start && end && new Date(start) > new Date(end)) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} start date must be before or equal to end date`
+            })
+          }
+          break
+        }
       }
     }
 
@@ -209,6 +250,9 @@ export function getDefaultValues(definitions: ParameterDefinition[]): Record<str
           break
         case 'date':
           defaults[def.name] = ''
+          break
+        case 'date_range':
+          defaults[def.name] = { start: '', end: '' }
           break
       }
     }

@@ -120,6 +120,20 @@ params:
       expect(result[2].type).toBe('boolean')
       expect(result[2].default).toBe(false)
     })
+
+    it('should normalize date_range type in params mapping format', () => {
+      const yaml = `
+params:
+  window:
+    type: date_range
+    required: true
+`
+      const result = parseParametersFromYaml(yaml)
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('window')
+      expect(result[0].type).toBe('date_range')
+      expect(result[0].required).toBe(true)
+    })
   })
 
   describe('hasParameters', () => {
@@ -222,6 +236,31 @@ parameters:
       const result = validateParameters({ brief: 'hello' }, definitions)
       expect(result.valid).toBe(true)
     })
+
+    it('should validate date_range completeness and ordering', () => {
+      const definitions: ParameterDefinition[] = [
+        { name: 'window', label: 'Window', type: 'date_range', required: true }
+      ]
+
+      const missingEnd = validateParameters(
+        { window: { start: '2026-01-01', end: '' } },
+        definitions
+      )
+      expect(missingEnd.valid).toBe(false)
+
+      const outOfOrder = validateParameters(
+        { window: { start: '2026-02-01', end: '2026-01-01' } },
+        definitions
+      )
+      expect(outOfOrder.valid).toBe(false)
+      expect(outOfOrder.errors[0].message).toContain('before or equal')
+
+      const validRange = validateParameters(
+        { window: { start: '2026-01-01', end: '2026-02-01' } },
+        definitions
+      )
+      expect(validRange.valid).toBe(true)
+    })
   })
 
   describe('getDefaultValues', () => {
@@ -256,6 +295,15 @@ parameters:
       
       const result = getDefaultValues(definitions)
       expect(result.age).toBe(18)
+    })
+
+    it('should provide empty start/end for date_range defaults', () => {
+      const definitions: ParameterDefinition[] = [
+        { name: 'window', label: 'Window', type: 'date_range' }
+      ]
+
+      const result = getDefaultValues(definitions)
+      expect(result.window).toEqual({ start: '', end: '' })
     })
   })
 })
