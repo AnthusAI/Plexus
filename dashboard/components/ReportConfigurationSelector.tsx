@@ -1,25 +1,12 @@
 import React, { useEffect, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { generateClient } from "aws-amplify/data"
-import type { Schema } from "@/amplify/data/resource"
-import { ModelListResult } from '@/types/shared'
-import { listFromModel } from "@/utils/amplify-helpers"
 import { useAccount } from "@/app/contexts/AccountContext"
-
-let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
-const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
+import { listAllReportConfigurationsByAccount } from "@/utils/report-configurations"
 
 export interface ReportConfigurationSelectorProps {
   selectedReportConfiguration: string | null;
   setSelectedReportConfiguration: (value: string | null) => void;
   useMockData?: boolean;
-}
-
-async function listReportConfigurations(accountId: string): ModelListResult<Schema['ReportConfiguration']['type']> {
-  return listFromModel<Schema['ReportConfiguration']['type']>(
-    getAmplifyClient().models.ReportConfiguration,
-    { accountId: { eq: accountId } }
-  )
 }
 
 const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({
@@ -45,16 +32,9 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
       try {
         setIsLoading(true)
         if (!accountId) return
-        const { data: configModels } = await listReportConfigurations(accountId)
+        const deduped = await listAllReportConfigurationsByAccount(accountId)
 
-        // Sort by updatedAt descending (most recent first)
-        const sortedConfigs = configModels.sort((a, b) => {
-          const aDate = new Date(a.updatedAt || a.createdAt || '').getTime()
-          const bDate = new Date(b.updatedAt || b.createdAt || '').getTime()
-          return bDate - aDate // Descending order
-        })
-
-        const formattedConfigurations = sortedConfigs.map(config => ({
+        const formattedConfigurations = deduped.map(config => ({
           value: config.id,
           label: config.name || `Config ${config.id.substring(0, 6)}`
         }))

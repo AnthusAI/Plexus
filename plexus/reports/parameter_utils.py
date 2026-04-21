@@ -7,6 +7,8 @@ This module provides functions for:
 - Rendering configuration content with Jinja2 templates
 """
 
+import json
+from datetime import datetime
 import yaml
 from typing import Dict, Any, List, Optional
 from jinja2 import StrictUndefined, TemplateError
@@ -119,6 +121,36 @@ def validate_parameter_value(param_def: Dict[str, Any], value: Any) -> tuple[boo
             valid_values = [opt['value'] if isinstance(opt, dict) else opt for opt in options]
             if value not in valid_values:
                 return False, f"Parameter '{param_name}' must be one of: {', '.join(map(str, valid_values))}"
+
+    elif param_type == 'date_range':
+        if not isinstance(value, dict):
+            return False, f"Parameter '{param_name}' must be an object with start and end"
+
+        start = str(value.get('start') or '').strip()
+        end = str(value.get('end') or '').strip()
+
+        if required and (not start or not end):
+            return False, f"Parameter '{param_name}' requires both start and end dates"
+
+        if not start and not end:
+            return True, None
+
+        def _parse_iso(raw: str) -> Optional[datetime]:
+            if not raw:
+                return None
+            try:
+                return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            except ValueError:
+                return None
+
+        start_dt = _parse_iso(start)
+        end_dt = _parse_iso(end)
+
+        if (start and start_dt is None) or (end and end_dt is None):
+            return False, f"Parameter '{param_name}' must include valid ISO date values"
+
+        if start_dt is not None and end_dt is not None and start_dt > end_dt:
+            return False, f"Parameter '{param_name}' start must be before or equal to end"
     
     # All other types (text, date, etc.) - just check it's not empty if required
     return True, None
@@ -248,7 +280,37 @@ def normalize_parameter_value(param_def: Dict[str, Any], value: str) -> Any:
         if isinstance(value, str):
             return value.lower() in ('true', 'yes', 'y', '1')
         return bool(value)
-    
+
+    elif param_type == 'date_range':
+        if isinstance(value, dict):
+            return {
+                'start': str(value.get('start') or '').strip(),
+                'end': str(value.get('end') or '').strip(),
+            }
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return {'start': '', 'end': ''}
+
+            # Accept JSON object value for convenience in CLI usage.
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, dict):
+                    return {
+                        'start': str(parsed.get('start') or '').strip(),
+                        'end': str(parsed.get('end') or '').strip(),
+                    }
+            except Exception:
+                pass
+
+            # Accept "start,end" shorthand.
+            if ',' in stripped:
+                start, end = stripped.split(',', 1)
+                return {'start': start.strip(), 'end': end.strip()}
+
+            return {'start': stripped, 'end': ''}
+
     else:
         # text, date, select, and others - keep as string
         return str(value)

@@ -1,0 +1,67 @@
+{
+  "id": "plx-1e78121d-f9c6-4a98-9ba4-cafddbfce0d0",
+  "title": "Fix date-range popover interaction inside report parameter dialog",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-88d8f8c6-72b2-4f34-8a65-9818f9673ab7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "992cb48a-582d-44e4-8d6a-ad8ae1459a96",
+      "author": "derek",
+      "text": "Reproduced from user screenshot: date-range popover in ConfigurableParametersDialog is causing parent modal dismissal on date click. Applying fix to keep parent dialog open and make popover interaction modal-safe inside dialog.",
+      "created_at": "2026-04-21T18:11:10.242614444Z"
+    },
+    {
+      "id": "e2033c62-1683-419b-9d25-5a283ce5fa2e",
+      "author": "derek",
+      "text": "Applied fixes: (1) DateRange popover now uses modal mode and single-month layout to avoid overlay spill/interaction conflicts; (2) closing ConfigurableParametersDialog no longer auto-closes parent Run Report dialog. This prevents 'click date closes everything' failure mode.",
+      "created_at": "2026-04-21T18:11:28.660976097Z"
+    },
+    {
+      "id": "1a554a67-a429-43cd-9c77-1151b16c4e0a",
+      "author": "derek",
+      "text": "Follow-up: current calendar UI still malformed (weekday header spacing, nav placement, missing range highlight). Root cause appears to be outdated className keys for react-day-picker v9 in shared ui/calendar.tsx. Implementing class map correction and restoring 2-month range view.",
+      "created_at": "2026-04-21T18:15:28.164728766Z"
+    },
+    {
+      "id": "74ed7ca0-e668-4e82-8eee-e42ccd0fa085",
+      "author": "derek",
+      "text": "Applied follow-up styling fix in shared Calendar component: migrated classNames to react-day-picker v9 keys (weekday/week/day_button/range_start/range_middle/range_end/button_previous/button_next/month_grid). Restored 2-month range view in DateRangeParameter. This addresses misaligned weekdays/nav and missing range highlight.",
+      "created_at": "2026-04-21T18:15:57.379927452Z"
+    },
+    {
+      "id": "355af5e2-031b-4873-8dd0-a0f3ea6e03d3",
+      "author": "derek",
+      "text": "Final UX tweak requested: hide outside days in date-range calendar so each month shows only in-month dates (no previous/next month bleed). Applying in DateRangeParameter.",
+      "created_at": "2026-04-21T18:18:40.332904531Z"
+    },
+    {
+      "id": "c7867c52-e2e1-4729-a200-8e0c4dc7a600",
+      "author": "derek",
+      "text": "Implemented hide-outside-days tweak on DateRangeParameter calendar () per UX feedback; this removes prior/next month day bleed in each month panel.",
+      "created_at": "2026-04-21T18:18:58.701277848Z"
+    },
+    {
+      "id": "139eb3cf-2c98-4d2c-bc66-46f5fed87f5e",
+      "author": "derek",
+      "text": "UX polish: adjust Calendar today styling so non-selected today is visually distinct (subtle ring/text emphasis) while selected/range states remain blue. This reduces confusion between 'today' and 'selected'.",
+      "created_at": "2026-04-21T18:26:27.892253758Z"
+    },
+    {
+      "id": "cf694abc-e974-424d-ab8d-e9535bdfc309",
+      "author": "derek",
+      "text": "Finalized per user validation: month-nav click targets fixed (left/right), outside-day bleed removed while preserving grid alignment, and today styling differentiated from selection. Ready for commit/push.",
+      "created_at": "2026-04-21T18:29:28.823238451Z"
+    }
+  ],
+  "created_at": "2026-04-21T18:11:05.483970112Z",
+  "updated_at": "2026-04-21T18:29:28.835105330Z",
+  "closed_at": "2026-04-21T18:29:28.835105330Z",
+  "custom": {}
+}
