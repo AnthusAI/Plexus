@@ -404,13 +404,13 @@ mcp = FastMCP(
     - plexus_task_last: Get the most recent task for an account, with optional filtering by task type
     - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
-    ## Feedback Analysis & Score Testing Tools
-    - plexus_feedback_analysis: Generate comprehensive feedback analysis with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    ## Feedback Alignment & Score Testing Tools
+    - plexus_feedback_alignment: Generate comprehensive feedback alignment with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
-    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
+    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback alignment and score testing guide)
     
     ## Experiment Tools
     - plexus_procedure_create: Create a new procedure

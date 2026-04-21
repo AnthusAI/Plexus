@@ -1,13 +1,13 @@
 """
-Core feedback analysis functionality for analyzing feedback items.
+Core feedback alignment functionality for analyzing feedback items.
 
 This module provides reusable functions for analyzing feedback items to calculate
 metrics like accuracy, Gwet's AC1 agreement, confusion matrix, precision, and recall.
 
 This code is shared between:
-- FeedbackAnalysis report block
+- FeedbackAlignment report block
 - Feedback evaluation type
-- CLI feedback analysis tools
+- CLI feedback alignment tools
 """
 
 import logging
@@ -28,7 +28,7 @@ def analyze_feedback_items(
     Analyze feedback items to produce summary statistics including confusion matrix,
     accuracy, AC1 agreement, precision/recall.
     
-    This is the core feedback analysis function that should be used by all components
+    This is the core feedback alignment function that should be used by all components
     that need to analyze feedback data.
     
     Args:
@@ -290,7 +290,7 @@ def calculate_precision_recall(
 
 def generate_recommendation(analysis: Dict[str, Any]) -> str:
     """
-    Generate actionable recommendations based on feedback analysis.
+    Generate actionable recommendations based on feedback alignment.
     
     Args:
         analysis: Dictionary containing analysis results

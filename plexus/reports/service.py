@@ -621,7 +621,7 @@ def _derive_programmatic_display_strings(
         score_name = parsed_output.get("score_name") or None
         scope = parsed_output.get("scope") or None
 
-        # FeedbackAnalysis now includes scorecard_summary; use it as a fallback source.
+        # FeedbackAlignment now includes scorecard_summary; use it as a fallback source.
         if not scorecard_name and isinstance(parsed_output.get("scorecard_summary"), dict):
             scorecard_name = parsed_output["scorecard_summary"].get("scorecard_name") or None
 

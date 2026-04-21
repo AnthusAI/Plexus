@@ -45,4 +45,24 @@ describe('TopicList misclassification drill-down', () => {
     fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
     expect(onTopicFilter).toHaveBeenCalledWith(['item-1'], 'False positive pattern')
   })
+
+  test('hides leaked lua table pointer strings in topic label and root cause', () => {
+    const topics = [
+      {
+        topic_id: 2,
+        label: '<Lua table at 0x11a82bf10>',
+        cause: 'Root cause: <Lua table at 0x380f0b510>',
+        memory_weight: 1,
+        memory_tier: 'warm',
+        member_count: 4,
+        exemplars: [{ text: 'example', item_id: 'item-2' }],
+      },
+    ] as any
+
+    render(<TopicList topics={topics} />)
+
+    expect(screen.getByText('Unlabeled topic')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /unlabeled topic/i }))
+    expect(screen.queryByText(/Root cause:/i)).not.toBeInTheDocument()
+  })
 })
