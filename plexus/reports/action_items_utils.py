@@ -1,5 +1,5 @@
 """
-Shared helpers for generating action items from FeedbackAnalysis report output.
+Shared helpers for generating action items from FeedbackAlignment report output.
 
 Used by both the ActionItems ReportBlock and the `plexus report action-items` CLI.
 """
@@ -42,7 +42,7 @@ def fetch_memories(memories_file: str) -> dict:
 
 def collect_action_items(output: dict, ac1_threshold: float, recency_days: int,
                          scorecard_name_hint: str = None) -> list:
-    """Walk the FeedbackAnalysis output and return filtered, annotated action items.
+    """Walk the FeedbackAlignment output and return filtered, annotated action items.
 
     Handles both all-scorecards mode (output has a 'scorecards' list) and
     single-scorecard mode (output has 'scores' and optionally 'memories_file' at root).

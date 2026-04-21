@@ -50,8 +50,8 @@ type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersio
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
 type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
 
-// New index types for Feedback Analysis
-// type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
+// New index types for Feedback Alignment
+// type FeedbackAlignmentIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({

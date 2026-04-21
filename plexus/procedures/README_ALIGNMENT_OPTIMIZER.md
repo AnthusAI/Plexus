@@ -352,5 +352,5 @@ Potential improvements for future versions:
 
 - [Plexus Procedures DSL Specification](DSL_SPECIFICATION.md)
 - [Plexus Scorecard Improver Skill](../skills/plexus-scorecard-improver/SKILL.md)
-- [Feedback Analysis Guide](https://docs.plexus.ai/feedback-alignment)
+- [Feedback Alignment Guide](https://docs.plexus.ai/feedback-alignment)
 - [Score YAML Format](https://docs.plexus.ai/score-yaml-format)

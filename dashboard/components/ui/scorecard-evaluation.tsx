@@ -105,7 +105,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const [showRawJson, setShowRawJson] = useState(false);
   const [showDetailsSection, setShowDetailsSection] = useState(false);
   
-  // State for on-demand feedback analysis drill-down
+  // State for on-demand feedback alignment drill-down
   const [onDemandItems, setOnDemandItems] = useState<FeedbackItemWithRelations[]>([]);
   const [showOnDemandDetails, setShowOnDemandDetails] = useState(false);
   

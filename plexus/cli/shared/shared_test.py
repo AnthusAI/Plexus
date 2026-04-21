@@ -123,5 +123,17 @@ class TestPathHandling(unittest.TestCase):
         self.assertEqual(str(result2), "scorecards/Manual Dir/Another Score.yaml")
         self.assertTrue(result2.parent.exists())
 
+    def test_get_score_yaml_path_replaces_broken_scorecards_symlink(self):
+        """Broken scorecards symlinks should be replaced with a real directory."""
+        broken_target = Path("../missing-scorecards")
+        Path("scorecards").symlink_to(broken_target)
+
+        result = get_score_yaml_path("Test Scorecard", "Test Score")
+
+        self.assertEqual(str(result), "scorecards/Test Scorecard/Test Score.yaml")
+        self.assertTrue(Path("scorecards").exists())
+        self.assertTrue(Path("scorecards").is_dir())
+        self.assertFalse(Path("scorecards").is_symlink())
+
 if __name__ == '__main__':
     unittest.main() 

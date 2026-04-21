@@ -7,7 +7,7 @@ This module provides reusable functions for:
 - Fetching feedback items for a score in a time range
 - Identifying which scorecards/scores have feedback in a given time range
 
-These utilities are used by both the FeedbackAnalysis report block and
+These utilities are used by both the FeedbackAlignment report block and
 the feedback evaluation CLI commands.
 """
 

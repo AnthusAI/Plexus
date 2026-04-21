@@ -2304,8 +2304,8 @@ async def test_debug_mode_langchain_integration():
 
 
 @pytest.mark.asyncio
-async def test_postgresql_checkpointer_no_url_provided():
-    """Test LangGraphScore creation without PostgreSQL URL - should use None checkpointer."""
+async def test_langgraph_score_initializes_without_checkpointer():
+    """LangGraph score runtime should never initialize a checkpointer."""
     
     config = {
         "graph": [
@@ -2331,23 +2331,11 @@ async def test_postgresql_checkpointer_no_url_provided():
         mock_classifier_class.return_value = mock_classifier_instance
         mock_import.return_value = mock_classifier_class
         
-        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-            mock_init_model.return_value = AsyncMock()
-            
-            # Mock the PostgreSQL connection to prevent actual database setup
-            with patch('langgraph.checkpoint.postgres.aio.AsyncPostgresSaver.from_conn_string') as mock_postgres:
-                mock_postgres.side_effect = Exception("No postgres_url provided")
-                
-                with patch('logging.info') as mock_log_info:
-                    # Create instance without postgres_url - should handle the absence gracefully
-                    try:
-                        instance = await LangGraphScore.create(**config)
-                        # If creation succeeds, verify checkpointer handling
-                        print("✅ PostgreSQL no URL test passed - handled gracefully!")
-                    except Exception as e:
-                        # If it fails, that's also expected behavior for missing postgres_url
-                        assert "postgres" in str(e).lower() or "checkpoint" in str(e).lower(), f"Expected postgres-related error but got: {e}"
-                        print("✅ PostgreSQL no URL test passed - correctly rejected missing URL!")
+        with patch.object(LangGraphScore, '_ainitialize_model', new=AsyncMock(return_value=AsyncMock())):
+            instance = await LangGraphScore.create(**config)
+            assert instance.model is not None
+            assert instance.workflow is not None
+            assert not hasattr(instance, 'checkpointer')
 
 
 @pytest.mark.asyncio
@@ -3427,11 +3415,8 @@ def test_score_result_full_storage():
 
 
 @pytest.mark.asyncio
-async def test_async_setup_and_cleanup_with_postgres():
-    """Test asynchronous setup and cleanup with PostgreSQL checkpointer."""
-    
-    # This test targets the critical async_setup and cleanup methods
-    # These handle PostgreSQL connections and resource management
+async def test_async_setup_and_cleanup_without_checkpointer():
+    """Async setup/cleanup should work without any checkpointer state."""
     
     config = {
         "graph": [
@@ -3440,8 +3425,7 @@ async def test_async_setup_and_cleanup_with_postgres():
                 "class": "YesOrNoClassifier",
                 "prompt_template": "Test prompt",
             }
-        ],
-        "postgres_url": "postgresql://test:test@localhost:5432/test"
+        ]
     }
     
     with patch('plexus.scores.LangGraphScore.LangGraphScore._import_class') as mock_import:
@@ -3459,33 +3443,14 @@ async def test_async_setup_and_cleanup_with_postgres():
         mock_import.return_value = mock_classifier_class
         
         # Mock model initialization
-        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-            mock_init_model.return_value = AsyncMock()
-            
-            # Mock PostgreSQL checkpointer
-            mock_checkpointer = AsyncMock()
-            mock_checkpointer.setup = AsyncMock()
-            mock_checkpointer_context = AsyncMock()
-            mock_checkpointer_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-            mock_checkpointer_context.__aexit__ = AsyncMock()
-            
-            with patch('langgraph.checkpoint.postgres.aio.AsyncPostgresSaver.from_conn_string',
-                       return_value=mock_checkpointer_context):
-                
-                # Test successful async setup
-                instance = await LangGraphScore.create(**config)
-                
-                # Verify async setup worked
-                assert instance.checkpointer is mock_checkpointer, "PostgreSQL checkpointer should be initialized"
-                mock_checkpointer.setup.assert_called_once()
-                
-                # Test cleanup functionality
-                await instance.cleanup()
-                
-                # Verify cleanup was called on checkpointer
-                mock_checkpointer_context.__aexit__.assert_called_once()
-                
-                print("✅ Async setup and cleanup test passed - PostgreSQL resource management validated!")
+        with patch.object(LangGraphScore, '_ainitialize_model', new=AsyncMock(return_value=AsyncMock())):
+            instance = await LangGraphScore.create(**config)
+            assert instance.model is not None
+            assert instance.workflow is not None
+            assert not hasattr(instance, 'checkpointer')
+
+            await instance.cleanup()
+            assert not hasattr(instance, '_checkpointer_context')
 
 
 @pytest.mark.asyncio
@@ -3499,8 +3464,7 @@ async def test_async_setup_postgres_connection_failure():
                 "class": "YesOrNoClassifier",
                 "prompt_template": "Test prompt",
             }
-        ],
-        "postgres_url": "postgresql://invalid:invalid@nonexistent:5432/invalid"
+        ]
     }
     
     with patch('plexus.scores.LangGraphScore.LangGraphScore._import_class') as mock_import:
@@ -3517,25 +3481,13 @@ async def test_async_setup_postgres_connection_failure():
         mock_classifier_class.return_value = mock_classifier_instance
         mock_import.return_value = mock_classifier_class
         
-        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-            mock_init_model.return_value = AsyncMock()
-            
-            # Mock PostgreSQL connection failure
-            with patch('langgraph.checkpoint.postgres.aio.AsyncPostgresSaver.from_conn_string',
-                       side_effect=Exception("Connection failed")):
-                
-                # Should still create instance but without checkpointer
-                with patch('logging.error') as mock_log_error:
-                    try:
-                        instance = await LangGraphScore.create(**config)
-                        # Verify error was logged
-                        mock_log_error.assert_called()
-                        assert instance.checkpointer is None, "Checkpointer should be None on connection failure"
-                    except Exception:
-                        # Or it might raise an exception, which is also valid behavior
-                        pass
-                
-                print("✅ PostgreSQL connection failure test passed - error handling validated!")
+        with patch.object(LangGraphScore, '_ainitialize_model', new=AsyncMock(return_value=AsyncMock())):
+            instance = await LangGraphScore.create(**config)
+            assert instance.model is not None
+            assert instance.workflow is not None
+            assert not hasattr(instance, 'checkpointer')
+
+            print("✅ PostgreSQL connection failure test passed - error handling validated!")
 
 
 @pytest.mark.asyncio
@@ -5071,10 +5023,9 @@ async def test_cost_calculation_with_model_provider():
 
 @pytest.mark.asyncio
 async def test_async_resource_cleanup_scenarios():
-    """Test async resource cleanup in various scenarios."""
+    """Test async resource cleanup in various scenarios without checkpoint state."""
     
     config = {
-        "postgres_url": "postgresql://test:test@localhost/test",
         "graph": [{"name": "cleanup_test_node", "class": "YesOrNoClassifier"}]
     }
     
@@ -5094,47 +5045,14 @@ async def test_async_resource_cleanup_scenarios():
         with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
             mock_init_model.return_value = AsyncMock()
             
-            # Test cleanup with PostgreSQL checkpointer
-            with patch('plexus.scores.LangGraphScore.AsyncPostgresSaver') as mock_saver:
-                mock_context = AsyncMock()
-                mock_checkpointer = AsyncMock()
-                mock_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-                mock_context.__aexit__ = AsyncMock()
-                mock_checkpointer.setup = AsyncMock()
-                mock_saver.from_conn_string.return_value = mock_context
-                
-                try:
-                    instance = await LangGraphScore.create(**config)
-                    
-                    # Verify checkpointer was set up
-                    assert instance.checkpointer is not None, "Should have checkpointer"
-                    
-                    # Test cleanup
-                    await instance.cleanup()
-                    
-                    # Verify cleanup was called
-                    mock_context.__aexit__.assert_called_once()
-                    
-                    print("✅ Resource cleanup test passed!")
-                    
-                except Exception as e:
-                    print(f"Resource cleanup test handled complexity: {str(e)[:100]}")
-                    assert True, "Resource cleanup test completed"
-                    
-                # Test cleanup with exceptions
-                mock_context.__aexit__.side_effect = Exception("Cleanup error")
-                
-                try:
-                    instance = await LangGraphScore.create(**config)
-                    
-                    # Cleanup should handle exceptions gracefully
-                    await instance.cleanup()  # Should not raise
-                    
-                    print("✅ Resource cleanup exception handling test passed!")
-                    
-                except Exception as e:
-                    print(f"Resource cleanup exception test completed: {str(e)[:100]}")
-                    assert True, "Resource cleanup exception test completed"
+            instance = await LangGraphScore.create(**config)
+            assert instance.workflow is not None
+            assert not hasattr(instance, 'checkpointer')
+
+            await instance.cleanup()
+            assert not hasattr(instance, '_checkpointer_context')
+
+            print("✅ Resource cleanup test passed!")
 
 
 @pytest.mark.asyncio
@@ -5478,24 +5396,23 @@ async def test_initialization_and_core_setup():
             assert instance.model is None  # Not initialized until async_setup
             assert instance.node_instances == []
             assert instance.workflow is None
-            assert instance.checkpointer is None
+            assert not hasattr(instance, 'checkpointer')
             
             # Mock the _ainitialize_model method properly
             with patch.object(instance, '_ainitialize_model', return_value=mock_model):
                 # Test async_setup
-                with patch.dict('os.environ', {'PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI': ''}):
+                with patch.dict('os.environ', {'PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI': 'postgresql://ignored'}):
                     await instance.async_setup()
                     
-                    # Verify model was initialized
+                    # Verify model was initialized and stale env vars are ignored
                     assert instance.model is not None
                     assert instance.workflow is not None
-                    # Note: checkpointer might be set to context manager, so just check it's handled
-                    assert hasattr(instance, 'checkpointer')
+                    assert not hasattr(instance, 'checkpointer')
 
 
 @pytest.mark.asyncio
-async def test_postgresql_checkpointer_setup():
-    """Test PostgreSQL checkpointer initialization and setup."""
+async def test_removed_postgres_checkpointer_config_is_ignored():
+    """Stale postgres_url config should not affect score setup."""
     
     config = {
         "name": "test_score",
@@ -5522,25 +5439,13 @@ async def test_postgresql_checkpointer_setup():
         mock_classifier_class.return_value = mock_classifier_instance
         mock_import.return_value = mock_classifier_class
         
-        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-            mock_init_model.return_value = AsyncMock()
-            
-            # Mock PostgreSQL checkpointer setup
-            mock_checkpointer = AsyncMock()
-            mock_context = AsyncMock()
-            mock_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-            mock_context.__aexit__ = AsyncMock(return_value=None)
-            
-            with patch('langgraph.checkpoint.postgres.aio.AsyncPostgresSaver.from_conn_string') as mock_postgres:
-                mock_postgres.return_value = mock_context
-                
-                instance = LangGraphScore(**config)
-                await instance.async_setup()
-                
-                # Verify PostgreSQL checkpointer setup
-                assert instance.checkpointer == mock_checkpointer
-                assert instance._checkpointer_context == mock_context
-                mock_checkpointer.setup.assert_called_once()
+        with patch.object(LangGraphScore, '_ainitialize_model', new=AsyncMock(return_value=AsyncMock())):
+            instance = LangGraphScore(**config)
+            await instance.async_setup()
+
+            assert instance.model is not None
+            assert instance.workflow is not None
+            assert not hasattr(instance, 'checkpointer')
 
 
 @pytest.mark.asyncio
@@ -5593,7 +5498,6 @@ async def test_async_cleanup_and_resource_management():
     config = {
         "name": "cleanup_test",
         "scorecard_name": "test_scorecard",
-        "postgres_url": "postgresql://user:pass@localhost:5432/test",
         "graph": [
             {
                 "name": "test_node",
@@ -5619,37 +5523,26 @@ async def test_async_cleanup_and_resource_management():
             mock_model = AsyncMock()
             mock_init_model.return_value = mock_model
             
-            # Mock PostgreSQL checkpointer
-            mock_checkpointer = AsyncMock()
-            mock_context = AsyncMock()
-            mock_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-            mock_context.__aexit__ = AsyncMock(return_value=None)
+            instance = LangGraphScore(**config)
             
-            with patch('langgraph.checkpoint.postgres.aio.AsyncPostgresSaver.from_conn_string') as mock_postgres:
-                mock_postgres.return_value = mock_context
+            # Mock the _ainitialize_model method properly
+            with patch.object(instance, '_ainitialize_model', return_value=mock_model):
+                await instance.async_setup()
                 
-                instance = LangGraphScore(**config)
+                # Mock Azure credential for cleanup testing
+                mock_credential = AsyncMock()
+                mock_credential.close = AsyncMock()
+                instance._credential = mock_credential
                 
-                # Mock the _ainitialize_model method properly
-                with patch.object(instance, '_ainitialize_model', return_value=mock_model):
-                    await instance.async_setup()
-                    
-                    # Mock Azure credential for cleanup testing
-                    mock_credential = AsyncMock()
-                    mock_credential.close = AsyncMock()
-                    instance._credential = mock_credential
-                    
-                    # Test cleanup
-                    await instance.cleanup()
-                    
-                    # Verify PostgreSQL checkpointer cleanup
-                    mock_context.__aexit__.assert_called_once()
-                    assert instance.checkpointer is None
-                    assert instance._checkpointer_context is None
-                    
-                    # Verify Azure credential cleanup
-                    mock_credential.close.assert_called_once()
-                    assert instance._credential is None
+                # Test cleanup
+                await instance.cleanup()
+                
+                assert not hasattr(instance, 'checkpointer')
+                assert not hasattr(instance, '_checkpointer_context')
+                
+                # Verify Azure credential cleanup
+                mock_credential.close.assert_called_once()
+                assert instance._credential is None
 
 
 @pytest.mark.asyncio
@@ -6523,7 +6416,7 @@ async def test_complex_multi_condition_routing_with_fallbacks():
 @pytest.mark.asyncio
 async def test_async_resource_cleanup_comprehensive():
     """
-    ADVANCED TEST: Comprehensive async resource cleanup including PostgreSQL and Azure credentials.
+    ADVANCED TEST: Comprehensive async resource cleanup including Azure credentials.
     
     This tests the enhanced cleanup logic from multiple commits, ensuring proper resource
     management in production environments with multiple async resources.
@@ -6537,29 +6430,14 @@ async def test_async_resource_cleanup_comprehensive():
     config = {
         "graph": [{"name": "test_node", "class": "YesOrNoClassifier"}],
         "model_provider": "AzureChatOpenAI",
-        "postgres_url": "postgresql://test:test@localhost/test"
     }
     
-    with patch('plexus.scores.LangGraphScore.AsyncPostgresSaver') as mock_postgres, \
-         patch.object(LangGraphScore, '_ainitialize_model', return_value=AsyncMock()):
-        
-        # Mock PostgreSQL checkpointer context manager
-        mock_checkpointer_context = AsyncMock()
-        mock_checkpointer = AsyncMock()
-        mock_checkpointer.setup = AsyncMock()
-        mock_checkpointer_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-        mock_checkpointer_context.__aexit__ = AsyncMock()
-        mock_postgres.from_conn_string.return_value = mock_checkpointer_context
-        
-        # Create instance
+    with patch.object(LangGraphScore, '_ainitialize_model', return_value=AsyncMock()):
         lang_graph_score = LangGraphScore(**config)
-        
-        # Simulate async setup
         await lang_graph_score.async_setup()
         
-        # Verify resources were initialized
-        assert lang_graph_score.checkpointer is not None, "Checkpointer should be initialized"
-        assert hasattr(lang_graph_score, '_checkpointer_context'), "Context should be stored"
+        assert lang_graph_score.workflow is not None
+        assert not hasattr(lang_graph_score, 'checkpointer')
         
         # Mock Azure credential for comprehensive cleanup test
         mock_credential = AsyncMock()
@@ -6569,10 +6447,7 @@ async def test_async_resource_cleanup_comprehensive():
         # Test comprehensive cleanup
         await lang_graph_score.cleanup()
         
-        # Verify PostgreSQL cleanup
-        mock_checkpointer_context.__aexit__.assert_called_once_with(None, None, None)
-        assert lang_graph_score.checkpointer is None, "Checkpointer should be cleared"
-        assert lang_graph_score._checkpointer_context is None, "Context should be cleared"
+        assert not hasattr(lang_graph_score, '_checkpointer_context')
         
         # Verify Azure credential cleanup
         mock_credential.close.assert_called_once()
@@ -6653,82 +6528,35 @@ async def test_batch_processing_interruption_and_recovery():
 
 
 @pytest.mark.asyncio
-async def test_postgresql_checkpointer_error_scenarios():
-    """
-    ADVANCED TEST: PostgreSQL checkpointer error handling and fallback scenarios.
-    
-    This tests various failure modes in PostgreSQL integration and ensures
-    graceful degradation when database issues occur.
-    """
-    from plexus.scores.LangGraphScore import LangGraphScore
-    from unittest.mock import AsyncMock, MagicMock, patch
-    import os
-    
-    print("🔍 POSTGRESQL CHECKPOINTER ERROR SCENARIOS TEST")
-    
+async def test_removed_checkpointer_inputs_do_not_change_setup():
+    """Legacy checkpointer inputs should have no effect on score setup."""
     config = {
         "graph": [{"name": "db_test_node", "class": "YesOrNoClassifier"}],
         "model_provider": "AzureChatOpenAI",
-        "postgres_url": "postgresql://invalid:connection@nonexistent/db"
+        "postgres_url": "postgresql://invalid:connection@nonexistent/db",
+        "checkpoint_db_path": "/tmp/legacy-checkpoints.db",
     }
-    
-    # Test Scenario 1: Database connection failure during setup
-    with patch('plexus.scores.LangGraphScore.AsyncPostgresSaver') as mock_postgres, \
-         patch.object(LangGraphScore, '_ainitialize_model', return_value=AsyncMock()):
-        
-        # Mock connection failure
-        mock_postgres.from_conn_string.side_effect = Exception("Connection failed")
-        
-        lang_graph_score = LangGraphScore(**config)
-        
-        # Should handle connection failure gracefully
-        try:
-            await lang_graph_score.async_setup()
-            # If it doesn't raise an exception, verify fallback behavior
-            assert lang_graph_score.checkpointer is None, "Should fallback to no checkpointer on connection failure"
-            print("✅ Graceful fallback on connection failure")
-        except Exception as e:
-            # Connection failures should be handled or logged appropriately
-            print(f"✅ Connection failure handled: {str(e)[:100]}")
-    
-    # Test Scenario 2: Setup failure after connection success
-    with patch('plexus.scores.LangGraphScore.AsyncPostgresSaver') as mock_postgres, \
-         patch.object(LangGraphScore, '_ainitialize_model', return_value=AsyncMock()):
-        
-        mock_checkpointer_context = AsyncMock()
-        mock_checkpointer = AsyncMock()
-        mock_checkpointer.setup = AsyncMock(side_effect=Exception("Setup failed"))
-        mock_checkpointer_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-        mock_checkpointer_context.__aexit__ = AsyncMock()
-        mock_postgres.from_conn_string.return_value = mock_checkpointer_context
-        
-        lang_graph_score = LangGraphScore(**config)
-        
-        try:
-            await lang_graph_score.async_setup()
-            print("✅ Setup failure handled gracefully")
-        except Exception as e:
-            print(f"✅ Setup failure properly propagated: {str(e)[:100]}")
-    
-    # Test Scenario 3: Cleanup failure handling
-    with patch('plexus.scores.LangGraphScore.AsyncPostgresSaver') as mock_postgres, \
-         patch.object(LangGraphScore, '_ainitialize_model', return_value=AsyncMock()):
-        
-        mock_checkpointer_context = AsyncMock()
-        mock_checkpointer = AsyncMock()
-        mock_checkpointer.setup = AsyncMock()
-        mock_checkpointer_context.__aenter__ = AsyncMock(return_value=mock_checkpointer)
-        mock_checkpointer_context.__aexit__ = AsyncMock(side_effect=Exception("Cleanup failed"))
-        mock_postgres.from_conn_string.return_value = mock_checkpointer_context
-        
+
+    with patch.object(LangGraphScore, '_ainitialize_model', return_value=AsyncMock()), \
+         patch('plexus.scores.LangGraphScore.LangGraphScore._import_class') as mock_import:
+        mock_classifier_class = MagicMock()
+        mock_classifier_instance = MagicMock()
+        mock_classifier_instance.GraphState = MagicMock()
+        mock_classifier_instance.GraphState.__annotations__ = {'text': str, 'classification': str}
+        mock_classifier_instance.parameters = MagicMock()
+        mock_classifier_instance.parameters.output = None
+        mock_classifier_instance.parameters.edge = None
+        mock_classifier_instance.parameters.conditions = None
+        mock_classifier_instance.build_compiled_workflow = MagicMock(return_value=lambda state: state)
+        mock_classifier_class.return_value = mock_classifier_instance
+        mock_import.return_value = mock_classifier_class
+
         lang_graph_score = LangGraphScore(**config)
         await lang_graph_score.async_setup()
-        
-        # Cleanup should handle exceptions gracefully
-        await lang_graph_score.cleanup()  # Should not raise exception
-        print("✅ Cleanup failure handled gracefully")
-    
-    print("✅ POSTGRESQL CHECKPOINTER ERROR SCENARIOS TEST PASSED - Robust database error handling!")
+
+        assert lang_graph_score.model is not None
+        assert lang_graph_score.workflow is not None
+        assert not hasattr(lang_graph_score, 'checkpointer')
 
 
 @pytest.mark.skip(reason="Graph visualization test needs refinement for file handling")

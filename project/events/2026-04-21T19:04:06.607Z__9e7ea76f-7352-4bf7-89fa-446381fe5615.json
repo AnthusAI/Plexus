@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9e7ea76f-7352-4bf7-89fa-446381fe5615",
+  "issue_id": "plx-9ae05c29-6849-4d3c-b646-b9f3715b0d1b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T19:04:06.607Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-bdf46225-f6cd-441e-907f-ae08bfceb3bd",
+    "priority": 2,
+    "status": "open",
+    "title": "Resolve github-code-quality unused symbol findings on develop->main promotion PR"
+  }
+}

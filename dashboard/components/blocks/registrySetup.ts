@@ -9,7 +9,7 @@ import { registerBlock } from './BlockRegistry';
 import { BlockComponent } from './ReportBlock';
 import ReportBlock from './ReportBlock';
 import TextBlock from './TextBlock';
-import FeedbackAnalysis from './FeedbackAnalysis';
+import FeedbackAlignment from './FeedbackAlignment';
 import ExplanationAnalysis from './ExplanationAnalysis';
 import ScorecardReport from './ScorecardReport';
 import ScoreInfo from './ScoreInfo';
@@ -31,7 +31,8 @@ registerBlock('default', ReportBlock);
 
 // Register specific block types - use type casting to satisfy BlockComponent interface
 registerBlock('ScorecardReport', ScorecardReport as BlockComponent);
-registerBlock('FeedbackAnalysis', FeedbackAnalysis as BlockComponent);
+registerBlock('FeedbackAlignment', FeedbackAlignment as BlockComponent);
+registerBlock('FeedbackAnalysis', FeedbackAlignment as BlockComponent);
 registerBlock('ExplanationAnalysis', ExplanationAnalysis as BlockComponent);
 registerBlock('text', TextBlock as BlockComponent);
 registerBlock('ScoreInfo', ScoreInfo as BlockComponent);

@@ -122,14 +122,14 @@ def action_items_command(
 
     console.print(f"[dim]Report: {report_instance.id}[/dim]")
 
-    # Find the FeedbackAnalysis block
+    # Find the FeedbackAlignment block
     blocks = ReportBlock.list_by_report_id(report_instance.id, client)
     fa_block = next(
-        (b for b in blocks if (b.type or "").lower() in ("feedbackanalysis", "feedback_analysis")),
+        (b for b in blocks if (b.type or "").lower() in ("feedbackalignment", "feedback_alignment")),
         None,
     )
     if not fa_block:
-        console.print("[red]No FeedbackAnalysis block found in this report.[/red]")
+        console.print("[red]No FeedbackAlignment block found in this report.[/red]")
         raise click.Abort()
 
     console.print("[dim]Fetching report output...[/dim]")

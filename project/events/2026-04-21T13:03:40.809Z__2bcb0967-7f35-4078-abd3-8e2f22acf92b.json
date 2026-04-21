@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2bcb0967-7f35-4078-abd3-8e2f22acf92b",
+  "issue_id": "plx-17d6228f-bc9d-45c8-b4ff-a75aa9047093",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T13:03:40.809Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer should fail task/stages when baseline evaluation fails"
+  }
+}

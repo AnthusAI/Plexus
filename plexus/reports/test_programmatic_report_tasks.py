@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from plexus.reports.service import (
     _wait_for_programmatic_task_result,
+    run_programmatic_block_and_persist,
     run_block_cached,
 )
 
@@ -134,3 +135,69 @@ def test_wait_for_programmatic_task_result_surfaces_failure(
     assert "Task crashed" in log_output
     assert "stacktrace" in log_output
     assert was_cached is False
+
+
+@patch("plexus.reports.service.time.monotonic", side_effect=[0.0, 0.1])
+@patch("plexus.reports.service.Task.get_by_id")
+@patch("plexus.reports.service._find_report_by_task_id")
+@patch("plexus.reports.service._load_programmatic_report_result")
+def test_wait_for_programmatic_task_result_surfaces_persisted_report_failure(
+    mock_load_programmatic_report_result,
+    mock_find_report_by_task_id,
+    mock_task_get_by_id,
+    _mock_monotonic,
+):
+    queued_task = MagicMock()
+    queued_task.id = "task-222"
+
+    report = MagicMock()
+    mock_find_report_by_task_id.return_value = report
+    mock_load_programmatic_report_result.return_value = (None, "Score not found")
+
+    refreshed_task = MagicMock()
+    refreshed_task.status = "COMPLETED"
+    refreshed_task.dispatchStatus = "COMPLETED"
+    refreshed_task.errorMessage = None
+    refreshed_task.stderr = None
+    mock_task_get_by_id.return_value = refreshed_task
+
+    output, log_output, was_cached = _wait_for_programmatic_task_result(
+        task=queued_task,
+        cache_key="cache-key",
+        account_id="acct-1",
+        client=MagicMock(),
+        timeout_seconds=1,
+    )
+
+    assert output is None
+    assert log_output == "Score not found"
+    assert was_cached is False
+
+
+@patch("plexus.reports.service._persist_block_result")
+@patch("plexus.reports.service._instantiate_and_run_block")
+def test_run_programmatic_block_and_persist_uses_concise_failure_message(
+    mock_instantiate_and_run_block,
+    mock_persist_block_result,
+):
+    mock_instantiate_and_run_block.return_value = (
+        None,
+        "Error running block FeedbackContradictions (FeedbackContradictions): Score not found\nDetails:\ntraceback",
+        None,
+    )
+
+    output, log_output = run_programmatic_block_and_persist(
+        cache_key="cache-key",
+        block_class="FeedbackContradictions",
+        block_config={"scorecard": "sc-1"},
+        account_id="acct-1",
+        client=MagicMock(),
+    )
+
+    assert output is None
+    assert "Details:\ntraceback" in log_output
+    assert mock_persist_block_result.call_args.kwargs["success"] is False
+    assert (
+        mock_persist_block_result.call_args.kwargs["error_message"]
+        == "Error running block FeedbackContradictions (FeedbackContradictions): Score not found"
+    )

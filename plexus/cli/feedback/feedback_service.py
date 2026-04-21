@@ -19,6 +19,10 @@ from plexus.analysis.metrics.metric import Metric
 logger = logging.getLogger(__name__)
 
 
+def _feedback_item_relationship_fields() -> Dict[str, List[str]]:
+    return {"item": list(FeedbackItem.GRAPHQL_ITEM_FIELDS)}
+
+
 @dataclass
 class FeedbackItemSummary:
     """Token-efficient summary of a feedback item for alignment work."""
@@ -302,7 +306,7 @@ class FeedbackService:
     @staticmethod
     def _generate_recommendation(analysis: Dict[str, Any]) -> str:
         """
-        Generate actionable recommendations based on feedback analysis.
+        Generate actionable recommendations based on feedback alignment.
         
         Args:
             analysis: Dictionary containing analysis results
@@ -545,7 +549,8 @@ class FeedbackService:
                 client=client,
                 limit=1000,  # Use a large limit to get all matching items
                 filter=filter_condition,
-                fields=FeedbackItem.GRAPHQL_BASE_FIELDS
+                fields=FeedbackItem.GRAPHQL_BASE_FIELDS,
+                relationship_fields=_feedback_item_relationship_fields(),
             )
             
             logger.info(f"Retrieved {len(all_feedback_items)} feedback items from standard query (all time)")
@@ -636,10 +641,16 @@ class FeedbackService:
                     # Execute the query (async operation)
                     response = await asyncio.to_thread(client.execute, query, variables)
                     
+                    if not isinstance(response, dict):
+                        raise TypeError(f"Unexpected GSI response type: {type(response).__name__}")
+
                     if 'errors' in response:
                         logger.error(f"GraphQL errors in GSI query: {response['errors']}")
-                        # Fall back to the standard method if GSI fails
-                        raise Exception(f"GSI query failed: {response['errors']}")
+                        raise RuntimeError(
+                            "Failed to load feedback items with related item metadata "
+                            f"for scorecard {scorecard_id}, score {score_id}: "
+                            f"GSI query failed: {response['errors']}"
+                        )
                     
                     result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt', {})
                     items_data = result_data.get('items', [])
@@ -657,10 +668,11 @@ class FeedbackService:
                 
                 logger.info(f"Retrieved {len(all_feedback_items)} feedback items from GSI")
                 
+            except RuntimeError:
+                raise
             except Exception as e:
-                logger.warning(f"GSI query failed, falling back to standard query: {str(e)}")
-                
-                # Fallback to the original method
+                logger.warning("GSI query failed, falling back to standard query: %s", str(e))
+
                 cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
                 filter_condition = {
                     "and": [
@@ -670,14 +682,15 @@ class FeedbackService:
                         {"editedAt": {"ge": cutoff_date}}
                     ]
                 }
-                
+
                 all_feedback_items, _ = FeedbackItem.list(
                     client=client,
                     limit=1000,  # Use a large limit to get all matching items
                     filter=filter_condition,
-                    fields=FeedbackItem.GRAPHQL_BASE_FIELDS
+                    fields=FeedbackItem.GRAPHQL_BASE_FIELDS,
+                    relationship_fields=_feedback_item_relationship_fields(),
                 )
-                
+
                 logger.info(f"Retrieved {len(all_feedback_items)} feedback items from fallback query")
         
         # Apply value filters if specified

@@ -5,26 +5,26 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 
 from . import feedback_utils
-from .feedback_analysis import FeedbackAnalysis
+from .feedback_alignment import FeedbackAlignment
 from .reinforcement_helpers import (
     fetch_item_identifiers,
     is_normal_prediction_score_result,
     parse_iso_timestamp,
 )
+from .score_resolution import resolve_score_for_scorecard
 
 logger = logging.getLogger(__name__)
 
 
-class ExplanationAnalysis(FeedbackAnalysis):
+class ExplanationAnalysis(FeedbackAlignment):
     """
     Semantic reinforcement-memory analysis over normal production
     ScoreResult explanations.
 
-    This is intentionally a separate report block from FeedbackAnalysis.
+    This is intentionally a separate report block from FeedbackAlignment.
     """
 
     DEFAULT_NAME = "Explanation Analysis"
@@ -241,26 +241,11 @@ class ExplanationAnalysis(FeedbackAnalysis):
             return scores
 
         self._log(f"Looking up specific Plexus Score for identifier: {score_id_param}")
-        is_uuid_like = (
-            len(score_id_param) == 36
-            and score_id_param.count("-") == 4
-            and all(c in "0123456789abcdefABCDEF-" for c in score_id_param)
+        plexus_score = await resolve_score_for_scorecard(
+            api_client=self.api_client,
+            score_identifier=str(score_id_param),
+            scorecard_id=str(plexus_scorecard.id),
         )
-        if is_uuid_like:
-            plexus_score = await asyncio.to_thread(
-                Score.get_by_id,
-                id=score_id_param,
-                client=self.api_client,
-            )
-            if plexus_score and plexus_score.scorecard_id != plexus_scorecard.id:
-                plexus_score = None
-        else:
-            plexus_score = await asyncio.to_thread(
-                Score.get_by_external_id,
-                external_id=str(score_id_param),
-                scorecard_id=plexus_scorecard.id,
-                client=self.api_client,
-            )
 
         if not plexus_score:
             self._log(f"WARNING: Plexus Score not found for identifier: {score_id_param}.", level="WARNING")

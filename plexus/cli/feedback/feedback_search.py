@@ -97,7 +97,7 @@ async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: s
     all_items_for_score = []
     
     try:
-        # Use the optimized GSI directly with GraphQL (same approach as FeedbackAnalysis report block)
+        # Use the optimized GSI directly with GraphQL (same approach as FeedbackAlignment report block)
         query = """
         query ListFeedbackItemsByGSI(
             $accountId: String!,
