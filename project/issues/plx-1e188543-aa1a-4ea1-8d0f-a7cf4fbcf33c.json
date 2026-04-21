@@ -1,0 +1,25 @@
+{
+  "id": "plx-1e188543-aa1a-4ea1-8d0f-a7cf4fbcf33c",
+  "title": "Fail fast on missing feedback item metadata and surface optimizer evaluation errors",
+  "description": "As an operator, I want feedback-backed optimizer runs to fail immediately when required item metadata is missing or a score returns ERROR, so that ProcedureTask, Evaluation, and procedure chat clearly explain why no cycles ran.\n\n## Behavior\nFeature: Optimizer run failure visibility for broken feedback-backed evaluations\n\nScenario: Feedback-backed evaluation loses required item metadata\nGiven an optimizer run starts an initial evaluation from feedback items\nAnd the feedback loading path does not provide the related item metadata payload\nWhen dataset rows are built for evaluation\nThen the run fails immediately\nAnd the failure message identifies the feedback item or item id with missing metadata\nAnd TaskStage, Task, Evaluation, and procedure chat show that failure reason\n\nScenario: Score execution returns ERROR during initial evaluation\nGiven an optimizer run starts an initial evaluation\nWhen any score execution returns value ERROR\nThen the evaluation fails immediately\nAnd the initial evaluation stage is marked failed with the execution error details\nAnd the procedure does not continue to RCA or optimization cycles\nAnd the same failure reason is visible in ProcedureTask, Evaluation, and procedure chat\n\nScenario: Feedback item loading query fails\nGiven a date-bounded feedback-backed evaluation\nWhen the GSI query for feedback items fails\nThen the run fails instead of falling back to a lower-fidelity metadata-dropping query\n",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "codex",
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "adc3449f-ca7a-45b4-a8a7-a20f7ddb66a6",
+      "author": "ryan",
+      "text": "Implemented fail-fast handling for broken feedback-backed optimizer evaluations.\n\nCompleted:\n- feedback loading now keeps related Item metadata on supported paths and date-bounded GSI failures raise instead of silently falling back\n- FeedbackItems dataset construction now fails fast when related Item metadata is missing or unparsable\n- Evaluation now treats any score result with value=ERROR as fatal, preserves the underlying score error text, and aborts the run instead of continuing to metrics/RCA\n- CLI evaluation failure path now updates Evaluation.errorMessage/status in addition to Task/TaskStage failure state\n- Tactus trace sink now records terminal tool responses for started tool calls and emits assistant-visible ALERT_ERROR chat messages for failed tool executions\n- targeted tests added/updated for feedback loading, dataset metadata validation, evaluation fail-fast behavior, and trace sink failure visibility\n\nVerification:\n- pytest -q plexus/cli/feedback/feedback_service_test.py plexus/data/test_feedback_items.py plexus/test_evaluation_metrics.py plexus/cli/procedure/test_trace_sink.py\n- result: 57 passed\n",
+      "created_at": "2026-04-21T01:49:26.997089Z"
+    }
+  ],
+  "created_at": "2026-04-21T01:41:02.072108Z",
+  "updated_at": "2026-04-21T01:49:26.997089Z",
+  "closed_at": null,
+  "custom": {}
+}
