@@ -5219,7 +5219,7 @@ class AccuracyEvaluation(Evaluation):
                     )
                 except Exception:
                     pass  # Don't mask the original error
-            raise e # Re-raise after logging
+            raise
         finally:
             self.should_stop = True
 
@@ -5544,7 +5544,7 @@ class AccuracyEvaluation(Evaluation):
             return metrics
         except Exception as e:
             self.logging.error(f"Error in _run_evaluation: {e}", exc_info=True)
-            'raise e'
+            raise
         finally:
             pass
 
