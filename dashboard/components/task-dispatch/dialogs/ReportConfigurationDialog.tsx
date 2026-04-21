@@ -23,30 +23,38 @@ import { toast } from "sonner"
 import { ConfigurableParametersDialog } from "@/components/ui/ConfigurableParametersDialog"
 import { parseParametersFromYaml, hasParameters } from "@/lib/parameter-parser"
 import { useAccount } from "@/app/contexts/AccountContext"
+import {
+  listAllReportConfigurationsByAccount,
+  type ReportConfigurationListItem,
+} from "@/utils/report-configurations"
 
 // Report configuration type definition
-interface ReportConfiguration {
+interface ReportConfiguration extends ReportConfigurationListItem {
   id: string
-  name: string
-  description?: string | null
   configuration?: string | null
 }
 
-// GraphQL query to list report configurations
-const LIST_REPORT_CONFIGURATIONS = `
-  query ListReportConfigurations($accountId: String!) {
-    listReportConfigurationByAccountIdAndUpdatedAt(
-      accountId: $accountId
-      limit: 100
+function flattenReportParameters(parameters: Record<string, any>): Record<string, any> {
+  const flattened: Record<string, any> = {}
+
+  Object.entries(parameters).forEach(([key, value]) => {
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      ('start' in value || 'end' in value)
     ) {
-      items {
-        id
-        name
-        description
-      }
+      const start = typeof value.start === 'string' ? value.start : ''
+      const end = typeof value.end === 'string' ? value.end : ''
+      if (start) flattened[`${key}_start`] = start
+      if (end) flattened[`${key}_end`] = end
+      return
     }
-  }
-`
+    flattened[key] = value
+  })
+
+  return flattened
+}
 
 // GraphQL query to get full report configuration with content
 const GET_REPORT_CONFIGURATION = `
@@ -84,24 +92,18 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       setError(null)
       
       try {
-        const configResponse = await getClient().graphql({
-          query: LIST_REPORT_CONFIGURATIONS,
-          variables: {
-            accountId: selectedAccount.id
-          }
-        })
-        
-        if ('data' in configResponse && 
-            configResponse.data?.listReportConfigurationByAccountIdAndUpdatedAt?.items) {
-          const configs = configResponse.data.listReportConfigurationByAccountIdAndUpdatedAt.items
-          setConfigurations(configs)
-          
-          // Auto-select the first config if none is selected
-          if (configs.length > 0 && !selectedConfigId) {
-            setSelectedConfigId(configs[0].id)
+        const allConfigs = await listAllReportConfigurationsByAccount(selectedAccount.id)
+
+        if (allConfigs.length > 0) {
+          setConfigurations(allConfigs)
+
+          // Prefer current selection when present, otherwise select most recent.
+          if (!selectedConfigId || !allConfigs.some((config) => config.id === selectedConfigId)) {
+            setSelectedConfigId(allConfigs[0].id)
           }
         } else {
           setError("No report configurations found")
+          setConfigurations([])
         }
       } catch (err: any) {
         console.error('Error fetching report configurations:', err)
@@ -112,7 +114,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
     }
     
     fetchConfigurations()
-  }, [isOpen, selectedAccount?.id, selectedConfigId])
+  }, [isOpen, selectedAccount?.id])
   
   // Fetch full configuration when selected config changes
   useEffect(() => {
@@ -166,22 +168,17 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   
   const handleDispatchReport = async (parameters?: Record<string, any>) => {
     if (!selectedConfigId) return
+
+    const flattenedParameters = parameters ? flattenReportParameters(parameters) : undefined
     
     // Build the command for running this report
     let command = `report run --config ${selectedConfigId}`
     
     // Add parameter options if provided
-    if (parameters) {
-      Object.entries(parameters).forEach(([key, value]) => {
+    if (flattenedParameters) {
+      Object.entries(flattenedParameters).forEach(([key, value]) => {
         command += ` --param-${key}=${value}`
       })
-    }
-    
-    // Get additional metadata
-    const metadata = {
-      reportConfigurationId: selectedConfigId,
-      reportConfigurationName: selectedConfig?.name || 'Report',
-      parameters: parameters || {}
     }
     
     // Dispatch the task once and close only after dispatch attempt completes.
@@ -270,13 +267,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       {selectedConfig && selectedConfig.configuration && (
         <ConfigurableParametersDialog
           open={showParametersDialog}
-          onOpenChange={(open) => {
-            setShowParametersDialog(open)
-            if (!open) {
-              // User cancelled parameters - close main dialog too
-              onClose()
-            }
-          }}
+          onOpenChange={setShowParametersDialog}
           title={`Configure ${selectedConfig.name}`}
           description="Please provide the required parameters for this report"
           parameters={parseParametersFromYaml(selectedConfig.configuration)}

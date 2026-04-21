@@ -8,9 +8,15 @@ export type ParameterType =
   | 'boolean'
   | 'select'
   | 'date'
+  | 'date_range'
   | 'scorecard_select'
   | 'score_select'
   | 'score_version_select'
+
+export interface DateRangeValue {
+  start?: string
+  end?: string
+}
 
 export interface ParameterOption {
   value: string
@@ -45,5 +51,4 @@ export interface ParameterValidationError {
   parameter: string
   message: string
 }
-
 
