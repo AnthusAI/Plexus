@@ -35,7 +35,21 @@ try:
     import langchain_core.prompts.string as _lc_string_mod
     if hasattr(_lc_string_mod, '_RestrictedSandboxedEnvironment'):
         from jinja2 import Environment as _Jinja2Env
-        _lc_string_mod._RestrictedSandboxedEnvironment = _Jinja2Env
+        from jinja2 import ChainableUndefined as _ChainableUndefined
+
+        class _PlexusJinja2Environment(_Jinja2Env):
+            """Jinja2 Environment for Plexus score prompts.
+
+            We rely on nested metadata access in templates (e.g. {{ metadata.other_data['X'] }}).
+            Some items legitimately have missing metadata during backfills. Using ChainableUndefined
+            prevents hard failures and lets the score classify those as NA per rubric instead.
+            """
+
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault("undefined", _ChainableUndefined)
+                super().__init__(*args, **kwargs)
+
+        _lc_string_mod._RestrictedSandboxedEnvironment = _PlexusJinja2Environment
         logging.info("Patched langchain_core Jinja2 sandbox to use unrestricted Environment")
 except Exception as _patch_err:
     logging.warning(f"Could not patch langchain Jinja2 sandbox: {_patch_err}")
