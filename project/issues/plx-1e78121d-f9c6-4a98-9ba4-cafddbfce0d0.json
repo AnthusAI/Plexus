@@ -22,10 +22,22 @@
       "author": "derek",
       "text": "Applied fixes: (1) DateRange popover now uses modal mode and single-month layout to avoid overlay spill/interaction conflicts; (2) closing ConfigurableParametersDialog no longer auto-closes parent Run Report dialog. This prevents 'click date closes everything' failure mode.",
       "created_at": "2026-04-21T18:11:28.660976097Z"
+    },
+    {
+      "id": "1a554a67-a429-43cd-9c77-1151b16c4e0a",
+      "author": "derek",
+      "text": "Follow-up: current calendar UI still malformed (weekday header spacing, nav placement, missing range highlight). Root cause appears to be outdated className keys for react-day-picker v9 in shared ui/calendar.tsx. Implementing class map correction and restoring 2-month range view.",
+      "created_at": "2026-04-21T18:15:28.164728766Z"
+    },
+    {
+      "id": "74ed7ca0-e668-4e82-8eee-e42ccd0fa085",
+      "author": "derek",
+      "text": "Applied follow-up styling fix in shared Calendar component: migrated classNames to react-day-picker v9 keys (weekday/week/day_button/range_start/range_middle/range_end/button_previous/button_next/month_grid). Restored 2-month range view in DateRangeParameter. This addresses misaligned weekdays/nav and missing range highlight.",
+      "created_at": "2026-04-21T18:15:57.379927452Z"
     }
   ],
   "created_at": "2026-04-21T18:11:05.483970112Z",
-  "updated_at": "2026-04-21T18:11:34.781399457Z",
-  "closed_at": "2026-04-21T18:11:34.781399457Z",
+  "updated_at": "2026-04-21T18:16:03.758189020Z",
+  "closed_at": "2026-04-21T18:16:03.758189020Z",
   "custom": {}
 }

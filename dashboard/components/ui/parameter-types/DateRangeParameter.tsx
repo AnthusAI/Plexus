@@ -89,7 +89,7 @@ export function DateRangeParameter({ definition, value, onChange, disabled, erro
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
             mode="range"
-            numberOfMonths={1}
+            numberOfMonths={2}
             selected={selectedRange}
             defaultMonth={selectedRange?.from}
             onSelect={handleRangeSelect}
