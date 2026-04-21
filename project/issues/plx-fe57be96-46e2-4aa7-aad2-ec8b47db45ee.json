@@ -1,0 +1,25 @@
+{
+  "id": "plx-fe57be96-46e2-4aa7-aad2-ec8b47db45ee",
+  "title": "Define Property Type and Home Value Metadata AI guidelines for Suco Home Improvement",
+  "description": "Create and validate classifier guidelines for the Suco - Home Improvement Property Type and Home Value Metadata AI score so reviewers and the model share the same class definitions and decision criteria.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "38a3e3f2-dbee-446f-96ca-a5873fca36f4",
+      "author": "ryan",
+      "text": "Initial guidelines work completed for Suco - Home Improvement / Property Type and Home Value Metadata AI; see story plx-e46f05 for validation and pushed version details.",
+      "created_at": "2026-04-21T01:05:57.614392Z"
+    }
+  ],
+  "created_at": "2026-04-21T01:05:03.304008Z",
+  "updated_at": "2026-04-21T01:05:57.614392Z",
+  "closed_at": "2026-04-21T01:05:57.600922Z",
+  "custom": {}
+}
