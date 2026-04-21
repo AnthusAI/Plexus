@@ -267,13 +267,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       {selectedConfig && selectedConfig.configuration && (
         <ConfigurableParametersDialog
           open={showParametersDialog}
-          onOpenChange={(open) => {
-            setShowParametersDialog(open)
-            if (!open) {
-              // User cancelled parameters - close main dialog too
-              onClose()
-            }
-          }}
+          onOpenChange={setShowParametersDialog}
           title={`Configure ${selectedConfig.name}`}
           description="Please provide the required parameters for this report"
           parameters={parseParametersFromYaml(selectedConfig.configuration)}
