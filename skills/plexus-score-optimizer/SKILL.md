@@ -97,6 +97,70 @@ Use the contradictions report to sort findings into these buckets:
 - feedback invalidation candidate
 - mechanical / no action
 
+### Step 2.5 - Mechanical hints for working with the contradictions report
+
+Do not guess from memory and do not reconstruct contradiction themes from individual item tools first. Use the stored contradictions report output as the source of truth.
+
+Operational hints:
+
+- The command may finish generating and caching the report even if the shell wrapper still looks busy. Do not assume a timeout just because the terminal has not returned yet.
+- Treat these as completion signals:
+  - the command prints the report metadata payload with a `report_id`
+  - the command prints that the report block was generated or cached
+  - the command prints contradiction/aligned counts and the run summary
+- If you saw those completion signals, inspect the report output next instead of rerunning the whole report blindly.
+
+When the top-level CLI output is too shallow and you need the actual exemplar payload, use a one-off repo Python command to load the stored attachment through the existing helper that already knows how to read compacted `ReportBlock.output` metadata:
+
+```bash
+/Users/ryan/miniconda3/bin/python - <<'PY'
+from plexus.cli.shared.client_utils import create_client
+from plexus.dashboard.api.models.report_block import ReportBlock
+from plexus.cli.dataset.curation import _load_feedback_contradictions_output_from_block
+
+client = create_client()
+block = ReportBlock.get_by_id("<report_block_id>", client=client)
+payload = _load_feedback_contradictions_output_from_block(block)
+
+for topic in payload.get("topics", []):
+    for exemplar in topic.get("exemplars", []):
+        print({
+            "item_id": exemplar.get("item_id"),
+            "item_external_id": exemplar.get("item_external_id"),
+            "feedback_item_id": exemplar.get("feedback_item_id"),
+            "edit_comment": exemplar.get("edit_comment"),
+            "reason": exemplar.get("reason"),
+            "category": exemplar.get("category"),
+            "guideline_quote": exemplar.get("guideline_quote"),
+            "is_invalid": exemplar.get("is_invalid"),
+        })
+PY
+```
+
+This is the preferred way to answer questions like:
+
+- which Prescriber contradictions explicitly enforced an old `all meds` standard?
+- which Dosage contradictions explicitly enforced `any miss = No` instead of the newer numeric rule?
+- which contradictions are policy gaps versus invalidation candidates?
+
+When filtering a candidate invalidation group from the report payload, prioritize these fields:
+
+- `edit_comment`
+- `reason`
+- `category`
+- `guideline_quote`
+- `item_external_id`
+- `feedback_item_id`
+- `is_invalid`
+
+Practical filtering rules:
+
+- Build candidate groups from shared editor rationale, not just from the contradiction verdict.
+- For invalidation discussions, prefer contradictions whose `edit_comment` or `reason` explicitly shows the older rubric being applied, such as `for all meds`, `for each med`, or `single miss caused No`.
+- Exclude `policy_gap` cases from invalidation-first batches unless the user explicitly wants to review them.
+- Exclude mechanical/truncated-context cases from invalidation-first batches unless the user explicitly asks for them.
+- Present the user-facing group with stable item identifiers, usually `item_external_id`, and keep `feedback_item_id` available for the actual invalidation step.
+
 ### Step 3 - Handle contradiction findings at the right level
 
 Use the report output first. Do not start by spelunking individual feedback items.
@@ -106,6 +170,8 @@ When the report reveals a contradiction cluster:
 - summarize the shared pattern
 - explain whether it looks like a score issue, rubric issue, or feedback-quality issue
 - propose a candidate invalidation group only when the contradiction clearly reflects old or incorrect rubric application
+- cite the exact report evidence that makes the cluster fit that group, especially the `edit_comment` and `reason` text
+- ask for approval before invalidating anything
 
 Examples of strong invalidation candidates:
 
@@ -135,6 +201,8 @@ Notes:
 - It must not be used automatically by the optimizer.
 - It accepts a direct feedback item ID or an item identifier and resolves deterministically.
 - Use `--scorecard` and `--score` to disambiguate item-level matches when needed.
+- Before running it, restate the approved group back to the user in a flat list so there is no ambiguity about which items are being invalidated.
+- After running it, report the exact identifiers invalidated and whether any item was already invalid.
 
 ### Step 5 - Launch the optimizer
 
