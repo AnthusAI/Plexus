@@ -1,0 +1,25 @@
+{
+  "id": "plx-af79c711-277f-4ce3-b9d5-fd8e99fb06aa",
+  "title": "Publish Medication Review split-score guidelines, promote merged champions, and rerun contradictions",
+  "description": "Align published guidelines with the current Medication Review split-score logic, ensure code and guidelines are merged into the same promotable version for Prescriber, Dosage, Pharmacy, Individual Confirmation, and Medication Review (Composite), promote the merged versions to champion, rerun 180-day contradiction analysis on split scores only, and produce rubric-vs-invalidation triage notes without mutating legacy Medication Review or invalidating feedback.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f0e70f4f-ed3a-43fc-9d15-2888ee09987c",
+      "author": "ryan",
+      "text": "Validated the existing draft guidelines for Medication Review: Prescriber and Medication Review: Dosage. Remote draft versions are the source of truth because local pulled files had drifted behind the latest non-champion versions; Pharmacy and Individual Confirmation still need new official guidelines, and Medication Review (Composite) needs a minimal aggregate-only guideline. Next step: create merged guideline-bearing versions for Pharmacy, Individual Confirmation, and the new composite, then verify exact version contents before champion promotion.",
+      "created_at": "2026-04-22T14:02:38.272943Z"
+    }
+  ],
+  "created_at": "2026-04-22T13:58:54.522824Z",
+  "updated_at": "2026-04-22T14:02:38.272943Z",
+  "closed_at": null,
+  "custom": {}
+}
