@@ -139,6 +139,7 @@ describe('Procedures dashboard loading UX', () => {
     render(<ProceduresDashboard />)
 
     expect(screen.getByTestId('procedures-dashboard-skeleton')).toBeInTheDocument()
+    expect(screen.queryByText('No procedures found')).not.toBeInTheDocument()
   })
 
   it('renders cards before task hydration completes, then hydrates statuses', async () => {

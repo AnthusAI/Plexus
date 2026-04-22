@@ -110,6 +110,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   
   const [procedures, setProcedures] = useState<ProcedureWithTask[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isFetchingProcedures, setIsFetchingProcedures] = useState(false)
   const [isHydratingTasks, setIsHydratingTasks] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [nextToken, setNextToken] = useState<string | null>(null)
@@ -172,6 +173,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setHasMore(false)
       setError(null)
       setIsInitialLoading(false)
+      setIsFetchingProcedures(false)
       setIsHydratingTasks(false)
       hasLoadedProceduresOnceRef.current = false
       procedureTaskMapRef.current = new Map()
@@ -184,6 +186,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       if (shouldBlockInitialRender) {
         setIsInitialLoading(true)
       }
+      setIsFetchingProcedures(true)
       setError(null)
       lastLoadTimeRef.current = Date.now()
       // Phase A: fetch first procedure page and render immediately without task hydration
@@ -246,6 +249,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setNextToken(newNextToken)
       setHasMore(!!newNextToken)
       setIsInitialLoading(false)
+      setIsFetchingProcedures(false)
       hasLoadedProceduresOnceRef.current = true
 
       // Phase B: hydrate task/status data in background without blocking rendered cards
@@ -356,6 +360,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       console.error('Error loading procedures:', err)
       setError(err instanceof Error ? err.message : 'Failed to load procedures')
       setIsInitialLoading(false)
+      setIsFetchingProcedures(false)
       setIsHydratingTasks(false)
     }
   }, [selectedAccount?.id])
@@ -969,7 +974,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }), [])
   
 
-  if (isInitialLoading && procedures.length === 0) {
+  if ((isInitialLoading || isFetchingProcedures) && procedures.length === 0) {
     return <ProceduresDashboardSkeleton />
   }
 
@@ -1082,11 +1087,11 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 {!(selectedProcedureId && isNarrowViewport) && (
                   <ProceduresGauges />
                 )}
-                {procedures.length === 0 ? (
+                {procedures.length === 0 && !isFetchingProcedures && !isHydratingTasks ? (
                   <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
                     No procedures found
                   </div>
-                ) : (
+                ) : procedures.length > 0 ? (
                   <div className={`
                     grid gap-3
                     ${selectedProcedureId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
@@ -1122,7 +1127,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                       )
                     })}
                   </div>
-                )}
+                ) : null}
                 {/* Infinite scroll sentinel */}
                 <div ref={sentinelRef} className="h-4" />
                 {isLoadingMore && (
