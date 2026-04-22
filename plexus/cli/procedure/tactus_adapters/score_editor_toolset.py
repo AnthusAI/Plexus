@@ -6,7 +6,8 @@ Implements the standard str_replace_editor text editor tool protocol so Claude m
 can make targeted, precise edits to score configuration YAML.
 
 Key tools exposed:
-- str_replace_editor: Standard Claude text editor tool (view/str_replace/insert/undo_edit)
+- str_replace_editor: Standard Claude text editor tool
+  (view/str_replace/replace_lines/insert/undo_edit)
 - submit_score_version: State-transition tool that validates and creates a new ScoreVersion
 - score_editor_setup: MCP tool called from Lua to initialize the virtual file
 - score_editor_get_result: MCP tool called from Lua to retrieve the created version ID
@@ -278,7 +279,7 @@ class ScoreEditorToolset:
         """
         Standard Claude text editor tool — virtual in-memory implementation.
 
-        Commands: view, str_replace, insert, undo_edit, create
+        Commands: view, str_replace, replace_lines, insert, undo_edit, create
         Path: must be 'score_config.yaml'
 
         On the first view command, automatically loads the current champion score
@@ -356,6 +357,54 @@ class ScoreEditorToolset:
             self._last_edit_error = None
             return self._format_edit_result("str_replace")
 
+        elif command == "replace_lines":
+            if not self._content:
+                err = (
+                    "Error: No file content is loaded. "
+                    f"Call str_replace_editor(command='view', path='{VIRTUAL_PATH}') first."
+                )
+                self._last_edit_error = err
+                return err
+
+            start_line = arguments.get("start_line")
+            end_line = arguments.get("end_line")
+            if start_line is None or end_line is None:
+                err = "Error: start_line and end_line are required for replace_lines command"
+                self._last_edit_error = err
+                return err
+            if "new_str" not in arguments:
+                err = "Error: new_str is required for replace_lines command"
+                self._last_edit_error = err
+                return err
+
+            try:
+                start_line = int(start_line)
+                end_line = int(end_line)
+            except (TypeError, ValueError):
+                err = "Error: start_line and end_line must be integers"
+                self._last_edit_error = err
+                return err
+
+            lines = self._content.split("\n")
+            total_lines = len(lines)
+            if start_line < 1 or end_line < start_line or end_line > total_lines:
+                err = (
+                    "Error: Invalid line range for replace_lines command. "
+                    f"Requested {start_line}-{end_line}, but the file has {total_lines} line(s). "
+                    "Call view with a bounded view_range to inspect the current numbered lines first."
+                )
+                self._last_edit_error = err
+                return err
+
+            new_str = arguments.get("new_str", "")
+            replacement_lines = new_str.split("\n") if new_str != "" else []
+
+            self._history.append(self._content)
+            lines[start_line - 1:end_line] = replacement_lines
+            self._content = "\n".join(lines)
+            self._last_edit_error = None
+            return self._format_edit_result("replace_lines")
+
         elif command == "insert":
             insert_line = arguments.get("insert_line")
             new_str = arguments.get("new_str", "")
@@ -395,7 +444,7 @@ class ScoreEditorToolset:
         else:
             return (
                 f"Error: Unknown command '{command}'. "
-                "Supported: view, str_replace, insert, undo_edit, create"
+                "Supported: view, str_replace, replace_lines, insert, undo_edit, create"
             )
 
     async def submit_score_version(self, arguments: dict) -> dict:
@@ -802,7 +851,7 @@ class ScoreEditorToolset:
         transport.register_tool(MCPToolInfo(
             name="str_replace_editor",
             description=(
-                "Edit a text file using view, str_replace, insert, undo_edit, or create commands. "
+                "Edit a text file using view, str_replace, replace_lines, insert, undo_edit, or create commands. "
                 f"The only available file is '{VIRTUAL_PATH}'."
             ),
             input_schema={
@@ -810,7 +859,7 @@ class ScoreEditorToolset:
                 "properties": {
                     "command": {
                         "type": "string",
-                        "enum": ["view", "str_replace", "create", "insert", "undo_edit"],
+                        "enum": ["view", "str_replace", "replace_lines", "create", "insert", "undo_edit"],
                         "description": "The editing command to run",
                     },
                     "path": {
@@ -823,7 +872,15 @@ class ScoreEditorToolset:
                     },
                     "new_str": {
                         "type": "string",
-                        "description": "For str_replace/insert/create: the replacement or new text",
+                        "description": "For str_replace/replace_lines/insert/create: the replacement or new text",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "For replace_lines: first inclusive line number to replace",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "For replace_lines: last inclusive line number to replace",
                     },
                     "insert_line": {
                         "type": "integer",
