@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d87cde73-079a-4129-ab14-a664a9622756",
+  "issue_id": "plx-23c0325f-cd47-46c7-9da3-89a177b29b8b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:42:54.180Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Verify whether Medication Review (Composite) can still return No when split sub-scores are all Yes after the parse-from-end changes, and fix the aggregation logic if the mismatch persists.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Investigate Medication Review composite mismatch after split-score parse fix"
+  }
+}
