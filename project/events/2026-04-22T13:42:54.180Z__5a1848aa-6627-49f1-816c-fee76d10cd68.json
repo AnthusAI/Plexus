@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5a1848aa-6627-49f1-816c-fee76d10cd68",
+  "issue_id": "plx-6ecb4765-d9f7-4555-a2db-df6cda4c01c1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:42:54.180Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Investigate repeated missing_required_context / empty processed_input failures surfaced in Medication Review split-score feedback evaluations, especially Individual Confirmation, Dosage, and Prescriber, and restore stable evaluation inputs before further rubric tuning.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Fix Medication Review feedback-eval mechanical missing-context failures"
+  }
+}
