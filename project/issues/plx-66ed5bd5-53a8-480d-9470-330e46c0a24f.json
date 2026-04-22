@@ -1,0 +1,25 @@
+{
+  "id": "plx-66ed5bd5-53a8-480d-9470-330e46c0a24f",
+  "title": "Fix Medication Review Prescriber GraphRecursionError on optimizer baseline items",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4535cea8-87bc-466b-ae84-792b06179a54",
+      "author": "ryan",
+      "text": "Patched retry-capable node subgraph invocation in plexus/scores/nodes/BaseNode.py to pass a recursion limit derived from maximum_retry_count, so LangGraph no longer throws GraphRecursionError before Classifier reaches its own max-retries path. Local validation on the exact failing Prescriber items (309504413 and 306082262) no longer reproduces GraphRecursionError; the score now completes via bounded retry/max-retries behavior instead of crashing.",
+      "created_at": "2026-04-22T16:00:59.257629Z"
+    }
+  ],
+  "created_at": "2026-04-22T15:47:42.334586Z",
+  "updated_at": "2026-04-22T16:01:07.855341Z",
+  "closed_at": null,
+  "custom": {}
+}

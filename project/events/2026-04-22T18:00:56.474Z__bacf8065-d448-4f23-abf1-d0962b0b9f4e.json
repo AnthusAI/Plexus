@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bacf8065-d448-4f23-abf1-d0962b0b9f4e",
+  "issue_id": "plx-2dfbca2e-3357-41b8-81e1-a1dd6b1eae5b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T18:00:56.474Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+    "priority": 2,
+    "status": "open",
+    "title": "Teach optimizer skill how contradiction analysis and feedback invalidation fit into optimization"
+  }
+}

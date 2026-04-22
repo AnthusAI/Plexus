@@ -3,7 +3,7 @@
   "title": "Publish Medication Review split-score guidelines, promote merged champions, and rerun contradictions",
   "description": "Align published guidelines with the current Medication Review split-score logic, ensure code and guidelines are merged into the same promotable version for Prescriber, Dosage, Pharmacy, Individual Confirmation, and Medication Review (Composite), promote the merged versions to champion, rerun 180-day contradiction analysis on split scores only, and produce rubric-vs-invalidation triage notes without mutating legacy Medication Review or invalidating feedback.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Validated the existing draft guidelines for Medication Review: Prescriber and Medication Review: Dosage. Remote draft versions are the source of truth because local pulled files had drifted behind the latest non-champion versions; Pharmacy and Individual Confirmation still need new official guidelines, and Medication Review (Composite) needs a minimal aggregate-only guideline. Next step: create merged guideline-bearing versions for Pharmacy, Individual Confirmation, and the new composite, then verify exact version contents before champion promotion.",
       "created_at": "2026-04-22T14:02:38.272943Z"
+    },
+    {
+      "id": "ea0ab021-8e3c-4c86-abf5-3ac64bb8dfbd",
+      "author": "ryan",
+      "text": "Completed the Medication Review split-score publishing pass.\n\nPublished/promoted versions:\n- Prescriber -> `edc3048a-6e2c-455c-8937-c635b0c02525`\n- Dosage -> `2a57e656-be2f-4751-b55d-2e7b22f347d1`\n- Pharmacy -> `dac068be-03c7-4dbe-8fd4-6ee0b2a11245`\n- Individual Confirmation -> `018241a4-bb1f-4141-9259-13d9fcd6cc9d`\n- Medication Review (Composite) -> `35f48165-452a-4ef8-9eda-3ae9142329c1`\n\nValidation / publication notes:\n- Validated existing Prescriber and Dosage guidelines format before promotion.\n- Created new official guidelines for Pharmacy and Individual Confirmation, validated both, and published merged guideline-bearing versions on top of the latest parse-from-end code drafts.\n- Added minimal aggregate-only guidelines for Medication Review (Composite), validated them, and published a new merged version.\n- Verified the target versions contained the intended code state plus non-empty guidelines before switching champion pointers.\n- Did not modify the legacy `Medication Review` score.\n\nFresh 180-day contradiction rerun summary after promotion:\n- Prescriber: 13 contradictions / 41 aligned\n- Dosage: 12 contradictions / 42 aligned\n- Pharmacy: 4 contradictions / 48 aligned\n- Individual Confirmation: 4 contradictions / 49 aligned\n\nTriage summary:\n- Prescriber: majority of contradictions are older feedback applying an all-meds standard or SRX logic to SPM calls; likely invalidation-review candidates. Remaining policy-gap items are customer uncertainty and a low-priority explicit \"prescribed by\" example question.\n- Dosage: contradictions are concentrated in the new objective threshold/exclusion logic (two-or-more misses for No; excluded/non-current meds do not count; one miss can still be Yes); this is the clearest candidate-invalidation bucket. Remaining policy-gap item is customer uncertainty.\n- Pharmacy: contradictions are limited and cluster around vague / ESI-only / unclear pharmacy confirmation being accepted as Yes; likely invalidation-review candidates under the newly published current-pharmacy rubric.\n- Individual Confirmation: contradictions are mostly older all-meds / batch-vs-mostly-individualized disagreements; likely invalidation-review candidates. Remaining rubric question is whether patient-led item-by-item listing can count, or whether the score should remain agent-triggered only.\n\nFollow-up tasks filed:\n- `plx-e61376` Review Medication Review contradiction invalidation candidates\n- `plx-d856c7` Clarify remaining Medication Review rubric gaps from contradictions",
+      "created_at": "2026-04-22T14:30:20.825594Z"
     }
   ],
   "created_at": "2026-04-22T13:58:54.522824Z",
-  "updated_at": "2026-04-22T14:02:38.272943Z",
-  "closed_at": null,
+  "updated_at": "2026-04-22T14:30:23.878977Z",
+  "closed_at": "2026-04-22T14:30:23.878977Z",
   "custom": {}
 }

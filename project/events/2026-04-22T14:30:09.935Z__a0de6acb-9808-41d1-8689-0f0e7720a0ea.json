@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a0de6acb-9808-41d1-8689-0f0e7720a0ea",
+  "issue_id": "plx-d856c7eb-ce41-4d1b-a2e6-196d825a6634",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T14:30:09.935Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Review contradiction-report policy-gap items and decide whether the published Medication Review split-score guidelines need clarification.\n\nPriority questions:\n- Prescriber: how to score agent attempts when the customer cannot confirm prescriber information because they are unsure\n- Dosage: how to score dosage verification when the customer is unable to confirm because they are unsure\n- Individual Confirmation: whether patient-led item-by-item medication listing can satisfy the score, or whether the rubric should remain agent-triggered only\n- Optional low-priority clarification: whether explicit phrasing like \"prescribed by\" should be called out as a valid prescriber-verification pattern in examples\n\nOutput should be SME-facing questions and a proposed guideline-change recommendation for each gap.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Clarify remaining Medication Review rubric gaps from contradictions"
+  }
+}

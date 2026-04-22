@@ -1,0 +1,31 @@
+{
+  "id": "plx-2dfbca2e-3357-41b8-81e1-a1dd6b1eae5b",
+  "title": "Teach optimizer skill how contradiction analysis and feedback invalidation fit into optimization",
+  "description": "",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "19c8c682-b054-469c-ba65-0fd9278a8da1",
+      "author": "ryan",
+      "text": "Follow-up refinement requested by user: enrich the optimizer skill with specific operational hints for contradiction-report mechanics, including use of stored report output attachments and the rule that invalidation discussions must begin from report evidence rather than ad hoc item inspection.",
+      "created_at": "2026-04-22T18:14:40.358399Z"
+    },
+    {
+      "id": "e78ea9c7-892b-4ed5-99c8-afcca38c4ff1",
+      "author": "ryan",
+      "text": "The follow-up mechanics refinement is complete and committed on the branch. The skill now explains how to work from stored contradictions report output, how to filter invalidation candidates from exemplar rationale, and how to keep invalidation approval-gated.",
+      "created_at": "2026-04-22T18:16:05.356910Z"
+    }
+  ],
+  "created_at": "2026-04-22T18:00:56.474704Z",
+  "updated_at": "2026-04-22T18:31:13.906854Z",
+  "closed_at": null,
+  "custom": {}
+}
