@@ -1834,6 +1834,7 @@ export default function ProcedureTask({
         onToggleFullWidth={onToggleFullWidth}
         onClose={onClose}
         isSelected={isSelected}
+        showSelectedOutline={true}
         renderHeader={renderHeader}
         renderContent={renderContent}
       />

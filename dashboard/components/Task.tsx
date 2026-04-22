@@ -48,6 +48,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   onRetry?: () => void
   showPreExecutionStages?: boolean
   isSelected?: boolean
+  showSelectedOutline?: boolean
   extra?: boolean
   commandDisplay?: 'hide' | 'show' | 'full'
   statusMessageDisplay?: 'always' | 'never' | 'error-only'
@@ -65,6 +66,7 @@ export interface TaskComponentProps<TData extends BaseTaskData = BaseTaskData> e
   renderContent: (props: TaskChildProps<TData>) => React.ReactNode
   showProgress?: boolean
   isSelected?: boolean
+  showSelectedOutline?: boolean
 }
 
 // Add helper function to get task icon
@@ -113,6 +115,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   onRetry,
   showPreExecutionStages,
   isSelected = false,
+  showSelectedOutline = false,
   extra = false,
   commandDisplay = 'show',
   statusMessageDisplay = 'always'
@@ -158,6 +161,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
         "transition-colors duration-200 flex flex-col h-full rounded-lg w-full max-w-full relative",
         variant === 'grid' ? 'cursor-pointer' : '',
         effectiveIsSelected ? 'bg-card-selected' : variant === 'grid' ? 'bg-card hover:bg-accent/50' : 'bg-card',
+        variant === 'grid' && effectiveIsSelected && showSelectedOutline && 'selected-border-rounded'
       )}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
