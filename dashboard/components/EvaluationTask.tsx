@@ -2517,6 +2517,7 @@ ${categoryLines}${mechanicalLines}
       onClose={onClose}
       extra={extra}
       isSelected={isSelected}
+      showSelectedOutline={true}
       commandDisplay={commandDisplay}
       {...restProps}
       renderHeader={(props) => (
