@@ -1,0 +1,31 @@
+{
+  "id": "plx-207e1147-b156-476a-844a-b9d70df5b0b2",
+  "title": "Avoid 'No procedures found' while procedures are still loading",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0ae9ae8d-d8e0-4a9c-a012-962a1babf94f",
+      "author": "ryan",
+      "text": "Adjusted procedures dashboard empty-state gating so 'No procedures found' is not shown during active procedures fetch/hydration. Added test assertion to verify no empty-state text during initial loading.",
+      "created_at": "2026-04-22T02:52:23.535269Z"
+    },
+    {
+      "id": "5b5d12d3-0be4-4470-b129-7a160c53edae",
+      "author": "ryan",
+      "text": "Added account-loading guard for procedures empty-state: suppress 'No procedures found' while AccountContext is loading and while no selected account is ready. Added test coverage for account-loading path. Verified with local Playwright smoke after dev-server restart (no empty-state text during loading window).",
+      "created_at": "2026-04-22T04:19:58.606121Z"
+    }
+  ],
+  "created_at": "2026-04-22T02:51:25.112372Z",
+  "updated_at": "2026-04-22T04:19:58.606121Z",
+  "closed_at": null,
+  "custom": {}
+}

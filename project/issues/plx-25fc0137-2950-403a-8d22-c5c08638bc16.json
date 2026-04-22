@@ -1,0 +1,31 @@
+{
+  "id": "plx-25fc0137-2950-403a-8d22-c5c08638bc16",
+  "title": "Optimizer: fix per-cycle string.format crash and harden reporting",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "05c6980d-20aa-4313-9d1a-b65946c86a69",
+      "author": "ryan",
+      "text": "Implementing optimizer format-crash fix + report-format hardening + guardrail tests.",
+      "created_at": "2026-04-22T02:21:17.264051Z"
+    },
+    {
+      "id": "052d0f5f-e06e-4cab-b419-20f23a3a2713",
+      "author": "ryan",
+      "text": "Implemented fix for per-cycle report string.format crash: added missing cycle argument at Analyze Cycle prompt, introduced safe_format helper for non-critical per-cycle reporting strings, and added regression test to detect unbound string.format placeholders. Targeted tests pass: pytest -q plexus/cli/procedure/test_feedback_alignment_optimizer_config.py (10 passed).",
+      "created_at": "2026-04-22T02:24:29.317912Z"
+    }
+  ],
+  "created_at": "2026-04-22T02:21:10.318356Z",
+  "updated_at": "2026-04-22T02:24:29.317912Z",
+  "closed_at": null,
+  "custom": {}
+}

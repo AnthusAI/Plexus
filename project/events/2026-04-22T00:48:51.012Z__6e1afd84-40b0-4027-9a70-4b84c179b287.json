@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6e1afd84-40b0-4027-9a70-4b84c179b287",
+  "issue_id": "plx-fdd5ac21-79bd-44b6-9808-cc119f450573",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T00:48:51.012Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer: replace plateau stop with escalation and explicit blocked cycle outcomes"
+  }
+}

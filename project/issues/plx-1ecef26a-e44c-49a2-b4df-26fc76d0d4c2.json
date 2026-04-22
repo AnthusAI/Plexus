@@ -1,0 +1,18 @@
+{
+  "id": "plx-1ecef26a-e44c-49a2-b4df-26fc76d0d4c2",
+  "title": "Improve procedures dashboard loading skeleton and progressive render",
+  "description": "## Problem\nProcedures dashboard loading state has poor visual quality in dark mode (bright/light flashes) and blocks too long before showing procedure cards.\n\n## Required Changes\n- Replace inline procedure skeleton placeholders with a themed, dark-mode-safe shared skeleton component\n- Refactor procedures loading to progressive phases so cards render before task hydration completes\n- Keep existing list visible during refresh/hydration and surface non-blocking errors\n- Add tests covering initial skeleton, progressive render, and hydration behavior\n\n## Constraints\n- No backend/schema changes\n- Dashboard-only implementation in existing React/Next.js app",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-22T01:41:23.054411Z",
+  "updated_at": "2026-04-22T02:20:09.634774Z",
+  "closed_at": "2026-04-22T02:20:09.634774Z",
+  "custom": {}
+}

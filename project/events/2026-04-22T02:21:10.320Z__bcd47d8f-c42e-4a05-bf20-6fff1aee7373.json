@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bcd47d8f-c42e-4a05-bf20-6fff1aee7373",
+  "issue_id": "plx-25fc0137-2950-403a-8d22-c5c08638bc16",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T02:21:10.320Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer: fix per-cycle string.format crash and harden reporting"
+  }
+}

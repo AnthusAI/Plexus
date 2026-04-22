@@ -1,0 +1,31 @@
+{
+  "id": "plx-c0f92bc5-ea5d-4e9c-93a3-99ebe81a39a7",
+  "title": "Make optimizer score editing line-based instead of exact-substring based",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bd080d66-2463-4461-89e0-f908ddb54af6",
+      "author": "ryan",
+      "text": "Starting implementation. Plan: add a line-range replace_lines command to ScoreEditorToolset, update optimizer prompts/recovery to use view + replace_lines + submit, and fix stale cycle/stage messaging so blocked status is only written on true blocked outcomes.",
+      "created_at": "2026-04-22T04:08:05.616516Z"
+    },
+    {
+      "id": "71b480ce-528f-4afe-ab6d-7ba306c4ebdb",
+      "author": "ryan",
+      "text": "Implementation complete locally. Added ScoreEditorToolset.replace_lines, updated optimizer prompting/recovery to use view + replace_lines + submit, added live stage-status updates for editing/smoke-test/evaluation phases, and added focused regression tests. Targeted pytest is green (16 passed). Moving to operational validation by restarting the affected optimizer runs.",
+      "created_at": "2026-04-22T04:12:47.350710Z"
+    }
+  ],
+  "created_at": "2026-04-22T04:07:58.936750Z",
+  "updated_at": "2026-04-22T04:12:47.350710Z",
+  "closed_at": null,
+  "custom": {}
+}

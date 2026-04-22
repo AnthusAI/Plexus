@@ -1,0 +1,34 @@
+{
+  "id": "plx-462ceaaf-2260-4b81-8739-7ff62b557e08",
+  "title": "Procedure runtime PID tracking + stale detection",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8615b6f8-bd4a-4ccc-84be-e48ee7f1601a",
+      "author": "ryan",
+      "text": "Implementing Procedure PID ownership metadata + stale liveness detection in run/status paths.",
+      "created_at": "2026-04-22T01:30:39.898650Z"
+    },
+    {
+      "id": "147cd9c4-5cda-4f77-9c8f-b39088682fad",
+      "author": "ryan",
+      "text": "Implemented PID liveness stale detection in stale_timeout: runtime.pid/host now probed with os.kill(pid,0); dead local PID marks Procedure+Task+stages STALLED immediately with kind=process_dead and explicit message. Added tests; stale-timeout suite passing (7/7).",
+      "created_at": "2026-04-22T01:32:22.046821Z"
+    }
+  ],
+  "created_at": "2026-04-22T01:30:34.906973Z",
+  "updated_at": "2026-04-22T01:32:22.046821Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

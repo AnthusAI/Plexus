@@ -1,0 +1,43 @@
+{
+  "id": "plx-17e986ff-68bb-495f-a1f8-e59c61b4fbdf",
+  "title": "Restore selected-row outline in Evaluations and Procedures tables",
+  "description": "## Problem\nIn the dashboard, selecting a row in the Items, Scorecards, and Data grids shows both a background highlight and an outline ring. Evaluations and Procedures currently only show the background highlight and are missing the outline ring.\n\n## Expected Behavior\nEvaluations and Procedures should render the same selected-row outline style as Items/Scorecards/Data.\n\n## Scope\n- Add missing selected-state outline for Evaluations grid\n- Add missing selected-state outline for Procedures grid\n- No behavior or interaction changes beyond the missing outline style",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ae62e54e-ff14-48cb-993e-d2ede12667c3",
+      "author": "ryan",
+      "text": "Starting investigation for missing selected-row outline in Evaluations and Procedures dashboard grids. Next step: locate shared row selection styles and compare with Items/Scorecards/Data implementations.",
+      "created_at": "2026-04-22T00:20:23.820461Z"
+    },
+    {
+      "id": "fd411121-5b1c-4f86-bedd-78b9e96ae09a",
+      "author": "ryan",
+      "text": "Implemented scoped UI fix for missing selection outline:\n- Added new optional  prop to  component\n- Applied  only when , selected, and \n- Enabled this prop in  and  only\n\nValidation:\n-  ✅\n-  ✅\n\nNote: lint commands are currently broken in this workspace due toolchain incompatibilities ( rejects legacy flags from package script; direct eslint fails with AJV/eslintrc runtime error).",
+      "created_at": "2026-04-22T00:22:34.731871Z"
+    },
+    {
+      "id": "2a6c09d2-9666-483e-b2d3-255e97cbf06b",
+      "author": "ryan",
+      "text": "Implemented scoped UI fix for missing selection outline:\n- Added new optional showSelectedOutline prop to Task component\n- Applied selected-border-rounded only when variant=grid, selected, and showSelectedOutline=true\n- Enabled this prop in EvaluationTask and ProcedureTask only\n\nValidation:\n- npm test -- --runInBand components/__tests__/evaluations-dashboard.test.tsx (pass)\n- npm test -- --runInBand components/__tests__/ProcedureTask.optimizer-auth.test.tsx components/__tests__/TaskDisplay.test.tsx components/__tests__/EvaluationTask.memo.test.tsx (pass)\n\nNote: lint commands are currently broken in this workspace due toolchain incompatibilities (next lint script uses unsupported --no-cache; direct eslint fails with AJV/eslintrc runtime error).",
+      "created_at": "2026-04-22T00:22:38.639069Z"
+    },
+    {
+      "id": "4f24011d-90d1-470b-8d7d-7647d440dd5e",
+      "author": "ryan",
+      "text": "Merged fix into develop and pushed:\n- Branch merged: fix/evaluations-procedures-selection-outline -> develop (fast-forward)\n- Commit on develop: 7cbf919f3\n\nGitHub Actions status:\n- Run 24753621388 (develop push): completed with conclusion=success\n- All CI/CD Pipeline jobs for this run passed (version sync, dashboard storybook, dashboard unit tests, python 3.11, python 3.12).",
+      "created_at": "2026-04-22T00:39:19.313889Z"
+    }
+  ],
+  "created_at": "2026-04-22T00:20:21.479853Z",
+  "updated_at": "2026-04-22T00:39:24.353093Z",
+  "closed_at": "2026-04-22T00:39:24.353093Z",
+  "custom": {}
+}
