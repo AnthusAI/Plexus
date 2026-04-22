@@ -19,6 +19,34 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   If the score is already on gpt-5.4-nano, do NOT propose a model swap unless all other
   options have been exhausted (see C3 below). Never upgrade to a mini model early.
 
+▶ GPT-5 EMPTY / PARTIAL COMPLETION SIGNAL → mandatory C3 config hypothesis:
+
+  Add a token-budget hypothesis BEFORE prompt rewrites or model swaps if ALL of the following
+  are true:
+  - the score uses a GPT-5-class or o-series reasoning model
+  - the score config sets a low output budget (for example max_tokens: 500)
+  - smoke tests, evaluations, or retry traces show any of these:
+    - empty completions
+    - partial completions that stop before the final class label
+    - repeated "invalid classification" retries after the model produced reasoning text
+      but never reached the required final answer format
+    - responses that appear to stop mid-thought without a clear prompt/rubric mistake
+
+  WHY THIS MATTERS: With GPT-5-class reasoning models in the Responses API, the output token
+  budget covers BOTH reasoning tokens and visible output. If the budget is too low, the model
+  can exhaust it before producing any visible answer, or after producing only a partial answer.
+  This can look like a prompt bug even when the prompt is fine.
+
+  FIRST FIX TO TRY:
+  - raise max_tokens substantially (for example from 500 to 2000)
+  - keep the same prompt and rubric first, unless there is separate evidence of a prompt error
+  - only escalate to prompt rewrites or model swaps if the higher token budget does not solve it
+
+  DEFAULT INTERPRETATION:
+  - treat this as a structural/config problem, not immediate evidence that the rubric is wrong
+  - if the model starts producing valid complete answers after the budget increase, keep the
+    prompt changes minimal and focus elsewhere
+
 ▶ WORD-LEVEL TIMING SIGNAL → mandatory C1e.1 hypothesis (DeepgramInputSource + format: words):
 
   Add this hypothesis if the score config contains ANY of the following:
@@ -131,6 +159,12 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
   Changes to control flow, data preprocessing, or the model itself.
   This is ALWAYS slot 4 — every cycle gets one structural hypothesis.
   Pick the most promising option from C1–C4 below that has NOT already been tried.
+
+  IMPORTANT TRIAGE RULE:
+  If a GPT-5-class model is returning empty completions, truncated reasoning, or repeated
+  invalid-classification retries, check max_tokens before assuming the prompt is broken.
+  Increasing the output budget is often the correct C-category fix and is lower risk than a
+  prompt rewrite or a model swap.
 
   C1. Architecture — decomposing the decision into multiple LLM calls:
 
@@ -456,8 +490,26 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
        or redacted personally identifiable information. When you encounter garbled or redacted
        text, infer the most likely intended meaning from surrounding context before classifying.'
 
-  C3. Model swap (use sparingly — only when prompt/structure changes have stagnated):
-    First check score_config.yaml above for the current model_name. Then swap to a DIFFERENT model.
+  C3. Model/config change (use sparingly — structural, but often high leverage):
+    First check score_config.yaml above for the current model_name and max_tokens.
+
+    C3a. Output budget adjustment for GPT-5-class reasoning models:
+      If the score uses a GPT-5-class or o-series reasoning model and you see empty output,
+      partial output, or repeated invalid-classification retries, inspect max_tokens FIRST.
+
+      WHY: In these models, the output budget can be consumed by reasoning before the visible
+      answer is emitted. A low cap can therefore produce an empty or incomplete completion even
+      when the prompt and rubric are otherwise sound.
+
+      FIRST CHANGE TO TRY:
+      - keep the model the same
+      - raise max_tokens materially (typical first step: 500 → 2000)
+      - rerun smoke tests on the exact failing items before proposing prompt surgery
+
+      INTERPRETATION:
+      - if the higher budget fixes the failure, treat the problem as resolved configuration debt
+      - do NOT describe this as evidence that the score needs a new rubric rule
+      - do NOT jump straight to a model swap when the current model is otherwise performing well
 
     DEFAULT TARGET: gpt-5.4-nano is the standard default model. If the score is NOT already
     on gpt-5.4-nano, that is the first and only model swap to try. It is fast, cheap, and
