@@ -1907,6 +1907,10 @@ class TestScoreToolsSharedPatterns:
             return mock_client
 
         with patch("plexus.cli.shared.client_utils.create_client", side_effect=noisy_create_client), \
+             patch(
+                 "plexus.cli.shared.direct_memoized_resolvers.direct_memoized_resolve_scorecard_identifier",
+                 return_value="scorecard-123",
+             ), \
              patch("plexus.dashboard.api.models.scorecard.Scorecard.get_by_id", return_value=SimpleNamespace(name="Test Scorecard")), \
              patch("MCP.tools.score.scores._pull_specific_version", new=AsyncMock(return_value={
                  "success": True,
@@ -1925,6 +1929,66 @@ class TestScoreToolsSharedPatterns:
         assert result["versionId"] == "version-789"
         assert result["codeFilePath"] == "/tmp/test-score.yaml"
         assert result["guidelinesFilePath"] == "/tmp/test-score.md"
+
+    @pytest.mark.asyncio
+    async def test_score_pull_resolves_scorecard_name_with_direct_resolver(self, monkeypatch):
+        tool = await _get_pull_tool()
+        monkeypatch.setenv("PLEXUS_API_URL", "https://api.example.com/graphql")
+        monkeypatch.setenv("PLEXUS_API_KEY", "test-key")
+
+        mock_client = Mock()
+
+        def execute_side_effect(query):
+            if "GetScorecardForScore" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [
+                                {
+                                    "id": "section-1",
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "score-456",
+                                                "name": "Test Score",
+                                                "key": "test-score",
+                                                "externalId": "ext-score",
+                                                "type": "LangGraphScore",
+                                                "order": 1,
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+        mock_client.execute.side_effect = execute_side_effect
+
+        with patch("plexus.cli.shared.client_utils.create_client", return_value=mock_client), \
+             patch(
+                 "plexus.cli.shared.direct_memoized_resolvers.direct_memoized_resolve_scorecard_identifier",
+                 return_value="scorecard-123",
+             ) as mock_resolver, \
+             patch("plexus.dashboard.api.models.scorecard.Scorecard.get_by_id", return_value=SimpleNamespace(name="Test Scorecard")), \
+             patch("MCP.tools.score.scores._pull_specific_version", new=AsyncMock(return_value={
+                 "success": True,
+                 "code_file_path": "/tmp/test-score.yaml",
+                 "guidelines_file_path": "/tmp/test-score.md",
+                 "version_id": "version-789",
+                 "message": "pulled",
+             })):
+            result = await tool.fn(
+                scorecard_identifier="Test Scorecard",
+                score_identifier="Test Score",
+                version_id="version-789",
+            )
+
+        assert result["success"] is True
+        assert result["scorecardName"] == "Test Scorecard"
+        mock_resolver.assert_called_once_with(mock_client, "Test Scorecard")
 
     @pytest.mark.asyncio
     async def test_pull_specific_version_succeeds_with_broken_scorecards_symlink(self, monkeypatch, tmp_path):

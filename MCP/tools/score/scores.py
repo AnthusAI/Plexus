@@ -28,40 +28,12 @@ def register_score_tools(mcp: FastMCP):
     def _resolve_scorecard_identifier_quiet(client, identifier: str) -> Optional[str]:
         """Resolve a scorecard identifier without printing CLI-oriented status lines."""
         try:
-            result = client.execute(
-                f"""
-                query GetScorecard {{
-                    getScorecard(id: "{identifier}") {{
-                        id
-                    }}
-                }}
-                """
-            )
-            if result.get("getScorecard"):
-                return identifier
-        except Exception:
-            pass
+            from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
 
-        for field in ("key", "name", "externalId"):
-            try:
-                result = client.execute(
-                    f"""
-                    query ListScorecardsForIdentifier {{
-                        listScorecards(filter: {{ {field}: {{ eq: "{identifier}" }} }}, limit: 10) {{
-                            items {{
-                                id
-                            }}
-                        }}
-                    }}
-                    """
-                )
-                items = result.get("listScorecards", {}).get("items", [])
-                if items:
-                    return items[0].get("id")
-            except Exception:
-                continue
-
-        return None
+            return direct_memoized_resolve_scorecard_identifier(client, identifier)
+        except Exception as exc:
+            logger.warning("Quiet scorecard resolution failed for %r: %s", identifier, exc)
+            return None
     
     @mcp.tool()
     async def plexus_score_info(
