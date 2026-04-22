@@ -5,6 +5,11 @@ import ProceduresDashboard from '@/components/procedures-dashboard'
 import { ProceduresDashboardSkeleton } from '@/components/loading-skeleton'
 
 const mockGraphql = jest.fn()
+const mockAccountState = {
+  selectedAccount: { id: 'account-1' },
+  accounts: [{ id: 'account-1' }],
+  isLoadingAccounts: false,
+}
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -45,11 +50,7 @@ jest.mock('next/navigation', () => ({
 }))
 
 jest.mock('@/app/contexts/AccountContext', () => ({
-  useAccount: () => ({
-    selectedAccount: { id: 'account-1' },
-    accounts: [{ id: 'account-1' }],
-    isLoadingAccounts: false,
-  }),
+  useAccount: () => mockAccountState,
 }))
 
 jest.mock('framer-motion', () => ({
@@ -117,6 +118,9 @@ describe('Procedures dashboard loading UX', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockAccountState.selectedAccount = { id: 'account-1' }
+    mockAccountState.accounts = [{ id: 'account-1' }]
+    mockAccountState.isLoadingAccounts = false
   })
 
   it('shows the dedicated procedures skeleton on initial load', async () => {
@@ -135,6 +139,18 @@ describe('Procedures dashboard loading UX', () => {
       }
       return Promise.resolve({ data: {} })
     })
+
+    render(<ProceduresDashboard />)
+
+    expect(screen.getByTestId('procedures-dashboard-skeleton')).toBeInTheDocument()
+    expect(screen.queryByText('No procedures found')).not.toBeInTheDocument()
+  })
+
+  it('does not show empty-state text while accounts are still loading', () => {
+    mockAccountState.selectedAccount = null as any
+    mockAccountState.accounts = []
+    mockAccountState.isLoadingAccounts = true
+    mockGraphql.mockResolvedValue({ data: {} })
 
     render(<ProceduresDashboard />)
 
