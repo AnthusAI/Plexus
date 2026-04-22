@@ -1,0 +1,37 @@
+{
+  "id": "plx-c0fb8dbc-7c00-4064-8ae9-46e123b6eef8",
+  "title": "Address GitHub code-quality comment on PR #193",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d4dcd24b-0042-44de-be07-7958f55b9656",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6b51b3b7-5ac3-4084-9687-7078ad2ee99c",
+      "author": "derek",
+      "text": "Collected github-code-quality bot comments on PR #193 (4 findings): 3 unused symbol warnings and 1 broad except in MCP/tools/procedure/procedures.py. Creating fix branch and applying minimal behavior-preserving fixes.",
+      "created_at": "2026-04-21T19:47:40.277866945Z"
+    },
+    {
+      "id": "bd3ea916-9a93-4635-8ccd-35b0d31df37c",
+      "author": "derek",
+      "text": "Implemented fix on branch bugfix/pr-193-code-quality-comments: replaced broad except blocks in MCP/tools/procedure/procedures.py with explicit JSONDecodeError/TypeError/ValueError handling. Running targeted procedure tool tests.",
+      "created_at": "2026-04-21T19:48:17.654929789Z"
+    },
+    {
+      "id": "9b303a2b-4918-4dfd-a71d-2e6f05f43629",
+      "author": "derek",
+      "text": "Completed: GitHub code-quality finding on PR #193 addressed via PR #197 and merged; fix is now in main.",
+      "created_at": "2026-04-22T17:50:36.975914010Z"
+    }
+  ],
+  "created_at": "2026-04-21T19:47:36.847111968Z",
+  "updated_at": "2026-04-22T17:50:36.988156467Z",
+  "closed_at": "2026-04-22T17:50:36.988156467Z",
+  "custom": {}
+}
