@@ -2,6 +2,7 @@
 """
 Feedback management tools for Plexus MCP Server
 """
+import asyncio
 import os
 import sys
 import json
@@ -517,3 +518,51 @@ def register_feedback_tools(mcp: FastMCP):
             import json
             return json.dumps({"error": f"Failed to search feedback: {str(e)}"})
 
+    @mcp.tool()
+    async def plexus_feedback_invalidate(
+        identifier: str,
+        scorecard_name: Optional[str] = None,
+        score_name: Optional[str] = None,
+    ) -> str:
+        """
+        Invalidate exactly one feedback item by direct feedback ID or item identifier.
+
+        Args:
+            identifier: Feedback item ID, item ID, item externalId, or identifier-table value.
+            scorecard_name: Optional scorecard identifier used only to disambiguate item-level matches.
+            score_name: Optional score identifier used only to disambiguate item-level matches. Requires scorecard_name.
+
+        Returns:
+            JSON string describing the invalidated feedback item or a structured error.
+        """
+        try:
+            from plexus.cli.feedback.feedback_invalidation import (
+                FeedbackInvalidationError,
+                invalidate_feedback_item,
+            )
+            from plexus.cli.shared.client_utils import create_client
+
+            client = create_client()
+            if not client:
+                return json.dumps({"error": "Failed to create API client"})
+
+            result = await asyncio.to_thread(
+                invalidate_feedback_item,
+                client=client,
+                identifier=identifier,
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+            )
+            return json.dumps(result, indent=2, default=str)
+        except FeedbackInvalidationError as exc:
+            payload = {"error": str(exc), "code": exc.code}
+            if exc.details:
+                payload["details"] = exc.details
+            return json.dumps(payload, indent=2, default=str)
+        except Exception as exc:
+            logger.error("Error in plexus_feedback_invalidate: %s", exc, exc_info=True)
+            return json.dumps(
+                {"error": f"Failed to invalidate feedback: {str(exc)}"},
+                indent=2,
+                default=str,
+            )
