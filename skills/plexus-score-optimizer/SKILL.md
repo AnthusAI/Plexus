@@ -1,78 +1,240 @@
 ---
 name: plexus-score-optimizer
-description: Start a feedback alignment optimization run for a Plexus score. Creates and launches a Feedback Alignment Optimizer procedure that iterates automatically over N cycles.
+description: Run, debug, and steer the Plexus feedback-alignment optimizer from the direct CLI, including contradiction analysis, SME rubric questions, and approval-gated feedback invalidation.
 ---
 
 # Plexus Score Optimizer
 
-Use this skill when a user wants to run, resume, or steer an automated optimization procedure for a Plexus score.
+Use this skill when the task is to run, monitor, debug, or steer a feedback-alignment optimization procedure for a Plexus score.
 
-## Optimization Mindset
+Examples below assume you are in the repo root and are using `python -m plexus.cli`. If your shell does not provide `python`, replace it with the repo's Python interpreter.
+
+## Purpose and Optimization Mindset
 
 The optimizer is not just a code-tuning loop. Its job is to move a measurable needle such as alignment, AC1, accuracy, precision, recall, or cost efficiency.
 
-That means the work usually falls into three lanes:
+That work usually falls into three lanes:
 
 1. Improve the score logic or prompt under the current rubric.
 2. Identify rubric gaps, policy ambiguities, or clarification questions for stakeholders and SMEs.
 3. Identify feedback items that appear inconsistent with the rubric expressed in the current guidelines or newer SME decisions.
 
-This is how the optimizer "moves the goal posts" in a disciplined way:
+This is how optimization can "move the goal posts" in a disciplined way:
 
 - The iterative metacognitive loop tries to improve a quantifiable metric.
 - Contradiction analysis shows where the current feedback set may not match the current rubric.
 - SME questions help refine the rubric when the current guidelines are underspecified or outdated.
 - Approved feedback invalidation removes labels that were created under a different rubric or were simply applied incorrectly.
 
-Do not treat every contradiction as a score bug. Some contradictions mean:
+Do not treat every contradiction as a score bug. A contradiction can mean:
 
 - the score needs to change
 - the rubric needs clarification
 - the feedback should be invalidated
 - the item is mechanical noise and should not drive optimization
 
-## Guardrails
+## Hard Guardrails
 
+- Use the direct CLI for optimizer execution and debugging. Do not treat dashboard or dispatcher state alone as proof that a run is healthy.
+- Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.
+- Capture stdout/stderr with `tee` for real runs so you keep the traceback and early procedure/task IDs.
+- Baseline evaluations are the real start of meaningful optimizer work. Procedure creation alone is not.
 - Never invalidate feedback automatically.
-- Never invalidate feedback just because a contradiction report flagged an item.
+- Never invalidate feedback just because a contradictions report flagged an item.
 - Always discuss candidate invalidation groups with the user first.
 - Only invalidate items after the user explicitly approves the exact group.
-- Use the contradiction report output as the source of truth for triage.
-- Drill into individual items only after the report identifies a specific contradiction theme or candidate set.
+- Start invalidation triage from contradiction report output, not ad hoc individual item inspection.
+- Use MCP for inspection around the optimizer when helpful, but not as the primary execution path during debugging.
 
-## Input
+## Direct CLI as Source of Truth
 
-Required:
-- `scorecard` — scorecard name, key, or ID
-- `score` — score name, key, or ID
-
-Optional:
-- `days` — feedback window in days (default: 90)
-- `max_cycles` — number of optimization cycles (default: 10)
-- `max_samples` — feedback samples per eval (skill default: 200; pass it explicitly)
-- `start_version` — score version ID to start from instead of the champion
-- `resume_recent_eval` — recent feedback baseline eval ID to reuse
-- `resume_regression_eval` — regression baseline eval ID to reuse
-- `hint` — free-text expert hint to include in the agent's context
-
-## Recommended Workflow
-
-### Step 1 - Resolve the score context
-
-Use the CLI, not MCP-style tool names:
+During development and debugging, the direct CLI log is the source of truth:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli score info \
+python -m plexus.cli procedure optimize ...
+```
+
+Do not infer optimizer health from:
+
+- a dashboard `RUNNING` badge
+- dispatcher state
+- a task record without matching local process evidence
+
+If a run exits unexpectedly, capture and report the exact CLI traceback before proposing fixes.
+
+## Preferred Normal Launch Path With `procedure optimize`
+
+### What `procedure optimize` actually does
+
+The convenience command wraps the feedback-alignment optimizer procedure YAML. A normal run does this:
+
+1. Creates a new `Procedure` record.
+2. Creates or reuses a `Task` plus dashboard stages.
+3. Starts a Tactus runtime and a procedure chat session.
+4. Pulls the starting score version locally.
+5. Refreshes the contradictions report in the background.
+6. Looks for reusable baselines.
+7. If baselines are not reused, runs two fresh baseline evaluations in parallel:
+   - regression baseline: accuracy evaluation on the associated deterministic dataset
+   - recent baseline: feedback evaluation on recent human-reviewed items
+8. If baselines succeed, proposes hypotheses, edits the score, submits candidate versions, evaluates them, compares deltas, and repeats up to `max_iterations`.
+
+Default optimization objective is alignment. If you need a non-default objective such as precision or recall variants, use the manual procedure/YAML path instead of assuming the convenience CLI can switch objectives for you.
+
+### Identifier resolution
+
+`--scorecard` and `--score` use shared resolvers. You can pass any of these if they uniquely resolve:
+
+- DynamoDB ID
+- external ID
+- name
+- key
+
+Do not waste time resolving UUIDs manually unless there is an ambiguity or you need the exact resolved ID for debugging.
+
+### Recommended run command
+
+```bash
+ts=$(date +%Y%m%d-%H%M%S)
+log=/tmp/optimizer-$ts.log
+python -m plexus.cli procedure optimize \
+  --scorecard "<scorecard>" \
+  --score "<score>" \
+  --days <days> \
+  --max-samples <max_samples> \
+  --max-iterations <max_cycles> \
+  --version "<start_version>" \
+  --resume-recent-eval "<resume_recent_eval>" \
+  --resume-regression-eval "<resume_regression_eval>" \
+  --hint "<hint>" \
+  2>&1 | tee "$log"
+```
+
+Only include the optional flags that are actually needed.
+Pass `--max-samples` explicitly instead of relying on the CLI default. If the user does not specify a sample cap, use `200`.
+
+## How To Read A Live Run and Spot Real Progress
+
+Things you should expect to see early in the log:
+
+- `Starting feedback alignment optimization...`
+- `Created Task ... for procedure ...`
+- `Running optimization procedure...`
+- `Starting procedure run for procedure ID: ...`
+- `Chat session created: ...`
+- `Running 2 fresh baseline evaluation(s) ...`
+
+If you do not see baseline reuse or baseline evaluations dispatch, the optimizer has not really started doing the important work yet.
+
+Treat the following as high-signal failure modes:
+
+- A contradictions report refresh near cycle 0 is not the baseline itself. Do not mistake report generation for successful baseline execution.
+- If a baseline evaluation fails, stop and inspect the direct CLI log for the first concrete exception, not just the final dashboard status.
+- Use the item, content, and feedback identifiers from the first failure to inspect the bad record or bad score code.
+- The contradictions report may already be complete even if the shell wrapper still looks busy. Check the emitted report metadata before rerunning it.
+- GPT-5-class models can return empty or partial completions when `max_tokens` or `max_output_tokens` is too low. If you see `No completion received from LLM`, truncated outputs, or retries with blank responses, inspect the score's token budget immediately.
+- Invalidation triage must start from contradiction report output, not from ad hoc item-by-item reconstruction.
+
+## Process Lookup and Kill Workflow
+
+When a user says an optimizer is still running and needs to die, start with live local process evidence:
+
+```bash
+ps -o pid,ppid,etime,command -ax | rg "<procedure-id>|procedure optimize|procedure run|<score name>"
+```
+
+Do not narrow this search too aggressively. Older or wrapper-style launches can appear as:
+
+- `python -m plexus.cli procedure optimize ...`
+- `python -m plexus.cli procedure run ...`
+- `python -c ... score.main(args=['optimize', ...])`
+
+Expected outcomes:
+
+- If a matching local PID exists, it is a local CLI-owned run and can be terminated locally.
+- If no matching local PID exists, do not assume the dashboard `RUNNING` state means a local process still exists on this host.
+- If there is fresh procedure chat activity but no local PID, the run may be executing on another host or only persisted state may still be alive.
+
+Safe stop sequence:
+
+1. Send `TERM` to the exact confirmed PID:
+
+```bash
+kill <pid>
+```
+
+2. Re-check with `ps`:
+
+```bash
+ps -o pid,ppid,etime,command -ax | rg "<pid>|<procedure-id>|<score name>"
+```
+
+3. Only if the exact PID ignores `TERM`, escalate:
+
+```bash
+kill -9 <pid>
+```
+
+Important limitations:
+
+- `python -m plexus.cli procedure show <procedure-id>` does not currently expose runtime PID or host information.
+- For non-stale runs, PID correlation may require `ps` plus direct CLI log correlation rather than a single CLI lookup command.
+- Killing a local PID stops the process. It does not by itself rewrite database state from `RUNNING` to `STALLED` or `FAILED`.
+
+## Stale-Timeout Workflow
+
+Use stale-timeout when you need to decide whether persisted `RUNNING` procedures are actually stalled.
+
+Manual dry-run command:
+
+```bash
+python -m plexus.cli procedure timeout-stale \
+  --threshold-seconds <seconds> \
+  --lookback-hours <hours> \
+  --dry-run \
+  -o json
+```
+
+What stale-timeout uses:
+
+- latest procedure chat activity timestamp
+- fallback to `task startedAt` if there is no chat yet
+
+How to read the output:
+
+- `timed_out` means the procedure would be marked `STALLED`
+- `skipped` with `fresh_chat_activity` means the procedure is still considered active
+- `skipped` with `fresh_no_chat_runtime` means it started recently and has not emitted chat yet
+- `waiting_for_human` means the run is intentionally excluded from stale timeout
+
+Without `--dry-run`, the command:
+
+- marks task, procedure, and chat sessions `STALLED`
+- records timeout failure metadata
+- does **not** kill a local PID directly
+
+Important caveats:
+
+- New optimizer launches already trigger an automatic background stale scan for older procedures via `launch_async_stale_timeout_scan`, excluding the current procedure ID.
+- `--account <raw-account-id>` is currently unreliable through this resolver path. Prefer omitting `--account` and using the default account context unless you have a verified account key or name.
+- Stale-timeout is for persisted run state. Use OS signals when you actually have a local PID to kill.
+
+## Contradiction-Report and Approval-Gated Invalidation Workflow
+
+### Resolve the score context
+
+```bash
+python -m plexus.cli score info \
   --scorecard "<scorecard>" \
   --score "<score>"
 ```
 
-### Step 2 - Run or refresh the contradictions report
+### Run or refresh the contradictions report
 
-If a current contradictions report does not already exist for the score and time window, run one.
+If a current contradictions report does not already exist for the score and time window, run one:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli feedback report contradictions \
+python -m plexus.cli feedback report contradictions \
   --scorecard "<scorecard>" \
   --score "<score>" \
   --days <days> \
@@ -80,40 +242,35 @@ If a current contradictions report does not already exist for the score and time
   --format json
 ```
 
-Useful options:
-
-- `--mode contradictions` is the default and is the normal triage mode.
-- `--background` queues the report for dispatcher execution.
-- If you use `--background`, process it with:
+If you queue it in the background, process it with:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli command dispatcher --once
+python -m plexus.cli command dispatcher --once
 ```
 
-Use the contradictions report to sort findings into these buckets:
+Use the report to sort findings into these buckets:
 
 - score logic change
 - rubric clarification / SME question
 - feedback invalidation candidate
 - mechanical / no action
 
-### Step 2.5 - Mechanical hints for working with the contradictions report
+### Mechanical hints for working with the contradictions report
 
-Do not guess from memory and do not reconstruct contradiction themes from individual item tools first. Use the stored contradictions report output as the source of truth.
+Do not guess from memory and do not reconstruct contradiction themes from lower-level item tools first. Use the stored contradictions report output as the source of truth.
 
-Operational hints:
+Treat these as completion signals:
 
-- The command may finish generating and caching the report even if the shell wrapper still looks busy. Do not assume a timeout just because the terminal has not returned yet.
-- Treat these as completion signals:
-  - the command prints the report metadata payload with a `report_id`
-  - the command prints that the report block was generated or cached
-  - the command prints contradiction/aligned counts and the run summary
-- If you saw those completion signals, inspect the report output next instead of rerunning the whole report blindly.
+- the command prints report metadata with a `report_id`
+- the command prints that the report block was generated or cached
+- the command prints contradiction/aligned counts or a final run summary
 
-When the top-level CLI output is too shallow and you need the actual exemplar payload, use a one-off repo Python command to load the stored attachment through the existing helper that already knows how to read compacted `ReportBlock.output` metadata:
+If you saw those signals, inspect the stored report output next instead of rerunning the whole report blindly.
+
+When the top-level CLI output is too shallow and you need the actual exemplar payload, use the existing helper that reads the `ReportBlock` attachment:
 
 ```bash
-/Users/ryan/miniconda3/bin/python - <<'PY'
+python - <<'PY'
 from plexus.cli.shared.client_utils import create_client
 from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.cli.dataset.curation import _load_feedback_contradictions_output_from_block
@@ -137,13 +294,7 @@ for topic in payload.get("topics", []):
 PY
 ```
 
-This is the preferred way to answer questions like:
-
-- which Prescriber contradictions explicitly enforced an old `all meds` standard?
-- which Dosage contradictions explicitly enforced `any miss = No` instead of the newer numeric rule?
-- which contradictions are policy gaps versus invalidation candidates?
-
-When filtering a candidate invalidation group from the report payload, prioritize these fields:
+When filtering a candidate invalidation group from the report payload, prioritize:
 
 - `edit_comment`
 - `reason`
@@ -158,80 +309,44 @@ Practical filtering rules:
 - Build candidate groups from shared editor rationale, not just from the contradiction verdict.
 - For invalidation discussions, prefer contradictions whose `edit_comment` or `reason` explicitly shows the older rubric being applied, such as `for all meds`, `for each med`, or `single miss caused No`.
 - Exclude `policy_gap` cases from invalidation-first batches unless the user explicitly wants to review them.
-- Exclude mechanical/truncated-context cases from invalidation-first batches unless the user explicitly asks for them.
+- Exclude mechanical or truncated-context cases from invalidation-first batches unless the user explicitly asks for them.
 - Present the user-facing group with stable item identifiers, usually `item_external_id`, and keep `feedback_item_id` available for the actual invalidation step.
 
-### Step 3 - Handle contradiction findings at the right level
-
-Use the report output first. Do not start by spelunking individual feedback items.
+### Handle contradiction findings at the right level
 
 When the report reveals a contradiction cluster:
 
 - summarize the shared pattern
 - explain whether it looks like a score issue, rubric issue, or feedback-quality issue
 - propose a candidate invalidation group only when the contradiction clearly reflects old or incorrect rubric application
-- cite the exact report evidence that makes the cluster fit that group, especially the `edit_comment` and `reason` text
+- cite the report evidence that makes the cluster fit that group, especially the `edit_comment` and `reason`
 - ask for approval before invalidating anything
 
-Examples of strong invalidation candidates:
+### Invalidate feedback only after explicit user approval
 
-- feedback created before a newer objective rule replaced an older vague standard such as "most"
-- feedback that clearly enforced "all medications" after the rubric changed to "two or more misses"
-- feedback that contradicts explicit newer SME guidance already reflected in the guidelines
-
-Examples that are usually not invalidation-first:
-
-- unresolved rubric ambiguity
-- customer-uncertainty edge cases that SMEs have not answered yet
-- truncated or mechanically corrupted transcripts
-
-### Step 4 - Invalidate feedback only after explicit user approval
-
-Once the user approves an exact group, invalidate the items one at a time with the CLI:
+Once the user approves an exact group, invalidate items one at a time:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli feedback invalidate "<identifier>" \
+python -m plexus.cli feedback invalidate "<identifier>" \
   --scorecard "<scorecard>" \
   --score "<score>"
 ```
 
-Notes:
+Rules:
 
 - This command is for operator-approved targeted invalidation only.
-- It must not be used automatically by the optimizer.
-- It accepts a direct feedback item ID or an item identifier and resolves deterministically.
-- Use `--scorecard` and `--score` to disambiguate item-level matches when needed.
-- Before running it, restate the approved group back to the user in a flat list so there is no ambiguity about which items are being invalidated.
+- It must not be run automatically by the optimizer.
+- Before running it, restate the approved group back to the user in a flat list so there is no ambiguity.
 - After running it, report the exact identifiers invalidated and whether any item was already invalid.
 
-### Step 5 - Launch the optimizer
-
-Prefer the direct optimizer CLI for normal runs:
-
-```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli procedure optimize \
-  --scorecard "<scorecard>" \
-  --score "<score>" \
-  --days <days> \
-  --max-samples <max_samples> \
-  --max-iterations <max_cycles> \
-  --version "<start_version>" \
-  --resume-recent-eval "<resume_recent_eval>" \
-  --resume-regression-eval "<resume_regression_eval>" \
-  --hint "<hint>"
-```
-
-Only include the optional flags that were actually provided.
-If the user does not specify `max_samples`, this skill should still pass `--max-samples 200`.
-
-### Step 6 - Advanced manual procedure path
+## Advanced Manual Procedure Path With `procedure create` and `procedure run`
 
 Keep this path for cases where you want to inspect or patch optimizer YAML directly.
 
 List recent procedures:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli procedure list \
+python -m plexus.cli procedure list \
   --account "call-criteria" \
   --scorecard "<scorecard>"
 ```
@@ -239,7 +354,7 @@ List recent procedures:
 Pull the latest YAML from a recent optimizer procedure:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli procedure pull <procedure_id> \
+python -m plexus.cli procedure pull <procedure_id> \
   --output /tmp/optimizer_patched.yaml
 ```
 
@@ -266,19 +381,19 @@ days:
   type: number
   value: <days>
 
-start_version:         # only if provided
+start_version:
   type: string
   value: "<version_id>"
 
-resume_recent_eval:    # only if provided
+resume_recent_eval:
   type: string
   value: "<eval_id>"
 
-resume_regression_eval:# only if provided
+resume_regression_eval:
   type: string
   value: "<eval_id>"
 
-hint:                  # only if provided
+hint:
   type: string
   value: "<hint text>"
 ```
@@ -286,10 +401,10 @@ hint:                  # only if provided
 Create the procedure from YAML:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli procedure create \
+python -m plexus.cli procedure create \
   --account "call-criteria" \
-  --scorecard "<scorecard name>" \
-  --score "<score name>" \
+  --scorecard "<scorecard>" \
+  --score "<score>" \
   --yaml /tmp/optimizer_patched.yaml \
   --output json
 ```
@@ -297,16 +412,5 @@ Create the procedure from YAML:
 Then run it:
 
 ```bash
-/Users/ryan/miniconda3/bin/python -m plexus.cli procedure run <procedure_id>
+python -m plexus.cli procedure run <procedure_id>
 ```
-
-### Step 7 - Report back
-
-Report:
-
-- the procedure ID
-- the starting score version
-- the key optimizer parameters
-- whether contradictions / invalidation triage influenced the baseline definition
-- the dashboard URL:
-  `http://localhost:3000/lab/procedures/<procedure_id>`
