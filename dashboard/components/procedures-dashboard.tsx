@@ -102,7 +102,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
-  const { selectedAccount } = useAccount()
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   
   // Extract procedure ID from URL params if present, or use the prop
   const procedureIdFromParams = (params && 'id' in params) ? params.id as string : null
@@ -172,8 +172,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setNextToken(null)
       setHasMore(false)
       setError(null)
-      setIsInitialLoading(false)
-      setIsFetchingProcedures(false)
+      setIsInitialLoading(isLoadingAccounts)
+      setIsFetchingProcedures(isLoadingAccounts)
       setIsHydratingTasks(false)
       hasLoadedProceduresOnceRef.current = false
       procedureTaskMapRef.current = new Map()
@@ -363,7 +363,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setIsFetchingProcedures(false)
       setIsHydratingTasks(false)
     }
-  }, [selectedAccount?.id])
+  }, [selectedAccount?.id, isLoadingAccounts])
 
   const loadMoreProcedures = useCallback(async () => {
     if (!selectedAccount?.id || !nextToken || isLoadingMore) return
@@ -974,7 +974,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }), [])
   
 
-  if ((isInitialLoading || isFetchingProcedures) && procedures.length === 0) {
+  if ((isInitialLoading || isFetchingProcedures || isLoadingAccounts) && procedures.length === 0) {
     return <ProceduresDashboardSkeleton />
   }
 
@@ -1087,7 +1087,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 {!(selectedProcedureId && isNarrowViewport) && (
                   <ProceduresGauges />
                 )}
-                {procedures.length === 0 && !isFetchingProcedures && !isHydratingTasks ? (
+                {procedures.length === 0 &&
+                !!selectedAccount?.id &&
+                !isLoadingAccounts &&
+                !isInitialLoading &&
+                !isFetchingProcedures &&
+                !isHydratingTasks ? (
                   <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
                     No procedures found
                   </div>
