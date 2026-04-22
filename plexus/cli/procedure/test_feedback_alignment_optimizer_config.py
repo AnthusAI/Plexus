@@ -71,3 +71,16 @@ def test_optimizer_yaml_defines_safe_encode_for_score_test_failure_details():
     assert "if test_result.failures and #test_result.failures > 0 then" in code
     assert 'safe_encode(test_result.failures)' in code
     assert 'safe_encode(test_result.predictions)' in code
+
+
+def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local bg = opts.background or false" not in code
+    assert 'background = true' not in code
+    assert 'background = false' not in code
+    assert "dispatched in background" not in code
+    assert "consume results later" not in code
+    assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
+    assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
