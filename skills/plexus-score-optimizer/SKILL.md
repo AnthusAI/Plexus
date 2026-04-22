@@ -255,6 +255,59 @@ Use the report to sort findings into these buckets:
 - feedback invalidation candidate
 - mechanical / no action
 
+### Locate the exact historical report before comparing results
+
+When you need a true pre/post comparison, do not rely on memory, Kanbus summaries, or whichever report happens to be cached. Find the exact historical report object first.
+
+List recent reports and match by title plus timestamp:
+
+```bash
+python -m plexus.cli report list --limit 30
+```
+
+Notes:
+
+- `report list` is table-oriented; it does not currently offer a structured `-o json` path.
+- Use the report title, score name, and `Created At` timestamp to identify the pre-change and post-change reports you want.
+- For contradiction work, it is common to have several same-day reports for the same score. Pick the latest report that still predates the invalidation batch or rubric/code change you are comparing against.
+
+Inspect a specific historical report once you have the ID:
+
+```bash
+python -m plexus.cli report show <report_id>
+```
+
+`report show` gives you:
+
+- report metadata and timestamp
+- run parameters
+- the report block type
+- the compacted output preview
+- the attachment pointer for the full stored block output
+
+If you need the full historical contradiction payload for a diff, load the report block attachment directly:
+
+```bash
+python - <<'PY'
+from plexus.cli.shared.client_utils import create_client
+from plexus.dashboard.api.models.report_block import ReportBlock
+from plexus.cli.dataset.curation import _load_feedback_contradictions_output_from_block
+
+client = create_client()
+blocks = ReportBlock.list_by_report_id("<report_id>", client=client)
+payload = _load_feedback_contradictions_output_from_block(blocks[0])
+
+print(payload["contradictions_found"], payload["aligned_found"])
+print([t["label"] for t in payload.get("topics", [])])
+PY
+```
+
+Use this path when you need to answer questions like:
+
+- which contradiction items disappeared after invalidation?
+- did the contradiction count really drop, or did clustering just surface different items?
+- which report is the correct pre-invalidation baseline?
+
 ### Mechanical hints for working with the contradictions report
 
 Do not guess from memory and do not reconstruct contradiction themes from lower-level item tools first. Use the stored contradictions report output as the source of truth.
