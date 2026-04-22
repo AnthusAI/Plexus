@@ -2856,19 +2856,16 @@ code: |
     return { output = out, code_repr = code_repr }, nil
   end
 
-  -- Helper: run FeedbackContradictions report and cache result in State.
-  -- Supports background=true for fire-and-forget dispatch; a later call with
-  -- background=false (default) blocks until the background thread completes.
+  -- Helper: run FeedbackContradictions report directly and cache result in State.
   -- Defined here (after scorecard_name/score_name) so it is available in both
   -- fresh-run and continuation paths.
   local function refresh_known_contradictions(current_cycle, opts)
     opts = opts or {}
     local ttl = opts.ttl_hours or 24
     local fresh = opts.fresh or false
-    local bg = opts.background or false
     Human.notify({message = string.format(
-      "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s, bg=%s)...",
-      current_cycle, ttl, tostring(fresh), tostring(bg)), level = "info"})
+      "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s)...",
+      current_cycle, ttl, tostring(fresh)), level = "info"})
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
@@ -2881,8 +2878,7 @@ code: |
       },
       cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
       ttl_hours = ttl,
-      fresh = fresh,
-      background = bg
+      fresh = fresh
     })
     if not ok or not report_result then
       local err = "Contradictions report failed"
@@ -2893,11 +2889,6 @@ code: |
       end
       State.set("known_contradictions_status", {cycle = current_cycle, available = false, error = err})
       Human.notify({message = "  Contradictions report failed: " .. err, level = "warning"})
-      return
-    end
-    -- Background dispatch returns status="dispatched" — results will be collected later
-    if report_result.status == "dispatched" or report_result.status == "already_dispatched" then
-      Human.notify({message = "  Contradictions report dispatched in background — will consume results later", level = "info"})
       return
     end
     local parsed_result, parse_error = parse_contradictions_report_result(report_result)
@@ -3299,10 +3290,6 @@ code: |
 
   -- (diag and refresh_known_contradictions are defined earlier, before continuation check)
 
-  -- Dispatch contradictions analysis in background — it runs concurrently with
-  -- baseline evaluations.  Results are consumed (blocking) after baselines finish.
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = true})
-
   -- Try to reuse recent completed evaluations before running fresh baselines
   local n_samples = params.max_samples or 100
   if not regression_baseline_id and champion_version_id then
@@ -3468,8 +3455,8 @@ code: |
   State.set("last_regression_rca", regression_baseline_rca)
   State.set("last_recent_rca", recent_baseline_rca)
 
-  -- Consume feedback contradictions results (blocks until background dispatch finishes)
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = false})
+  -- Refresh feedback contradictions results now that the procedure needs them.
+  pcall(refresh_known_contradictions, 0, {ttl_hours = 48})
 
   -- Early exit: if feedback alignment is already perfect or no RCA data
   local fb_rca_topics = (type(recent_baseline_rca) == "table" and recent_baseline_rca.topics) or {}
