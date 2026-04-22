@@ -16,6 +16,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
 import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
+import { ProceduresDashboardSkeleton } from "@/components/loading-skeleton"
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
 import { useInView } from "react-intersection-observer"
 
@@ -25,7 +26,6 @@ type ProcedureWithTask = Procedure & {
   task?: Task | null
 }
 
-const INITIAL_VISIBLE_PROCEDURE_COUNT = 50
 const PROCEDURE_PAGE_SIZE = 25
 
 const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
@@ -109,7 +109,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const finalInitialProcedureId = initialSelectedProcedureId || procedureIdFromParams
   
   const [procedures, setProcedures] = useState<ProcedureWithTask[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isHydratingTasks, setIsHydratingTasks] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [nextToken, setNextToken] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
@@ -124,6 +125,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const lastLoadTimeRef = useRef(0)
+  const loadRequestIdRef = useRef(0)
+  const hasLoadedProceduresOnceRef = useRef(false)
   const procedureTaskMapRef = useRef<Map<string, Task>>(new Map())
   const { ref: sentinelRef, inView } = useInView({ threshold: 0 })
 
@@ -161,185 +164,199 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }, [handleSelectProcedure])
 
   const loadProcedures = useCallback(async (force = false) => {
+    const requestId = ++loadRequestIdRef.current
+
     if (!selectedAccount?.id) {
       setProcedures([])
-      setIsLoading(false)
+      setNextToken(null)
+      setHasMore(false)
+      setError(null)
+      setIsInitialLoading(false)
+      setIsHydratingTasks(false)
+      hasLoadedProceduresOnceRef.current = false
+      procedureTaskMapRef.current = new Map()
       return
     }
 
+    const shouldBlockInitialRender = !hasLoadedProceduresOnceRef.current
+
     try {
-      setIsLoading(true)
+      if (shouldBlockInitialRender) {
+        setIsInitialLoading(true)
+      }
+      setError(null)
       lastLoadTimeRef.current = Date.now()
-      const tasksResult = await getAmplifyClient().graphql({
+      // Phase A: fetch first procedure page and render immediately without task hydration
+      const proceduresResult: any = await getAmplifyClient().graphql({
         query: `
-          query ListTaskByAccountIdAndUpdatedAt(
+          query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
+            $nextToken: String
           ) {
-            listTaskByAccountIdAndUpdatedAt(
+            listProcedureByAccountIdAndUpdatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
+              nextToken: $nextToken
             ) {
               items {
                 id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
-                metadata
+                name
+                featured
+                code
+                rootNodeId
                 createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
+                updatedAt
+                accountId
+                scorecardId
+                scorecard {
+                  id
+                  name
+                }
+                scoreId
+                score {
+                  id
+                  name
                 }
               }
+              nextToken
             }
           }
         `,
         variables: {
           accountId: selectedAccount.id,
           sortDirection: 'DESC',
-          limit: 1000
+          limit: PROCEDURE_PAGE_SIZE,
+          nextToken: null
         }
       })
-      
-      const proceduresData: Procedure[] = []
-      let newNextToken: string | null = null
 
-      do {
-        const proceduresResult: any = await getAmplifyClient().graphql({
+      if (requestId !== loadRequestIdRef.current) return
+
+      const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt
+      const firstPageItems: Procedure[] = procedureResponse?.items || []
+      const newNextToken: string | null = procedureResponse?.nextToken ?? null
+      const firstPageWithoutTasks = sortProceduresByStartTime(
+        firstPageItems.map((procedure: Procedure) => ({ ...procedure, task: null }))
+      )
+
+      setProcedures(firstPageWithoutTasks)
+      setNextToken(newNextToken)
+      setHasMore(!!newNextToken)
+      setIsInitialLoading(false)
+      hasLoadedProceduresOnceRef.current = true
+
+      // Phase B: hydrate task/status data in background without blocking rendered cards
+      setIsHydratingTasks(true)
+      try {
+        const tasksResult = await getAmplifyClient().graphql({
           query: `
-            query ListProcedureByAccountIdAndUpdatedAt(
+            query ListTaskByAccountIdAndUpdatedAt(
               $accountId: String!
               $sortDirection: ModelSortDirection
               $limit: Int
-              $nextToken: String
             ) {
-              listProcedureByAccountIdAndUpdatedAt(
+              listTaskByAccountIdAndUpdatedAt(
                 accountId: $accountId
                 sortDirection: $sortDirection
                 limit: $limit
-                nextToken: $nextToken
               ) {
                 items {
                   id
-                  name
-                  featured
-                  code
-                  rootNodeId
+                  type
+                  status
+                  target
+                  command
+                  description
+                  dispatchStatus
+                  metadata
                   createdAt
-                  updatedAt
-                  accountId
-                  scorecardId
-                  scorecard {
-                    id
-                    name
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  errorMessage
+                  errorDetails
+                  currentStageId
+                  stages {
+                    items {
+                      id
+                      name
+                      order
+                      status
+                      statusMessage
+                      startedAt
+                      completedAt
+                      estimatedCompletionAt
+                      processedItems
+                      totalItems
+                    }
                   }
-                  scoreId
-                  score {
-                    id
-                    name
-                  }
-
                 }
-                nextToken
               }
             }
           `,
           variables: {
             accountId: selectedAccount.id,
             sortDirection: 'DESC',
-            limit: PROCEDURE_PAGE_SIZE,
-            nextToken: newNextToken
+            limit: 1000
           }
         })
 
-        const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt
-        proceduresData.push(...(procedureResponse?.items || []))
-        newNextToken = procedureResponse?.nextToken ?? null
-      } while (newNextToken && proceduresData.length < INITIAL_VISIBLE_PROCEDURE_COUNT)
+        if (requestId !== loadRequestIdRef.current) return
 
-      const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
-      
-      // Filter tasks that have procedure_id in metadata
-      const procedureTasks = allTasks.filter((task: Task) => {
-        try {
-          const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-          return metadata && metadata.procedure_id
-        } catch {
-          return false
-        }
-      })
-      
-      // Create a map of procedure_id -> task for quick lookup
-      const procedureTaskMap = new Map()
-      procedureTasks.forEach((task: Task) => {
-        try {
-          const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-          if (metadata && metadata.procedure_id) {
-            procedureTaskMap.set(metadata.procedure_id, task)
+        const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
+        const procedureTasks = allTasks.filter((task: Task) => {
+          try {
+            const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
+            return metadata && metadata.procedure_id
+          } catch {
+            return false
           }
-        } catch {
-          // Ignore parsing errors
+        })
+
+        const procedureTaskMap = new Map<string, Task>()
+        procedureTasks.forEach((task: Task) => {
+          try {
+            const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
+            if (metadata && metadata.procedure_id) {
+              procedureTaskMap.set(metadata.procedure_id, task)
+            }
+          } catch {
+            // Ignore parsing errors
+          }
+        })
+
+        procedureTaskMapRef.current = procedureTaskMap
+
+        setProcedures(prev =>
+          sortProceduresByStartTime(
+            prev.map(procedure => ({
+              ...procedure,
+              task: procedureTaskMap.get(procedure.id) || null
+            }))
+          )
+        )
+
+        if (force) {
+          console.log('Forced reload completed for procedures first page')
         }
-      })
-      procedureTaskMapRef.current = procedureTaskMap
-      
-      // Combine procedures with their tasks
-      const data = proceduresData.map((procedure: Procedure): ProcedureWithTask => {
-        const task = procedureTaskMap.get(procedure.id) || null
-        if (task) {
-          const stageStatuses = task.stages?.items?.map((s: any) => `${s.name}:${s.status}`).join(', ') || 'none';
-        } else {
+      } catch (taskErr) {
+        if (requestId !== loadRequestIdRef.current) return
+        console.error('Error hydrating procedure tasks:', taskErr)
+        setError(taskErr instanceof Error ? taskErr.message : 'Failed to hydrate procedure task state')
+      } finally {
+        if (requestId === loadRequestIdRef.current) {
+          setIsHydratingTasks(false)
         }
-        return {
-          ...procedure,
-          task
-        }
-      })
-      
-      // Check if we're looking for a specific procedure (for debugging)
-      if (force) {
-        console.log('Forced reload - checking if we can find recently created procedures...')
-        const recentProcedures = data?.slice(0, 5)?.map((proc: Procedure) => ({
-          id: proc.id,
-          createdAt: proc.createdAt
-        }))
-        console.log('Most recent 5 procedures by API order:', recentProcedures)
       }
-      
-      // Order by actual run start time instead of update time.
-      const sortedData = sortProceduresByStartTime(data || [])
-      
-      // Always replace with the first page — loadProcedures is a full reset
-      setProcedures(sortedData)
-      setNextToken(newNextToken)
-      setHasMore(!!newNextToken)
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return
       console.error('Error loading procedures:', err)
       setError(err instanceof Error ? err.message : 'Failed to load procedures')
-    } finally {
-      setIsLoading(false)
+      setIsInitialLoading(false)
+      setIsHydratingTasks(false)
     }
   }, [selectedAccount?.id])
 
@@ -952,41 +969,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }), [])
   
 
-  // Loading and error states
-  if (isLoading || error) {
-    return (
-      <div className="@container flex flex-col h-full p-3 overflow-hidden">
-        <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
-          <div className="@[600px]:flex-grow w-full">
-            <ScorecardContext 
-              selectedScorecard={selectedScorecard}
-              setSelectedScorecard={setSelectedScorecard}
-              selectedScore={selectedScore}
-              setSelectedScore={setSelectedScore}
-              skeletonMode={isLoading}
-            />
-          </div>
-          <div className="flex-shrink-0">
-            <Button onClick={handleCreateProcedure} disabled={isLoading}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Procedure
-            </Button>
-          </div>
-        </div>
-        
-        {error ? (
-          <div className="text-center text-destructive p-8">
-            <p>Error loading procedures: {error}</p>
-          </div>
-        ) : (
-          <div className="animate-pulse space-y-4">
-            <div className="h-32 bg-gray-200 rounded"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
-          </div>
-        )}
-      </div>
-    )
+  if (isInitialLoading && procedures.length === 0) {
+    return <ProceduresDashboardSkeleton />
   }
 
 
@@ -1051,6 +1035,18 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         </div>
       </div>
 
+      {error && (
+        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Unable to fully refresh procedures: {error}
+        </div>
+      )}
+
+      {isHydratingTasks && procedures.length > 0 && (
+        <div className="pb-2 text-xs text-muted-foreground">
+          Updating procedure statuses...
+        </div>
+      )}
+
       {/* Procedures Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <AnimatePresence mode="popLayout">
@@ -1086,11 +1082,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 {!(selectedProcedureId && isNarrowViewport) && (
                   <ProceduresGauges />
                 )}
-                {procedures.length === 0 && isLoading ? (
-                  <div className="animate-pulse space-y-4">
-                    <div className="h-32 bg-gray-200 rounded"></div>
-                    <div className="h-32 bg-gray-200 rounded"></div>
-                    <div className="h-32 bg-gray-200 rounded"></div>
+                {procedures.length === 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
+                    No procedures found
                   </div>
                 ) : (
                   <div className={`
