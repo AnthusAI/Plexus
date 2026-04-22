@@ -976,6 +976,7 @@ class FeedbackItem(BaseModel):
                     finalCommentValue
                     editCommentValue
                     isAgreement
+                    isInvalid
                     editedAt
                     editorName
                     itemId
@@ -1009,3 +1010,18 @@ class FeedbackItem(BaseModel):
             if debug:
                 logger.error(f"Error updating FeedbackItem {feedback_item_id}: {e}")
             return None 
+
+    @classmethod
+    def invalidate(
+        cls,
+        client: 'PlexusDashboardClient',
+        feedback_item_id: str,
+        debug: bool = False,
+    ) -> Optional['FeedbackItem']:
+        """Mark a feedback item invalid without changing any other fields."""
+        return cls._update_feedback_item(
+            client=client,
+            feedback_item_id=feedback_item_id,
+            feedback_data={"isInvalid": True},
+            debug=debug,
+        )
