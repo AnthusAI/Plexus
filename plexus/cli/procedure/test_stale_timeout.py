@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from plexus.cli.procedure.stale_timeout import STALE_PROCEDURE_TIMEOUT_MESSAGE
+from plexus.cli.procedure.stale_timeout import STALE_PROCEDURE_DEAD_PROCESS_MESSAGE
 from plexus.cli.procedure.stale_timeout import STALLED_STATUS
 from plexus.cli.procedure.stale_timeout import timeout_stale_procedures
 
@@ -136,14 +137,11 @@ def test_timeout_stale_procedures_skips_fresh_chat_activity(monkeypatch):
     assert result["recent_started_count"] == 1
     assert result["checked"] == 1
     assert result["timed_out"] == []
-    assert result["skipped"] == [
-        {
-            "procedure_id": "proc-fresh",
-            "reason": "fresh_chat_activity",
-            "last_activity_at": "2026-04-20T17:40:00+00:00",
-            "activity_source": "chat",
-        }
-    ]
+    assert len(result["skipped"]) == 1
+    assert result["skipped"][0]["procedure_id"] == "proc-fresh"
+    assert result["skipped"][0]["reason"] == "fresh_chat_activity"
+    assert result["skipped"][0]["last_activity_at"] == "2026-04-20T17:40:00+00:00"
+    assert result["skipped"][0]["activity_source"] == "chat"
 
 
 def test_timeout_stale_procedures_skips_waiting_for_human(monkeypatch):
@@ -334,3 +332,76 @@ def test_timeout_stale_procedures_continues_when_procedure_update_conflicts(monk
     assert len(result["timed_out"]) == 1
     assert "warnings" in result["timed_out"][0]
     assert "procedure_update_failed" in result["timed_out"][0]["warnings"][0]
+
+
+def test_timeout_stale_procedures_marks_dead_runtime_pid_stalled_immediately(monkeypatch):
+    now = datetime(2026, 4, 20, 18, 0, tzinfo=timezone.utc)
+    fake_task = _FakeTask()
+    fake_task.target = "procedure/proc-dead"
+    fake_task.command = "procedure run proc-dead"
+    stage_stalled_calls = []
+    procedure_update_calls = []
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._list_procedure_tasks",
+        lambda _client, _account_id: [
+            {
+                "id": "task-dead",
+                "status": "RUNNING",
+                "target": "procedure/proc-dead",
+                "metadata": json.dumps({}),
+                "startedAt": "2026-04-20T17:58:00+00:00",
+                "updatedAt": "2026-04-20T17:59:00+00:00",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._get_procedure_status_snapshot",
+        lambda _client, _procedure_id: {
+            "status": "RUNNING",
+            "metadata": {"runtime": {"pid": 999999, "host": "local-host"}},
+        },
+    )
+    monkeypatch.setattr("plexus.cli.procedure.stale_timeout.socket.gethostname", lambda: "local-host")
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout.os.kill",
+        lambda _pid, _sig: (_ for _ in ()).throw(ProcessLookupError()),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._get_latest_chat_activity_at",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("chat activity should not be checked for dead pid")),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout.Task.get_by_id",
+        lambda _task_id, _client: fake_task,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._update_procedure_status_and_metadata",
+        lambda _client, procedure_id, **kwargs: procedure_update_calls.append((procedure_id, kwargs)),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._mark_procedure_chat_sessions_stalled",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._mark_nonterminal_task_stages_status",
+        lambda _client, task_id, **kwargs: stage_stalled_calls.append((task_id, kwargs)),
+    )
+
+    result = timeout_stale_procedures(
+        client=object(),
+        account_id="acct-1",
+        threshold_seconds=3600,
+        lookback_hours=72,
+        now=now,
+    )
+
+    assert result["checked"] == 1
+    assert len(result["timed_out"]) == 1
+    assert result["timed_out"][0]["failure"]["kind"] == "process_dead"
+    assert result["timed_out"][0]["failure"]["message"] == STALE_PROCEDURE_DEAD_PROCESS_MESSAGE
+    assert fake_task.update_calls[-1]["errorMessage"] == STALE_PROCEDURE_DEAD_PROCESS_MESSAGE
+    assert json.loads(fake_task.update_calls[-1]["errorDetails"])["kind"] == "process_dead"
+    assert stage_stalled_calls == [("task-1", {"status": STALLED_STATUS, "status_message": STALE_PROCEDURE_DEAD_PROCESS_MESSAGE, "now": now})]
+    assert procedure_update_calls[0][0] == "proc-dead"
+    assert procedure_update_calls[0][1]["status"] == STALLED_STATUS

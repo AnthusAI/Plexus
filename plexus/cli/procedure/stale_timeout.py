@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 STALE_PROCEDURE_TIMEOUT_SECONDS = 3600
 STALE_PROCEDURE_TIMEOUT_MESSAGE = "Stalled process detected after timeout period"
+STALE_PROCEDURE_DEAD_PROCESS_MESSAGE = "Procedure process no longer running"
 STALE_PROCEDURE_LOOKBACK_HOURS = 72
 STALLED_STATUS = "STALLED"
 
@@ -31,6 +34,45 @@ def _parse_iso_datetime(value: Any) -> Optional[datetime]:
         except ValueError:
             return None
     return None
+
+
+def _runtime_process_alive(runtime: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(runtime, dict):
+        return {"known": False, "alive": None, "reason": "missing_runtime_metadata"}
+
+    host = str(runtime.get("host") or "").strip()
+    pid_raw = runtime.get("pid")
+    try:
+        pid = int(pid_raw)
+    except Exception:
+        return {"known": False, "alive": None, "reason": "invalid_runtime_pid"}
+
+    if pid <= 0:
+        return {"known": False, "alive": None, "reason": "invalid_runtime_pid"}
+
+    local_host = socket.gethostname()
+    if not host:
+        return {"known": False, "alive": None, "reason": "missing_runtime_host", "pid": pid}
+    if host != local_host:
+        return {"known": False, "alive": None, "reason": "runtime_host_mismatch", "pid": pid, "host": host}
+
+    try:
+        os.kill(pid, 0)
+        return {"known": True, "alive": True, "reason": "process_alive", "pid": pid, "host": host}
+    except ProcessLookupError:
+        return {"known": True, "alive": False, "reason": "process_not_found", "pid": pid, "host": host}
+    except PermissionError:
+        # Process exists but permission denied to signal.
+        return {"known": True, "alive": True, "reason": "permission_denied", "pid": pid, "host": host}
+    except Exception as exc:
+        return {
+            "known": False,
+            "alive": None,
+            "reason": "pid_probe_failed",
+            "pid": pid,
+            "host": host,
+            "error": str(exc),
+        }
 
 
 def _extract_procedure_id_from_task_payload(task_data: Dict[str, Any]) -> Optional[str]:
@@ -323,51 +365,79 @@ def timeout_stale_procedures(
             skipped.append({"procedure_id": procedure_id, "reason": "waiting_for_human"})
             continue
 
-        started_at = _parse_iso_datetime(task_data.get("startedAt"))
-        last_activity_at = _get_latest_chat_activity_at(client, procedure_id)
-        activity_source = "chat"
-        if last_activity_at is None:
-            if started_at is None:
-                skipped.append({"procedure_id": procedure_id, "reason": "no_chat_activity"})
-                continue
-            last_activity_at = started_at
-            activity_source = "task_started_at"
-
-        inactivity = now - last_activity_at
-        if inactivity <= stale_after:
-            skipped.append(
-                {
-                    "procedure_id": procedure_id,
-                    "reason": "fresh_chat_activity" if activity_source == "chat" else "fresh_no_chat_runtime",
-                    "last_activity_at": last_activity_at.isoformat(),
-                    "activity_source": activity_source,
-                }
-            )
-            continue
-
         runtime = procedure.get("metadata", {}).get("runtime") if isinstance(procedure.get("metadata"), dict) else {}
         if not isinstance(runtime, dict):
             runtime = {}
-        failure_payload = {
-            "kind": "timeout",
-            "signal": None,
-            "exception_type": None,
-            "message": STALE_PROCEDURE_TIMEOUT_MESSAGE,
-            "phase": None,
-            "terminated_at": now.isoformat(),
-            "pid": runtime.get("pid"),
-            "host": runtime.get("host"),
-            "traceback": None,
-            "timeout_seconds": threshold_seconds,
-            "last_chat_activity_at": last_activity_at.isoformat(),
-            "activity_source": activity_source,
-        }
+        liveness = _runtime_process_alive(runtime)
+        runtime_dead = bool(liveness.get("known")) and liveness.get("alive") is False
+
+        started_at = _parse_iso_datetime(task_data.get("startedAt"))
+        failure_payload: Optional[Dict[str, Any]] = None
+        silence_seconds: Optional[int] = None
+        last_activity_iso: Optional[str] = None
+
+        if runtime_dead:
+            failure_payload = {
+                "kind": "process_dead",
+                "signal": None,
+                "exception_type": None,
+                "message": STALE_PROCEDURE_DEAD_PROCESS_MESSAGE,
+                "phase": None,
+                "terminated_at": now.isoformat(),
+                "pid": runtime.get("pid"),
+                "host": runtime.get("host"),
+                "traceback": None,
+                "process_probe": liveness,
+            }
+        else:
+            last_activity_at = _get_latest_chat_activity_at(client, procedure_id)
+            activity_source = "chat"
+            if last_activity_at is None:
+                if started_at is None:
+                    skipped.append({"procedure_id": procedure_id, "reason": "no_chat_activity"})
+                    continue
+                last_activity_at = started_at
+                activity_source = "task_started_at"
+
+            inactivity = now - last_activity_at
+            if inactivity <= stale_after:
+                skipped.append(
+                    {
+                        "procedure_id": procedure_id,
+                        "reason": "fresh_chat_activity" if activity_source == "chat" else "fresh_no_chat_runtime",
+                        "last_activity_at": last_activity_at.isoformat(),
+                        "activity_source": activity_source,
+                        "process_probe": liveness,
+                    }
+                )
+                continue
+
+            silence_seconds = int(inactivity.total_seconds())
+            last_activity_iso = last_activity_at.isoformat()
+            failure_payload = {
+                "kind": "timeout",
+                "signal": None,
+                "exception_type": None,
+                "message": STALE_PROCEDURE_TIMEOUT_MESSAGE,
+                "phase": None,
+                "terminated_at": now.isoformat(),
+                "pid": runtime.get("pid"),
+                "host": runtime.get("host"),
+                "traceback": None,
+                "timeout_seconds": threshold_seconds,
+                "last_chat_activity_at": last_activity_iso,
+                "activity_source": activity_source,
+                "process_probe": liveness,
+            }
+
+        if not failure_payload:
+            continue
 
         record = {
             "procedure_id": procedure_id,
             "task_id": task_data.get("id"),
-            "last_chat_activity_at": last_activity_at.isoformat(),
-            "silence_seconds": int(inactivity.total_seconds()),
+            "last_chat_activity_at": last_activity_iso,
+            "silence_seconds": silence_seconds,
             "failure": failure_payload,
             "dry_run": dry_run,
         }
@@ -381,12 +451,13 @@ def timeout_stale_procedures(
             skipped.append({"procedure_id": procedure_id, "reason": "task_not_running"})
             continue
 
+        failure_message = str(failure_payload.get("message") or STALE_PROCEDURE_TIMEOUT_MESSAGE)
         try:
             _mark_nonterminal_task_stages_status(
                 client,
                 task.id,
                 status=STALLED_STATUS,
-                status_message=STALE_PROCEDURE_TIMEOUT_MESSAGE,
+                status_message=failure_message,
                 now=now,
             )
         except Exception as exc:
@@ -403,7 +474,7 @@ def timeout_stale_procedures(
                 metadata=json.dumps(task_metadata),
                 updatedAt=now.isoformat(),
                 completedAt=now.isoformat(),
-                errorMessage=STALE_PROCEDURE_TIMEOUT_MESSAGE,
+                errorMessage=failure_message,
                 errorDetails=json.dumps(failure_payload),
             )
         except Exception as exc:
