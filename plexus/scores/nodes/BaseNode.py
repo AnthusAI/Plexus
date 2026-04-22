@@ -155,6 +155,34 @@ class BaseNode(ABC, LangChainUser):
         """
         return self.parameters.example_refinement_message
 
+    def get_graph_recursion_limit(self) -> Optional[int]:
+        """
+        Determine an appropriate LangGraph recursion limit for this node workflow.
+
+        Retry-capable nodes such as Classifier and Generator consume multiple graph
+        steps per retry loop. LangGraph's default recursion limit of 25 is too low
+        for the current default retry configuration, which can trigger a
+        GraphRecursionError before the node reaches its own max-retries handler.
+        """
+        maximum_retry_count = getattr(getattr(self, "parameters", None), "maximum_retry_count", None)
+        if maximum_retry_count is None:
+            return None
+
+        try:
+            retry_count = max(0, int(maximum_retry_count))
+        except (TypeError, ValueError):
+            logging.warning(
+                "Ignoring non-integer maximum_retry_count on %s: %r",
+                self.__class__.__name__,
+                maximum_retry_count,
+            )
+            return None
+
+        # Retry-capable node subgraphs consume roughly four steps per retry loop
+        # plus initial and terminal bookkeeping. Give them enough headroom to
+        # reach their own max-retries path instead of tripping LangGraph first.
+        return max(25, (retry_count * 4) + 8)
+
     @abstractmethod
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
         """Build and return a core LangGraph workflow.
@@ -247,7 +275,12 @@ class BaseNode(ABC, LangChainUser):
             else:
                 state_dict = dict(state) # Fallback
             
-            final_node_state = await app.ainvoke(state_dict)
+            ainvoke_kwargs = {}
+            recursion_limit = self.get_graph_recursion_limit()
+            if recursion_limit is not None:
+                ainvoke_kwargs["config"] = {"recursion_limit": recursion_limit}
+
+            final_node_state = await app.ainvoke(state_dict, **ainvoke_kwargs)
             
             # ✅ CRITICAL FIX: Merge ALL fields from final_node_state, not just hardcoded ones
             # This preserves node-level output aliases that were set during node execution

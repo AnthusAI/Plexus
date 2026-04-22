@@ -1,10 +1,10 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import json
 from pydantic import BaseModel, ConfigDict
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.scores.LangGraphScore import LangGraphScore
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, END
 
 class MockGraphState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -196,6 +196,48 @@ def test_build_compiled_workflow_with_io_aliasing(mock_node):
         
         # Check that a workflow was created
         assert workflow is not None
+
+
+@pytest.mark.asyncio
+async def test_build_compiled_workflow_passes_recursion_limit_for_retrying_nodes():
+    """Retry-capable nodes should raise LangGraph's recursion limit above the default."""
+
+    class RetryingNode(BaseNode):
+        class Parameters(BaseNode.Parameters):
+            maximum_retry_count: int = 6
+
+        def __init__(self):
+            super().__init__(name="retry_node", maximum_retry_count=6)
+            self.GraphState = MockGraphState
+
+        def add_core_nodes(self, workflow):
+            workflow.add_node("core", MagicMock())
+            workflow.add_edge("core", END)
+            return workflow
+
+    node = RetryingNode()
+    mock_workflow = MagicMock()
+    mock_workflow.nodes = {}
+
+    def add_node(name, _fn):
+        mock_workflow.nodes[name] = _fn
+
+    mock_workflow.add_node.side_effect = add_node
+    mock_workflow.add_edge.return_value = None
+    mock_workflow.set_entry_point.return_value = None
+
+    mock_app = MagicMock()
+    mock_app.ainvoke = AsyncMock(return_value={"metadata": {"trace": {"node_results": []}}})
+    mock_workflow.compile.return_value = mock_app
+
+    with patch("plexus.scores.nodes.BaseNode.StateGraph", return_value=mock_workflow):
+        compiled = node.build_compiled_workflow(MockGraphState)
+
+    await compiled(MockGraphState(text="test text", metadata={"trace": {"node_results": []}}))
+
+    assert mock_app.ainvoke.await_count == 1
+    _, kwargs = mock_app.ainvoke.await_args
+    assert kwargs["config"]["recursion_limit"] == 32
 
 
 def test_basenode_trace_entry_duplicate_prevention():
