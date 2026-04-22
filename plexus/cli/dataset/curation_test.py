@@ -20,6 +20,7 @@ def _make_feedback_item_dict(
     *,
     edited_at: str,
     final_answer: str = "Yes",
+    is_invalid: bool = False,
     include_item: bool = True,
 ):
     payload = {
@@ -29,6 +30,7 @@ def _make_feedback_item_dict(
         "scoreId": "score-1",
         "itemId": f"item-{item_id}",
         "finalAnswerValue": final_answer,
+        "isInvalid": is_invalid,
         "editedAt": edited_at,
     }
     if include_item:
@@ -49,6 +51,7 @@ def _to_feedback_model(item_dict, **_kwargs):
         scorecardId=item_dict.get("scorecardId"),
         scoreId=item_dict.get("scoreId"),
         finalAnswerValue=item_dict.get("finalAnswerValue"),
+        isInvalid=item_dict.get("isInvalid"),
         editedAt=item_dict.get("editedAt"),
         item=SimpleNamespace(
             id=item.get("id"),
@@ -94,6 +97,33 @@ def test_collect_qualifying_feedback_items_caps_and_orders():
 
     assert [item.id for item in items] == ["a", "b"]
     assert client.execute.call_count == 1
+
+
+def test_collect_qualifying_feedback_items_excludes_invalid():
+    client = MagicMock()
+    client.execute = MagicMock(
+        return_value={
+            "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt": {
+                "items": [
+                    _make_feedback_item_dict("valid", edited_at="2026-03-03T00:00:00Z", is_invalid=False),
+                    _make_feedback_item_dict("invalid", edited_at="2026-03-02T00:00:00Z", is_invalid=True),
+                ],
+                "nextToken": None,
+            }
+        }
+    )
+
+    with patch("plexus.cli.dataset.curation.FeedbackItem.from_dict", side_effect=_to_feedback_model):
+        items = collect_qualifying_feedback_items(
+            client=client,
+            account_id="account-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            max_items=10,
+            days=None,
+        )
+
+    assert [item.id for item in items] == ["valid"]
 
 
 def test_collect_qualifying_feedback_items_rejects_non_positive_max():
