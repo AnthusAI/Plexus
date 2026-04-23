@@ -2,7 +2,20 @@ import pytest
 import time
 from unittest.mock import Mock, patch
 from gql.transport.exceptions import TransportQueryError
-from .client import PlexusDashboardClient
+from .client import (
+    GraphQLRetryPolicy,
+    LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    PlexusDashboardClient,
+)
+
+
+def _make_transport_query_error(message: str, error_type: str | None = None):
+    error = TransportQueryError(message)
+    payload = {"message": message}
+    if error_type:
+        payload["errorType"] = error_type
+    error.errors = [payload]
+    return error
 
 @pytest.fixture
 def mock_env(monkeypatch):
@@ -99,6 +112,71 @@ def test_execute_returns_query_result(mock_env, mock_gql_client):
     
     result = client.execute("query { test }")
     assert result == expected_result
+
+
+def test_execute_retries_retryable_query_error_then_succeeds(mock_env, mock_gql_client):
+    client = PlexusDashboardClient()
+
+    expected_result = {'data': {'test': 'value'}}
+    mock_session = Mock()
+    mock_session.execute.side_effect = [
+        _make_transport_query_error(
+            "Throughput exceeds the current capacity for one or more global secondary indexes.",
+            error_type="DynamoDB:ThrottlingException",
+        ),
+        expected_result,
+    ]
+    mock_gql_client.return_value.__enter__.return_value = mock_session
+
+    with patch("plexus.dashboard.api.client.time.sleep") as mock_sleep, \
+         patch("plexus.dashboard.api.client.random.uniform", return_value=0.0):
+        result = client.execute("query { test }")
+
+    assert result == expected_result
+    assert mock_session.execute.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+def test_execute_does_not_retry_non_retryable_query_error(mock_env, mock_gql_client):
+    client = PlexusDashboardClient()
+
+    mock_session = Mock()
+    mock_session.execute.side_effect = _make_transport_query_error("Validation failed")
+    mock_gql_client.return_value.__enter__.return_value = mock_session
+
+    with patch("plexus.dashboard.api.client.time.sleep") as mock_sleep:
+        with pytest.raises(Exception, match="GraphQL query failed: Validation failed"):
+            client.execute("query { test }")
+
+    assert mock_session.execute.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+def test_execute_uses_long_running_policy_until_exhausted(mock_env, mock_gql_client):
+    client = PlexusDashboardClient()
+
+    mock_session = Mock()
+    mock_session.execute.side_effect = _make_transport_query_error(
+        "Throughput exceeds the current capacity for one or more global secondary indexes.",
+        error_type="DynamoDB:ThrottlingException",
+    )
+    mock_gql_client.return_value.__enter__.return_value = mock_session
+
+    policy = GraphQLRetryPolicy(
+        name=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+        max_attempts=3,
+        max_elapsed_seconds=60.0,
+        initial_delay_seconds=0.1,
+        max_delay_seconds=0.2,
+    )
+
+    with patch("plexus.dashboard.api.client.time.sleep") as mock_sleep, \
+         patch("plexus.dashboard.api.client.random.uniform", return_value=0.0):
+        with pytest.raises(Exception, match="GraphQL query failed after 3 attempts"):
+            client.execute("mutation { test }", retry_policy=policy)
+
+    assert mock_session.execute.call_count == 3
+    assert mock_sleep.call_count == 2
 
 def test_background_logging_flushes_on_batch_size(mock_score_result):
     """Test that logs are flushed when batch size is reached"""

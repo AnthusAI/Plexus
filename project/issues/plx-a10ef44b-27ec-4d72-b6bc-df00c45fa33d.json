@@ -1,0 +1,37 @@
+{
+  "id": "plx-a10ef44b-27ec-4d72-b6bc-df00c45fa33d",
+  "title": "Prevent classifier-as-extractor optimizer candidates",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "799bb49c-6708-4981-be95-ba1ad748b9a2",
+      "author": "ryan",
+      "text": "Started implementation. Confirmed current Prescriber and Dosage champions do not contain extract_* classifier nodes; malfunction is optimizer-generated. Plan: add pre-submit structural validation in score editor, document Classifier vs Extractor contract in LangGraphScore docs, and tighten optimizer structural-slot guidance to forbid pseudo-extractor classifiers.",
+      "created_at": "2026-04-23T16:55:16.622947Z"
+    },
+    {
+      "id": "33cc4adb-6686-4b7d-a4bf-c5825deb0173",
+      "author": "ryan",
+      "text": "Implemented classifier-as-extractor guardrails. Added pre-submit structural validation in score editor to reject Classifier nodes used as free-form extractors (e.g. valid_classes=['Extracted']) and require class: Extractor + mapped extracted_text output. Updated LangGraphScore YAML docs and optimizer guidance/cookbook to document the Classifier vs Extractor contract. Focused tests passed: test_score_editor_toolset.py + test_feedback_alignment_optimizer_config.py (17 passed). Runtime spot-check is currently blocked by a separate procedure creation failure in  (service reports invalid YAML with x0000 even though the procedure YAML parses cleanly in the same base environment); not caused by the new guardrail patch.",
+      "created_at": "2026-04-23T17:00:41.746649Z"
+    },
+    {
+      "id": "3d0d5003-ca0c-45e6-863d-f82a6b527d98",
+      "author": "ryan",
+      "text": "Implemented classifier-as-extractor guardrails. Added pre-submit structural validation in score editor to reject Classifier nodes used as free-form extractors (for example valid_classes=[\"Extracted\"]) and require class: Extractor plus mapped extracted_text output. Updated LangGraphScore YAML docs and optimizer guidance/cookbook to document the Classifier vs Extractor contract. Focused tests passed: plexus/cli/procedure/test_score_editor_toolset.py and plexus/cli/procedure/test_feedback_alignment_optimizer_config.py (17 passed). Runtime spot-check is currently blocked by a separate procedure optimize creation failure: the service reports invalid YAML with x0000 even though feedback_alignment_optimizer.yaml parses cleanly in the same base environment. That blocker appears unrelated to this patch.",
+      "created_at": "2026-04-23T17:00:49.816768Z"
+    }
+  ],
+  "created_at": "2026-04-23T16:55:08.005971Z",
+  "updated_at": "2026-04-23T17:00:49.816768Z",
+  "closed_at": null,
+  "custom": {}
+}
