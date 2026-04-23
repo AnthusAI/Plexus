@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import yaml
 
 from plexus.reports.blocks.feedback_alignment import FeedbackAlignment
@@ -213,6 +213,21 @@ class TestFeedbackAlignment:
                 assert parsed_output is not None
                 assert parsed_output["scores"][0]["score_id"] == "score1"
                 assert parsed_output["scores"][1]["score_id"] == "score2"
+
+    def test_parse_window_date_accepts_date_type(self):
+        start = FeedbackAlignment._parse_window_date(
+            date(2026, 4, 9),
+            is_end=False,
+            default_value=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        end = FeedbackAlignment._parse_window_date(
+            date(2026, 4, 9),
+            is_end=True,
+            default_value=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        assert start == datetime(2026, 4, 9, 0, 0, 0, 0, tzinfo=timezone.utc)
+        assert end == datetime(2026, 4, 9, 23, 59, 59, 999999, tzinfo=timezone.utc)
     
     @pytest.mark.asyncio
     async def test_generate_with_no_data(self, mock_api_client):
