@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3a2dee37-237f-4f8c-a0c1-e52b40548fed",
+  "issue_id": "plx-9172bffa-33d1-41c7-9af8-150cc92e967f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T05:37:56.120Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix optimizer cycle errors from extending max_iterations and double-counting failures"
+  }
+}

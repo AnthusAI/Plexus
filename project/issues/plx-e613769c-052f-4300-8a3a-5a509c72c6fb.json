@@ -46,10 +46,46 @@
       "author": "ryan",
       "text": "Ran post-fix feedback evaluation for Medication Review: Prescriber (eval 7ccfb878-ef0c-43f7-ac4d-5ef326951a10) and verified invalidated feedback IDs are excluded (intersection count 0 against the 5 invalidated IDs).",
       "created_at": "2026-04-22T19:28:30.614558Z"
+    },
+    {
+      "id": "e0e06ac6-c39d-41fc-a245-11fa0a828ffa",
+      "author": "ryan",
+      "text": "User approved invalidating contradiction-driven Prescriber feedback items. Proceeding with the contradiction group while leaving likely real score-bug items in place for optimizer follow-up.",
+      "created_at": "2026-04-22T19:38:52.381328Z"
+    },
+    {
+      "id": "8b00e405-d4dc-4422-869b-6cfb061399f4",
+      "author": "ryan",
+      "text": "Starting Prescriber optimizer to 20 cycles after contradiction cleanup. Will also update the canonical optimizer skill with the conservative contradiction-invalidation workflow used here, then begin the same process on the next Medication Review score.",
+      "created_at": "2026-04-22T19:56:25.059226Z"
+    },
+    {
+      "id": "fbd868dd-5cb7-43eb-8ca0-d51fd0ab3916",
+      "author": "ryan",
+      "text": "Beginning the same contradictions-report plus fresh-evaluation triage for Medication Review: Dosage, since it uses the same threshold-style SRX rubric (two or more misses => No; no more than one miss => Yes).",
+      "created_at": "2026-04-22T19:58:19.950691Z"
+    },
+    {
+      "id": "d5d74120-8aee-4a00-ad75-8c60b4d9d0ca",
+      "author": "ryan",
+      "text": "Prescriber optimizer relaunched successfully via direct CLI using /Users/ryan/miniconda3/bin/python after earlier SCORE_NOT_FOUND failure on explicit start_version pull. New procedure: 9029e3b7-1890-4e38-8909-330337b3803f. Also started Medication Review: Dosage contradiction triage with fresh 180-day contradictions report + eval 30533ae5-eae0-4c96-8917-ebe457d2b6e5. Clean initial invalidation shortlist is currently: a2032807-0f2a-431a-878e-116af9c82bfe, a3a6640c-f1fe-46ae-ad17-1caa662ddf42, 8b777a9b-29ff-448a-ae57-b19978ee30c5, 22ce6344-d998-43a3-90f4-0030f24f5f47. Important separate finding: Dosage champion still has parse_from_start=true and guidelines missing, and several false negatives appear to be parser/config artifacts rather than contradictory labels.",
+      "created_at": "2026-04-22T20:10:47.354850Z"
+    },
+    {
+      "id": "ef5ddfdd-6cc8-4081-8127-c0742341c1b6",
+      "author": "ryan",
+      "text": "Continuing with Dosage before launching its optimizer. Rationale: post-invalidation contradiction count improved (14 -> 9), but the live Dosage champion still shows a real config problem (parse_from_start=true and missing published guidelines on the champion version), so optimization would currently learn from parser/config noise. Next step is to fix Dosage code+guidelines together, verify via evaluation, then start the Dosage optimizer on the cleaned signal.",
+      "created_at": "2026-04-22T20:51:47.395126Z"
+    },
+    {
+      "id": "6c7d253c-39ce-4833-851b-cf9d1ee483c8",
+      "author": "ryan",
+      "text": "Prescriber optimizer startup bug fixed via CLI score-pull resolver patch. Current clean run: procedure 75231fc3-823a-4654-8192-ecc016f6b8d1. Also updated RCA handling to avoid false missing-context clustering and documented conservative contradiction-driven invalidation workflow in skills/plexus-score-optimizer/SKILL.md.",
+      "created_at": "2026-04-22T21:02:04.272476Z"
     }
   ],
   "created_at": "2026-04-22T14:30:09.933567Z",
-  "updated_at": "2026-04-22T19:28:30.614558Z",
+  "updated_at": "2026-04-22T21:02:04.272476Z",
   "closed_at": null,
   "custom": {}
 }
