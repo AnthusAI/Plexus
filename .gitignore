@@ -48,3 +48,4 @@ project/.cache/
 optimizer_*.log
 optimizer_*.txt
 prescriber_policy_email.md
+project-local/

@@ -167,6 +167,15 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
         Step 1 — Extraction: "List every instance of X in this transcript."
         Step 2 — Classification: "Given these instances, was the requirement met?"
       This lets each step focus on one thing and produces more reliable evidence extraction.
+      IMPORTANT NODE CONTRACT:
+        - Use `class: Extractor` for Step 1.
+        - Map `output.extracted_text` into a named state field such as
+          `dosage_evidence` or `prescriber_evidence`.
+        - Then have the downstream classifier consume that mapped field.
+        - Do NOT create pseudo-extractor classifiers like:
+            class: Classifier
+            valid_classes: ['Extracted']
+          A `Classifier` is for closed-set labels only, not multiline evidence output.
 
     C1d. Split into parallel per-criterion calls (for multi-criteria scores):
       If a score checks 3–5 independent criteria (e.g., branding = school name +

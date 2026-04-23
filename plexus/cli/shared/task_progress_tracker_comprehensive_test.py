@@ -30,6 +30,7 @@ from plexus.cli.shared.stage_configurations import (
 )
 from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 class TestStageConfigurationSystem:
@@ -1245,3 +1246,43 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_async_update_api_task_progress_uses_long_running_retry_policy():
+    tracker = object.__new__(TaskProgressTracker)
+
+    client = Mock()
+    api_task = Mock(spec=Task)
+    api_task.id = "task-1"
+    api_task.accountId = "acct-1"
+    api_task.type = "Procedure"
+    api_task.status = "RUNNING"
+    api_task.target = "procedure/proc-1"
+    api_task.command = "procedure proc-1"
+    api_task._client = client
+
+    evaluation_stage = Mock()
+    evaluation_stage.id = "stage-1"
+    evaluation_stage.taskId = "task-1"
+    evaluation_stage.order = 2
+    evaluation_stage.name = "Evaluation"
+    evaluation_stage.status = "RUNNING"
+    api_task.get_stages.return_value = [evaluation_stage]
+
+    tracker.api_task = api_task
+    tracker._current_stage_name = "Evaluation"
+
+    stage_configs = {
+        "Evaluation": {
+            "status": "RUNNING",
+            "statusMessage": "Evaluating",
+            "startedAt": "2026-04-23T12:00:00+00:00",
+            "completedAt": None,
+            "totalItems": 10,
+            "processedItems": 4,
+        }
+    }
+
+    tracker._async_update_api_task_progress(stage_configs, "2026-04-23T13:00:00+00:00")
+
+    assert client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME

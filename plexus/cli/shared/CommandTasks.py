@@ -24,6 +24,7 @@ from .universal_code import (
     extract_score_from_command
 )
 from .command_output import CommandOutputManager, set_output_manager
+from .task_output_storage import persist_task_output_artifact
 
 # Load environment variables from .env file
 load_dotenv()
@@ -505,7 +506,14 @@ task_info:
                             }
                             
                             if universal_code_yaml:
-                                update_data['output'] = universal_code_yaml
+                                compact_output, attached_files, _attachment_key = persist_task_output_artifact(
+                                    task_id=task.id,
+                                    output_payload=universal_code_yaml,
+                                    format_type='yaml',
+                                    existing_attached_files=getattr(task, 'attachedFiles', None) or attached_files,
+                                    status='completed',
+                                )
+                                update_data['output'] = compact_output
                             
                             if attached_files:
                                 update_data['attachedFiles'] = attached_files
