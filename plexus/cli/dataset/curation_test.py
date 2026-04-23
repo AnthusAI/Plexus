@@ -126,6 +126,34 @@ def test_collect_qualifying_feedback_items_excludes_invalid():
     assert [item.id for item in items] == ["valid"]
 
 
+def test_collect_qualifying_feedback_items_excludes_shadow_invalid_ids():
+    client = MagicMock()
+    client.execute = MagicMock(
+        return_value={
+            "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt": {
+                "items": [
+                    _make_feedback_item_dict("keep", edited_at="2026-03-03T00:00:00Z", is_invalid=False),
+                    _make_feedback_item_dict("shadow", edited_at="2026-03-02T00:00:00Z", is_invalid=False),
+                ],
+                "nextToken": None,
+            }
+        }
+    )
+
+    with patch("plexus.cli.dataset.curation.FeedbackItem.from_dict", side_effect=_to_feedback_model):
+        items = collect_qualifying_feedback_items(
+            client=client,
+            account_id="account-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            max_items=10,
+            days=None,
+            excluded_feedback_item_ids=["shadow"],
+        )
+
+    assert [item.id for item in items] == ["keep"]
+
+
 def test_collect_qualifying_feedback_items_rejects_non_positive_max():
     with pytest.raises(ValueError, match="--max-items must be greater than 0"):
         collect_qualifying_feedback_items(
@@ -360,6 +388,7 @@ def test_ordered_unique_feedback_ids_preserves_input_order():
         "classes": ["Yes", "No"],
         "source": "graph[-1].LogicalClassifier.code",
         "score_version_id": "sv-explicit",
+        "optimizer_shadow_invalid_feedback_item_ids": ["fb-2", "fb-1"],
     },
 )
 @patch("plexus.cli.dataset.curation.collect_qualifying_feedback_items")
@@ -438,6 +467,7 @@ def test_build_associated_dataset_from_feedback_window_persists_stats(
         score_id="score-1",
         score_version_id="sv-explicit",
     )
+    assert mock_collect.call_args.kwargs["excluded_feedback_item_ids"] == ["fb-2", "fb-1"]
     stats = mock_create_datasource_version.call_args.kwargs["dataset_stats"]
     assert stats["row_count"] == 2
     assert stats["label_distribution"] == {"No": 1, "Yes": 1}
@@ -445,6 +475,11 @@ def test_build_associated_dataset_from_feedback_window_persists_stats(
     assert stats["class_resolution_source"] == "graph[-1].LogicalClassifier.code"
     assert stats["observed_label_set"] == ["No", "Yes"]
     assert stats["class_label_overlap"] == ["No", "Yes"]
+    assert stats["optimizer_shadow_invalid_feedback_item_ids"] == ["fb-2", "fb-1"]
+    assert stats["score_version_id_used"] == "sv-explicit"
+    assert result["optimizer_shadow_invalid_feedback_item_ids"] == ["fb-2", "fb-1"]
+    assert result["score_version_id_used"] == "sv-explicit"
+    assert result["feedback_target_hash"]
 
 
 @patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)

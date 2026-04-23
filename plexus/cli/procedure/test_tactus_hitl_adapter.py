@@ -7,6 +7,7 @@ from tactus.core.exceptions import ProcedureWaitingForHuman
 from tactus.protocols.models import HITLRequest
 
 from plexus.cli.procedure.tactus_adapters.hitl import PlexusHITLAdapter
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 def _make_request(**overrides):
@@ -67,6 +68,7 @@ def test_request_interaction_creates_pending_message_and_sets_waiting_status():
     assert metadata_obj["control"]["request_type"] == "approval"
     assert metadata_obj["control"]["procedure_id"] == "procedure-1"
     assert metadata_obj["control"]["request_id"]
+    assert client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
     storage.update_procedure_status.assert_called_once_with(
         "procedure-1",
@@ -170,3 +172,21 @@ def test_request_interaction_reuses_existing_unresolved_pending_message():
     for call_args, _ in client.execute.call_args_list:
         if call_args:
             assert "createChatMessage" not in call_args[0]
+
+
+def test_cancel_pending_request_uses_long_running_retry_policy():
+    client = Mock()
+    client.execute.return_value = {"updateChatMessage": {"id": "pending-msg-1", "humanInteraction": "CANCELLED"}}
+
+    storage = Mock()
+    storage.load_procedure_metadata.return_value = SimpleNamespace(waiting_on_message_id="pending-msg-1")
+    adapter = PlexusHITLAdapter(
+        client=client,
+        procedure_id="procedure-1",
+        chat_recorder=Mock(session_id="session-1"),
+        storage_adapter=storage,
+    )
+
+    adapter.cancel_pending_request("procedure-1", "pending-msg-1")
+
+    assert client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME

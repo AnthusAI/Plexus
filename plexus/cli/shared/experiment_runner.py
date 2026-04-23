@@ -14,6 +14,7 @@ import click
 
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
+from plexus.cli.shared.task_output_storage import persist_task_output_artifact
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedure
 from plexus.dashboard.api.models.task import Task
@@ -741,6 +742,13 @@ async def run_experiment_with_task_tracking(
 
         # Complete or update the task
         if task_ref and mapped_task_status != "FAILED":
+            compact_output, attached_files, _attachment_key = persist_task_output_artifact(
+                task_id=task_ref.id,
+                output_payload=experiment_result,
+                format_type="json",
+                existing_attached_files=getattr(task_ref, "attachedFiles", None),
+                status=mapped_task_status.lower(),
+            )
             update_data = {
                 "accountId": task_ref.accountId,
                 "type": task_ref.type,
@@ -748,7 +756,8 @@ async def run_experiment_with_task_tracking(
                 "target": task_ref.target,
                 "command": task_ref.command,
                 "updatedAt": datetime.now(timezone.utc).isoformat(),
-                "output": json.dumps(experiment_result, default=str),
+                "output": compact_output,
+                "attachedFiles": attached_files,
             }
             if mapped_task_status in {"COMPLETED", "FAILED"}:
                 update_data["completedAt"] = datetime.now(timezone.utc).isoformat()

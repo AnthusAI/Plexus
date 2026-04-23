@@ -5,7 +5,10 @@ import time
 import logging
 import os
 import json
-from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import (
+    LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    PlexusDashboardClient,
+)
 from plexus.dashboard.api.models.task import Task
 import threading
 import traceback
@@ -774,7 +777,11 @@ class TaskProgressTracker:
             }, indent=2))
             
             # Execute the batched mutation
-            result = self.api_task._client.execute(mutation, variables)
+            result = self.api_task._client.execute(
+                mutation,
+                variables,
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
         except Exception as e:
             logging.error(json.dumps({
