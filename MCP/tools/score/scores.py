@@ -9,6 +9,10 @@ import logging
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
+from plexus.cli.shared.optimizer_shadow_invalidation import (
+    extract_shadow_invalid_feedback_item_ids_from_yaml_text,
+    normalize_shadow_invalid_field_in_yaml_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1809,6 +1813,33 @@ def register_score_tools(mcp: FastMCP):
             if not client:
                 return "Error: Could not create dashboard client."
 
+            version_query = """
+            query GetScoreVersionForChampionGuard($id: ID!) {
+                getScoreVersion(id: $id) {
+                    id
+                    configuration
+                }
+            }
+            """
+            version_result = client.execute(version_query, {"id": version_id})
+            version_data = version_result.get("getScoreVersion") or {}
+            shadow_invalid_feedback_item_ids = extract_shadow_invalid_feedback_item_ids_from_yaml_text(
+                version_data.get("configuration") or ""
+            )
+            if shadow_invalid_feedback_item_ids:
+                return {
+                    "success": False,
+                    "error": "SHADOW_INVALIDATION_PRESENT",
+                    "message": (
+                        "Cannot promote this version to champion because it still contains "
+                        "optimizer_shadow_invalid_feedback_item_ids. Remove that field in a cleanup "
+                        "version before promoting."
+                    ),
+                    "scoreId": score_id,
+                    "versionId": version_id,
+                    "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+                }
+
             mutation = """
             mutation UpdateScore($input: UpdateScoreInput!) {
                 updateScore(input: $input) {
@@ -1988,6 +2019,9 @@ async def _create_version_from_code_with_parent(
                     "error": "INVALID_YAML",
                     "message": f"Invalid YAML code content: {str(e)}"
                 }
+            code_content, _normalized_shadow_invalid_feedback_item_ids = normalize_shadow_invalid_field_in_yaml_text(
+                code_content
+            )
 
         # Get current content from parent version for comparison
         current_yaml = ''
@@ -2008,6 +2042,9 @@ async def _create_version_from_code_with_parent(
                 current_version_data = version_result['getScoreVersion']
                 current_yaml = (current_version_data.get('configuration') or '').strip()
                 current_guidelines = (current_version_data.get('guidelines') or '').strip()
+                if current_yaml:
+                    current_yaml, _ = normalize_shadow_invalid_field_in_yaml_text(current_yaml)
+                    current_yaml = current_yaml.strip()
         
         # Compare both code and guidelines (ignoring whitespace differences)
         code_unchanged = current_yaml == (code_content or '').strip()

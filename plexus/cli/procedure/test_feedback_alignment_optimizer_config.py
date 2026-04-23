@@ -107,3 +107,24 @@ def test_optimizer_yaml_avoids_double_counting_after_cycle_record_and_formats_cy
     assert 'Analyze Cycle %d and produce exactly four sections in this order:\\n"' in code
     assert '.. "- No long paragraphs anywhere\\n",' in code
     assert "cycle))" in code
+
+
+def test_optimizer_yaml_never_promotes_champion_and_reports_manual_follow_up():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "plexus_score_set_champion" not in code
+    assert "Promoting winning version" not in code
+    assert "Champion promoted:" not in code
+    assert "Manual promotion is required; the optimizer never promotes champion automatically." in code
+    assert "Winning version remains the current champion" in code
+    assert "No promotion was performed." in code
+    assert "winning_version_id = last_accepted_version_id" in code
+
+
+def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion." in code
+    assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code

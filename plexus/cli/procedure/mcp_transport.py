@@ -17,6 +17,8 @@ from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+
 logger = logging.getLogger(__name__)
 
 
@@ -232,17 +234,29 @@ def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -
     for stage in stages:
         order = stage.get("order", 0)
         if order < target_order and stage.get("status") != "COMPLETED":
-            client.execute(update_mutation, {
-                "input": {"id": stage["id"], "status": "COMPLETED", "completedAt": now}
-            })
+            client.execute(
+                update_mutation,
+                {
+                    "input": {"id": stage["id"], "status": "COMPLETED", "completedAt": now}
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
         elif order == target_order and stage.get("status") != "RUNNING":
-            client.execute(update_mutation, {
-                "input": {"id": stage["id"], "status": "RUNNING", "startedAt": now}
-            })
+            client.execute(
+                update_mutation,
+                {
+                    "input": {"id": stage["id"], "status": "RUNNING", "startedAt": now}
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
         elif order > target_order and stage.get("status") != "PENDING":
-            client.execute(update_mutation, {
-                "input": {"id": stage["id"], "status": "PENDING", "startedAt": None, "completedAt": None}
-            })
+            client.execute(
+                update_mutation,
+                {
+                    "input": {"id": stage["id"], "status": "PENDING", "startedAt": None, "completedAt": None}
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
 
 
 def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:
@@ -285,13 +299,17 @@ def _update_stage_progress(client: Any, task_id: str, current: int, total: int) 
         }
     }
     """
-    client.execute(update_mutation, {
-        "input": {
-            "id": running["id"],
-            "processedItems": current,
-            "totalItems": total
-        }
-    })
+    client.execute(
+        update_mutation,
+        {
+            "input": {
+                "id": running["id"],
+                "processedItems": current,
+                "totalItems": total
+            }
+        },
+        retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    )
     logger.info("Updated stage %s progress: %d/%d", running.get("name"), current, total)
 
 

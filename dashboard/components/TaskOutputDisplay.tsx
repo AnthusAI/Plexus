@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Paperclip, Copy, Eye, Download } from 'lucide-react';
 import { CardButton } from '@/components/CardButton';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,39 @@ export interface TaskOutputDisplayProps {
   className?: string;
 }
 
+interface CompactedTaskOutputEnvelope {
+  status?: string;
+  output_compacted?: boolean;
+  preview?: unknown;
+  output_attachment?: string;
+  error?: string;
+}
+
+function parseCompactedTaskOutputEnvelope(output?: string): CompactedTaskOutputEnvelope | null {
+  if (!output || typeof output !== 'string') {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(output) as CompactedTaskOutputEnvelope;
+    if (parsed && parsed.output_compacted === true && typeof parsed.output_attachment === 'string') {
+      return parsed;
+    }
+  } catch (_error) {
+    return null;
+  }
+  return null;
+}
+
+function formatTaskOutputPreview(preview: unknown): string {
+  if (typeof preview === 'string') {
+    return preview;
+  }
+  if (preview && typeof preview === 'object') {
+    return JSON.stringify(preview, null, 2);
+  }
+  return '';
+}
+
 /**
  * TaskOutputDisplay Component
  * 
@@ -43,9 +76,13 @@ export const TaskOutputDisplay: React.FC<TaskOutputDisplayProps> = ({
   variant = 'detail',
   className = ''
 }) => {
+  const compactedOutput = useMemo(() => parseCompactedTaskOutputEnvelope(output), [output]);
   
   // stderr is expanded by default if it has content, collapsed otherwise
   const [showStderr, setShowStderr] = useState(!!stderr);
+  const [loadedTaskOutput, setLoadedTaskOutput] = useState<string | null>(null);
+  const [taskOutputLoadError, setTaskOutputLoadError] = useState<string | null>(null);
+  const [isLoadingTaskOutput, setIsLoadingTaskOutput] = useState(false);
   
   // File viewing state
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
@@ -54,6 +91,48 @@ export const TaskOutputDisplay: React.FC<TaskOutputDisplayProps> = ({
   const [selectedFileIsImage, setSelectedFileIsImage] = useState<boolean | null>(null);
   const [selectedFileIsHtml, setSelectedFileIsHtml] = useState<boolean | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
+
+  useEffect(() => {
+    const attachmentPath = compactedOutput?.output_attachment;
+    if (!attachmentPath) {
+      setLoadedTaskOutput(null);
+      setTaskOutputLoadError(null);
+      setIsLoadingTaskOutput(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTaskOutput = async () => {
+      setIsLoadingTaskOutput(true);
+      setTaskOutputLoadError(null);
+      try {
+        const downloadResult = await downloadData({
+          path: attachmentPath,
+          options: { bucket: 'taskAttachments' },
+        }).result;
+        const text = await downloadResult.body.text();
+        if (!cancelled) {
+          setLoadedTaskOutput(text);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setTaskOutputLoadError(
+            error instanceof Error ? error.message : 'Failed to load task output attachment.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingTaskOutput(false);
+        }
+      }
+    };
+
+    void loadTaskOutput();
+    return () => {
+      cancelled = true;
+    };
+  }, [compactedOutput?.output_attachment]);
 
   // Don't render anything in grid mode
   if (variant === 'grid') {
@@ -76,14 +155,17 @@ export const TaskOutputDisplay: React.FC<TaskOutputDisplayProps> = ({
   };
 
   const handleCopyUniversalCode = async () => {
-    if (!output) return;
+    const copyText = loadedTaskOutput
+      ?? (compactedOutput ? formatTaskOutputPreview(compactedOutput.preview) : output)
+      ?? '';
+    if (!copyText) return;
     
     try {
-      await navigator.clipboard.writeText(output);
-      toast.success("Universal Code copied to clipboard");
+      await navigator.clipboard.writeText(copyText);
+      toast.success("Task output copied to clipboard");
     } catch (error) {
-      console.error('Failed to copy Universal Code:', error);
-      toast.error("Failed to copy Universal Code to clipboard");
+      console.error('Failed to copy task output:', error);
+      toast.error("Failed to copy task output to clipboard");
     }
   };
 
@@ -234,10 +316,10 @@ export const TaskOutputDisplay: React.FC<TaskOutputDisplayProps> = ({
   const renderUniversalCode = () => {
     if (!output) return null;
 
-    // Add task context to the Universal Code
-    let displayOutput = output;
+    let displayOutput = loadedTaskOutput
+      ?? (compactedOutput ? formatTaskOutputPreview(compactedOutput.preview) : output);
     
-    if (command || taskType) {
+    if (!compactedOutput && (command || taskType)) {
       const contextHeader = `# ====================================
 # Task Output Context
 # ====================================
@@ -254,19 +336,31 @@ ${command ? `# Command: ${command}` : ''}
     return (
       <div className="my-3">
         <div className="flex flex-row justify-between items-center mb-3">
-          <h4 className="text-base font-medium">Universal Code (YAML)</h4>
+          <h4 className="text-base font-medium">Task Output</h4>
           <CardButton 
             icon={Copy} 
             onClick={handleCopyUniversalCode}
             label="Copy"
-            aria-label="Copy Universal Code to clipboard"
+            aria-label="Copy task output to clipboard"
           />
         </div>
+        {compactedOutput && (
+          <div className="mb-2 rounded bg-muted/50 px-2 py-2 text-xs text-muted-foreground">
+            <div>Attachment: {compactedOutput.output_attachment}</div>
+            {compactedOutput.status && <div>Status: {compactedOutput.status}</div>}
+            {compactedOutput.error && <div>Error: {compactedOutput.error}</div>}
+          </div>
+        )}
         <div className="w-full overflow-hidden">
           <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[400px] px-2 py-2 max-w-full rounded">
-            {displayOutput}
+            {isLoadingTaskOutput ? 'Loading task output attachment...' : displayOutput}
           </pre>
         </div>
+        {taskOutputLoadError && (
+          <p className="mt-2 text-xs text-red-500">
+            Failed to load task output attachment: {taskOutputLoadError}
+          </p>
+        )}
       </div>
     );
   };
