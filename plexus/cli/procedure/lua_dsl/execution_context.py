@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+
 
 class GraphQLServiceAdapter:
     """
@@ -36,7 +38,11 @@ class GraphQLServiceAdapter:
 
     def mutate(self, mutation: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute a GraphQL mutation."""
-        return self.client.execute(mutation, variables)
+        return self.client.execute(
+            mutation,
+            variables,
+            retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+        )
 
 
 @dataclass
