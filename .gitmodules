@@ -1,0 +1,3 @@
+[submodule ".shared-hooks"]
+	path = .shared-hooks
+	url = https://github.com/AnthusAI/git-hooks.git

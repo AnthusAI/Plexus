@@ -187,10 +187,10 @@ def info(scorecard: str, score: str):
 # Add the same command to the score group as an alias
 score.add_command(info)
 
-@scores.command()
+@scores.command(name="list")
 @click.option('--scorecard', required=True, help='Scorecard to list scores for (accepts ID, name, key, or external ID)')
 @click.option('--limit', default=50, help='Maximum number of scores to return')
-def list(scorecard: str, limit: int):
+def list_scores(scorecard: str, limit: int):
     """List scores in a scorecard with rich formatting."""
     client = create_client()
     
@@ -255,7 +255,7 @@ def list(scorecard: str, limit: int):
         click.echo(f"Error listing scores: {e}")
 
 # Add an alias for the list command to the score group
-score.add_command(list)
+score.add_command(list_scores, name="list")
 
 
 @score.command(name="dataset-curate")
@@ -1417,6 +1417,58 @@ def push(scorecard: str, score: str, note: str):
 
 # Add the push command to the score group as an alias
 score.add_command(push)
+
+
+@score.command(name="test")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (ID, name, key, or external ID)')
+@click.option('--version', default=None, help='Score version ID to test (defaults to champion)')
+@click.option('--samples', type=int, default=3, show_default=True, help='Number of sample items to test')
+@click.option('--item', 'items', multiple=True, help='Item identifier to test (repeatable; overrides --samples count)')
+@click.option('--items', 'items_csv', default=None, help='Comma-separated item identifiers (overrides --samples count)')
+@click.option('--days', type=int, default=90, show_default=True, help='Lookback window for auto-sampled items')
+def test(scorecard: str, score: str, version: Optional[str], samples: int, items: tuple[str, ...], items_csv: Optional[str], days: int):
+    """Run a mechanical score-version test on sampled items.
+
+    This validates that prediction execution works mechanically for the target version.
+    It does not evaluate business correctness of the returned class.
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.score_version_test import run_score_version_test_sync
+
+    item_identifiers = [*items]
+    if items_csv:
+        item_identifiers.extend([v.strip() for v in items_csv.split(",") if v.strip()])
+
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    try:
+        result = run_score_version_test_sync(
+            client=client,
+            scorecard_identifier=scorecard,
+            score_identifier=score,
+            version=version,
+            samples=samples,
+            item_identifiers=item_identifiers or None,
+            days=days,
+        )
+    except Exception as exc:
+        result = {
+            "success": False,
+            "passed": False,
+            "failure_code": "tool_error",
+            "message": str(exc),
+            "predictions": [],
+            "failures": [{"error": str(exc)}],
+        }
+
+    click.echo(json.dumps(result, indent=2, default=str))
+
+
+scores.add_command(test)
 
 # Define retry decorator for API calls
 @retry(

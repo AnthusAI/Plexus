@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 def test_resolve_account_id_prefers_context():
@@ -728,3 +729,23 @@ async def test_end_session_supports_tactus_signature_with_session_id():
     mutation_call = client.execute.call_args_list[-1]
     assert mutation_call.args[1]["input"]["id"] == "session-10"
     assert mutation_call.args[1]["input"]["status"] == "ERROR"
+
+
+@pytest.mark.asyncio
+async def test_record_message_uses_long_running_retry_policy():
+    client = Mock()
+    client.execute.return_value = {
+        "createChatMessage": {
+            "id": "msg-1",
+            "sequenceNumber": 1,
+            "createdAt": "2026-03-29T02:00:00.000Z",
+        }
+    }
+    recorder = ProcedureChatRecorder(client, "proc-write-1")
+    recorder.session_id = "session-1"
+    recorder.account_id = "acct-1"
+
+    message_id = await recorder.record_message("ASSISTANT", "hello world")
+
+    assert message_id == "msg-1"
+    assert client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME

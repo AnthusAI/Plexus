@@ -55,11 +55,16 @@ Error Handling:
 """
 
 import os
-from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING
+import random
+from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING, Union
 from dataclasses import dataclass
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
-from gql.transport.exceptions import TransportQueryError
+from gql.transport.exceptions import (
+    TransportClosed,
+    TransportQueryError,
+    TransportServerError,
+)
 from queue import Queue, Empty
 from threading import Thread, Event
 import time
@@ -80,6 +85,8 @@ gql_logger = logging.getLogger('gql')
 gql_logger.setLevel(logging.WARNING)
 gql_logger.propagate = False
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from .models.scoring_job import ScoringJob
     from .models.batch_job import BatchJob
@@ -95,6 +102,66 @@ class ClientContext:
     scorecard_id: Optional[str] = None
     score_name: Optional[str] = None
     score_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class GraphQLRetryPolicy:
+    name: str
+    max_attempts: int
+    max_elapsed_seconds: float
+    initial_delay_seconds: float
+    max_delay_seconds: float
+    backoff_multiplier: float = 2.0
+    jitter_ratio: float = 0.2
+
+
+DEFAULT_GRAPHQL_RETRY_POLICY_NAME = "default_graphql"
+LONG_RUNNING_WRITE_RETRY_POLICY_NAME = "long_running_write"
+
+DEFAULT_GRAPHQL_RETRY_POLICY = GraphQLRetryPolicy(
+    name=DEFAULT_GRAPHQL_RETRY_POLICY_NAME,
+    max_attempts=6,
+    max_elapsed_seconds=30.0,
+    initial_delay_seconds=0.5,
+    max_delay_seconds=8.0,
+)
+
+LONG_RUNNING_WRITE_RETRY_POLICY = GraphQLRetryPolicy(
+    name=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    max_attempts=120,
+    max_elapsed_seconds=3600.0,
+    initial_delay_seconds=1.0,
+    max_delay_seconds=60.0,
+)
+
+_GRAPHQL_RETRY_POLICIES = {
+    DEFAULT_GRAPHQL_RETRY_POLICY_NAME: DEFAULT_GRAPHQL_RETRY_POLICY,
+    LONG_RUNNING_WRITE_RETRY_POLICY_NAME: LONG_RUNNING_WRITE_RETRY_POLICY,
+}
+
+_RETRYABLE_QUERY_ERROR_TYPES = {
+    "DynamoDB:ThrottlingException",
+    "ThrottlingException",
+    "TooManyRequestsException",
+}
+
+_RETRYABLE_MESSAGE_SNIPPETS = (
+    "throughput exceeds the current capacity",
+    "throttlingexception",
+    "rate exceeded",
+    "too many requests",
+    "temporarily unavailable",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "timed out",
+    "timeout",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "internal server error",
+    "remote end closed connection",
+)
 
 class _BaseAPIClient:
     def __init__(
@@ -225,30 +292,123 @@ class _BaseAPIClient:
     def __del__(self):
         self.flush()
 
-    def execute(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        try:
-            transport = RequestsHTTPTransport(
-                url=self.api_url,
-                headers={
-                    'x-api-key': self.api_key,
-                    'Content-Type': 'application/json',
-                },
-                verify=True,
-                retries=3,
-            )
-            client = Client(
-                transport=transport,
-                fetch_schema_from_transport=self._fetch_schema
-            )
-            with client as session:
-                return session.execute(gql(query), variable_values=variables)
-        except TransportQueryError as e:
-            # The error object contains a list of error dictionaries
-            if hasattr(e, 'errors') and e.errors:
-                error_message = e.errors[0]['message']
-            else:
-                error_message = str(e)
-            raise Exception(f"GraphQL query failed: {error_message}")
+    @staticmethod
+    def _extract_error_details(exc: Exception) -> Tuple[str, Optional[str]]:
+        error_message = str(exc)
+        error_type = None
+
+        if isinstance(exc, TransportQueryError) and hasattr(exc, 'errors') and exc.errors:
+            first_error = exc.errors[0] or {}
+            error_message = first_error.get('message') or error_message
+            error_type = first_error.get('errorType')
+
+        return error_message, error_type
+
+    @classmethod
+    def _is_retryable_graphql_error(cls, exc: Exception) -> bool:
+        error_message, error_type = cls._extract_error_details(exc)
+        normalized_message = (error_message or "").lower()
+
+        if error_type in _RETRYABLE_QUERY_ERROR_TYPES:
+            return True
+
+        if any(snippet in normalized_message for snippet in _RETRYABLE_MESSAGE_SNIPPETS):
+            return True
+
+        if any(status_code in normalized_message for status_code in ("429", "500", "502", "503", "504")):
+            return True
+
+        return isinstance(exc, (TransportServerError, TransportClosed))
+
+    @staticmethod
+    def _resolve_retry_policy(
+        retry_policy: Optional[Union[str, GraphQLRetryPolicy]]
+    ) -> GraphQLRetryPolicy:
+        if retry_policy is None:
+            return DEFAULT_GRAPHQL_RETRY_POLICY
+        if isinstance(retry_policy, GraphQLRetryPolicy):
+            return retry_policy
+        if retry_policy in _GRAPHQL_RETRY_POLICIES:
+            return _GRAPHQL_RETRY_POLICIES[retry_policy]
+        raise ValueError(f"Unknown GraphQL retry policy: {retry_policy}")
+
+    def execute(
+        self,
+        query: str,
+        variables: Optional[Dict[str, Any]] = None,
+        retry_policy: Optional[Union[str, GraphQLRetryPolicy]] = None,
+    ) -> Dict[str, Any]:
+        policy = self._resolve_retry_policy(retry_policy)
+        attempt = 0
+        delay_seconds = policy.initial_delay_seconds
+        started_at = time.monotonic()
+        last_error: Optional[Exception] = None
+
+        while attempt < policy.max_attempts:
+            try:
+                transport = RequestsHTTPTransport(
+                    url=self.api_url,
+                    headers={
+                        'x-api-key': self.api_key,
+                        'Content-Type': 'application/json',
+                    },
+                    verify=True,
+                    retries=3,
+                )
+                client = Client(
+                    transport=transport,
+                    fetch_schema_from_transport=self._fetch_schema
+                )
+                with client as session:
+                    return session.execute(gql(query), variable_values=variables)
+            except Exception as exc:
+                last_error = exc
+                error_message, _error_type = self._extract_error_details(exc)
+                retryable = self._is_retryable_graphql_error(exc)
+                elapsed_seconds = time.monotonic() - started_at
+                attempts_used = attempt + 1
+
+                if not retryable:
+                    raise Exception(f"GraphQL query failed: {error_message}") from exc
+
+                exhausted_attempts = attempts_used >= policy.max_attempts
+                exhausted_time = elapsed_seconds >= policy.max_elapsed_seconds
+                if exhausted_attempts or exhausted_time:
+                    raise Exception(
+                        f"GraphQL query failed after {attempts_used} attempts over "
+                        f"{elapsed_seconds:.1f}s: {error_message}"
+                    ) from exc
+
+                jitter = random.uniform(0.0, delay_seconds * policy.jitter_ratio)
+                sleep_seconds = min(
+                    policy.max_delay_seconds,
+                    delay_seconds + jitter,
+                )
+                logger.warning(
+                    "Retryable GraphQL error under policy '%s' (attempt %d/%d, elapsed %.1fs): %s. "
+                    "Retrying in %.2fs.",
+                    policy.name,
+                    attempts_used,
+                    policy.max_attempts,
+                    elapsed_seconds,
+                    error_message,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+                attempt += 1
+                delay_seconds = min(
+                    policy.max_delay_seconds,
+                    delay_seconds * policy.backoff_multiplier,
+                )
+
+        if last_error is not None:
+            error_message, _error_type = self._extract_error_details(last_error)
+            elapsed_seconds = time.monotonic() - started_at
+            raise Exception(
+                f"GraphQL query failed after {policy.max_attempts} attempts over "
+                f"{elapsed_seconds:.1f}s: {error_message}"
+            ) from last_error
+        raise Exception("GraphQL query failed before execution started")
 
     def _resolve_account_id(self) -> str:
         """Get account ID, resolving from key if needed"""
