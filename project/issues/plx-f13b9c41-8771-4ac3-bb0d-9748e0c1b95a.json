@@ -1,0 +1,31 @@
+{
+  "id": "plx-f13b9c41-8771-4ac3-bb0d-9748e0c1b95a",
+  "title": "Realign split Agent Misrepresentation scores to Information Accuracy rubric",
+  "description": "Realign the split Agent Misrepresentation score set to the Information Accuracy rubric rows from the CSV, update the composite dependencies and explanation order, and verify predictions on the revised phrase-level scores.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "74f72c3c-1b6c-4d56-a23b-493012a6ec2b",
+      "author": "ryan",
+      "text": "Starting CSV-aligned taxonomy realignment. Planned sequence:\n1. Rename or repurpose the existing split scores in place.\n2. Create the missing High-Pressure Tactics phrase score.\n3. Update the composite dependency list and explanation order.\n4. Run targeted direct predictions for the revised phrase scores and the composite.",
+      "created_at": "2026-04-21T20:31:34.531981Z"
+    },
+    {
+      "id": "be203343-1ef4-49fe-bffc-ea8ce6927d8b",
+      "author": "ryan",
+      "text": "Implemented the Information Accuracy realignment in Plexus. Renamed/repurposed the six existing split scores, created Agent Misrepresentation: High-Pressure Tactics, and rewired Agent Misrepresentation (Composite) to the seven CSV-aligned phrase names in rubric order. Direct no-cache predictions now execute successfully for all seven phrase scores using explicit version IDs. Validation highlights: item 308889128 returns a single Savings Promises failure; item 308639116 returns Copay Guarantees, False Carrier Claims, and False Service Claims failures under the new stricter rubric. Composite no-cache execution still fails because the dependency resolver requires championVersionId on these newly created scores; that known platform issue remains tracked separately in plx-b2349b.",
+      "created_at": "2026-04-21T20:45:56.974650Z"
+    }
+  ],
+  "created_at": "2026-04-21T20:31:20.947021Z",
+  "updated_at": "2026-04-21T20:45:56.998068Z",
+  "closed_at": "2026-04-21T20:45:56.998068Z",
+  "custom": {}
+}

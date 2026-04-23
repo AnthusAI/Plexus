@@ -92,6 +92,7 @@ class TestFeedbackEvaluation:
                         'itemId': f'item-{i}',
                         'initialAnswerValue': item.initialAnswerValue,
                         'finalAnswerValue': item.finalAnswerValue,
+                        'isInvalid': False,
                         'isMismatch': item.initialAnswerValue != item.finalAnswerValue,
                         'createdAt': datetime.now(timezone.utc).isoformat(),
                         'updatedAt': datetime.now(timezone.utc).isoformat()
@@ -115,6 +116,124 @@ class TestFeedbackEvaluation:
         
         assert len(items) == 10
         assert mock_api_client.execute.called
+
+    @pytest.mark.asyncio
+    async def test_fetch_feedback_items_excludes_invalid(self, mock_api_client):
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key"
+        )
+
+        now = datetime.now(timezone.utc).isoformat()
+        mock_api_client.execute = MagicMock(return_value={
+            'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt': {
+                'items': [
+                    {
+                        'id': 'valid-1',
+                        'accountId': 'test-account',
+                        'scorecardId': 'scorecard-123',
+                        'scoreId': 'score-456',
+                        'itemId': 'item-valid-1',
+                        'initialAnswerValue': 'No',
+                        'finalAnswerValue': 'Yes',
+                        'isInvalid': False,
+                        'createdAt': now,
+                        'updatedAt': now,
+                    },
+                    {
+                        'id': 'invalid-1',
+                        'accountId': 'test-account',
+                        'scorecardId': 'scorecard-123',
+                        'scoreId': 'score-456',
+                        'itemId': 'item-invalid-1',
+                        'initialAnswerValue': 'No',
+                        'finalAnswerValue': 'Yes',
+                        'isInvalid': True,
+                        'createdAt': now,
+                        'updatedAt': now,
+                    },
+                ],
+                'nextToken': None
+            }
+        })
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+        items = await evaluation._fetch_feedback_items(
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        assert len(items) == 1
+        assert items[0].id == "valid-1"
+
+    @pytest.mark.asyncio
+    async def test_fetch_feedback_items_excludes_shadow_invalid_ids(self, mock_api_client):
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key"
+        )
+
+        now = datetime.now(timezone.utc).isoformat()
+        mock_api_client.execute = MagicMock(return_value={
+            'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt': {
+                'items': [
+                    {
+                        'id': 'keep-me',
+                        'accountId': 'test-account',
+                        'scorecardId': 'scorecard-123',
+                        'scoreId': 'score-456',
+                        'itemId': 'item-keep-me',
+                        'initialAnswerValue': 'No',
+                        'finalAnswerValue': 'Yes',
+                        'isInvalid': False,
+                        'createdAt': now,
+                        'updatedAt': now,
+                    },
+                    {
+                        'id': 'shadow-invalid',
+                        'accountId': 'test-account',
+                        'scorecardId': 'scorecard-123',
+                        'scoreId': 'score-456',
+                        'itemId': 'item-shadow-invalid',
+                        'initialAnswerValue': 'No',
+                        'finalAnswerValue': 'Yes',
+                        'isInvalid': False,
+                        'createdAt': now,
+                        'updatedAt': now,
+                    },
+                ],
+                'nextToken': None
+            }
+        })
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+        items = await evaluation._fetch_feedback_items(
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            start_date=start_date,
+            end_date=end_date,
+            exclude_feedback_item_ids=["shadow-invalid"],
+        )
+
+        assert [item.id for item in items] == ["keep-me"]
     
     @pytest.mark.asyncio
     async def test_run_evaluation(self, mock_api_client, mock_feedback_items):

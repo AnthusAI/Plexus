@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c23c2910-c2f7-419c-b7e4-4711d4f3c6bd",
+  "issue_id": "plx-b49b2f0d-1c54-48b7-881c-e610fa7bc538",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:23:34.506Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run direct prediction checks against the new split Agent Misrepresentation scores and composite score in SelectQuote HCS Medium-Risk to verify they execute and return results on real items.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 2,
+    "status": "open",
+    "title": "Run prediction checks for split Agent Misrepresentation scores"
+  }
+}

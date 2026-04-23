@@ -222,6 +222,35 @@ def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_even
         logger.warning("Failed persisting inference costs to state: %s", exc)
 
 
+def _normalize_tactus_result(result: Any) -> Dict[str, Any]:
+    """Normalize runtime results so wrapped logical failures are surfaced as top-level failures."""
+    if not isinstance(result, dict):
+        return {"success": False, "error": "Tactus runtime returned non-dict result"}
+
+    top_level_success = bool(result.get("success"))
+    nested_result = result.get("result")
+    if not top_level_success or not isinstance(nested_result, dict):
+        return result
+
+    nested_success = nested_result.get("success")
+    nested_status = str(nested_result.get("status") or "").strip().lower()
+    nested_failed = nested_success is False or nested_status in {"error", "failed", "cancelled", "canceled"}
+    if not nested_failed:
+        return result
+
+    normalized = dict(result)
+    normalized["success"] = False
+    if not normalized.get("error"):
+        normalized["error"] = (
+            nested_result.get("error")
+            or nested_result.get("message")
+            or "Tactus runtime returned nested failure result"
+        )
+    if not normalized.get("message") and nested_result.get("message"):
+        normalized["message"] = nested_result.get("message")
+    return normalized
+
+
 def _complete_all_task_stages(client: Any, task_id: str) -> None:
     """
     Mark all PENDING or RUNNING task stages as COMPLETED.
@@ -1135,7 +1164,9 @@ async def _execute_tactus(
             logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
 
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
-        result = await runtime.execute(procedure_source, runtime_context, format="yaml")
+        result = _normalize_tactus_result(
+            await runtime.execute(procedure_source, runtime_context, format="yaml")
+        )
         if log_bridge:
             await log_bridge.flush()
             _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)

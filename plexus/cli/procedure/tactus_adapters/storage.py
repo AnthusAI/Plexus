@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError
 
 from tactus.protocols.models import ProcedureMetadata, CheckpointEntry
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -404,10 +405,14 @@ class PlexusStorageAdapter:
 
             serialized = json.dumps(metadata_json)
 
-            self.client.execute(mutation, {
-                'id': metadata.procedure_id,
-                'metadata': serialized
-            })
+            self.client.execute(
+                mutation,
+                {
+                    'id': metadata.procedure_id,
+                    'metadata': serialized
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
 
             # Update cache
             self._metadata_cache = metadata
@@ -454,11 +459,15 @@ class PlexusStorageAdapter:
                 logger.debug("Updated in-memory status for built-in procedure %s -> %s", procedure_id, status)
                 return
 
-            self.client.execute(mutation, {
-                'id': procedure_id,
-                'status': status,
-                'waitingOnMessageId': waiting_on_message_id
-            })
+            self.client.execute(
+                mutation,
+                {
+                    'id': procedure_id,
+                    'status': status,
+                    'waitingOnMessageId': waiting_on_message_id
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
 
             # Update cache
             if self._metadata_cache:

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5d5e14d2-5054-45cd-9afb-8e915ed49e13",
+  "issue_id": "plx-3fd41b7f-e7ac-4827-bdaa-4426f3600389",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T20:46:58.974Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 1,
+    "status": "open",
+    "title": "Rename split score taxonomy to Information Accuracy"
+  }
+}

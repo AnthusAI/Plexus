@@ -837,6 +837,7 @@ class FeedbackItems(DataCache):
                 limit=None,  # We'll apply limits after sampling
                 prioritize_edit_comments=False
             )
+            all_items = [item for item in all_items if not getattr(item, "isInvalid", False)]
             logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService for score {score_name}")
             
             # Debug the first item to see what metadata structure we get

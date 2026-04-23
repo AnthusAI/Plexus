@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b599d799-60f5-4a09-baf6-ae298b6b1f3f",
+  "issue_id": "plx-c5b1f24e-6ea6-4267-8606-29e6e1e4bc44",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:19:51.526Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implementation task for the current-medication policy and Medication Review composite fix in SelectQuote HCS Medium-Risk.\n\nAcceptance criteria:\n- Update live score versions in Plexus for the affected Medication Review scores.\n- Validate guideline markdown before pushing guideline-bearing changes.\n- Verify direct predictions after the change.\n- Record final promoted or non-promoted state in Kanbus.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 1,
+    "status": "open",
+    "title": "Update live Medication Review split-score rubric and composite logic"
+  }
+}

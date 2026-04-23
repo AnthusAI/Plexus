@@ -1,0 +1,31 @@
+{
+  "id": "plx-4c40b818-7f04-437a-b471-7ab29db8a195",
+  "title": "Implement feedback invalidate CLI and MCP tool",
+  "description": "Implement the single-item feedback invalidation workflow described in plx-f21daa, including deterministic identifier resolution, GraphQL mutation plumbing, CLI registration, MCP registration, and automated tests.\n\nNotes:\n- This tool is for operator-approved targeted invalidation only.\n- It must not batch invalidate or silently choose among multiple candidate feedback items.\n- Prefer shared resolution logic between CLI and MCP to keep behavior identical.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-9c0031ce-2dfc-4026-bdc4-5b00cf0352aa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2d1ef41f-75a2-47fa-9169-86cc42722461",
+      "author": "ryan",
+      "text": "Started implementation. Current design: accept a single identifier, resolve it first as a feedback item ID, then as an item ID / identifier-table value / externalId. If resolution lands on an item with multiple feedback items, require explicit --scorecard and --score disambiguation instead of mutating multiple records. CLI and MCP will share the same resolver/mutation helper.",
+      "created_at": "2026-04-22T17:04:39.528141Z"
+    },
+    {
+      "id": "02484919-40d8-43eb-8e05-1c07a71184b4",
+      "author": "ryan",
+      "text": "Implemented the single-item invalidation workflow.\n\nWhat changed:\n- Added a shared feedback invalidation helper that resolves a target as direct feedback ID first, then item ID / identifier-table value / externalId.\n- Added `FeedbackItem.invalidate()` plus `isInvalid` in update mutation responses.\n- Added `plexus feedback invalidate <identifier>` with optional `--scorecard` and `--score` disambiguation.\n- Added MCP tool `plexus_feedback_invalidate` with the same single-item semantics and structured ambiguity errors.\n- Extended shared item resolution to support item externalId lookups.\n\nVerification so far:\n- Focused unit tests: 13 passed.\n- Adjacent feedback/MCP tests: 42 passed.\n- CLI import smoke test for `plexus.cli.feedback.commands`: passed.\n- Editable CLI help confirms `plexus feedback invalidate --help` is live.",
+      "created_at": "2026-04-22T17:26:45.443404Z"
+    }
+  ],
+  "created_at": "2026-04-22T17:04:35.159786Z",
+  "updated_at": "2026-04-22T17:26:45.443404Z",
+  "closed_at": null,
+  "custom": {}
+}

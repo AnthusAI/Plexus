@@ -257,6 +257,38 @@ def test_classifier_detects_missing_required_context_as_mechanical():
     assert result["mechanical_subtype"] == "missing_required_context"
 
 
+def test_classifier_does_not_mark_missing_context_from_llm_flag_alone_when_primary_input_exists():
+    context = _base_item_context()
+    context["source_availability"]["has_primary_input"] = True
+    context["source_availability"]["has_metadata_snapshot"] = True
+    context["source_availability"]["primary_input_fetch_error"] = False
+    result = classify_misclassification_item(
+        context,
+        _base_evidence_flags(
+            missing_required_context_due_system=True,
+            best_evidence_source="processed_input",
+            best_evidence_quote="processed_input_text is empty",
+        ),
+    )
+    assert result["primary_category"] == "score_configuration_problem"
+
+
+def test_classifier_marks_missing_context_when_llm_flag_and_primary_input_missing():
+    context = _base_item_context()
+    context["source_availability"]["has_primary_input"] = False
+    context["source_availability"]["primary_input_fetch_error"] = True
+    result = classify_misclassification_item(
+        context,
+        _base_evidence_flags(
+            missing_required_context_due_system=True,
+            best_evidence_source="primary_input",
+            best_evidence_quote="Primary input artifact unavailable",
+        ),
+    )
+    assert result["primary_category"] == "mechanical_malfunction"
+    assert result["mechanical_subtype"] == "missing_required_context"
+
+
 def test_classifier_detects_invalid_output_class_as_mechanical():
     context = _base_item_context()
     context["prediction"]["predicted_value"] = "Maybe"

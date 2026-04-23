@@ -147,13 +147,43 @@ def test_check_db_cache_ignores_failed_compacted_report(monkeypatch):
     report.id = "report-err"
     report.createdAt = service.datetime.now(service.timezone.utc)
     report.output = "```block\nclass: FeedbackContradictions\n```"
+    report.parameters = {"_cache_key": "cache-key"}
 
-    monkeypatch.setattr(service.Report, "get_by_name", Mock(return_value=report))
+    monkeypatch.setattr(service.Report, "list_by_account_id", Mock(return_value=[report]))
     monkeypatch.setattr(service, "_fetch_first_block_result", Mock(return_value=(None, "Score not found")))
 
     cached = service._check_db_cache("cache-key", "acct-1", Mock(), ttl_hours=24)
 
     assert cached is None
+
+
+def test_check_db_cache_uses_report_parameters_cache_key(monkeypatch):
+    matching_report = Mock()
+    matching_report.id = "report-match"
+    matching_report.createdAt = service.datetime.now(service.timezone.utc)
+    matching_report.output = "```block\nclass: FeedbackContradictions\n```"
+    matching_report.parameters = {"_cache_key": "cache-key"}
+
+    non_matching_report = Mock()
+    non_matching_report.id = "report-other"
+    non_matching_report.createdAt = service.datetime.now(service.timezone.utc)
+    non_matching_report.output = "```block\nclass: FeedbackContradictions\n```"
+    non_matching_report.parameters = {"_cache_key": "other-cache-key"}
+
+    monkeypatch.setattr(
+        service.Report,
+        "list_by_account_id",
+        Mock(return_value=[non_matching_report, matching_report]),
+    )
+    monkeypatch.setattr(
+        service,
+        "_fetch_first_block_result",
+        Mock(return_value=({"status": "ok", "topics": [1, 2]}, None)),
+    )
+
+    cached = service._check_db_cache("cache-key", "acct-1", Mock(), ttl_hours=24)
+
+    assert cached == {"status": "ok", "topics": [1, 2]}
 
 
 def test_persist_output_artifact_raises_when_s3_unavailable(monkeypatch):

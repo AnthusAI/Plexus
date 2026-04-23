@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "584e361d-73ab-4ff8-8626-110843abb251",
+  "issue_id": "plx-9ce67e1e-0190-44d1-ac8d-5bf0f45b1b7b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:08:43.695Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# Feature\n\nSplit Agent Misrepresentation into decision-element scores on the SelectQuote HCS Medium-Risk scorecard while keeping the legacy score in place.\n\n# Scenario: Composite passes when no decision element fails\n\nGiven six new Agent Misrepresentation decision-element scores exist for Copay Guarantee, Free Medication Claim, False Service Claim, Unqualified Savings Promise, Ambiguous Cost Language, and Pharmacy Confusion\nWhen a call transcript is evaluated and each decision-element score returns Yes\nThen the composite score returns Yes\nAnd the composite explanation indicates that all decision elements passed\n\n# Scenario: Composite fails when one decision element fails\n\nGiven the split Agent Misrepresentation scores exist\nWhen a transcript causes exactly one decision-element score to return No\nThen the composite score returns No\nAnd the composite explanation names that failed decision element\n\n# Scenario: Composite explanation concatenates multiple failed elements\n\nGiven the split Agent Misrepresentation scores exist\nWhen a transcript causes multiple decision-element scores to return No\nThen the composite score returns No\nAnd the composite explanation concatenates the names of all failed decision elements in deterministic order\n\n# Scenario: Legacy score remains available\n\nGiven the original Agent Misrepresentation score exists on the scorecard\nWhen the new split scores are added\nThen the original Agent Misrepresentation score remains present and unchanged",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 2,
+    "status": "open",
+    "title": "Define behavior for split Agent Misrepresentation decision-element and composite scores"
+  }
+}

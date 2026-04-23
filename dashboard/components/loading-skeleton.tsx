@@ -1,3 +1,4 @@
+import React from 'react'
 import ScorecardContext from './ScorecardContext'
 
 export function EvaluationDashboardSkeleton() {
@@ -284,6 +285,65 @@ export function ItemsDashboardSkeleton() {
       </div>
     </div>
   );
+}
+
+export function ProceduresDashboardSkeleton() {
+  return (
+    <div className="@container flex flex-col h-full p-3 overflow-hidden" data-testid="procedures-dashboard-skeleton">
+      {/* Header skeleton */}
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+        <div className="@[600px]:flex-grow w-full">
+          <ScorecardContext
+            selectedScorecard={null}
+            setSelectedScorecard={() => {}}
+            selectedScore={null}
+            setSelectedScore={() => {}}
+            skeletonMode={true}
+          />
+        </div>
+        <div className="flex-shrink-0">
+          <div className="h-9 w-28 rounded-md bg-muted animate-pulse" />
+        </div>
+      </div>
+
+      {/* Content skeleton */}
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="@container space-y-3 overflow-visible">
+          {/* Gauges block placeholder */}
+          <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+            <div className="h-48 rounded-lg bg-card animate-pulse" />
+            <div className="h-48 rounded-lg bg-card animate-pulse" />
+            <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 h-48 rounded-lg bg-card animate-pulse" />
+          </div>
+
+          {/* Procedure cards grid placeholder */}
+          <div className="grid gap-3 grid-cols-1 @[640px]:grid-cols-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-lg bg-card p-4 animate-pulse">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2 flex-1">
+                      <div className="h-5 w-2/3 rounded bg-muted" />
+                      <div className="h-4 w-1/3 rounded bg-muted" />
+                    </div>
+                    <div className="h-8 w-8 rounded bg-muted" />
+                  </div>
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-3 w-full rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Loading-more placeholder */}
+          <div className="space-y-3 pb-3">
+            <div className="h-24 rounded-lg bg-card animate-pulse" />
+            <div className="h-24 rounded-lg bg-card animate-pulse" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ItemsGauges skeleton component to match the real component structure

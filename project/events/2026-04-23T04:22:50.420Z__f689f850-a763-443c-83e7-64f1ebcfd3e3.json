@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f689f850-a763-443c-83e7-64f1ebcfd3e3",
+  "issue_id": "plx-35427c7b-4958-4000-8d92-df875bab8797",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T04:22:50.420Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Normalize optimizer score editor YAML before agent edits"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "21d3d512-b2a3-457e-a2ad-03e97ea61f4c",
+  "issue_id": "plx-4439fee3-5d36-4e2d-9428-a12440d54c9e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T06:57:29.184Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement optimizer-only top-level score YAML field optimizer_shadow_invalid_feedback_item_ids, thread it through optimizer evaluation/dataset selection, make artifact reuse exclusion-aware, and block champion promotion for versions carrying shadow invalidation metadata.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Add YAML-based shadow invalidation for optimizer what-if testing"
+  }
+}
