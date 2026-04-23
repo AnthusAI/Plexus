@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fc63e79e-5da7-4f12-a769-ff92494a9471",
+  "issue_id": "plx-e8badfd4-d7a1-468b-864d-51f169d301e3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T17:10:43.228Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Stabilize PR198 feedback upsert and time-window tests"
+  }
+}

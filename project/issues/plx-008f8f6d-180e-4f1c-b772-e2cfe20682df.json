@@ -1,0 +1,61 @@
+{
+  "id": "plx-008f8f6d-180e-4f1c-b772-e2cfe20682df",
+  "title": "Fix PR198 CI failures in feedback upsert + feedback search time window",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e8badfd4-d7a1-468b-864d-51f169d301e3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0524fef5-b213-4d94-b614-1f9d68fbcfd0",
+      "author": "derek",
+      "text": "Starting investigation of 5 CI failures from PR198. Plan: reproduce only failing tests, identify whether implementation or tests regressed, apply minimal fix, rerun focused tests then broader impacted suite.",
+      "created_at": "2026-04-23T17:10:53.660062961Z"
+    },
+    {
+      "id": "7269843a-b2f7-4b80-9c7f-9048585bda90",
+      "author": "derek",
+      "text": "Reproduced 5 failing tests locally. Root causes: (1) _update_feedback_item now performs a prefetch read for missing composite-key fields before mutation, so execute is called twice in that scenario; test expectation was stale. (2) FeedbackService now excludes invalidated items; bare Mock objects in tests made isInvalid truthy, filtering everything out. Updated tests to reflect current contract: assert update path includes prefetch+mutation call pattern and set isInvalid=False on mocked feedback items. Verified: targeted 5 tests pass and full impacted modules pass (46/46).",
+      "created_at": "2026-04-23T17:12:11.933826076Z"
+    },
+    {
+      "id": "dc5f554e-0494-4c85-abe0-988bd4019ca7",
+      "author": "derek",
+      "text": "Continuing remediation pass: address rcql findings in feedback_item_upsert_test.py (unused imports and unused local variables), then rerun targeted tests.",
+      "created_at": "2026-04-23T17:18:50.743515763Z"
+    },
+    {
+      "id": "d274aa1e-a43b-463c-8d27-f111bb7b3899",
+      "author": "derek",
+      "text": "RCQL remediation complete for feedback_item_upsert_test.py: removed unused imports (pytest, MagicMock), removed TYPE_CHECKING no-op block, and removed unused tuple assignment in cache-key test. Verification: poetry run pytest -q plexus/dashboard/api/models/feedback_item_upsert_test.py (20 passed), broader impacted suite (46 passed), and fresh rcql python scan followed by file-filtered report-only check shows no remaining findings for this file.",
+      "created_at": "2026-04-23T17:21:23.515109295Z"
+    },
+    {
+      "id": "8b4cd5b4-5574-42b3-a26c-26bc05f08c59",
+      "author": "derek",
+      "text": "Running report-only RCQL for remaining touched test files. Findings detected in tests/test_feedback_service.py: unused imports (asyncio, MagicMock, datetime/timezone/timedelta). Remediating now.",
+      "created_at": "2026-04-23T17:23:33.497341630Z"
+    },
+    {
+      "id": "525249a0-37b6-49f5-9475-9eac4727ef25",
+      "author": "derek",
+      "text": "Completed report-only RCQL pass for tests/test_feedback_service.py and tests/test_item_feedback_integration.py. Removed unused imports in tests/test_feedback_service.py (asyncio, MagicMock, datetime/timezone/timedelta). Re-ran targeted tests: 26 passed. Refreshed Python RCQL scan and re-checked both files with --report-only; no findings are currently shown for either file.",
+      "created_at": "2026-04-23T17:25:44.261186442Z"
+    },
+    {
+      "id": "d3c7a679-7c31-4a6d-82ed-cf1fcbf7228f",
+      "author": "derek",
+      "text": "Committed and pushed test remediations on branch bugfix/pr198-feedback-tests as commit ea16d513 with semantic commit message: fix(tests): align feedback upsert and time-window expectations. Opened PR #199 targeting develop: https://github.com/AnthusAI/Plexus/pull/199. Monitoring GitHub checks via gh pr checks --watch; currently pending for Dashboard + Python test jobs.",
+      "created_at": "2026-04-23T17:35:27.114926486Z"
+    }
+  ],
+  "created_at": "2026-04-23T17:10:46.867003124Z",
+  "updated_at": "2026-04-23T17:35:27.114926486Z",
+  "closed_at": null,
+  "custom": {}
+}
