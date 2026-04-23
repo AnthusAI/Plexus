@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Tuple
 from dataclasses import dataclass, field
 
@@ -960,6 +960,32 @@ class FeedbackItem(BaseModel):
             # Add the ID to the data for update
             update_data = feedback_data.copy()
             update_data["id"] = feedback_item_id
+
+            # AppSync requires the full composite key when an update touches a model that
+            # participates in the byAccountScorecardScoreUpdatedAt index. Hydrate those
+            # key fields from the current record when the caller only supplies a partial
+            # patch (for example, invalidating a feedback item).
+            required_index_fields = ("accountId", "scorecardId", "scoreId", "editedAt")
+            missing_index_fields = [
+                field for field in required_index_fields
+                if update_data.get(field) in (None, "")
+            ]
+            if missing_index_fields:
+                current_item = cls.get(
+                    feedback_item_id,
+                    client=client,
+                    fields=cls.GRAPHQL_BASE_FIELDS,
+                )
+                if current_item:
+                    for field in required_index_fields:
+                        current_value = getattr(current_item, field, None)
+                        if update_data.get(field) in (None, "") and current_value not in (None, ""):
+                            if isinstance(current_value, datetime):
+                                if current_value.tzinfo is None:
+                                    current_value = current_value.replace(tzinfo=timezone.utc)
+                                update_data[field] = current_value.isoformat().replace("+00:00", "Z")
+                            else:
+                                update_data[field] = current_value
             
             # Construct update mutation
             mutation = """

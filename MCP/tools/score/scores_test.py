@@ -1927,6 +1927,136 @@ class TestScoreToolsSharedPatterns:
         assert result["guidelinesFilePath"] == "/tmp/test-score.md"
 
     @pytest.mark.asyncio
+    async def test_score_pull_uses_cli_scorecard_resolver_when_quiet_lookup_misses(self, monkeypatch):
+        tool = await _get_pull_tool()
+        monkeypatch.setenv("PLEXUS_API_URL", "https://api.example.com/graphql")
+        monkeypatch.setenv("PLEXUS_API_KEY", "test-key")
+
+        mock_client = Mock()
+
+        def execute_side_effect(query):
+            if "GetScorecardForScore" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [
+                                {
+                                    "id": "section-1",
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "score-456",
+                                                "name": "Medication Review: Prescriber",
+                                                "key": "medication-review-prescriber",
+                                                "externalId": "48058",
+                                                "type": "LangGraphScore",
+                                                "order": 1,
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+        mock_client.execute.side_effect = execute_side_effect
+
+        with patch("plexus.cli.shared.client_utils.create_client", return_value=mock_client), \
+             patch(
+                 "plexus.cli.scorecard.scorecards.resolve_scorecard_identifier",
+                 return_value="scorecard-123",
+             ), \
+             patch(
+                 "plexus.dashboard.api.models.scorecard.Scorecard.get_by_id",
+                 return_value=SimpleNamespace(name="SelectQuote HCS Medium-Risk"),
+             ), \
+             patch(
+                 "MCP.tools.score.scores._pull_champion_with_backup",
+                 return_value={
+                     "success": True,
+                     "code_file_path": "/tmp/prescriber.yaml",
+                     "guidelines_file_path": "/tmp/prescriber.md",
+                     "version_id": "version-789",
+                     "message": "pulled",
+                 },
+             ):
+            result = await tool.fn(
+                scorecard_identifier="SelectQuote HCS Medium-Risk",
+                score_identifier="Medication Review: Prescriber",
+            )
+
+        assert result["success"] is True
+        assert result["scorecardName"] == "SelectQuote HCS Medium-Risk"
+        assert result["scoreName"] == "Medication Review: Prescriber"
+        assert result["codeFilePath"] == "/tmp/prescriber.yaml"
+
+    @pytest.mark.asyncio
+    async def test_score_pull_matches_name_with_case_and_whitespace_variants(self, monkeypatch):
+        tool = await _get_pull_tool()
+        monkeypatch.setenv("PLEXUS_API_URL", "https://api.example.com/graphql")
+        monkeypatch.setenv("PLEXUS_API_KEY", "test-key")
+
+        mock_client = Mock()
+
+        def execute_side_effect(query):
+            if "GetScorecardForScore" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [
+                                {
+                                    "id": "section-1",
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "score-456",
+                                                "name": "Medication Review: Prescriber",
+                                                "key": "medication-review-prescriber",
+                                                "externalId": "48058",
+                                                "type": "LangGraphScore",
+                                                "order": 1,
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+        mock_client.execute.side_effect = execute_side_effect
+
+        with patch("plexus.cli.shared.client_utils.create_client", return_value=mock_client), \
+             patch(
+                 "plexus.cli.scorecard.scorecards.resolve_scorecard_identifier",
+                 return_value="scorecard-123",
+             ), \
+             patch(
+                 "plexus.dashboard.api.models.scorecard.Scorecard.get_by_id",
+                 return_value=SimpleNamespace(name="SelectQuote HCS Medium-Risk"),
+             ), \
+             patch(
+                 "MCP.tools.score.scores._pull_champion_with_backup",
+                 return_value={
+                     "success": True,
+                     "code_file_path": "/tmp/prescriber.yaml",
+                     "guidelines_file_path": "/tmp/prescriber.md",
+                     "version_id": "version-789",
+                     "message": "pulled",
+                 },
+             ):
+            result = await tool.fn(
+                scorecard_identifier="SelectQuote HCS Medium-Risk",
+                score_identifier="  medication review: prescriber  ",
+            )
+
+        assert result["success"] is True
+        assert result["scoreName"] == "Medication Review: Prescriber"
+
+    @pytest.mark.asyncio
     async def test_pull_specific_version_succeeds_with_broken_scorecards_symlink(self, monkeypatch, tmp_path):
         class _ScoreStub:
             name = "Test Score"

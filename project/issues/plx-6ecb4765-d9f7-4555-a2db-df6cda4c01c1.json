@@ -10,9 +10,22 @@
   "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "6032ce3b-05e5-4d8e-b610-02f4fa835428",
+      "author": "ryan",
+      "text": "Investigating RCA false mechanical flags: missing_required_context is being inferred when processed_input_text is empty even though raw_input_text exists. Implementing deterministic guardrails in rca_analysis classification + tests.",
+      "created_at": "2026-04-22T19:32:00.155599Z"
+    },
+    {
+      "id": "db75aab2-a47c-4bef-ac2c-d8a197eb0f29",
+      "author": "ryan",
+      "text": "Patched RCA classifier: missing_required_context now requires objective signal (missing keys/fetch error/marker or no primary input), not LLM flag alone. Added regression tests and ran pytest plexus/rca_analysis_test.py (24 passed).",
+      "created_at": "2026-04-22T19:32:46.653230Z"
+    }
+  ],
   "created_at": "2026-04-22T13:42:54.179124Z",
-  "updated_at": "2026-04-22T16:44:44.641713Z",
+  "updated_at": "2026-04-22T19:32:46.653230Z",
   "closed_at": null,
   "custom": {}
 }

@@ -84,3 +84,26 @@ def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch
     assert "consume results later" not in code
     assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
     assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
+
+
+def test_optimizer_yaml_treats_cycle_errors_as_terminal_and_does_not_extend_iteration_cap():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local max_cycles = params.max_iterations" in code
+    assert "max_cycles = max_cycles + 1" not in code
+    assert '"ERROR in cycle %d: %s — stopping run"' in code
+    assert 'stop_reason = "error"' in code
+    assert 'error("Cycle " .. tostring(cycle) .. " failed: " .. tostring(cycle_err))' in code
+
+
+def test_optimizer_yaml_avoids_double_counting_after_cycle_record_and_formats_cycle_prompt_with_cycle_number():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local cycle_recorded = false" in code
+    assert "if not cycle_recorded then" in code
+    assert "cycle_recorded = true" in code
+    assert 'Analyze Cycle %d and produce exactly four sections in this order:\\n"' in code
+    assert '.. "- No long paragraphs anywhere\\n",' in code
+    assert "cycle))" in code

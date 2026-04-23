@@ -1029,6 +1029,11 @@ def register_evaluation_tools(mcp: FastMCP):
         evaluation_type: str,
         max_age_hours: float = 24.0,
         min_items: int = 0,
+        dataset_id: Optional[str] = None,
+        days: Optional[int] = None,
+        max_feedback_items: Optional[int] = None,
+        sampling_mode: Optional[str] = None,
+        latest_feedback_updated_at: Optional[str] = None,
     ) -> str:
         """Find the most recent completed evaluation for a score version and type.
 
@@ -1042,6 +1047,11 @@ def register_evaluation_tools(mcp: FastMCP):
         - evaluation_type: Evaluation type — "feedback" or "accuracy".
         - max_age_hours: Only consider evaluations created within this many hours (default: 24).
         - min_items: Minimum number of items the evaluation must have processed (default: 0).
+        - dataset_id: Optional exact-match dataset_id filter for accuracy evaluations.
+        - days: Optional exact-match days filter for feedback evaluations.
+        - max_feedback_items: Optional exact-match max_feedback_items filter for feedback evaluations.
+        - sampling_mode: Optional exact-match sampling_mode filter for feedback evaluations.
+        - latest_feedback_updated_at: Optional watermark; feedback eval must be created at/after this timestamp.
         """
         import json as _json
         from datetime import datetime, timezone, timedelta
@@ -1070,11 +1080,27 @@ def register_evaluation_tools(mcp: FastMCP):
             )
 
             cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+            normalized_eval_type = str(evaluation_type or "").strip().lower()
+            normalized_sampling_mode = str(sampling_mode or "").strip().lower() if sampling_mode is not None else None
+            latest_feedback_updated_at_dt = None
+            if latest_feedback_updated_at:
+                try:
+                    latest_feedback_updated_at_dt = datetime.fromisoformat(
+                        str(latest_feedback_updated_at).replace("Z", "+00:00")
+                    )
+                    if latest_feedback_updated_at_dt.tzinfo is None:
+                        latest_feedback_updated_at_dt = latest_feedback_updated_at_dt.replace(tzinfo=timezone.utc)
+                except Exception:
+                    logger.warning(
+                        "plexus_evaluation_find_recent: invalid latest_feedback_updated_at=%s",
+                        latest_feedback_updated_at,
+                    )
+                    latest_feedback_updated_at_dt = None
 
             for item in items:
                 if item.get("status") != "COMPLETED":
                     continue
-                if item.get("type", "").lower() != evaluation_type.lower():
+                if item.get("type", "").lower() != normalized_eval_type:
                     continue
                 total = item.get("totalItems") or 0
                 if total < min_items:
@@ -1104,6 +1130,53 @@ def register_evaluation_tools(mcp: FastMCP):
                         eval_id, exc
                     )
                     continue
+
+                parameters = eval_info.get("parameters")
+                if not isinstance(parameters, dict):
+                    parameters = {}
+
+                if normalized_eval_type == "accuracy" and dataset_id is not None:
+                    eval_dataset_id = parameters.get("dataset_id")
+                    if not eval_dataset_id and parameters.get("metadata") and isinstance(parameters.get("metadata"), dict):
+                        eval_dataset_id = parameters["metadata"].get("dataset_id")
+                    if str(eval_dataset_id or "") != str(dataset_id):
+                        continue
+
+                if normalized_eval_type == "feedback":
+                    if days is not None:
+                        eval_days = parameters.get("days")
+                        try:
+                            eval_days_int = int(eval_days) if eval_days is not None else None
+                            requested_days_int = int(days)
+                        except Exception:
+                            eval_days_int = None
+                            requested_days_int = int(days)
+                        if eval_days_int is None or eval_days_int != requested_days_int:
+                            continue
+                    if max_feedback_items is not None:
+                        eval_max_items = parameters.get("max_feedback_items")
+                        try:
+                            eval_max_items_int = int(eval_max_items) if eval_max_items is not None else None
+                            requested_max_items_int = int(max_feedback_items)
+                        except Exception:
+                            eval_max_items_int = None
+                            requested_max_items_int = int(max_feedback_items)
+                        if eval_max_items_int is None or eval_max_items_int != requested_max_items_int:
+                            continue
+                    if normalized_sampling_mode is not None:
+                        eval_sampling_mode = str(parameters.get("sampling_mode") or "").strip().lower()
+                        if eval_sampling_mode != normalized_sampling_mode:
+                            continue
+                    if latest_feedback_updated_at_dt is not None:
+                        created_text = eval_info.get("created_at") or item.get("createdAt")
+                        try:
+                            created_dt = datetime.fromisoformat(str(created_text).replace("Z", "+00:00"))
+                            if created_dt.tzinfo is None:
+                                created_dt = created_dt.replace(tzinfo=timezone.utc)
+                        except Exception:
+                            continue
+                        if created_dt < latest_feedback_updated_at_dt:
+                            continue
 
                 payload: Dict[str, Any] = {
                     "_from_cache": True,

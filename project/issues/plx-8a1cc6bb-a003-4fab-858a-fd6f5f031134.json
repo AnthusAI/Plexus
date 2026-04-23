@@ -16,10 +16,22 @@
       "author": "ryan",
       "text": "Patched MCP score-pull name resolution in MCP/tools/score/scores.py to use the shared direct resolver path instead of the ad hoc local helper. Local validation: direct plexus_score_pull invocation now succeeds for scorecard name SelectQuote HCS Medium-Risk and score Medication Review: Prescriber with version 27816b39-0bb8-4fd8-adec-934d40cb47ab.",
       "created_at": "2026-04-22T16:00:59.257629Z"
+    },
+    {
+      "id": "668f8ec8-754a-4f29-9a31-186e936c1ed3",
+      "author": "ryan",
+      "text": "Resuming break/fix: canonical optimizer runs still fail with SCORE_NOT_FOUND on named Medication Review scores. Investigating score-pull identifier resolution in optimizer path and will patch root cause, then re-run one canonical procedure to verify start.",
+      "created_at": "2026-04-23T04:50:04.833194Z"
+    },
+    {
+      "id": "fb36a2bb-13ae-43c9-ac08-b334d1972db1",
+      "author": "ryan",
+      "text": "Implemented root-cause patch set: optimizer now uses resolved score_id for all score pull/editor setup/score test calls (instead of name-based params.score), and MCP score lookup now normalizes whitespace/case across id/name/key/externalId and returns richer diagnostics on misses. Added unit test for name-case/whitespace variant matching in score pull path. Local runtime verification pending due missing project CLI runtime in this shell.",
+      "created_at": "2026-04-23T04:54:11.341859Z"
     }
   ],
   "created_at": "2026-04-22T15:26:24.213216Z",
-  "updated_at": "2026-04-22T16:01:07.849640Z",
+  "updated_at": "2026-04-23T04:54:11.341859Z",
   "closed_at": null,
   "custom": {}
 }
