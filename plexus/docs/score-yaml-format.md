@@ -439,6 +439,56 @@ Segment text into "before" and "after" parts based on a found quote:
           extracted_text: extracted_text
 ```
 
+### Classifier vs Extractor
+
+Use the node type that matches the output contract:
+
+- `Classifier` is for closed-set labels only, such as `Yes`/`No`, routing labels, or other enum-like classes.
+- `Extractor` is for free-form evidence, quotes, ledgers, summaries, or other extracted artifacts.
+
+If your prompt asks the model to produce multiline evidence, snippets, medication ledgers, or a summary artifact, do **not** implement that node as a `Classifier`. A pseudo-extractor pattern such as:
+
+```yaml
+- name: extract_evidence
+  class: Classifier
+  valid_classes:
+    - Extracted
+```
+
+is invalid design. It creates a parser contract that expects an exact class label while the prompt is asking for free-form extraction output.
+
+Recommended two-step pattern:
+
+```yaml
+- name: dosage_evidence_extractor
+  class: Extractor
+  trust_model_output: true
+  system_message: |-
+    Extract only the dosage evidence needed for the final decision.
+  user_message: |-
+    {{text}}
+  output:
+    dosage_evidence: extracted_text
+
+- name: check_dosage_verification
+  class: Classifier
+  valid_classes:
+    - Yes
+    - No
+  user_message: |-
+    Transcript:
+    {{text}}
+
+    Extracted dosage evidence:
+    {{dosage_evidence}}
+```
+
+In that pattern:
+
+- the extractor owns the free-form artifact
+- the classifier owns the final closed-set decision
+- downstream nodes should consume the mapped extractor output field (for example `{{dosage_evidence}}`), not a classifier explanation field
+
 ## LogicalClassifier Usage
 
 Apply custom Python logic to make scoring decisions based on previous node outputs:
