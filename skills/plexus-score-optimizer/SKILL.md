@@ -45,6 +45,7 @@ Do not treat every contradiction as a score bug. A contradiction can mean:
 - Only invalidate items after the user explicitly approves the exact group.
 - Start invalidation triage from contradiction report output, not ad hoc individual item inspection.
 - Use MCP for inspection around the optimizer when helpful, but not as the primary execution path during debugging.
+- When you prepare a score for optimizer work with `python -m plexus.cli score push`, remember that CLI-published guidelines come from `scorecards/<scorecard>/guidelines/<score>.md`. A sidecar markdown file next to the YAML is not the canonical guidelines path for CLI push.
 
 ## Direct CLI as Source of Truth
 
@@ -391,6 +392,203 @@ Rules:
 - It must not be run automatically by the optimizer.
 - Before running it, restate the approved group back to the user in a flat list so there is no ambiguity.
 - After running it, report the exact identifiers invalidated and whether any item was already invalid.
+
+### Conservative contradiction-cleanup loop before optimization
+
+Use this conservative loop when a score has likely rubric-drift labels and you need to clean the feedback pool before trusting optimizer output.
+
+1. Run a fresh contradictions report for the score and window:
+
+```bash
+python -m plexus.cli feedback report contradictions \
+  --scorecard "<scorecard>" \
+  --score "<score>" \
+  --days <days> \
+  --fresh \
+  --format json
+```
+
+2. Run a fresh feedback evaluation for the same score and window:
+
+```bash
+python -m plexus.cli evaluate feedback \
+  --scorecard "<scorecard>" \
+  --score "<score>" \
+  --days <days> \
+  --max-items <max_samples> \
+  --sampling-mode newest \
+  --version "<score_version>"
+```
+
+Before trusting the evaluation as optimizer input, do one mechanical sanity pass. If you recently changed parsing, output formatting, or score structure, verify that stored score results are not showing `value`/explanation contradictions.
+
+Example direct check:
+
+```bash
+python - <<'PY'
+from plexus.dashboard.api.client import PlexusDashboardClient
+
+client = PlexusDashboardClient()
+evaluation_id = "<evaluation_id>"
+query = """
+query Q($evaluationId: String!) {
+  listScoreResultByEvaluationId(evaluationId: $evaluationId, limit: 500) {
+    items { id value explanation }
+  }
+}
+"""
+
+items = client.execute(query, {"evaluationId": evaluation_id})["listScoreResultByEvaluationId"]["items"]
+mismatches = []
+for row in items or []:
+    value = (row.get("value") or "").strip().lower()
+    explanation = (row.get("explanation") or "").strip()
+    last_line = explanation.splitlines()[-1].strip().lower() if explanation else ""
+    if last_line in {"yes", "no"} and value and last_line != value:
+        mismatches.append((row["id"], value, last_line))
+
+print({"results": len(items or []), "mismatches": len(mismatches), "examples": mismatches[:10]})
+PY
+```
+
+3. Look at both outputs together before invalidating anything.
+
+What to compare:
+
+- contradiction clusters from the contradictions report
+- current error shape from the fresh evaluation
+- exact feedback items that appear in both places
+
+Practical rule:
+
+- Start with the biggest contradiction categories first, especially clusters that clearly reflect an older rubric such as `all meds`, `each med`, or other stricter-than-current thresholds.
+- Within the biggest category, start with the narrowest high-confidence subgroup first instead of invalidating every candidate at once.
+- Prefer contradiction items that also show up in the current evaluation error set, because those are the labels actively distorting the optimizer target.
+- Leave likely real score-behavior problems in place for the optimizer.
+- Leave `policy_gap` items out of the first invalidation batch unless the user explicitly approves them.
+
+If you need an explicit overlap check, compare the stored contradiction payload with the fresh evaluation score results:
+
+```bash
+python - <<'PY'
+import json
+from plexus.cli.shared.client_utils import create_client
+from plexus.dashboard.api.models.report_block import ReportBlock
+from plexus.cli.dataset.curation import _load_feedback_contradictions_output_from_block
+
+client = create_client()
+report_block = ReportBlock.get_by_id("<report_block_id>", client=client)
+payload = _load_feedback_contradictions_output_from_block(report_block)
+contradiction_ids = {
+    ex["feedback_item_id"]
+    for topic in payload.get("topics", [])
+    for ex in topic.get("exemplars", [])
+    if ex.get("feedback_item_id")
+}
+
+query = """
+query ListScoreResultsForEvaluation($evaluationId: String!, $limit: Int, $nextToken: String) {
+  listScoreResultByEvaluationId(evaluationId: $evaluationId, limit: $limit, nextToken: $nextToken) {
+    items { metadata }
+    nextToken
+  }
+}
+"""
+
+def extract_feedback_id(metadata):
+    if isinstance(metadata, dict):
+        return metadata.get("feedback_item_id") or metadata.get("feedbackItemId")
+    if isinstance(metadata, str) and metadata.strip():
+        try:
+            parsed = json.loads(metadata)
+        except Exception:
+            return None
+        if isinstance(parsed, str):
+            try:
+                parsed = json.loads(parsed)
+            except Exception:
+                return None
+        if isinstance(parsed, dict):
+            return parsed.get("feedback_item_id") or parsed.get("feedbackItemId")
+    return None
+
+evaluation_ids = set()
+next_token = None
+while True:
+    result = client.execute(query, {
+        "evaluationId": "<evaluation_id>",
+        "limit": 200,
+        "nextToken": next_token,
+    })
+    payload = (result or {}).get("listScoreResultByEvaluationId") or {}
+    for row in payload.get("items") or []:
+        fid = extract_feedback_id(row.get("metadata"))
+        if fid:
+            evaluation_ids.add(fid)
+    next_token = payload.get("nextToken")
+    if not next_token:
+        break
+
+print(sorted(contradiction_ids & evaluation_ids))
+PY
+```
+
+4. Propose a narrow invalidation batch to the user, grouped by shared rationale.
+
+Good first-batch candidates:
+
+- items where the feedback explicitly applies the superseded rubric
+- duplicate contradictory labels on the same item
+- contradiction clusters with strong consensus and clean rationale
+- the cleanest exemplars from the largest contradiction category, when that category is clearly driving the error set
+
+Avoid first-batch invalidation for:
+
+- items that look like prompt or recognition failures
+- items with mixed evidence about whether the feedback or the score is wrong
+- items whose contradiction depends on a new policy question not yet settled
+
+5. After approval, invalidate only the approved batch.
+
+6. Immediately rerun the fresh feedback evaluation for the same score and window.
+
+What you want to see:
+
+- sample size drops by the number of newly invalidated items, or close to it if duplicates collapse
+- the newly invalidated IDs are absent from the new evaluation
+- error count and contradiction-shaped errors decrease
+- value/explanation mismatch count stays at zero if you just fixed a parsing or output-format issue
+
+7. Immediately rerun the contradictions report for the same score and window.
+
+What you want to see:
+
+- contradiction count drops
+- the invalidated contradiction clusters disappear
+- the remaining contradiction set is smaller, cleaner, and more focused
+
+8. Only after the post-invalidation evaluation and post-invalidation contradictions report both look cleaner should you trust the remaining set as optimizer input.
+
+This is the gating question:
+
+- Are the remaining errors mostly real score-behavior problems under the current rubric?
+
+If yes, proceed with optimizer work.
+If no, do another conservative invalidation review or escalate rubric questions to SMEs first.
+
+### Artifact-reuse freshness and restart policy
+
+The optimizer now treats feedback edits/invalidation as target-mutation events and will not trust stale cached artifacts.
+
+- Fresh feedback evaluation selectors already exclude `isInvalid=true` items.
+- Remaining leakage risk comes from artifact reuse, not live feedback fetch.
+- Reuse is now guarded by a feedback watermark (`latest FeedbackItem.updatedAt` in the score window bounded by `editedAt + days`).
+- Associated regression datasets are reused only when they are materialized, large enough, and fresh relative to that watermark.
+- Cached baseline reuse is exact-match:
+  - accuracy baseline reuse requires matching `dataset_id`
+  - feedback baseline reuse requires matching `days`, `max_feedback_items`, and `sampling_mode`, and must be newer than the watermark
+- If feedback changes during a run, optimizer stops with `feedback_target_changed_restart_required`.
+  This is expected behavior. Restart so all baselines and cycle comparisons are computed against one consistent target.
 
 ## Advanced Manual Procedure Path With `procedure create` and `procedure run`
 
