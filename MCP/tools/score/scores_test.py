@@ -2095,3 +2095,33 @@ class TestScoreToolsSharedPatterns:
         assert Path(first["guidelines_file_path"]).exists()
         assert (tmp_path / "scorecards").is_dir()
         assert not (tmp_path / "scorecards").is_symlink()
+
+
+@pytest.mark.asyncio
+async def test_score_set_champion_rejects_versions_with_shadow_invalid_feedback_ids():
+    mcp = FastMCP("test-score-set-champion")
+    register_score_tools(mcp)
+    tool = await mcp.get_tool("plexus_score_set_champion")
+
+    mock_client = Mock()
+    mock_client.execute.return_value = {
+        "getScoreVersion": {
+            "id": "version-123",
+            "configuration": (
+                "name: Test Score\n"
+                "optimizer_shadow_invalid_feedback_item_ids:\n"
+                "  - fb-2\n"
+                "  - fb-1\n"
+            ),
+        }
+    }
+
+    with patch.dict(os.environ, {"PLEXUS_API_URL": "https://example.test", "PLEXUS_API_KEY": "secret"}), patch(
+        "plexus.cli.shared.client_utils.create_client",
+        return_value=mock_client,
+    ):
+        result = await tool.fn(score_id="score-123", version_id="version-123")
+
+    assert result["success"] is False
+    assert result["error"] == "SHADOW_INVALIDATION_PRESENT"
+    assert result["optimizer_shadow_invalid_feedback_item_ids"] == ["fb-1", "fb-2"]

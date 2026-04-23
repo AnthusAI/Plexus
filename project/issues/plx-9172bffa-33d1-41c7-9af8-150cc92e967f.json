@@ -3,7 +3,7 @@
   "title": "Fix optimizer cycle errors from extending max_iterations and double-counting failures",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-04-23T05:37:56.119148Z",
-  "updated_at": "2026-04-23T05:38:00.722871Z",
-  "closed_at": null,
+  "updated_at": "2026-04-23T05:57:27.923633Z",
+  "closed_at": "2026-04-23T05:57:27.923633Z",
   "custom": {}
 }

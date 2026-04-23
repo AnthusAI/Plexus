@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0f8ef47f-3986-46da-b9bc-6b39d312b8ff",
+  "issue_id": "plx-65843850-17de-42de-a134-ccf2b602e85c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T11:57:53.358Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Optimizer score editor should normalize YAML for both direct yaml_content injection and fallback API load so Dosage/Prescriber hypotheses edit canonical block-scalar YAML instead of escaped prompt blobs. Includes focused verification against Medication Review: Dosage and Medication Review: Prescriber.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix score editor normalization on optimizer injection path"
+  }
+}
