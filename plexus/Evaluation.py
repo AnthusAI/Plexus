@@ -3536,6 +3536,7 @@ class FeedbackEvaluation(Evaluation):
                     finalAnswerValue
                     editCommentValue
                     isAgreement
+                    isInvalid
                     editedAt
                     createdAt
                     updatedAt
@@ -3588,6 +3589,8 @@ class FeedbackEvaluation(Evaluation):
                 # Convert to FeedbackItem object
                 from plexus.dashboard.api.models.feedback_item import FeedbackItem
                 item = FeedbackItem.from_dict(item_data, self.api_client)
+                if item.isInvalid:
+                    continue
                 all_items.append(item)
             
             next_token = result['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'].get('nextToken')
