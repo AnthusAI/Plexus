@@ -1,0 +1,43 @@
+{
+  "id": "plx-2f16158a-c640-4d04-8145-e064fbcd66d0",
+  "title": "Make Medication Review Prescriber use objective miss-count threshold",
+  "description": "Replace the current SRX \"most medications\" prescriber standard with the same kind of objective threshold used by Medication Review: Dosage.\n\nScope:\n- Update Medication Review: Prescriber score code/prompt in Plexus\n- Update official guidelines to match\n- Keep SPM PCP-only logic unchanged\n- Publish one merged version containing both code and guidelines\n- Promote that merged version to champion\n- Rerun fresh 180-day FeedbackContradictions for Prescriber and summarize the delta\n\nOut of scope:\n- legacy Medication Review\n- other Medication Review split scores unless required by direct dependency",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4578b776-dea5-4f85-8eaf-187cfdcfe5d8",
+      "author": "ryan",
+      "text": "Confirmed the live Prescriber champion still uses a subjective SRX \"most medications\" standard. Also found a later non-champion draft (`f20ca228-acef-4475-90bc-345ec877c43a`) that reintroduced `parse_from_start: true`, so the new objective-threshold version will be built intentionally from the correct parse-from-end state rather than inheriting that regression.",
+      "created_at": "2026-04-22T14:55:49.018775Z"
+    },
+    {
+      "id": "f6b2162a-3624-456b-a862-63d52695f2a9",
+      "author": "ryan",
+      "text": "Created merged Prescriber version `27816b39-0bb8-4fd8-adec-934d40cb47ab` from champion `edc3048a-6e2c-455c-8937-c635b0c02525`, replacing the SRX subjective \\\"most medications\\\" standard with an explicit miss-count threshold in both the guidelines and the classifier prompt. Next step is exact-version verification, quick score execution smoke test, then champion promotion and a fresh contradictions rerun.",
+      "created_at": "2026-04-22T14:58:48.594726Z"
+    },
+    {
+      "id": "2cd267d6-51a0-432e-b205-abee2c08b273",
+      "author": "ryan",
+      "text": "Version-specific prediction lookup continued to resolve the old champion, so I promoted the verified merged version first rather than trusting the pre-promotion smoke test. Next step is post-promotion prediction confirmation and a fresh 180-day contradictions rerun against the new champion.",
+      "created_at": "2026-04-22T14:59:20.998681Z"
+    },
+    {
+      "id": "90a22baf-21f0-418f-bbca-99f8594e1cf1",
+      "author": "ryan",
+      "text": "Completed the Prescriber objective-threshold update.\n\nPublished/promoted version:\n- `Medication Review: Prescriber` -> `27816b39-0bb8-4fd8-adec-934d40cb47ab`\n\nWhat changed:\n- Replaced the SRX subjective \"most medications\" rubric with an explicit threshold: `No` when two or more current medications are missing prescriber verification; `Yes` when no more than one current medication is missing prescriber verification.\n- Updated both the official guidelines and the live classifier prompt/code in the same version.\n- Preserved the SPM PCP-only rule.\n- Preserved parse-from-end behavior and avoided inheriting the later non-champion `parse_from_start` regression.\n- Added explicit SRX handling that unresolved patient uncertainty on a current medication counts as a miss, and that chart-led list-correctness confirmation does not by itself verify the prescriber.\n\nVerification:\n- Validated the rewritten guidelines format before publishing.\n- Verified the created version contains both the updated code and the updated guidelines.\n- Promoted the merged version to champion.\n- Post-promotion prediction smoke tests executed successfully on:\n  - SRX-like item `9c929f25-a91f-4db7-8943-5aa93498b8e9--309504474`\n  - SPM-like item `9c929f25-a91f-4db7-8943-5aa93498b8e9--305879339`\n\nFresh 180-day contradiction rerun after promotion:\n- Before: 13 contradictions / 41 aligned\n- After: 10 contradictions / 44 aligned\n\nRemaining contradiction themes:\n- Older feedback applying an all-meds standard or treating a single missed prescriber as `No` (now clearer invalidation-review candidates).\n- SPM calls still being judged with SRX-style per-medication expectations.\n- Two residual low-confidence policy-gap buckets: one agent-uncertainty wording edge case and one transcription-artifact / `prescribed by` detection item.\n\nThis work narrows the contradiction set and makes the Prescriber rubric consistent with the same kind of objective threshold already used on Dosage.",
+      "created_at": "2026-04-22T15:02:54.085352Z"
+    }
+  ],
+  "created_at": "2026-04-22T14:55:17.655719Z",
+  "updated_at": "2026-04-22T15:02:56.774401Z",
+  "closed_at": "2026-04-22T15:02:56.774401Z",
+  "custom": {}
+}

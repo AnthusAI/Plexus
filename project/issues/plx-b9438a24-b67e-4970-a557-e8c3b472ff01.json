@@ -1,0 +1,25 @@
+{
+  "id": "plx-b9438a24-b67e-4970-a557-e8c3b472ff01",
+  "title": "Confirm/publish latest Medication Review Prescriber edits",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "97c73b7d-0a20-49ed-bef3-a57c34abe1a0",
+      "author": "ryan",
+      "text": "Checked live version history for Medication Review: Prescriber. There is no newer non-champion version beyond the current champion , so there is nothing additional to promote. Current champion already contains the latest score-code and guideline edits for this question.",
+      "created_at": "2026-04-22T15:11:05.182866Z"
+    }
+  ],
+  "created_at": "2026-04-22T15:10:50.010387Z",
+  "updated_at": "2026-04-22T15:11:09.920357Z",
+  "closed_at": "2026-04-22T15:11:09.920357Z",
+  "custom": {}
+}

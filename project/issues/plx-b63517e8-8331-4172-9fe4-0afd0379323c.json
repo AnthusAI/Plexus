@@ -1,0 +1,43 @@
+{
+  "id": "plx-b63517e8-8331-4172-9fe4-0afd0379323c",
+  "title": "Optimizer should invalidate artifact reuse when feedback target mutates",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "151fb475-e3c5-4a97-849a-1b270359a920",
+      "author": "ryan",
+      "text": "Investigation summary: fresh feedback selectors now exclude isInvalid=true in Evaluation._fetch_feedback_items and FeedbackService.find_feedback_items, and associated dataset curation rejects invalid items. Remaining leak is artifact reuse in feedback_alignment_optimizer.yaml: existing associated dataset is reused by row_count/materialization only; evaluation_find_recent cache reuse is keyed too loosely (accuracy keyed by score_version only, feedback keyed by score_version/type/age only) and ignores feedback target mutations after invalidation/edit. Planned fix: add feedback updatedAt watermark tool, tighten dataset+baseline cache matching, and stop runs on mid-run feedback drift.",
+      "created_at": "2026-04-23T03:24:40.739932Z"
+    },
+    {
+      "id": "fec45313-dfa6-4efe-bbe9-93b02dfa90d9",
+      "author": "ryan",
+      "text": "Implemented fix set:\n1) Added MCP tool plexus_feedback_latest_update in MCP/tools/feedback/feedback.py. It computes latest relevant FeedbackItem.updatedAt watermark while restricting candidates to the score window by editedAt+days.\n2) Tightened plexus_evaluation_find_recent in MCP/tools/evaluation/evaluations.py with optional exact-match filters (dataset_id, days, max_feedback_items, sampling_mode) plus latest_feedback_updated_at freshness gate for feedback baselines.\n3) Updated optimizer procedure wiring in plexus/procedures/feedback_alignment_optimizer.yaml:\n   - computes/stores feedback_target_updated_at watermark\n   - rejects associated dataset reuse when dataset.created_at < watermark\n   - passes exact-match arguments to plexus_evaluation_find_recent for both accuracy and feedback baseline reuse\n   - checks watermark at cycle start and stops run with stop_reason=feedback_target_changed_restart_required when drift detected\n4) Updated skills/plexus-score-optimizer/SKILL.md with artifact-reuse freshness/restart policy.\n5) Added tests:\n   - MCP/tools/feedback/feedback_latest_update_test.py\n   - MCP/tools/evaluation/evaluation_find_recent_exact_match_test.py\nValidation:\n- Syntax sanity passed via python3 -m py_compile for modified Python files.\n- Could not execute pytest in current shell: pytest is not installed on available interpreters in this environment.",
+      "created_at": "2026-04-23T03:29:09.736791Z"
+    },
+    {
+      "id": "0e62fe7a-8ca9-46b5-a438-4fc022955e74",
+      "author": "ryan",
+      "text": "Validation update: executed syntax check successfully via python3 -m py_compile on modified Python files. Attempted targeted pytest for new tests, but local system interpreter environment lacks MCP runtime deps ( import fails in this shell), so runtime unit execution could not be completed locally. Tests are added and ready for execution in the project runtime/CI environment where MCP deps are available.",
+      "created_at": "2026-04-23T03:30:18.354653Z"
+    },
+    {
+      "id": "10460573-6ed6-4383-82c0-ab5451735920",
+      "author": "ryan",
+      "text": "Validation update: python3 -m py_compile passed for modified Python files. Targeted pytest execution was attempted, but local system interpreter environment lacks MCP runtime dependencies and imports fail before tests run. New tests are added and should run in the project runtime/CI environment where MCP dependencies are available.",
+      "created_at": "2026-04-23T03:30:24.597600Z"
+    }
+  ],
+  "created_at": "2026-04-23T03:24:34.278164Z",
+  "updated_at": "2026-04-23T03:30:24.597600Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+  "title": "Improve optimizer skill guidance for contradiction analysis and approved invalidation workflow",
+  "description": "",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "279ced4d-daeb-44e0-84ef-92806455b9e0",
+      "author": "ryan",
+      "text": "Reopened for follow-up skill refinements: add concrete mechanics and failure-mode hints for extracting contradiction candidates from stored report output, filtering approval candidates from the report itself, and avoiding item-by-item reconstruction before report triage.",
+      "created_at": "2026-04-22T18:14:40.361992Z"
+    },
+    {
+      "id": "4e32c32b-1e91-466d-8da4-d214bc530705",
+      "author": "ryan",
+      "text": "Optimizer skill guidance update is complete. Both the high-level contradiction/invalidation framing and the new mechanical hints for report-first triage are now in the skill, and the follow-up task/story are closed.",
+      "created_at": "2026-04-22T18:16:05.359349Z"
+    }
+  ],
+  "created_at": "2026-04-22T18:00:52.216743Z",
+  "updated_at": "2026-04-22T18:31:13.871133Z",
+  "closed_at": null,
+  "custom": {}
+}
