@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block pushes when Kanbus artifact files are left uncommitted.
+# These artifacts are used to share task state across systems/users.
+pending="$(git status --short | rg 'project/(issues|events)/' || true)"
+if [[ -n "${pending}" ]]; then
+  echo "ERROR: Uncommitted Kanbus artifacts detected:" >&2
+  echo "${pending}" >&2
+  echo "" >&2
+  echo "Stage and commit project/issues and project/events changes before push." >&2
+  echo "Hint: git add project/issues project/events && git commit -m 'Sync Kanbus artifacts'" >&2
+  exit 1
+fi
