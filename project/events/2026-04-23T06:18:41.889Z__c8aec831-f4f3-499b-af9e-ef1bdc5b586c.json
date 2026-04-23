@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c8aec831-f4f3-499b-af9e-ef1bdc5b586c",
+  "issue_id": "plx-1251dbc7-d7c4-4cbb-b2eb-868b6ecad99e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T06:18:41.889Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Remove champion auto-promotion from the feedback alignment optimizer, keep winning version reporting manual-safe, and clarify that --max-iterations 1 is a single-cycle verification run.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Remove optimizer auto-promotion and clarify one-cycle verification runs"
+  }
+}

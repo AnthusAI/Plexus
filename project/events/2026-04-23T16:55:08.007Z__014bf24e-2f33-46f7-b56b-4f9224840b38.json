@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "014bf24e-2f33-46f7-b56b-4f9224840b38",
+  "issue_id": "plx-a10ef44b-27ec-4d72-b6bc-df00c45fa33d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T16:55:08.007Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Prevent classifier-as-extractor optimizer candidates"
+  }
+}

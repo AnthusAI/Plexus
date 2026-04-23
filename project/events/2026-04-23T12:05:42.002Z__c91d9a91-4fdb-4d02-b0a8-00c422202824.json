@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c91d9a91-4fdb-4d02-b0a8-00c422202824",
+  "issue_id": "plx-e102d8f5-bd51-4a59-84da-f1d39cbf8506",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T12:05:42.002Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run feedback alignment optimizer via CLI for scorecard 0e48be55-1682-4949-9e7e-3c5b5da1e00a / score cf17129c-6cd7-425a-9040-8a7b46b38f31 with 60 days of feedback, 200 samples per evaluation, and 10 cycles. Capture procedure and task IDs from direct CLI output.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Run optimizer test for score cf17129c-6cd7-425a-9040-8a7b46b38f31"
+  }
+}
