@@ -44,6 +44,7 @@ Do not treat every contradiction as a score bug. A contradiction can mean:
 - Always discuss candidate invalidation groups with the user first.
 - Only invalidate items after the user explicitly approves the exact group.
 - Start invalidation triage from contradiction report output, not ad hoc individual item inspection.
+- The optimizer never promotes champion automatically. Champion promotion is always a separate manual operator step.
 - Use MCP for inspection around the optimizer when helpful, but not as the primary execution path during debugging.
 - When you prepare a score for optimizer work with `python -m plexus.cli score push`, remember that CLI-published guidelines come from `scorecards/<scorecard>/guidelines/<score>.md`. A sidecar markdown file next to the YAML is not the canonical guidelines path for CLI push.
 
@@ -113,6 +114,13 @@ python -m plexus.cli procedure optimize \
 
 Only include the optional flags that are actually needed.
 Pass `--max-samples` explicitly instead of relying on the CLI default. If the user does not specify a sample cap, use `200`.
+
+If you intentionally launch with `--max-iterations 1`, treat it as a verification-style run:
+
+- it is for validating one optimizer cycle or a bug fix
+- it is not a full optimization pass
+- it still returns a winning version candidate for review
+- any champion promotion must still be done manually afterward
 
 ## How To Read A Live Run and Spot Real Progress
 

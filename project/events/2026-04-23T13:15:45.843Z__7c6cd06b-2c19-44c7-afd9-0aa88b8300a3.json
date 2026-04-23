@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7c6cd06b-2c19-44c7-afd9-0aa88b8300a3",
+  "issue_id": "plx-3714e984-6799-4e43-a171-188380ac6962",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T13:15:45.843Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Long-running optimizer and procedure runs can fail after hours of useful work when AppSync/DynamoDB throttling hits procedure/task/chat persistence writes. Add throttling-aware retry/backoff in the dashboard GraphQL client plus a longer write policy for procedure-runtime persistence surfaces (procedure metadata/status, task stages/progress, chat/HITL writes), with regression tests proving retries succeed and exhausted retry windows fail clearly.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 0,
+    "status": "open",
+    "title": "Harden procedure persistence against transient GraphQL throttling"
+  }
+}

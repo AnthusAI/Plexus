@@ -3,13 +3,16 @@ import json
 from tactus.protocols.models import ProcedureMetadata
 
 from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 class _FakeS3Client:
     def __init__(self):
         self.objects = {}
+        self.put_calls = 0
 
     def put_object(self, Bucket, Key, Body, ContentType):
+        self.put_calls += 1
         self.objects[(Bucket, Key)] = {
             "Body": Body,
             "ContentType": ContentType,
@@ -24,8 +27,10 @@ class _FakeClient:
             "custom": {"keep": True},
         }
         self.saved_metadata = None
+        self.retry_policies = []
 
-    def execute(self, query, variables):
+    def execute(self, query, variables, retry_policy=None):
+        self.retry_policies.append(retry_policy)
         if "getProcedure(id: $id)" in query:
             return {
                 "getProcedure": {
@@ -36,11 +41,12 @@ class _FakeClient:
                 }
             }
         if "updateProcedure(input:" in query:
-            self.saved_metadata = json.loads(variables["metadata"])
+            if "metadata" in variables:
+                self.saved_metadata = json.loads(variables["metadata"])
             return {
                 "updateProcedure": {
                     "id": variables["id"],
-                    "metadata": variables["metadata"],
+                    "metadata": variables.get("metadata"),
                 }
             }
         raise AssertionError(f"Unexpected query: {query}")
@@ -73,3 +79,14 @@ def test_save_procedure_metadata_preserves_runtime_and_failure_fields(monkeypatc
     assert fake_client.saved_metadata["state"]["_s3_key"].endswith("/state.json")
     assert fake_client.saved_metadata["lua_state"]["_s3_key"].endswith("/lua_state.json")
     assert fake_client.saved_metadata["checkpoints"]["_s3_key"].endswith("/checkpoints.json")
+    assert fake_client.retry_policies[-1] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+    assert fake_s3.put_calls == 4
+
+
+def test_update_procedure_status_uses_long_running_write_policy():
+    fake_client = _FakeClient()
+    storage = PlexusStorageAdapter(fake_client, "proc-123")
+
+    storage.update_procedure_status("proc-123", "RUNNING", waiting_on_message_id="msg-1")
+
+    assert fake_client.retry_policies[-1] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME

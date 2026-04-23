@@ -11,6 +11,8 @@ import asyncio
 import json
 from unittest.mock import Mock, patch
 from plexus.cli.procedure.mcp_transport import (
+    _advance_task_to_stage_by_name,
+    _update_stage_progress,
     InProcessMCPTransport,
     EmbeddedMCPServer,
     ProcedureMCPClient,
@@ -18,6 +20,7 @@ from plexus.cli.procedure.mcp_transport import (
     MCPResourceInfo,
     create_procedure_mcp_server
 )
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 class TestInProcessMCPTransport:
@@ -258,16 +261,61 @@ class TestEmbeddedMCPServer:
             # Test that we can use the client
             tools = await client.list_tools()
             assert len(tools) >= 2  # At least the core tools
-        
+
         # Connection should be closed after context exit
         assert not server.transport.connected
-    
+
     @pytest.mark.asyncio
     async def test_connection_default_client_info(self, server):
         """Test connection with default client info."""
         async with server.connect() as client:
             assert server.transport.client_info["name"] == "Procedure Client"
             assert server.transport.client_info["version"] == "1.0.0"
+
+
+def test_advance_task_to_stage_by_name_uses_long_running_retry_policy():
+    client = Mock()
+    client.execute.side_effect = [
+        {
+            "getTask": {
+                "stages": {
+                    "items": [
+                        {"id": "stage-1", "name": "Start", "order": 1, "status": "PENDING"},
+                        {"id": "stage-2", "name": "Evaluation", "order": 2, "status": "PENDING"},
+                    ]
+                }
+            }
+        },
+        {"updateTaskStage": {"id": "stage-1", "status": "COMPLETED"}},
+        {"updateTaskStage": {"id": "stage-2", "status": "RUNNING"}},
+    ]
+
+    _advance_task_to_stage_by_name(client, "task-1", "Evaluation")
+
+    mutation_calls = client.execute.call_args_list[1:]
+    assert mutation_calls
+    for call in mutation_calls:
+        assert call.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+
+
+def test_update_stage_progress_uses_long_running_retry_policy():
+    client = Mock()
+    client.execute.side_effect = [
+        {
+            "getTask": {
+                "stages": {
+                    "items": [
+                        {"id": "stage-2", "name": "Evaluation", "order": 2, "status": "RUNNING"},
+                    ]
+                }
+            }
+        },
+        {"updateTaskStage": {"id": "stage-2", "processedItems": 3, "totalItems": 5}},
+    ]
+
+    _update_stage_progress(client, "task-1", 3, 5)
+
+    assert client.execute.call_args_list[1].kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 class TestProcedureMCPClient:

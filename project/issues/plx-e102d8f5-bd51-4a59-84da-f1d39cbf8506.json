@@ -1,0 +1,18 @@
+{
+  "id": "plx-e102d8f5-bd51-4a59-84da-f1d39cbf8506",
+  "title": "Run optimizer test for score cf17129c-6cd7-425a-9040-8a7b46b38f31",
+  "description": "Run feedback alignment optimizer via CLI for scorecard 0e48be55-1682-4949-9e7e-3c5b5da1e00a / score cf17129c-6cd7-425a-9040-8a7b46b38f31 with 60 days of feedback, 200 samples per evaluation, and 10 cycles. Capture procedure and task IDs from direct CLI output.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-23T12:05:42.001681Z",
+  "updated_at": "2026-04-23T12:05:51.137875Z",
+  "closed_at": null,
+  "custom": {}
+}
