@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c3969cbc-100f-41a7-aaa6-e7bba8b5c39f",
+  "issue_id": "plx-f21daa68-f19f-43a1-bfd8-aee2f6cd57b0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T17:04:25.306Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a Plexus operator\nI want to invalidate one specific feedback item from the CLI or MCP using a feedback ID or any identifier that resolves to the underlying Item\nSo that approved invalidations do not depend on the dashboard UI succeeding.\n\n## Acceptance Criteria\n- CLI command: `plexus feedback invalidate <identifier>`\n- MCP tool exposes the same single-item invalidation capability\n- `<identifier>` may be a feedback item ID, an item ID, an item externalId, or an identifier-table value\n- If an item identifier maps to multiple feedback items, the command refuses to mutate and tells the operator how to disambiguate\n- No command path invalidates more than one feedback item in a single invocation\n- The mutation marks `isInvalid=true` and returns the updated feedback item details\n\n## Gherkin Specification\n```gherkin\nFeature: Invalidate a specific feedback item by flexible identifier\n  As a Plexus operator\n  I want to invalidate one approved feedback item from tooling\n  So that I am not blocked on the dashboard UI\n\nScenario: Invalidate by direct feedback item ID\n  Given a feedback item exists with ID \"feedback-123\"\n  When I run `plexus feedback invalidate feedback-123`\n  Then that feedback item is updated with `isInvalid=true`\n  And the command returns the updated feedback item details\n\nScenario: Invalidate by item identifier when there is one matching feedback item\n  Given an item identifier value resolves to item \"item-123\"\n  And exactly one feedback item exists for that item\n  When I run `plexus feedback invalidate CUSTOMER-42`\n  Then the matching feedback item is updated with `isInvalid=true`\n\nScenario: Refuse ambiguous item matches\n  Given an item identifier resolves to item \"item-123\"\n  And multiple feedback items exist for that item\n  When I run `plexus feedback invalidate CUSTOMER-42`\n  Then no feedback item is updated\n  And the command explains how to disambiguate with scorecard and score\n\nScenario: Invalidate by item identifier for a specific score\n  Given an item identifier resolves to item \"item-123\"\n  And multiple feedback items exist for that item\n  When I run `plexus feedback invalidate CUSTOMER-42 --scorecard \"Test Scorecard\" --score \"Eligibility\"`\n  Then the matching feedback item for that score is updated with `isInvalid=true`\n  And no other feedback items are changed\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+    "priority": 1,
+    "status": "open",
+    "title": "Invalidate one feedback item by feedback ID or item identifier"
+  }
+}

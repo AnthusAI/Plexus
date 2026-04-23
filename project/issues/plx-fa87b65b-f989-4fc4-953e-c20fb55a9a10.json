@@ -1,0 +1,25 @@
+{
+  "id": "plx-fa87b65b-f989-4fc4-953e-c20fb55a9a10",
+  "title": "Document GPT-5 output-budget exhaustion in optimizer cookbook",
+  "description": "As an optimizer agent, I want the cookbook to call out empty or partial GPT-5 completions caused by low max_output_tokens so that I can recognize the pattern, inspect output budget settings, and test increasing the token cap instead of misdiagnosing the issue as pure prompt failure.\n\nFeature: Optimizer cookbook documents GPT-5 output-budget starvation\n\nScenario: Encountering empty or truncated completions from GPT-5-class models\nGiven an optimizer hypothesis run or smoke test using a GPT-5-class reasoning model\nWhen the model returns empty output, partial output, or repeated invalid classifications after retries\nThen the cookbook explains that low max_output_tokens can exhaust reasoning/output budget before visible text is produced\nAnd the cookbook instructs the agent to inspect model max_tokens/max_output_tokens settings\nAnd the cookbook suggests raising the output budget as a structural fix when the rubric and prompt are otherwise sound",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e89b0522-db36-463e-bb66-ed6ed2aa0eb7",
+      "author": "ryan",
+      "text": "Updated optimizer-cookbook.md to teach the optimizer that GPT-5-class empty or partial completions can be caused by low max_tokens/max_output_tokens, and that increasing the output budget is a Category C config fix to try before prompt surgery or model swap.",
+      "created_at": "2026-04-22T16:12:38.825517Z"
+    }
+  ],
+  "created_at": "2026-04-22T16:11:18.497902Z",
+  "updated_at": "2026-04-22T16:12:38.825517Z",
+  "closed_at": null,
+  "custom": {}
+}

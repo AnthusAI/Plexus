@@ -390,6 +390,8 @@ def _is_qualifying_feedback_item(
 ) -> bool:
     if feedback_item.scorecardId != scorecard_id or feedback_item.scoreId != score_id:
         return False
+    if getattr(feedback_item, "isInvalid", False):
+        return False
     if not (feedback_item.finalAnswerValue or "").strip():
         return False
     item = getattr(feedback_item, "item", None)

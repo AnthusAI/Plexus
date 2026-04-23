@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b919e099-9e74-470b-ac1c-0d37d0b43179",
+  "issue_id": "plx-2f16158a-c640-4d04-8145-e064fbcd66d0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T14:55:17.657Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Replace the current SRX \"most medications\" prescriber standard with the same kind of objective threshold used by Medication Review: Dosage.\n\nScope:\n- Update Medication Review: Prescriber score code/prompt in Plexus\n- Update official guidelines to match\n- Keep SPM PCP-only logic unchanged\n- Publish one merged version containing both code and guidelines\n- Promote that merged version to champion\n- Rerun fresh 180-day FeedbackContradictions for Prescriber and summarize the delta\n\nOut of scope:\n- legacy Medication Review\n- other Medication Review split scores unless required by direct dependency",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Make Medication Review Prescriber use objective miss-count threshold"
+  }
+}

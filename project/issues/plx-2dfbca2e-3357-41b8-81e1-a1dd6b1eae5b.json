@@ -1,0 +1,49 @@
+{
+  "id": "plx-2dfbca2e-3357-41b8-81e1-a1dd6b1eae5b",
+  "title": "Teach optimizer skill how contradiction analysis and feedback invalidation fit into optimization",
+  "description": "",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "19c8c682-b054-469c-ba65-0fd9278a8da1",
+      "author": "ryan",
+      "text": "Follow-up refinement requested by user: enrich the optimizer skill with specific operational hints for contradiction-report mechanics, including use of stored report output attachments and the rule that invalidation discussions must begin from report evidence rather than ad hoc item inspection.",
+      "created_at": "2026-04-22T18:14:40.358399Z"
+    },
+    {
+      "id": "e78ea9c7-892b-4ed5-99c8-afcca38c4ff1",
+      "author": "ryan",
+      "text": "The follow-up mechanics refinement is complete and committed on the branch. The skill now explains how to work from stored contradictions report output, how to filter invalidation candidates from exemplar rationale, and how to keep invalidation approval-gated.",
+      "created_at": "2026-04-22T18:16:05.356910Z"
+    },
+    {
+      "id": "8046db0c-cc4e-43ef-8805-adb263db679b",
+      "author": "ryan",
+      "text": "Expanding canonical optimizer skill instructions with the conservative contradiction invalidation workflow: compare contradictions report with fresh evaluation, invalidate biggest contradiction categories first, rerun evaluation, rerun contradictions report, and only then trust optimizer inputs.",
+      "created_at": "2026-04-22T19:56:25.059153Z"
+    },
+    {
+      "id": "ffe78f53-dcd6-4afe-9dc6-5c7ba47e3c04",
+      "author": "ryan",
+      "text": "Fixed optimizer startup failure root cause: MCP plexus_score_pull used a weaker scorecard-name resolver than working score tools, causing Lua runtime failure SCORE_NOT_FOUND during optimizer initialization. Patched MCP/tools/score/scores.py to use the CLI-backed scorecard resolver first, added regression coverage in MCP/tools/score/scores_test.py, verified score_pull now succeeds for Medication Review: Prescriber in a fresh subprocess, and relaunched optimizer. Current Prescriber procedure 75231fc3-823a-4654-8192-ecc016f6b8d1 is RUNNING and has progressed into the initial evaluation stage.",
+      "created_at": "2026-04-22T20:48:44.685384Z"
+    },
+    {
+      "id": "2763d909-f342-4ca8-9ae4-6e08c8ac8eed",
+      "author": "ryan",
+      "text": "Dosage cleanup advanced: invalidated approved threshold-drift feedback items, fixed live score mechanics by publishing merged version 72805404-4a3a-4299-afd8-90fe6026b7b2 (parse_from_end + canonical guidelines), promoted it to champion, launched fresh feedback eval b8512928-2cde-4849-85da-038a05205cf6, and started optimizer procedure 7629e4f7-f64c-41ac-86b2-d8c3bd255dac.",
+      "created_at": "2026-04-22T21:02:04.272472Z"
+    }
+  ],
+  "created_at": "2026-04-22T18:00:56.474704Z",
+  "updated_at": "2026-04-22T21:02:04.272472Z",
+  "closed_at": null,
+  "custom": {}
+}

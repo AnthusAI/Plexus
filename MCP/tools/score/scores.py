@@ -28,6 +28,32 @@ def register_score_tools(mcp: FastMCP):
     def _resolve_scorecard_identifier_quiet(client, identifier: str) -> Optional[str]:
         """Resolve a scorecard identifier without printing CLI-oriented status lines."""
         try:
+            from plexus.cli.scorecard.scorecards import (
+                resolve_scorecard_identifier as _resolve_scorecard_identifier,
+            )
+
+            resolver_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = resolver_stdout
+            try:
+                resolved = _resolve_scorecard_identifier(client, identifier)
+            finally:
+                resolver_output = resolver_stdout.getvalue()
+                if resolver_output:
+                    logger.warning(
+                        "Captured unexpected stdout during quiet scorecard resolution: %s",
+                        resolver_output,
+                    )
+                sys.stdout = saved_stdout
+
+            if resolved:
+                return resolved
+        except Exception:
+            # Fall back to the local query-based resolver below if the CLI resolver
+            # is unavailable or errors in the MCP runtime.
+            pass
+
+        try:
             result = client.execute(
                 f"""
                 query GetScorecard {{
@@ -505,15 +531,32 @@ def register_score_tools(mcp: FastMCP):
                     "error": f"Could not retrieve scorecard sections for '{scorecard_identifier}'."
                 }
 
+            normalized_identifier = (score_identifier or "").strip()
+            normalized_identifier_ci = normalized_identifier.casefold()
+
+            def _candidate_values(score_data: Dict[str, Any]) -> List[str]:
+                return [
+                    str(score_data.get("id") or "").strip(),
+                    str(score_data.get("name") or "").strip(),
+                    str(score_data.get("key") or "").strip(),
+                    str(score_data.get("externalId") or "").strip(),
+                ]
+
             # Find the specific score
             found_score_data = None
             found_section_id = None
+            available_scores: List[str] = []
             for section in scorecard_data.get('sections', {}).get('items', []):
                 for score_data in section.get('scores', {}).get('items', []):
-                    if (score_data.get('id') == score_identifier or 
-                        score_data.get('name') == score_identifier or 
-                        score_data.get('key') == score_identifier or 
-                        score_data.get('externalId') == score_identifier):
+                    candidates = _candidate_values(score_data)
+                    if score_data.get("name"):
+                        available_scores.append(str(score_data.get("name")))
+
+                    if any(c == normalized_identifier for c in candidates):
+                        found_score_data = score_data
+                        found_section_id = section['id']
+                        break
+                    if any(c and c.casefold() == normalized_identifier_ci for c in candidates):
                         found_score_data = score_data
                         found_section_id = section['id']
                         break
@@ -523,7 +566,12 @@ def register_score_tools(mcp: FastMCP):
             if not found_score_data:
                 return {
                     "success": False,
-                    "error": f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
+                    "error": (
+                        f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'. "
+                        f"resolved_scorecard_id='{scorecard_id}', normalized_identifier='{normalized_identifier}'."
+                    ),
+                    "available_scores": available_scores[:25],
+                    "scorecard_id": scorecard_id,
                 }
 
             # Create Score instance

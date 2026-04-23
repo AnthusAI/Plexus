@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0e29c5b5-9fdf-475c-85db-c859a32366df",
+  "issue_id": "plx-8a1cc6bb-a003-4fab-858a-fd6f5f031134",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T15:26:24.213Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Fix optimizer score pull name-resolution for procedures"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "caf9f49f-1a43-4fad-ae0f-ea5d776e835c",
+  "issue_id": "plx-378dac0e-9bd5-4e6f-9b15-dc15173a931a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T15:12:01.479Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Run optimizer for Medication Review Prescriber"
+  }
+}

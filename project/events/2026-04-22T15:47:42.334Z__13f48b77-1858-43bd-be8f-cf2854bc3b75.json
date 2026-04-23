@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "13f48b77-1858-43bd-be8f-cf2854bc3b75",
+  "issue_id": "plx-66ed5bd5-53a8-480d-9470-330e46c0a24f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T15:47:42.334Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Medication Review Prescriber GraphRecursionError on optimizer baseline items"
+  }
+}

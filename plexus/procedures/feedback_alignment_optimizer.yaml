@@ -2666,6 +2666,9 @@ code: |
   -- Build the review context message shown to the reviewer agent after evals
   local function build_review_context(opts)
     local parts = {}
+    local function has_number(value)
+      return type(value) == "number"
+    end
 
     table.insert(parts, "=== EVALUATION RESULTS FOR YOUR CHANGE ===")
     table.insert(parts, "")
@@ -2676,19 +2679,25 @@ code: |
     table.insert(parts, "")
 
     table.insert(parts, "Feedback alignment (vs baseline):")
-    if opts.fb_metrics then
+    if opts.fb_metrics and has_number(opts.baseline_fb_ac1) and has_number(opts.fb_metrics.alignment) then
       table.insert(parts, string.format("  AC1: %.3f → %.3f (delta %+.3f)",
         opts.baseline_fb_ac1, opts.fb_metrics.alignment,
         opts.fb_metrics.alignment - opts.baseline_fb_ac1))
-      table.insert(parts, string.format("  Accuracy: %.3f, Precision: %.3f, Recall: %.3f",
-        opts.fb_metrics.accuracy, opts.fb_metrics.precision, opts.fb_metrics.recall))
+      if has_number(opts.fb_metrics.accuracy)
+         and has_number(opts.fb_metrics.precision)
+         and has_number(opts.fb_metrics.recall) then
+        table.insert(parts, string.format("  Accuracy: %.3f, Precision: %.3f, Recall: %.3f",
+          opts.fb_metrics.accuracy, opts.fb_metrics.precision, opts.fb_metrics.recall))
+      else
+        table.insert(parts, "  Accuracy/precision/recall: (not available)")
+      end
     else
       table.insert(parts, "  (not available)")
     end
     table.insert(parts, "")
 
     table.insert(parts, "Accuracy on regression dataset (vs baseline):")
-    if opts.acc_metrics then
+    if opts.acc_metrics and has_number(opts.baseline_acc_ac1) and has_number(opts.acc_metrics.alignment) then
       table.insert(parts, string.format("  AC1: %.3f → %.3f (delta %+.3f)",
         opts.baseline_acc_ac1, opts.acc_metrics.alignment,
         opts.acc_metrics.alignment - opts.baseline_acc_ac1))
@@ -2707,7 +2716,7 @@ code: |
         if cand.score and cand.score <= -999 then dq = " (DISQUALIFIED)" end
         local synth_tag = cand.is_synthesis and " [SYNTH]" or ""
         table.insert(parts, string.format("  Candidate %d%s: Recent AC1 %+.3f, Regression AC1 %+.3f%s%s",
-          cand.index, synth_tag,
+          cand.index or 0, synth_tag,
           cand.fb_deltas and cand.fb_deltas.alignment or 0,
           cand.acc_deltas and cand.acc_deltas.alignment or 0,
           dq, selected))
@@ -3039,7 +3048,7 @@ code: |
     do
       local _cont_pull = call_plexus_tool("plexus_score_pull", {
         scorecard_identifier = params.scorecard,
-        score_identifier = params.score,
+        score_identifier = score_id,
         version_id = champion_version_id
       })
       if _cont_pull and _cont_pull.success then
@@ -3068,6 +3077,26 @@ code: |
   -- The feedback evaluation separately uses the newest items.
   Human.notify({message = "Checking for existing associated regression dataset...", level = "info"})
   -- dataset_id is pre-declared above the continuation check
+  local function iso_after_or_equal(lhs, rhs)
+    if not has_text(lhs) or not has_text(rhs) then return false end
+    return tostring(lhs) >= tostring(rhs)
+  end
+
+  local feedback_target_updated_at = nil
+  local watermark_ok, watermark = pcall(call_plexus_tool, "plexus_feedback_latest_update", {
+    scorecard_name = params.scorecard,
+    score_name = params.score,
+    days = params.days
+  })
+  if watermark_ok and watermark and not watermark.error and watermark.found and has_text(watermark.latest_feedback_updated_at) then
+    feedback_target_updated_at = watermark.latest_feedback_updated_at
+    Human.notify({
+      message = "Feedback watermark: " .. tostring(feedback_target_updated_at),
+      level = "info"
+    })
+  else
+    Human.notify({message = "Feedback watermark unavailable; using row-count/materialization checks only.", level = "warning"})
+  end
 
   local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
     scorecard = params.scorecard,
@@ -3076,9 +3105,14 @@ code: |
 
   local min_dataset_rows = params.max_samples
   local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
+  local dataset_is_fresh = true
+  if has_text(feedback_target_updated_at) then
+    dataset_is_fresh = iso_after_or_equal(dataset_check and dataset_check.created_at, feedback_target_updated_at)
+  end
   local dataset_adequate = dataset_check and dataset_check.has_dataset
     and dataset_check.is_materialized
     and dataset_check.row_count and dataset_check.row_count >= min_acceptable
+    and dataset_is_fresh
 
   if dataset_adequate then
     dataset_id = dataset_check.dataset_id
@@ -3086,10 +3120,18 @@ code: |
   else
     -- Need to create a dataset
     if dataset_check and dataset_check.has_dataset then
-      Human.notify({message = string.format(
-        "Existing dataset has %d rows but need %d, creating new one...",
-        dataset_check.row_count or 0, min_dataset_rows
-      ), level = "info"})
+      if not dataset_is_fresh and has_text(feedback_target_updated_at) then
+        Human.notify({message = string.format(
+          "Existing dataset is stale (created_at=%s older than watermark=%s), creating new one...",
+          tostring(dataset_check.created_at or "unknown"),
+          tostring(feedback_target_updated_at)
+        ), level = "info"})
+      else
+        Human.notify({message = string.format(
+          "Existing dataset has %d rows but need %d, creating new one...",
+          dataset_check.row_count or 0, min_dataset_rows
+        ), level = "info"})
+      end
     else
       Human.notify({message = "No associated dataset found, creating one...", level = "info"})
     end
@@ -3150,12 +3192,13 @@ code: |
   end
 
   State.set("dataset_id", dataset_id)
+  State.set("feedback_target_updated_at", feedback_target_updated_at)
   Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
 
   -- Pull starting version (champion or specified start_version)
   local pull_args = {
     scorecard_identifier = params.scorecard,
-    score_identifier = params.score
+    score_identifier = score_id
   }
   if has_text(params.start_version) then
     pull_args.version_id = params.start_version
@@ -3205,6 +3248,19 @@ code: |
 
   local resume_regression = has_text(params.resume_regression_eval) and params.resume_regression_eval or nil
   local resume_recent  = has_text(params.resume_recent_eval) and params.resume_recent_eval or nil
+  local feedback_target_updated_at = State.get("feedback_target_updated_at")
+  if not has_text(feedback_target_updated_at) then
+    local watermark_ok, watermark = pcall(call_plexus_tool, "plexus_feedback_latest_update", {
+      scorecard_name = params.scorecard,
+      score_name = params.score,
+      days = params.days
+    })
+    if watermark_ok and watermark and not watermark.error and watermark.found and has_text(watermark.latest_feedback_updated_at) then
+      feedback_target_updated_at = watermark.latest_feedback_updated_at
+      State.set("feedback_target_updated_at", feedback_target_updated_at)
+      Human.notify({message = "Initialized feedback watermark: " .. tostring(feedback_target_updated_at), level = "info"})
+    end
+  end
 
   if resume_regression or resume_recent then
     -- Resume mode: reuse existing baseline evaluations
@@ -3298,6 +3354,7 @@ code: |
       evaluation_type  = "accuracy",
       max_age_hours    = 168,  -- 7 days: accuracy uses a fixed dataset, valid across restarts
       min_items        = math.floor(n_samples * 0.8),  -- allow ~20% smaller sample counts
+      dataset_id       = dataset_id,
     })
     if ok_acc and found_acc and not found_acc.error and (found_acc.evaluation_id or found_acc.id) then
       record_evaluation_cost(found_acc, "find_recent_regression_baseline", "accuracy")
@@ -3318,6 +3375,10 @@ code: |
       evaluation_type  = "feedback",
       max_age_hours    = 48,   -- 48h: daily runs take hours, need buffer beyond 24h
       min_items        = math.floor(n_samples * 0.8),  -- same 20% tolerance as accuracy
+      days             = params.days,
+      max_feedback_items = params.max_samples or 100,
+      sampling_mode    = "newest",
+      latest_feedback_updated_at = feedback_target_updated_at,
     })
     if ok_fb and found_fb and not found_fb.error and (found_fb.evaluation_id or found_fb.id) then
       record_evaluation_cost(found_fb, "find_recent_feedback_baseline", "feedback")
@@ -3774,12 +3835,40 @@ code: |
 
   while cycle < max_cycles do
     cycle = cycle + 1
+    local cycle_recorded = false
     local cycle_ok, cycle_err = pcall(function()
     diag(string.format("=== ENTERING CYCLE %d/%d === (last_accepted=%s)", cycle, max_cycles, tostring(last_accepted_version_id)))
     Human.notify({message = string.format(
       "═══ Cycle %d/%d ═══", cycle, max_cycles), level = "info"})
     State.set("current_iteration", cycle)
     Stage.progress(cycle, max_cycles)
+
+    -- Stop when feedback changed since run start; restart is required to keep baselines coherent.
+    do
+      local start_watermark = State.get("feedback_target_updated_at")
+      if has_text(start_watermark) then
+        local wm_ok, wm = pcall(call_plexus_tool, "plexus_feedback_latest_update", {
+          scorecard_name = params.scorecard,
+          score_name = params.score,
+          days = params.days
+        })
+        if wm_ok and wm and not wm.error and wm.found and has_text(wm.latest_feedback_updated_at) then
+          local current_watermark = wm.latest_feedback_updated_at
+          if tostring(current_watermark) > tostring(start_watermark) then
+            stop_reason = "feedback_target_changed_restart_required"
+            Human.notify({
+              message = string.format(
+                "Feedback target changed during run (start=%s current=%s). Stopping for clean restart.",
+                tostring(start_watermark),
+                tostring(current_watermark)
+              ),
+              level = "warning"
+            })
+            return "break_cycle"
+          end
+        end
+      end
+    end
 
     -- Phase 4: Mailbox check — pick up any user messages injected via conversation viewer
     do
@@ -3812,7 +3901,7 @@ code: |
     -- Pull the last accepted version as starting point for this cycle
     local score_pull = call_plexus_tool("plexus_score_pull", {
       scorecard_identifier = params.scorecard,
-      score_identifier = params.score,
+      score_identifier = score_id,
       version_id = last_accepted_version_id
     })
     if not score_pull or not score_pull.success then
@@ -4087,7 +4176,7 @@ code: |
       -- Reset editor to baseline code for each hypothesis
       call_plexus_tool("score_editor_setup", {
         scorecard_identifier = params.scorecard,
-        score_identifier     = params.score,
+        score_identifier     = score_id,
         yaml_content         = current_code,
         code_file_path       = score_pull.codeFilePath,
         iteration            = cycle,
@@ -4333,7 +4422,7 @@ code: |
 
             local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
               scorecard_identifier = params.scorecard,
-              score_identifier     = params.score,
+              score_identifier     = score_id,
               version              = candidate_id,
               samples              = 3
             })
@@ -4633,7 +4722,7 @@ code: |
 
         call_plexus_tool("score_editor_setup", {
           scorecard_identifier = params.scorecard,
-          score_identifier     = params.score,
+          score_identifier     = score_id,
           yaml_content         = start_code,
           code_file_path       = score_pull.codeFilePath,
           iteration            = cycle,
@@ -4845,7 +4934,7 @@ code: |
 
               local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
                 scorecard_identifier = params.scorecard,
-                score_identifier     = params.score,
+                score_identifier     = score_id,
                 version              = candidate_id,
                 samples              = 3
               })
@@ -5004,7 +5093,7 @@ code: |
       for _, sv in ipairs(succeeded) do
         local hyp_pull = call_plexus_tool("plexus_score_pull", {
           scorecard_identifier = params.scorecard,
-          score_identifier = params.score,
+          score_identifier = score_id,
           version_id = sv.version_id
         })
         if hyp_pull and hyp_pull.success and hyp_pull.codeFilePath then
@@ -5040,7 +5129,7 @@ code: |
         end
         local best_pull = call_plexus_tool("plexus_score_pull", {
           scorecard_identifier = params.scorecard,
-          score_identifier = params.score,
+          score_identifier = score_id,
           version_id = best.version_id
         })
         if best_pull and best_pull.success and best_pull.codeFilePath then
@@ -5515,6 +5604,7 @@ code: |
             exploration_results = submitted_versions
           }
           table.insert(iterations, cycle_log)
+          cycle_recorded = true
           State.set("iterations", iterations)
 
           if best and best.fb_rca then State.set("last_recent_rca", best.fb_rca) end
@@ -5894,6 +5984,7 @@ code: |
           policy_gap_pct     = gap_pct,
         }
         table.insert(iterations, cycle_log)
+        cycle_recorded = true
 
         -- Update cross-cycle item recurrence tracker from the winning synthesis RCA
         local fb_item_class = (b_fb_rca and type(b_fb_rca._all_item_classifications) == "table")
@@ -6092,7 +6183,8 @@ code: |
           .. "## NEXT CYCLE TARGET\n"
           .. "- Maximum 3 bullets\n"
           .. "- Each bullet must name one specific next-cycle direction\n"
-          .. "- No long paragraphs anywhere\n"))
+          .. "- No long paragraphs anywhere\n",
+          cycle))
 
         table.insert(syn, string.format("\n=== CURRENT CYCLE %d RESULTS ===", cycle))
         if cur_iter and cur_iter.exploration_results and type(cur_iter.exploration_results) == "table" then
@@ -6643,29 +6735,26 @@ code: |
     if not cycle_ok then
       diag(string.format("ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
       Human.notify({message = string.format(
-        "ERROR in cycle %d: %s — skipping to next cycle", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
+        "ERROR in cycle %d: %s — stopping run", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
 
-      consecutive_failed_cycles = consecutive_failed_cycles + 1
-      consecutive_stagnant_cycles = consecutive_stagnant_cycles + 1
-      max_cycles = max_cycles + 1  -- skipped cycle doesn't count toward the limit
+      if not cycle_recorded then
+        consecutive_failed_cycles = consecutive_failed_cycles + 1
+        consecutive_stagnant_cycles = consecutive_stagnant_cycles + 1
 
-      -- Record as failed cycle so history is preserved
-      table.insert(iterations, {
-        iteration = cycle,
-        accepted = false,
-        skip_reason = "cycle_error: " .. trunc(tostring(cycle_err), 200),
-        recent_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-        regression_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-      })
-      State.set("iterations", iterations)
-
-      -- Permanent errors should kill the procedure immediately
-      local err_lower = string.lower(tostring(cycle_err))
-      if string.find(err_lower, "authentication") or string.find(err_lower, "unauthorized")
-         or string.find(err_lower, "item size has exceeded") then
-        error(cycle_err)
+        -- Record as failed cycle so history is preserved if we crashed before
+        -- the cycle had already emitted its normal iteration record.
+        table.insert(iterations, {
+          iteration = cycle,
+          accepted = false,
+          skip_reason = "cycle_error: " .. trunc(tostring(cycle_err), 200),
+          recent_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+          regression_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+        })
+        State.set("iterations", iterations)
       end
-      -- Otherwise continue to next cycle (plateau detection handles repeated failures)
+
+      stop_reason = "error"
+      error("Cycle " .. tostring(cycle) .. " failed: " .. tostring(cycle_err))
     end
     -- pcall body returns "break_cycle" when it wants to exit the while loop
     if cycle_err == "break_cycle" then break end
