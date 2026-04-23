@@ -889,10 +889,9 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
                 ),
                 None,
             )
-            if (
+            objective_missing_context_signal = bool(
                 missing_required_context_keys
                 or primary_input_fetch_error
-                or normalized_flags["missing_required_context_due_system"]
                 or (
                     missing_context_marker
                     and (
@@ -902,7 +901,12 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
                         or "context" in missing_context_marker
                     )
                 )
-            ):
+                or (
+                    normalized_flags["missing_required_context_due_system"]
+                    and (not has_primary_input or primary_input_fetch_error)
+                )
+            )
+            if objective_missing_context_signal:
                 mechanical_subtype = "missing_required_context"
                 context_bits = []
                 if missing_required_context_keys:

@@ -36,8 +36,11 @@ if using_stdio:
     class DummyRichModule(types.ModuleType):
         def __init__(self, name):
             super().__init__(name)
-            # Add __spec__ to prevent "is None" errors
-            self.__spec__ = types.SimpleNamespace(name=name, loader=None, origin=None, submodule_search_locations=[])
+            # Mark as a package and provide a minimal spec
+            self.__path__ = []
+            self.__spec__ = types.SimpleNamespace(
+                name=name, loader=None, origin=None, submodule_search_locations=[]
+            )
 
         def __getattr__(self, name):
             # Return a dummy object for any attribute access
@@ -82,39 +85,47 @@ if using_stdio:
             return self
         def __setitem__(self, key, value):
             pass
-    
-    # Replace the rich module in sys.modules BEFORE importing FastMCP
-    sys.modules['rich'] = DummyRichModule('rich')
-    sys.modules['rich.console'] = DummyRichModule('rich.console')
-    sys.modules['rich.logging'] = DummyRichModule('rich.logging')
-    sys.modules['rich.table'] = DummyRichModule('rich.table')
-    sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
-    sys.modules['rich.markdown'] = DummyRichModule('rich.markdown')
-    sys.modules['rich.panel'] = DummyRichModule('rich.panel')
-    sys.modules['rich.text'] = DummyRichModule('rich.text')
-    sys.modules['rich.progress'] = DummyRichModule('rich.progress')
-    sys.modules['rich.prompt'] = DummyRichModule('rich.prompt')
-    sys.modules['rich.status'] = DummyRichModule('rich.status')
-    sys.modules['rich.syntax'] = DummyRichModule('rich.syntax')
-    sys.modules['rich.tree'] = DummyRichModule('rich.tree')
-    sys.modules['rich.align'] = DummyRichModule('rich.align')
-    sys.modules['rich.columns'] = DummyRichModule('rich.columns')
-    sys.modules['rich.group'] = DummyRichModule('rich.group')
-    sys.modules['rich.layout'] = DummyRichModule('rich.layout')
-    sys.modules['rich.live'] = DummyRichModule('rich.live')
-    sys.modules['rich.rule'] = DummyRichModule('rich.rule')
-    sys.modules['rich.spinner'] = DummyRichModule('rich.spinner')
-    sys.modules['rich.style'] = DummyRichModule('rich.style')
-    sys.modules['rich.theme'] = DummyRichModule('rich.theme')
-    sys.modules['rich.box'] = DummyRichModule('rich.box')
-    sys.modules['rich.color'] = DummyRichModule('rich.color')
-    sys.modules['rich.console'] = DummyRichModule('rich.console')
-    sys.modules['rich.measure'] = DummyRichModule('rich.measure')
-    sys.modules['rich.padding'] = DummyRichModule('rich.padding')
-    sys.modules['rich.region'] = DummyRichModule('rich.region')
-    sys.modules['rich.segment'] = DummyRichModule('rich.segment')
-    sys.modules['rich.spacing'] = DummyRichModule('rich.spacing')
-    sys.modules['rich.terminal_theme'] = DummyRichModule('rich.terminal_theme')
+
+    # If Rich has already been imported (e.g. by fastmcp import above),
+    # don't clobber it with dummy modules. Doing so breaks Rich internals.
+    if 'rich' not in sys.modules:
+        # Replace the rich module in sys.modules BEFORE importing FastMCP
+        sys.modules['rich'] = DummyRichModule('rich')
+        sys.modules['rich.console'] = DummyRichModule('rich.console')
+        sys.modules['rich.logging'] = DummyRichModule('rich.logging')
+        sys.modules['rich.table'] = DummyRichModule('rich.table')
+        sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
+        sys.modules['rich.markdown'] = DummyRichModule('rich.markdown')
+        sys.modules['rich.panel'] = DummyRichModule('rich.panel')
+        sys.modules['rich.text'] = DummyRichModule('rich.text')
+        sys.modules['rich.progress'] = DummyRichModule('rich.progress')
+        sys.modules['rich.prompt'] = DummyRichModule('rich.prompt')
+        sys.modules['rich.status'] = DummyRichModule('rich.status')
+        sys.modules['rich.syntax'] = DummyRichModule('rich.syntax')
+        sys.modules['rich.tree'] = DummyRichModule('rich.tree')
+        sys.modules['rich.align'] = DummyRichModule('rich.align')
+        sys.modules['rich.columns'] = DummyRichModule('rich.columns')
+        sys.modules['rich.group'] = DummyRichModule('rich.group')
+        sys.modules['rich.layout'] = DummyRichModule('rich.layout')
+        sys.modules['rich.live'] = DummyRichModule('rich.live')
+        sys.modules['rich.rule'] = DummyRichModule('rich.rule')
+        sys.modules['rich.spinner'] = DummyRichModule('rich.spinner')
+        sys.modules['rich.style'] = DummyRichModule('rich.style')
+        sys.modules['rich.theme'] = DummyRichModule('rich.theme')
+        sys.modules['rich.box'] = DummyRichModule('rich.box')
+        sys.modules['rich.color'] = DummyRichModule('rich.color')
+        sys.modules['rich.console'] = DummyRichModule('rich.console')
+        sys.modules['rich.measure'] = DummyRichModule('rich.measure')
+        sys.modules['rich.padding'] = DummyRichModule('rich.padding')
+        sys.modules['rich.region'] = DummyRichModule('rich.region')
+        sys.modules['rich.segment'] = DummyRichModule('rich.segment')
+        sys.modules['rich.spacing'] = DummyRichModule('rich.spacing')
+        sys.modules['rich.terminal_theme'] = DummyRichModule('rich.terminal_theme')
+        sys.modules['rich.pretty'] = DummyRichModule('rich.pretty')
+        sys.modules['rich._emoji_codes'] = DummyRichModule('rich._emoji_codes')
+    else:
+        logger = logging.getLogger(__name__)
+        logger.info("Rich already imported; skipping dummy Rich module override for stdio.")
     
     # Configure FastMCP to not use Rich
     import fastmcp
@@ -407,6 +418,7 @@ mcp = FastMCP(
     ## Feedback Alignment & Score Testing Tools
     - plexus_feedback_alignment: Generate comprehensive feedback alignment with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
+    - plexus_feedback_invalidate: Invalidate exactly one approved feedback item by feedback ID or item identifier
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools

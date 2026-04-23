@@ -192,6 +192,15 @@ agents:
       - submit_score_version: submit current edits for evaluation
       - done: signal you cannot improve current hypothesis
 
+      LANGGRAPH NODE CONTRACTS:
+      - `Classifier` is for closed-set labels only (Yes/No, routing labels, enum-like classes).
+      - `Extractor` is for free-form evidence, quotes, ledgers, summaries, or other extracted artifacts.
+      - If a structural hypothesis needs an extraction step before a final decision, use
+        `class: Extractor`, map `output.extracted_text` to a named state field, and have the
+        downstream classifier consume that mapped field.
+      - Never create pseudo-extractor classifiers such as `class: Classifier` with
+        `valid_classes: ['Extracted']`, `['Found']`, or similar extraction-like labels.
+
       MODEL CHANGES:
       If you change the model: field, use the base model name WITHOUT a date suffix
       (e.g. "gpt-5-mini" not "gpt-5-mini-2025-01-01"). The API resolves the alias
@@ -464,6 +473,19 @@ code: |
     -- see the actual tool error (e.g. "Error: Missing API credentials.") instead
     -- of an opaque JSON parse failure.
     return nil, value
+  end
+
+  local function safe_encode(value)
+    if value == nil then
+      return nil
+    end
+    local ok, encoded = pcall(function()
+      return Json.encode(value)
+    end)
+    if ok then
+      return encoded
+    end
+    return string.format("<encode_error: %s>", tostring(encoded))
   end
 
   local function safe_get_metric(metrics, name)
@@ -2617,6 +2639,9 @@ code: |
       table.insert(parts, "            If prior cycles show DeepgramInputSource smoke test failures, do NOT retry.")
       table.insert(parts, "     - C2:  Preprocessing — add/tune RelevantWindowsTranscriptFilter to trim input.")
       table.insert(parts, "     - C1a: Architecture — decompose into multiple LLM calls, add N/A gate, add CoT node.")
+      table.insert(parts, "            If you add an extraction stage, use class: Extractor and map output.extracted_text")
+      table.insert(parts, "            into a named state field consumed by the final classifier.")
+      table.insert(parts, "            Never use Classifier(valid_classes=['Extracted']) or similar pseudo-extractor labels.")
       table.insert(parts, "     - C4:  Full rewrite — if prior cycles have plateaued, start from scratch.")
       table.insert(parts, "")
       table.insert(parts, "Check score_config.yaml to avoid proposing something already in place.")
@@ -2653,6 +2678,9 @@ code: |
   -- Build the review context message shown to the reviewer agent after evals
   local function build_review_context(opts)
     local parts = {}
+    local function has_number(value)
+      return type(value) == "number"
+    end
 
     table.insert(parts, "=== EVALUATION RESULTS FOR YOUR CHANGE ===")
     table.insert(parts, "")
@@ -2663,19 +2691,25 @@ code: |
     table.insert(parts, "")
 
     table.insert(parts, "Feedback alignment (vs baseline):")
-    if opts.fb_metrics then
+    if opts.fb_metrics and has_number(opts.baseline_fb_ac1) and has_number(opts.fb_metrics.alignment) then
       table.insert(parts, string.format("  AC1: %.3f → %.3f (delta %+.3f)",
         opts.baseline_fb_ac1, opts.fb_metrics.alignment,
         opts.fb_metrics.alignment - opts.baseline_fb_ac1))
-      table.insert(parts, string.format("  Accuracy: %.3f, Precision: %.3f, Recall: %.3f",
-        opts.fb_metrics.accuracy, opts.fb_metrics.precision, opts.fb_metrics.recall))
+      if has_number(opts.fb_metrics.accuracy)
+         and has_number(opts.fb_metrics.precision)
+         and has_number(opts.fb_metrics.recall) then
+        table.insert(parts, string.format("  Accuracy: %.3f, Precision: %.3f, Recall: %.3f",
+          opts.fb_metrics.accuracy, opts.fb_metrics.precision, opts.fb_metrics.recall))
+      else
+        table.insert(parts, "  Accuracy/precision/recall: (not available)")
+      end
     else
       table.insert(parts, "  (not available)")
     end
     table.insert(parts, "")
 
     table.insert(parts, "Accuracy on regression dataset (vs baseline):")
-    if opts.acc_metrics then
+    if opts.acc_metrics and has_number(opts.baseline_acc_ac1) and has_number(opts.acc_metrics.alignment) then
       table.insert(parts, string.format("  AC1: %.3f → %.3f (delta %+.3f)",
         opts.baseline_acc_ac1, opts.acc_metrics.alignment,
         opts.acc_metrics.alignment - opts.baseline_acc_ac1))
@@ -2694,7 +2728,7 @@ code: |
         if cand.score and cand.score <= -999 then dq = " (DISQUALIFIED)" end
         local synth_tag = cand.is_synthesis and " [SYNTH]" or ""
         table.insert(parts, string.format("  Candidate %d%s: Recent AC1 %+.3f, Regression AC1 %+.3f%s%s",
-          cand.index, synth_tag,
+          cand.index or 0, synth_tag,
           cand.fb_deltas and cand.fb_deltas.alignment or 0,
           cand.acc_deltas and cand.acc_deltas.alignment or 0,
           dq, selected))
@@ -2734,6 +2768,12 @@ code: |
   Stage.set("setup")
   Stage.progress(0, params.max_iterations)  -- show total cycle count from the start
   Human.notify({message = "Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score, level = "info"})
+  if params.max_iterations == 1 then
+    Human.notify({
+      message = "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion.",
+      level = "info"
+    })
+  end
 
   -- Validate scorecard exists
   -- plexus_scorecard_info returns the scorecard dict directly (no wrapper):
@@ -2777,7 +2817,6 @@ code: |
   -- are used after ::start_cycling:: must be declared before the goto.)
   -- ================================================================
   local dataset_id              = nil
-  local smoke_test_item_ids     = nil
   local champion_version_id     = nil
   local regression_baseline       = nil
   local regression_baseline_id    = nil
@@ -2844,19 +2883,16 @@ code: |
     return { output = out, code_repr = code_repr }, nil
   end
 
-  -- Helper: run FeedbackContradictions report and cache result in State.
-  -- Supports background=true for fire-and-forget dispatch; a later call with
-  -- background=false (default) blocks until the background thread completes.
+  -- Helper: run FeedbackContradictions report directly and cache result in State.
   -- Defined here (after scorecard_name/score_name) so it is available in both
   -- fresh-run and continuation paths.
   local function refresh_known_contradictions(current_cycle, opts)
     opts = opts or {}
     local ttl = opts.ttl_hours or 24
     local fresh = opts.fresh or false
-    local bg = opts.background or false
     Human.notify({message = string.format(
-      "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s, bg=%s)...",
-      current_cycle, ttl, tostring(fresh), tostring(bg)), level = "info"})
+      "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s)...",
+      current_cycle, ttl, tostring(fresh)), level = "info"})
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
@@ -2869,8 +2905,7 @@ code: |
       },
       cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
       ttl_hours = ttl,
-      fresh = fresh,
-      background = bg
+      fresh = fresh
     })
     if not ok or not report_result then
       local err = "Contradictions report failed"
@@ -2881,11 +2916,6 @@ code: |
       end
       State.set("known_contradictions_status", {cycle = current_cycle, available = false, error = err})
       Human.notify({message = "  Contradictions report failed: " .. err, level = "warning"})
-      return
-    end
-    -- Background dispatch returns status="dispatched" — results will be collected later
-    if report_result.status == "dispatched" or report_result.status == "already_dispatched" then
-      Human.notify({message = "  Contradictions report dispatched in background — will consume results later", level = "info"})
       return
     end
     local parsed_result, parse_error = parse_contradictions_report_result(report_result)
@@ -3031,13 +3061,12 @@ code: |
     regression_baseline_rca   = State.get("last_regression_rca") or {}
     recent_baseline_rca   = State.get("last_recent_rca") or {}
     regression_available      = regression_baseline_metrics ~= nil
-    smoke_test_item_ids     = State.get("smoke_test_item_ids")
 
     -- Re-pull current config from last accepted version
     do
       local _cont_pull = call_plexus_tool("plexus_score_pull", {
         scorecard_identifier = params.scorecard,
-        score_identifier = params.score,
+        score_identifier = score_id,
         version_id = champion_version_id
       })
       if _cont_pull and _cont_pull.success then
@@ -3055,6 +3084,128 @@ code: |
     end
   end  -- end is_continuation block — fall through to ::start_cycling::
 
+  local function iso_after_or_equal(lhs, rhs)
+    if not has_text(lhs) or not has_text(rhs) then return false end
+    return tostring(lhs) >= tostring(rhs)
+  end
+
+  local dataset_cache_by_version = {}
+  local function ensure_regression_dataset_for_version(version_id)
+    local version_key = tostring(version_id or "__champion__")
+    if dataset_cache_by_version[version_key] and has_text(dataset_cache_by_version[version_key].dataset_id) then
+      return dataset_cache_by_version[version_key].dataset_id, dataset_cache_by_version[version_key].feedback_target_hash
+    end
+
+    local active_feedback_target_updated_at = State.get("feedback_target_updated_at")
+    local min_dataset_rows = params.max_samples or 100
+    local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
+    local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
+      scorecard = params.scorecard,
+      score = params.score,
+      score_version_id = version_id,
+      days = params.days
+    })
+
+    local dataset_is_fresh = true
+    if has_text(active_feedback_target_updated_at) then
+      dataset_is_fresh = iso_after_or_equal(dataset_check and dataset_check.created_at, active_feedback_target_updated_at)
+    end
+    local dataset_adequate = dataset_check and dataset_check.has_dataset
+      and dataset_check.is_materialized
+      and dataset_check.row_count and dataset_check.row_count >= min_acceptable
+      and dataset_is_fresh
+
+    local selected_dataset_id = nil
+    local selected_feedback_target_hash = dataset_check and dataset_check.feedback_target_hash or nil
+
+    if dataset_adequate then
+      selected_dataset_id = dataset_check.dataset_id
+      Human.notify({message = string.format(
+        "Found adequate associated dataset for version %s: %s (%s rows)",
+        tostring(version_id or "champion"),
+        tostring(selected_dataset_id),
+        tostring(dataset_check.row_count or "?")
+      ), level = "info"})
+    else
+      if dataset_check and dataset_check.has_dataset then
+        if not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
+          Human.notify({message = string.format(
+            "Existing dataset for version %s is stale (created_at=%s older than watermark=%s), creating new one...",
+            tostring(version_id or "champion"),
+            tostring(dataset_check.created_at or "unknown"),
+            tostring(active_feedback_target_updated_at)
+          ), level = "info"})
+        else
+          Human.notify({message = string.format(
+            "Existing dataset for version %s has %d rows but need %d, creating new one...",
+            tostring(version_id or "champion"),
+            dataset_check.row_count or 0,
+            min_dataset_rows
+          ), level = "info"})
+        end
+      else
+        Human.notify({message = "No associated dataset found for version " .. tostring(version_id or "champion") .. ", creating one...", level = "info"})
+      end
+
+      Human.notify({
+        message = string.format("Building balanced regression dataset (%d items) for version %s...", min_dataset_rows, tostring(version_id or "champion")),
+        level = "info"
+      })
+      local build_ok, build_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
+        scorecard = params.scorecard,
+        score = params.score,
+        max_items = min_dataset_rows,
+        days = params.days,
+        balance = true,
+        score_version_id = version_id
+      })
+      if not build_ok then
+        Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
+        build_result = nil
+      end
+
+      if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
+        selected_dataset_id = build_result.dataset_id
+        selected_feedback_target_hash = build_result.feedback_target_hash
+        Human.notify({message = "Created balanced dataset: " .. selected_dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
+      else
+        local rows_so_far = (build_result and build_result.rows_written) or 0
+        Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
+
+        local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
+          scorecard = params.scorecard,
+          score = params.score,
+          max_items = min_dataset_rows,
+          days = params.days,
+          balance = false,
+          score_version_id = version_id
+        })
+        local final_build_result = unbal_ok and unbal_result or nil
+
+        if final_build_result and final_build_result.rows_written and final_build_result.rows_written >= min_acceptable then
+          selected_dataset_id = final_build_result.dataset_id
+          selected_feedback_target_hash = final_build_result.feedback_target_hash
+          Human.notify({message = "Created unbalanced dataset: " .. selected_dataset_id .. " (" .. final_build_result.rows_written .. " rows)", level = "info"})
+        else
+          local final_rows = (final_build_result and final_build_result.rows_written) or 0
+          error(string.format(
+            "Insufficient feedback data to build a regression dataset for version %s. Only %d items available (need %d, minimum %d).",
+            tostring(version_id or "champion"),
+            final_rows,
+            min_dataset_rows,
+            min_acceptable
+          ))
+        end
+      end
+    end
+
+    dataset_cache_by_version[version_key] = {
+      dataset_id = selected_dataset_id,
+      feedback_target_hash = selected_feedback_target_hash
+    }
+    return selected_dataset_id, selected_feedback_target_hash
+  end
+
   -- ================================================================
   -- (Fresh run) Phase A — skipped when is_continuation == true
   -- ================================================================
@@ -3065,97 +3216,32 @@ code: |
   -- The accuracy evaluation uses this fixed dataset across all iterations.
   -- The feedback evaluation separately uses the newest items.
   Human.notify({message = "Checking for existing associated regression dataset...", level = "info"})
-  -- dataset_id is pre-declared above the continuation check
 
-  local dataset_check = call_plexus_tool("plexus_dataset_check_associated", {
-    scorecard = params.scorecard,
-    score = params.score
+  local feedback_target_updated_at = nil
+  local watermark_ok, watermark = pcall(call_plexus_tool, "plexus_feedback_latest_update", {
+    scorecard_name = params.scorecard,
+    score_name = params.score,
+    days = params.days
   })
-
-  local min_dataset_rows = params.max_samples
-  local min_acceptable = math.max(math.floor(min_dataset_rows / 4), 15)
-  local dataset_adequate = dataset_check and dataset_check.has_dataset
-    and dataset_check.is_materialized
-    and dataset_check.row_count and dataset_check.row_count >= min_acceptable
-
-  if dataset_adequate then
-    dataset_id = dataset_check.dataset_id
-    Human.notify({message = "Found adequate associated dataset: " .. dataset_id .. " (" .. dataset_check.row_count .. " rows)", level = "info"})
-  else
-    -- Need to create a dataset
-    if dataset_check and dataset_check.has_dataset then
-      Human.notify({message = string.format(
-        "Existing dataset has %d rows but need %d, creating new one...",
-        dataset_check.row_count or 0, min_dataset_rows
-      ), level = "info"})
-    else
-      Human.notify({message = "No associated dataset found, creating one...", level = "info"})
-    end
-
-    -- Tier 1: Try balanced dataset with requested sample size
+  if watermark_ok and watermark and not watermark.error and watermark.found and has_text(watermark.latest_feedback_updated_at) then
+    feedback_target_updated_at = watermark.latest_feedback_updated_at
     Human.notify({
-      message = string.format("Building balanced regression dataset (%d items)...", min_dataset_rows),
+      message = "Feedback watermark: " .. tostring(feedback_target_updated_at),
       level = "info"
     })
-    local build_ok, build_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
-      scorecard = params.scorecard,
-      score = params.score,
-      max_items = min_dataset_rows,
-      days = params.days,
-      balance = true,
-      score_version_id = params.start_version
-    })
-    if not build_ok then
-      Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
-      build_result = nil
-    end
-
-    if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
-      dataset_id = build_result.dataset_id
-      Human.notify({message = "Created balanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
-    else
-      -- Tier 2: Try unbalanced (relax balancing to get more items)
-      local rows_so_far = (build_result and build_result.rows_written) or 0
-      Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
-
-      local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
-        scorecard = params.scorecard,
-        score = params.score,
-        max_items = min_dataset_rows,
-        days = params.days,
-        balance = false,
-        score_version_id = params.start_version
-      })
-      local build_result = unbal_ok and unbal_result or nil
-
-      if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
-        dataset_id = build_result.dataset_id
-        Human.notify({message = "Created unbalanced dataset: " .. dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
-      else
-        -- Abort: not enough feedback data
-        local final_rows = (build_result and build_result.rows_written) or 0
-        return {
-          success = false,
-          status = "error",
-          message = string.format(
-            "Insufficient feedback data to build a regression dataset. Only %d items available (need %d, minimum %d). " ..
-            "Collect more feedback for score '%s' before running the optimizer.",
-            final_rows, min_dataset_rows, min_acceptable, score_name
-          )
-        }
-      end
-    end
+  else
+    Human.notify({message = "Feedback watermark unavailable; using row-count/materialization checks only.", level = "warning"})
   end
+  dataset_id = ensure_regression_dataset_for_version(params.start_version)
 
   State.set("dataset_id", dataset_id)
+  State.set("feedback_target_updated_at", feedback_target_updated_at)
   Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
-
-  -- smoke_test_item_ids is pre-declared above the continuation check; populated below.
 
   -- Pull starting version (champion or specified start_version)
   local pull_args = {
     scorecard_identifier = params.scorecard,
-    score_identifier = params.score
+    score_identifier = score_id
   }
   if has_text(params.start_version) then
     pull_args.version_id = params.start_version
@@ -3173,6 +3259,9 @@ code: |
   end
   -- champion_version_id and baseline variables are pre-declared above the continuation check
   champion_version_id = initial_pull.versionId
+  dataset_cache_by_version[tostring(champion_version_id)] = {
+    dataset_id = dataset_id
+  }
   current_code_path = initial_pull.codeFilePath
   current_code = File.read(current_code_path)
 
@@ -3205,6 +3294,19 @@ code: |
 
   local resume_regression = has_text(params.resume_regression_eval) and params.resume_regression_eval or nil
   local resume_recent  = has_text(params.resume_recent_eval) and params.resume_recent_eval or nil
+  local feedback_target_updated_at = State.get("feedback_target_updated_at")
+  if not has_text(feedback_target_updated_at) then
+    local watermark_ok, watermark = pcall(call_plexus_tool, "plexus_feedback_latest_update", {
+      scorecard_name = params.scorecard,
+      score_name = params.score,
+      days = params.days
+    })
+    if watermark_ok and watermark and not watermark.error and watermark.found and has_text(watermark.latest_feedback_updated_at) then
+      feedback_target_updated_at = watermark.latest_feedback_updated_at
+      State.set("feedback_target_updated_at", feedback_target_updated_at)
+      Human.notify({message = "Initialized feedback watermark: " .. tostring(feedback_target_updated_at), level = "info"})
+    end
+  end
 
   if resume_regression or resume_recent then
     -- Resume mode: reuse existing baseline evaluations
@@ -3290,10 +3392,6 @@ code: |
 
   -- (diag and refresh_known_contradictions are defined earlier, before continuation check)
 
-  -- Dispatch contradictions analysis in background — it runs concurrently with
-  -- baseline evaluations.  Results are consumed (blocking) after baselines finish.
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = true})
-
   -- Try to reuse recent completed evaluations before running fresh baselines
   local n_samples = params.max_samples or 100
   if not regression_baseline_id and champion_version_id then
@@ -3302,6 +3400,7 @@ code: |
       evaluation_type  = "accuracy",
       max_age_hours    = 168,  -- 7 days: accuracy uses a fixed dataset, valid across restarts
       min_items        = math.floor(n_samples * 0.8),  -- allow ~20% smaller sample counts
+      dataset_id       = dataset_id,
     })
     if ok_acc and found_acc and not found_acc.error and (found_acc.evaluation_id or found_acc.id) then
       record_evaluation_cost(found_acc, "find_recent_regression_baseline", "accuracy")
@@ -3322,6 +3421,10 @@ code: |
       evaluation_type  = "feedback",
       max_age_hours    = 48,   -- 48h: daily runs take hours, need buffer beyond 24h
       min_items        = math.floor(n_samples * 0.8),  -- same 20% tolerance as accuracy
+      days             = params.days,
+      max_feedback_items = params.max_samples or 100,
+      sampling_mode    = "newest",
+      latest_feedback_updated_at = feedback_target_updated_at,
     })
     if ok_fb and found_fb and not found_fb.error and (found_fb.evaluation_id or found_fb.id) then
       record_evaluation_cost(found_fb, "find_recent_feedback_baseline", "feedback")
@@ -3459,43 +3562,8 @@ code: |
   State.set("last_regression_rca", regression_baseline_rca)
   State.set("last_recent_rca", recent_baseline_rca)
 
-  -- Consume feedback contradictions results (blocks until background dispatch finishes)
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 48, background = false})
-
-  -- Fetch smoke test items from the regression dataset (regression baseline eval).
-  -- Using items from the actual regression dataset ensures they are EDU items
-  -- with real school metadata, so the LLM path is exercised during smoke tests.
-  if regression_baseline_id then
-    local ids = {}
-    -- Sample at three spread offsets to get variety across the dataset
-    -- Use small offsets since some evals have 50+ items; avoid going past end
-    for _, offset in ipairs({0, 15, 30}) do
-      local ok, res = pcall(call_plexus_tool, "plexus_evaluation_score_result_find", {
-        evaluation_id = regression_baseline_id,
-        limit         = 1,
-        offset        = offset
-      })
-      -- Tool returns {"score_results": [...], "pagination": {...}, ...}
-      local sr = res and res.score_results
-      if ok and sr and type(sr) == "table" and sr[1] and sr[1].item_id then
-        ids[#ids+1] = sr[1].item_id
-      end
-    end
-    if #ids > 0 then
-      smoke_test_item_ids = table.concat(ids, ",")
-      Human.notify({message = string.format(
-        "Smoke test items from regression dataset (%d): %s", #ids, smoke_test_item_ids),
-        level = "info"})
-    else
-      Human.notify({message = "WARNING: could not fetch smoke test items from baseline eval — smoke tests will be skipped",
-        level = "warning"})
-    end
-  else
-    Human.notify({message = "WARNING: no regression baseline available — smoke tests will be skipped",
-      level = "warning"})
-  end
-  -- Persist so continuation runs can restore it
-  State.set("smoke_test_item_ids", smoke_test_item_ids)
+  -- Refresh feedback contradictions results now that the procedure needs them.
+  pcall(refresh_known_contradictions, 0, {ttl_hours = 48})
 
   -- Early exit: if feedback alignment is already perfect or no RCA data
   local fb_rca_topics = (type(recent_baseline_rca) == "table" and recent_baseline_rca.topics) or {}
@@ -3813,12 +3881,40 @@ code: |
 
   while cycle < max_cycles do
     cycle = cycle + 1
+    local cycle_recorded = false
     local cycle_ok, cycle_err = pcall(function()
     diag(string.format("=== ENTERING CYCLE %d/%d === (last_accepted=%s)", cycle, max_cycles, tostring(last_accepted_version_id)))
     Human.notify({message = string.format(
       "═══ Cycle %d/%d ═══", cycle, max_cycles), level = "info"})
     State.set("current_iteration", cycle)
     Stage.progress(cycle, max_cycles)
+
+    -- Stop when feedback changed since run start; restart is required to keep baselines coherent.
+    do
+      local start_watermark = State.get("feedback_target_updated_at")
+      if has_text(start_watermark) then
+        local wm_ok, wm = pcall(call_plexus_tool, "plexus_feedback_latest_update", {
+          scorecard_name = params.scorecard,
+          score_name = params.score,
+          days = params.days
+        })
+        if wm_ok and wm and not wm.error and wm.found and has_text(wm.latest_feedback_updated_at) then
+          local current_watermark = wm.latest_feedback_updated_at
+          if tostring(current_watermark) > tostring(start_watermark) then
+            stop_reason = "feedback_target_changed_restart_required"
+            Human.notify({
+              message = string.format(
+                "Feedback target changed during run (start=%s current=%s). Stopping for clean restart.",
+                tostring(start_watermark),
+                tostring(current_watermark)
+              ),
+              level = "warning"
+            })
+            return "break_cycle"
+          end
+        end
+      end
+    end
 
     -- Phase 4: Mailbox check — pick up any user messages injected via conversation viewer
     do
@@ -3851,7 +3947,7 @@ code: |
     -- Pull the last accepted version as starting point for this cycle
     local score_pull = call_plexus_tool("plexus_score_pull", {
       scorecard_identifier = params.scorecard,
-      score_identifier = params.score,
+      score_identifier = score_id,
       version_id = last_accepted_version_id
     })
     if not score_pull or not score_pull.success then
@@ -4126,7 +4222,7 @@ code: |
       -- Reset editor to baseline code for each hypothesis
       call_plexus_tool("score_editor_setup", {
         scorecard_identifier = params.scorecard,
-        score_identifier     = params.score,
+        score_identifier     = score_id,
         yaml_content         = current_code,
         code_file_path       = score_pull.codeFilePath,
         iteration            = cycle,
@@ -4185,6 +4281,8 @@ code: |
             "Implement hypothesis %d of %d: %s\n\n%s\n\n"
             .. "Edit score_config.yaml to test this hypothesis. "
             .. "The current file content is shown in the system message above.\n"
+            .. "For prompt-only hypotheses, prefer the SMALLEST UNIQUE replacement inside system_message or user_message.\n"
+            .. "Do NOT replace the entire prompt block unless the hypothesis truly requires a full rewrite.\n"
             .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
             .. "The RCA quotes are paraphrased — do NOT use RCA text as old_str.\n"
             .. "When done, call submit_score_version(version_note='<what you changed> to address <which error pattern>; expect <predicted effect>').\n"
@@ -4370,77 +4468,46 @@ code: |
               "    Hypothesis %d: version %s created (step %d) — smoke testing...",
               h, candidate_id, react_step), level = "info"})
 
+            local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
+              scorecard_identifier = params.scorecard,
+              score_identifier     = score_id,
+              version              = candidate_id,
+              samples              = 3
+            })
             local smoke_passed = false
             local smoke_detail = ""
-
-            if not smoke_test_item_ids then
-              smoke_passed = true
-              Human.notify({message = "    Smoke test skipped (no item IDs available)", level = "warning"})
-            end
-
-            local smoke_ok, smoke = true, nil
-            if smoke_test_item_ids then
-              smoke_ok, smoke = pcall(call_plexus_tool, "plexus_predict", {
-                scorecard_name = params.scorecard,
-                score_name     = params.score,
-                version        = candidate_id,
-                item_ids       = smoke_test_item_ids,
-                include_trace  = false,
-                no_cache       = true
-              })
-              if not smoke_ok then
-                smoke_detail = "Smoke test call error: " .. tostring(smoke)
-                smoke = nil
-              end
-            end
-
-            -- Pass if at least one prediction reached the LLM (value is not ERROR/nil/NA)
-            if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
-              local all_details = {}
-              for _, pred in ipairs(smoke.predictions) do
-                local sc = pred.scores and pred.scores[1]
-                if sc and sc.value ~= "ERROR" and sc.value ~= nil and sc.value ~= "NA" then
-                  smoke_passed = true
-                  Human.notify({message = string.format(
-                    "    Smoke test PASSED (item=%s value=%s)",
-                    tostring(pred.item_id or "?"), tostring(sc.value)), level = "info"})
-                  diag(string.format("Hyp %d smoke PASSED (version=%s item=%s value=%s)",
-                    h, tostring(candidate_id), tostring(pred.item_id or "?"), tostring(sc.value)))
-                  break
-                else
-                  local ed = sc and sc.error_details
-                  local detail = (sc and sc.explanation) or (ed and ed.error_message)
-                    or string.format("value=%s", tostring(sc and sc.value or "nil"))
-                  if ed and ed.traceback then
-                    detail = detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
-                  end
-                  all_details[#all_details+1] = string.format("item=%s: %s",
-                    tostring(pred.item_id or "?"), detail)
+            if not test_ok then
+              smoke_detail = "Score test call error: " .. tostring(test_result)
+            elseif type(test_result) ~= "table" then
+              smoke_detail = "Score test returned non-table response: " .. tostring(test_result)
+            else
+              smoke_passed = test_result.passed == true
+              if not smoke_passed then
+                local base = tostring(test_result.message or "Score test failed")
+                local fc = tostring(test_result.failure_code or "unknown")
+                smoke_detail = string.format("%s (failure_code=%s)", base, fc)
+                if test_result.failures and #test_result.failures > 0 then
+                  smoke_detail = smoke_detail .. "\n\nFailure details:\n" .. tostring(safe_encode(test_result.failures) or "[]")
+                elseif test_result.predictions and #test_result.predictions > 0 then
+                  smoke_detail = smoke_detail .. "\n\nPrediction details:\n" .. tostring(safe_encode(test_result.predictions) or "[]")
                 end
               end
-              if not smoke_passed then
-                smoke_detail = "All smoke test items failed LLM invocation:\n" .. table.concat(all_details, "\n")
-              end
-            elseif smoke and smoke.error then
-              smoke_detail = "Prediction call failed: " .. tostring(smoke.error)
-            elseif smoke and not smoke_passed then
-              smoke_detail = "Prediction returned no results: " .. (safe_encode(smoke) or "{}")
             end
 
             if smoke_passed then
               version_id = candidate_id
-              diag(string.format("Hyp %d smoke passed, setting version_id=%s", h, tostring(candidate_id)))
+              diag(string.format("Hyp %d score test passed, setting version_id=%s", h, tostring(candidate_id)))
               local ok_a, vn = pcall(function() return submit_call.args.version_note end)
               if ok_a and has_text(vn) then hyp_done_reason = vn end
               hypothesis_done = true
             else
               Human.notify({message = string.format(
-                "    Hypothesis %d: smoke test FAILED — %s",
+                "    Hypothesis %d: score test FAILED — %s",
                 h, trunc(smoke_detail, 120)), level = "warning"})
-              diag(string.format("Hyp %d smoke FAILED (version=%s): %s",
+              diag(string.format("Hyp %d score test FAILED (version=%s): %s",
                 h, tostring(candidate_id), trunc(smoke_detail, 200)))
               smoke_test_failure = string.format(
-                "Version %s was created but FAILED the smoke test.\n\nError detail:\n%s\n\n"
+                "Version %s was created but FAILED the mechanical score test.\n\nError detail:\n%s\n\n"
                 .. "The score_config.yaml has an execution error. Diagnose and fix it, "
                 .. "then call submit_score_version again.",
                 candidate_id, smoke_detail)
@@ -4585,11 +4652,13 @@ code: |
       local batch = {}
       for _, sv in ipairs(submitted_versions) do
         if regression_available then
+          local candidate_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
+          sv.dataset_id = candidate_dataset_id
           table.insert(batch, {
             scorecard_name = params.scorecard,
             score_name = params.score,
             evaluation_type = "accuracy",
-            dataset_id = dataset_id,
+            dataset_id = candidate_dataset_id,
             n_samples = params.max_samples or 100,
             version = sv.version_id,
             baseline = regression_baseline_id,
@@ -4703,7 +4772,7 @@ code: |
 
         call_plexus_tool("score_editor_setup", {
           scorecard_identifier = params.scorecard,
-          score_identifier     = params.score,
+          score_identifier     = score_id,
           yaml_content         = start_code,
           code_file_path       = score_pull.codeFilePath,
           iteration            = cycle,
@@ -4832,7 +4901,8 @@ code: |
             local second_parts = {
               "Your previous attempt concluded with cannot_improve. Try a MINIMAL change: "
                 .. "a single clarifying example, one sharpened criterion, or a small prompt restructure. "
-                .. "Even a neutral result is better than skipping. Submit with submit_score_version."
+                .. "Even a neutral result is better than skipping. Submit with submit_score_version.",
+              "Prefer the SMALLEST UNIQUE replacement inside system_message or user_message rather than replacing an entire prompt block."
             }
             local ec = call_plexus_tool("score_editor_get_content", {})
             if ec and ec.file_content then
@@ -4844,8 +4914,13 @@ code: |
           end
 
           guard_context_budget(code_editor)
+          local strategy_file_content = nil
+          pcall(function()
+            local ec = call_plexus_tool("score_editor_get_content", {})
+            if ec and ec.file_content then strategy_file_content = ec.file_content end
+          end)
           local editor_ok, editor_err = safe_editor_call(msg, {
-            file_content = current_code,
+            file_content = strategy_file_content or current_code,
             task_description = msg
           })
           if not editor_ok then
@@ -4913,60 +4988,30 @@ code: |
               Human.notify({message = string.format(
                 "  %s version %s created — smoke testing...", strategy_label, candidate_id), level = "info"})
 
+              local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
+                scorecard_identifier = params.scorecard,
+                score_identifier     = score_id,
+                version              = candidate_id,
+                samples              = 3
+              })
               local smoke_passed = false
               local smoke_detail = ""
-
-              if not smoke_test_item_ids then
-                smoke_passed = true
-                Human.notify({message = "    Smoke test skipped (no item IDs)", level = "warning"})
-              end
-
-              local smoke_ok, smoke = true, nil
-              if smoke_test_item_ids then
-                smoke_ok, smoke = pcall(call_plexus_tool, "plexus_predict", {
-                  scorecard_name = params.scorecard,
-                  score_name     = params.score,
-                  version        = candidate_id,
-                  item_ids       = smoke_test_item_ids,
-                  include_trace  = false,
-                  no_cache       = true
-                })
-                if not smoke_ok then
-                  smoke_detail = "Smoke test call error: " .. tostring(smoke)
-                  smoke = nil
-                end
-              end
-
-              if not smoke_passed and smoke and smoke.predictions and #smoke.predictions > 0 then
-                local all_details = {}
-                for _, pred in ipairs(smoke.predictions) do
-                  local sc = pred.scores and pred.scores[1]
-                  if sc and sc.value ~= "ERROR" and sc.value ~= nil and sc.value ~= "NA" then
-                    smoke_passed = true
-                    Human.notify({message = string.format(
-                      "    Smoke test PASSED (item=%s value=%s)",
-                      tostring(pred.item_id or "?"), tostring(sc.value)), level = "info"})
-                    diag(string.format("%s smoke PASSED (version=%s item=%s value=%s)",
-                      strategy_label, tostring(candidate_id), tostring(pred.item_id or "?"), tostring(sc.value)))
-                    break
-                  else
-                    local ed = sc and sc.error_details
-                    local detail = (sc and sc.explanation) or (ed and ed.error_message)
-                      or string.format("value=%s", tostring(sc and sc.value or "nil"))
-                    if ed and ed.traceback then
-                      detail = detail .. "\n\nTraceback:\n" .. tostring(ed.traceback)
-                    end
-                    all_details[#all_details+1] = string.format("item=%s: %s",
-                      tostring(pred.item_id or "?"), detail)
+              if not test_ok then
+                smoke_detail = "Score test call error: " .. tostring(test_result)
+              elseif type(test_result) ~= "table" then
+                smoke_detail = "Score test returned non-table response: " .. tostring(test_result)
+              else
+                smoke_passed = test_result.passed == true
+                if not smoke_passed then
+                  local base = tostring(test_result.message or "Score test failed")
+                  local fc = tostring(test_result.failure_code or "unknown")
+                  smoke_detail = string.format("%s (failure_code=%s)", base, fc)
+                  if test_result.failures and #test_result.failures > 0 then
+                    smoke_detail = smoke_detail .. "\n\nFailure details:\n" .. tostring(safe_encode(test_result.failures) or "[]")
+                  elseif test_result.predictions and #test_result.predictions > 0 then
+                    smoke_detail = smoke_detail .. "\n\nPrediction details:\n" .. tostring(safe_encode(test_result.predictions) or "[]")
                   end
                 end
-                if not smoke_passed then
-                  smoke_detail = "All smoke test items failed LLM invocation:\n" .. table.concat(all_details, "\n")
-                end
-              elseif smoke and smoke.error then
-                smoke_detail = "Prediction call failed: " .. tostring(smoke.error)
-              elseif smoke and not smoke_passed then
-                smoke_detail = "Prediction returned no results"
               end
 
               if smoke_passed then
@@ -4979,9 +5024,9 @@ code: |
                 done = true
               else
                 Human.notify({message = string.format(
-                  "  %s smoke test FAILED: %s", strategy_label, trunc(smoke_detail, 120)), level = "warning"})
+                  "  %s score test FAILED: %s", strategy_label, trunc(smoke_detail, 120)), level = "warning"})
                 smoke_failure = string.format(
-                  "Version %s was created but FAILED the smoke test.\n\nError detail:\n%s\n\n"
+                  "Version %s was created but FAILED the mechanical score test.\n\nError detail:\n%s\n\n"
                   .. "The score_config.yaml has an execution error. Diagnose and fix it, "
                   .. "then call submit_score_version again.",
                   candidate_id, smoke_detail)
@@ -5104,7 +5149,7 @@ code: |
       for _, sv in ipairs(succeeded) do
         local hyp_pull = call_plexus_tool("plexus_score_pull", {
           scorecard_identifier = params.scorecard,
-          score_identifier = params.score,
+          score_identifier = score_id,
           version_id = sv.version_id
         })
         if hyp_pull and hyp_pull.success and hyp_pull.codeFilePath then
@@ -5140,7 +5185,7 @@ code: |
         end
         local best_pull = call_plexus_tool("plexus_score_pull", {
           scorecard_identifier = params.scorecard,
-          score_identifier = params.score,
+          score_identifier = score_id,
           version_id = best.version_id
         })
         if best_pull and best_pull.success and best_pull.codeFilePath then
@@ -5423,11 +5468,13 @@ code: |
         local eval_batch = {}
         for _, sv in ipairs(strategy_versions) do
           if regression_available then
+            local strategy_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
+            sv.dataset_id = strategy_dataset_id
             table.insert(eval_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = dataset_id,
+              dataset_id = strategy_dataset_id,
               n_samples = params.max_samples or 100,
               version = sv.version_id,
               baseline = regression_baseline_id,
@@ -5615,6 +5662,7 @@ code: |
             exploration_results = submitted_versions
           }
           table.insert(iterations, cycle_log)
+          cycle_recorded = true
           State.set("iterations", iterations)
 
           if best and best.fb_rca then State.set("last_recent_rca", best.fb_rca) end
@@ -5682,12 +5730,14 @@ code: |
           diag(string.format("Dispatching synthesis eval for version %s", tostring(final_version_id)))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
+          local final_dataset_id = nil
           if regression_available then
+            final_dataset_id = ensure_regression_dataset_for_version(final_version_id)
             table.insert(b_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = dataset_id,
+              dataset_id = final_dataset_id,
               n_samples = params.max_samples or 100,
               version = final_version_id,
               baseline = regression_baseline_id,
@@ -5994,6 +6044,7 @@ code: |
           policy_gap_pct     = gap_pct,
         }
         table.insert(iterations, cycle_log)
+        cycle_recorded = true
 
         -- Update cross-cycle item recurrence tracker from the winning synthesis RCA
         local fb_item_class = (b_fb_rca and type(b_fb_rca._all_item_classifications) == "table")
@@ -6192,7 +6243,8 @@ code: |
           .. "## NEXT CYCLE TARGET\n"
           .. "- Maximum 3 bullets\n"
           .. "- Each bullet must name one specific next-cycle direction\n"
-          .. "- No long paragraphs anywhere\n"))
+          .. "- No long paragraphs anywhere\n",
+          cycle))
 
         table.insert(syn, string.format("\n=== CURRENT CYCLE %d RESULTS ===", cycle))
         if cur_iter and cur_iter.exploration_results and type(cur_iter.exploration_results) == "table" then
@@ -6743,29 +6795,26 @@ code: |
     if not cycle_ok then
       diag(string.format("ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
       Human.notify({message = string.format(
-        "ERROR in cycle %d: %s — skipping to next cycle", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
+        "ERROR in cycle %d: %s — stopping run", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
 
-      consecutive_failed_cycles = consecutive_failed_cycles + 1
-      consecutive_stagnant_cycles = consecutive_stagnant_cycles + 1
-      max_cycles = max_cycles + 1  -- skipped cycle doesn't count toward the limit
+      if not cycle_recorded then
+        consecutive_failed_cycles = consecutive_failed_cycles + 1
+        consecutive_stagnant_cycles = consecutive_stagnant_cycles + 1
 
-      -- Record as failed cycle so history is preserved
-      table.insert(iterations, {
-        iteration = cycle,
-        accepted = false,
-        skip_reason = "cycle_error: " .. trunc(tostring(cycle_err), 200),
-        recent_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-        regression_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
-      })
-      State.set("iterations", iterations)
-
-      -- Permanent errors should kill the procedure immediately
-      local err_lower = string.lower(tostring(cycle_err))
-      if string.find(err_lower, "authentication") or string.find(err_lower, "unauthorized")
-         or string.find(err_lower, "item size has exceeded") then
-        error(cycle_err)
+        -- Record as failed cycle so history is preserved if we crashed before
+        -- the cycle had already emitted its normal iteration record.
+        table.insert(iterations, {
+          iteration = cycle,
+          accepted = false,
+          skip_reason = "cycle_error: " .. trunc(tostring(cycle_err), 200),
+          recent_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+          regression_deltas = {alignment = 0, accuracy = 0, precision = 0, recall = 0},
+        })
+        State.set("iterations", iterations)
       end
-      -- Otherwise continue to next cycle (plateau detection handles repeated failures)
+
+      stop_reason = "error"
+      error("Cycle " .. tostring(cycle) .. " failed: " .. tostring(cycle_err))
     end
     -- pcall body returns "break_cycle" when it wants to exit the while loop
     if cycle_err == "break_cycle" then break end
@@ -6812,9 +6861,10 @@ code: |
     total_acc_improvement = last_accepted.regression_metrics.alignment - regression_baseline_metrics.alignment
   end
 
+  local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"
   Human.notify({message = string.format(
-    "Optimization complete: %d cycles, feedback AC1 improvement: %+.4f, accuracy AC1 improvement: %+.4f",
-    #iterations, total_fb_improvement, total_acc_improvement
+    "%s: %d cycles, feedback AC1 improvement: %+.4f, accuracy AC1 improvement: %+.4f",
+    completion_mode, #iterations, total_fb_improvement, total_acc_improvement
   ), level = "info"})
 
   -- ========================================================================
@@ -7379,35 +7429,18 @@ code: |
     .. string.rep("=", 60) .. "\n\n"
     .. sme_agenda_text, level = "info"})
 
-  -- ========================================================================
-  -- CHAMPION PROMOTION
-  -- If we improved on the champion, promote the winning version to champion.
-  -- ========================================================================
-  local promoted_to_champion = false
-  if last_accepted_version_id and last_accepted_version_id ~= champion_version_id and not params.dry_run then
+  if last_accepted_version_id and last_accepted_version_id ~= champion_version_id then
     Human.notify({message = string.format(
-      "Promoting winning version %s to champion (was: %s)...",
+      "Winning version selected: %s (starting champion: %s). Manual promotion is required; the optimizer never promotes champion automatically.",
       last_accepted_version_id, tostring(champion_version_id)
     ), level = "info"})
-    local promo_ok, promo_result = pcall(call_plexus_tool, "plexus_score_set_champion", {
-      score_id   = score_id,
-      version_id = last_accepted_version_id
-    })
-    if promo_ok and promo_result and not promo_result.error then
-      promoted_to_champion = true
-      Human.notify({message = string.format(
-        "Champion promoted: version %s is now champion for score %s",
-        last_accepted_version_id, score_id
-      ), level = "info"})
-    else
-      local err_msg = (promo_result and promo_result.error) or tostring(promo_result)
-      Human.notify({message = string.format(
-        "WARNING: Champion promotion failed — %s. Manually run: plexus_score_set_champion(score_id=%s, version_id=%s)",
-        err_msg, score_id, last_accepted_version_id
-      ), level = "warning"})
-    end
   elseif last_accepted_version_id == champion_version_id then
-    Human.notify({message = "No improvement over champion — champion unchanged.", level = "info"})
+    Human.notify({message = string.format(
+      "Winning version remains the current champion (%s). No promotion was performed.",
+      tostring(champion_version_id)
+    ), level = "info"})
+  else
+    Human.notify({message = "No winning version was selected. No promotion was performed.", level = "info"})
   end
 
   return {
@@ -7428,6 +7461,5 @@ code: |
     executive_summary = executive_summary_text,
     lab_report = lab_report_text,
     sme_agenda = sme_agenda_text,
-    promoted_to_champion = promoted_to_champion,
     winning_version_id = last_accepted_version_id
   }

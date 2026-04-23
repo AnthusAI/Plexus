@@ -3,7 +3,7 @@ import os
 import re
 import socket
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 import yaml
 
 from plexus.CustomLogging import logging
@@ -23,6 +23,10 @@ from plexus.cli.dataset.datasets import (
     _fetch_score_champion_version,
     _persist_dataset_file_reference,
     _upload_dataset_parquet,
+)
+from plexus.cli.shared.optimizer_shadow_invalidation import (
+    build_feedback_target_hash,
+    resolve_score_version_shadow_invalidation_metadata,
 )
 
 
@@ -215,42 +219,14 @@ def _resolve_score_final_classes_from_yaml_details(
     score_id: str,
     score_version_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    resolved_score_version_id = score_version_id
-    if not resolved_score_version_id:
-        score_result = client.execute(
-            """
-            query GetScoreChampionVersion($id: ID!) {
-                getScore(id: $id) {
-                    id
-                    championVersionId
-                }
-            }
-            """,
-            {"id": score_id},
-        )
-        score_data = score_result.get("getScore") or {}
-        champion_version_id = score_data.get("championVersionId")
-        if not champion_version_id:
-            raise ValueError(f"No champion version configured for score {score_id}.")
-        resolved_score_version_id = champion_version_id
-
-    version_result = client.execute(
-        """
-        query GetScoreVersionConfiguration($id: ID!) {
-            getScoreVersion(id: $id) {
-                id
-                configuration
-            }
-        }
-        """,
-        {"id": resolved_score_version_id},
+    version_details = resolve_score_version_shadow_invalidation_metadata(
+        client,
+        score_id=score_id,
+        score_version_id=score_version_id,
+        days=None,
     )
-    version_data = version_result.get("getScoreVersion") or {}
-    configuration_text = version_data.get("configuration")
-    if not configuration_text:
-        raise ValueError(
-            f"Score version {resolved_score_version_id} has no configuration for score {score_id}."
-        )
+    resolved_score_version_id = version_details["score_version_id"]
+    configuration_text = version_details["configuration"]
 
     try:
         parsed = yaml.safe_load(configuration_text)
@@ -289,6 +265,7 @@ def _resolve_score_final_classes_from_yaml_details(
             "classes": valid_classes,
             "source": "valid_classes",
             "score_version_id": resolved_score_version_id,
+            "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
         }
 
     validation_classes = (
@@ -302,6 +279,7 @@ def _resolve_score_final_classes_from_yaml_details(
             "classes": valid_classes,
             "source": "parameters.validation.value.valid_classes",
             "score_version_id": resolved_score_version_id,
+            "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
         }
 
     classes_section = parsed.get("classes")
@@ -314,6 +292,7 @@ def _resolve_score_final_classes_from_yaml_details(
             "classes": valid_classes,
             "source": "classes[].name",
             "score_version_id": resolved_score_version_id,
+            "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
         }
 
     graph_nodes = parsed.get("graph")
@@ -328,6 +307,7 @@ def _resolve_score_final_classes_from_yaml_details(
                 "classes": valid_classes,
                 "source": "graph[-1].valid_classes",
                 "score_version_id": resolved_score_version_id,
+                "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
 
         node_conditions = final_node.get("conditions")
@@ -344,6 +324,7 @@ def _resolve_score_final_classes_from_yaml_details(
                 "classes": valid_classes,
                 "source": "graph[-1].conditions[].output.value",
                 "score_version_id": resolved_score_version_id,
+                "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
 
         if final_node.get("class") == "YesOrNoClassifier":
@@ -353,6 +334,7 @@ def _resolve_score_final_classes_from_yaml_details(
                 "classes": valid_classes,
                 "source": "graph[-1].class=YesOrNoClassifier",
                 "score_version_id": resolved_score_version_id,
+                "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
 
         if final_node.get("class") == "LogicalClassifier":
@@ -365,6 +347,7 @@ def _resolve_score_final_classes_from_yaml_details(
                 "classes": valid_classes,
                 "source": "graph[-1].LogicalClassifier.code",
                 "score_version_id": resolved_score_version_id,
+                "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
 
     if not valid_classes:
@@ -379,6 +362,7 @@ def _resolve_score_final_classes_from_yaml_details(
         "classes": valid_classes,
         "source": "unknown",
         "score_version_id": resolved_score_version_id,
+        "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
     }
 
 
@@ -387,8 +371,13 @@ def _is_qualifying_feedback_item(
     *,
     scorecard_id: str,
     score_id: str,
+    excluded_feedback_item_ids: Optional[set[str]] = None,
 ) -> bool:
     if feedback_item.scorecardId != scorecard_id or feedback_item.scoreId != score_id:
+        return False
+    if getattr(feedback_item, "isInvalid", False):
+        return False
+    if excluded_feedback_item_ids and str(getattr(feedback_item, "id", "") or "") in excluded_feedback_item_ids:
         return False
     if not (feedback_item.finalAnswerValue or "").strip():
         return False
@@ -485,6 +474,7 @@ def collect_qualifying_feedback_items(
     max_items: int,
     days: Optional[int],
     stop_at_max: bool = True,
+    excluded_feedback_item_ids: Optional[Sequence[str]] = None,
 ) -> List[FeedbackItem]:
     if max_items <= 0:
         raise ValueError("--max-items must be greater than 0.")
@@ -566,6 +556,11 @@ def collect_qualifying_feedback_items(
     }
 
     qualifying_items: List[FeedbackItem] = []
+    excluded_ids = {
+        str(item_id).strip()
+        for item_id in (excluded_feedback_item_ids or [])
+        if str(item_id).strip()
+    }
     while True:
         response = client.execute(query, variables)
         result_data = response.get("listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt") or {}
@@ -579,6 +574,7 @@ def collect_qualifying_feedback_items(
                 feedback_item,
                 scorecard_id=scorecard_id,
                 score_id=score_id,
+                excluded_feedback_item_ids=excluded_ids,
             ):
                 qualifying_items.append(feedback_item)
                 if stop_at_max and len(qualifying_items) >= max_items:
@@ -637,6 +633,21 @@ def build_associated_dataset_from_vetted_feedback_items(
     if not ordered_feedback_item_ids:
         raise ValueError("No eligible vetted feedback item IDs were provided.")
 
+    version_details = _resolve_score_final_classes_from_yaml_details(
+        client=client,
+        score_id=score_id,
+        score_version_id=class_source_score_version_id,
+    )
+    shadow_invalid_feedback_item_ids = (
+        version_details.get("optimizer_shadow_invalid_feedback_item_ids") or []
+    )
+    feedback_target_hash = build_feedback_target_hash(
+        score_version_id=version_details["score_version_id"],
+        days=None,
+        shadow_invalid_feedback_item_ids=shadow_invalid_feedback_item_ids,
+    )
+    excluded_ids = set(shadow_invalid_feedback_item_ids)
+
     score_name = _fetch_score_name(client, score_id)
     account_id = _fetch_scorecard_account_id(client, scorecard_id)
 
@@ -672,6 +683,7 @@ def build_associated_dataset_from_vetted_feedback_items(
                 feedback_item,
                 scorecard_id=scorecard_id,
                 score_id=score_id,
+                excluded_feedback_item_ids=excluded_ids,
             ):
                 invalid_ids.append(feedback_item_id)
                 continue
@@ -692,14 +704,9 @@ def build_associated_dataset_from_vetted_feedback_items(
         if not all_vetted_items:
             raise ValueError("No valid vetted feedback items remain after validation.")
 
-        class_resolution_details = _resolve_score_final_classes_from_yaml_details(
-            client=client,
-            score_id=score_id,
-            score_version_id=class_source_score_version_id,
-        )
-        class_list_used = class_resolution_details["classes"]
-        class_resolution_source = class_resolution_details["source"]
-        resolved_score_version_used = class_resolution_details["score_version_id"]
+        class_list_used = version_details["classes"]
+        class_resolution_source = version_details["source"]
+        resolved_score_version_used = version_details["score_version_id"]
 
         observed_label_set = sorted(
             {
@@ -761,6 +768,9 @@ def build_associated_dataset_from_vetted_feedback_items(
                 "selected_vetted_count": len(feedback_items),
                 "source_report_id": report_id,
                 "source_report_block_id": report_block_id,
+                "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+                "feedback_target_hash": feedback_target_hash,
+                "score_version_id_used": resolved_score_version_used,
             },
         )
 
@@ -825,6 +835,9 @@ def build_associated_dataset_from_vetted_feedback_items(
             "class_label_overlap": class_label_overlap,
             "class_distribution_before": class_distribution_before,
             "class_distribution_after": class_distribution_after,
+            "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+            "feedback_target_hash": feedback_target_hash,
+            "score_version_id_used": resolved_score_version_used,
         }
         if task:
             task.update(
@@ -945,6 +958,19 @@ def build_associated_dataset_from_feedback_window(
 ) -> Dict[str, Any]:
     score_name = _fetch_score_name(client, score_id)
     account_id = _fetch_scorecard_account_id(client, scorecard_id)
+    version_details = _resolve_score_final_classes_from_yaml_details(
+        client=client,
+        score_id=score_id,
+        score_version_id=class_source_score_version_id,
+    )
+    shadow_invalid_feedback_item_ids = (
+        version_details.get("optimizer_shadow_invalid_feedback_item_ids") or []
+    )
+    feedback_target_hash = build_feedback_target_hash(
+        score_version_id=version_details["score_version_id"],
+        days=days,
+        shadow_invalid_feedback_item_ids=shadow_invalid_feedback_item_ids,
+    )
 
     task: Optional[Task] = None
     if task_id:
@@ -970,6 +996,7 @@ def build_associated_dataset_from_feedback_window(
             max_items=max_items,
             days=days,
             stop_at_max=not balance,
+            excluded_feedback_item_ids=shadow_invalid_feedback_item_ids,
         )
         if not all_qualifying_items:
             raise ValueError("No qualifying feedback items found for dataset curation.")
@@ -985,14 +1012,9 @@ def build_associated_dataset_from_feedback_window(
         })
         class_label_overlap: List[str] = []
         if balance:
-            class_resolution_details = _resolve_score_final_classes_from_yaml_details(
-                client=client,
-                score_id=score_id,
-                score_version_id=class_source_score_version_id,
-            )
-            class_list_used = class_resolution_details["classes"]
-            class_resolution_source = class_resolution_details["source"]
-            resolved_score_version_used = class_resolution_details["score_version_id"]
+            class_list_used = version_details["classes"]
+            class_resolution_source = version_details["source"]
+            resolved_score_version_used = version_details["score_version_id"]
             class_label_overlap = sorted(set(class_list_used).intersection(set(observed_label_set)))
             min_required_overlap = 1 if max_items <= 1 else 2
             if len(class_label_overlap) < min_required_overlap:
@@ -1043,6 +1065,9 @@ def build_associated_dataset_from_feedback_window(
                 "balance_applied": balance,
                 "class_distribution_before": class_distribution_before,
                 "class_distribution_after": class_distribution_after,
+                "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+                "feedback_target_hash": feedback_target_hash,
+                "score_version_id_used": version_details["score_version_id"],
             },
         )
 
@@ -1105,6 +1130,9 @@ def build_associated_dataset_from_feedback_window(
             "class_label_overlap": class_label_overlap,
             "class_distribution_before": class_distribution_before,
             "class_distribution_after": class_distribution_after,
+            "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+            "feedback_target_hash": feedback_target_hash,
+            "score_version_id_used": version_details["score_version_id"],
         }
 
         if task:

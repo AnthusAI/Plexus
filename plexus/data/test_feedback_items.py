@@ -8,6 +8,7 @@ import pytest
 import logging
 import pandas as pd
 import json
+import asyncio
 from pydantic import ValidationError
 from unittest.mock import patch, Mock
 
@@ -961,3 +962,37 @@ def test_column_mappings_case_sensitivity():
         df_different_case = feedback_items._create_dataset_rows([], "test score")
         assert 'test score' in df_different_case.columns
         assert 'Mapped Score' not in df_different_case.columns
+
+
+def test_fetch_feedback_items_for_scores_excludes_invalid_items():
+    """Ensure invalidated feedback items are excluded before sampling."""
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_resolve_account.return_value = 'test-account-id'
+
+        feedback_items = FeedbackItems(
+            scorecard='test_scorecard',
+            score='test_score',
+            days=14,
+        )
+
+        valid_item = Mock()
+        valid_item.id = "valid-1"
+        valid_item.isInvalid = False
+        invalid_item = Mock()
+        invalid_item.id = "invalid-1"
+        invalid_item.isInvalid = True
+
+        with patch('plexus.data.FeedbackItems.FeedbackService.find_feedback_items', return_value=[valid_item, invalid_item]):
+            result = asyncio.run(
+                feedback_items._fetch_feedback_items_for_scores(
+                    scorecard_id="scorecard-1",
+                    resolved_scores=[("score-1", "test_score")],
+                )
+            )
+
+        assert "score-1" in result
+        assert [item.id for item in result["score-1"]] == ["valid-1"]

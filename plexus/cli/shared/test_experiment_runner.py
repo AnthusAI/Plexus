@@ -177,6 +177,14 @@ async def test_run_experiment_launches_background_stale_timeout_scan(monkeypatch
         "plexus.cli.procedure.stale_timeout.launch_async_stale_timeout_scan",
         lambda **kwargs: launched_scans.append(kwargs),
     )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **_kwargs: (
+            '{"output_compacted": true, "output_attachment": "tasks/task-123/output.json"}',
+            ["tasks/task-123/output.json"],
+            "tasks/task-123/output.json",
+        ),
+    )
 
     async def _run_impl(_procedure_id, **_options):
         return {"success": True, "status": "completed", "message": "ok"}
@@ -191,6 +199,52 @@ async def test_run_experiment_launches_background_stale_timeout_scan(monkeypatch
 
     assert result["status"] == "COMPLETED"
     assert launched_scans == [{"account_id": "acct-123", "exclude_procedure_id": "proc-123"}]
+
+
+@pytest.mark.asyncio
+async def test_run_experiment_persists_compacted_task_output_attachment(monkeypatch):
+    fake_task = _FakeTask()
+    fake_client = _FakeClient()
+    persisted_calls = []
+
+    _patch_tracker(monkeypatch, fake_task)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.experiment_runner.persist_task_output_artifact",
+        lambda **kwargs: (
+            persisted_calls.append(kwargs)
+            or ('{"output_compacted": true, "output_attachment": "tasks/task-123/output.json"}',
+                ["tasks/task-123/output.json"],
+                "tasks/task-123/output.json")
+        ),
+    )
+
+    async def _run_impl(_procedure_id, **_options):
+        return {"success": True, "status": "completed", "message": "ok", "score": "Dosage"}
+
+    _patch_service(monkeypatch, _run_impl)
+
+    result = await run_experiment_with_task_tracking(
+        procedure_id="proc-123",
+        client=fake_client,
+        account_id="acct-123",
+    )
+
+    assert result["status"] == "COMPLETED"
+    assert persisted_calls == [
+        {
+            "task_id": "task-123",
+            "output_payload": {"success": True, "status": "completed", "message": "ok", "score": "Dosage"},
+            "format_type": "json",
+            "existing_attached_files": None,
+            "status": "completed",
+        }
+    ]
+    assert fake_task.update_calls[-1]["output"] == '{"output_compacted": true, "output_attachment": "tasks/task-123/output.json"}'
+    assert fake_task.update_calls[-1]["attachedFiles"] == ["tasks/task-123/output.json"]
 
 
 @pytest.mark.asyncio

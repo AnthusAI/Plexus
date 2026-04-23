@@ -51,3 +51,80 @@ def test_optimizer_yaml_bounds_report_context_and_output_shapes():
     assert 'render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 2)' in code
     assert 'render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 2)' in code
     assert 'render_items("OTHER MISCLASSIFICATIONS", other_items, 1)' in code
+
+
+def test_optimizer_yaml_uses_shared_score_version_test_tool():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'call_plexus_tool, "plexus_score_test"' in code
+    assert 'version              = candidate_id' in code
+    assert 'samples              = 3' in code
+
+
+def test_optimizer_yaml_defines_safe_encode_for_score_test_failure_details():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function safe_encode(value)" in code
+    assert "return Json.encode(value)" in code
+    assert "if test_result.failures and #test_result.failures > 0 then" in code
+    assert 'safe_encode(test_result.failures)' in code
+    assert 'safe_encode(test_result.predictions)' in code
+
+
+def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local bg = opts.background or false" not in code
+    assert 'background = true' not in code
+    assert 'background = false' not in code
+    assert "dispatched in background" not in code
+    assert "consume results later" not in code
+    assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
+    assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
+
+
+def test_optimizer_yaml_treats_cycle_errors_as_terminal_and_does_not_extend_iteration_cap():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local max_cycles = params.max_iterations" in code
+    assert "max_cycles = max_cycles + 1" not in code
+    assert '"ERROR in cycle %d: %s — stopping run"' in code
+    assert 'stop_reason = "error"' in code
+    assert 'error("Cycle " .. tostring(cycle) .. " failed: " .. tostring(cycle_err))' in code
+
+
+def test_optimizer_yaml_avoids_double_counting_after_cycle_record_and_formats_cycle_prompt_with_cycle_number():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local cycle_recorded = false" in code
+    assert "if not cycle_recorded then" in code
+    assert "cycle_recorded = true" in code
+    assert 'Analyze Cycle %d and produce exactly four sections in this order:\\n"' in code
+    assert '.. "- No long paragraphs anywhere\\n",' in code
+    assert "cycle))" in code
+
+
+def test_optimizer_yaml_never_promotes_champion_and_reports_manual_follow_up():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "plexus_score_set_champion" not in code
+    assert "Promoting winning version" not in code
+    assert "Champion promoted:" not in code
+    assert "Manual promotion is required; the optimizer never promotes champion automatically." in code
+    assert "Winning version remains the current champion" in code
+    assert "No promotion was performed." in code
+    assert "winning_version_id = last_accepted_version_id" in code
+
+
+def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion." in code
+    assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code

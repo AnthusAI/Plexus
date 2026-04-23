@@ -381,6 +381,8 @@ def register_dataset_tools(mcp: FastMCP):
     async def plexus_dataset_check_associated(
         scorecard: str,
         score: str,
+        score_version_id: Optional[str] = None,
+        days: Optional[int] = None,
     ) -> str:
         """
         Check whether a score has an existing associated dataset and return its metadata.
@@ -391,6 +393,8 @@ def register_dataset_tools(mcp: FastMCP):
         Parameters:
         - scorecard: Scorecard identifier (id/key/name/external id)
         - score: Score identifier (id/key/name/external id)
+        - score_version_id: Optional specific score version to match against the dataset target.
+        - days: Optional lookback window used when matching optimizer feedback targets.
 
         Returns:
         - JSON payload with has_dataset, dataset_id, dataset_name, created_at,
@@ -402,9 +406,12 @@ def register_dataset_tools(mcp: FastMCP):
         try:
             try:
                 from plexus.cli.dataset.datasets import create_client
-                from plexus.cli.evaluation.evaluations import get_latest_associated_dataset_for_score
+                from plexus.cli.evaluation.evaluations import list_associated_datasets_for_score
                 from plexus.cli.evaluation.evaluations import validate_dataset_materialization
                 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+                from plexus.cli.shared.optimizer_shadow_invalidation import (
+                    resolve_score_version_shadow_invalidation_metadata,
+                )
             except ImportError as exc:
                 return f"Error: Could not import required modules: {exc}"
 
@@ -418,10 +425,18 @@ def register_dataset_tools(mcp: FastMCP):
             if not score_id:
                 return f"Error: Could not resolve score '{score}' in scorecard '{scorecard}'"
 
-            try:
-                dataset = get_latest_associated_dataset_for_score(client, score_id)
-            except ValueError:
-                # No associated dataset found
+            expected_feedback_target_hash = None
+            if score_version_id is not None or days is not None:
+                target_metadata = resolve_score_version_shadow_invalidation_metadata(
+                    client,
+                    score_id=score_id,
+                    score_version_id=score_version_id,
+                    days=days,
+                )
+                expected_feedback_target_hash = target_metadata.get("feedback_target_hash")
+
+            datasets = list_associated_datasets_for_score(client, score_id)
+            if not datasets:
                 return json.dumps({
                     "has_dataset": False,
                     "dataset_id": None,
@@ -431,32 +446,60 @@ def register_dataset_tools(mcp: FastMCP):
                     "is_materialized": False,
                     "dataset_file": None,
                     "materialization_error": None,
+                    "feedback_target_hash": expected_feedback_target_hash,
                 })
 
-            # Try to extract row_count from the DataSourceVersion's build context
+            dataset = None
             row_count = None
-            if dataset.get("dataSourceVersionId"):
-                try:
-                    dsv_result = client.execute(
-                        """
-                        query GetDataSourceVersion($id: ID!) {
-                            getDataSourceVersion(id: $id) {
-                                id
-                                yamlConfiguration
+            stored_feedback_target_hash = None
+            for candidate in datasets:
+                candidate_row_count = None
+                candidate_feedback_target_hash = None
+                if candidate.get("dataSourceVersionId"):
+                    try:
+                        dsv_result = client.execute(
+                            """
+                            query GetDataSourceVersion($id: ID!) {
+                                getDataSourceVersion(id: $id) {
+                                    id
+                                    yamlConfiguration
+                                }
                             }
-                        }
-                        """,
-                        {"id": dataset["dataSourceVersionId"]}
-                    )
-                    dsv = dsv_result.get("getDataSourceVersion")
-                    if dsv and dsv.get("yamlConfiguration"):
-                        import yaml
-                        config = yaml.safe_load(dsv["yamlConfiguration"])
-                        if isinstance(config, dict):
-                            stats = config.get("dataset_stats", {})
-                            row_count = stats.get("row_count")
-                except Exception as e:
-                    logger.warning("Could not read dataset row_count from DataSourceVersion: %s", e)
+                            """,
+                            {"id": candidate["dataSourceVersionId"]}
+                        )
+                        dsv = dsv_result.get("getDataSourceVersion")
+                        if dsv and dsv.get("yamlConfiguration"):
+                            import yaml
+
+                            config = yaml.safe_load(dsv["yamlConfiguration"])
+                            if isinstance(config, dict):
+                                stats = config.get("dataset_stats", {})
+                                candidate_row_count = stats.get("row_count")
+                                candidate_feedback_target_hash = stats.get("feedback_target_hash")
+                    except Exception as e:
+                        logger.warning("Could not read dataset build metadata from DataSourceVersion: %s", e)
+
+                if expected_feedback_target_hash and candidate_feedback_target_hash != expected_feedback_target_hash:
+                    continue
+
+                dataset = candidate
+                row_count = candidate_row_count
+                stored_feedback_target_hash = candidate_feedback_target_hash
+                break
+
+            if not dataset:
+                return json.dumps({
+                    "has_dataset": False,
+                    "dataset_id": None,
+                    "dataset_name": None,
+                    "created_at": None,
+                    "row_count": None,
+                    "is_materialized": False,
+                    "dataset_file": None,
+                    "materialization_error": None,
+                    "feedback_target_hash": expected_feedback_target_hash,
+                })
 
             readiness = validate_dataset_materialization(dataset)
             return json.dumps({
@@ -468,6 +511,7 @@ def register_dataset_tools(mcp: FastMCP):
                 "is_materialized": bool(readiness.get("is_materialized")),
                 "dataset_file": readiness.get("dataset_file"),
                 "materialization_error": readiness.get("materialization_error"),
+                "feedback_target_hash": stored_feedback_target_hash or expected_feedback_target_hash,
             }, default=str)
         except Exception as exc:
             logger.error("Error checking associated dataset: %s", exc, exc_info=True)

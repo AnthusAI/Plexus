@@ -12,6 +12,7 @@ import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -802,7 +803,11 @@ class ProcedureChatRecorder:
             }
             """
             
-            result = self.client.execute(mutation, {'input': session_data})
+            result = self.client.execute(
+                mutation,
+                {'input': session_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             # Check for GraphQL errors first
             if 'errors' in result:
@@ -927,7 +932,11 @@ class ProcedureChatRecorder:
             }
             """
 
-            result = self.client.execute(mutation, {'input': message_data})
+            result = self.client.execute(
+                mutation,
+                {'input': message_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             # Check for GraphQL errors first
             if 'errors' in result:
@@ -1014,7 +1023,11 @@ class ProcedureChatRecorder:
         """
 
         try:
-            result = self.client.execute(mutation, {"input": update_input})
+            result = self.client.execute(
+                mutation,
+                {"input": update_input},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             if isinstance(result, dict) and result.get("errors"):
                 logger.error("GraphQL error updating message %s: %s", message_id, result["errors"])
                 return False
@@ -1167,7 +1180,11 @@ class ProcedureChatRecorder:
             }
             """
             
-            result = self.client.execute(mutation, {'input': message_data})
+            result = self.client.execute(
+                mutation,
+                {'input': message_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             # Check for GraphQL errors first
             if 'errors' in result:
@@ -1265,7 +1282,11 @@ class ProcedureChatRecorder:
                 'name': name
             }
             
-            result = self.client.execute(mutation, {'input': session_data})
+            result = self.client.execute(
+                mutation,
+                {'input': session_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             if 'errors' in result:
                 logger.error(f"GraphQL error updating session name: {result['errors']}")
@@ -1343,7 +1364,11 @@ class ProcedureChatRecorder:
             if name:
                 update_data['name'] = name
             
-            result = self.client.execute(mutation, {'input': update_data})
+            result = self.client.execute(
+                mutation,
+                {'input': update_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             if (
                 (result and isinstance(result, dict) and result.get('updateChatSession'))
                 or (result and isinstance(result, dict) and result.get('data', {}).get('updateChatSession'))

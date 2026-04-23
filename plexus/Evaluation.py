@@ -32,6 +32,9 @@ from plexus.utils.feedback_selection import (
     normalize_feedback_sampling_mode,
     select_feedback_items,
 )
+from plexus.cli.shared.optimizer_shadow_invalidation import (
+    resolve_score_version_shadow_invalidation_metadata,
+)
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
@@ -3136,6 +3139,8 @@ class FeedbackEvaluation(Evaluation):
         self.account_id = account_id
         self.task_id = task_id
         self.logger = logging.getLogger('plexus/evaluation')
+        self.shadow_invalid_feedback_item_ids: List[str] = []
+        self.feedback_target_hash: Optional[str] = None
 
     @staticmethod
     def _has_usable_root_cause(root_cause_payload) -> bool:
@@ -3375,11 +3380,29 @@ class FeedbackEvaluation(Evaluation):
                 start_date = datetime.now(timezone.utc) - timedelta(days=self.days)
             end_date = datetime.now(timezone.utc)
 
+            shadow_invalidation = {
+                "optimizer_shadow_invalid_feedback_item_ids": [],
+                "feedback_target_hash": None,
+            }
+            if getattr(self, "score_version_id", None):
+                shadow_invalidation = await asyncio.to_thread(
+                    resolve_score_version_shadow_invalidation_metadata,
+                    self.api_client,
+                    score_id=self.score_id,
+                    score_version_id=self.score_version_id,
+                    days=self.days,
+                )
+            self.shadow_invalid_feedback_item_ids = list(
+                shadow_invalidation.get("optimizer_shadow_invalid_feedback_item_ids") or []
+            )
+            self.feedback_target_hash = shadow_invalidation.get("feedback_target_hash")
+
             feedback_items = await self._fetch_feedback_items(
                 scorecard_id=self.scorecard_id,
                 score_id=self.score_id,
                 start_date=start_date,
                 end_date=end_date,
+                exclude_feedback_item_ids=self.shadow_invalid_feedback_item_ids,
             )
 
             selected_feedback_items, selection_metadata = select_feedback_items(
@@ -3450,9 +3473,13 @@ class FeedbackEvaluation(Evaluation):
                 existing_parameters={
                     "days": self.days,
                     "max_items": self.max_items,
+                    "max_feedback_items": self.max_items,
                     "sampling_mode": self.sampling_mode,
                     "sample_seed": self.sample_seed,
                     "max_category_summary_items": self.max_category_summary_items,
+                    "score_version_id": getattr(self, "score_version_id", None),
+                    "optimizer_shadow_invalid_feedback_item_ids": self.shadow_invalid_feedback_item_ids,
+                    "feedback_target_hash": self.feedback_target_hash,
                     **(selection_metadata or {}),
                     "incorrect_items_total": incorrect_items_total,
                 },
@@ -3491,7 +3518,8 @@ class FeedbackEvaluation(Evaluation):
         scorecard_id: str,
         score_id: str,
         start_date: datetime,
-        end_date: datetime
+        end_date: datetime,
+        exclude_feedback_item_ids: Optional[List[str]] = None,
     ) -> List:
         """
         Fetch feedback items for a specific score within a date range.
@@ -3536,6 +3564,7 @@ class FeedbackEvaluation(Evaluation):
                     finalAnswerValue
                     editCommentValue
                     isAgreement
+                    isInvalid
                     editedAt
                     createdAt
                     updatedAt
@@ -3566,6 +3595,7 @@ class FeedbackEvaluation(Evaluation):
         }
         
         all_items = []
+        excluded_ids = {str(item_id).strip() for item_id in (exclude_feedback_item_ids or []) if str(item_id).strip()}
         next_token = None
         
         while True:
@@ -3588,6 +3618,10 @@ class FeedbackEvaluation(Evaluation):
                 # Convert to FeedbackItem object
                 from plexus.dashboard.api.models.feedback_item import FeedbackItem
                 item = FeedbackItem.from_dict(item_data, self.api_client)
+                if item.isInvalid:
+                    continue
+                if excluded_ids and str(getattr(item, "id", "") or "") in excluded_ids:
+                    continue
                 all_items.append(item)
             
             next_token = result['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt'].get('nextToken')

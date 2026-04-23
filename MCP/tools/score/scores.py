@@ -9,6 +9,10 @@ import logging
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
+from plexus.cli.shared.optimizer_shadow_invalidation import (
+    extract_shadow_invalid_feedback_item_ids_from_yaml_text,
+    normalize_shadow_invalid_field_in_yaml_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,32 @@ def register_score_tools(mcp: FastMCP):
 
     def _resolve_scorecard_identifier_quiet(client, identifier: str) -> Optional[str]:
         """Resolve a scorecard identifier without printing CLI-oriented status lines."""
+        try:
+            from plexus.cli.scorecard.scorecards import (
+                resolve_scorecard_identifier as _resolve_scorecard_identifier,
+            )
+
+            resolver_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = resolver_stdout
+            try:
+                resolved = _resolve_scorecard_identifier(client, identifier)
+            finally:
+                resolver_output = resolver_stdout.getvalue()
+                if resolver_output:
+                    logger.warning(
+                        "Captured unexpected stdout during quiet scorecard resolution: %s",
+                        resolver_output,
+                    )
+                sys.stdout = saved_stdout
+
+            if resolved:
+                return resolved
+        except Exception:
+            # Fall back to the local query-based resolver below if the CLI resolver
+            # is unavailable or errors in the MCP runtime.
+            pass
+
         try:
             result = client.execute(
                 f"""
@@ -505,15 +535,32 @@ def register_score_tools(mcp: FastMCP):
                     "error": f"Could not retrieve scorecard sections for '{scorecard_identifier}'."
                 }
 
+            normalized_identifier = (score_identifier or "").strip()
+            normalized_identifier_ci = normalized_identifier.casefold()
+
+            def _candidate_values(score_data: Dict[str, Any]) -> List[str]:
+                return [
+                    str(score_data.get("id") or "").strip(),
+                    str(score_data.get("name") or "").strip(),
+                    str(score_data.get("key") or "").strip(),
+                    str(score_data.get("externalId") or "").strip(),
+                ]
+
             # Find the specific score
             found_score_data = None
             found_section_id = None
+            available_scores: List[str] = []
             for section in scorecard_data.get('sections', {}).get('items', []):
                 for score_data in section.get('scores', {}).get('items', []):
-                    if (score_data.get('id') == score_identifier or 
-                        score_data.get('name') == score_identifier or 
-                        score_data.get('key') == score_identifier or 
-                        score_data.get('externalId') == score_identifier):
+                    candidates = _candidate_values(score_data)
+                    if score_data.get("name"):
+                        available_scores.append(str(score_data.get("name")))
+
+                    if any(c == normalized_identifier for c in candidates):
+                        found_score_data = score_data
+                        found_section_id = section['id']
+                        break
+                    if any(c and c.casefold() == normalized_identifier_ci for c in candidates):
                         found_score_data = score_data
                         found_section_id = section['id']
                         break
@@ -523,7 +570,12 @@ def register_score_tools(mcp: FastMCP):
             if not found_score_data:
                 return {
                     "success": False,
-                    "error": f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
+                    "error": (
+                        f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'. "
+                        f"resolved_scorecard_id='{scorecard_id}', normalized_identifier='{normalized_identifier}'."
+                    ),
+                    "available_scores": available_scores[:25],
+                    "scorecard_id": scorecard_id,
                 }
 
             # Create Score instance
@@ -1611,6 +1663,113 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
+    async def plexus_score_test(
+        scorecard_identifier: str,
+        score_identifier: str,
+        version: Optional[str] = None,
+        samples: int = 3,
+        item_ids: Optional[str] = None,
+        days: int = 90,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Run a mechanical score-version test on sampled items.
+
+        Parameters:
+        - scorecard_identifier: Scorecard identifier (ID, key, name, or external ID)
+        - score_identifier: Score identifier (ID, key, name, or external ID)
+        - version: Optional score version ID to test (defaults to champion)
+        - samples: Number of samples to test (default: 3)
+        - item_ids: Optional comma-separated item identifiers; when provided, count overrides samples
+        - days: Lookback window in days for auto sample discovery (default: 90)
+
+        Returns:
+        - Structured machine-readable test result with pass/fail and per-item details
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+
+        try:
+            if samples <= 0:
+                return _structured_error(
+                    "samples must be a positive integer",
+                    error="invalid_samples",
+                )
+
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.shared.score_version_test import run_score_version_test
+            except ImportError as e:
+                return _structured_error(
+                    f"Could not import required modules: {e}",
+                    error="import_error",
+                )
+
+            api_url = os.environ.get("PLEXUS_API_URL", "")
+            api_key = os.environ.get("PLEXUS_API_KEY", "")
+            if not api_url or not api_key:
+                return _structured_error(
+                    "Missing API credentials. Use --env-file to specify your .env file path.",
+                    error="missing_credentials",
+                )
+
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    client_output = client_stdout.getvalue()
+                    if client_output:
+                        logger.warning(
+                            "Captured unexpected stdout during client creation in plexus_score_test: %s",
+                            client_output,
+                        )
+                    sys.stdout = saved_stdout
+            except Exception as client_err:
+                return _structured_error(
+                    f"Error creating dashboard client: {client_err}",
+                    error="client_error",
+                )
+
+            if not client:
+                return _structured_error(
+                    "Could not create dashboard client.",
+                    error="client_error",
+                )
+
+            parsed_item_ids = None
+            if item_ids:
+                parsed_item_ids = [v.strip() for v in item_ids.split(",") if v.strip()]
+
+            result = await run_score_version_test(
+                client=client,
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                version=version,
+                samples=samples,
+                item_identifiers=parsed_item_ids,
+                days=days,
+            )
+            return result
+
+        except Exception as e:
+            logger.error("Error running plexus_score_test: %s", str(e), exc_info=True)
+            return _structured_error(
+                f"Error running score mechanical test: {str(e)}",
+                error="tool_error",
+            )
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_score_test: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
     async def plexus_score_set_champion(
         score_id: str,
         version_id: str
@@ -1653,6 +1812,33 @@ def register_score_tools(mcp: FastMCP):
 
             if not client:
                 return "Error: Could not create dashboard client."
+
+            version_query = """
+            query GetScoreVersionForChampionGuard($id: ID!) {
+                getScoreVersion(id: $id) {
+                    id
+                    configuration
+                }
+            }
+            """
+            version_result = client.execute(version_query, {"id": version_id})
+            version_data = version_result.get("getScoreVersion") or {}
+            shadow_invalid_feedback_item_ids = extract_shadow_invalid_feedback_item_ids_from_yaml_text(
+                version_data.get("configuration") or ""
+            )
+            if shadow_invalid_feedback_item_ids:
+                return {
+                    "success": False,
+                    "error": "SHADOW_INVALIDATION_PRESENT",
+                    "message": (
+                        "Cannot promote this version to champion because it still contains "
+                        "optimizer_shadow_invalid_feedback_item_ids. Remove that field in a cleanup "
+                        "version before promoting."
+                    ),
+                    "scoreId": score_id,
+                    "versionId": version_id,
+                    "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+                }
 
             mutation = """
             mutation UpdateScore($input: UpdateScoreInput!) {
@@ -1833,6 +2019,9 @@ async def _create_version_from_code_with_parent(
                     "error": "INVALID_YAML",
                     "message": f"Invalid YAML code content: {str(e)}"
                 }
+            code_content, _normalized_shadow_invalid_feedback_item_ids = normalize_shadow_invalid_field_in_yaml_text(
+                code_content
+            )
 
         # Get current content from parent version for comparison
         current_yaml = ''
@@ -1853,6 +2042,9 @@ async def _create_version_from_code_with_parent(
                 current_version_data = version_result['getScoreVersion']
                 current_yaml = (current_version_data.get('configuration') or '').strip()
                 current_guidelines = (current_version_data.get('guidelines') or '').strip()
+                if current_yaml:
+                    current_yaml, _ = normalize_shadow_invalid_field_in_yaml_text(current_yaml)
+                    current_yaml = current_yaml.strip()
         
         # Compare both code and guidelines (ignoring whitespace differences)
         code_unchanged = current_yaml == (code_content or '').strip()
