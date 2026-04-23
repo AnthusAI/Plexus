@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6e5f5b69-068e-4b2d-819d-2845b7e08700",
+  "issue_id": "plx-9c0031ce-2dfc-4026-bdc4-5b00cf0352aa",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T17:04:25.306Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Add a first-class CLI and MCP path for invalidating a single feedback item by deterministic identifier resolution instead of relying on brittle manual UI actions.\n\nDefinition of done:\n- A CLI command can invalidate exactly one feedback item at a time.\n- The command accepts a raw feedback item ID or an item identifier that resolves to the underlying Item.\n- Ambiguous item-to-feedback matches fail with a clear disambiguation error instead of mutating multiple records.\n- An MCP tool exposes the same capability for agent workflows.\n- The implementation is covered by tests and documented through command help/output.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+    "priority": 1,
+    "status": "open",
+    "title": "Add targeted feedback invalidation tooling"
+  }
+}

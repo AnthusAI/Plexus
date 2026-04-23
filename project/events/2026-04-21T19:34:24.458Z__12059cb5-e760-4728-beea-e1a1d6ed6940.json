@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "12059cb5-e760-4728-beea-e1a1d6ed6940",
+  "issue_id": "plx-fcfbb512-9386-4a50-ba71-d37f07dd59f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T19:34:24.458Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+    "priority": 2,
+    "status": "open",
+    "title": "Bump tactus to v0.46.2 and open PR to develop"
+  }
+}

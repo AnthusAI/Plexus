@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8436ba24-ed91-45c8-8d58-be60bee68f72",
+  "issue_id": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:19:21.733Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Client-reported fixes for the split Medication Review questions in SelectQuote HCS Medium-Risk.\n\nDefinition of done:\n- Medication Review sub-scores do not penalize missing dosage/prescriber verification for medications the customer explicitly says they no longer take, discontinued medications, or short-course historical medications such as completed antibiotics.\n- Medication Review (Composite) returns Yes when all four dependent split scores return Yes, and returns No only when one or more dependent split scores return No.\n- Updated live score versions are verified with direct prediction checks.\n- Client-facing rubric/guideline language is updated where applicable.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Align SelectQuote HCS Medication Review split-score logic with current-medication policy"
+  }
+}

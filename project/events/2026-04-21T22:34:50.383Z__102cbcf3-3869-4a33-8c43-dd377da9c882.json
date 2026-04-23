@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "102cbcf3-3869-4a33-8c43-dd377da9c882",
+  "issue_id": "plx-2f058121-f371-4403-86fa-85f73a05a56d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T22:34:50.383Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Procedure runs that terminate early due to insufficient feedback data are currently surfaced as COMPLETED when runtime wraps workflow error under result.status=error. Normalize execution result so task/procedure/stages are FAILED.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Mark optimizer insufficient-data runs as FAILED"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "plx-cc35bdaf-aab7-4536-ac2f-c9f1b0fb6adf",
+  "title": "Add reusable score version mechanical test for optimizer",
+  "description": "Create shared score-version mechanical test service, expose as CLI and MCP tool, and replace optimizer manual smoke testing with the shared tool.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7c405cbc-d552-46fd-b902-6654fde69830",
+      "author": "ryan",
+      "text": "Implemented shared mechanical score-version test service in plexus/cli/shared/score_version_test.py with 90-day sampling policy: explicit items override sample count; otherwise sample recent feedback items for the score, then fallback to scorecard recent items from score results. Added plexus score test CLI command (JSON output) and new MCP tool plexus_score_test that call the same shared service. Updated feedback optimizer YAML to replace both duplicated manual smoke-test blocks with plexus_score_test and removed obsolete smoke_test_item_ids state plumbing. Added tests in plexus/cli/shared/test_score_version_test.py and optimizer config assertion for the shared tool call. Ran pytest -q plexus/cli/shared/test_score_version_test.py and pytest -q plexus/cli/procedure/test_feedback_alignment_optimizer_config.py (all passing).",
+      "created_at": "2026-04-21T17:51:35.473321Z"
+    },
+    {
+      "id": "c5001a26-17e6-4b21-b611-57aa7d431d85",
+      "author": "ryan",
+      "text": "Implemented shared mechanical score-version test service () with 90-day sampling policy: explicit items override sample count; otherwise sample recent feedback items for the score, then fallback to scorecard recent items from score results. Added  CLI command (JSON output) and new MCP tool  that call the same shared service. Updated feedback optimizer YAML to replace both duplicated manual smoke-test blocks with  and removed obsolete smoke_test_item_ids state plumbing. Added tests:  and optimizer config assertion for the shared tool call. Ran: ..                                                                       [100%]\n=============================== warnings summary ===============================\nplexus/scores/AgenticValidator.py:627\n  /Users/ryan/Projects/Plexus/plexus/scores/AgenticValidator.py:627: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    @validator('metadata', pre=True, each_item=True)\n\nplexus/scores/nodes/BeforeAfterSlicer.py:35\n  /Users/ryan/Projects/Plexus/plexus/scores/nodes/BeforeAfterSlicer.py:35: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class SlicingOutputParser(BaseOutputParser[dict]):\n\n../../miniconda3/lib/python3.12/site-packages/pydantic/_internal/_config.py:383\n  /Users/ryan/miniconda3/lib/python3.12/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:\n  * 'underscore_attrs_are_private' has been removed\n    warnings.warn(message, UserWarning)\n\nplexus/scores/nodes/Extractor.py:70\n  /Users/ryan/Projects/Plexus/plexus/scores/nodes/Extractor.py:70: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\nplexus/scores/nodes/ContextExtractor.py:51\n  /Users/ryan/Projects/Plexus/plexus/scores/nodes/ContextExtractor.py:51: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/\n    class ExtractionOutputParser(BaseOutputParser[dict]):\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n2 passed, 5 warnings in 9.99s and ....                                                                     [100%]\n4 passed in 0.44s (all passing).",
+      "created_at": "2026-04-21T17:51:56.214149Z"
+    },
+    {
+      "id": "795ba8e7-1c3d-431e-80a6-69097997906b",
+      "author": "ryan",
+      "text": "Patched optimizer YAML to define missing safe_encode() near safe_decode() and eliminated nil-global crash in score-test failure detail branches. Added regression assertions in test_feedback_alignment_optimizer_config.py for safe_encode definition and usage in both failures/predictions detail paths. Verified with: pytest -q plexus/cli/procedure/test_feedback_alignment_optimizer_config.py (5 passed).",
+      "created_at": "2026-04-21T22:25:52.355201Z"
+    }
+  ],
+  "created_at": "2026-04-21T17:46:48.120670Z",
+  "updated_at": "2026-04-21T22:25:52.355201Z",
+  "closed_at": null,
+  "custom": {}
+}

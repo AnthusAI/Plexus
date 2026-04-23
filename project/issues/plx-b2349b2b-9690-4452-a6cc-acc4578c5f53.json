@@ -1,0 +1,25 @@
+{
+  "id": "plx-b2349b2b-9690-4452-a6cc-acc4578c5f53",
+  "title": "Prediction resolver should handle unchampioned newly created scores consistently",
+  "description": "Newly created split Agent Misrepresentation scores can be predicted individually when targeted directly, but no-cache scorecard loading for the composite path fails because dependent scores have no championVersionId. Investigate score configuration resolution for newly created unchampioned scores and align latest/version/no_cache behavior.",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "af18c02c-b31e-485f-afa3-6e9231b05c39",
+      "author": "ryan",
+      "text": "Reconfirmed during the Information Accuracy realignment rollout on 2026-04-21. The MCP predict path for Agent Misrepresentation (Composite) with no_cache=true fails because the resolver rejects dependency scores that do not yet have championVersionId. The failing dependency set now includes High-Pressure Tactics, Copay Guarantees, Savings Promises, Ambiguous Cost Language, False Carrier Claims, False Local Pharmacy Claims, and False Service Claims.",
+      "created_at": "2026-04-21T20:46:02.306723Z"
+    }
+  ],
+  "created_at": "2026-04-21T17:22:41.525161Z",
+  "updated_at": "2026-04-21T20:46:11.283152Z",
+  "closed_at": null,
+  "custom": {}
+}

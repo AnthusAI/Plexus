@@ -1,0 +1,18 @@
+{
+  "id": "plx-2f058121-f371-4403-86fa-85f73a05a56d",
+  "title": "Mark optimizer insufficient-data runs as FAILED",
+  "description": "Procedure runs that terminate early due to insufficient feedback data are currently surfaced as COMPLETED when runtime wraps workflow error under result.status=error. Normalize execution result so task/procedure/stages are FAILED.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-21T22:34:50.382851Z",
+  "updated_at": "2026-04-21T22:34:54.560304Z",
+  "closed_at": null,
+  "custom": {}
+}

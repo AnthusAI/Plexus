@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "94199069-eaf7-43bb-949b-8d47bf1c7d61",
+  "issue_id": "plx-c9c0b29c-c4ee-4a8e-8a85-d01a8c7c7932",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T21:02:11.037Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 1,
+    "status": "open",
+    "title": "Update official Information Accuracy guidelines and validate rubric format"
+  }
+}

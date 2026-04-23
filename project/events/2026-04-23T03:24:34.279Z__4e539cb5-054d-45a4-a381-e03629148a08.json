@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4e539cb5-054d-45a4-a381-e03629148a08",
+  "issue_id": "plx-b63517e8-8331-4172-9fe4-0afd0379323c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T03:24:34.279Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer should invalidate artifact reuse when feedback target mutates"
+  }
+}

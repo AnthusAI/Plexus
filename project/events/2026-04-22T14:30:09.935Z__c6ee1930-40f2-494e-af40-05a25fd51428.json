@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c6ee1930-40f2-494e-af40-05a25fd51428",
+  "issue_id": "plx-e613769c-052f-4300-8a3a-5a509c72c6fb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T14:30:09.935Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Review split-score contradiction exemplars after the April 22 rubric/code promotion and determine which older feedback items should be invalidated under the current Medication Review rubric.\n\nIn scope:\n- Medication Review: Prescriber\n- Medication Review: Dosage\n- Medication Review: Pharmacy\n- Medication Review: Individual Confirmation\n\nFocus:\n- older labels that require all medications instead of most\n- older labels that count excluded/discontinued/not-current meds\n- older labels that apply SRX rules to SPM calls\n- pharmacy labels that accept vague or system-only pharmacy verification despite the published current-pharmacy rubric\n\nDo not invalidate automatically; prepare and review candidate lists first.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Review Medication Review contradiction invalidation candidates"
+  }
+}

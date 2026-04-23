@@ -593,6 +593,7 @@ class FeedbackService:
                             editedAt
                             editorName
                             isAgreement
+                            isInvalid
                             createdAt
                             updatedAt
                             item {
@@ -693,6 +694,9 @@ class FeedbackService:
 
                 logger.info(f"Retrieved {len(all_feedback_items)} feedback items from fallback query")
         
+        # Always exclude invalidated feedback items for alignment workflows.
+        all_feedback_items = [item for item in all_feedback_items if not getattr(item, "isInvalid", False)]
+
         # Apply value filters if specified
         if initial_value or final_value:
             filtered_items = []

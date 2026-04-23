@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1284635e-42ec-403d-a53c-b2555bd16445",
+  "issue_id": "plx-51b2734a-479f-43f1-a5a4-44e193c6c6ba",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:08:47.443Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create six binary decision-element scores and one composite score in Plexus for SelectQuote HCS Medium-Risk, configure their YAML, verify prediction behavior, and leave the legacy Agent Misrepresentation score unchanged.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 2,
+    "status": "open",
+    "title": "Create and verify split Agent Misrepresentation scores in Plexus"
+  }
+}

@@ -1497,7 +1497,7 @@ def create_cli():
         pass
     
     # Import and register commands from restructured directories
-    from plexus.cli.score.scores import score
+    from plexus.cli.score.scores import scores
     from plexus.cli.scorecard.scorecards import scorecards
     from plexus.cli.evaluation.evaluations import evaluate
     from plexus.cli.data.operations import data
@@ -1515,7 +1515,8 @@ def create_cli():
     from plexus.cli.feedback.commands import feedback # Import the feedback command group
     
     # Add top-level commands
-    cli.add_command(score)
+    cli.add_command(scores)
+    cli.add_command(scores, name="score")
     cli.add_command(scorecards)
     cli.add_command(evaluate)
     cli.add_command(data)

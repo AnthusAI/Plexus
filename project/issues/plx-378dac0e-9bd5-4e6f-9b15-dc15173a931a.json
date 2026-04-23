@@ -1,0 +1,151 @@
+{
+  "id": "plx-378dac0e-9bd5-4e6f-9b15-dc15173a931a",
+  "title": "Run optimizer for Medication Review Prescriber",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "91cf49ff-8d74-49fe-a9db-3fe034d2c837",
+      "author": "ryan",
+      "text": "Preparing a fresh optimizer run for Medication Review: Prescriber using the direct CLI path. Requested parameters: 12 cycles, 180-day feedback window, max 100 samples, starting from current champion 27816b39-0bb8-4fd8-adec-934d40cb47ab.",
+      "created_at": "2026-04-22T15:12:59.478247Z"
+    },
+    {
+      "id": "3173a197-2b1e-4f35-a4f0-a267cc4ea77c",
+      "author": "ryan",
+      "text": "Launched a new direct-CLI optimizer run for Medication Review: Prescriber. Procedure ID: adf366f9-4e0e-415b-8ab0-a2a203e6b805. Starting version: 27816b39-0bb8-4fd8-adec-934d40cb47ab. Parameters: 180-day feedback window, max 100 samples, max 12 iterations.",
+      "created_at": "2026-04-22T15:15:55.814660Z"
+    },
+    {
+      "id": "0a3a3ea8-5920-4d44-83bc-2580806b23f6",
+      "author": "ryan",
+      "text": "The first optimizer attempt failed in setup, not in the scoring logic. Exact error from the direct CLI run: plexus_score_pull returned SCORE_NOT_FOUND after 3 attempts. Root cause reproduced directly: plexus_score_pull fails when given scorecard/score names but succeeds with the scorecard ID 59125ba2-670c-4aa5-b796-c2085cf38a0c and score ID 00c72712-4651-47d3-b32f-2f8904540b2c. Relaunching the optimizer with IDs as a workaround.",
+      "created_at": "2026-04-22T15:26:24.135633Z"
+    },
+    {
+      "id": "0c12aa7c-68e7-4806-ade1-975f88c76437",
+      "author": "ryan",
+      "text": "Retry launched with scorecard/score IDs instead of names to work around the procedure-time score_pull resolver bug. New procedure: ad648a45-6bd3-4c38-838c-5ba44694a377. New task: 130041a7-0c0d-4d94-9e99-12e3824fa97a.",
+      "created_at": "2026-04-22T15:27:01.880708Z"
+    },
+    {
+      "id": "931a98a7-26f9-4e76-bbbf-0f22c4ee8034",
+      "author": "ryan",
+      "text": "Retry with scorecard/score IDs successfully bypassed the initial procedure-time score_pull name-resolution bug. The retried optimizer still failed, but for a different reason: the baseline regression evaluation crashed because Medication Review: Prescriber returned GraphRecursionError on specific feedback items during scoring. Example failures surfaced in the direct CLI log: item 309504413 / feedback item 43709332-f4e0-4338-b3e1-e59121b47c92 and item 306082262 / feedback item 5aaa24b3-f672-49a0-a331-a93b72632ca2. This is now a score/runtime execution bug, not the original procedure resolver bug.",
+      "created_at": "2026-04-22T15:47:42.252545Z"
+    },
+    {
+      "id": "b9e20543-be74-4d50-8e95-a5f5a5ff25b3",
+      "author": "ryan",
+      "text": "Restarted Prescriber optimizer from patched local code. New procedure: 538c4ab5-40e9-463a-8b63-95aba9382f37. New task: 75e81bd3-c235-4830-a016-7f5ccc302686. Launch params: 180-day feedback window, max_samples=100, max_iterations=12, start_version=27816b39-0bb8-4fd8-adec-934d40cb47ab. Monitoring the direct CLI run instead of relying on dashboard state alone.",
+      "created_at": "2026-04-22T16:00:59.257633Z"
+    },
+    {
+      "id": "fe3d5d55-50ac-4ab4-904a-76a7abc0b3a2",
+      "author": "ryan",
+      "text": "Killed local optimizer process 91247 for procedure 538c4ab5-40e9-463a-8b63-95aba9382f37 because the Prescriber champion baseline is mechanically unstable due to empty/partial LLM completions. Fixing the live score before any further optimizer runs.",
+      "created_at": "2026-04-22T16:44:01.808111Z"
+    },
+    {
+      "id": "9e8fec01-017f-455d-8bb0-925bf5e5d670",
+      "author": "ryan",
+      "text": "Restart requested for Medication Review: Prescriber optimizer with reduced scope: 4 cycles, 180-day window, max 100 samples. No previous direct CLI optimizer process is currently running locally, so proceeding to a fresh launch.",
+      "created_at": "2026-04-22T18:22:26.003971Z"
+    },
+    {
+      "id": "f0847e81-9490-4be8-b9e8-ae183e1d240f",
+      "author": "ryan",
+      "text": "Launching a fresh direct-CLI optimizer run for Medication Review: Prescriber from champion version afb050bb-1bbd-4c5b-a2c7-6625fa2c5bd8 with reduced scope: 4 iterations, 180-day feedback window, max 100 samples. Using scorecard/score IDs to avoid the earlier procedure-time score_pull name-resolution bug.",
+      "created_at": "2026-04-22T18:22:53.902687Z"
+    },
+    {
+      "id": "37da7207-b679-4b70-be91-059ca4b06404",
+      "author": "ryan",
+      "text": "New optimizer procedure successfully created and entered Tactus runtime. Procedure ID: 65700dd2-f628-47bd-8dee-22da735e72b6. Task ID: ea9e6a16-688e-4fa8-a035-876e73b0d502. Launch parameters: 4 iterations, 180-day window, max_samples=100, start_version=afb050bb-1bbd-4c5b-a2c7-6625fa2c5bd8.",
+      "created_at": "2026-04-22T18:23:39.515263Z"
+    },
+    {
+      "id": "0d8c69f5-505b-454a-a874-8bd40a4cbb99",
+      "author": "ryan",
+      "text": "User requested termination of older optimizer procedure 09d04402-30c1-4b7e-9599-95140bd1dfc5 and asked whether current skill guidance documents OS-process lookup and stale-process-detection workflow. Inspecting live process table and current optimizer docs before killing the matching local process.",
+      "created_at": "2026-04-22T18:31:40.671118Z"
+    },
+    {
+      "id": "1238430c-753a-45d8-b100-8ca7487b0692",
+      "author": "ryan",
+      "text": "Checking for lingering optimizer procedures before continuing skill work. Inspecting local PIDs with ps and comparing against procedure timeout-stale dry-run output to determine whether any older Medication Review: Prescriber run is still local and killable or only stale in persisted task/procedure state.",
+      "created_at": "2026-04-22T18:43:14.147307Z"
+    },
+    {
+      "id": "2c99dd15-ea94-43a8-989d-1e5be2083eab",
+      "author": "ryan",
+      "text": "The older procedure 09d04402-30c1-4b7e-9599-95140bd1dfc5 still reports fresh chat activity, but there is no matching local optimizer PID on this host. Expanding the local process search beyond direct procedure optimize/run commands to confirm whether any local worker/dispatcher process is driving it or whether the run is only active in persisted state on another host.",
+      "created_at": "2026-04-22T18:43:50.825374Z"
+    },
+    {
+      "id": "0bf28c77-e2e4-418f-8c78-1c82ed17de91",
+      "author": "ryan",
+      "text": "Found the lingering older local run. It is not a procedure optimize process; it is a score optimize wrapper process: PID 98688 (). That elapsed time matches the older Prescriber optimizer launch. Confirming its child PIDs before sending TERM to that exact process.",
+      "created_at": "2026-04-22T18:44:15.179115Z"
+    },
+    {
+      "id": "949abb62-b33a-449c-9adf-ef0949910b2e",
+      "author": "ryan",
+      "text": "Found and terminated the lingering older local optimizer wrapper for Medication Review Prescriber. It was not a procedure optimize process; it was a score optimize wrapper at PID 98688 with the older 12-cycle parameters. TERM did not stop it, so it required kill -9. The surviving local optimizer process is the newer 4-cycle procedure optimize run at PID 11372.",
+      "created_at": "2026-04-22T18:46:27.160694Z"
+    },
+    {
+      "id": "31ce6b7b-841f-47ee-aa67-925970a6865a",
+      "author": "ryan",
+      "text": "Reviewing the post-invalidation Medication Review: Prescriber evaluation bd50de24-c17f-4daa-8d1a-ddc86c6e353b to identify which remaining misclassifications still look like the old rubric class we already corrected versus which ones reflect real remaining score/rubric issues. Goal: connect the current error set back to the recent Prescriber rubric clarification and feedback invalidation work.",
+      "created_at": "2026-04-22T18:55:39.633710Z"
+    },
+    {
+      "id": "0dc45f32-3579-4152-9585-1568839819a1",
+      "author": "ryan",
+      "text": "Reviewed evaluation bd50de24-c17f-4daa-8d1a-ddc86c6e353b (Medication Review: Prescriber, score version 99aa28ab-268d-47c1-80d7-ab3e7c7d4b7c) after the first Prescriber invalidation batch. Important finding: the evaluation is still contaminated by stale labels because it contains at least three explicitly invalidated Prescriber feedback items from the approved batch. Confirmed stale items in this evaluation: 306181806 / feedback 71febae1-9a45-4d58-a19b-bf31d810ca58 (Yes->No misclassification), 305252079 / feedback 9f1f8fab-0a02-42d0-893a-697625b3cdf7 (No->No), and 305141717 / feedback f2d731f8-f411-4d30-b896-3a05f28c6f7a (No->No). So this evaluation is not a clean post-invalidation measure yet; it likely used a dataset snapshot built before those invalidations. Aside from the stale-label contamination, the remaining error mix is mostly implementation/mechanical, not rubric ambiguity: evaluation RCA reports 7 score_configuration_problem, 4 mechanical_malfunction, 0 guideline_gap_requires_sme, 0 information_gap. Main remaining themes: undercounting unresolved meds on some Yes->No/No->Yes boundary calls, RelevantWindowsTranscriptFilter removing prescriber-verification evidence on several false negatives, and missing-required-context / truncated processed-input problems on several others.",
+      "created_at": "2026-04-22T18:57:45.616413Z"
+    },
+    {
+      "id": "c24f2112-9cf8-4ef2-ac1f-17709104ec42",
+      "author": "ryan",
+      "text": "Reviewed evaluation bd50de24-c17f-4daa-8d1a-ddc86c6e353b after the first Prescriber invalidation batch. This is not a clean post-invalidation read yet: the evaluation still contains at least three explicitly invalidated Prescriber feedback items (306181806 as a Yes->No miss, plus 305252079 and 305141717 in No/No). Among the 11 actual misclassifications, RCA reports 7 score_configuration_problem and 4 mechanical_malfunction, with 0 guideline_gap_requires_sme and 0 information_gap. Remaining false negatives cluster around RelevantWindowsTranscriptFilter evidence loss / missing required context, while the two non-stale false positives look like real unresolved-med counting disagreements rather than the old 'not all meds' rubric class.",
+      "created_at": "2026-04-22T18:59:37.237913Z"
+    },
+    {
+      "id": "3f4ed3e3-b4ab-4c90-a385-39e9aa9801d2",
+      "author": "ryan",
+      "text": "Confirmed likely root cause for stale invalidated labels in Prescriber evaluation: contradiction report path explicitly excludes isInvalid feedback items, but evaluation-related fetch/build paths do not. FeedbackEvaluation._fetch_feedback_items in plexus/Evaluation.py fetches FeedbackItems without requesting or filtering isInvalid. FeedbackService.find_feedback_items also does not request/filter isInvalid. Associated dataset curation fetches isInvalid but _is_qualifying_feedback_item ignores it, so curated datasets can still materialize invalidated feedback. This explains why the fresh contradictions report dropped the invalidated Prescriber items while evaluation bd50de24-c17f-4daa-8d1a-ddc86c6e353b still contained them.",
+      "created_at": "2026-04-22T19:07:42.480114Z"
+    },
+    {
+      "id": "23d9ceb4-904e-484d-9533-c735873d50a3",
+      "author": "ryan",
+      "text": "Starting implementation of invalidated-feedback exclusion across optimizer-relevant ingestion paths: Evaluation feedback fetch, FeedbackService, FeedbackItems data cache, and dataset curation eligibility. Will add/extend tests and run targeted test suite.",
+      "created_at": "2026-04-22T19:12:48.919059Z"
+    },
+    {
+      "id": "41275c77-1f8f-419b-886e-51a2af9dbe5a",
+      "author": "ryan",
+      "text": "Implemented invalidated-feedback exclusion across optimizer-relevant ingestion paths (FeedbackEvaluation._fetch_feedback_items, FeedbackService.find_feedback_items, FeedbackItems._fetch_feedback_items_for_scores, and dataset curation eligibility in _is_qualifying_feedback_item). Added tests covering all four paths and ran targeted suite: /Users/ryan/miniconda3/bin/python -m pytest -q plexus/cli/feedback/feedback_service_test.py plexus/cli/dataset/curation_test.py plexus/Evaluation_feedback_test.py plexus/data/test_feedback_items.py -> 69 passed. Also ran live integration spot checks on Medication Review: Prescriber (180 days): FeedbackEvaluation fetch, FeedbackService fetch, and collect_qualifying_feedback_items each returned zero intersection with invalidated IDs {71feb...,9f1f...,f2d7...,e3c7...,fb01...}.",
+      "created_at": "2026-04-22T19:17:02.179454Z"
+    },
+    {
+      "id": "4552853d-4ea5-48a5-a264-b3b515d95723",
+      "author": "ryan",
+      "text": "Implemented and pushed invalidated-feedback exclusion fix across optimizer-relevant ingestion and curation paths. Commit: a1acc17cc. Targeted tests pass (69). Live spot checks for Medication Review: Prescriber show zero intersection with known invalidated feedback IDs in feedback evaluation fetch, FeedbackService fetch, and curation qualifying set.",
+      "created_at": "2026-04-22T19:17:28.862260Z"
+    }
+  ],
+  "created_at": "2026-04-22T15:12:01.478422Z",
+  "updated_at": "2026-04-22T19:17:28.862260Z",
+  "closed_at": "2026-04-22T19:17:28.858139Z",
+  "custom": {}
+}

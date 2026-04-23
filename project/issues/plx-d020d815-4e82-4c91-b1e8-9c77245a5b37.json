@@ -1,0 +1,31 @@
+{
+  "id": "plx-d020d815-4e82-4c91-b1e8-9c77245a5b37",
+  "title": "Add score-optimizer-agent skill for CLI optimizer runs",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1156b779-5352-4b57-acc5-f52b888596ed",
+      "author": "ryan",
+      "text": "Creating a new skills/score-optimizer-agent skill with direct CLI optimizer usage, parameter guidance, DRY identifier-resolution notes, and operational notes learned from live optimizer runs on develop.",
+      "created_at": "2026-04-21T14:37:04.660799Z"
+    },
+    {
+      "id": "a0779680-66b3-4c4c-822c-db43cb9e87f0",
+      "author": "ryan",
+      "text": "Created skills/score-optimizer-agent/SKILL.md. It documents the direct CLI optimizer path, the startup sequence inside the Tactus procedure, DRY identifier resolution for --scorecard/--score, the default alignment objective, the need to use the procedure/YAML path for non-default objectives, and the rule that missing metadata must fail fast rather than degrade into a score outcome.",
+      "created_at": "2026-04-21T14:38:37.509964Z"
+    }
+  ],
+  "created_at": "2026-04-21T14:36:56.630507Z",
+  "updated_at": "2026-04-21T14:38:37.509964Z",
+  "closed_at": null,
+  "custom": {}
+}

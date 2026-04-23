@@ -1,0 +1,25 @@
+{
+  "id": "plx-eae890c8-2545-48c9-a7db-75bd0524dcea",
+  "title": "Feedback item update makes exactly one mutation call and returns updated record",
+  "description": "",
+  "type": "story",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e8badfd4-d7a1-468b-864d-51f169d301e3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c8f908a3-44ca-4b37-b6a0-e2929e0bb6f1",
+      "author": "derek",
+      "text": "Feature: Feedback item update and feedback search consistency\n\nScenario: Updating feedback item returns the updated record without extra reads\nGiven a feedback item id and update input\nWhen the update operation is executed\nThen exactly one update mutation is sent\nAnd the returned feedback item reflects updated fields\n\nScenario: Feedback search includes items near time-window boundary\nGiven feedback edited near the lower bound of the query window\nWhen feedback items are queried with the configured buffer\nThen matching items are not missed at the boundary",
+      "created_at": "2026-04-23T17:10:53.608546762Z"
+    }
+  ],
+  "created_at": "2026-04-23T17:10:46.866111825Z",
+  "updated_at": "2026-04-23T17:10:53.608546762Z",
+  "closed_at": null,
+  "custom": {}
+}

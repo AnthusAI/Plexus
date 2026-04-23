@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "df7ab313-ed3f-45a3-9f18-52acf8db9a86",
+  "issue_id": "plx-ae491c7e-4863-4ba6-aa16-1ebea732bdbb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T14:23:29.877Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 0,
+    "status": "open",
+    "title": "Validate real multi-cycle optimizer runs for Medication Review Prescriber and Dosage"
+  }
+}

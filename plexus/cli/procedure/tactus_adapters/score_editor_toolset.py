@@ -14,11 +14,44 @@ Key tools exposed:
 """
 
 import logging
+from io import StringIO
 from typing import Optional, List, Any
+
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import LiteralScalarString
+
+from plexus.cli.shared.optimizer_shadow_invalidation import (
+    OPTIMIZER_SHADOW_INVALID_FIELD,
+    normalize_shadow_invalid_feedback_item_ids,
+)
 
 logger = logging.getLogger(__name__)
 
 VIRTUAL_PATH = "score_config.yaml"
+EXTRACTION_LIKE_VALID_CLASSES = {
+    "extract",
+    "extracted",
+    "found",
+    "quoted",
+    "quote",
+    "located",
+    "captured",
+    "identified",
+}
+EXTRACTION_PROMPT_HINTS = (
+    "extract",
+    "extracted",
+    "evidence summary",
+    "exact evidence",
+    "exact visible evidence",
+    "verbatim evidence",
+    "quote",
+    "quotes",
+    "ledger",
+    "list every",
+    "list each",
+    "medication-by-medication",
+)
 
 
 class ScoreEditorToolset:
@@ -49,6 +82,54 @@ class ScoreEditorToolset:
     # ------------------------------------------------------------------
     # MCP tools (called from Lua via call_plexus_tool)
     # ------------------------------------------------------------------
+
+    def _normalize_yaml_content(self, yaml_content: str, source: str) -> str:
+        """
+        Canonicalize score YAML before exposing it to the editor agent.
+
+        This keeps the optimizer edit surface deterministic by converting
+        escaped one-line prompt blobs into canonical block-scalar YAML.
+        """
+        try:
+            yaml = YAML()
+            yaml.preserve_quotes = True
+            yaml.width = 4096
+            yaml.indent(mapping=2, sequence=4, offset=2)
+            yaml.map_indent = 2
+            yaml.sequence_indent = 4
+            yaml.sequence_dash_offset = 2
+
+            parsed = yaml.load(yaml_content or "")
+            if not isinstance(parsed, dict):
+                raise ValueError("Score configuration must be a YAML mapping.")
+
+            def _rewrite_multiline_strings(value):
+                if isinstance(value, dict):
+                    for key in list(value.keys()):
+                        value[key] = _rewrite_multiline_strings(value[key])
+                    return value
+                if isinstance(value, list):
+                    for idx in range(len(value)):
+                        value[idx] = _rewrite_multiline_strings(value[idx])
+                    return value
+                if isinstance(value, str) and "\n" in value:
+                    return LiteralScalarString(value)
+                return value
+
+            shadow_ids = normalize_shadow_invalid_feedback_item_ids(
+                parsed.get(OPTIMIZER_SHADOW_INVALID_FIELD)
+            )
+            if shadow_ids:
+                parsed[OPTIMIZER_SHADOW_INVALID_FIELD] = shadow_ids
+            else:
+                parsed.pop(OPTIMIZER_SHADOW_INVALID_FIELD, None)
+
+            normalized = _rewrite_multiline_strings(parsed)
+            rendered = StringIO()
+            yaml.dump(normalized, rendered)
+            return rendered.getvalue()
+        except Exception as exc:
+            raise ValueError(f"Failed to normalize score YAML from {source}: {exc}") from exc
 
     def setup(self, arguments: dict) -> dict:
         """
@@ -84,13 +165,23 @@ class ScoreEditorToolset:
 
         yaml_content = arguments.get("yaml_content", "")
         if yaml_content:
+            try:
+                normalized_yaml = self._normalize_yaml_content(yaml_content, "score_editor_setup yaml_content")
+            except ValueError as exc:
+                return {
+                    "success": False,
+                    "message": str(exc),
+                    "path": VIRTUAL_PATH,
+                    "code_file_path": self._code_file_path,
+                }
+
             # Direct injection from Lua — no async call needed
-            self._content = yaml_content
-            self._original = yaml_content
+            self._content = normalized_yaml
+            self._original = normalized_yaml
             self._history = []
             logger.info(
-                "ScoreEditorToolset: loaded %d chars directly for iteration %d, score=%s, dry_run=%s",
-                len(yaml_content), self._iteration, self._score, self._dry_run,
+                "ScoreEditorToolset: loaded %d normalized chars directly for iteration %d, score=%s, dry_run=%s",
+                len(normalized_yaml), self._iteration, self._score, self._dry_run,
             )
         else:
             # Fallback: try async API load (may fail in nested event loop contexts)
@@ -610,13 +701,15 @@ class ScoreEditorToolset:
                 if not code:
                     raise RuntimeError(f"Score code file is empty: {code_file_path}")
 
-                self._content = code
-                self._original = code
+                normalized_code = self._normalize_yaml_content(code, f"plexus_score_pull:{code_file_path}")
+
+                self._content = normalized_code
+                self._original = normalized_code
                 self._history = []
                 self._code_file_path = code_file_path
                 logger.info(
-                    "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
-                    len(code), self._scorecard, self._score, code_file_path,
+                    "ScoreEditorToolset: auto-loaded %d normalized chars for %s/%s from %s",
+                    len(normalized_code), self._scorecard, self._score, code_file_path,
                 )
                 return None
 
@@ -664,16 +757,87 @@ class ScoreEditorToolset:
             return f"(Validation unavailable: {exc})"
 
     def _get_validation_errors(self) -> List[str]:
+        errors: List[str] = []
         try:
             from plexus.linting.yaml_linter import YamlLinter
             result = YamlLinter().lint(self._content)
-            return [
+            errors.extend([
                 f"{m.title}" + (f" (line {m.line})" if m.line else "") + f": {m.message}"
                 for m in result.messages
                 if m.level == "error"
-            ]
+            ])
+        except Exception:
+            pass
+
+        errors.extend(self._get_structural_validation_errors())
+        return errors
+
+    def _get_structural_validation_errors(self) -> List[str]:
+        """
+        Reject optimizer-generated score YAML that uses Classifier as a free-form
+        extractor. This catches the pseudo-extractor pattern before expensive
+        evaluation starts.
+        """
+        try:
+            yaml = YAML(typ="safe")
+            parsed = yaml.load(self._content)
         except Exception:
             return []
+
+        if not isinstance(parsed, dict):
+            return []
+
+        graph = parsed.get("graph")
+        if not isinstance(graph, list):
+            return []
+
+        errors: List[str] = []
+        for idx, node in enumerate(graph, start=1):
+            if not isinstance(node, dict):
+                continue
+
+            node_class = str(node.get("class") or "").strip()
+            if node_class != "Classifier":
+                continue
+
+            valid_classes = node.get("valid_classes")
+            if not isinstance(valid_classes, list) or not valid_classes:
+                continue
+
+            normalized_valid_classes = {
+                str(value).strip().lower()
+                for value in valid_classes
+                if str(value).strip()
+            }
+            if not normalized_valid_classes:
+                continue
+
+            extraction_like_classes = normalized_valid_classes.issubset(
+                EXTRACTION_LIKE_VALID_CLASSES
+            )
+            if not extraction_like_classes:
+                continue
+
+            node_name = str(node.get("name") or f"graph[{idx}]")
+            prompt_text = " ".join(
+                str(node.get(field) or "")
+                for field in ("system_message", "user_message")
+            ).lower()
+            looks_like_extractor = (
+                node_name.lower().startswith("extract")
+                or any(hint in prompt_text for hint in EXTRACTION_PROMPT_HINTS)
+            )
+            if not looks_like_extractor:
+                continue
+
+            errors.append(
+                f"Structural validation failed for node '{node_name}': "
+                "Classifier cannot be used for free-form extraction. "
+                "Use class: Extractor, map output.extracted_text to a named state field, "
+                f"and reserve valid_classes for closed-set labels. Found valid_classes={valid_classes!r}."
+            )
+
+        return errors
 
     def _extract_version_id(self, mcp_response: Any) -> Optional[str]:
         """Extract newVersionId or version_id from a MCP tool call response."""

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "253e7256-b8aa-4eb0-b182-3ab39ac98859",
+  "issue_id": "plx-008f8f6d-180e-4f1c-b772-e2cfe20682df",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T17:10:46.867Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-e8badfd4-d7a1-468b-864d-51f169d301e3",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix PR198 CI failures in feedback upsert + feedback search time window"
+  }
+}

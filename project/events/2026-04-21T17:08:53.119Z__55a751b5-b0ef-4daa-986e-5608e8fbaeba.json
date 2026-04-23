@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "55a751b5-b0ef-4daa-986e-5608e8fbaeba",
+  "issue_id": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-21T17:08:53.119Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Implement the Agent Misrepresentation score split for the  scorecard, including six decision-element scores, one composite score, and verification that the legacy score remains unchanged.",
+        "to": "Implement the Agent Misrepresentation score split for the SelectQuote HCS Medium-Risk scorecard, including six decision-element scores, one composite score, and verification that the legacy score remains unchanged."
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-5c945e36-1343-41f9-8f1b-792febf4e07d",
+  "title": "Fix optimizer contradictions report cache reuse",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "66024401-35bc-4b8d-b7da-7ca47c485ea4",
+      "author": "ryan",
+      "text": "Implementing direct synchronous FeedbackContradictions execution in feedback_alignment_optimizer.yaml; removing background dispatch dependency on plexus command dispatcher and adding YAML regression assertions.",
+      "created_at": "2026-04-22T00:13:58.049507Z"
+    },
+    {
+      "id": "504a794c-72d8-4d71-a986-969c48b357a9",
+      "author": "ryan",
+      "text": "Implemented synchronous contradictions execution in feedback_alignment_optimizer.yaml, removed background dispatch dependency on plexus command dispatcher, and added optimizer YAML regression coverage. Focused pytest passed. Started a small direct CLI verification run (procedure 002445d9-ae74-4179-b93a-60517ef30392) and confirmed the old pending-dispatcher error string was absent before stopping the run.",
+      "created_at": "2026-04-22T00:16:44.842410Z"
+    }
+  ],
+  "created_at": "2026-04-21T15:45:35.576826Z",
+  "updated_at": "2026-04-22T00:16:44.845223Z",
+  "closed_at": "2026-04-22T00:16:44.845223Z",
+  "custom": {}
+}

@@ -2,15 +2,123 @@
 """
 Feedback management tools for Plexus MCP Server
 """
+import asyncio
 import os
 import sys
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+async def _fetch_latest_feedback_update_for_window(
+    *,
+    client,
+    account_id: str,
+    scorecard_id: str,
+    score_id: str,
+    days: Optional[int],
+) -> Dict[str, Any]:
+    """Return latest FeedbackItem.updatedAt in an editedAt-bounded window."""
+    now = datetime.now(timezone.utc)
+    window_start = (now - timedelta(days=days)) if days is not None else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    window_end = now + timedelta(minutes=5)
+
+    query = """
+    query ListFeedbackUpdatesByEditedWindow(
+        $accountId: String!,
+        $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+        $limit: Int,
+        $nextToken: String,
+        $sortDirection: ModelSortDirection
+    ) {
+        listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+            accountId: $accountId,
+            scorecardIdScoreIdEditedAt: $composite_sk_condition,
+            limit: $limit,
+            nextToken: $nextToken,
+            sortDirection: $sortDirection
+        ) {
+            items {
+                id
+                editedAt
+                updatedAt
+                isInvalid
+            }
+            nextToken
+        }
+    }
+    """
+
+    variables: Dict[str, Any] = {
+        "accountId": account_id,
+        "composite_sk_condition": {
+            "between": [
+                {
+                    "scorecardId": str(scorecard_id),
+                    "scoreId": str(score_id),
+                    "editedAt": window_start.isoformat(),
+                },
+                {
+                    "scorecardId": str(scorecard_id),
+                    "scoreId": str(score_id),
+                    "editedAt": window_end.isoformat(),
+                },
+            ]
+        },
+        "limit": 200,
+        "nextToken": None,
+        "sortDirection": "DESC",
+    }
+
+    latest_item_id: Optional[str] = None
+    latest_updated_at: Optional[datetime] = None
+
+    while True:
+        response = await asyncio.to_thread(client.execute, query, variables)
+        if not isinstance(response, dict):
+            break
+        page = response.get("listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt") or {}
+        rows = page.get("items") or []
+        for row in rows:
+            updated = _parse_iso_datetime((row or {}).get("updatedAt"))
+            if not updated:
+                continue
+            if latest_updated_at is None or updated > latest_updated_at:
+                latest_updated_at = updated
+                latest_item_id = (row or {}).get("id")
+
+        next_token = page.get("nextToken")
+        if not next_token:
+            break
+        variables["nextToken"] = next_token
+
+    return {
+        "found": latest_updated_at is not None,
+        "latest_feedback_updated_at": latest_updated_at.isoformat().replace("+00:00", "Z") if latest_updated_at else None,
+        "latest_feedback_item_id": latest_item_id,
+        "window_start": window_start.isoformat().replace("+00:00", "Z"),
+        "window_end": window_end.isoformat().replace("+00:00", "Z"),
+    }
 
 
 async def _get_paginated_feedback_with_items(
@@ -517,3 +625,114 @@ def register_feedback_tools(mcp: FastMCP):
             import json
             return json.dumps({"error": f"Failed to search feedback: {str(e)}"})
 
+    @mcp.tool()
+    async def plexus_feedback_latest_update(
+        scorecard_name: str,
+        score_name: str,
+        days: Optional[Union[int, float, str]] = None,
+    ) -> str:
+        """
+        Return latest feedback updatedAt watermark for a score in an editedAt window.
+
+        The lookup window is bounded by editedAt (score feedback source window) while the
+        returned freshness watermark uses updatedAt so invalidation/edit changes are detected.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client
+            from plexus.cli.shared.memoized_resolvers import (
+                memoized_resolve_scorecard_identifier,
+                memoized_resolve_score_identifier,
+            )
+            from plexus.cli.report.utils import resolve_account_id_for_command
+
+            client = create_client()
+            if not client:
+                return json.dumps({"error": "Failed to create API client"})
+
+            days_int: Optional[int] = None
+            if days is not None:
+                days_int = int(float(str(days)))
+                if days_int <= 0:
+                    return json.dumps({"error": "days must be a positive integer when provided"})
+
+            account_id = resolve_account_id_for_command(client, None)
+            if not account_id:
+                return json.dumps({"error": "Failed to resolve account ID"})
+
+            scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
+            if not scorecard_id:
+                return json.dumps({"error": f"Scorecard '{scorecard_name}' not found"})
+
+            score_id = memoized_resolve_score_identifier(client, scorecard_id, score_name)
+            if not score_id:
+                return json.dumps({"error": f"Score '{score_name}' not found in scorecard '{scorecard_name}'"})
+
+            payload = await _fetch_latest_feedback_update_for_window(
+                client=client,
+                account_id=account_id,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                days=days_int,
+            )
+            payload.update(
+                {
+                    "scorecard_name": scorecard_name,
+                    "score_name": score_name,
+                    "scorecard_id": scorecard_id,
+                    "score_id": score_id,
+                    "days": days_int,
+                }
+            )
+            return json.dumps(payload, indent=2, default=str)
+        except Exception as exc:
+            logger.error("Error in plexus_feedback_latest_update: %s", exc, exc_info=True)
+            return json.dumps({"error": f"Failed to compute feedback watermark: {str(exc)}"})
+
+    @mcp.tool()
+    async def plexus_feedback_invalidate(
+        identifier: str,
+        scorecard_name: Optional[str] = None,
+        score_name: Optional[str] = None,
+    ) -> str:
+        """
+        Invalidate exactly one feedback item by direct feedback ID or item identifier.
+
+        Args:
+            identifier: Feedback item ID, item ID, item externalId, or identifier-table value.
+            scorecard_name: Optional scorecard identifier used only to disambiguate item-level matches.
+            score_name: Optional score identifier used only to disambiguate item-level matches. Requires scorecard_name.
+
+        Returns:
+            JSON string describing the invalidated feedback item or a structured error.
+        """
+        try:
+            from plexus.cli.feedback.feedback_invalidation import (
+                FeedbackInvalidationError,
+                invalidate_feedback_item,
+            )
+            from plexus.cli.shared.client_utils import create_client
+
+            client = create_client()
+            if not client:
+                return json.dumps({"error": "Failed to create API client"})
+
+            result = await asyncio.to_thread(
+                invalidate_feedback_item,
+                client=client,
+                identifier=identifier,
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+            )
+            return json.dumps(result, indent=2, default=str)
+        except FeedbackInvalidationError as exc:
+            payload = {"error": str(exc), "code": exc.code}
+            if exc.details:
+                payload["details"] = exc.details
+            return json.dumps(payload, indent=2, default=str)
+        except Exception as exc:
+            logger.error("Error in plexus_feedback_invalidate: %s", exc, exc_info=True)
+            return json.dumps(
+                {"error": f"Failed to invalidate feedback: {str(exc)}"},
+                indent=2,
+                default=str,
+            )
