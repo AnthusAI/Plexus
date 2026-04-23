@@ -3,7 +3,7 @@
   "title": "Feedback item update makes exactly one mutation call and returns updated record",
   "description": "",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek",
       "text": "Feature: Feedback item update and feedback search consistency\n\nScenario: Updating feedback item returns the updated record without extra reads\nGiven a feedback item id and update input\nWhen the update operation is executed\nThen exactly one update mutation is sent\nAnd the returned feedback item reflects updated fields\n\nScenario: Feedback search includes items near time-window boundary\nGiven feedback edited near the lower bound of the query window\nWhen feedback items are queried with the configured buffer\nThen matching items are not missed at the boundary",
       "created_at": "2026-04-23T17:10:53.608546762Z"
+    },
+    {
+      "id": "c16f65f8-fbad-4500-a01e-e47a73441334",
+      "author": "derek",
+      "text": "Completed via PR #199 (merged to develop). Updated tests to align with current feedback update behavior and time-window/invalid-item filtering expectations.",
+      "created_at": "2026-04-23T17:49:42.258723961Z"
     }
   ],
   "created_at": "2026-04-23T17:10:46.866111825Z",
-  "updated_at": "2026-04-23T17:10:53.608546762Z",
-  "closed_at": null,
+  "updated_at": "2026-04-23T17:49:42.270987348Z",
+  "closed_at": "2026-04-23T17:49:42.270987348Z",
   "custom": {}
 }

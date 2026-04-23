@@ -3,7 +3,7 @@
   "title": "Fix PR198 CI failures in feedback upsert + feedback search time window",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -52,10 +52,16 @@
       "author": "derek",
       "text": "Committed and pushed test remediations on branch bugfix/pr198-feedback-tests as commit ea16d513 with semantic commit message: fix(tests): align feedback upsert and time-window expectations. Opened PR #199 targeting develop: https://github.com/AnthusAI/Plexus/pull/199. Monitoring GitHub checks via gh pr checks --watch; currently pending for Dashboard + Python test jobs.",
       "created_at": "2026-04-23T17:35:27.114926486Z"
+    },
+    {
+      "id": "4387df06-d2c4-4398-aeea-34052bbd86c7",
+      "author": "derek",
+      "text": "Resolved by PR #199 (merged to develop). Reproduced and fixed all 5 PR198 CI failures, plus rcql cleanup in touched test files; targeted suites passing.",
+      "created_at": "2026-04-23T17:49:42.282529620Z"
     }
   ],
   "created_at": "2026-04-23T17:10:46.867003124Z",
-  "updated_at": "2026-04-23T17:35:27.114926486Z",
-  "closed_at": null,
+  "updated_at": "2026-04-23T17:49:42.293705846Z",
+  "closed_at": "2026-04-23T17:49:42.293705846Z",
   "custom": {}
 }
