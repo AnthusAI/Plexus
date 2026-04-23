@@ -13,6 +13,7 @@ Key tools exposed:
 - score_editor_get_content: MCP tool called from Lua to read current virtual file content
 """
 
+import io
 import logging
 from typing import Optional, List, Any
 
@@ -45,6 +46,7 @@ class ScoreEditorToolset:
         self._last_version_id: Optional[str] = None
         self._code_file_path: Optional[str] = None
         self._last_edit_error: Optional[str] = None
+        self._load_error: Optional[str] = None
 
     # ------------------------------------------------------------------
     # MCP tools (called from Lua via call_plexus_tool)
@@ -63,6 +65,7 @@ class ScoreEditorToolset:
         self._original = ""
         self._history = []
         self._code_file_path = None
+        self._load_error = None
         # Only overwrite scorecard/score if the caller provides non-empty values.
         # When the orchestrator LLM calls setup({}) (args stripped by DSPy), we
         # preserve the values pre-populated by procedure_executor from context.
@@ -84,18 +87,37 @@ class ScoreEditorToolset:
 
         yaml_content = arguments.get("yaml_content", "")
         if yaml_content:
+            try:
+                normalized_yaml = self._normalize_yaml_content(yaml_content)
+            except Exception as exc:
+                self._load_error = f"Failed to normalize score YAML: {exc}"
+                logger.error(
+                    "ScoreEditorToolset: yaml_content normalization failed for iteration %d, score=%s: %s",
+                    self._iteration,
+                    self._score,
+                    exc,
+                )
+                return {
+                    "success": False,
+                    "message": self._load_error,
+                    "error": self._load_error,
+                    "path": VIRTUAL_PATH,
+                    "code_file_path": self._code_file_path,
+                }
+
             # Direct injection from Lua — no async call needed
-            self._content = yaml_content
-            self._original = yaml_content
+            self._content = normalized_yaml
+            self._original = normalized_yaml
             self._history = []
             logger.info(
                 "ScoreEditorToolset: loaded %d chars directly for iteration %d, score=%s, dry_run=%s",
-                len(yaml_content), self._iteration, self._score, self._dry_run,
+                len(normalized_yaml), self._iteration, self._score, self._dry_run,
             )
         else:
             # Fallback: try async API load (may fail in nested event loop contexts)
             load_error = self._load_content_from_api()
             if load_error:
+                self._load_error = load_error
                 logger.warning("ScoreEditorToolset: eager load failed: %s", load_error)
             logger.info(
                 "ScoreEditorToolset: initialized for iteration %d, score=%s, dry_run=%s, file=%s",
@@ -125,6 +147,15 @@ class ScoreEditorToolset:
 
     def get_content(self, arguments: dict) -> dict:
         """Return the current virtual file content for Lua to build system messages."""
+        if self._load_error:
+            return {
+                "success": False,
+                "error": self._load_error,
+                "file_content": "",
+                "original": "",
+                "modified": False,
+                "length": 0,
+            }
         return {
             "success": True,
             "file_content": self._content,
@@ -300,8 +331,11 @@ class ScoreEditorToolset:
 
             # Auto-load content on first view if not yet populated
             if not self._content:
+                if self._load_error:
+                    return f"Error loading score configuration: {self._load_error}"
                 load_error = self._load_content_from_api()
                 if load_error:
+                    self._load_error = load_error
                     return f"Error loading score configuration: {load_error}"
 
             view_range = arguments.get("view_range")
@@ -610,13 +644,16 @@ class ScoreEditorToolset:
                 if not code:
                     raise RuntimeError(f"Score code file is empty: {code_file_path}")
 
-                self._content = code
-                self._original = code
+                normalized_code = self._normalize_yaml_content(code)
+
+                self._content = normalized_code
+                self._original = normalized_code
                 self._history = []
                 self._code_file_path = code_file_path
+                self._load_error = None
                 logger.info(
                     "ScoreEditorToolset: auto-loaded %d chars for %s/%s from %s",
-                    len(code), self._scorecard, self._score, code_file_path,
+                    len(normalized_code), self._scorecard, self._score, code_file_path,
                 )
                 return None
 
@@ -633,6 +670,48 @@ class ScoreEditorToolset:
                         max_retries, exc,
                     )
                     return str(exc)
+
+    def _normalize_yaml_content(self, yaml_content: str) -> str:
+        """Parse and re-dump YAML so the optimizer edits a canonical text form."""
+        if not yaml_content or not yaml_content.strip():
+            raise ValueError("YAML content is empty")
+
+        from ruamel.yaml import YAML
+        from ruamel.yaml.scalarstring import LiteralScalarString
+
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        yaml.width = 4096
+        yaml.indent(mapping=2, sequence=4, offset=2)
+        yaml.map_indent = 2
+        yaml.sequence_indent = 4
+        yaml.sequence_dash_offset = 2
+
+        parsed = yaml.load(io.StringIO(yaml_content))
+        if parsed is None:
+            raise ValueError("YAML content parsed to an empty document")
+
+        def normalize_multiline_strings(value):
+            if isinstance(value, str):
+                return LiteralScalarString(value) if "\n" in value else value
+            if isinstance(value, list):
+                for idx, item in enumerate(value):
+                    value[idx] = normalize_multiline_strings(item)
+                return value
+            if isinstance(value, dict):
+                for key in list(value.keys()):
+                    value[key] = normalize_multiline_strings(value[key])
+                return value
+            return value
+
+        parsed = normalize_multiline_strings(parsed)
+
+        buffer = io.StringIO()
+        yaml.dump(parsed, buffer)
+        normalized = buffer.getvalue()
+        if not normalized.strip():
+            raise ValueError("Normalized YAML content is empty")
+        return normalized
 
     def _format_edit_result(self, operation: str) -> str:
         validation = self._format_validation()
