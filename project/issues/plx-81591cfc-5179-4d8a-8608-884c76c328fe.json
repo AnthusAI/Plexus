@@ -1,0 +1,49 @@
+{
+  "id": "plx-81591cfc-5179-4d8a-8608-884c76c328fe",
+  "title": "Triaging Dosage contradiction set before further optimizer restarts",
+  "description": "Use the recent Medication Review: Dosage optimizer and contradiction-report evidence to identify the exact contradiction-heavy feedback set, prepare SME-facing policy questions or explicit invalidation candidates, and establish the cleaned slice required before further meaningful optimizer restarts. Direct CLI logs and stored report artifacts are the source of truth.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3d9714df-787a-44bc-8908-61108ced4042",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0d82b5ad-95b6-477f-bc67-fba539148d34",
+      "author": "ryan",
+      "text": "Starting Dosage triangulation pass using the local skill that combines three signals: optimizer repeat-offender evidence, contradiction-report output, and evaluation RCA. Goal is to identify the exact feedback items or clusters that are blocking meaningful optimizer progress before any further restart.",
+      "created_at": "2026-04-23T20:39:16.679894Z"
+    },
+    {
+      "id": "a0042f21-6a20-41e0-93c5-2923d8ab905e",
+      "author": "ryan",
+      "text": "Triangulation complete for Medication Review: Dosage using three signals from the local optimizer workflow: (1) notable item recurrence from procedure aa6aa920-20d5-4586-a6d5-89e9259f2b31 state, (2) final expanded contradictions report b92d7af9-fa90-4598-a706-aa311e8ef288, and (3) last_recent_rca from the same procedure state. Highest-confidence three-signal overlap items are external IDs 305141718, 305156002, 305252084, and 305262577. These all appear in recurrence, in the final contradiction payload, and in recent RCA exemplars, so they are the cleanest first-batch contradiction/invalidation review candidates. Second group is recurrence+RCA but not final-contradiction overlap: 305221883, 305262247, 309504280, 309504413, 309504474, 309504981, and 307516880. Those look more like active preprocessing/evidence-loss score problems than obvious label-cleanup items, so they should stay in the score-fix bucket. Third group is contradiction-only / SME-facing holdouts: 309504386, 308889128, 308639001, and 307500372. These hinge on current-vs-non-current / omitted-medication / Prolia / uncertainty policy questions and should not go into the first invalidation batch without explicit rubric decisions. 305259519 remains a watchlist item: oscillating in recurrence and cited in older optimizer summaries, but not present in the final contradiction payload or the latest RCA exemplar set.",
+      "created_at": "2026-04-23T20:43:50.379283Z"
+    },
+    {
+      "id": "cd405b86-b4db-4bf4-808d-9a7b33cd016c",
+      "author": "ryan",
+      "text": "User approved the first Dosage contradiction-cleanup batch. Proceeding with targeted invalidation for external IDs 305141718, 305156002, 305252084, and 305262577 under SelectQuote HCS Medium-Risk / Medication Review: Dosage, then rerunning a fresh 180-day feedback evaluation and a fresh contradictions report to verify cleanup impact.",
+      "created_at": "2026-04-23T20:46:17.887669Z"
+    },
+    {
+      "id": "ab383e03-c3b1-4822-bae7-fb130c912412",
+      "author": "ryan",
+      "text": "Approved Dosage contradiction invalidations completed via direct CLI on 2026-04-23. Invalidated feedback items: 4c46a603-e6c7-46ab-8f8f-8ccd6cbc052e (item 305141718), 2a50eaa2-7269-46a5-aca2-89315fd97da5 (item 305156002), 0c46bf2e-1d79-4253-9352-65488797ddc3 (item 305252084), a3959847-d892-4733-8d1b-aeff3e5d6213 (item 305262577). Next step: rerun 180-day feedback evaluation and fresh contradictions report on Medication Review: Dosage against the current champion version to measure contradiction-count reduction and any metric movement.",
+      "created_at": "2026-04-23T20:50:04.344449Z"
+    },
+    {
+      "id": "4d6ab346-f2e1-4453-aabc-4ee666d0796b",
+      "author": "ryan",
+      "text": "Post-cleanup verification complete on 2026-04-23. Fresh Dosage feedback evaluation 87ff889e-552f-44e2-b0c3-0dd33f2d86e2 completed with 52/52 items, Accuracy 82.6923, Alignment 0.653974121996303, Precision 87.5, Recall 77.7778. Pre-cleanup baseline d8d12d4e-32f5-49d6-a3ba-ffee37a29f30 had 56/56 items, Accuracy 76.7857, Alignment 0.5358622888109661, Precision 84, Recall 70. Fresh contradictions report 3eb21536-9379-4843-88ae-4e020f12c8d6 found 3 contradictions / 48 aligned over 51 vetted items, down from 9 contradictions in prior report b92d7af9-fa90-4598-a706-aa311e8ef288. Confirmed absent from new contradiction payload: 4c46a603-e6c7-46ab-8f8f-8ccd6cbc052e, 2a50eaa2-7269-46a5-aca2-89315fd97da5, 0c46bf2e-1d79-4253-9352-65488797ddc3, a3959847-d892-4733-8d1b-aeff3e5d6213. Remaining contradiction/policy-gap set is now centered on 305252085, 308639001, and 307500372.",
+      "created_at": "2026-04-23T20:57:20.383440Z"
+    }
+  ],
+  "created_at": "2026-04-23T20:36:18.605332Z",
+  "updated_at": "2026-04-23T20:57:20.383440Z",
+  "closed_at": null,
+  "custom": {}
+}

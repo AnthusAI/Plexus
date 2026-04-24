@@ -1,0 +1,25 @@
+{
+  "id": "plx-a0969aad-9621-4ec3-946e-5c2ef68764a0",
+  "title": "Patch Prescriber score to reaffirm SRX at-most-one-miss rule",
+  "description": "Implement the approved Prescriber clarification from item 305259519 that SRX follows the published at-most-one-miss threshold and does not require prescriber verification for each medication. Apply the change on top of version 770575d5-b3dd-4939-a19d-64ac99fb592e so the prior prescribed-by recognition stays intact. Update both the score guidelines and the current non-champion score version with a minimal wording patch; do not broaden other Prescriber rules or change optimizer direction.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "24a4e9be-d8c9-4214-aa65-46601bd5ed26",
+      "author": "ryan",
+      "text": "Created Prescriber score version ba041b6a-8786-4f31-b082-31b5f999b0e7 from parent 770575d5-b3dd-4939-a19d-64ac99fb592e. This patch explicitly reaffirms the published SRX threshold that at most one unresolved current-medication miss still passes and rejects the stricter verify-each-medication interpretation, while retaining the prior prescribed-by recognition wording. Champion promotion was requested but not performed because agent policy blocks champion promotion even with user approval; evaluate the candidate version directly.",
+      "created_at": "2026-04-23T20:11:17.634382Z"
+    }
+  ],
+  "created_at": "2026-04-23T20:10:25.764662Z",
+  "updated_at": "2026-04-23T20:12:22.727460Z",
+  "closed_at": "2026-04-23T20:12:22.727460Z",
+  "custom": {}
+}
