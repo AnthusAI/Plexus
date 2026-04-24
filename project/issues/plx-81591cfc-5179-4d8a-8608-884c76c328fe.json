@@ -40,10 +40,28 @@
       "author": "ryan",
       "text": "Post-cleanup verification complete on 2026-04-23. Fresh Dosage feedback evaluation 87ff889e-552f-44e2-b0c3-0dd33f2d86e2 completed with 52/52 items, Accuracy 82.6923, Alignment 0.653974121996303, Precision 87.5, Recall 77.7778. Pre-cleanup baseline d8d12d4e-32f5-49d6-a3ba-ffee37a29f30 had 56/56 items, Accuracy 76.7857, Alignment 0.5358622888109661, Precision 84, Recall 70. Fresh contradictions report 3eb21536-9379-4843-88ae-4e020f12c8d6 found 3 contradictions / 48 aligned over 51 vetted items, down from 9 contradictions in prior report b92d7af9-fa90-4598-a706-aa311e8ef288. Confirmed absent from new contradiction payload: 4c46a603-e6c7-46ab-8f8f-8ccd6cbc052e, 2a50eaa2-7269-46a5-aca2-89315fd97da5, 0c46bf2e-1d79-4253-9352-65488797ddc3, a3959847-d892-4733-8d1b-aeff3e5d6213. Remaining contradiction/policy-gap set is now centered on 305252085, 308639001, and 307500372.",
       "created_at": "2026-04-23T20:57:20.383440Z"
+    },
+    {
+      "id": "a322c293-5290-4e4b-bf23-dc657f918cd3",
+      "author": "ryan",
+      "text": "Triangulated current Dosage optimizer procedure d010b142-1b67-48e3-b408-150ab2727e83 against latest contradictions report ba2773fb-dffc-40d7-a485-ecfc7b1cb6d4. Current overlap between procedure item_recurrence and contradiction exemplars is exactly three external IDs: 309815466 (feedback 1e4c3f6f-5fcd-48b0-b7d3-fffda7f56e10, pattern PERSISTENT, model_prediction Yes vs recent_label no), 309815464 (feedback fdae4dda-c118-414e-8146-906ab65375c9, pattern LATE_EMERGING, model_prediction Yes vs recent_label no), and 305252085 (feedback c4c45bff-80d3-4c34-ab13-5c481b34df30, pattern EMERGING, model_prediction No vs recent_label yes). None of the three appear in last_recent_rca exemplar overlap for this procedure, so this is recurrence+contradictions triangulation rather than full three-signal overlap. 305252085 remains the strongest invalidation candidate because the latest contradiction reason is crisp and policy-complete: the score result explanation says multiple current medications remain dose-unverified and should therefore be No, but the label remains Yes. The two new 30981546x items also look contradiction-worthy, but they should be treated as second-tier invalidation candidates behind 305252085 unless we inspect their underlying call snippets first.",
+      "created_at": "2026-04-24T18:07:58.263840Z"
+    },
+    {
+      "id": "62da3c6f-29d6-4c83-a829-49c6275a2292",
+      "author": "ryan",
+      "text": "Current-procedure overlap invalidations completed on 2026-04-24 for Dosage. Invalidated feedback items: c4c45bff-80d3-4c34-ab13-5c481b34df30 (item 305252085), 1e4c3f6f-5fcd-48b0-b7d3-fffda7f56e10 (item 309815466), and fdae4dda-c118-414e-8146-906ab65375c9 (item 309815464). Main learning from the remaining repeat-offender set in procedure d010b142-1b67-48e3-b408-150ab2727e83: the dominant common-problem cluster is no longer label contradiction, it is preprocessing/evidence-retention failure. Persistent six-cycle offenders 309504981, 309504474, 309504413, 309504280, 307516880, 305262247, and 305221883 all point back to DeepgramFormatProcessor -> RelevantWindowsTranscriptFilter removing dosage evidence, and recent RCA topics are explicitly 'Preprocessing Pipeline Content Loss Error' plus 'Dosage Verification Content Removal Error'. Secondary watchlist items are 308538589 (persistent one-miss-threshold style disagreement but not in latest contradictions report), 305259366 (late-emerging likely transcript/audio loss case), and previously policy-adjacent 308639001 / 307500372, which should be reevaluated under the clarified live rubric but are not the dominant blocker in the current run.",
+      "created_at": "2026-04-24T18:11:05.232785Z"
+    },
+    {
+      "id": "5d677c58-a3ad-4e5f-ad2c-87172267e3c0",
+      "author": "ryan",
+      "text": "Landed continuation-path follow-up work together with the optimizer plateau changes on the feature branch so the branch can be merged cleanly. Focused continuation and optimizer regression tests are green.",
+      "created_at": "2026-04-24T18:31:40.430512Z"
     }
   ],
   "created_at": "2026-04-23T20:36:18.605332Z",
-  "updated_at": "2026-04-23T20:57:20.383440Z",
+  "updated_at": "2026-04-24T18:31:40.430512Z",
   "closed_at": null,
   "custom": {}
 }

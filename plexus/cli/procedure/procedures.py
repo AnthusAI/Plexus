@@ -1372,7 +1372,10 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
         console.print("[red]Error: Could not create API client[/red]")
         return
 
-    from plexus.cli.procedure.continuation_service import prepare_continuation
+    from plexus.cli.procedure.continuation_service import (
+        build_continuation_context,
+        prepare_continuation,
+    )
 
     console.print(f"Preparing continuation for procedure {procedure_id} (+{additional_cycles} cycles)...")
 
@@ -1398,12 +1401,19 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
 
     import asyncio
     from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    context = build_continuation_context(
+        client,
+        procedure_id,
+        max_iterations=info["new_max_iterations"],
+        hint=hint,
+    )
 
     try:
         result = asyncio.run(run_experiment_with_task_tracking(
             procedure_id=procedure_id,
             client=client,
             account_id=account_id,
+            context=context,
         ))
     except Exception as e:
         console.print(f"[red]Error dispatching procedure: {e}[/red]")
@@ -1461,7 +1471,10 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
         console.print("[red]Error: Could not create API client[/red]")
         return
 
-    from plexus.cli.procedure.continuation_service import prepare_branch
+    from plexus.cli.procedure.continuation_service import (
+        build_continuation_context,
+        prepare_branch,
+    )
 
     console.print(f"Branching {source_id} from cycle {cycle} (+{additional_cycles} cycles)...")
 
@@ -1487,12 +1500,19 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
 
     import asyncio
     from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    context = build_continuation_context(
+        client,
+        target_id,
+        max_iterations=info["new_max_iterations"],
+        hint=hint,
+    )
 
     try:
         result = asyncio.run(run_experiment_with_task_tracking(
             procedure_id=target_id,
             client=client,
             account_id=account_id,
+            context=context,
         ))
     except Exception as e:
         console.print(f"[red]Error dispatching branch: {e}[/red]")
