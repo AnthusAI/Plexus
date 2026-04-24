@@ -3,7 +3,7 @@
   "title": "Debug and fix cross-repo feedback score linkage for Appropriate Rebuttal- AI",
   "description": "",
   "type": "story",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,22 @@
       "author": "derek",
       "text": "Implemented fix in dashboard/components/ui/scorecard-evaluation.tsx: detail-file resolution now prefers score.indexed_items_file (identity-based), and only falls back to scoreIndex filename for legacy payloads. This prevents comments/details from being sourced from another score when backend sorts score rows.",
       "created_at": "2026-04-24T17:50:47.784282234Z"
+    },
+    {
+      "id": "f1922bf9-020d-41d7-bc9d-82a58f8cc0a7",
+      "author": "derek",
+      "text": "Implemented and merged visual mapping fix into develop. Root cause: index-based score detail file lookup could cross-wire comments after score sorting. Resolution: prioritize per-score indexed_items_file, keep index fallback for legacy payloads.",
+      "created_at": "2026-04-24T18:09:29.766950203Z"
+    },
+    {
+      "id": "8408053d-70e1-43ff-bf45-a331354e1738",
+      "author": "derek",
+      "text": "Completed and merged to develop via PR #205.",
+      "created_at": "2026-04-24T18:09:32.931103779Z"
     }
   ],
   "created_at": "2026-04-24T17:47:33.063711111Z",
-  "updated_at": "2026-04-24T17:50:47.784282234Z",
-  "closed_at": null,
+  "updated_at": "2026-04-24T18:09:32.931103779Z",
+  "closed_at": "2026-04-24T18:09:32.918728396Z",
   "custom": {}
 }
