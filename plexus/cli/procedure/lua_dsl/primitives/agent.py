@@ -24,8 +24,8 @@ def _coerce_lua_mapping(value: Any) -> Any:
         try:
             if lua_type(value) == 'table':
                 return {k: v for k, v in value.items()}
-        except Exception:
-            pass
+        except Exception as exc:  # Defensive: keep original value when Lua proxy coercion fails
+            logger.debug("Failed to coerce Lua table proxy to dict: %s", exc)
 
     return value
 
