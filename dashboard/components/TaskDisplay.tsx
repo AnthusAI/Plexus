@@ -58,6 +58,8 @@ interface TaskDisplayProps {
     scoreVersionId?: string | null | undefined
     dataSetId?: string | null | undefined
     parameters?: string | null
+    baseline_evaluation_id?: string | null
+    current_baseline_evaluation_id?: string | null
   }
   reportData?: {
     id: string
@@ -359,7 +361,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
             JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
           isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
           parameters: evaluationData.parameters ?? null,
-           scoreResults: transformedScoreResults as any,
+          baseline_evaluation_id: evaluationData.baseline_evaluation_id ?? null,
+          current_baseline_evaluation_id: evaluationData.current_baseline_evaluation_id ?? null,
+          scoreResults: transformedScoreResults as any,
           task: processedTask ? { 
               id: processedTask.id,
               accountId: '',

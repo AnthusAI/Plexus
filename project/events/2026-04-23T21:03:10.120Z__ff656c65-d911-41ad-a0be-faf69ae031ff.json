@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ff656c65-d911-41ad-a0be-faf69ae031ff",
+  "issue_id": "plx-76a5e627-1de1-4e20-827b-a5a3b0bda85f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T21:03:10.120Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-3d9714df-787a-44bc-8908-61108ced4042",
+    "priority": 1,
+    "status": "open",
+    "title": "Clarify Dosage current-use rubric and promote revised champion"
+  }
+}

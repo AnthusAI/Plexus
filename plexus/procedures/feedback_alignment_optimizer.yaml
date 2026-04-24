@@ -424,21 +424,13 @@ code: |
 
   -- Helper functions
 
-  -- Reliable string truncation — string.sub may not work in Tactus/lupa sandbox
+  -- UTF-8-safe truncation for agent text, notes, and version metadata.
+  -- Tactus installs utf8_clean() and a UTF-8-aware string.sub override in the Lua sandbox.
   local function trunc(s, maxlen)
     if s == nil then return "" end
-    local str = tostring(s)
+    local str = utf8_clean(tostring(s))
     if #str <= maxlen then return str end
-    local attempt = string.sub(str, 1, maxlen)
-    if #attempt <= maxlen + 10 then
-      return attempt
-    end
-    -- string.sub failed; build char-by-char via table
-    local chars = {}
-    for i = 1, maxlen do
-      chars[i] = string.char(string.byte(str, i))
-    end
-    return table.concat(chars)
+    return utf8_clean(string.sub(str, 1, maxlen))
   end
 
   local function has_text(s)
@@ -486,6 +478,28 @@ code: |
       return encoded
     end
     return string.format("<encode_error: %s>", tostring(encoded))
+  end
+
+  local function tool_call_arg(call, key, default)
+    if call == nil then
+      return default
+    end
+
+    local ok_args, args = pcall(function()
+      return call.args
+    end)
+    if not ok_args or args == nil then
+      return default
+    end
+
+    local ok_value, value = pcall(function()
+      return args[key]
+    end)
+    if not ok_value or value == nil then
+      return default
+    end
+
+    return value
   end
 
   local function safe_get_metric(metrics, name)
@@ -4325,7 +4339,7 @@ code: |
             smoke_test_failure = nil
           elseif last_edit then
             local edit_result = tostring(last_edit.result or "")
-            local edit_command = (last_edit.args and last_edit.args.command) or ""
+            local edit_command = tostring(tool_call_arg(last_edit, "command", ""))
             if edit_command == "view" then
               table.insert(recent_parts, "File viewed successfully. The file has NOT been modified yet.")
               table.insert(recent_parts, "You must call str_replace_editor with command='str_replace' to make changes, then call submit_score_version to submit.")
@@ -4411,14 +4425,11 @@ code: |
         -- Use pcall to guard against Python dict KeyError when args lack optional keys
         -- (e.g. undo_edit has no old_str/new_str; insert has no old_str)
         local last_edit = Tool.last_call("str_replace_editor")
-        if last_edit and last_edit.args then
-          local ok_cmd, cmd = pcall(function() return last_edit.args.command end)
-          cmd = (ok_cmd and cmd) or ""
+        if last_edit then
+          local cmd = tostring(tool_call_arg(last_edit, "command", ""))
           if cmd ~= "view" then
-            local ok_old, old_s = pcall(function() return trunc(tostring(last_edit.args.old_str or ""), 200) end)
-            old_s = ok_old and old_s or ""
-            local ok_new, new_s = pcall(function() return trunc(tostring(last_edit.args.new_str or ""), 400) end)
-            new_s = ok_new and new_s or ""
+            local old_s = trunc(tostring(tool_call_arg(last_edit, "old_str", "")), 200)
+            local new_s = trunc(tostring(tool_call_arg(last_edit, "new_str", "")), 400)
             if has_text(new_s) then
               local edit_reasoning = string.format("Edit: replaced [%s] with [%s]", old_s, new_s)
               table.insert(hyp_reasoning_parts, edit_reasoning)
@@ -4427,16 +4438,16 @@ code: |
           end
         end
         local last_submit = Tool.last_call("submit_score_version")
-        if last_submit and last_submit.args then
-          local note = tostring(last_submit.args.version_note or "")
+        if last_submit then
+          local note = tostring(tool_call_arg(last_submit, "version_note", ""))
           if has_text(note) then
             table.insert(hyp_reasoning_parts, "Submit: " .. note)
             diag(string.format("  [Hyp %d] Captured submit reasoning: %s", h, trunc(note, 200)))
           end
         end
         local last_done_call = Tool.last_call("done")
-        if last_done_call and last_done_call.args then
-          local reason = tostring(last_done_call.args.reason or "")
+        if last_done_call then
+          local reason = tostring(tool_call_arg(last_done_call, "reason", ""))
           if has_text(reason) then
             table.insert(hyp_reasoning_parts, "Done: " .. reason)
             diag(string.format("  [Hyp %d] Captured done reasoning: %s", h, trunc(reason, 200)))
@@ -4448,7 +4459,7 @@ code: |
         local last_edit_check = Tool.last_call("str_replace_editor")
         if last_edit_check then
           local edit_result = tostring(last_edit_check.result or "")
-          local edit_command = (last_edit_check.args and last_edit_check.args.command) or ""
+          local edit_command = tostring(tool_call_arg(last_edit_check, "command", ""))
           if edit_command ~= "view" and string.sub(edit_result, 1, 6) == "Error:" then
             was_edit_failure = true
             total_edit_failures = total_edit_failures + 1
@@ -4497,8 +4508,8 @@ code: |
             if smoke_passed then
               version_id = candidate_id
               diag(string.format("Hyp %d score test passed, setting version_id=%s", h, tostring(candidate_id)))
-              local ok_a, vn = pcall(function() return submit_call.args.version_note end)
-              if ok_a and has_text(vn) then hyp_done_reason = vn end
+              local vn = tostring(tool_call_arg(submit_call, "version_note", ""))
+              if has_text(vn) then hyp_done_reason = vn end
               hypothesis_done = true
             else
               Human.notify({message = string.format(
@@ -4528,8 +4539,8 @@ code: |
             hyp_done_reason = done_result.reason
           end
           if not has_text(hyp_done_reason) then
-            local ok_r, reason_val = pcall(function() return done_call.args.reason end)
-            if ok_r and has_text(reason_val) then
+            local reason_val = tostring(tool_call_arg(done_call, "reason", ""))
+            if has_text(reason_val) then
               hyp_done_reason = string.gsub(reason_val, "\\n", "\n")
             end
           end
@@ -4561,8 +4572,8 @@ code: |
         if not has_text(hyp_done_reason) and version_id then
           local sc = Tool.last_call("submit_score_version")
           if sc then
-            local ok_a, note = pcall(function() return sc.args.version_note end)
-            if ok_a and has_text(note) then hyp_done_reason = note end
+            local note = tostring(tool_call_arg(sc, "version_note", ""))
+            if has_text(note) then hyp_done_reason = note end
           end
         end
 
@@ -4866,7 +4877,7 @@ code: |
               local last_submit = Tool.last_call("submit_score_version")
               if last_edit then
                 local edit_result = tostring(last_edit.result or "")
-                local edit_cmd = (last_edit.args and last_edit.args.command) or ""
+                local edit_cmd = tostring(tool_call_arg(last_edit, "command", ""))
                 if edit_cmd == "view" then
                   table.insert(recent_parts, "File viewed. Call str_replace_editor with command='str_replace' to make changes.")
                 elseif string.sub(edit_result, 1, 6) == "Error:" then
@@ -4943,27 +4954,24 @@ code: |
 
           -- Capture reasoning from tool calls
           local last_edit_r = Tool.last_call("str_replace_editor")
-          if last_edit_r and last_edit_r.args then
-            local ok_cmd_r, cmd = pcall(function() return last_edit_r.args.command end)
-            cmd = (ok_cmd_r and cmd) or ""
+          if last_edit_r then
+            local cmd = tostring(tool_call_arg(last_edit_r, "command", ""))
             if cmd ~= "view" then
-              local ok_old_r, old_s = pcall(function() return trunc(tostring(last_edit_r.args.old_str or ""), 200) end)
-              old_s = ok_old_r and old_s or ""
-              local ok_new_r, new_s = pcall(function() return trunc(tostring(last_edit_r.args.new_str or ""), 400) end)
-              new_s = ok_new_r and new_s or ""
+              local old_s = trunc(tostring(tool_call_arg(last_edit_r, "old_str", "")), 200)
+              local new_s = trunc(tostring(tool_call_arg(last_edit_r, "new_str", "")), 400)
               if has_text(new_s) then
                 table.insert(react_reasoning, string.format("Edit: replaced [%s] with [%s]", old_s, new_s))
               end
             end
           end
           local last_submit_r = Tool.last_call("submit_score_version")
-          if last_submit_r and last_submit_r.args then
-            local note = tostring(last_submit_r.args.version_note or "")
+          if last_submit_r then
+            local note = tostring(tool_call_arg(last_submit_r, "version_note", ""))
             if has_text(note) then table.insert(react_reasoning, "Submit: " .. note) end
           end
           local last_done_r = Tool.last_call("done")
-          if last_done_r and last_done_r.args then
-            local reason = tostring(last_done_r.args.reason or "")
+          if last_done_r then
+            local reason = tostring(tool_call_arg(last_done_r, "reason", ""))
             if has_text(reason) then table.insert(react_reasoning, "Done: " .. reason) end
           end
 
@@ -4972,7 +4980,7 @@ code: |
           local edit_check = Tool.last_call("str_replace_editor")
           if edit_check then
             local edit_result = tostring(edit_check.result or "")
-            local edit_command = (edit_check.args and edit_check.args.command) or ""
+            local edit_command = tostring(tool_call_arg(edit_check, "command", ""))
             if edit_command ~= "view" and string.sub(edit_result, 1, 6) == "Error:" then
               was_edit_failure = true
               edit_failures = edit_failures + 1
@@ -5016,8 +5024,8 @@ code: |
 
               if smoke_passed then
                 react_version_id = candidate_id
-                local ok_a, vn = pcall(function() return submit_call.args.version_note end)
-                if ok_a and has_text(vn) then react_done_reason = vn end
+                local vn = tostring(tool_call_arg(submit_call, "version_note", ""))
+                if has_text(vn) then react_done_reason = vn end
                 diag(string.format("%s version created: %s", strategy_label, react_version_id))
                 Human.notify({message = string.format(
                   "  %s version: %s", strategy_label, react_version_id), level = "info"})
@@ -5043,8 +5051,7 @@ code: |
           if not done then
             local done_call = Tool.last_call("done")
             if done_call then
-              local ok_r, reason = pcall(function() return done_call.args.reason or "" end)
-              local reason_text = ok_r and reason or "agent gave up"
+              local reason_text = tostring(tool_call_arg(done_call, "reason", "agent gave up"))
               if string.find(string.lower(reason_text), "cannot_improve") and not second_chance then
                 second_chance = true
                 second_chance_pending = true
@@ -5902,11 +5909,9 @@ code: |
 
           -- Extract reviewer assessment (advisory only — metrics determine acceptance)
           local review_done = Tool.last_call("done")
-          if review_done and review_done.args then
-            local ok_r, reason_field = pcall(function() return review_done.args.reason or "" end)
-            local ok_d, decision_field = pcall(function() return review_done.args.decision or "" end)
-            reason_field = ok_r and reason_field or ""
-            decision_field = ok_d and decision_field or ""
+          if review_done then
+            local reason_field = tostring(tool_call_arg(review_done, "reason", ""))
+            local decision_field = tostring(tool_call_arg(review_done, "decision", ""))
             Human.notify({message = string.format(
               "  Reviewer assessment: %s — %s",
               decision_field,
@@ -6774,10 +6779,8 @@ code: |
           diag(string.format("Early stop advisor crashed: %s — continuing run", tostring(es_err)))
         else
           local es_done = Tool.last_call("done")
-          local ok_esd, es_decision = pcall(function() return es_done and es_done.args and es_done.args.decision or "continue" end)
-          es_decision = (ok_esd and es_decision) or "continue"
-          local ok_esr, es_reason = pcall(function() return es_done and es_done.args and es_done.args.reason or "(no reason given)" end)
-          es_reason = (ok_esr and es_reason) or "(no reason given)"
+          local es_decision = tostring(tool_call_arg(es_done, "decision", "continue"))
+          local es_reason = tostring(tool_call_arg(es_done, "reason", "(no reason given)"))
           if es_decision == "abort" then
             Human.notify({message = string.format(
               "Early stopping: %s", es_reason), level = "warning"})
