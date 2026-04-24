@@ -24,7 +24,10 @@ from .universal_code import (
     extract_score_from_command
 )
 from .command_output import CommandOutputManager, set_output_manager
-from .task_output_storage import persist_task_output_artifact
+from .task_output_storage import (
+    persist_task_output_artifact,
+    resolve_task_output_attachment_bucket_name,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -386,8 +389,8 @@ def register_tasks(app):
                         # Universal Code will be generated after file uploads
                         
                         # Upload command-generated output files and logs to S3
-                        bucket_name = os.getenv('AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME')
-                        logging.info(f"Bucket name from env: {bucket_name}")
+                        bucket_name = resolve_task_output_attachment_bucket_name()
+                        logging.info(f"Resolved task attachments bucket: {bucket_name}")
                         if bucket_name and task_id:
                             # Upload any output files created by the command
                             if output_manager:
@@ -432,7 +435,7 @@ def register_tasks(app):
                                     logging.info(f"Uploaded stderr: {stderr_key}")
                         else:
                             if not bucket_name:
-                                logging.warning("AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME not set, skipping file uploads")
+                                logging.warning("Task attachments bucket could not be resolved, skipping file uploads")
                         
                         # NOW generate Universal Code YAML using available clean data
                         try:
@@ -560,7 +563,7 @@ task_info:
                             logging.error(f"Failed to generate error Universal Code: {e}")
                         
                         # Upload error files
-                        bucket_name = os.getenv('AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME')
+                        bucket_name = resolve_task_output_attachment_bucket_name()
                         if bucket_name and task_id:
                             # Upload stdout as separate file if we have content
                             if stdout_content.strip():
@@ -684,7 +687,7 @@ task_info:
                             logging.error(f"Failed to generate exception Universal Code: {yaml_error}")
                         
                         # Upload exception files
-                        bucket_name = os.getenv('AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME')
+                        bucket_name = resolve_task_output_attachment_bucket_name()
                         if bucket_name and 'task_id' in locals() and task_id:
                             # Upload exception details
                             exception_content = f"EXCEPTION: {str(e)}\nTRACEBACK: {str(sys.exc_info())}"

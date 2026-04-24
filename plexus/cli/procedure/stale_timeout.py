@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
+import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -46,6 +49,64 @@ def _extract_procedure_id_from_task_payload(task_data: Dict[str, Any]) -> Option
     if isinstance(procedure_id, str) and procedure_id.strip():
         return procedure_id.strip()
     return None
+
+
+def _extract_runtime_identity(
+    procedure_snapshot: Dict[str, Any],
+    task_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    task_metadata = _parse_json_dict(task_data.get("metadata"))
+    task_runtime = task_metadata.get("runtime")
+    if isinstance(task_runtime, dict):
+        return task_runtime
+
+    procedure_metadata = procedure_snapshot.get("metadata")
+    if isinstance(procedure_metadata, dict):
+        procedure_runtime = procedure_metadata.get("runtime")
+        if isinstance(procedure_runtime, dict):
+            return procedure_runtime
+
+    return {}
+
+
+def _local_runtime_process_is_active(runtime: Dict[str, Any]) -> bool:
+    if not isinstance(runtime, dict):
+        return False
+
+    host = runtime.get("host")
+    pid = runtime.get("pid")
+    if not isinstance(host, str) or not host.strip():
+        return False
+    if host.strip().casefold() != socket.gethostname().strip().casefold():
+        return False
+
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid_int <= 0:
+        return False
+
+    try:
+        os.kill(pid_int, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+    expected_command = str(runtime.get("command") or "").strip()
+    if not expected_command:
+        return True
+
+    try:
+        command = subprocess.check_output(
+            ["ps", "-o", "command=", "-p", str(pid_int)],
+            text=True,
+        ).strip()
+    except Exception:
+        return True
+
+    return bool(command) and expected_command in command
 
 
 def _list_procedure_tasks(client: Any, account_id: str) -> List[Dict[str, Any]]:
@@ -345,9 +406,19 @@ def timeout_stale_procedures(
             )
             continue
 
-        runtime = procedure.get("metadata", {}).get("runtime") if isinstance(procedure.get("metadata"), dict) else {}
-        if not isinstance(runtime, dict):
-            runtime = {}
+        runtime = _extract_runtime_identity(procedure, task_data)
+        if _local_runtime_process_is_active(runtime):
+            skipped.append(
+                {
+                    "procedure_id": procedure_id,
+                    "reason": "active_runtime_process",
+                    "last_activity_at": last_activity_at.isoformat(),
+                    "activity_source": activity_source,
+                    "pid": runtime.get("pid"),
+                    "host": runtime.get("host"),
+                }
+            )
+            continue
         failure_payload = {
             "kind": "timeout",
             "signal": None,
