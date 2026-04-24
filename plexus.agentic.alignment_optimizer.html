@@ -1,0 +1,283 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.agentic.alignment_optimizer module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.analysis package" href="plexus.analysis.html" />
+    <link rel="prev" title="plexus.agentic package" href="plexus.agentic.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.agentic.html#plexus.agentic.AlignmentOptimizer"><code class="docutils literal notranslate"><span class="pre">AlignmentOptimizer</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.agentic.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.agentic.html">plexus.agentic package</a></li>
+      <li class="breadcrumb-item active">plexus.agentic.alignment_optimizer module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.agentic.alignment_optimizer.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.agentic.alignment_optimizer">
+<span id="plexus-agentic-alignment-optimizer-module"></span><h1>plexus.agentic.alignment_optimizer module<a class="headerlink" href="#module-plexus.agentic.alignment_optimizer" title="Link to this heading"></a></h1>
+<p>Alignment Optimizer - Programmatic interface for feedback evaluation optimization with RCA</p>
+<p>This module provides a clean Python API for running the Tactus-based feedback alignment
+optimizer procedure, enabling integration into automated systems and agentic applications.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.AlignmentOptimizer">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.agentic.alignment_optimizer.</span></span><span class="sig-name descname"><span class="pre">AlignmentOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.AlignmentOptimizer" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Programmatic interface to feedback alignment optimization using Tactus procedures.</p>
+<p>This class wraps the feedback_alignment_optimizer Tactus procedure, providing
+a simple Python API for running iterative score optimization with RCA-based analysis.</p>
+<dl>
+<dt>Example:</dt><dd><p><a href="#id1"><span class="problematic" id="id2">``</span></a><a href="#id3"><span class="problematic" id="id4">`</span></a>python
+from plexus.agentic import AlignmentOptimizer
+from plexus.dashboard.api.client import PlexusDashboardClient</p>
+<p>client = PlexusDashboardClient(api_key=”…”)
+optimizer = AlignmentOptimizer(client, mcp_server)</p>
+<dl class="simple">
+<dt>result = await optimizer.optimize(</dt><dd><p>scorecard=”customer-service”,
+score=”empathy”,
+days=90,
+max_iterations=10</p>
+</dd>
+</dl>
+<p>)</p>
+<p>print(f”Improved AC1 by {result[‘improvement’]:.4f}”)
+print(f”Completed {len(result[‘iterations’])} iterations”)
+<a href="#id5"><span class="problematic" id="id6">``</span></a><a href="#id7"><span class="problematic" id="id8">`</span></a></p>
+</dd>
+</dl>
+<p>Initialize the AlignmentOptimizer.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance with valid credentials
+mcp_server: MCP server instance for tool execution</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.AlignmentOptimizer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mcp_server</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.AlignmentOptimizer.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the AlignmentOptimizer.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>client: PlexusDashboardClient instance with valid credentials
+mcp_server: MCP server instance for tool execution</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.AlignmentOptimizer.optimize">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">optimize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">days</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">90</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">improvement_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dry_run</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_iteration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.AlignmentOptimizer.optimize" title="Link to this definition"></a></dt>
+<dd><p>Run feedback evaluation optimization for a score.</p>
+<p>This method executes the complete optimization workflow:
+1. Run baseline feedback evaluation with RCA
+2. Iteratively analyze RCA, propose changes, evaluate, and compare
+3. Return comprehensive results with all iteration data</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard: Scorecard identifier (name, key, or ID)
+score: Score identifier (name, key, or ID)
+days: Feedback window in days (default: 90)
+max_iterations: Maximum optimization iterations (default: 10)
+improvement_threshold: Minimum AC1 improvement to continue (default: 0.02 = 2%)
+dry_run: If True, run analysis only without making score updates (default: False)
+on_iteration: Optional callback called after each iteration with (iteration_num, iteration_data)</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Dict containing:</dt><dd><ul class="simple">
+<li><p>success: bool - Whether optimization completed successfully</p></li>
+<li><p>status: str - Completion status (converged, max_iterations, user_stopped, etc.)</p></li>
+<li><p>message: str - Human-readable summary message</p></li>
+<li><p>baseline_evaluation_id: str - Initial baseline evaluation ID</p></li>
+<li><p>final_evaluation_id: str - Final evaluation ID</p></li>
+<li><p>iterations: list - Array of iteration results with metrics and deltas</p></li>
+<li><p>improvement: float - Total AC1 improvement from baseline to final</p></li>
+<li><p>scorecard_id: str - Resolved scorecard ID</p></li>
+<li><p>score_id: str - Resolved score ID</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Raises:</dt><dd><p>FileNotFoundError: If procedure YAML cannot be found
+Exception: If procedure execution fails</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.AlignmentOptimizer.run_baseline_only">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">run_baseline_only</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">days</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">90</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.AlignmentOptimizer.run_baseline_only" title="Link to this definition"></a></dt>
+<dd><p>Run only the baseline evaluation without optimization iterations.</p>
+<p>This is useful for getting an initial RCA analysis before deciding
+whether to proceed with full optimization.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>scorecard: Scorecard identifier
+score: Score identifier
+days: Feedback window in days</p>
+</dd>
+<dt>Returns:</dt><dd><p>Dict with baseline evaluation results and RCA</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.OptimizationMonitor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.agentic.alignment_optimizer.</span></span><span class="sig-name descname"><span class="pre">OptimizationMonitor</span></span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.OptimizationMonitor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Helper class for monitoring optimization progress in real-time.</p>
+<dl>
+<dt>Example:</dt><dd><p><a href="#id9"><span class="problematic" id="id10">``</span></a><a href="#id11"><span class="problematic" id="id12">`</span></a>python
+monitor = OptimizationMonitor()</p>
+<dl class="simple">
+<dt>result = await optimizer.optimize(</dt><dd><p>scorecard=”customer-service”,
+score=”empathy”,
+on_iteration=monitor.on_iteration</p>
+</dd>
+</dl>
+<p>)</p>
+<p>monitor.print_summary()
+<a href="#id13"><span class="problematic" id="id14">``</span></a><a href="#id15"><span class="problematic" id="id16">`</span></a></p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.OptimizationMonitor.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.OptimizationMonitor.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.OptimizationMonitor.on_iteration">
+<span class="sig-name descname"><span class="pre">on_iteration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iteration_num</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iteration_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.OptimizationMonitor.on_iteration" title="Link to this definition"></a></dt>
+<dd><p>Callback for each completed iteration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.agentic.alignment_optimizer.OptimizationMonitor.print_summary">
+<span class="sig-name descname"><span class="pre">print_summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.agentic.alignment_optimizer.OptimizationMonitor.print_summary" title="Link to this definition"></a></dt>
+<dd><p>Print a summary of all iterations.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.agentic.html" class="btn btn-neutral float-left" title="plexus.agentic package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.analysis.html" class="btn btn-neutral float-right" title="plexus.analysis package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
