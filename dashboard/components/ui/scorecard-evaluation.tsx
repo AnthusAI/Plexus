@@ -156,19 +156,22 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
 
   const scoreDetailsFileName = `score-${scoreIndex + 1}-results.json`;
   const scoreDetailsFile = useMemo(() => {
-    // First try to find in parsedAttachedFiles
-    let file = parsedAttachedFiles.find(f => f.name === scoreDetailsFileName);
-    
-    // If not found and score has indexed_items_file, create a file entry
-    if (!file && (score as any).indexed_items_file) {
-      const indexedFile = (score as any).indexed_items_file;
-      file = {
-        name: indexedFile,
-        path: indexedFile // The backend should provide the full path
-      };
+    const indexedFile = (score as any).indexed_items_file;
+
+    // Prefer explicit per-score file mapping from backend.
+    // This avoids cross-score detail mismatches when score rows are re-ordered.
+    if (typeof indexedFile === 'string' && indexedFile.trim()) {
+      const indexedName = indexedFile.trim();
+      const matched = parsedAttachedFiles.find((f) => f.name === indexedName);
+      if (matched) return matched;
+      return {
+        name: indexedName,
+        path: indexedName, // Legacy fallback when only filename is present
+      } as DetailFile;
     }
-    
-    return file;
+
+    // Legacy fallback for old payloads that only supported index-based filenames.
+    return parsedAttachedFiles.find((f) => f.name === scoreDetailsFileName);
   }, [parsedAttachedFiles, scoreDetailsFileName, score]);
 
   const fetchScoreDetailsContent = useCallback(async () => {
