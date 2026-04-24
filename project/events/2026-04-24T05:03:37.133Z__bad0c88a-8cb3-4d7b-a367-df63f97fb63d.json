@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bad0c88a-8cb3-4d7b-a367-df63f97fb63d",
+  "issue_id": "plx-9c9530cc-2d5c-4d65-b8ee-b1b686893490",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-24T05:03:37.133Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Restart Medication Review optimizer procedures for Prescriber, Dosage, and Individual Confirmation"
+  }
+}

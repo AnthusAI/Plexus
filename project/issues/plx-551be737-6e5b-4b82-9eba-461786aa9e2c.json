@@ -1,0 +1,18 @@
+{
+  "id": "plx-551be737-6e5b-4b82-9eba-461786aa9e2c",
+  "title": "Align Medication Review Pharmacy implementation with current-pharmacy guideline",
+  "description": "The current Medication Review: Pharmacy champion code is materially looser than the published guideline. The system/user prompts currently allow broad pharmacy-information discussion and even say No only when no pharmacy discussion occurs, while the guideline requires establishing a specific current pharmacy and excludes general/future/transfer-only discussion. Fix the live implementation so the prompt logic matches the published current-pharmacy rubric, then verify on representative SRX and SPM examples.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d856c7eb-ce41-4d1b-a2e6-196d825a6634",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-23T19:57:23.591053Z",
+  "updated_at": "2026-04-23T19:57:23.591053Z",
+  "closed_at": null,
+  "custom": {}
+}

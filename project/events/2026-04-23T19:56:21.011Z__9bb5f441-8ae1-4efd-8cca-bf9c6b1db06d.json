@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9bb5f441-8ae1-4efd-8cca-bf9c6b1db06d",
+  "issue_id": "plx-b76f234e-7b10-4fae-95b9-5acc2269a128",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T19:56:21.011Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Compare the published champion guidelines and current live champion implementations for Medication Review: Dosage and Medication Review: Individual Confirmation. Record concrete inconsistencies, conflicts, translation gaps, and risky ambiguities in decision logic, scope, enrollment-type handling, thresholds, exclusions, ambiguity handling, and evidence standards. No edits in this task; audit only.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Audit Medication Review Dosage and Individual Confirmation champion code against champion guidelines"
+  }
+}
