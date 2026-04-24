@@ -34,6 +34,29 @@ describe('transformEvaluation', () => {
     expect(result!.procedureId).toBe('procedure-999');
   });
 
+  it('extracts canonical baseline ids from evaluation parameters metadata', () => {
+    const mockEvaluation: BaseEvaluation = {
+      id: 'eval-baselines',
+      type: 'accuracy',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      status: 'COMPLETED',
+      accountId: 'account-1',
+      parameters: JSON.stringify({
+        metadata: JSON.stringify({
+          baseline: 'eval-original-base',
+          current_baseline: 'eval-current-best',
+        }),
+      }),
+    } as any;
+
+    const result = transformEvaluation(mockEvaluation);
+
+    expect(result).toBeTruthy();
+    expect(result!.baseline_evaluation_id).toBe('eval-original-base');
+    expect(result!.current_baseline_evaluation_id).toBe('eval-current-best');
+  });
+
   describe('itemIdentifiers extraction', () => {
     it('should extract itemIdentifiers from score results with item relationships', () => {
       const mockEvaluation: BaseEvaluation = {

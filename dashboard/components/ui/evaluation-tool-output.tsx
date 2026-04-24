@@ -225,6 +225,8 @@ function buildEvaluationData(evaluation: Evaluation) {
     scoreId: evaluation.scoreId,
     scoreVersionId: evaluation.scoreVersionId,
     parameters: evaluation.parameters,
+    baseline_evaluation_id: (evaluation as any).baseline_evaluation_id ?? null,
+    current_baseline_evaluation_id: (evaluation as any).current_baseline_evaluation_id ?? null,
   }
 }
 

@@ -32,6 +32,10 @@ export function EvaluationListAccuracyBar({
   const clampedCurrentBaseline = currentBaselineAccuracy != null
     ? Math.min(Math.max(currentBaselineAccuracy, 0), 100)
     : null
+  const baselinesOverlap =
+    clampedBaseline != null &&
+    clampedCurrentBaseline != null &&
+    Math.abs(clampedBaseline - clampedCurrentBaseline) < 0.05
 
   return (
     <div className={cn(
@@ -87,14 +91,26 @@ export function EvaluationListAccuracyBar({
           )}
           {clampedBaseline != null && (
             <div
-              className="absolute top-0 h-full w-[2px] bg-muted-foreground/50"
-              style={{ left: `${clampedBaseline}%` }}
+              className="absolute bg-muted-foreground/50"
+              style={{
+                left: `${clampedBaseline}%`,
+                top: 0,
+                height: baselinesOverlap ? '50%' : '100%',
+                width: baselinesOverlap ? '1px' : '2px',
+              }}
+              aria-label="Original baseline marker"
             />
           )}
           {clampedCurrentBaseline != null && (
             <div
-              className="absolute top-0 h-full w-[2px] bg-muted-foreground"
-              style={{ left: `${clampedCurrentBaseline}%` }}
+              className="absolute bg-muted-foreground"
+              style={{
+                left: `${clampedCurrentBaseline}%`,
+                top: baselinesOverlap ? '50%' : 0,
+                height: baselinesOverlap ? '50%' : '100%',
+                width: '2px',
+              }}
+              aria-label="Current best baseline marker"
             />
           )}
         </>

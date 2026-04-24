@@ -101,6 +101,8 @@ export const EvaluationCard = React.memo(({
     errorMessage: evaluation.errorMessage || undefined,
     errorDetails: evaluation.errorDetails || null,
     parameters: (evaluation as any).parameters ?? null,
+    baseline_evaluation_id: (evaluation as any).baseline_evaluation_id ?? null,
+    current_baseline_evaluation_id: (evaluation as any).current_baseline_evaluation_id ?? null,
     dataSetId: (evaluation as any).dataSetId ?? null,
     scoreResults: evaluation.scoreResults as any, // Pass the transformed score results with itemIdentifiers
     task: taskData

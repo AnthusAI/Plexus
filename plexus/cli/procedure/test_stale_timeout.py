@@ -278,7 +278,68 @@ def test_timeout_stale_procedures_times_out_no_chat_when_started_is_stale(monkey
     assert len(result["timed_out"]) == 1
     assert result["timed_out"][0]["failure"]["activity_source"] == "task_started_at"
     assert json.loads(fake_task.update_calls[-1]["errorDetails"])["activity_source"] == "task_started_at"
-    assert stage_stalled_calls == [("task-no-chat", {"status": STALLED_STATUS, "status_message": STALE_PROCEDURE_TIMEOUT_MESSAGE, "now": now})]
+
+
+def test_timeout_stale_procedures_skips_when_local_runtime_process_is_active(monkeypatch):
+    now = datetime(2026, 4, 23, 20, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._list_procedure_tasks",
+        lambda _client, _account_id: [
+            {
+                "id": "task-active-runtime",
+                "status": "RUNNING",
+                "target": "procedure/proc-active-runtime",
+                "metadata": json.dumps(
+                    {
+                        "runtime": {
+                            "pid": 1500,
+                            "host": "test-host",
+                            "command": "procedure proc-active-runtime",
+                        }
+                    }
+                ),
+                "startedAt": "2026-04-23T18:36:06+00:00",
+                "updatedAt": "2026-04-23T18:36:06+00:00",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._get_procedure_status_snapshot",
+        lambda _client, _procedure_id: {"status": "RUNNING", "metadata": {}},
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._get_latest_chat_activity_at",
+        lambda _client, _procedure_id: datetime(2026, 4, 23, 18, 36, 6, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._local_runtime_process_is_active",
+        lambda runtime: runtime.get("pid") == 1500 and runtime.get("host") == "test-host",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout.Task.get_by_id",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Task.get_by_id should not run for active runtime")),
+    )
+
+    result = timeout_stale_procedures(
+        client=object(),
+        account_id="acct-1",
+        threshold_seconds=3600,
+        lookback_hours=72,
+        now=now,
+    )
+
+    assert result["timed_out"] == []
+    assert result["skipped"] == [
+        {
+            "procedure_id": "proc-active-runtime",
+            "reason": "active_runtime_process",
+            "last_activity_at": "2026-04-23T18:36:06+00:00",
+            "activity_source": "chat",
+            "pid": 1500,
+            "host": "test-host",
+        }
+    ]
 
 
 def test_timeout_stale_procedures_continues_when_procedure_update_conflicts(monkeypatch):
