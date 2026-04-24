@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Tuple, List
 import logging
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from collections import Counter
 import json # Ensure json import at the top
 import yaml # For YAML formatted output with contextual comments
@@ -114,6 +114,61 @@ class FeedbackAlignment(BaseReportBlock):
         except Exception:
             return scores
 
+    @staticmethod
+    def _parse_window_date(
+        raw_value: Any,
+        *,
+        is_end: bool,
+        default_value: datetime,
+    ) -> datetime:
+        """Parse a configured date window value into UTC datetime.
+
+        Accepts YAML/templated inputs that may come through as:
+        - str (YYYY-MM-DD or ISO datetime)
+        - datetime.date
+        - datetime.datetime
+        """
+        if raw_value is None or raw_value == "":
+            dt = default_value
+        elif isinstance(raw_value, datetime):
+            dt = raw_value
+        elif isinstance(raw_value, date):
+            if is_end:
+                dt = datetime(
+                    raw_value.year,
+                    raw_value.month,
+                    raw_value.day,
+                    23,
+                    59,
+                    59,
+                    999999,
+                )
+            else:
+                dt = datetime(raw_value.year, raw_value.month, raw_value.day, 0, 0, 0, 0)
+        else:
+            value_str = str(raw_value).strip()
+            if not value_str:
+                dt = default_value
+            else:
+                date_only = len(value_str) == 10 and value_str[4] == "-" and value_str[7] == "-"
+                normalized = value_str.replace("Z", "+00:00")
+                try:
+                    dt = datetime.fromisoformat(normalized)
+                except ValueError:
+                    dt = datetime.strptime(value_str, "%Y-%m-%d")
+                    date_only = True
+                if date_only:
+                    if is_end:
+                        dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    else:
+                        dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt
+
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches feedback data and performs agreement analysis."""
         self.log_messages = []
@@ -181,23 +236,22 @@ class FeedbackAlignment(BaseReportBlock):
                 _s = str(cc_question_id_param).strip()
                 cc_question_id_param = None if not _s or _s.lower() == "none" else _s
 
-            # Parse date strings
-            if start_date_str:
-                start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
-            else:
-                start_date = datetime.now() - timedelta(days=days)
-            # Make start_date UTC aware (assuming naive datetime is intended as UTC)
-            start_date = start_date.replace(tzinfo=timezone.utc)
-            
-            if end_date_str:
-                end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
-            else:
-                end_date = datetime.now()
-            
-            # Ensure end_date is at the end of the day for correct filtering
-            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-            # Make end_date UTC aware (assuming naive datetime is intended as UTC)
-            end_date = end_date.replace(tzinfo=timezone.utc)
+            now_utc = datetime.now(tz=timezone.utc)
+            start_default = now_utc - timedelta(days=days)
+            end_default = now_utc.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+            start_date = self._parse_window_date(
+                start_date_str,
+                is_end=False,
+                default_value=start_default,
+            )
+            end_date = self._parse_window_date(
+                end_date_str,
+                is_end=True,
+                default_value=end_default,
+            )
+            if end_date < start_date:
+                raise ValueError("'end_date' must be on or after 'start_date'.")
 
             self._log(f"Effective date range for filtering FeedbackItems: {start_date.isoformat()} to {end_date.isoformat()}")
             if cc_question_id_param:
