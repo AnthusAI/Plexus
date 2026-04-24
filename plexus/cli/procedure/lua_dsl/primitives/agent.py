@@ -8,7 +8,7 @@ Provides:
 
 import json
 import logging
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, Optional, List
 
 logger = logging.getLogger(__name__)
 
