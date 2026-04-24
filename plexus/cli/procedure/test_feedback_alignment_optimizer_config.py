@@ -128,3 +128,25 @@ def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
 
     assert "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion." in code
     assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code
+
+
+def test_optimizer_yaml_uses_safe_tool_call_arg_helper_instead_of_direct_args_dereferences():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function tool_call_arg(call, key, default)" in code
+    assert ".args.command" not in code
+    assert ".args.reason" not in code
+    assert ".args.version_note" not in code
+    assert ".args.old_str" not in code
+    assert ".args.new_str" not in code
+
+
+def test_optimizer_yaml_uses_utf8_safe_truncation_without_byte_slicing():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function trunc(s, maxlen)" in code
+    assert "local str = utf8_clean(tostring(s))" in code
+    assert "return utf8_clean(string.sub(str, 1, maxlen))" in code
+    assert "string.char(string.byte(str, i))" not in code
