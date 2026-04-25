@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Copy, ExternalLink } from 'lucide-react'
+import { Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import {
   copyText,
@@ -279,96 +285,87 @@ export function ScoreProcedureList({
                   variant="grid"
                   procedure={toProcedureTaskData(run, scorecardName, scoreName)}
                   controlButtons={
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <Button variant="secondary" size="sm" asChild>
-                        <a href={`/lab/procedures/${run.procedureId}`} target="_blank" rel="noreferrer">
-                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                          Open
-                        </a>
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void copyText(run.procedureId, 'Procedure ID copied')}
-                      >
-                        <Copy className="mr-2 h-3.5 w-3.5" />
-                        ID
-                      </Button>
-                      {!run.indexed && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            void copyText(
-                              `plexus procedure index-optimizer-run ${run.procedureId}`,
-                              'Index command copied'
-                            )
-                          }
-                        >
-                          <Copy className="mr-2 h-3.5 w-3.5" />
-                          Index
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md bg-border" aria-label="More options">
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
-                      )}
-                      {winningVersionId && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            void copyText(
-                              JSON.stringify(
-                                {
-                                  score: scoreName,
-                                  version_id: winningVersionId,
-                                  feedback_evaluation_url: evaluationUrl(best?.best_feedback_evaluation_id),
-                                  accuracy_evaluation_url: evaluationUrl(best?.best_accuracy_evaluation_id),
-                                  guidelines_relative_path: scorecardGuideRelativePath(scorecardName, scoreName),
-                                },
-                                null,
-                                2
-                              ),
-                              'Promotion packet copied'
-                            )
-                          }
-                        >
-                          <Copy className="mr-2 h-3.5 w-3.5" />
-                          Packet
-                        </Button>
-                      )}
-                      {run.artifactPointer?.runtime_log && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void openArtifactViewer(run.artifactPointer?.runtime_log, 'Runtime log')}
-                        >
-                          Log
-                        </Button>
-                      )}
-                      {run.artifactPointer?.events && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void openArtifactViewer(run.artifactPointer?.events, 'Event stream')}
-                        >
-                          Events
-                        </Button>
-                      )}
-                      {best?.best_feedback_evaluation_id && (
-                        <Button variant="secondary" size="sm" asChild>
-                          <a href={evaluationUrl(best.best_feedback_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <a href={`/lab/procedures/${run.procedureId}`} target="_blank" rel="noreferrer">
                             <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                            FB
+                            Open procedure
                           </a>
-                        </Button>
-                      )}
-                      {best?.best_accuracy_evaluation_id && (
-                        <Button variant="secondary" size="sm" asChild>
-                          <a href={evaluationUrl(best.best_accuracy_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                            Acc
-                          </a>
-                        </Button>
-                      )}
-                    </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void copyText(run.procedureId, 'Procedure ID copied')}>
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy procedure ID
+                        </DropdownMenuItem>
+                        {!run.indexed && (
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              void copyText(
+                                `plexus procedure index-optimizer-run ${run.procedureId}`,
+                                'Index command copied'
+                              )
+                            }
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy index command
+                          </DropdownMenuItem>
+                        )}
+                        {winningVersionId && (
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              void copyText(
+                                JSON.stringify(
+                                  {
+                                    score: scoreName,
+                                    version_id: winningVersionId,
+                                    feedback_evaluation_url: evaluationUrl(best?.best_feedback_evaluation_id),
+                                    accuracy_evaluation_url: evaluationUrl(best?.best_accuracy_evaluation_id),
+                                    guidelines_relative_path: scorecardGuideRelativePath(scorecardName, scoreName),
+                                  },
+                                  null,
+                                  2
+                                ),
+                                'Promotion packet copied'
+                              )
+                            }
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy promotion packet
+                          </DropdownMenuItem>
+                        )}
+                        {run.artifactPointer?.runtime_log && (
+                          <DropdownMenuItem onSelect={() => void openArtifactViewer(run.artifactPointer?.runtime_log, 'Runtime log')}>
+                            Runtime log
+                          </DropdownMenuItem>
+                        )}
+                        {run.artifactPointer?.events && (
+                          <DropdownMenuItem onSelect={() => void openArtifactViewer(run.artifactPointer?.events, 'Event stream')}>
+                            Event stream
+                          </DropdownMenuItem>
+                        )}
+                        {best?.best_feedback_evaluation_id && (
+                          <DropdownMenuItem asChild>
+                            <a href={evaluationUrl(best.best_feedback_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
+                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                              Open best feedback eval
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                        {best?.best_accuracy_evaluation_id && (
+                          <DropdownMenuItem asChild>
+                            <a href={evaluationUrl(best.best_accuracy_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
+                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                              Open best accuracy eval
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   }
                 />
               </div>
