@@ -17,6 +17,7 @@ jest.mock('@/components/EvaluationTask', () => ({
     <div>
       <div>{task.id}</div>
       <div>{task.description}</div>
+      <div data-testid={`notes-${task.id}`}>{task?.data?.parameters ?? ''}</div>
       {controlButtons}
     </div>
   ),
@@ -37,6 +38,7 @@ describe('ScoreEvaluationList', () => {
               updatedAt: '2026-04-25T00:00:00Z',
               createdAt: '2026-04-25T00:00:00Z',
               scoreVersionId: 'version-1',
+              parameters: JSON.stringify({ notes: 'Evaluation note 1' }),
               accuracy: 92.5,
               metrics: JSON.stringify({ alignment: 0.88 }),
             },
@@ -47,6 +49,7 @@ describe('ScoreEvaluationList', () => {
               updatedAt: '2026-04-24T00:00:00Z',
               createdAt: '2026-04-24T00:00:00Z',
               scoreVersionId: 'version-2',
+              parameters: JSON.stringify({ notes: 'Evaluation note 2' }),
               accuracy: 75.0,
               metrics: JSON.stringify({ alignment: 0.51 }),
             },
@@ -64,6 +67,7 @@ describe('ScoreEvaluationList', () => {
     })
 
     expect(screen.getByText(/Feedback · COMPLETED/i)).toBeInTheDocument()
+    expect(screen.getByTestId('notes-eval-1')).toHaveTextContent('Evaluation note 1')
     expect(screen.getAllByRole('link', { name: /^Open$/i })[0]).toHaveAttribute('href', '/lab/evaluations/eval-1')
   })
 

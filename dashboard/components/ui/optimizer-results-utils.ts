@@ -38,17 +38,82 @@ export type OptimizerManifest = {
 export type ProcedureRecord = {
   id: string
   name?: string | null
+  description?: string | null
   status?: string | null
   updatedAt?: string | null
   metadata?: string | null
   scoreVersionId?: string | null
+  task?: {
+    id: string
+    type?: string | null
+    status?: string | null
+    target?: string | null
+    command?: string | null
+    description?: string | null
+    dispatchStatus?: string | null
+    metadata?: unknown
+    createdAt?: string | null
+    startedAt?: string | null
+    completedAt?: string | null
+    estimatedCompletionAt?: string | null
+    errorMessage?: string | null
+    errorDetails?: unknown
+    currentStageId?: string | null
+    stages?: {
+      items: Array<{
+        id: string
+        name: string
+        order: number
+        status: string
+        statusMessage?: string | null
+        startedAt?: string | null
+        completedAt?: string | null
+        estimatedCompletionAt?: string | null
+        processedItems?: number | null
+        totalItems?: number | null
+      }>
+    } | null
+  } | null
 }
 
 export type OptimizerRunView = {
   procedureId: string
   name?: string | null
+  procedureDescription?: string | null
   status?: string | null
   updatedAt?: string | null
+  metadataText?: string | null
+  task?: {
+    id: string
+    type?: string | null
+    status?: string | null
+    target?: string | null
+    command?: string | null
+    description?: string | null
+    dispatchStatus?: string | null
+    metadata?: unknown
+    createdAt?: string | null
+    startedAt?: string | null
+    completedAt?: string | null
+    estimatedCompletionAt?: string | null
+    errorMessage?: string | null
+    errorDetails?: unknown
+    currentStageId?: string | null
+    stages?: {
+      items: Array<{
+        id: string
+        name: string
+        order: number
+        status: string
+        statusMessage?: string | null
+        startedAt?: string | null
+        completedAt?: string | null
+        estimatedCompletionAt?: string | null
+        processedItems?: number | null
+        totalItems?: number | null
+      }>
+    } | null
+  } | null
   indexed: boolean
   manifestKey?: string | null
   artifactPointer?: {
@@ -71,6 +136,7 @@ export type ScoreVersionSummary = {
 export type ScoreEvaluationView = {
   id: string
   type?: string | null
+  parameters?: unknown
   status?: string | null
   updatedAt?: string | null
   createdAt?: string | null
@@ -270,7 +336,8 @@ export async function openArtifactText(artifactKey: string | null | undefined) {
 }
 
 export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Promise<OptimizerRunView[]> {
-  const response = await getAmplifyClient().graphql({
+  const client = getAmplifyClient()
+  const response = await client.graphql({
     query: `
       query ListProcedureByScoreIdAndUpdatedAtWorkbench(
         $scoreId: String!
@@ -285,6 +352,7 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
           items {
             id
             name
+            description
             status
             metadata
             updatedAt
@@ -301,6 +369,111 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
   }) as any
 
   const procedures: ProcedureRecord[] = response.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
+  const procedureIds = new Set(procedures.map((procedure) => procedure.id))
+
+  let tasksByProcedureId = new Map<string, NonNullable<OptimizerRunView['task']>>()
+  try {
+    const tasksResponse = await client.graphql({
+      query: `
+        query ListTaskByScoreIdForProcedureWorkbench($scoreId: String!) {
+          listTaskByScoreId(scoreId: $scoreId) {
+            items {
+              id
+              type
+              status
+              target
+              command
+              description
+              dispatchStatus
+              metadata
+              createdAt
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              errorMessage
+              errorDetails
+              currentStageId
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  statusMessage
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  processedItems
+                  totalItems
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: { scoreId },
+    }) as any
+
+    const taskItems = tasksResponse.data?.listTaskByScoreId?.items ?? []
+    for (const task of taskItems) {
+      const targetProcedureId = typeof task?.target === 'string' ? task.target : null
+      if (!targetProcedureId || !procedureIds.has(targetProcedureId)) continue
+      const type = String(task?.type ?? '').toLowerCase()
+      if (!type.includes('procedure')) continue
+
+      const mappedTask = {
+        id: task.id,
+        type: task.type ?? null,
+        status: task.status ?? null,
+        target: task.target ?? null,
+        command: task.command ?? null,
+        description: task.description ?? null,
+        dispatchStatus: task.dispatchStatus ?? null,
+        metadata: task.metadata ?? null,
+        createdAt: task.createdAt ?? null,
+        startedAt: task.startedAt ?? null,
+        completedAt: task.completedAt ?? null,
+        estimatedCompletionAt: task.estimatedCompletionAt ?? null,
+        errorMessage: task.errorMessage ?? null,
+        errorDetails: task.errorDetails ?? null,
+        currentStageId: task.currentStageId ?? null,
+        stages: task.stages
+          ? {
+              items: (task.stages.items ?? []).map((stage: any) => ({
+                id: String(stage.id ?? ''),
+                name: String(stage.name ?? ''),
+                order: typeof stage.order === 'number' ? stage.order : 0,
+                status: String(stage.status ?? 'PENDING'),
+                statusMessage: stage.statusMessage ?? null,
+                startedAt: stage.startedAt ?? null,
+                completedAt: stage.completedAt ?? null,
+                estimatedCompletionAt: stage.estimatedCompletionAt ?? null,
+                processedItems: toFiniteNumber(stage.processedItems),
+                totalItems: toFiniteNumber(stage.totalItems),
+              })),
+            }
+          : null,
+      } satisfies NonNullable<OptimizerRunView['task']>
+
+      const existing = tasksByProcedureId.get(targetProcedureId)
+      if (!existing) {
+        tasksByProcedureId.set(targetProcedureId, mappedTask)
+        continue
+      }
+      const existingUpdatedAt = new Date(
+        existing.completedAt ?? existing.startedAt ?? existing.createdAt ?? 0
+      ).getTime()
+      const candidateUpdatedAt = new Date(
+        mappedTask.completedAt ?? mappedTask.startedAt ?? mappedTask.createdAt ?? 0
+      ).getTime()
+      if (candidateUpdatedAt >= existingUpdatedAt) {
+        tasksByProcedureId.set(targetProcedureId, mappedTask)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load procedure tasks for score', scoreId, error)
+    tasksByProcedureId = new Map()
+  }
 
   return Promise.all(
     procedures.map(async (procedure) => {
@@ -321,8 +494,15 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
       return {
         procedureId: procedure.id,
         name: procedure.name,
+        procedureDescription: procedure.description ?? null,
         status: procedure.status,
         updatedAt: procedure.updatedAt,
+        metadataText:
+          typeof procedure.metadata === 'string'
+            ? procedure.metadata
+            : procedure.metadata != null
+              ? JSON.stringify(procedure.metadata)
+              : null,
         indexed: Boolean(manifestKey && manifest),
         manifestKey: manifestKey ?? null,
         artifactPointer: artifactPointer
@@ -334,6 +514,7 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
           : null,
         manifest,
         scoreVersionId: procedure.scoreVersionId ?? null,
+        task: tasksByProcedureId.get(procedure.id) ?? null,
       } satisfies OptimizerRunView
     })
   )
@@ -415,6 +596,7 @@ export async function loadScoreEvaluations(scoreId: string, limit: number = 100)
     return {
       id: item.id,
       type: item.type ?? null,
+      parameters: item.parameters ?? null,
       status: item.status ?? null,
       updatedAt: item.updatedAt ?? null,
       createdAt: item.createdAt ?? null,

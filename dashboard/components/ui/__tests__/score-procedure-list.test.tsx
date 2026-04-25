@@ -31,13 +31,14 @@ describe('ScoreProcedureList', () => {
   beforeEach(() => {
     jest.clearAllMocks()
 
-    mockGraphql.mockResolvedValue({
+    mockGraphql.mockImplementationOnce(async () => ({
       data: {
         listProcedureByScoreIdAndUpdatedAt: {
           items: [
             {
               id: 'proc-1',
               name: 'Optimizer Run 1',
+              description: 'Procedure note 1',
               status: 'COMPLETED',
               metadata: JSON.stringify({
                 optimizer_artifacts: {
@@ -52,6 +53,7 @@ describe('ScoreProcedureList', () => {
             {
               id: 'proc-2',
               name: 'Other Run',
+              description: 'Procedure note 2',
               status: 'FAILED',
               metadata: null,
               updatedAt: '2026-04-24T00:00:00Z',
@@ -60,7 +62,33 @@ describe('ScoreProcedureList', () => {
           ],
         },
       },
-    })
+    }))
+    mockGraphql.mockImplementationOnce(async () => ({
+      data: {
+        listTaskByScoreId: {
+          items: [
+            {
+              id: 'task-1',
+              type: 'Procedure',
+              status: 'COMPLETED',
+              target: 'proc-1',
+              command: '',
+              description: 'Task description that should not be treated as procedure note',
+              dispatchStatus: null,
+              metadata: null,
+              createdAt: '2026-04-25T00:00:00Z',
+              startedAt: null,
+              completedAt: null,
+              estimatedCompletionAt: null,
+              errorMessage: null,
+              errorDetails: null,
+              currentStageId: null,
+              stages: { items: [] },
+            },
+          ],
+        },
+      },
+    }))
 
     mockDownloadData.mockImplementation(({ path }: { path: string }) => {
       if (path === 'tasks/task-1/optimizer/manifest.json') {
@@ -118,7 +146,8 @@ describe('ScoreProcedureList', () => {
       expect(screen.getByText('Optimizer Run 1')).toBeInTheDocument()
     })
 
-    expect(screen.getByText(/Winning: version-1/)).toBeInTheDocument()
+    expect(screen.getByText('Procedure note 1')).toBeInTheDocument()
+    expect(screen.queryByText(/Task description that should not be treated as procedure note/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Log$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Events$/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /^FB$/i })).toHaveAttribute('href', '/lab/evaluations/eval-feedback-1')
