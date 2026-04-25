@@ -149,6 +149,15 @@ def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _looks_like_optimizer_state(state: Any) -> bool:
+    return isinstance(state, dict) and (
+        "iterations" in state
+        or "baseline_version_id" in state
+        or "end_of_run_report" in state
+        or "last_accepted_version_id" in state
+    )
+
+
 class PlexusStorageAdapter:
     """
     Implements Tactus StorageBackend protocol using Plexus GraphQL.
@@ -402,6 +411,21 @@ class PlexusStorageAdapter:
 
             _store_attachment('checkpoints', checkpoints_dict, f"procedures/{pid}/checkpoints.json")
             metadata_json['checkpoints'] = {'_s3_key': f"procedures/{pid}/checkpoints.json"}
+
+            if _looks_like_optimizer_state(metadata.state):
+                from plexus.cli.shared.optimizer_results import (
+                    OPTIMIZER_ARTIFACTS_METADATA_KEY,
+                    OptimizerResultsService,
+                )
+
+                optimizer_service = OptimizerResultsService(self.client)
+                optimizer_index = optimizer_service.index_optimizer_run(
+                    metadata.procedure_id,
+                    state_override=metadata.state,
+                    existing_metadata=metadata_json,
+                    persist_metadata_pointer=False,
+                )
+                metadata_json[OPTIMIZER_ARTIFACTS_METADATA_KEY] = optimizer_index["pointer"]
 
             serialized = json.dumps(metadata_json)
 

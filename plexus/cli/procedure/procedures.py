@@ -26,6 +26,7 @@ from datetime import datetime
 
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
+from plexus.cli.shared.optimizer_results import OptimizerResultsService
 from .service import ProcedureService
 
 @click.group()
@@ -1578,6 +1579,53 @@ def clone_state(source_id: str, target_id: str, truncate_to_cycle: int):
         console.print(f"[red]Error cloning state: {e}[/red]")
         import traceback
         console.print(traceback.format_exc())
+
+
+@procedure.command("index-optimizer-run")
+@click.argument("procedure_id")
+@click.option("--force", is_flag=True, help="Rewrite optimizer artifacts even if the task already has them attached")
+@click.option("--output", "-o", type=click.Choice(["json", "yaml", "table"]), default="table", show_default=True)
+def index_optimizer_run(procedure_id: str, force: bool, output: str):
+    """Index one historical optimizer run into canonical task attachments."""
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = OptimizerResultsService(client)
+    try:
+        result = service.index_optimizer_run(procedure_id, force=force)
+    except Exception as exc:
+        console.print(f"[red]Error indexing optimizer run: {exc}[/red]")
+        return
+
+    payload = {
+        "procedure_id": procedure_id,
+        "task_id": result["task_id"],
+        "pointer": result["pointer"],
+        "summary": result["manifest"].get("summary"),
+        "best": result["manifest"].get("best"),
+    }
+
+    if output == "json":
+        console.print(json.dumps(payload, indent=2, default=str))
+        return
+    if output == "yaml":
+        console.print(yaml.dump(payload, default_flow_style=False))
+        return
+
+    table = Table(title=f"Indexed Optimizer Run {procedure_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Task", payload["task_id"])
+    table.add_row("Manifest", payload["pointer"]["manifest"])
+    table.add_row("Events", payload["pointer"]["events"])
+    table.add_row("Runtime log", payload["pointer"]["runtime_log"])
+    table.add_row("Completed cycles", str((payload["summary"] or {}).get("completed_cycles") or "—"))
+    table.add_row("Winning version", (payload["best"] or {}).get("winning_version_id") or "—")
+    table.add_row("Best feedback eval", (payload["best"] or {}).get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best accuracy eval", (payload["best"] or {}).get("best_accuracy_evaluation_id") or "—")
+    console.print(table)
 
 
 # Add to CLI

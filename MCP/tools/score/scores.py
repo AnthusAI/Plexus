@@ -92,6 +92,49 @@ def register_score_tools(mcp: FastMCP):
                 continue
 
         return None
+
+    def _build_optimizer_score_context(client, scorecard_identifier: str, score_identifier: str) -> Dict[str, Any]:
+        from plexus.cli.shared.memoized_resolvers import (
+            memoized_resolve_scorecard_identifier,
+            memoized_resolve_score_identifier,
+        )
+        from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+        scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+        if not scorecard_id:
+            raise ValueError(f"Scorecard not found: {scorecard_identifier}")
+
+        score_id = memoized_resolve_score_identifier(client, scorecard_id, score_identifier)
+        if not score_id:
+            raise ValueError(f"Score not found: {score_identifier}")
+
+        query = """
+        query GetOptimizerScoreContext($scorecardId: ID!, $scoreId: ID!) {
+          getScorecard(id: $scorecardId) {
+            id
+            name
+          }
+          getScore(id: $scoreId) {
+            id
+            name
+            championVersionId
+          }
+        }
+        """
+        result = client.execute(query, {"scorecardId": scorecard_id, "scoreId": score_id})
+        scorecard = result.get("getScorecard") or {}
+        score = result.get("getScore") or {}
+        if not score:
+            raise ValueError(f"Score {score_identifier} resolved to {score_id}, but could not be loaded.")
+
+        return {
+            "scorecard_id": scorecard_id,
+            "scorecard_name": scorecard.get("name") or scorecard_identifier,
+            "score_id": score_id,
+            "score_name": score.get("name") or score_identifier,
+            "champion_version_id": score.get("championVersionId"),
+            "service": OptimizerResultsService(client),
+        }
     
     @mcp.tool()
     async def plexus_score_info(
@@ -1873,6 +1916,103 @@ def register_score_tools(mcp: FastMCP):
             if captured:
                 logger.warning(f"Captured unexpected stdout during plexus_score_set_champion: {captured}")
             sys.stdout = old_stdout
+
+    class ScoreOptimizerRunsRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        limit: Annotated[int, Field(description="Maximum number of optimizer runs to return", ge=1)] = 25
+
+    @mcp.tool()
+    async def plexus_score_optimizer_runs(request: ScoreOptimizerRunsRequest) -> Dict[str, Any]:
+        """List indexed optimizer runs for a score."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            runs = context["service"].list_optimizer_runs_for_score(context["score_id"], limit=request.limit)
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "runs": [
+                    {
+                        "procedure_id": run.procedure.get("id"),
+                        "name": run.procedure.get("name"),
+                        "status": run.procedure.get("status"),
+                        "updated_at": run.procedure.get("updatedAt"),
+                        "indexed": run.indexed,
+                        "artifact_pointer": run.artifact_pointer,
+                        "summary": (run.manifest or {}).get("summary"),
+                        "best": (run.manifest or {}).get("best"),
+                    }
+                    for run in runs
+                ],
+            }
+        except Exception as e:
+            logger.error(f"Error listing score optimizer runs: {e}", exc_info=True)
+            return _structured_error("Failed to list optimizer runs", error=str(e))
+
+    class ScoreOptimizerCandidatesRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        limit_runs: Annotated[int, Field(description="Maximum number of indexed runs to aggregate", ge=1)] = 25
+
+    @mcp.tool()
+    async def plexus_score_optimizer_candidates(request: ScoreOptimizerCandidatesRequest) -> Dict[str, Any]:
+        """List optimizer-generated candidate versions and their best visible evaluations for a score."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            candidates = context["service"].list_optimizer_candidates_for_score(
+                context["score_id"],
+                limit_runs=request.limit_runs,
+            )
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "candidates": candidates,
+            }
+        except Exception as e:
+            logger.error(f"Error listing optimizer candidates: {e}", exc_info=True)
+            return _structured_error("Failed to list optimizer candidates", error=str(e))
+
+    class ScorePromotionPacketRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        version_id: Annotated[Optional[str], Field(description="Specific version ID to package (defaults to best indexed candidate)")] = None
+
+    @mcp.tool()
+    async def plexus_score_promotion_packet(request: ScorePromotionPacketRequest) -> Dict[str, Any]:
+        """Build a client-ready promotion packet for a score from indexed optimizer results."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            packet = context["service"].build_promotion_packet_for_score(
+                context["score_id"],
+                score_name=context["score_name"],
+                scorecard_name=context["scorecard_name"],
+                champion_version_id=context["champion_version_id"],
+                version_id=request.version_id,
+            )
+            return {"success": True, **packet}
+        except Exception as e:
+            logger.error(f"Error building promotion packet: {e}", exc_info=True)
+            return _structured_error("Failed to build promotion packet", error=str(e))
 
     @mcp.tool()
     async def plexus_score_delete(
