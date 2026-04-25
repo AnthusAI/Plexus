@@ -1,0 +1,466 @@
+import { generateClient } from 'aws-amplify/api'
+import { downloadData } from 'aws-amplify/storage'
+import { toast } from 'sonner'
+
+const getAmplifyClient = (() => {
+  let client: any = null
+  return () => (client ??= generateClient())
+})()
+
+export type OptimizerManifest = {
+  procedure?: {
+    id?: string
+    name?: string
+    status?: string
+    task_id?: string
+  }
+  baseline?: {
+    version_id?: string | null
+  }
+  summary?: {
+    completed_cycles?: number | null
+    configured_max_iterations?: number | null
+    stop_reason?: string | null
+  }
+  best?: {
+    winning_version_id?: string | null
+    last_accepted_version_id?: string | null
+    best_feedback_evaluation_id?: string | null
+    best_accuracy_evaluation_id?: string | null
+    best_feedback_alignment?: number | null
+    best_accuracy_alignment?: number | null
+    winning_feedback_metrics?: { alignment?: number | null; accuracy?: number | null } | null
+    winning_accuracy_metrics?: { alignment?: number | null; accuracy?: number | null } | null
+  }
+  cycles?: Array<Record<string, any>>
+}
+
+export type ProcedureRecord = {
+  id: string
+  name?: string | null
+  status?: string | null
+  updatedAt?: string | null
+  metadata?: string | null
+  scoreVersionId?: string | null
+}
+
+export type OptimizerRunView = {
+  procedureId: string
+  name?: string | null
+  status?: string | null
+  updatedAt?: string | null
+  indexed: boolean
+  manifestKey?: string | null
+  artifactPointer?: {
+    manifest?: string | null
+    events?: string | null
+    runtime_log?: string | null
+  } | null
+  manifest?: OptimizerManifest | null
+  scoreVersionId?: string | null
+}
+
+export type ScoreVersionSummary = {
+  id: string
+  isFeatured: boolean
+  note?: string
+  branch?: string
+  parentVersionId?: string
+}
+
+export type ScoreEvaluationView = {
+  id: string
+  type?: string | null
+  status?: string | null
+  updatedAt?: string | null
+  createdAt?: string | null
+  scoreVersionId?: string | null
+  accuracy?: number | null
+  alignment?: number | null
+  baselineEvaluationId?: string | null
+  currentBaselineEvaluationId?: string | null
+  processedItems?: number | null
+  totalItems?: number | null
+  elapsedSeconds?: number | null
+  estimatedRemainingSeconds?: number | null
+  task?: {
+    id: string
+    type?: string | null
+    status?: string | null
+    target?: string | null
+    command?: string | null
+    description?: string | null
+    dispatchStatus?: string | null
+    createdAt?: string | null
+    startedAt?: string | null
+    completedAt?: string | null
+    estimatedCompletionAt?: string | null
+    errorMessage?: string | null
+    errorDetails?: unknown
+    currentStageId?: string | null
+    stages?: {
+      items: Array<{
+        id: string
+        name: string
+        order: number
+        status: string
+        statusMessage?: string | null
+        startedAt?: string | null
+        completedAt?: string | null
+        estimatedCompletionAt?: string | null
+        processedItems?: number | null
+        totalItems?: number | null
+      }>
+    } | null
+  } | null
+}
+
+function parseJsonMaybeDeep(value: unknown): unknown {
+  let current = value
+  for (let i = 0; i < 3; i += 1) {
+    if (typeof current !== 'string') return current
+    const trimmed = current.trim()
+    if (!trimmed) return current
+    try {
+      current = JSON.parse(trimmed)
+    } catch {
+      return current
+    }
+  }
+  return current
+}
+
+function extractBaselineIdsFromParameters(parameters: unknown): {
+  baselineEvaluationId: string | null
+  currentBaselineEvaluationId: string | null
+} {
+  const parsedParameters = parseJsonMaybeDeep(parameters)
+  if (!parsedParameters || typeof parsedParameters !== 'object') {
+    return {
+      baselineEvaluationId: null,
+      currentBaselineEvaluationId: null,
+    }
+  }
+
+  const metadata = parseJsonMaybeDeep((parsedParameters as Record<string, unknown>).metadata)
+  if (!metadata || typeof metadata !== 'object') {
+    return {
+      baselineEvaluationId: null,
+      currentBaselineEvaluationId: null,
+    }
+  }
+
+  const metadataObj = metadata as Record<string, unknown>
+  const baselineEvaluationId =
+    typeof metadataObj.baseline === 'string'
+      ? metadataObj.baseline
+      : typeof metadataObj.baseline_evaluation_id === 'string'
+        ? metadataObj.baseline_evaluation_id
+        : null
+  const currentBaselineEvaluationId =
+    typeof metadataObj.current_baseline === 'string'
+      ? metadataObj.current_baseline
+      : typeof metadataObj.current_baseline_evaluation_id === 'string'
+        ? metadataObj.current_baseline_evaluation_id
+        : null
+
+  return {
+    baselineEvaluationId,
+    currentBaselineEvaluationId,
+  }
+}
+
+export function safeJsonParse<T>(value: unknown): T | null {
+  if (value == null) return null
+  if (typeof value === 'object') return value as T
+  if (typeof value !== 'string' || !value) return null
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
+  }
+}
+
+export function evaluationUrl(evaluationId?: string | null): string | null {
+  return evaluationId ? `/lab/evaluations/${evaluationId}` : null
+}
+
+export async function copyText(text: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success(successMessage)
+  } catch (error) {
+    console.error('Failed to copy text:', error)
+    toast.error('Failed to copy to clipboard')
+  }
+}
+
+export function scorecardGuideRelativePath(scorecardName: string, scoreName: string) {
+  return `scorecards/${scorecardName}/guidelines/${scoreName}.md`
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function parseEvaluationMetrics(rawMetrics: unknown): { accuracy: number | null; alignment: number | null } {
+  const metrics = safeJsonParse<any>(rawMetrics)
+  if (!metrics) {
+    return { accuracy: null, alignment: null }
+  }
+
+  if (Array.isArray(metrics)) {
+    let accuracy: number | null = null
+    let alignment: number | null = null
+    for (const metric of metrics) {
+      if (!metric || typeof metric !== 'object') continue
+      const name = String(metric.name ?? metric.label ?? '').toLowerCase()
+      const value = toFiniteNumber(metric.value)
+      if (value == null) continue
+      if (!accuracy && name.includes('accuracy')) accuracy = value
+      if (!alignment && (name.includes('alignment') || name.includes('ac1'))) alignment = value
+    }
+    return { accuracy, alignment }
+  }
+
+  if (typeof metrics === 'object') {
+    return {
+      accuracy: toFiniteNumber((metrics as any).accuracy),
+      alignment:
+        toFiniteNumber((metrics as any).alignment) ??
+        toFiniteNumber((metrics as any).ac1) ??
+        toFiniteNumber((metrics as any).agreement),
+    }
+  }
+
+  return { accuracy: null, alignment: null }
+}
+
+export function manifestTouchesVersion(
+  manifest: OptimizerManifest | null | undefined,
+  versionId: string | null | undefined
+): boolean {
+  if (!manifest || !versionId) return false
+  if (manifest.baseline?.version_id === versionId) return true
+  if (manifest.best?.winning_version_id === versionId) return true
+  if (manifest.best?.last_accepted_version_id === versionId) return true
+
+  for (const cycle of manifest.cycles ?? []) {
+    if (cycle?.version_id === versionId) return true
+    for (const candidate of cycle?.candidates ?? []) {
+      if (candidate?.version_id === versionId) return true
+    }
+    for (const candidate of cycle?.no_version_candidates ?? []) {
+      if (candidate?.version_id === versionId) return true
+    }
+  }
+
+  return false
+}
+
+export async function openArtifactText(artifactKey: string | null | undefined) {
+  if (!artifactKey) {
+    throw new Error('Artifact key is required')
+  }
+  const downloadResult = await downloadData({
+    path: artifactKey,
+    options: { bucket: 'taskAttachments' },
+  }).result
+  return downloadResult.body.text()
+}
+
+export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Promise<OptimizerRunView[]> {
+  const response = await getAmplifyClient().graphql({
+    query: `
+      query ListProcedureByScoreIdAndUpdatedAtWorkbench(
+        $scoreId: String!
+        $sortDirection: ModelSortDirection
+        $limit: Int
+      ) {
+        listProcedureByScoreIdAndUpdatedAt(
+          scoreId: $scoreId
+          sortDirection: $sortDirection
+          limit: $limit
+        ) {
+          items {
+            id
+            name
+            status
+            metadata
+            updatedAt
+            scoreVersionId
+          }
+        }
+      }
+    `,
+    variables: {
+      scoreId,
+      sortDirection: 'DESC',
+      limit,
+    },
+  }) as any
+
+  const procedures: ProcedureRecord[] = response.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
+
+  return Promise.all(
+    procedures.map(async (procedure) => {
+      const metadata = safeJsonParse<Record<string, any>>(procedure.metadata)
+      const artifactPointer = metadata?.optimizer_artifacts ?? null
+      const manifestKey = artifactPointer?.manifest as string | undefined
+      let manifest: OptimizerManifest | null = null
+
+      if (manifestKey) {
+        try {
+          const manifestText = await openArtifactText(manifestKey)
+          manifest = JSON.parse(manifestText) as OptimizerManifest
+        } catch (error) {
+          console.error('Failed to load optimizer manifest for procedure', procedure.id, error)
+        }
+      }
+
+      return {
+        procedureId: procedure.id,
+        name: procedure.name,
+        status: procedure.status,
+        updatedAt: procedure.updatedAt,
+        indexed: Boolean(manifestKey && manifest),
+        manifestKey: manifestKey ?? null,
+        artifactPointer: artifactPointer
+          ? {
+              manifest: artifactPointer.manifest ?? null,
+              events: artifactPointer.events ?? null,
+              runtime_log: artifactPointer.runtime_log ?? null,
+            }
+          : null,
+        manifest,
+        scoreVersionId: procedure.scoreVersionId ?? null,
+      } satisfies OptimizerRunView
+    })
+  )
+}
+
+export async function loadScoreEvaluations(scoreId: string, limit: number = 100): Promise<ScoreEvaluationView[]> {
+  const response = await getAmplifyClient().graphql({
+    query: `
+      query ListEvaluationByScoreIdAndUpdatedAtForWorkbench(
+        $scoreId: String!
+        $sortDirection: ModelSortDirection!
+        $limit: Int
+      ) {
+        listEvaluationByScoreIdAndUpdatedAt(
+          scoreId: $scoreId
+          sortDirection: $sortDirection
+          limit: $limit
+        ) {
+          items {
+            id
+            type
+            status
+            updatedAt
+            createdAt
+            parameters
+            scoreVersionId
+            accuracy
+            processedItems
+            totalItems
+            elapsedSeconds
+            estimatedRemainingSeconds
+            metrics
+            task {
+              id
+              type
+              status
+              target
+              command
+              description
+              dispatchStatus
+              createdAt
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              errorMessage
+              errorDetails
+              currentStageId
+              stages {
+                items {
+                  id
+                  name
+                  order
+                  status
+                  statusMessage
+                  startedAt
+                  completedAt
+                  estimatedCompletionAt
+                  processedItems
+                  totalItems
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      scoreId,
+      sortDirection: 'DESC',
+      limit,
+    },
+  }) as any
+
+  const items = response.data?.listEvaluationByScoreIdAndUpdatedAt?.items ?? []
+  return items.map((item: any) => {
+    const parsed = parseEvaluationMetrics(item.metrics)
+    const { baselineEvaluationId, currentBaselineEvaluationId } =
+      extractBaselineIdsFromParameters(item.parameters)
+    return {
+      id: item.id,
+      type: item.type ?? null,
+      status: item.status ?? null,
+      updatedAt: item.updatedAt ?? null,
+      createdAt: item.createdAt ?? null,
+      scoreVersionId: item.scoreVersionId ?? null,
+      accuracy: toFiniteNumber(item.accuracy) ?? parsed.accuracy,
+      alignment: parsed.alignment,
+      baselineEvaluationId,
+      currentBaselineEvaluationId,
+      processedItems: toFiniteNumber(item.processedItems),
+      totalItems: toFiniteNumber(item.totalItems),
+      elapsedSeconds: toFiniteNumber(item.elapsedSeconds),
+      estimatedRemainingSeconds: toFiniteNumber(item.estimatedRemainingSeconds),
+      task: item.task
+        ? {
+            id: item.task.id,
+            type: item.task.type ?? null,
+            status: item.task.status ?? null,
+            target: item.task.target ?? null,
+            command: item.task.command ?? null,
+            description: item.task.description ?? null,
+            dispatchStatus: item.task.dispatchStatus ?? null,
+            createdAt: item.task.createdAt ?? null,
+            startedAt: item.task.startedAt ?? null,
+            completedAt: item.task.completedAt ?? null,
+            estimatedCompletionAt: item.task.estimatedCompletionAt ?? null,
+            errorMessage: item.task.errorMessage ?? null,
+            errorDetails: item.task.errorDetails ?? null,
+            currentStageId: item.task.currentStageId ?? null,
+            stages: item.task.stages
+              ? {
+                  items: (item.task.stages.items ?? []).map((stage: any) => ({
+                    id: String(stage.id ?? ''),
+                    name: String(stage.name ?? ''),
+                    order: typeof stage.order === 'number' ? stage.order : 0,
+                    status: String(stage.status ?? 'PENDING'),
+                    statusMessage: stage.statusMessage ?? null,
+                    startedAt: stage.startedAt ?? null,
+                    completedAt: stage.completedAt ?? null,
+                    estimatedCompletionAt: stage.estimatedCompletionAt ?? null,
+                    processedItems: toFiniteNumber(stage.processedItems),
+                    totalItems: toFiniteNumber(stage.totalItems),
+                  })),
+                }
+              : null,
+          }
+        : null,
+    } satisfies ScoreEvaluationView
+  })
+}
