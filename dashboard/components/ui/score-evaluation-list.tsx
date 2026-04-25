@@ -78,6 +78,12 @@ function toEvaluationTaskData(evaluation: ScoreEvaluationView): EvaluationTaskDa
       ? { name: 'Alignment', value: evaluation.alignment, priority: true, maximum: 1 }
       : null,
   ].filter((metric): metric is NonNullable<typeof metric> => metric !== null)
+  const parameters =
+    evaluation.parameters == null
+      ? null
+      : typeof evaluation.parameters === 'string'
+        ? evaluation.parameters
+        : JSON.stringify(evaluation.parameters)
 
   return {
     id: evaluation.id,
@@ -94,6 +100,7 @@ function toEvaluationTaskData(evaluation: ScoreEvaluationView): EvaluationTaskDa
     estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds ?? null,
     baseline_evaluation_id: evaluation.baselineEvaluationId ?? null,
     current_baseline_evaluation_id: evaluation.currentBaselineEvaluationId ?? null,
+    parameters,
     task: {
       id: evaluation.task?.id ?? `task-${evaluation.id}`,
       accountId: '',

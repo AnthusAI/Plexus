@@ -82,7 +82,7 @@ function toProcedureTaskData(
 ): ProcedureTaskData {
   const summary = run.manifest?.summary
   const best = run.manifest?.best
-  const descriptionParts = [
+  const operationalSummary = [
     summary?.completed_cycles != null || summary?.configured_max_iterations != null
       ? `Cycles: ${summary?.completed_cycles ?? '—'}/${summary?.configured_max_iterations ?? '—'}`
       : null,
@@ -96,20 +96,42 @@ function toProcedureTaskData(
     featured: false,
     createdAt: run.updatedAt || new Date().toISOString(),
     updatedAt: run.updatedAt || new Date().toISOString(),
-    status: run.status || 'PENDING',
+    status: run.task?.status || run.status || 'PENDING',
     scorecard: scorecardNameFromRun(scorecardName),
     score: scoreFromRun(scoreName),
-    description: descriptionParts.join(' · '),
+    description: run.procedureDescription ?? undefined,
     taskId: run.procedureId,
     task: {
-      id: run.procedureId,
-      type: 'Procedure',
-      status: run.status || 'PENDING',
-      target: run.procedureId,
-      command: '',
-      description: descriptionParts.join(' · '),
-      createdAt: run.updatedAt || new Date().toISOString(),
-      stages: { items: [] },
+      id: run.task?.id || run.procedureId,
+      type: run.task?.type || 'Procedure',
+      status: run.task?.status || run.status || 'PENDING',
+      target: run.task?.target || run.procedureId,
+      command: run.task?.command || '',
+      description: operationalSummary.join(' · '),
+      dispatchStatus: run.task?.dispatchStatus || undefined,
+      metadata: run.task?.metadata,
+      createdAt: run.task?.createdAt || run.updatedAt || new Date().toISOString(),
+      startedAt: run.task?.startedAt || undefined,
+      completedAt: run.task?.completedAt || undefined,
+      estimatedCompletionAt: run.task?.estimatedCompletionAt || undefined,
+      errorMessage: run.task?.errorMessage || undefined,
+      errorDetails: run.task?.errorDetails,
+      currentStageId: run.task?.currentStageId || undefined,
+      stages: {
+        items:
+          run.task?.stages?.items?.map((stage) => ({
+            id: stage.id,
+            name: stage.name,
+            order: stage.order,
+            status: stage.status,
+            statusMessage: stage.statusMessage ?? undefined,
+            startedAt: stage.startedAt ?? undefined,
+            completedAt: stage.completedAt ?? undefined,
+            estimatedCompletionAt: stage.estimatedCompletionAt ?? undefined,
+            processedItems: stage.processedItems ?? undefined,
+            totalItems: stage.totalItems ?? undefined,
+          })) ?? [],
+      },
     },
   }
 }
@@ -172,9 +194,7 @@ export function ScoreProcedureList({
       ? runs.filter((run) => {
           if (manifestTouchesVersion(run.manifest, versionId)) return true
           if (run.scoreVersionId === versionId) return true
-          // Keep unindexed runs with unknown version linkage visible instead of hiding
-          // procedures that may have touched this version but lack manifest lineage.
-          if (!run.indexed && !run.scoreVersionId) return true
+          if (run.metadataText?.includes(versionId)) return true
           return false
         })
       : runs
