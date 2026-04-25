@@ -1,5 +1,6 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { ScoreProcedureList } from '../score-procedure-list'
 
@@ -133,6 +134,7 @@ describe('ScoreProcedureList', () => {
   })
 
   it('renders score-scoped procedures with indexed optimizer actions', async () => {
+    const user = userEvent.setup()
     render(
       <ScoreProcedureList
         scoreId="score-1"
@@ -148,9 +150,13 @@ describe('ScoreProcedureList', () => {
 
     expect(screen.getByText('Procedure note 1')).toBeInTheDocument()
     expect(screen.queryByText(/Task description that should not be treated as procedure note/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Log$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Events$/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^FB$/i })).toHaveAttribute('href', '/lab/evaluations/eval-feedback-1')
+    await user.click(screen.getAllByRole('button', { name: /more options/i })[0])
+    expect(screen.getByRole('menuitem', { name: /runtime log/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /event stream/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /open best feedback eval/i })).toHaveAttribute(
+      'href',
+      '/lab/evaluations/eval-feedback-1'
+    )
   })
 
   it('filters version-scoped procedures to runs that touched the selected version', async () => {
