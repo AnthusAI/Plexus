@@ -6,9 +6,10 @@ import os
 import sys
 import json
 import logging
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Union, Optional, Annotated
 from io import StringIO
 from fastmcp import FastMCP
+from pydantic import BaseModel, Field
 from plexus.cli.shared.optimizer_shadow_invalidation import (
     extract_shadow_invalid_feedback_item_ids_from_yaml_text,
     normalize_shadow_invalid_field_in_yaml_text,
