@@ -1678,3 +1678,208 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
                 delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
                 hypothesis = str(it.get('hypothesis') or '')[:60]
                 console.print(f"  {it.get('iteration', '?')}. {hypothesis}... (AC1 {delta_str})")
+
+
+def _resolve_optimizer_score_context(client, scorecard_identifier: str, score_identifier: str) -> dict:
+    from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise click.ClickException(f"Scorecard not found: {scorecard_identifier}")
+
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise click.ClickException(f"Score not found: {score_identifier}")
+
+    query = """
+    query GetOptimizerScoreContext($scorecardId: ID!, $scoreId: ID!) {
+      getScorecard(id: $scorecardId) {
+        id
+        name
+      }
+      getScore(id: $scoreId) {
+        id
+        name
+        championVersionId
+      }
+    }
+    """
+    result = client.execute(query, {"scorecardId": scorecard_id, "scoreId": score_id})
+    scorecard = result.get("getScorecard") or {}
+    score = result.get("getScore") or {}
+    if not score:
+        raise click.ClickException(f"Score {score_identifier} resolved to {score_id}, but could not be loaded.")
+
+    return {
+        "scorecard_id": scorecard_id,
+        "scorecard_name": scorecard.get("name") or scorecard_identifier,
+        "score_id": score_id,
+        "score_name": score.get("name") or score_identifier,
+        "champion_version_id": score.get("championVersionId"),
+        "service": OptimizerResultsService(client),
+    }
+
+
+@score.command(name="optimizer-runs")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--limit', '-l', default=25, show_default=True, help='Maximum number of runs to show')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def optimizer_runs(scorecard: str, score: str, limit: int, output: str):
+    """List optimizer runs for a score using indexed task-attachment manifests."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    runs = context["service"].list_optimizer_runs_for_score(context["score_id"], limit=limit)
+    payload = []
+    for run in runs:
+        manifest = run.manifest or {}
+        summary = manifest.get("summary") or {}
+        best = manifest.get("best") or {}
+        payload.append({
+            "procedure_id": run.procedure.get("id"),
+            "name": run.procedure.get("name"),
+            "status": run.procedure.get("status"),
+            "updated_at": run.procedure.get("updatedAt"),
+            "indexed": run.indexed,
+            "completed_cycles": summary.get("completed_cycles"),
+            "configured_max_iterations": summary.get("configured_max_iterations"),
+            "stop_reason": summary.get("stop_reason"),
+            "winning_version_id": best.get("winning_version_id"),
+            "best_feedback_evaluation_id": best.get("best_feedback_evaluation_id"),
+            "best_accuracy_evaluation_id": best.get("best_accuracy_evaluation_id"),
+            "manifest": (run.artifact_pointer or {}).get("manifest"),
+        })
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(payload, sys.stdout)
+        return
+
+    table = Table(title=f"Optimizer Runs for {context['score_name']}")
+    table.add_column("Procedure", style="cyan")
+    table.add_column("Status", style="white")
+    table.add_column("Cycles", style="green")
+    table.add_column("Stop", style="yellow")
+    table.add_column("Winning Version", style="magenta")
+    table.add_column("Feedback Eval", style="blue")
+    table.add_column("Accuracy Eval", style="blue")
+    for row in payload:
+        cycles = "—"
+        if row["completed_cycles"] is not None:
+            cycles = str(row["completed_cycles"])
+            if row["configured_max_iterations"] is not None:
+                cycles = f"{cycles}/{row['configured_max_iterations']}"
+        table.add_row(
+            row["procedure_id"],
+            row["status"] or "unknown",
+            cycles,
+            row["stop_reason"] or "—",
+            row["winning_version_id"] or "—",
+            row["best_feedback_evaluation_id"] or "—",
+            row["best_accuracy_evaluation_id"] or "—",
+        )
+    console.print(table)
+
+
+scores.add_command(optimizer_runs)
+
+
+@score.command(name="optimizer-candidates")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--limit-runs', default=25, show_default=True, help='Number of indexed runs to aggregate')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def optimizer_candidates(scorecard: str, score: str, limit_runs: int, output: str):
+    """List optimizer candidate versions and their best visible evaluations for a score."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    candidates = context["service"].list_optimizer_candidates_for_score(
+        context["score_id"],
+        limit_runs=limit_runs,
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(candidates, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(candidates, sys.stdout)
+        return
+
+    table = Table(title=f"Optimizer Candidates for {context['score_name']}")
+    table.add_column("Version", style="magenta")
+    table.add_column("Pinned", style="yellow")
+    table.add_column("Feedback AC1", style="green")
+    table.add_column("Accuracy AC1", style="green")
+    table.add_column("Feedback Eval", style="blue")
+    table.add_column("Accuracy Eval", style="blue")
+    table.add_column("Runs", style="cyan")
+    for candidate in candidates:
+        table.add_row(
+            candidate["version_id"],
+            "★" if candidate.get("pinned") else "",
+            f"{candidate['best_feedback_alignment']:.4f}" if candidate.get("best_feedback_alignment") is not None else "—",
+            f"{candidate['best_accuracy_alignment']:.4f}" if candidate.get("best_accuracy_alignment") is not None else "—",
+            candidate.get("best_feedback_evaluation_id") or "—",
+            candidate.get("best_accuracy_evaluation_id") or "—",
+            ", ".join(candidate.get("runs") or []),
+        )
+    console.print(table)
+
+
+scores.add_command(optimizer_candidates)
+
+
+@score.command(name="promotion-packet")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--version', 'version_id', default=None, help='Specific version ID to build a packet for')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def promotion_packet(scorecard: str, score: str, version_id: Optional[str], output: str):
+    """Build a client-ready promotion packet for the best indexed optimizer candidate."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    packet = context["service"].build_promotion_packet_for_score(
+        context["score_id"],
+        score_name=context["score_name"],
+        scorecard_name=context["scorecard_name"],
+        champion_version_id=context["champion_version_id"],
+        version_id=version_id,
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(packet, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(packet, sys.stdout)
+        return
+
+    table = Table(title=f"Promotion Packet for {context['score_name']}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Version", packet["version_id"])
+    table.add_row("Champion", "yes" if packet["is_champion"] else "no")
+    table.add_row("Current champion", packet.get("champion_version_id") or "—")
+    table.add_row("Best feedback eval", packet.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best accuracy eval", packet.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Feedback URL", packet.get("best_feedback_evaluation_url") or "—")
+    table.add_row("Accuracy URL", packet.get("best_accuracy_evaluation_url") or "—")
+    table.add_row("Guidelines", packet.get("guidelines_relative_path") or "—")
+    table.add_row("Pinned", "yes" if packet.get("pinned") else "no")
+    console.print(table)
+
+
+scores.add_command(promotion_packet)
