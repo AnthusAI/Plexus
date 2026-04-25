@@ -106,10 +106,34 @@
       "author": "ryan",
       "text": "Landed optimizer plateau inversion work on the feature branch: no plateau-based early stop, no hypothesis-slot shrink, recent_bold preserved, and reframe/full_rewrite lanes added. Also launched a fresh Dosage optimizer on the new snapshot.",
       "created_at": "2026-04-24T18:31:40.412629Z"
+    },
+    {
+      "id": "08cc7bc4-7e19-4589-a47c-26b698e312d8",
+      "author": "ryan",
+      "text": "Analyzing Medication Review: Prescriber and Medication Review: Individual Confirmation to identify the best optimizer-produced candidate versions versus current champions, then running fresh comparison evaluations before any promotion decision.",
+      "created_at": "2026-04-24T19:55:46.900716Z"
+    },
+    {
+      "id": "1aba44e5-bddf-462c-9495-1e59f52b55e4",
+      "author": "ryan",
+      "text": "Fresh champion-vs-candidate comparisons completed for Medication Review: Prescriber and Medication Review: Individual Confirmation. Best candidate versions confirmed as 3c2347f7-5cff-4cc0-b097-598ab8b00946 (Prescriber) and 6ac86d0f-f3d3-4693-b6a1-3efbca9f3ea5 (Individual Confirmation). Both candidates beat current champions on the associated-dataset accuracy comparison, and both are also ahead on the 180-day feedback comparison metrics.",
+      "created_at": "2026-04-24T20:19:22.545115Z"
+    },
+    {
+      "id": "4401cdc9-00e9-4dd0-8276-060aff528206",
+      "author": "ryan",
+      "text": "Re-reviewing recent Medication Review optimizer results to identify the strongest recent versions/evaluations for client-facing evidence, since newer Dosage evaluations appear to outperform the earlier comparison set.",
+      "created_at": "2026-04-24T20:54:31.455743Z"
+    },
+    {
+      "id": "0e8b4966-1e01-4964-a9f7-f87e2c941ab3",
+      "author": "ryan",
+      "text": "Selecting promotable Medication Review split-score versions and applying champion promotion where warranted, with client-facing evaluation URLs captured for each score.",
+      "created_at": "2026-04-24T21:08:59.492504Z"
     }
   ],
   "created_at": "2026-04-24T05:03:37.133012Z",
-  "updated_at": "2026-04-24T18:31:40.412629Z",
+  "updated_at": "2026-04-24T21:08:59.492504Z",
   "closed_at": null,
   "custom": {}
 }
