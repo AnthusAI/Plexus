@@ -39,6 +39,7 @@ import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-di
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
+import { ScoreOptimizerWorkbench } from '@/components/ui/score-optimizer-workbench'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
@@ -70,6 +71,8 @@ export interface ScoreVersion {
   isFeatured: boolean
   isChampion?: boolean
   note?: string
+  branch?: string
+  parentVersionId?: string
   createdAt: string
   updatedAt: string
   user?: {
@@ -983,9 +986,9 @@ const DetailContent = React.memo(({
 
   // Add sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
-  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code' | 'optimizer'>('guidelines')
   const [isGuidelinesInlineEdit, setIsGuidelinesInlineEdit] = React.useState(false)
-  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code' | 'optimizer'>('guidelines')
   const [newVersionNote, setNewVersionNote] = React.useState('')
   const [associatedDatasets, setAssociatedDatasets] = React.useState<AssociatedDatasetView[]>([])
   const [isAssociatedDatasetsLoading, setIsAssociatedDatasetsLoading] = React.useState(false)
@@ -1322,11 +1325,12 @@ const DetailContent = React.memo(({
 
             {/* Tabbed Content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code' | 'optimizer')} className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-border">
                   <TabsList className="h-auto p-0 bg-transparent justify-start">
                     <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                     <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                    <TabsTrigger value="optimizer" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Optimizer</TabsTrigger>
                   </TabsList>
                   <div className="flex gap-1 pr-3">
                     <CardButton
@@ -1473,6 +1477,18 @@ const DetailContent = React.memo(({
                     </div>
                   </div>
                 </TabsContent>
+
+                <TabsContent value="optimizer" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0">
+                  <ScoreOptimizerWorkbench
+                    scoreId={score.id}
+                    scoreName={score.name}
+                    scorecardName={scorecardName || 'Unknown Scorecard'}
+                    championVersionId={championVersionId}
+                    versions={versions ?? []}
+                    onPromoteToChampion={onPromoteToChampion}
+                    onToggleFeature={onToggleFeature}
+                  />
+                </TabsContent>
               </Tabs>
             </div>
           </div>
@@ -1484,11 +1500,12 @@ const DetailContent = React.memo(({
         <div className="flex flex-col h-full w-full">
           {/* Fullscreen Tabs */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code' | 'optimizer')} className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between border-b border-border">
                 <TabsList className="h-auto p-0 bg-transparent justify-start">
                   <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                   <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                  <TabsTrigger value="optimizer" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Optimizer</TabsTrigger>
                 </TabsList>
                 <div className="flex gap-2">
                   <CardButton
@@ -1603,6 +1620,18 @@ const DetailContent = React.memo(({
                     />
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="optimizer" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                <ScoreOptimizerWorkbench
+                  scoreId={score.id}
+                  scoreName={score.name}
+                  scorecardName={scorecardName || 'Unknown Scorecard'}
+                  championVersionId={championVersionId}
+                  versions={versions ?? []}
+                  onPromoteToChampion={onPromoteToChampion}
+                  onToggleFeature={onToggleFeature}
+                />
               </TabsContent>
             </Tabs>
           </div>
@@ -1937,6 +1966,8 @@ export function ScoreComponent({
                     guidelines
                     isFeatured
                     note
+                    branch
+                    parentVersionId
                     createdAt
                     updatedAt
                   }
