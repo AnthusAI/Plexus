@@ -58,10 +58,12 @@ def _json_dumps(value: Dict[str, Any]) -> str:
 
 
 def _build_runtime_identity(command: Optional[str]) -> Dict[str, Any]:
+    now_iso = datetime.now(timezone.utc).isoformat()
     return {
         "pid": os.getpid(),
         "host": socket.gethostname(),
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": now_iso,
+        "lastHeartbeatAt": now_iso,
         "command": command or "",
     }
 
