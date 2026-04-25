@@ -171,7 +171,11 @@ export function ScoreProcedureList({
     const filtered = scope === 'version' && versionId
       ? runs.filter((run) => {
           if (manifestTouchesVersion(run.manifest, versionId)) return true
-          return run.scoreVersionId === versionId
+          if (run.scoreVersionId === versionId) return true
+          // Keep unindexed runs with unknown version linkage visible instead of hiding
+          // procedures that may have touched this version but lack manifest lineage.
+          if (!run.indexed && !run.scoreVersionId) return true
+          return false
         })
       : runs
     return sortProcedureRuns(filtered, sortBy)
@@ -207,8 +211,8 @@ export function ScoreProcedureList({
 
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        <div className="rounded-md bg-muted/40 p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-4 pb-4">
         {showHeader && (
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -249,7 +253,7 @@ export function ScoreProcedureList({
             return (
               <div
                 key={run.procedureId}
-                className={`rounded-md ${index % 2 === 0 ? 'bg-background' : 'bg-muted/60'}`}
+                className={index % 2 === 0 ? '' : 'bg-muted/60'}
               >
                 <ProcedureTask
                   variant="grid"
