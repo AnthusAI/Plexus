@@ -39,7 +39,8 @@ import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-di
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
-import { ScoreOptimizerWorkbench } from '@/components/ui/score-optimizer-workbench'
+import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
+import { ScoreEvaluationList } from '@/components/ui/score-evaluation-list'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
@@ -140,6 +141,8 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onSave?: () => void
   onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
+  onViewProcedures?: () => void
+  onViewEvaluations?: () => void
   onDelete?: () => void
   exampleItems?: Array<{
     id: string
@@ -172,6 +175,8 @@ interface DetailContentProps {
   onCancel?: () => void
   onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
+  onViewProcedures?: () => void
+  onViewEvaluations?: () => void
   onDelete?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
@@ -598,6 +603,8 @@ const DetailContent = React.memo(({
   onCancel,
   onFeedbackAlignment,
   onCostAnalysis,
+  onViewProcedures,
+  onViewEvaluations,
   onDelete,
   hasChanges,
   versions,
@@ -986,9 +993,9 @@ const DetailContent = React.memo(({
 
   // Add sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
-  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code' | 'optimizer'>('guidelines')
+  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code' | 'procedures' | 'evaluations'>('guidelines')
   const [isGuidelinesInlineEdit, setIsGuidelinesInlineEdit] = React.useState(false)
-  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code' | 'optimizer'>('guidelines')
+  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code' | 'procedures' | 'evaluations'>('guidelines')
   const [newVersionNote, setNewVersionNote] = React.useState('')
   const [associatedDatasets, setAssociatedDatasets] = React.useState<AssociatedDatasetView[]>([])
   const [isAssociatedDatasetsLoading, setIsAssociatedDatasetsLoading] = React.useState(false)
@@ -1109,6 +1116,18 @@ const DetailContent = React.memo(({
                       <DropdownMenuItem onClick={onCostAnalysis}>
                         <Coins className="mr-2 h-4 w-4" />
                         Analyze Cost
+                      </DropdownMenuItem>
+                    )}
+                    {onViewProcedures && (
+                      <DropdownMenuItem onClick={onViewProcedures}>
+                        <FileStack className="mr-2 h-4 w-4" />
+                        View Procedures
+                      </DropdownMenuItem>
+                    )}
+                    {onViewEvaluations && (
+                      <DropdownMenuItem onClick={onViewEvaluations}>
+                        <FlaskConical className="mr-2 h-4 w-4" />
+                        View Evaluations
                       </DropdownMenuItem>
                     )}
                     {onDelete && (
@@ -1325,12 +1344,13 @@ const DetailContent = React.memo(({
 
             {/* Tabbed Content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code' | 'optimizer')} className="flex-1 flex flex-col min-h-0">
+              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code' | 'procedures' | 'evaluations')} className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-border">
                   <TabsList className="h-auto p-0 bg-transparent justify-start">
                     <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                     <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
-                    <TabsTrigger value="optimizer" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Optimizer</TabsTrigger>
+                    <TabsTrigger value="procedures" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Procedures</TabsTrigger>
+                    <TabsTrigger value="evaluations" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Evaluations</TabsTrigger>
                   </TabsList>
                   <div className="flex gap-1 pr-3">
                     <CardButton
@@ -1478,15 +1498,23 @@ const DetailContent = React.memo(({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="optimizer" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0">
-                  <ScoreOptimizerWorkbench
+                <TabsContent value="procedures" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                  <ScoreProcedureList
                     scoreId={score.id}
                     scoreName={score.name}
                     scorecardName={scorecardName || 'Unknown Scorecard'}
-                    championVersionId={championVersionId}
-                    versions={versions ?? []}
-                    onPromoteToChampion={onPromoteToChampion}
-                    onToggleFeature={onToggleFeature}
+                    scope="version"
+                    versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                    className="flex-1 min-h-0"
+                  />
+                </TabsContent>
+
+                <TabsContent value="evaluations" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                  <ScoreEvaluationList
+                    scoreId={score.id}
+                    scope="version"
+                    versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                    className="flex-1 min-h-0"
                   />
                 </TabsContent>
               </Tabs>
@@ -1500,12 +1528,13 @@ const DetailContent = React.memo(({
         <div className="flex flex-col h-full w-full">
           {/* Fullscreen Tabs */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code' | 'optimizer')} className="flex-1 flex flex-col min-h-0">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code' | 'procedures' | 'evaluations')} className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between border-b border-border">
                 <TabsList className="h-auto p-0 bg-transparent justify-start">
                   <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                   <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
-                  <TabsTrigger value="optimizer" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Optimizer</TabsTrigger>
+                  <TabsTrigger value="procedures" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Procedures</TabsTrigger>
+                  <TabsTrigger value="evaluations" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Evaluations</TabsTrigger>
                 </TabsList>
                 <div className="flex gap-2">
                   <CardButton
@@ -1622,15 +1651,23 @@ const DetailContent = React.memo(({
                 </div>
               </TabsContent>
 
-              <TabsContent value="optimizer" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
-                <ScoreOptimizerWorkbench
+              <TabsContent value="procedures" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                <ScoreProcedureList
                   scoreId={score.id}
                   scoreName={score.name}
                   scorecardName={scorecardName || 'Unknown Scorecard'}
-                  championVersionId={championVersionId}
-                  versions={versions ?? []}
-                  onPromoteToChampion={onPromoteToChampion}
-                  onToggleFeature={onToggleFeature}
+                  scope="version"
+                  versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                  className="flex-1 min-h-0"
+                />
+              </TabsContent>
+
+              <TabsContent value="evaluations" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                <ScoreEvaluationList
+                  scoreId={score.id}
+                  scope="version"
+                  versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                  className="flex-1 min-h-0"
                 />
               </TabsContent>
             </Tabs>
@@ -1797,6 +1834,8 @@ export function ScoreComponent({
   onSave,
   onFeedbackAlignment,
   onCostAnalysis,
+  onViewProcedures,
+  onViewEvaluations,
   onDelete,
   exampleItems = [],
   scorecardName,
@@ -2595,6 +2634,8 @@ export function ScoreComponent({
               onCancel={handleCancel}
               onFeedbackAlignment={onFeedbackAlignment}
               onCostAnalysis={onCostAnalysis}
+              onViewProcedures={onViewProcedures}
+              onViewEvaluations={onViewEvaluations}
               onDelete={onDelete}
               hasChanges={hasChanges}
               versions={versions}
