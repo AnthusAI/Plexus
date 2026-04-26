@@ -104,7 +104,7 @@ describe('ScoreOptimizerWorkbench', () => {
 
     expect(screen.getByText('Winning version: version-1')).toBeInTheDocument()
     expect(screen.getByText('Feedback AC1: 0.8300')).toBeInTheDocument()
-    expect(screen.getByText('Accuracy AC1: 0.8800')).toBeInTheDocument()
+    expect(screen.getByText('Regression AC1: 0.8800')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Runtime log/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Event stream/i })).toBeInTheDocument()
     expect(screen.getByText('Champion')).toBeInTheDocument()

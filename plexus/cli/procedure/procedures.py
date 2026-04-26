@@ -1623,8 +1623,8 @@ def index_optimizer_run(procedure_id: str, force: bool, output: str):
     table.add_row("Runtime log", payload["pointer"]["runtime_log"])
     table.add_row("Completed cycles", str((payload["summary"] or {}).get("completed_cycles") or "—"))
     table.add_row("Winning version", (payload["best"] or {}).get("winning_version_id") or "—")
-    table.add_row("Best feedback eval", (payload["best"] or {}).get("best_feedback_evaluation_id") or "—")
-    table.add_row("Best accuracy eval", (payload["best"] or {}).get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Best feedback alignment evaluation", (payload["best"] or {}).get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", (payload["best"] or {}).get("best_accuracy_evaluation_id") or "—")
     console.print(table)
 
 
@@ -1669,8 +1669,8 @@ def optimizer_summary(procedure_id: str, runtime_log: bool, events: bool, log_li
     table.add_row("Cycles", f"{summary.get('completed_cycles') or '—'}/{summary.get('configured_max_iterations') or '—'}")
     table.add_row("Stop reason", summary.get("stop_reason") or "—")
     table.add_row("Winning version", best.get("winning_version_id") or "—")
-    table.add_row("Best feedback eval", best.get("best_feedback_evaluation_url") or best.get("best_feedback_evaluation_id") or "—")
-    table.add_row("Best accuracy eval", best.get("best_accuracy_evaluation_url") or best.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Best feedback alignment evaluation", best.get("best_feedback_evaluation_url") or best.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", best.get("best_accuracy_evaluation_url") or best.get("best_accuracy_evaluation_id") or "—")
     table.add_row("Manifest", (payload.get("artifact_pointer") or {}).get("manifest") or "—")
     table.add_row("Runtime log", (payload.get("artifact_pointer") or {}).get("runtime_log") or "—")
     console.print(table)
@@ -1680,7 +1680,7 @@ def optimizer_summary(procedure_id: str, runtime_log: bool, events: bool, log_li
     cycles.add_column("Status", style="white")
     cycles.add_column("Version", style="magenta")
     cycles.add_column("Feedback AC1", style="green")
-    cycles.add_column("Accuracy AC1", style="green")
+    cycles.add_column("Regression AC1", style="green")
     for cycle in payload.get("cycles") or []:
         cycles.add_row(
             str(cycle.get("cycle") or "—"),

@@ -153,9 +153,13 @@ describe('ScoreProcedureList', () => {
     await user.click(screen.getAllByRole('button', { name: /more options/i })[0])
     expect(screen.getByRole('menuitem', { name: /runtime log/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /event stream/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /open best feedback eval/i })).toHaveAttribute(
+    expect(screen.getByRole('menuitem', { name: /open best feedback alignment evaluation/i })).toHaveAttribute(
       'href',
       '/lab/evaluations/eval-feedback-1'
+    )
+    expect(screen.getByRole('menuitem', { name: /open best regression alignment evaluation/i })).toHaveAttribute(
+      'href',
+      '/lab/evaluations/eval-accuracy-1'
     )
   })
 
