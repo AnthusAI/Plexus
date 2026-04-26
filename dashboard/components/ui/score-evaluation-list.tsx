@@ -22,6 +22,7 @@ export interface ScoreEvaluationListProps {
   scope: EvaluationScope
   versionId?: string | null
   showHeader?: boolean
+  surface?: 'plain' | 'slot'
   className?: string
 }
 
@@ -159,6 +160,7 @@ export function ScoreEvaluationList({
   scope,
   versionId = null,
   showHeader = true,
+  surface = 'plain',
   className,
 }: ScoreEvaluationListProps) {
   const [evaluations, setEvaluations] = React.useState<ScoreEvaluationView[]>([])
@@ -224,6 +226,7 @@ export function ScoreEvaluationList({
     scope === 'score'
       ? 'All evaluations for this score, newest first by default.'
       : 'Evaluations created for the selected version.'
+  const usesSlotSurface = surface === 'slot'
 
   if (scope === 'version' && !versionId) {
     return (
@@ -236,7 +239,8 @@ export function ScoreEvaluationList({
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-4 pb-4">
+        <div className={cn(usesSlotSurface ? 'h-full' : 'px-4 pb-4')}>
+        <div className={cn(usesSlotSurface && 'min-h-full bg-background p-3')}>
         {showHeader && (
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -314,7 +318,7 @@ export function ScoreEvaluationList({
             return (
             <div
               key={evaluation.id}
-              className={index % 2 === 0 ? '' : 'bg-muted/60'}
+              className={!usesSlotSurface && index % 2 !== 0 ? 'bg-muted/60' : ''}
             >
               <EvaluationTask
                 variant="grid"
@@ -352,6 +356,7 @@ export function ScoreEvaluationList({
             </div>
             )
           })}
+        </div>
         </div>
         </div>
       </div>

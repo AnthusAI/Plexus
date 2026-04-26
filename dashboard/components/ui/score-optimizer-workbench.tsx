@@ -15,6 +15,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Timestamp } from '@/components/ui/timestamp'
+import {
+  compareOptimizerMetricValues,
+  OPTIMIZER_DATASETS,
+  OPTIMIZER_METRICS,
+  optimizerDatasetLabel,
+  optimizerMetricLabel,
+  optimizerMetricValueFromSource,
+  type OptimizerDatasetKey,
+  type OptimizerMetricKey,
+} from '@/components/ui/optimizer-results-utils'
 
 const getAmplifyClient = (() => {
   let client: any = null
@@ -39,10 +49,16 @@ type OptimizerManifest = {
     best_accuracy_evaluation_id?: string | null
     best_feedback_alignment?: number | null
     best_accuracy_alignment?: number | null
-    winning_feedback_metrics?: { alignment?: number | null; accuracy?: number | null } | null
-    winning_accuracy_metrics?: { alignment?: number | null; accuracy?: number | null } | null
+    winning_feedback_metrics?: Partial<Record<OptimizerMetricKey, number | null>> | null
+    winning_accuracy_metrics?: Partial<Record<OptimizerMetricKey, number | null>> | null
   }
   cycles?: Array<Record<string, any>>
+}
+
+type VersionMetricSort = `${OptimizerDatasetKey}_${OptimizerMetricKey}`
+type VersionMetricResult = {
+  evaluationId?: string | null
+  value: number | null
 }
 
 type ProcedureRecord = {
@@ -80,6 +96,7 @@ type CandidateVersionSummary = {
   bestAccuracyEvaluationId?: string | null
   bestFeedbackAlignment?: number | null
   bestAccuracyAlignment?: number | null
+  bestByMetric: Partial<Record<VersionMetricSort, VersionMetricResult>>
   sourceProcedureIds: string[]
 }
 
@@ -131,8 +148,8 @@ function aggregateCandidatesFromRuns(
     sourceProcedureId: string,
     feedbackEvalId?: string | null,
     accuracyEvalId?: string | null,
-    feedbackAlignment?: number | null,
-    accuracyAlignment?: number | null
+    feedbackMetrics?: Record<string, any> | null,
+    accuracyMetrics?: Record<string, any> | null
   ) => {
     if (!versionId) return
     const version = versionsById.get(versionId)
@@ -147,26 +164,39 @@ function aggregateCandidatesFromRuns(
       bestAccuracyEvaluationId: null,
       bestFeedbackAlignment: null,
       bestAccuracyAlignment: null,
+      bestByMetric: {},
       sourceProcedureIds: [],
     }
 
     if (!existing.sourceProcedureIds.includes(sourceProcedureId)) {
       existing.sourceProcedureIds.push(sourceProcedureId)
     }
-    if (
-      typeof feedbackAlignment === 'number' &&
-      (existing.bestFeedbackAlignment == null || feedbackAlignment > existing.bestFeedbackAlignment)
-    ) {
-      existing.bestFeedbackAlignment = feedbackAlignment
-      existing.bestFeedbackEvaluationId = feedbackEvalId ?? null
+    const source = {
+      feedback_evaluation_id: feedbackEvalId,
+      accuracy_evaluation_id: accuracyEvalId,
+      feedback_metrics: feedbackMetrics,
+      accuracy_metrics: accuracyMetrics,
     }
-    if (
-      typeof accuracyAlignment === 'number' &&
-      (existing.bestAccuracyAlignment == null || accuracyAlignment > existing.bestAccuracyAlignment)
-    ) {
-      existing.bestAccuracyAlignment = accuracyAlignment
-      existing.bestAccuracyEvaluationId = accuracyEvalId ?? null
+
+    for (const dataset of OPTIMIZER_DATASETS) {
+      for (const metric of OPTIMIZER_METRICS) {
+        const value = optimizerMetricValueFromSource(source, dataset, metric)
+        if (value == null) continue
+        const key = `${dataset}_${metric}` as VersionMetricSort
+        const current = existing.bestByMetric[key]
+        if (!current || compareOptimizerMetricValues(metric, value, current.value) < 0) {
+          existing.bestByMetric[key] = {
+            value,
+            evaluationId: dataset === 'feedback' ? feedbackEvalId : accuracyEvalId,
+          }
+        }
+      }
     }
+
+    existing.bestFeedbackAlignment = existing.bestByMetric.feedback_alignment?.value ?? existing.bestFeedbackAlignment
+    existing.bestFeedbackEvaluationId = existing.bestByMetric.feedback_alignment?.evaluationId ?? existing.bestFeedbackEvaluationId
+    existing.bestAccuracyAlignment = existing.bestByMetric.regression_alignment?.value ?? existing.bestAccuracyAlignment
+    existing.bestAccuracyEvaluationId = existing.bestByMetric.regression_alignment?.evaluationId ?? existing.bestAccuracyEvaluationId
     byVersionId.set(versionId, existing)
   }
 
@@ -178,8 +208,14 @@ function aggregateCandidatesFromRuns(
       procedureId,
       best?.best_feedback_evaluation_id,
       best?.best_accuracy_evaluation_id,
-      best?.winning_feedback_metrics?.alignment ?? best?.best_feedback_alignment ?? null,
-      best?.winning_accuracy_metrics?.alignment ?? best?.best_accuracy_alignment ?? null
+      {
+        ...(best?.winning_feedback_metrics ?? {}),
+        alignment: best?.winning_feedback_metrics?.alignment ?? best?.best_feedback_alignment ?? null,
+      },
+      {
+        ...(best?.winning_accuracy_metrics ?? {}),
+        alignment: best?.winning_accuracy_metrics?.alignment ?? best?.best_accuracy_alignment ?? null,
+      }
     )
     for (const cycle of run.manifest?.cycles ?? []) {
       touch(
@@ -187,8 +223,8 @@ function aggregateCandidatesFromRuns(
         procedureId,
         cycle.feedback_evaluation_id ?? null,
         cycle.accuracy_evaluation_id ?? null,
-        cycle.feedback_metrics?.alignment ?? null,
-        cycle.accuracy_metrics?.alignment ?? null
+        cycle.feedback_metrics ?? null,
+        cycle.accuracy_metrics ?? cycle.regression_metrics ?? null
       )
       for (const candidate of cycle.candidates ?? []) {
         touch(
@@ -196,8 +232,8 @@ function aggregateCandidatesFromRuns(
           procedureId,
           candidate.feedback_evaluation_id ?? null,
           candidate.accuracy_evaluation_id ?? null,
-          candidate.feedback_metrics?.alignment ?? null,
-          candidate.accuracy_metrics?.alignment ?? null
+          candidate.feedback_metrics ?? null,
+          candidate.accuracy_metrics ?? candidate.regression_metrics ?? null
         )
       }
     }
@@ -235,6 +271,7 @@ export function ScoreOptimizerWorkbench({
     title: string
     content: string
   } | null>(null)
+  const [versionSort, setVersionSort] = React.useState<VersionMetricSort>('feedback_alignment')
 
   const openArtifactViewer = React.useCallback(
     async (artifactKey: string | null | undefined, title: string) => {
@@ -355,10 +392,29 @@ export function ScoreOptimizerWorkbench({
     }
   }, [scoreId])
 
-  const candidateVersions = React.useMemo(
-    () => aggregateCandidatesFromRuns(runs, versions, championVersionId),
-    [runs, versions, championVersionId]
+  const versionSortOptions = React.useMemo(
+    () =>
+      OPTIMIZER_DATASETS.flatMap((dataset) =>
+        OPTIMIZER_METRICS.map((metric) => ({
+          value: `${dataset}_${metric}` as VersionMetricSort,
+          label: `Best ${optimizerDatasetLabel(dataset)} ${optimizerMetricLabel(metric)}`,
+        }))
+      ),
+    []
   )
+
+  const candidateVersions = React.useMemo(() => {
+    const [, metric] = versionSort.split('_') as [OptimizerDatasetKey, OptimizerMetricKey]
+    return aggregateCandidatesFromRuns(runs, versions, championVersionId).sort((left, right) => {
+      const metricCompare = compareOptimizerMetricValues(
+        metric,
+        left.bestByMetric[versionSort]?.value,
+        right.bestByMetric[versionSort]?.value
+      )
+      if (metricCompare !== 0) return metricCompare
+      return left.versionId.localeCompare(right.versionId)
+    })
+  }, [runs, versions, championVersionId, versionSort])
 
   return (
     <div className="flex flex-col gap-4 p-4 overflow-y-auto">
@@ -478,13 +534,28 @@ export function ScoreOptimizerWorkbench({
               <h3 className="font-semibold">Versions</h3>
               <p className="text-sm text-muted-foreground">Candidate versions with their best visible evaluations.</p>
             </div>
+            <select
+              className="rounded-md border-0 bg-background px-3 py-1.5 text-sm focus:outline-none"
+              value={versionSort}
+              aria-label="Version sort"
+              onChange={(event) => setVersionSort(event.target.value as VersionMetricSort)}
+            >
+              {versionSortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-3">
             {candidateVersions.length === 0 && (
               <div className="text-sm text-muted-foreground">No indexed candidate versions yet.</div>
             )}
-            {candidateVersions.map((candidate) => (
+            {candidateVersions.map((candidate) => {
+              const [selectedDataset, selectedMetric] = versionSort.split('_') as [OptimizerDatasetKey, OptimizerMetricKey]
+              const selectedMetricResult = candidate.bestByMetric[versionSort]
+              return (
               <div key={candidate.versionId} className="rounded-md border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -508,6 +579,10 @@ export function ScoreOptimizerWorkbench({
                 </div>
 
                 <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                  <div>
+                    Best {optimizerDatasetLabel(selectedDataset)} {optimizerMetricLabel(selectedMetric)}:{' '}
+                    {selectedMetricResult?.value?.toFixed(4) ?? '—'}
+                  </div>
                   <div>Feedback AC1: {candidate.bestFeedbackAlignment?.toFixed(4) ?? '—'}</div>
                   <div>Regression AC1: {candidate.bestAccuracyAlignment?.toFixed(4) ?? '—'}</div>
                   <div>Feedback evaluation: {candidate.bestFeedbackEvaluationId || '—'}</div>
@@ -554,6 +629,14 @@ export function ScoreOptimizerWorkbench({
                       </a>
                     </Button>
                   )}
+                  {selectedMetricResult?.evaluationId && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={evaluationUrl(selectedMetricResult.evaluationId) ?? '#'} target="_blank" rel="noreferrer">
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        Selected metric evaluation
+                      </a>
+                    </Button>
+                  )}
                   {candidate.bestAccuracyEvaluationId && (
                     <Button variant="outline" size="sm" asChild>
                       <a href={evaluationUrl(candidate.bestAccuracyEvaluationId) ?? '#'} target="_blank" rel="noreferrer">
@@ -584,7 +667,8 @@ export function ScoreOptimizerWorkbench({
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
       </div>
