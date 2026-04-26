@@ -58,6 +58,7 @@ export type ProcedureRecord = {
   updatedAt?: string | null
   metadata?: string | null
   scoreVersionId?: string | null
+  accountId?: string | null
 }
 
 export type ProcedureTaskRecord = NonNullable<OptimizerRunView['task']>
@@ -478,84 +479,100 @@ export async function openArtifactText(artifactKey: string | null | undefined) {
 
 export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Promise<OptimizerRunView[]> {
   const client = getAmplifyClient()
-  const [procedureResponse, taskResponse] = await Promise.all([
-    client.graphql({
-      query: `
-        query ListProcedureByScoreIdAndUpdatedAtWorkbench(
-          $scoreId: String!
-          $sortDirection: ModelSortDirection
-          $limit: Int
+  const procedureResponse = await client.graphql({
+    query: `
+      query ListProcedureByScoreIdAndUpdatedAtWorkbench(
+        $scoreId: String!
+        $sortDirection: ModelSortDirection
+        $limit: Int
+      ) {
+        listProcedureByScoreIdAndUpdatedAt(
+          scoreId: $scoreId
+          sortDirection: $sortDirection
+          limit: $limit
         ) {
-          listProcedureByScoreIdAndUpdatedAt(
-            scoreId: $scoreId
-            sortDirection: $sortDirection
-            limit: $limit
-          ) {
-            items {
-              id
-              name
-              description
-              status
-              metadata
-              updatedAt
-              scoreVersionId
-            }
+          items {
+            id
+            name
+            description
+            status
+            metadata
+            updatedAt
+            scoreVersionId
+            accountId
           }
         }
-      `,
-      variables: {
-        scoreId,
-        sortDirection: 'DESC',
-        limit,
-      },
-    }) as any,
-    client.graphql({
-      query: `
-        query ListTaskByScoreIdForProcedureWorkbench($scoreId: String!, $limit: Int) {
-          listTaskByScoreId(scoreId: $scoreId, limit: $limit) {
-            items {
-              id
-              type
-              status
-              target
-              command
-              description
-              dispatchStatus
-              metadata
-              createdAt
-              startedAt
-              completedAt
-              estimatedCompletionAt
-              errorMessage
-              errorDetails
-              currentStageId
-              stages {
-                items {
-                  id
-                  name
-                  order
-                  status
-                  statusMessage
-                  startedAt
-                  completedAt
-                  estimatedCompletionAt
-                  processedItems
-                  totalItems
+      }
+    `,
+    variables: {
+      scoreId,
+      sortDirection: 'DESC',
+      limit,
+    },
+  }) as any
+
+  const procedures: ProcedureRecord[] = procedureResponse.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
+  const accountIds = [...new Set(procedures.map((procedure) => procedure.accountId).filter(Boolean))]
+  const taskResponses = await Promise.all(
+    accountIds.map((accountId) =>
+      client.graphql({
+        query: `
+          query ListTaskByAccountIdAndUpdatedAtForProcedureWorkbench(
+            $accountId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+          ) {
+            listTaskByAccountIdAndUpdatedAt(
+              accountId: $accountId
+              sortDirection: $sortDirection
+              limit: $limit
+            ) {
+              items {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
                 }
               }
             }
           }
-        }
-      `,
-      variables: {
-        scoreId,
-        limit: 1000,
-      },
-    }) as any,
-  ])
+        `,
+        variables: {
+          accountId,
+          sortDirection: 'DESC',
+          limit: 1000,
+        },
+      }) as any
+    )
+  )
 
-  const procedures: ProcedureRecord[] = procedureResponse.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
-  const taskItems: ProcedureTaskRecord[] = taskResponse.data?.listTaskByScoreId?.items ?? []
+  const taskItems: ProcedureTaskRecord[] = taskResponses.flatMap(
+    (response) => response.data?.listTaskByAccountIdAndUpdatedAt?.items ?? []
+  )
   const tasksByProcedureId = new Map<string, ProcedureTaskRecord>()
   for (const task of taskItems) {
     const target = String(task.target ?? '')

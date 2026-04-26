@@ -37,10 +37,10 @@ describe('ScoreProcedureList', () => {
     jest.clearAllMocks()
 
     mockGraphql.mockImplementation(async ({ query }: { query: string }) => {
-      if (query.includes('listTaskByScoreId')) {
+      if (query.includes('listTaskByAccountIdAndUpdatedAt')) {
         return {
           data: {
-            listTaskByScoreId: {
+            listTaskByAccountIdAndUpdatedAt: {
               items: [
                 {
                   id: 'task-1',
@@ -101,6 +101,7 @@ describe('ScoreProcedureList', () => {
                 }),
                 updatedAt: '2026-04-25T00:00:00Z',
                 scoreVersionId: 'version-0',
+                accountId: 'account-1',
               },
               {
                 id: 'proc-2',
@@ -110,6 +111,7 @@ describe('ScoreProcedureList', () => {
                 metadata: null,
                 updatedAt: '2026-04-24T00:00:00Z',
                 scoreVersionId: 'version-x',
+                accountId: 'account-1',
               },
             ],
           },
