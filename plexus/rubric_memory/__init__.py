@@ -1,4 +1,9 @@
 from .authority import RubricAuthorityError, RubricAuthorityResolver
+from .local_corpus import (
+    LocalRubricMemoryCorpusPaths,
+    LocalRubricMemoryCorpusResolver,
+    LocalRubricMemorySource,
+)
 from .models import (
     ConfidenceInputs,
     ConfidenceLevel,
@@ -19,6 +24,9 @@ __all__ = [
     "ConfidenceLevel",
     "EvidenceClassification",
     "EvidenceSnippet",
+    "LocalRubricMemoryCorpusPaths",
+    "LocalRubricMemoryCorpusResolver",
+    "LocalRubricMemorySource",
     "RubricAuthority",
     "RubricAuthorityError",
     "RubricAuthorityResolver",
