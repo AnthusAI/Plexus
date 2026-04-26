@@ -191,6 +191,15 @@ export function ScoreEvaluationList({
   const [sortBy, setSortBy] = React.useState<EvaluationSort>('updated')
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [typeFilter, setTypeFilter] = React.useState('all')
+  const controlLoadingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (controlLoadingTimeoutRef.current) {
+        clearTimeout(controlLoadingTimeoutRef.current)
+      }
+    }
+  }, [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -222,11 +231,15 @@ export function ScoreEvaluationList({
   }, [scoreId])
 
   const applyControlChange = React.useCallback((apply: () => void) => {
+    if (controlLoadingTimeoutRef.current) {
+      clearTimeout(controlLoadingTimeoutRef.current)
+    }
     setIsApplyingControls(true)
     apply()
-    requestAnimationFrame(() => {
+    controlLoadingTimeoutRef.current = setTimeout(() => {
       setIsApplyingControls(false)
-    })
+      controlLoadingTimeoutRef.current = null
+    }, 120)
   }, [])
 
   const visibleEvaluations = React.useMemo(() => {
