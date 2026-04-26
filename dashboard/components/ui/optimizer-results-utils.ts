@@ -7,6 +7,21 @@ const getAmplifyClient = (() => {
   return () => (client ??= generateClient())
 })()
 
+export type OptimizerMetricKey = 'alignment' | 'accuracy' | 'precision' | 'recall' | 'cost'
+export type OptimizerDatasetKey = 'feedback' | 'regression'
+export type OptimizerMetricValues = Partial<Record<OptimizerMetricKey, number | null>>
+
+export const OPTIMIZER_METRICS: OptimizerMetricKey[] = ['alignment', 'accuracy', 'precision', 'recall', 'cost']
+export const OPTIMIZER_DATASETS: OptimizerDatasetKey[] = ['feedback', 'regression']
+
+export type OptimizerBestMetricResult = {
+  dataset: OptimizerDatasetKey
+  metric: OptimizerMetricKey
+  value: number
+  evaluationId: string
+  versionId?: string | null
+}
+
 export type OptimizerManifest = {
   procedure?: {
     id?: string
@@ -29,8 +44,8 @@ export type OptimizerManifest = {
     best_accuracy_evaluation_id?: string | null
     best_feedback_alignment?: number | null
     best_accuracy_alignment?: number | null
-    winning_feedback_metrics?: { alignment?: number | null; accuracy?: number | null } | null
-    winning_accuracy_metrics?: { alignment?: number | null; accuracy?: number | null } | null
+    winning_feedback_metrics?: OptimizerMetricValues | null
+    winning_accuracy_metrics?: OptimizerMetricValues | null
   }
   cycles?: Array<Record<string, any>>
 }
@@ -252,6 +267,138 @@ export function safeJsonParse<T>(value: unknown): T | null {
 
 export function evaluationUrl(evaluationId?: string | null): string | null {
   return evaluationId ? `/lab/evaluations/${evaluationId}` : null
+}
+
+export function scoreVersionUrl(
+  scorecardId: string | null | undefined,
+  scoreId: string | null | undefined,
+  versionId: string | null | undefined
+): string | null {
+  return scorecardId && scoreId && versionId
+    ? `/lab/scorecards/${scorecardId}/scores/${scoreId}/versions/${versionId}`
+    : null
+}
+
+export function optimizerMetricLabel(metric: OptimizerMetricKey): string {
+  switch (metric) {
+    case 'alignment':
+      return 'alignment'
+    case 'accuracy':
+      return 'accuracy'
+    case 'precision':
+      return 'precision'
+    case 'recall':
+      return 'recall'
+    case 'cost':
+      return 'cost'
+  }
+}
+
+export function optimizerDatasetLabel(dataset: OptimizerDatasetKey): string {
+  return dataset === 'feedback' ? 'feedback' : 'regression'
+}
+
+export function compareOptimizerMetricValues(
+  metric: OptimizerMetricKey,
+  left: number | null | undefined,
+  right: number | null | undefined
+): number {
+  const leftHasMetric = typeof left === 'number' && Number.isFinite(left)
+  const rightHasMetric = typeof right === 'number' && Number.isFinite(right)
+  if (leftHasMetric && rightHasMetric && left !== right) {
+    return metric === 'cost' ? left! - right! : right! - left!
+  }
+  if (leftHasMetric !== rightHasMetric) return leftHasMetric ? -1 : 1
+  return 0
+}
+
+function metricFromObject(source: unknown, metric: OptimizerMetricKey): number | null {
+  if (!source || typeof source !== 'object') return null
+  const record = source as Record<string, unknown>
+  if (metric === 'alignment') {
+    return toFiniteNumber(record.alignment) ?? toFiniteNumber(record.ac1) ?? toFiniteNumber(record.agreement)
+  }
+  if (metric === 'cost') {
+    return (
+      toFiniteNumber(record.cost) ??
+      toFiniteNumber(record.total_cost) ??
+      toFiniteNumber(record.totalCost) ??
+      toFiniteNumber(record.cost_per_item) ??
+      toFiniteNumber(record.costPerItem)
+    )
+  }
+  return toFiniteNumber(record[metric])
+}
+
+function evaluationIdForDataset(source: Record<string, any>, dataset: OptimizerDatasetKey): string | null {
+  const value =
+    dataset === 'feedback'
+      ? source.feedback_evaluation_id ?? source.best_feedback_evaluation_id
+      : source.accuracy_evaluation_id ?? source.regression_evaluation_id ?? source.best_accuracy_evaluation_id
+  return typeof value === 'string' && value ? value : null
+}
+
+function metricsForDataset(source: Record<string, any>, dataset: OptimizerDatasetKey): unknown {
+  return dataset === 'feedback'
+    ? source.feedback_metrics ?? source.winning_feedback_metrics
+    : source.accuracy_metrics ?? source.regression_metrics ?? source.winning_accuracy_metrics
+}
+
+function versionIdFromSource(source: Record<string, any>): string | null {
+  const value = source.version_id ?? source.score_version_id ?? source.winning_version_id
+  return typeof value === 'string' && value ? value : null
+}
+
+export function optimizerMetricValueFromSource(
+  source: Record<string, any> | null | undefined,
+  dataset: OptimizerDatasetKey,
+  metric: OptimizerMetricKey
+): number | null {
+  if (!source) return null
+  const metricsValue = metricFromObject(metricsForDataset(source, dataset), metric)
+  if (metricsValue != null) return metricsValue
+  if (dataset === 'feedback' && metric === 'alignment') {
+    return toFiniteNumber(source.best_feedback_alignment)
+  }
+  if (dataset === 'regression' && metric === 'alignment') {
+    return toFiniteNumber(source.best_accuracy_alignment)
+  }
+  return null
+}
+
+export function findBestOptimizerEvaluation(
+  manifest: OptimizerManifest | null | undefined,
+  dataset: OptimizerDatasetKey,
+  metric: OptimizerMetricKey
+): OptimizerBestMetricResult | null {
+  if (!manifest) return null
+  let bestResult: OptimizerBestMetricResult | null = null
+
+  const consider = (source: Record<string, any> | null | undefined) => {
+    if (!source) return
+    const evaluationId = evaluationIdForDataset(source, dataset)
+    const value = optimizerMetricValueFromSource(source, dataset, metric)
+    if (!evaluationId || value == null) return
+    const candidate: OptimizerBestMetricResult = {
+      dataset,
+      metric,
+      value,
+      evaluationId,
+      versionId: versionIdFromSource(source),
+    }
+    if (!bestResult || compareOptimizerMetricValues(metric, candidate.value, bestResult.value) < 0) {
+      bestResult = candidate
+    }
+  }
+
+  if (manifest.best) consider(manifest.best as Record<string, any>)
+  for (const cycle of manifest.cycles ?? []) {
+    consider(cycle)
+    for (const candidate of cycle?.candidates ?? []) consider(candidate)
+    for (const candidate of cycle?.no_version_candidates ?? []) consider(candidate)
+  }
+
+  return bestResult
 }
 
 export async function copyText(text: string, successMessage: string) {

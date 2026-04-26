@@ -1570,6 +1570,7 @@ export default function ScorecardsComponent({
               displayValue: `Item ${itemId.slice(0, 8)}...` // Show first 8 chars of ID as display
             };
           })}
+          scorecardId={selectedScorecard?.id}
           scorecardName={selectedScorecard?.name}
           onTaskCreated={handleTaskCreated}
         />
@@ -1584,16 +1585,19 @@ export default function ScorecardsComponent({
       scoreExplorerPanel.type === 'procedures' ? (
         <ScoreProcedureList
           scoreId={selectedScore.id}
+          scorecardId={selectedScorecard?.id}
           scoreName={selectedScore.name}
           scorecardName={selectedScorecard?.name || 'Unknown Scorecard'}
           scope="score"
           showHeader={false}
+          surface="slot"
         />
       ) : (
         <ScoreEvaluationList
           scoreId={selectedScore.id}
           scope="score"
           showHeader={false}
+          surface="slot"
         />
       )
     )

@@ -149,6 +149,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
     displayValue: string
   }>
   scorecardName?: string
+  scorecardId?: string
   onTaskCreated?: (task: any) => void
   initialSelectedVersionId?: string | null
   onVersionSelect?: (versionId: string) => void
@@ -195,6 +196,7 @@ interface DetailContentProps {
   }>
   selectedAccount?: { id: string } | null
   scorecardName?: string
+  scorecardId?: string
   onTaskCreated?: (task: any) => void
   // Guidelines editing props
   isGuidelinesExpanded?: boolean
@@ -620,6 +622,7 @@ const DetailContent = React.memo(({
   exampleItems = [],
   selectedAccount,
   scorecardName,
+  scorecardId,
   onTaskCreated,
   // Guidelines editing props
   isGuidelinesExpanded = false,
@@ -1501,6 +1504,7 @@ const DetailContent = React.memo(({
                 <TabsContent value="procedures" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
                   <ScoreProcedureList
                     scoreId={score.id}
+                    scorecardId={scorecardId}
                     scoreName={score.name}
                     scorecardName={scorecardName || 'Unknown Scorecard'}
                     scope="version"
@@ -1654,6 +1658,7 @@ const DetailContent = React.memo(({
               <TabsContent value="procedures" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
                 <ScoreProcedureList
                   scoreId={score.id}
+                  scorecardId={scorecardId}
                   scoreName={score.name}
                   scorecardName={scorecardName || 'Unknown Scorecard'}
                   scope="version"
@@ -1839,6 +1844,7 @@ export function ScoreComponent({
   onDelete,
   exampleItems = [],
   scorecardName,
+  scorecardId,
   onTaskCreated,
   initialSelectedVersionId,
   onVersionSelect,
@@ -2651,6 +2657,7 @@ export function ScoreComponent({
               exampleItems={exampleItems}
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
+              scorecardId={scorecardId}
               onTaskCreated={onTaskCreated}
               // Guidelines editing props
               isGuidelinesExpanded={isGuidelinesExpanded}
