@@ -139,6 +139,23 @@ def test_tactus_synthesizer_extracts_finish_pack_json():
     )
 
 
+def test_tactus_synthesizer_rejects_finish_without_pack_json():
+    synthesizer = TactusRubricEvidenceSynthesizer()
+    raw_call = "{'name': 'finish', 'args': {}, 'result': '<Lua table at 0x123>'}"
+
+    with pytest.raises(ValueError, match="finish without pack_json"):
+        synthesizer._extract_done_reason(raw_call)
+
+
+def test_tactus_synthesizer_loads_configured_token_budget():
+    synthesizer = TactusRubricEvidenceSynthesizer(max_tokens=12000)
+
+    tac_source = synthesizer._load_tac_source()
+
+    assert "max_tokens = 12000" in tac_source
+    assert "{{MAX_TOKENS}}" not in tac_source
+
+
 def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
     cache_root = tmp_path / "dashboard" / "scorecards"
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
