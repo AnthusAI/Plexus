@@ -152,6 +152,28 @@ function scoreFromRun(scoreName: string) {
   return scoreName ? { id: '', name: scoreName } : null
 }
 
+function ProcedureListSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="Loading procedures">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="rounded-lg bg-card p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <div className="h-4 w-48 rounded bg-muted animate-pulse" />
+              <div className="h-3 w-64 rounded bg-muted animate-pulse" />
+            </div>
+            <div className="h-8 w-8 rounded bg-muted animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 w-full rounded bg-muted animate-pulse" />
+            <div className="h-3 w-2/3 rounded bg-muted animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ScoreProcedureList({
   scoreId,
   scorecardId = null,
@@ -165,6 +187,7 @@ export function ScoreProcedureList({
 }: ScoreProcedureListProps) {
   const [runs, setRuns] = React.useState<OptimizerRunView[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isApplyingControls, setIsApplyingControls] = React.useState(false)
   const [artifactViewer, setArtifactViewer] = React.useState<{
     title: string
     content: string
@@ -190,6 +213,7 @@ export function ScoreProcedureList({
     let cancelled = false
 
     const loadRuns = async () => {
+      setRuns([])
       setIsLoading(true)
       try {
         const loadedRuns = await loadOptimizerRuns(scoreId)
@@ -214,6 +238,14 @@ export function ScoreProcedureList({
     }
   }, [scoreId])
 
+  const applySort = React.useCallback((nextSort: ProcedureSort) => {
+    setIsApplyingControls(true)
+    setSortBy(nextSort)
+    requestAnimationFrame(() => {
+      setIsApplyingControls(false)
+    })
+  }, [])
+
   const visibleRuns = React.useMemo(() => {
     const filtered = scope === 'version' && versionId
       ? runs.filter((run) => {
@@ -232,6 +264,7 @@ export function ScoreProcedureList({
       ? 'All procedures for this score, newest first by default.'
       : 'Procedures that touched the selected version.'
   const usesSlotSurface = surface === 'slot'
+  const shouldShowListSkeleton = isLoading || isApplyingControls
 
   const openArtifactViewer = React.useCallback(async (artifactKey: string | null | undefined, title: string) => {
     if (!artifactKey) {
@@ -286,7 +319,7 @@ export function ScoreProcedureList({
             id={`procedure-sort-${scope}`}
             className="rounded-md border-0 bg-background px-3 py-1.5 text-sm focus:outline-none"
             value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as ProcedureSort)}
+            onChange={(event) => applySort(event.target.value as ProcedureSort)}
           >
             <option value="updated">Updated</option>
             <option value="status">Status</option>
@@ -299,6 +332,9 @@ export function ScoreProcedureList({
           </select>
         </div>
 
+        {shouldShowListSkeleton ? (
+          <ProcedureListSkeleton />
+        ) : (
         <div className="space-y-3">
           {!isLoading && visibleRuns.length === 0 && (
             <div className="text-sm text-muted-foreground">No procedures found for this scope yet.</div>
@@ -403,6 +439,7 @@ export function ScoreProcedureList({
             )
           })}
         </div>
+        )}
         </div>
         </div>
       </div>

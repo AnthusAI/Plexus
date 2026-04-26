@@ -1,0 +1,25 @@
+{
+  "id": "plx-275c6a2a-c42c-4dc6-b3ad-178a2a7a8cf3",
+  "title": "Improve score detail and list loading states",
+  "description": "Add skeleton loading states and progressive score-version loading. Score detail must not show zero versions/no guidelines while loading. Score-level procedure/evaluation lists should clear stale rows and show task-shaped skeletons while loading or applying sort/filter changes.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "575f5a5a-ec8c-4cb8-b563-c01e8b04bb00",
+      "author": "ryan",
+      "text": "Implemented score detail skeletons and progressive score-version loading, plus task-shaped loading states for procedure/evaluation lists during initial load and sort/filter changes. Focused dashboard tests and typecheck pass.",
+      "created_at": "2026-04-26T17:33:05.532331Z"
+    }
+  ],
+  "created_at": "2026-04-26T17:25:51.894141Z",
+  "updated_at": "2026-04-26T17:33:05.559135Z",
+  "closed_at": "2026-04-26T17:33:05.559135Z",
+  "custom": {}
+}
