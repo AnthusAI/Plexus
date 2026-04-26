@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Implemented metric-aware evaluation sorting and terminology cleanup. Verified: Python optimizer results tests pass, focused dashboard Jest tests pass, score evaluations CLI help exposes precision/recall/cost sort options, and dashboard typecheck passes.",
       "created_at": "2026-04-26T15:32:46.648701Z"
+    },
+    {
+      "id": "b98fcfe5-6710-42d2-abf9-23c611e1d710",
+      "author": "ryan",
+      "text": "CI follow-up: dashboard full unit suite fails because Jest cannot resolve ESM-only @streamdown/* packages reached through ProcedureTask imports. Updating the existing frontend test configuration for this task before re-running CI.",
+      "created_at": "2026-04-26T15:46:29.396260Z"
     }
   ],
   "created_at": "2026-04-26T15:26:29.408646Z",
-  "updated_at": "2026-04-26T15:32:46.687167Z",
+  "updated_at": "2026-04-26T15:46:29.396260Z",
   "closed_at": "2026-04-26T15:32:46.687167Z",
   "custom": {}
 }
