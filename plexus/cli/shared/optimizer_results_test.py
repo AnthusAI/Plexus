@@ -209,6 +209,164 @@ def test_list_optimizer_candidates_for_score_aggregates_best_visible_metrics(mon
     assert candidates[1]["version_id"] == "version-candidate"
 
 
+def test_optimizer_summaries_are_compact_and_url_ready(monkeypatch):
+    service = OptimizerResultsService(_FakeClient())
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(),
+        task=_FakeTask(),
+        state=_sample_state(),
+    )
+    run = SimpleNamespace(
+        procedure=_sample_procedure(),
+        manifest=manifest,
+        artifact_pointer={"manifest": "tasks/task-123/optimizer/manifest.json"},
+        indexed=True,
+    )
+    run_summary = service.summarize_optimizer_run(run)
+
+    assert run_summary["procedure_id"] == "proc-123"
+    assert run_summary["winning_version_id"] == "version-accepted"
+    assert run_summary["best_feedback_evaluation_url"].endswith("/eval-fb-best")
+    assert "end_of_run_report" not in run_summary
+
+    candidate = {
+        "version_id": "version-accepted",
+        "runs": ["proc-123"],
+        "best_feedback_evaluation_id": "eval-fb-best",
+        "best_accuracy_evaluation_id": "eval-acc-best",
+        "best_feedback_alignment": 0.72,
+        "best_accuracy_alignment": 0.74,
+        "best_feedback_metrics": {"accuracy": 88.0},
+        "best_accuracy_metrics": {"accuracy": 89.0},
+        "pinned": True,
+    }
+    candidate_summary = service.summarize_optimizer_candidate(candidate)
+    assert candidate_summary["best_feedback_evaluation_url"].endswith("/eval-fb-best")
+    assert candidate_summary["best_feedback_accuracy"] == 88.0
+    assert candidate_summary["pinned"] is True
+
+
+def test_list_score_evaluations_filters_sorts_and_extracts_metadata():
+    class EvaluationClient:
+        def execute(self, query, variables):
+            assert "listEvaluationByScoreIdAndUpdatedAt" in query
+            return {
+                "listEvaluationByScoreIdAndUpdatedAt": {
+                    "items": [
+                        {
+                            "id": "eval-low",
+                            "type": "feedback",
+                            "status": "COMPLETED",
+                            "scoreVersionId": "version-1",
+                            "updatedAt": "2026-04-25T10:00:00+00:00",
+                            "accuracy": 75.0,
+                            "processedItems": 10,
+                            "totalItems": 10,
+                            "parameters": json.dumps({
+                                "notes": "baseline",
+                                "metadata": {"baseline_evaluation_id": "eval-base"},
+                            }),
+                            "metrics": json.dumps({"alignment": 0.51}),
+                        },
+                        {
+                            "id": "eval-high",
+                            "type": "accuracy",
+                            "status": "COMPLETED",
+                            "scoreVersionId": "version-2",
+                            "updatedAt": "2026-04-25T11:00:00+00:00",
+                            "accuracy": 91.0,
+                            "processedItems": 12,
+                            "totalItems": 12,
+                            "parameters": json.dumps({
+                                "notes": "candidate",
+                                "metadata": {"current_baseline_evaluation_id": "eval-current"},
+                            }),
+                            "metrics": json.dumps({"alignment": 0.83}),
+                        },
+                    ],
+                    "nextToken": None,
+                }
+            }
+
+    service = OptimizerResultsService(EvaluationClient())
+    rows = service.list_score_evaluations("score-1", sort_by="alignment")
+
+    assert [row["evaluation_id"] for row in rows] == ["eval-high", "eval-low"]
+    assert rows[0]["evaluation_url"].endswith("/eval-high")
+    assert rows[0]["notes"] == "candidate"
+    assert rows[0]["current_baseline_evaluation_id"] == "eval-current"
+
+    filtered = service.list_score_evaluations("score-1", version_id="version-1")
+    assert [row["evaluation_id"] for row in filtered] == ["eval-low"]
+
+
+def test_build_optimizer_review_packet_counts_unindexed_runs(monkeypatch):
+    service = OptimizerResultsService(_FakeClient())
+    indexed_run = SimpleNamespace(
+        procedure=_sample_procedure(),
+        manifest=service.build_manifest(procedure=_sample_procedure(), task=_FakeTask(), state=_sample_state()),
+        artifact_pointer={"manifest": "tasks/task-123/optimizer/manifest.json"},
+        indexed=True,
+    )
+    unindexed_run = SimpleNamespace(
+        procedure={**_sample_procedure(), "id": "proc-unindexed"},
+        manifest=None,
+        artifact_pointer=None,
+        indexed=False,
+    )
+    monkeypatch.setattr(service, "list_optimizer_runs_for_score", lambda *_args, **_kwargs: [indexed_run, unindexed_run])
+    monkeypatch.setattr(
+        service,
+        "list_optimizer_candidates_for_score",
+        lambda *_args, **_kwargs: [
+            {
+                "version_id": "version-best",
+                "runs": ["proc-123"],
+                "best_feedback_evaluation_id": "eval-fb-best",
+                "best_accuracy_evaluation_id": "eval-acc-best",
+                "best_feedback_alignment": 0.91,
+                "best_accuracy_alignment": 0.89,
+                "best_feedback_metrics": {"accuracy": 95.0},
+                "best_accuracy_metrics": {"accuracy": 94.0},
+                "pinned": True,
+            }
+        ],
+    )
+
+    packet = service.build_optimizer_review_packet_for_score(
+        "score-1",
+        score_name="Prescriber",
+        scorecard_name="Medication Review",
+        champion_version_id="version-old",
+    )
+
+    assert packet["unindexed_run_count"] == 1
+    assert packet["best_candidate"]["version_id"] == "version-best"
+    assert packet["promotion_packet"]["best_feedback_evaluation_url"].endswith("/eval-fb-best")
+    assert "promote manually" in packet["promotion_recommendation"]
+
+
+def test_summarize_optimizer_procedure_requires_index_and_returns_cycles(monkeypatch):
+    service = OptimizerResultsService(_FakeClient())
+    manifest = service.build_manifest(
+        procedure=_sample_procedure({"optimizer_artifacts": {"manifest": "tasks/task-123/optimizer/manifest.json"}}),
+        task=_FakeTask(),
+        state=_sample_state(),
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_procedure_record",
+        lambda _procedure_id: _sample_procedure({"optimizer_artifacts": {"manifest": "tasks/task-123/optimizer/manifest.json"}}),
+    )
+    monkeypatch.setattr(service, "load_indexed_manifest_for_procedure", lambda _procedure: manifest)
+
+    payload = service.summarize_optimizer_procedure("proc-123")
+
+    assert payload["procedure_id"] == "proc-123"
+    assert payload["best"]["best_feedback_evaluation_url"].endswith("/eval-fb-best")
+    assert payload["cycles"][0]["feedback_evaluation_url"].endswith("/eval-fb-1")
+
+
 def test_build_promotion_packet_uses_best_candidate_and_guideline_paths(monkeypatch, tmp_path):
     service = OptimizerResultsService(_FakeClient())
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(tmp_path / "scorecards"))
