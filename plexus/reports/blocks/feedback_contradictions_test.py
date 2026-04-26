@@ -112,6 +112,7 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     assert parsed['contradictions_found'] == 1
     assert parsed['aligned_found'] == 0
     assert len(parsed['topics']) == 1
+    assert 'rubric_evidence_packs' not in parsed
 
 
 @pytest.mark.asyncio
@@ -202,6 +203,7 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     assert parsed['eligible_count'] == 2
     assert parsed['eligibility_rule'] == 'unanimous non-contradiction'
     assert parsed['source_report_block_id'] == 'block-456'
+    assert 'rubric_evidence_packs' not in parsed
 
 
 @pytest.mark.asyncio
