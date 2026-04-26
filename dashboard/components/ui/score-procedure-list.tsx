@@ -9,6 +9,8 @@ import ProcedureTask, { type ProcedureTaskData } from '@/components/ProcedureTas
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -22,45 +24,44 @@ import { cn } from '@/lib/utils'
 import {
   copyText,
   evaluationUrl,
+  findBestOptimizerEvaluation,
   loadOptimizerRuns,
   manifestTouchesVersion,
+  OPTIMIZER_DATASETS,
+  OPTIMIZER_METRICS,
+  optimizerDatasetLabel,
+  optimizerMetricLabel,
+  compareOptimizerMetricValues,
   openArtifactText,
   scorecardGuideRelativePath,
+  scoreVersionUrl,
+  type OptimizerDatasetKey,
+  type OptimizerMetricKey,
   type OptimizerRunView,
 } from '@/components/ui/optimizer-results-utils'
 
 type ProcedureScope = 'score' | 'version'
-type ProcedureSort = 'updated' | 'status' | 'cycles' | 'feedback' | 'accuracy'
+type ProcedureSort =
+  | 'updated'
+  | 'status'
+  | 'cycles'
+  | `${OptimizerDatasetKey}_${OptimizerMetricKey}`
 
 export interface ScoreProcedureListProps {
   scoreId: string
+  scorecardId?: string | null
   scoreName: string
   scorecardName: string
   scope: ProcedureScope
   versionId?: string | null
   showHeader?: boolean
+  surface?: 'plain' | 'slot'
   className?: string
 }
 
 function sortProcedureRuns(runs: OptimizerRunView[], sortBy: ProcedureSort) {
   const updatedAtMs = (run: OptimizerRunView) => new Date(run.updatedAt ?? 0).getTime()
   const completedCycles = (run: OptimizerRunView) => run.manifest?.summary?.completed_cycles ?? -1
-  const feedbackAlignment = (run: OptimizerRunView) =>
-    run.manifest?.best?.winning_feedback_metrics?.alignment ??
-    run.manifest?.best?.best_feedback_alignment ??
-    null
-  const accuracyAlignment = (run: OptimizerRunView) =>
-    run.manifest?.best?.winning_accuracy_metrics?.alignment ??
-    run.manifest?.best?.best_accuracy_alignment ??
-    null
-
-  const sortMetricDesc = (left: number | null, right: number | null, leftRun: OptimizerRunView, rightRun: OptimizerRunView) => {
-    const leftHasMetric = typeof left === 'number'
-    const rightHasMetric = typeof right === 'number'
-    if (leftHasMetric && rightHasMetric && left !== right) return right! - left!
-    if (leftHasMetric !== rightHasMetric) return leftHasMetric ? -1 : 1
-    return updatedAtMs(rightRun) - updatedAtMs(leftRun)
-  }
 
   return [...runs].sort((left, right) => {
     if (sortBy === 'status') {
@@ -71,11 +72,12 @@ function sortProcedureRuns(runs: OptimizerRunView[], sortBy: ProcedureSort) {
       const delta = completedCycles(right) - completedCycles(left)
       return delta !== 0 ? delta : updatedAtMs(right) - updatedAtMs(left)
     }
-    if (sortBy === 'feedback') {
-      return sortMetricDesc(feedbackAlignment(left), feedbackAlignment(right), left, right)
-    }
-    if (sortBy === 'accuracy') {
-      return sortMetricDesc(accuracyAlignment(left), accuracyAlignment(right), left, right)
+    const [dataset, metric] = sortBy.split('_') as [OptimizerDatasetKey, OptimizerMetricKey]
+    if (OPTIMIZER_DATASETS.includes(dataset) && OPTIMIZER_METRICS.includes(metric)) {
+      const leftBest = findBestOptimizerEvaluation(left.manifest, dataset, metric)?.value ?? null
+      const rightBest = findBestOptimizerEvaluation(right.manifest, dataset, metric)?.value ?? null
+      const metricCompare = compareOptimizerMetricValues(metric, leftBest, rightBest)
+      return metricCompare !== 0 ? metricCompare : updatedAtMs(right) - updatedAtMs(left)
     }
     return updatedAtMs(right) - updatedAtMs(left)
   })
@@ -152,11 +154,13 @@ function scoreFromRun(scoreName: string) {
 
 export function ScoreProcedureList({
   scoreId,
+  scorecardId = null,
   scoreName,
   scorecardName,
   scope,
   versionId = null,
   showHeader = true,
+  surface = 'plain',
   className,
 }: ScoreProcedureListProps) {
   const [runs, setRuns] = React.useState<OptimizerRunView[]>([])
@@ -165,7 +169,22 @@ export function ScoreProcedureList({
     title: string
     content: string
   } | null>(null)
+  const [bestEvaluationDialog, setBestEvaluationDialog] = React.useState<{
+    run: OptimizerRunView
+  } | null>(null)
+  const [bestEvaluationDataset, setBestEvaluationDataset] = React.useState<OptimizerDatasetKey>('feedback')
+  const [bestEvaluationMetric, setBestEvaluationMetric] = React.useState<OptimizerMetricKey>('alignment')
   const [sortBy, setSortBy] = React.useState<ProcedureSort>('updated')
+  const metricSortOptions = React.useMemo(
+    () =>
+      OPTIMIZER_DATASETS.flatMap((dataset) =>
+        OPTIMIZER_METRICS.map((metric) => ({
+          value: `${dataset}_${metric}` as ProcedureSort,
+          label: `Best ${optimizerDatasetLabel(dataset)} ${optimizerMetricLabel(metric)}`,
+        }))
+      ),
+    []
+  )
 
   React.useEffect(() => {
     let cancelled = false
@@ -212,6 +231,7 @@ export function ScoreProcedureList({
     scope === 'score'
       ? 'All procedures for this score, newest first by default.'
       : 'Procedures that touched the selected version.'
+  const usesSlotSurface = surface === 'slot'
 
   const openArtifactViewer = React.useCallback(async (artifactKey: string | null | undefined, title: string) => {
     if (!artifactKey) {
@@ -227,6 +247,14 @@ export function ScoreProcedureList({
     }
   }, [])
 
+  const selectedBestEvaluation = React.useMemo(
+    () =>
+      bestEvaluationDialog
+        ? findBestOptimizerEvaluation(bestEvaluationDialog.run.manifest, bestEvaluationDataset, bestEvaluationMetric)
+        : null,
+    [bestEvaluationDataset, bestEvaluationDialog, bestEvaluationMetric]
+  )
+
   if (scope === 'version' && !versionId) {
     return (
       <div className={cn('h-full min-h-0 rounded-md bg-muted/50 p-4', className)}>
@@ -238,7 +266,8 @@ export function ScoreProcedureList({
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-4 pb-4">
+        <div className={cn(usesSlotSurface ? 'h-full' : 'px-4 pb-4')}>
+        <div className={cn(usesSlotSurface && 'min-h-full bg-background p-3')}>
         {showHeader && (
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -262,8 +291,11 @@ export function ScoreProcedureList({
             <option value="updated">Updated</option>
             <option value="status">Status</option>
             <option value="cycles">Completed cycles</option>
-            <option value="feedback">Best feedback alignment</option>
-            <option value="accuracy">Best accuracy alignment</option>
+            {metricSortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -275,11 +307,14 @@ export function ScoreProcedureList({
             const summary = run.manifest?.summary
             const best = run.manifest?.best
             const winningVersionId = best?.winning_version_id ?? null
+            const hasMetricEvaluations = OPTIMIZER_DATASETS.some((dataset) =>
+              OPTIMIZER_METRICS.some((metric) => findBestOptimizerEvaluation(run.manifest, dataset, metric))
+            )
 
             return (
               <div
                 key={run.procedureId}
-                className={index % 2 === 0 ? '' : 'bg-muted/60'}
+                className={!usesSlotSurface && index % 2 !== 0 ? 'bg-muted/60' : ''}
               >
                 <ProcedureTask
                   variant="grid"
@@ -348,20 +383,16 @@ export function ScoreProcedureList({
                             Event stream
                           </DropdownMenuItem>
                         )}
-                        {best?.best_feedback_evaluation_id && (
-                          <DropdownMenuItem asChild>
-                            <a href={evaluationUrl(best.best_feedback_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
-                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                              Open best feedback alignment evaluation
-                            </a>
-                          </DropdownMenuItem>
-                        )}
-                        {best?.best_accuracy_evaluation_id && (
-                          <DropdownMenuItem asChild>
-                            <a href={evaluationUrl(best.best_accuracy_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
-                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                              Open best regression alignment evaluation
-                            </a>
+                        {hasMetricEvaluations && (
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setBestEvaluationDataset('feedback')
+                              setBestEvaluationMetric('alignment')
+                              setBestEvaluationDialog({ run })
+                            }}
+                          >
+                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            Find best evaluation…
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -371,6 +402,7 @@ export function ScoreProcedureList({
               </div>
             )
           })}
+        </div>
         </div>
         </div>
       </div>
@@ -385,6 +417,100 @@ export function ScoreProcedureList({
               {artifactViewer?.content ?? ''}
             </pre>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(bestEvaluationDialog)} onOpenChange={(open) => !open && setBestEvaluationDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Find Best Evaluation</DialogTitle>
+            <DialogDescription>
+              Choose the optimizer dataset and metric to open the stored best evaluation or version for this procedure.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-sm text-muted-foreground" htmlFor={`best-evaluation-dataset-${scope}`}>
+                  Dataset
+                </label>
+                <select
+                  id={`best-evaluation-dataset-${scope}`}
+                  className="w-full rounded-md border-0 bg-background px-3 py-2 text-sm focus:outline-none"
+                  value={bestEvaluationDataset}
+                  onChange={(event) => setBestEvaluationDataset(event.target.value as OptimizerDatasetKey)}
+                >
+                  {OPTIMIZER_DATASETS.map((dataset) => (
+                    <option key={dataset} value={dataset}>
+                      {optimizerDatasetLabel(dataset)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm text-muted-foreground" htmlFor={`best-evaluation-metric-${scope}`}>
+                  Metric
+                </label>
+                <select
+                  id={`best-evaluation-metric-${scope}`}
+                  className="w-full rounded-md border-0 bg-background px-3 py-2 text-sm focus:outline-none"
+                  value={bestEvaluationMetric}
+                  onChange={(event) => setBestEvaluationMetric(event.target.value as OptimizerMetricKey)}
+                >
+                  {OPTIMIZER_METRICS.map((metric) => (
+                    <option key={metric} value={metric}>
+                      {optimizerMetricLabel(metric)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="rounded-md bg-muted/50 p-3 text-sm">
+              {selectedBestEvaluation ? (
+                <div className="space-y-1">
+                  <div>
+                    Best {optimizerDatasetLabel(bestEvaluationDataset)} {optimizerMetricLabel(bestEvaluationMetric)}:{' '}
+                    <span className="font-medium tabular-nums">{selectedBestEvaluation.value.toFixed(4)}</span>
+                  </div>
+                  <div className="text-muted-foreground">Evaluation: {selectedBestEvaluation.evaluationId}</div>
+                  <div className="text-muted-foreground">Version: {selectedBestEvaluation.versionId ?? 'not available'}</div>
+                </div>
+              ) : (
+                <div className="text-muted-foreground">
+                  No stored optimizer evaluation was found for that dataset and metric.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="ghost" onClick={() => setBestEvaluationDialog(null)}>
+              Close
+            </Button>
+            <div className="flex gap-2">
+              {selectedBestEvaluation?.versionId && scorecardId && (
+                <Button variant="secondary" asChild>
+                  <a
+                    href={scoreVersionUrl(scorecardId, scoreId, selectedBestEvaluation.versionId) ?? '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open version
+                  </a>
+                </Button>
+              )}
+              {selectedBestEvaluation && (
+                <Button asChild>
+                  <a href={evaluationUrl(selectedBestEvaluation.evaluationId) ?? '#'} target="_blank" rel="noreferrer">
+                    Open evaluation
+                  </a>
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

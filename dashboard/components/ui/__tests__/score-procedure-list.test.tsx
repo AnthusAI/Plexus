@@ -108,12 +108,16 @@ describe('ScoreProcedureList', () => {
                     winning_version_id: 'version-1',
                     best_feedback_evaluation_id: 'eval-feedback-1',
                     best_accuracy_evaluation_id: 'eval-accuracy-1',
-                    winning_feedback_metrics: { alignment: 0.83 },
-                    winning_accuracy_metrics: { alignment: 0.88 },
+                    winning_feedback_metrics: { alignment: 0.83, accuracy: 0.91, precision: 0.72, recall: 0.81, cost: 0.32 },
+                    winning_accuracy_metrics: { alignment: 0.88, accuracy: 0.93, precision: 0.77, recall: 0.84, cost: 0.41 },
                   },
                   cycles: [
                     {
                       version_id: 'version-1',
+                      feedback_evaluation_id: 'eval-feedback-cycle-1',
+                      accuracy_evaluation_id: 'eval-accuracy-cycle-1',
+                      feedback_metrics: { alignment: 0.80, precision: 0.79, recall: 0.70, cost: 0.21 },
+                      accuracy_metrics: { alignment: 0.82, precision: 0.82, recall: 0.71, cost: 0.30 },
                       candidates: [{ version_id: 'version-2' }],
                     },
                   ],
@@ -138,6 +142,7 @@ describe('ScoreProcedureList', () => {
     render(
       <ScoreProcedureList
         scoreId="score-1"
+        scorecardId="scorecard-1"
         scoreName="Medication Review: Prescriber"
         scorecardName="SelectQuote HCS Medium-Risk"
         scope="score"
@@ -150,16 +155,27 @@ describe('ScoreProcedureList', () => {
 
     expect(screen.getByText('Procedure note 1')).toBeInTheDocument()
     expect(screen.queryByText(/Task description that should not be treated as procedure note/)).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /best feedback precision/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /best regression recall/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /best feedback cost/i })).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: /more options/i })[0])
     expect(screen.getByRole('menuitem', { name: /runtime log/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /event stream/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /open best feedback alignment evaluation/i })).toHaveAttribute(
+    expect(screen.getByRole('menuitem', { name: /find best evaluation/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /open best feedback alignment evaluation/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /open best feedback precision evaluation/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: /find best evaluation/i }))
+    expect(screen.getByRole('dialog', { name: /find best evaluation/i })).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText(/^Metric$/i), 'precision')
+    expect(screen.getByRole('link', { name: /open evaluation/i })).toHaveAttribute(
       'href',
-      '/lab/evaluations/eval-feedback-1'
+      '/lab/evaluations/eval-feedback-cycle-1'
     )
-    expect(screen.getByRole('menuitem', { name: /open best regression alignment evaluation/i })).toHaveAttribute(
+    await user.selectOptions(screen.getByLabelText(/^Metric$/i), 'cost')
+    expect(screen.getByRole('link', { name: /open version/i })).toHaveAttribute(
       'href',
-      '/lab/evaluations/eval-accuracy-1'
+      '/lab/scorecards/scorecard-1/scores/score-1/versions/version-1'
     )
   })
 
@@ -167,6 +183,7 @@ describe('ScoreProcedureList', () => {
     render(
       <ScoreProcedureList
         scoreId="score-1"
+        scorecardId="scorecard-1"
         scoreName="Medication Review: Prescriber"
         scorecardName="SelectQuote HCS Medium-Risk"
         scope="version"
