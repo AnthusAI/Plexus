@@ -48,6 +48,7 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
 import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
+import { PROCEDURE_CARD_FIELDS } from "@/components/ui/optimizer-results-utils"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
 import ReactMarkdown from "react-markdown"
@@ -745,7 +746,9 @@ export default function ProcedureTask({
     await getAmplifyClient().graphql({
       query: `
         mutation UpdateProcedure($input: UpdateProcedureInput!) {
-          updateProcedure(input: $input) { id }
+          updateProcedure(input: $input) {
+            ${PROCEDURE_CARD_FIELDS}
+          }
         }
       `,
       variables: { input: { id: procedureId, code: newYaml } }
@@ -823,7 +826,9 @@ export default function ProcedureTask({
       const createResult = await getAmplifyClient().graphql({
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
-            createProcedure(input: $input) { id }
+            createProcedure(input: $input) {
+              ${PROCEDURE_CARD_FIELDS}
+            }
           }
         `,
         variables: {

@@ -78,17 +78,25 @@ class Procedure(BaseModel):
     def fields(cls) -> str:
         return """
             id
+            name
+            description
             status
             featured
-            code
-            parentProcedureId
             isTemplate
+            code
+            category
+            version
+            isDefault
+            parentProcedureId
             rootNodeId
+            waitingOnMessageId
+            metadata
             createdAt
             updatedAt
             accountId
             scorecardId
             scoreId
+            scoreVersionId
         """
 
     @classmethod
@@ -423,6 +431,5 @@ class Procedure(BaseModel):
         self.updatedAt = updated_procedure.updatedAt
         
         return self
-
 
 

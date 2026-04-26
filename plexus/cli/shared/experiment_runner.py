@@ -117,10 +117,25 @@ def _update_procedure_status_and_metadata(
     mutation UpdateProcedureTelemetry($input: UpdateProcedureInput!) {
         updateProcedure(input: $input) {
             id
+            name
+            description
             status
+            featured
+            isTemplate
+            code
+            category
+            version
+            isDefault
+            parentProcedureId
+            rootNodeId
             metadata
             waitingOnMessageId
+            createdAt
             updatedAt
+            accountId
+            scorecardId
+            scoreId
+            scoreVersionId
         }
     }
     """
