@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from plexus.rubric_memory import validate_rubric_memory_citations
+
 logger = logging.getLogger(__name__)
 
 MISCLASSIFICATION_CATEGORIES = (
@@ -240,12 +242,12 @@ def get_misclassification_item_scope_evidence_contract() -> dict:
             "primary_input_text",
             "primary_input_modality",
             "metadata_snapshot",
+            "rubric_memory_citation_context",
         ],
         "cannot_infer_at_item_scope": [
             "global_feedback_label_consistency",
             "cross-item_guideline_conflict_rate",
             "systemic_prediction_mode_collapse",
-            "organization_policy_change_history",
         ],
     }
 
@@ -262,6 +264,7 @@ def get_misclassification_classifier_output_contract() -> dict:
             "rationale_paragraph",
             "evidence_quote",
             "config_fixability",
+            "citation_ids",
         ],
         "conditional_fields": [
             "mechanical_subtype",
@@ -292,6 +295,7 @@ def get_misclassification_classifier_output_contract() -> dict:
                         "score_yaml",
                         "primary_input",
                         "metadata",
+                        "rubric_memory",
                     ],
                 },
             },
@@ -323,6 +327,10 @@ def get_misclassification_classifier_output_contract() -> dict:
                 "type": "enum",
                 "allowed_values": list(CONFIG_FIXABILITY_OPTIONS),
             },
+            "citation_ids": {
+                "type": "array",
+                "description": "Rubric-memory citation IDs used by the classification, when supplied.",
+            },
         },
     }
 
@@ -334,6 +342,7 @@ def get_misclassification_explainer_output_contract() -> dict:
             "rationale_paragraph",
             "evidence_quote",
             "config_fixability",
+            "citation_ids",
         ],
         "field_contracts": {
             "rationale_paragraph": {
@@ -347,6 +356,10 @@ def get_misclassification_explainer_output_contract() -> dict:
             "config_fixability": {
                 "type": "enum",
                 "allowed_values": list(CONFIG_FIXABILITY_OPTIONS),
+            },
+            "citation_ids": {
+                "type": "array",
+                "description": "Rubric-memory citation IDs used by the explanation, when supplied.",
             },
         },
     }
@@ -363,6 +376,7 @@ def get_misclassification_item_context_contract() -> dict:
             "score_context",
             "item_context",
             "source_availability",
+            "rubric_memory",
             "audit_metadata",
         ],
         "label_provenance_sources": list(MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES),
@@ -411,6 +425,7 @@ def build_misclassification_item_context(
     missing_required_context_keys: Optional[List[str]] = None,
     processed_input_text: str = "",
     processors_config_summary: str = "",
+    rubric_memory_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Build standardized item context/provenance payload for misclassification analysis."""
     if label_provenance_source not in MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES:
@@ -438,6 +453,14 @@ def build_misclassification_item_context(
         and primary_input_text
         and processed_input_text.strip() != primary_input_text.strip()
     )
+    citation_index = []
+    if isinstance(rubric_memory_context, dict):
+        citation_index = (
+            rubric_memory_context.get("citation_index")
+            or rubric_memory_context.get("citations")
+            or rubric_memory_context.get("machine_context", {}).get("citation_index")
+            or []
+        )
 
     return {
         "identifiers": {
@@ -505,7 +528,9 @@ def build_misclassification_item_context(
             "has_metadata_snapshot": bool(metadata_snapshot),
             "primary_input_fetch_error": bool(primary_input_fetch_error),
             "missing_required_context_keys": normalized_missing_context_keys,
+            "has_rubric_memory": bool(citation_index),
         },
+        "rubric_memory": rubric_memory_context or {},
         "audit_metadata": {
             "persisted_fields": get_misclassification_item_context_contract()[
                 "persisted_audit_metadata_required"
@@ -527,6 +552,8 @@ def _compact_context_for_triage(item_context: dict) -> dict:
     sc = item_context.get("score_context", {})
     ic = item_context.get("item_context", {})
     avail = item_context.get("source_availability", {})
+    rubric_memory = item_context.get("rubric_memory", {}) or {}
+    citation_index = rubric_memory.get("citation_index") or []
     return {
         "identifiers": item_context.get("identifiers", {}),
         "prediction": {
@@ -560,6 +587,12 @@ def _compact_context_for_triage(item_context: dict) -> dict:
             "preprocessing_changed_input": ic.get("preprocessing_changed_input", False),
             "primary_input_modality": ic.get("primary_input_modality", "unknown"),
             "metadata_snapshot": _excerpt(ic.get("metadata_snapshot", ""), 400),
+        },
+        "rubric_memory": {
+            "available": bool(citation_index),
+            "markdown_context": _excerpt(rubric_memory.get("markdown_context", ""), 2400),
+            "citation_index": citation_index[:12],
+            "diagnostics": (rubric_memory.get("diagnostics") or [])[:5],
         },
         "source_availability": avail,
     }
@@ -610,7 +643,7 @@ def extract_misclassification_evidence_flags(
         "FLAG_RUNTIME_OR_PARSER_FAILURE: <true|false>\n"
         "FLAG_INVALID_OUTPUT_CLASS: <true|false>\n"
         "FLAG_PREPROCESSING_EVIDENCE_LOSS: <true|false>\n"
-        "BEST_EVIDENCE_SOURCE: <edit_comment|score_explanation|guidelines|score_yaml|primary_input|processed_input|metadata|none>\n"
+        "BEST_EVIDENCE_SOURCE: <edit_comment|score_explanation|guidelines|score_yaml|primary_input|processed_input|metadata|rubric_memory|none>\n"
         "BEST_EVIDENCE_QUOTE: <short supporting quote/fact>\n\n"
         "Interpretation rules:\n"
         "- EXTERNAL_INFORMATION_GAP=true only when evidence says source evidence is degraded/insufficient externally "
@@ -693,6 +726,7 @@ def extract_misclassification_evidence_flags(
         "primary_input",
         "processed_input",
         "metadata",
+        "rubric_memory",
         "none",
     }
     if source not in allowed_sources:
@@ -755,12 +789,24 @@ def normalize_best_evidence_source(raw_source: str) -> str:
         "initial_comment_excerpt": "edit_comment",
         "metadata_snapshot": "metadata",
         "metadata_snapshot_excerpt": "metadata",
+        "rubric_memory_context": "rubric_memory",
+        "citation_context": "rubric_memory",
     }
     if normalized.startswith("feedback_comment"):
         return "edit_comment"
     if normalized.startswith("reviewer_comment"):
         return "edit_comment"
     return source_aliases.get(normalized, normalized)
+
+
+def _rubric_memory_citation_ids(item_context: dict, limit: int = 3) -> list[str]:
+    rubric_memory = item_context.get("rubric_memory", {}) or {}
+    raw_index = rubric_memory.get("citation_index") or []
+    citation_ids = []
+    for raw in raw_index:
+        if isinstance(raw, dict) and raw.get("id"):
+            citation_ids.append(str(raw["id"]))
+    return citation_ids[:limit]
 
 
 def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str, Any]) -> dict:
@@ -811,6 +857,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
     best_evidence_quote = _normalize_label(evidence_flags.get("best_evidence_quote"))
 
     evidence = []
+    rubric_memory_citation_ids = _rubric_memory_citation_ids(item_context)
 
     def _add_evidence(source: str, quote_or_fact: str):
         if quote_or_fact:
@@ -963,6 +1010,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
             "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "score_explanation", "quote_or_fact": "Execution failure indicators found."}],
             "evidence_flags": normalized_flags,
+            "citation_ids": rubric_memory_citation_ids if best_evidence_source == "rubric_memory" else [],
         }
 
     # Information gap: externally missing/degraded source evidence for correct determination.
@@ -990,6 +1038,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
                 "missing_primary_input" if not has_primary_input else "degraded_primary_input"
             ),
             "evidence_flags": normalized_flags,
+            "citation_ids": rubric_memory_citation_ids if best_evidence_source == "rubric_memory" else [],
         }
 
     # Guideline gap: ambiguity/policy signals should come from explicit LLM evidence flags.
@@ -1007,6 +1056,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
             "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "guidelines", "quote_or_fact": "Guidelines unavailable or ambiguous for this case."}],
             "evidence_flags": normalized_flags,
+            "citation_ids": rubric_memory_citation_ids,
         }
 
     # Preprocessing evidence loss: the preprocessor pipeline removed evidence critical for
@@ -1031,6 +1081,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
             "information_gap_subtype": None,
             "evidence_snippets": evidence or [{"source": "score_yaml", "quote_or_fact": f"Preprocessor config needs review: {processors_applied}"}],
             "evidence_flags": normalized_flags,
+            "citation_ids": rubric_memory_citation_ids if best_evidence_source == "rubric_memory" else [],
         }
 
     # Default bucket for model/score logic behavior.
@@ -1045,6 +1096,7 @@ def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str
         "information_gap_subtype": None,
         "evidence_snippets": evidence or [{"source": "score_yaml", "quote_or_fact": "Score configuration is the primary fix surface for this item."}],
         "evidence_flags": normalized_flags,
+        "citation_ids": rubric_memory_citation_ids if best_evidence_source == "rubric_memory" else [],
     }
 
 
@@ -1081,11 +1133,12 @@ def explain_misclassification_item_classification(
     )
     prompt = (
         "You are given normalized item context and an assigned category decision.\n"
-        "Return exactly three lines in this exact format:\n"
+        "Return exactly four lines in this exact format:\n"
         "RATIONALE_PARAGRAPH: <short paragraph, 2-4 sentences>\n"
         "EVIDENCE_QUOTE: <one concrete quote/fact>\n"
         "CONFIG_FIXABILITY: <one of "
-        f"{', '.join(CONFIG_FIXABILITY_OPTIONS)}>\n\n"
+        f"{', '.join(CONFIG_FIXABILITY_OPTIONS)}>\n"
+        "CITATION_IDS: <comma-separated rubric-memory citation IDs used, or empty>\n\n"
         "Rules:\n"
         "- Do not change the assigned category decision.\n"
         "- If failure is execution/system/context contract related, use blocked_by_mechanical.\n"
@@ -1095,6 +1148,8 @@ def explain_misclassification_item_classification(
         "- If preprocessing_evidence_loss flag is true: explain specifically what the preprocessor "
         "removed and why that removal caused the misclassification. Reference the processors_applied "
         "field and the difference between raw_input_text and processed_input_text.\n\n"
+        "- If rubric_memory.citation_index is available and you make a policy-memory claim, include "
+        "the exact citation IDs in CITATION_IDS.\n\n"
         f"{rca_cookbook}\n"
         f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n\n"
         f"Deterministic classification JSON:\n{json.dumps(classification, ensure_ascii=True)}\n"
@@ -1123,6 +1178,11 @@ def explain_misclassification_item_classification(
     rationale_paragraph = line_map.get("RATIONALE_PARAGRAPH", "")
     evidence_quote = line_map.get("EVIDENCE_QUOTE", "")
     config_fixability = line_map.get("CONFIG_FIXABILITY", "")
+    citation_ids = [
+        value.strip()
+        for value in re.split(r"[,\\s]+", line_map.get("CITATION_IDS", ""))
+        if value.strip()
+    ]
 
     if not rationale_paragraph:
         raise ValueError(f"Triage explainer output missing RATIONALE_PARAGRAPH: {raw_text}")
@@ -1133,10 +1193,17 @@ def explain_misclassification_item_classification(
             f"Triage explainer output has invalid config_fixability '{config_fixability}'. "
             f"Allowed: {CONFIG_FIXABILITY_OPTIONS}. Raw output: {raw_text}"
         )
+    citation_validation = validate_rubric_memory_citations(
+        citation_ids,
+        item_context.get("rubric_memory"),
+        require_citation=bool(item_context.get("rubric_memory", {}).get("citation_index")),
+    )
     return {
         "rationale_paragraph": _excerpt(rationale_paragraph, 320),
         "evidence_quote": _excerpt(evidence_quote, 180),
         "config_fixability": config_fixability,
+        "citation_ids": citation_validation.valid_ids,
+        "citation_validation": citation_validation.model_dump(mode="json"),
     }
 
 
@@ -1191,6 +1258,8 @@ def build_misclassification_analysis_summary(
             "rationale_paragraph": raw.get("rationale_paragraph", ""),
             "evidence_quote": raw.get("evidence_quote", ""),
             "config_fixability": raw.get("config_fixability", ""),
+            "citation_ids": raw.get("citation_ids", []),
+            "citation_validation": raw.get("citation_validation", {}),
             "has_primary_input": bool(availability.get("has_primary_input")),
             "missing_required_context": bool(availability.get("missing_required_context_keys")),
             "detailed_cause": raw.get("detailed_cause"),

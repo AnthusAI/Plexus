@@ -17,14 +17,17 @@ from plexus.rubric_memory import (
     LocalRubricMemoryCorpusResolver,
     LocalRubricMemorySource,
     RubricMemoryPreparedCorpusManager,
+    RubricMemoryContextProvider,
     RubricAuthorityResolver,
     RubricEvidencePack,
     RubricEvidencePackContextFormatter,
     RubricEvidencePackRequest,
     RubricEvidencePackService,
+    RubricMemoryCitationFormatter,
     RubricHistoryEvent,
     RubricMemoryQueryPlanner,
     TactusRubricEvidenceSynthesizer,
+    validate_rubric_memory_citations,
 )
 
 
@@ -657,6 +660,108 @@ async def test_biblicus_retriever_preserves_inferred_date_and_scope(tmp_path):
     assert evidence[0].scope_level == "score"
     assert evidence[0].source_timestamp.isoformat() == "2026-04-24T00:00:00"
     assert evidence[0].source_uri == source_file.resolve().as_uri()
+
+
+def test_citation_formatter_includes_official_and_corpus_citations():
+    context = RubricMemoryCitationFormatter().from_pack(_formatter_pack())
+
+    citation_ids = context.citation_ids()
+    assert any(citation_id.startswith("rubric:") for citation_id in citation_ids)
+    assert any(citation_id.startswith("support:01:") for citation_id in citation_ids)
+    assert any(citation_id.startswith("conflict:01:") for citation_id in citation_ids)
+    assert "Score version authority: `score-version-1`" in context.markdown_context
+    assert "Citation Index" in context.markdown_context
+    assert context.machine_context["evidence_counts"] == {
+        "supporting": 2,
+        "conflicting_or_stale": 1,
+        "history": 2,
+        "citations": 4,
+    }
+
+
+def test_citation_ids_are_stable_and_retain_provenance():
+    first = RubricMemoryCitationFormatter().from_pack(_formatter_pack())
+    second = RubricMemoryCitationFormatter().from_pack(_formatter_pack())
+
+    assert [citation.id for citation in first.citation_index] == [
+        citation.id for citation in second.citation_index
+    ]
+    supporting = next(
+        citation
+        for citation in first.citation_index
+        if citation.id.startswith("support:01:")
+    )
+    assert supporting.source_uri == "notes/new-ranked-first.md"
+    assert supporting.scope_level == "score"
+    assert supporting.source_timestamp.isoformat() == "2026-04-21T00:00:00"
+    assert supporting.authority_level == "high"
+    assert supporting.evidence_classification == "historical_context"
+
+
+def test_citation_validation_reports_missing_and_omitted_without_failing():
+    context = RubricMemoryCitationFormatter().from_pack(_formatter_pack())
+    valid_id = context.citation_index[0].id
+
+    validation = validate_rubric_memory_citations(
+        [valid_id, "missing:1"],
+        context,
+    )
+    assert validation.valid_ids == [valid_id]
+    assert validation.missing_ids == ["missing:1"]
+    assert validation.warnings
+
+    omitted = validate_rubric_memory_citations([], context, require_citation=True)
+    assert omitted.omitted_citations is True
+    assert "no citation IDs" in omitted.warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_context_provider_records_prepared_corpus_and_query_plan_diagnostics(monkeypatch):
+    class _DiagnosticRetriever(_StaticRetriever):
+        def __init__(self):
+            super().__init__(
+                [
+                    _snippet(
+                        "Retrieved score-specific policy memory.",
+                        source_uri="notes/policy.md",
+                        scope_level="score",
+                    )
+                ]
+            )
+            self.last_prepared_corpus = SimpleNamespace(
+                status="reused",
+                corpus_root="/tmp/prepared/corpus",
+                fingerprint="fingerprint-1",
+            )
+            self.last_query_plan = SimpleNamespace(
+                retrieval_phrases=["dosage verification", "current medication"]
+            )
+
+    retriever = _DiagnosticRetriever()
+
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_local_score",
+        lambda **_kwargs: retriever,
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.TactusRubricEvidenceSynthesizer",
+        lambda: _CapturingSynthesizer(),
+    )
+
+    context = await RubricMemoryContextProvider(api_client=object()).generate_for_request(
+        _request()
+    )
+
+    diagnostics_by_kind = {
+        diagnostic["kind"]: diagnostic for diagnostic in context.diagnostics
+    }
+    assert diagnostics_by_kind["prepared_corpus"]["status"] == "reused"
+    assert diagnostics_by_kind["prepared_corpus"]["fingerprint"] == "fingerprint-1"
+    assert diagnostics_by_kind["query_plan"]["generated_phrase_count"] == 2
+    assert diagnostics_by_kind["query_plan"]["generated_phrases"] == [
+        "dosage verification",
+        "current medication",
+    ]
 
 
 @pytest.mark.asyncio

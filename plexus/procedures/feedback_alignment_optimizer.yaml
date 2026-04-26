@@ -190,6 +190,7 @@ agents:
       TOOLS:
       - str_replace_editor: view or edit score_config.yaml
       - submit_score_version: submit current edits for evaluation
+      - plexus_rubric_memory_evidence_pack: retrieve rubric-memory citation context for policy-sensitive hypotheses or disputed items
       - done: signal you cannot improve current hypothesis
 
       LANGGRAPH NODE CONTRACTS:
@@ -211,6 +212,12 @@ agents:
       Ask: "Is the rubric missing a rule? Is an existing rule ambiguous or mis-stated?"
       Fixing a policy gap generalizes to every item of that type. Adding an example
       only helps items that closely resemble that example.
+
+      RUBRIC MEMORY CITATIONS:
+      When rubric-memory context is supplied or you call plexus_rubric_memory_evidence_pack,
+      cite exact citation IDs for policy claims, hypotheses, version notes, and
+      cannot_improve conclusions. The official score version rubric remains canonical;
+      corpus citations explain history, interpretation, stale areas, or gaps.
 
       FEW-SHOT EXAMPLES — use sparingly:
       Adding examples is tempting but usually counterproductive at scale. More than
@@ -270,6 +277,7 @@ agents:
     tools:
       - str_replace_editor
       - submit_score_version
+      - plexus_rubric_memory_evidence_pack
       - done
 
   cycle_analyst:
@@ -1556,6 +1564,15 @@ code: |
         table.insert(parts, "But follow the RCA over historical patterns if they conflict.")
         table.insert(parts, "")
       end
+    end
+
+    if has_text(opts.rubric_memory_briefing) then
+      table.insert(parts, "=== RUBRIC MEMORY BRIEFING (official rubric + cited corpus evidence) ===")
+      table.insert(parts, trunc(opts.rubric_memory_briefing, 12000))
+      table.insert(parts, "=== END RUBRIC MEMORY BRIEFING ===")
+      table.insert(parts, "")
+      table.insert(parts, "Use citation IDs from this briefing for policy-memory claims and hypotheses.")
+      table.insert(parts, "")
     end
 
     -- Evaluation results
@@ -2862,6 +2879,24 @@ code: |
 
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
+  local rubric_memory_briefing = ""
+  do
+    local rm_ok, rm_result = pcall(call_plexus_tool, "plexus_rubric_memory_evidence_pack", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_id = score_id,
+      topic_hint = "Score-level optimizer rubric-memory briefing"
+    }, {max_retries = 1})
+    if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
+      rubric_memory_briefing = rm_result.markdown_context
+      Human.notify({message = "Rubric-memory briefing loaded for optimizer planning.", level = "info"})
+    elseif rm_ok and type(rm_result) == "table" and rm_result.error then
+      Human.notify({message = "Rubric-memory briefing unavailable: " .. tostring(rm_result.error), level = "warning"})
+    else
+      Human.notify({message = "Rubric-memory briefing unavailable for this optimizer run.", level = "debug"})
+    end
+  end
+
   -- ================================================================
   -- Pre-declare variables shared between fresh-run and continuation paths.
   -- (Lua 5.4 goto cannot jump into the scope of a local, so all locals that
@@ -4117,7 +4152,8 @@ code: |
       iteration = cycle,
       consecutive_failed_cycles = consecutive_failed_cycles,
       hint = params.hint,
-      prior_run_prescription = params.prior_run_prescription
+      prior_run_prescription = params.prior_run_prescription,
+      rubric_memory_briefing = rubric_memory_briefing
     })
 
     -- Build shared cookbook section

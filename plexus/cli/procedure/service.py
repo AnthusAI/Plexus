@@ -1613,6 +1613,11 @@ You can query the current guidelines using the `plexus_score_info` tool with the
                     'existing_nodes': existing_nodes,
                     'active_parent_node_id': active_parent_node_id  # NEW: Parent node for hypothesis generation
                 }
+                rubric_memory_briefing = await self._build_optimizer_rubric_memory_briefing(
+                    experiment_context
+                )
+                if rubric_memory_briefing:
+                    experiment_context['rubric_memory_briefing'] = rubric_memory_briefing
                 
                 logger.info("Successfully pre-loaded all context for AI agent")
                 
@@ -2434,6 +2439,43 @@ Based on this data, you should prioritize examining error types with the highest
         
         logger.info(f"Retrieved feedback summary for {scorecard_name}/{score_name} (last {days} days)")
         return feedback_alignment
+
+    async def _build_optimizer_rubric_memory_briefing(
+        self,
+        experiment_context: Dict[str, Any],
+    ) -> Optional[str]:
+        """Generate optional score-level rubric-memory briefing for optimizer prompts."""
+        scorecard_name = experiment_context.get('scorecard_name')
+        score_name = experiment_context.get('score_name')
+        score_id = experiment_context.get('score_id')
+        if not scorecard_name or not score_name or not score_id:
+            return None
+        try:
+            from plexus.rubric_memory import RubricMemoryContextProvider
+
+            provider = RubricMemoryContextProvider(api_client=self.client)
+            status = provider.local_corpus_status(
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+            )
+            if not status["available"]:
+                logger.warning(
+                    "Rubric memory not available for optimizer briefing; missing canonical folders: %s",
+                    ", ".join(
+                        root["path"] for root in status["roots"] if not root["exists"]
+                    ),
+                )
+                return None
+            context = await provider.generate_for_score_item(
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+                score_id=score_id,
+                topic_hint="Score-level optimizer rubric-memory briefing",
+            )
+            return context.markdown_context
+        except Exception as exc:
+            logger.warning("Could not build optimizer rubric-memory briefing: %s", exc)
+            return None
     
     def _update_node_status(self, node_id: str, new_status: str) -> bool:
         """
@@ -3838,7 +3880,7 @@ Be concise but thorough. Focus on insights that will guide future hypothesis gen
 
             # Build user prompt with all context
             hypotheses_summary = "\n\n".join([
-                f"### Hypothesis {i+1}: {h['name']}\n"
+                f"### Hypothesis {i + 1}: {h['name']}\n"
                 f"**Description:** {h['hypothesis']}\n"
                 f"**Test Results:** {h['evaluation_summary']}\n"
                 f"**Status:** {h['status']}"

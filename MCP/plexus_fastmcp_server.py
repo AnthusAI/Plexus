@@ -456,6 +456,7 @@ try:
     from tools.dataset.datasets import register_dataset_tools
     from tools.procedure.procedures import register_procedure_tools
     from tools.procedure.procedure_nodes import register_procedure_node_tools
+    from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -472,6 +473,7 @@ try:
     register_dataset_tools(mcp)
     register_procedure_tools(mcp)
     register_procedure_node_tools(mcp)
+    register_rubric_memory_tools(mcp)
 
     logger.info("Successfully registered separated tools")
 except ImportError as e:
