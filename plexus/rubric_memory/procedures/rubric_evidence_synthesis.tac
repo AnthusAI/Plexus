@@ -37,7 +37,7 @@ Rules:
 - Sparse evidence must produce low confidence and open questions instead of a confident policy claim.
 - Use output_template as the exact JSON shape.
 - Fill empty text fields with concise analysis.
-- Copy relevant evidence objects from evidence into supporting_evidence or conflicting_evidence.
+- Leave supporting_evidence and conflicting_evidence empty. Python attaches evidence provenance after synthesis.
 - Return only valid JSON matching output_contract. Do not return Markdown or commentary.
 ]],
     tools = {finish},
@@ -92,6 +92,7 @@ You must call the finish tool exactly once.
 The finish tool has a required argument named pack_json.
 Set pack_json to the complete RubricEvidencePack JSON string.
 Start from output_template and fill in the empty fields.
+Do not copy raw evidence objects into supporting_evidence or conflicting_evidence.
 ]]
 
         synthesizer({ message = synthesis_message })

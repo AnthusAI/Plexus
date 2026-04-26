@@ -8,9 +8,11 @@ from datetime import date, datetime, time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Protocol, Sequence
+from urllib.parse import unquote, urlparse
 
 from .local_corpus import LocalRubricMemoryCorpusResolver, LocalRubricMemorySource
 from .models import EvidenceClassification, EvidenceSnippet, RubricEvidencePackRequest
+from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
 
 
 class RubricEvidenceRetriever(Protocol):
@@ -25,6 +27,16 @@ class BiblicusRubricEvidenceRetriever:
 
     _SIDECAR_SUFFIX = ".biblicus.yml"
     _DATE_FOLDER_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    _SOURCE_POLICY_ANCHORS = {
+        "required to confirm",
+        "must confirm",
+        "must verify",
+        "verify each",
+        "confirm medication",
+        "medication name",
+        "form/dosage",
+        "for all medications",
+    }
 
     _BIBLICUS_DERIVED_DIRS = {
         ".biblicus",
@@ -41,8 +53,10 @@ class BiblicusRubricEvidenceRetriever:
         *,
         corpus_sources: Sequence[LocalRubricMemorySource] | None = None,
         retriever_id: str = "scan",
-        max_total_items: int = 12,
-        maximum_total_characters: int = 12000,
+        max_total_items: int = 16,
+        maximum_total_characters: int = 60000,
+        source_window_characters: int = 6000,
+        query_planner: RubricMemoryQueryPlanner | None = None,
     ):
         if (corpus_root is None) == (corpus_sources is None):
             raise ValueError(
@@ -66,6 +80,9 @@ class BiblicusRubricEvidenceRetriever:
         self.retriever_id = retriever_id
         self.max_total_items = max_total_items
         self.maximum_total_characters = maximum_total_characters
+        self.source_window_characters = source_window_characters
+        self.query_planner = query_planner or RubricMemoryQueryPlanner()
+        self.last_query_plan: RubricMemoryQueryPlan | None = None
         self._knowledge_base: Any | None = None
         self._temp_dir: TemporaryDirectory[str] | None = None
 
@@ -76,8 +93,9 @@ class BiblicusRubricEvidenceRetriever:
         scorecard_name: str,
         score_name: str,
         retriever_id: str = "scan",
-        max_total_items: int = 12,
-        maximum_total_characters: int = 12000,
+        max_total_items: int = 16,
+        maximum_total_characters: int = 60000,
+        source_window_characters: int = 6000,
     ) -> "BiblicusRubricEvidenceRetriever":
         paths = LocalRubricMemoryCorpusResolver().resolve(
             scorecard_name=scorecard_name,
@@ -88,6 +106,7 @@ class BiblicusRubricEvidenceRetriever:
             retriever_id=retriever_id,
             max_total_items=max_total_items,
             maximum_total_characters=maximum_total_characters,
+            source_window_characters=source_window_characters,
         )
 
     async def retrieve(
@@ -113,15 +132,20 @@ class BiblicusRubricEvidenceRetriever:
                 ),
             )
 
+        query_plan = self.query_planner.plan(request)
+        self.last_query_plan = query_plan
         result = self._knowledge_base.query(
-            self._build_query_text(request),
+            query_plan.expanded_query_text,
             budget=QueryBudget(
                 max_total_items=self.max_total_items,
                 maximum_total_characters=self.maximum_total_characters,
                 max_items_per_source=None,
             ),
         )
-        return [self._map_evidence(evidence) for evidence in result.evidence]
+        return [
+            self._expand_snippet_from_source(self._map_evidence(evidence), query_plan)
+            for evidence in result.evidence
+        ]
 
     def _create_working_corpus_source(self) -> Path:
         self._temp_dir = TemporaryDirectory(prefix="plexus-rubric-memory-")
@@ -189,19 +213,9 @@ class BiblicusRubricEvidenceRetriever:
         return None
 
     def _build_query_text(self, request: RubricEvidencePackRequest) -> str:
-        parts = [
-            f"scorecard: {request.scorecard_identifier}",
-            f"score: {request.score_identifier}",
-            f"score version: {request.score_version_id}",
-            f"topic: {request.topic_hint}" if request.topic_hint else "",
-            f"model classification: {request.model_value}",
-            f"feedback classification: {request.feedback_value}",
-            f"feedback comment: {request.feedback_comment}",
-            f"model explanation: {request.model_explanation}",
-            f"transcript excerpt: {request.transcript_text[:4000]}",
-            f"rubric excerpt: {request.rubric_text[:3000]}",
-        ]
-        return "\n\n".join(part for part in parts if part.strip())
+        query_plan = self.query_planner.plan(request)
+        self.last_query_plan = query_plan
+        return query_plan.expanded_query_text
 
     def _map_evidence(self, evidence: Any) -> EvidenceSnippet:
         metadata = getattr(evidence, "metadata", None) or {}
@@ -236,6 +250,125 @@ class BiblicusRubricEvidenceRetriever:
             ),
             evidence_classification=self._metadata_classification(metadata),
         )
+
+    def _expand_snippet_from_source(
+        self,
+        snippet: EvidenceSnippet,
+        query_plan: RubricMemoryQueryPlan,
+    ) -> EvidenceSnippet:
+        source_path = self._source_uri_to_path(snippet.source_uri)
+        if source_path is None or not source_path.is_file():
+            return snippet
+        try:
+            source_text = source_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return snippet
+        source_text = self._strip_markdown_frontmatter(source_text)
+        expanded_text = self._best_source_window(
+            source_text,
+            query_plan,
+            original_snippet=snippet.snippet_text,
+        )
+        if not expanded_text or expanded_text == snippet.snippet_text:
+            return snippet
+        return snippet.model_copy(update={"snippet_text": expanded_text})
+
+    def _source_uri_to_path(self, source_uri: str) -> Path | None:
+        parsed = urlparse(source_uri)
+        if parsed.scheme != "file":
+            return None
+        return Path(unquote(parsed.path))
+
+    def _strip_markdown_frontmatter(self, text: str) -> str:
+        if not text.startswith("---\n"):
+            return text
+        frontmatter_end = text.find("\n---\n", 4)
+        if frontmatter_end < 0:
+            return text
+        return text[frontmatter_end + len("\n---\n") :]
+
+    def _best_source_window(
+        self,
+        source_text: str,
+        query_plan: RubricMemoryQueryPlan,
+        *,
+        original_snippet: str,
+    ) -> str:
+        if len(source_text) <= self.source_window_characters:
+            return source_text.strip()
+
+        lower_text = source_text.lower()
+        anchors = self._window_anchors(lower_text, query_plan)
+        if not anchors:
+            return original_snippet
+
+        best_score = self._window_score(original_snippet, query_plan)
+        best_window = original_snippet
+        half_window = self.source_window_characters // 2
+        for anchor in anchors:
+            start = max(0, anchor - half_window)
+            end = min(len(source_text), start + self.source_window_characters)
+            start = max(0, end - self.source_window_characters)
+            window = source_text[start:end].strip()
+            score = self._window_score(window, query_plan)
+            if score > best_score:
+                best_score = score
+                best_window = window
+        return best_window
+
+    def _window_anchors(
+        self,
+        lower_text: str,
+        query_plan: RubricMemoryQueryPlan,
+    ) -> list[int]:
+        anchors: list[int] = []
+        search_terms = [
+            phrase.lower()
+            for phrase in query_plan.retrieval_phrases
+            if len(phrase) >= 4
+        ]
+        search_terms.extend(
+            token.lower()
+            for token in query_plan.important_tokens
+            if len(token) >= 4
+        )
+        search_terms.extend(self._SOURCE_POLICY_ANCHORS)
+        for term in search_terms:
+            start = 0
+            while True:
+                index = lower_text.find(term, start)
+                if index < 0:
+                    break
+                anchors.append(index)
+                start = index + max(len(term), 1)
+        return sorted(set(anchors))
+
+    def _window_score(
+        self,
+        text: str,
+        query_plan: RubricMemoryQueryPlan,
+    ) -> int:
+        lower = text.lower()
+        score = 0
+        for phrase in query_plan.retrieval_phrases:
+            normalized = phrase.lower()
+            if len(normalized) < 4:
+                continue
+            hits = lower.count(normalized)
+            if hits:
+                score += hits * (10 + len(normalized.split()))
+        for token in query_plan.important_tokens:
+            normalized = token.lower()
+            if len(normalized) < 4:
+                continue
+            hits = lower.count(normalized)
+            if hits:
+                score += min(hits, 8)
+        for anchor in self._SOURCE_POLICY_ANCHORS:
+            hits = lower.count(anchor)
+            if hits:
+                score += hits * 25
+        return score
 
     def _metadata_text(
         self, metadata: dict[str, Any], *keys: str, default: str = "unknown"
