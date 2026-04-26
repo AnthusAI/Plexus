@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from typing import Sequence
 
 import pytest
+from click.testing import CliRunner
 
+from plexus.cli.shared.CommandLineInterface import cli
 from plexus.rubric_memory import (
     BiblicusRubricEvidenceRetriever,
     ConfidenceInputs,
@@ -14,6 +16,7 @@ from plexus.rubric_memory import (
     EvidenceSnippet,
     LocalRubricMemoryCorpusResolver,
     LocalRubricMemorySource,
+    RubricMemoryPreparedCorpusManager,
     RubricAuthorityResolver,
     RubricEvidencePack,
     RubricEvidencePackContextFormatter,
@@ -283,6 +286,61 @@ def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
     )
 
 
+def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
+    monkeypatch,
+    tmp_path,
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        cache_root = tmp_path / "dashboard" / "scorecards"
+        monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+        paths = LocalRubricMemoryCorpusResolver().resolve(
+            scorecard_name="SelectQuote HCS Medium-Risk",
+            score_name="Medication Review: Dosage",
+        )
+        scorecard_file = (
+            paths.scorecard_knowledge_base / "2026-04-01" / "scorecard.md"
+        )
+        score_file = paths.score_knowledge_base / "2026-04-24" / "dosage.md"
+        scorecard_file.parent.mkdir(parents=True)
+        score_file.parent.mkdir(parents=True)
+        scorecard_file.write_text("Shared medication review policy.", encoding="utf-8")
+        score_file.write_text("Dosage-specific policy memory.", encoding="utf-8")
+
+        first = runner.invoke(
+            cli,
+            [
+                "rubric-memory",
+                "prewarm",
+                "--scorecard",
+                "SelectQuote HCS Medium-Risk",
+                "--score",
+                "Medication Review: Dosage",
+            ],
+        )
+        second = runner.invoke(
+            cli,
+            [
+                "rubric-memory",
+                "prewarm",
+                "--scorecard",
+                "SelectQuote HCS Medium-Risk",
+                "--score",
+                "Medication Review: Dosage",
+            ],
+        )
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert "status: rebuilt" in first.output
+    assert "status: reused" in second.output
+    assert "retriever_id: scan" in first.output
+    assert "fingerprint:" in first.output
+    assert "prepared_corpus_path:" in first.output
+    assert "source_file_count: 2" in first.output
+    assert "Medication Review- Dosage.knowledge-base" in first.output
+
+
 def test_query_planner_derives_retrieval_phrases_from_request():
     request = RubricEvidencePackRequest(
         scorecard_identifier="SelectQuote HCS Medium-Risk",
@@ -419,44 +477,46 @@ def test_source_window_expansion_finds_policy_section(tmp_path):
     assert expanded.scope_level == header_snippet.scope_level
 
 
-def test_retriever_temp_corpus_infers_date_folder_metadata(tmp_path):
+def test_prepared_corpus_infers_date_folder_metadata_without_touching_raw_source(
+    tmp_path,
+):
     score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
     source_file = score_root / "2026-04-24" / "client" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text("Dosage calibration note.", encoding="utf-8")
 
-    retriever = BiblicusRubricEvidenceRetriever(
-        corpus_sources=[
-            LocalRubricMemorySource(root=score_root, scope_level="score")
-        ]
+    prepared = RubricMemoryPreparedCorpusManager(
+        cache_root=tmp_path / "prepared"
+    ).prepare(
+        corpus_sources=[LocalRubricMemorySource(root=score_root, scope_level="score")]
     )
-
-    working_root = retriever._create_working_corpus_source()
-    copied_file = working_root / "00-score" / "2026-04-24" / "client" / "source.md"
+    copied_file = (
+        prepared.corpus_root / "00-score" / "2026-04-24" / "client" / "source.md"
+    )
     sidecar = copied_file.with_name("source.md.biblicus.yml")
     metadata = json.loads(sidecar.read_text(encoding="utf-8"))
 
+    assert prepared.status == "rebuilt"
+    assert prepared.source_file_count == 1
     assert metadata["scope_level"] == "score"
     assert metadata["source_uri"] == source_file.resolve().as_uri()
     assert metadata["source_timestamp"] == "2026-04-24T00:00:00"
     assert source_file.with_name("source.md.biblicus.yml").exists() is False
 
 
-def test_retriever_temp_corpus_leaves_unknown_date_without_timestamp(tmp_path):
+def test_prepared_corpus_leaves_unknown_date_without_timestamp(tmp_path):
     score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
     source_file = score_root / "unknown-date" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text("Undated dosage note.", encoding="utf-8")
 
-    retriever = BiblicusRubricEvidenceRetriever(
-        corpus_sources=[
-            LocalRubricMemorySource(root=score_root, scope_level="score")
-        ]
+    prepared = RubricMemoryPreparedCorpusManager(
+        cache_root=tmp_path / "prepared"
+    ).prepare(
+        corpus_sources=[LocalRubricMemorySource(root=score_root, scope_level="score")]
     )
-
-    working_root = retriever._create_working_corpus_source()
     sidecar = (
-        working_root
+        prepared.corpus_root
         / "00-score"
         / "unknown-date"
         / "source.md.biblicus.yml"
@@ -467,7 +527,7 @@ def test_retriever_temp_corpus_leaves_unknown_date_without_timestamp(tmp_path):
     assert "source_timestamp" not in metadata
 
 
-def test_retriever_temp_corpus_combines_scorecard_and_score_scopes(tmp_path):
+def test_prepared_corpus_combines_scorecard_and_score_scopes(tmp_path):
     scorecard_root = tmp_path / "scorecard.knowledge-base"
     score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
     scorecard_file = scorecard_root / "2026-04-01" / "scorecard.md"
@@ -477,7 +537,9 @@ def test_retriever_temp_corpus_combines_scorecard_and_score_scopes(tmp_path):
     scorecard_file.write_text("Shared scorecard note.", encoding="utf-8")
     score_file.write_text("Score-local dosage note.", encoding="utf-8")
 
-    retriever = BiblicusRubricEvidenceRetriever(
+    prepared = RubricMemoryPreparedCorpusManager(
+        cache_root=tmp_path / "prepared"
+    ).prepare(
         corpus_sources=[
             LocalRubricMemorySource(
                 root=scorecard_root,
@@ -487,10 +549,9 @@ def test_retriever_temp_corpus_combines_scorecard_and_score_scopes(tmp_path):
         ]
     )
 
-    working_root = retriever._create_working_corpus_source()
     scorecard_metadata = json.loads(
         (
-            working_root
+            prepared.corpus_root
             / "00-scorecard"
             / "2026-04-01"
             / "scorecard.md.biblicus.yml"
@@ -498,7 +559,7 @@ def test_retriever_temp_corpus_combines_scorecard_and_score_scopes(tmp_path):
     )
     score_metadata = json.loads(
         (
-            working_root
+            prepared.corpus_root
             / "01-score"
             / "2026-04-24"
             / "score.md.biblicus.yml"
@@ -511,16 +572,54 @@ def test_retriever_temp_corpus_combines_scorecard_and_score_scopes(tmp_path):
     assert score_metadata["source_timestamp"] == "2026-04-24T00:00:00"
 
 
-def test_retriever_temp_corpus_rejects_missing_knowledge_base_folder(tmp_path):
+def test_prepared_corpus_rejects_missing_knowledge_base_folder(tmp_path):
     missing_root = tmp_path / "missing.knowledge-base"
-    retriever = BiblicusRubricEvidenceRetriever(
-        corpus_sources=[
-            LocalRubricMemorySource(root=missing_root, scope_level="score")
-        ]
-    )
 
     with pytest.raises(FileNotFoundError, match="knowledge-base folder"):
-        retriever._create_working_corpus_source()
+        RubricMemoryPreparedCorpusManager(cache_root=tmp_path / "prepared").prepare(
+            corpus_sources=[
+                LocalRubricMemorySource(root=missing_root, scope_level="score")
+            ]
+        )
+
+
+def test_prepared_corpus_reuses_matching_fingerprint(tmp_path):
+    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    source_file = score_root / "2026-04-24" / "source.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("Dosage calibration note.", encoding="utf-8")
+    manager = RubricMemoryPreparedCorpusManager(cache_root=tmp_path / "prepared")
+
+    first = manager.prepare(
+        corpus_sources=[LocalRubricMemorySource(root=score_root, scope_level="score")]
+    )
+    second = manager.prepare(
+        corpus_sources=[LocalRubricMemorySource(root=score_root, scope_level="score")]
+    )
+
+    assert first.status == "rebuilt"
+    assert second.status == "reused"
+    assert second.fingerprint == first.fingerprint
+    assert second.corpus_root == first.corpus_root
+
+
+def test_prepared_corpus_rebuilds_when_source_file_changes(tmp_path):
+    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    source_file = score_root / "2026-04-24" / "source.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("Dosage calibration note.", encoding="utf-8")
+    manager = RubricMemoryPreparedCorpusManager(cache_root=tmp_path / "prepared")
+
+    first = manager.prepare(
+        corpus_sources=[LocalRubricMemorySource(root=score_root, scope_level="score")]
+    )
+    source_file.write_text("Dosage calibration note with new content.", encoding="utf-8")
+    second = manager.prepare(
+        corpus_sources=[LocalRubricMemorySource(root=score_root, scope_level="score")]
+    )
+
+    assert second.status == "rebuilt"
+    assert second.fingerprint != first.fingerprint
 
 
 @pytest.mark.asyncio
@@ -537,6 +636,9 @@ async def test_biblicus_retriever_preserves_inferred_date_and_scope(tmp_path):
             LocalRubricMemorySource(root=source_root, scope_level="score")
         ],
         max_total_items=5,
+        prepared_corpus_manager=RubricMemoryPreparedCorpusManager(
+            cache_root=tmp_path / "prepared"
+        ),
     )
 
     evidence = await retriever.retrieve(
@@ -550,6 +652,8 @@ async def test_biblicus_retriever_preserves_inferred_date_and_scope(tmp_path):
     )
 
     assert len(evidence) == 1
+    assert retriever.last_prepared_corpus is not None
+    assert retriever.last_prepared_corpus.status == "rebuilt"
     assert evidence[0].scope_level == "score"
     assert evidence[0].source_timestamp.isoformat() == "2026-04-24T00:00:00"
     assert evidence[0].source_uri == source_file.resolve().as_uri()

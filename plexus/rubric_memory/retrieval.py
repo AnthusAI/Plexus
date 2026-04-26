@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import re
-import shutil
 from datetime import date, datetime, time
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Protocol, Sequence
 from urllib.parse import unquote, urlparse
 
 from .local_corpus import LocalRubricMemoryCorpusResolver, LocalRubricMemorySource
 from .models import EvidenceClassification, EvidenceSnippet, RubricEvidencePackRequest
+from .preparation import (
+    PreparedRubricMemoryCorpus,
+    RubricMemoryPreparedCorpusManager,
+)
 from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
 
 
@@ -25,8 +25,6 @@ class RubricEvidenceRetriever(Protocol):
 class BiblicusRubricEvidenceRetriever:
     """Retrieve rubric-memory evidence from one local Biblicus corpus folder."""
 
-    _SIDECAR_SUFFIX = ".biblicus.yml"
-    _DATE_FOLDER_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
     _SOURCE_POLICY_ANCHORS = {
         "required to confirm",
         "must confirm",
@@ -36,15 +34,6 @@ class BiblicusRubricEvidenceRetriever:
         "medication name",
         "form/dosage",
         "for all medications",
-    }
-
-    _BIBLICUS_DERIVED_DIRS = {
-        ".biblicus",
-        "analysis",
-        "extracted",
-        "graph",
-        "metadata",
-        "retrieval",
     }
 
     def __init__(
@@ -57,6 +46,7 @@ class BiblicusRubricEvidenceRetriever:
         maximum_total_characters: int = 60000,
         source_window_characters: int = 6000,
         query_planner: RubricMemoryQueryPlanner | None = None,
+        prepared_corpus_manager: RubricMemoryPreparedCorpusManager | None = None,
     ):
         if (corpus_root is None) == (corpus_sources is None):
             raise ValueError(
@@ -82,9 +72,12 @@ class BiblicusRubricEvidenceRetriever:
         self.maximum_total_characters = maximum_total_characters
         self.source_window_characters = source_window_characters
         self.query_planner = query_planner or RubricMemoryQueryPlanner()
+        self.prepared_corpus_manager = (
+            prepared_corpus_manager or RubricMemoryPreparedCorpusManager()
+        )
         self.last_query_plan: RubricMemoryQueryPlan | None = None
+        self.last_prepared_corpus: PreparedRubricMemoryCorpus | None = None
         self._knowledge_base: Any | None = None
-        self._temp_dir: TemporaryDirectory[str] | None = None
 
     @classmethod
     def from_local_score(
@@ -96,6 +89,7 @@ class BiblicusRubricEvidenceRetriever:
         max_total_items: int = 16,
         maximum_total_characters: int = 60000,
         source_window_characters: int = 6000,
+        prepared_corpus_manager: RubricMemoryPreparedCorpusManager | None = None,
     ) -> "BiblicusRubricEvidenceRetriever":
         paths = LocalRubricMemoryCorpusResolver().resolve(
             scorecard_name=scorecard_name,
@@ -107,6 +101,7 @@ class BiblicusRubricEvidenceRetriever:
             max_total_items=max_total_items,
             maximum_total_characters=maximum_total_characters,
             source_window_characters=source_window_characters,
+            prepared_corpus_manager=prepared_corpus_manager,
         )
 
     async def retrieve(
@@ -117,100 +112,59 @@ class BiblicusRubricEvidenceRetriever:
     def _retrieve_sync(
         self, request: RubricEvidencePackRequest
     ) -> list[EvidenceSnippet]:
-        from biblicus.knowledge_base import KnowledgeBase
         from biblicus.models import QueryBudget
 
+        query_budget = QueryBudget(
+            max_total_items=self.max_total_items,
+            maximum_total_characters=self.maximum_total_characters,
+            max_items_per_source=None,
+        )
         if self._knowledge_base is None:
-            working_root = self._create_working_corpus_source()
-            self._knowledge_base = KnowledgeBase.from_folder(
-                working_root,
+            self.last_prepared_corpus = self.prepared_corpus_manager.prepare(
+                corpus_sources=self.corpus_sources,
                 retriever_id=self.retriever_id,
-                query_budget=QueryBudget(
-                    max_total_items=self.max_total_items,
-                    maximum_total_characters=self.maximum_total_characters,
-                    max_items_per_source=None,
-                ),
+            )
+            self._knowledge_base = self._open_prepared_knowledge_base(
+                self.last_prepared_corpus.corpus_root,
+                query_budget=query_budget,
             )
 
         query_plan = self.query_planner.plan(request)
         self.last_query_plan = query_plan
         result = self._knowledge_base.query(
             query_plan.expanded_query_text,
-            budget=QueryBudget(
-                max_total_items=self.max_total_items,
-                maximum_total_characters=self.maximum_total_characters,
-                max_items_per_source=None,
-            ),
+            budget=query_budget,
         )
         return [
             self._expand_snippet_from_source(self._map_evidence(evidence), query_plan)
             for evidence in result.evidence
         ]
 
-    def _create_working_corpus_source(self) -> Path:
-        self._temp_dir = TemporaryDirectory(prefix="plexus-rubric-memory-")
-        working_root = Path(self._temp_dir.name) / "corpus"
-        working_root.mkdir(parents=True, exist_ok=True)
-        (working_root / ".biblicusignore").write_text(
-            "*.biblicus.yml\n**/*.biblicus.yml\n",
-            encoding="utf-8",
+    def _open_prepared_knowledge_base(self, corpus_root: Path, *, query_budget: Any) -> Any:
+        from biblicus.corpus import Corpus
+        from biblicus.knowledge_base import KnowledgeBase, KnowledgeBaseDefaults
+        from biblicus.retrievers import get_retriever
+
+        corpus = Corpus.open(corpus_root)
+        snapshot_id = corpus.latest_snapshot_id
+        if snapshot_id is None:
+            snapshot = get_retriever(self.retriever_id).build_snapshot(
+                corpus,
+                configuration_name="Knowledge base",
+                configuration={},
+            )
+        else:
+            snapshot = corpus.load_snapshot(snapshot_id)
+        return KnowledgeBase(
+            corpus=corpus,
+            retriever_id=self.retriever_id,
+            snapshot=snapshot,
+            defaults=KnowledgeBaseDefaults(
+                retriever_id=self.retriever_id,
+                query_budget=query_budget,
+            ),
+            _temp_dir=None,
         )
-
-        def ignore_derived(directory: str, names: list[str]) -> list[str]:
-            return [name for name in names if name in self._BIBLICUS_DERIVED_DIRS]
-
-        for index, source in enumerate(self.corpus_sources):
-            self._validate_source(source)
-            destination = working_root / f"{index:02d}-{source.scope_level}"
-            shutil.copytree(source.root, destination, ignore=ignore_derived)
-            self._write_temp_metadata_sidecars(source, destination)
-        return working_root
-
-    def _validate_source(self, source: LocalRubricMemorySource) -> None:
-        if not source.root.exists():
-            raise FileNotFoundError(
-                f"Rubric memory knowledge-base folder does not exist: {source.root}"
-            )
-        if not source.root.is_dir():
-            raise NotADirectoryError(
-                f"Rubric memory knowledge-base path is not a directory: {source.root}"
-            )
-
-    def _write_temp_metadata_sidecars(
-        self,
-        source: LocalRubricMemorySource,
-        destination_root: Path,
-    ) -> None:
-        for copied_path in sorted(destination_root.rglob("*")):
-            if not copied_path.is_file():
-                continue
-            if copied_path.name.endswith(self._SIDECAR_SUFFIX):
-                continue
-            relative_path = copied_path.relative_to(destination_root)
-            original_path = source.root / relative_path
-            metadata: dict[str, Any] = {
-                "scope_level": source.scope_level,
-                "source_uri": original_path.resolve().as_uri(),
-            }
-            source_timestamp = self._infer_source_timestamp(relative_path)
-            if source_timestamp is not None:
-                metadata["source_timestamp"] = source_timestamp.isoformat()
-            copied_path.with_name(
-                copied_path.name + self._SIDECAR_SUFFIX
-            ).write_text(
-                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-
-    def _infer_source_timestamp(self, relative_path: Path) -> datetime | None:
-        for part in reversed(relative_path.parts[:-1]):
-            if not self._DATE_FOLDER_PATTERN.match(part):
-                continue
-            try:
-                return datetime.combine(date.fromisoformat(part), time.min)
-            except ValueError:
-                return None
-        return None
 
     def _build_query_text(self, request: RubricEvidencePackRequest) -> str:
         query_plan = self.query_planner.plan(request)
