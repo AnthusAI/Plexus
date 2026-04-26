@@ -1,7 +1,19 @@
 -- Rubric evidence pack synthesis.
 -- {{PROVIDER}} and {{MODEL}} are substituted by Python before execution.
 
-local done = require("tactus.tools.done")
+finish = Tool {
+    name = "finish",
+    description = "Return the final RubricEvidencePack JSON.",
+    input = {
+        pack_json = field.string{
+            required = true,
+            description = "The complete RubricEvidencePack JSON string."
+        },
+    },
+    function(args)
+        return { pack_json = args.pack_json }
+    end
+}
 
 synthesizer = Agent {
     provider = "{{PROVIDER}}",
@@ -23,10 +35,12 @@ Rules:
 - Use "possible_stale_rubric" when corpus evidence suggests the official rubric may need updating.
 - Preserve source_uri, scope_level, source_type, authority_level, source_timestamp, author, retrieval_score, and policy_concepts when returning evidence.
 - Sparse evidence must produce low confidence and open questions instead of a confident policy claim.
-- Return only valid JSON matching response_schema. Do not return Markdown or commentary.
+- Use output_template as the exact JSON shape.
+- Fill empty text fields with concise analysis.
+- Copy relevant evidence objects from evidence into supporting_evidence or conflicting_evidence.
+- Return only valid JSON matching output_contract. Do not return Markdown or commentary.
 ]],
-    initial_message = "{synthesis_input_json}\n\nCall the done tool with only the RubricEvidencePack JSON as the reason.",
-    tools = {done},
+    tools = {finish},
 }
 
 Procedure {
@@ -72,24 +86,19 @@ Procedure {
             return ""
         end
 
-        local max_turns = 3
-        local turn_count = 0
-        while not done.called() and turn_count < max_turns do
-            synthesizer()
-            turn_count = turn_count + 1
-        end
+        local synthesis_message = input.synthesis_input_json .. [[
 
-        local last = done.last_result()
-        local text = extract_text(last)
-        if text == "" and last ~= nil and type(last) ~= "table" then
-            text = tostring(last)
-        end
+You must call the finish tool exactly once.
+The finish tool has a required argument named pack_json.
+Set pack_json to the complete RubricEvidencePack JSON string.
+Start from output_template and fill in the empty fields.
+]]
+
+        synthesizer({ message = synthesis_message })
+        local text = tostring(finish.last_call() or "")
 
         if type(text) ~= "string" then
             text = tostring(text or "")
-        end
-        if string.find(string.lower(text), "<lua table at ", 1, true) then
-            text = ""
         end
         return { text = text }
     end

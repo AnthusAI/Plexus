@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import ast
 from pathlib import Path
 from typing import Protocol, Sequence
 
@@ -33,7 +34,7 @@ class TactusRubricEvidenceSynthesizer:
         self,
         *,
         provider: str = "bedrock",
-        model: str = "anthropic.claude-3-haiku-20240307-v1:0",
+        model: str = "us.anthropic.claude-sonnet-4-6",
         procedure_id: str = "rubric_evidence_pack_synthesis",
     ):
         self.provider = provider
@@ -61,8 +62,44 @@ class TactusRubricEvidenceSynthesizer:
                 event.model_dump(mode="json") for event in history
             ],
             "confidence_inputs": confidence_inputs.model_dump(mode="json"),
-            "response_schema": RubricEvidencePack.model_json_schema(),
+            "output_template": {
+                "score_version_id": request.score_version_id,
+                "rubric_reading": "",
+                "evidence_classification": "rubric_gap",
+                "supporting_evidence": [],
+                "conflicting_evidence": [],
+                "history_of_change": [
+                    event.model_dump(mode="json") for event in history
+                ],
+                "likely_reason_for_disagreement": "",
+                "confidence": confidence_inputs.suggested_confidence.value,
+                "confidence_inputs": confidence_inputs.model_dump(mode="json"),
+                "open_questions": [],
+            },
+            "output_contract": {
+                "required_top_level_fields": [
+                    "score_version_id",
+                    "rubric_reading",
+                    "evidence_classification",
+                    "supporting_evidence",
+                    "conflicting_evidence",
+                    "history_of_change",
+                    "likely_reason_for_disagreement",
+                    "confidence",
+                    "confidence_inputs",
+                    "open_questions",
+                ],
+                "evidence_classification_values": [
+                    "rubric_supported",
+                    "rubric_conflicting",
+                    "rubric_gap",
+                    "historical_context",
+                    "possible_stale_rubric",
+                ],
+                "confidence_values": ["low", "medium", "high"],
+            },
         }
+        synthesis_prompt = self._build_synthesis_prompt(payload)
         runtime = TactusRuntime(
             procedure_id=self.procedure_id,
             storage_backend=MemoryStorage(),
@@ -71,7 +108,7 @@ class TactusRubricEvidenceSynthesizer:
         result = await runtime.execute(
             tac_source,
             context={
-                "synthesis_input_json": json.dumps(payload, ensure_ascii=False),
+                "synthesis_input_json": synthesis_prompt,
             },
             format="lua",
         )
@@ -90,6 +127,27 @@ class TactusRubricEvidenceSynthesizer:
             "{{MODEL}}", self.model
         )
 
+    def _build_synthesis_prompt(self, payload: dict) -> str:
+        return (
+            "Synthesize a RubricEvidencePack from the following context.\n\n"
+            "Official rubric authority and disputed item:\n"
+            f"{json.dumps(payload['request'], ensure_ascii=False, indent=2)}\n\n"
+            "Retrieved corpus evidence with provenance:\n"
+            f"{json.dumps(payload['evidence'], ensure_ascii=False, indent=2)}\n\n"
+            "Chronological evidence events:\n"
+            f"{json.dumps(payload['chronological_evidence'], ensure_ascii=False, indent=2)}\n\n"
+            "Confidence inputs computed by Python:\n"
+            f"{json.dumps(payload['confidence_inputs'], ensure_ascii=False, indent=2)}\n\n"
+            "Use this exact JSON object shape for pack_json. Fill empty strings and "
+            "choose evidence lists/classification based on the context:\n"
+            f"{json.dumps(payload['output_template'], ensure_ascii=False, indent=2)}\n\n"
+            "Allowed classifications: "
+            + ", ".join(payload["output_contract"]["evidence_classification_values"])
+            + ". Allowed confidence values: "
+            + ", ".join(payload["output_contract"]["confidence_values"])
+            + "."
+        )
+
     def _extract_text(self, result: object) -> str:
         procedure_output = result.get("result", result) if isinstance(result, dict) else result
         if isinstance(procedure_output, dict):
@@ -99,10 +157,28 @@ class TactusRubricEvidenceSynthesizer:
         if isinstance(raw_text, dict):
             raw_text = raw_text.get("reason", "") or ""
         text = str(raw_text or "").strip()
+        text = self._extract_done_reason(text)
         if not text:
             raise ValueError("Rubric evidence synthesis returned empty output.")
         if "<lua table at " in text.lower():
             raise ValueError("Rubric evidence synthesis returned a Lua table pointer.")
+        return text
+
+    def _extract_done_reason(self, text: str) -> str:
+        if not text.startswith("{") or "'args'" not in text:
+            return text
+        try:
+            call = ast.literal_eval(text)
+        except (SyntaxError, ValueError):
+            return text
+        if not isinstance(call, dict):
+            return text
+        args = call.get("args")
+        if not isinstance(args, dict):
+            return text
+        reason = args.get("pack_json") or args.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip()
         return text
 
     def _strip_json_fence(self, text: str) -> str:
