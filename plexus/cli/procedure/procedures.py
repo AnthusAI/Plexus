@@ -1608,10 +1608,10 @@ def index_optimizer_run(procedure_id: str, force: bool, output: str):
     }
 
     if output == "json":
-        console.print(json.dumps(payload, indent=2, default=str))
+        click.echo(json.dumps(payload, indent=2, default=str))
         return
     if output == "yaml":
-        console.print(yaml.dump(payload, default_flow_style=False))
+        click.echo(yaml.dump(payload, default_flow_style=False))
         return
 
     table = Table(title=f"Indexed Optimizer Run {procedure_id}")
@@ -1626,6 +1626,70 @@ def index_optimizer_run(procedure_id: str, force: bool, output: str):
     table.add_row("Best feedback eval", (payload["best"] or {}).get("best_feedback_evaluation_id") or "—")
     table.add_row("Best accuracy eval", (payload["best"] or {}).get("best_accuracy_evaluation_id") or "—")
     console.print(table)
+
+
+@procedure.command("optimizer-summary")
+@click.argument("procedure_id")
+@click.option("--runtime-log", is_flag=True, help="Include a runtime log excerpt")
+@click.option("--events", is_flag=True, help="Include an events.jsonl excerpt")
+@click.option("--log-lines", default=80, show_default=True, help="Number of trailing lines to include for excerpts")
+@click.option("--output", "-o", type=click.Choice(["json", "yaml", "table"]), default="table", show_default=True)
+def optimizer_summary(procedure_id: str, runtime_log: bool, events: bool, log_lines: int, output: str):
+    """Summarize one indexed optimizer procedure and its candidate/evaluation history."""
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = OptimizerResultsService(client)
+    try:
+        payload = service.summarize_optimizer_procedure(
+            procedure_id,
+            include_runtime_log=runtime_log,
+            include_events=events,
+            log_lines=log_lines,
+        )
+    except Exception as exc:
+        console.print(f"[red]Error loading optimizer summary: {exc}[/red]")
+        return
+
+    if output == "json":
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == "yaml":
+        click.echo(yaml.dump(payload, default_flow_style=False))
+        return
+
+    summary = payload.get("summary") or {}
+    best = payload.get("best") or {}
+    table = Table(title=f"Optimizer Summary {procedure_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Status", str((payload.get("procedure") or {}).get("status") or "—"))
+    table.add_row("Cycles", f"{summary.get('completed_cycles') or '—'}/{summary.get('configured_max_iterations') or '—'}")
+    table.add_row("Stop reason", summary.get("stop_reason") or "—")
+    table.add_row("Winning version", best.get("winning_version_id") or "—")
+    table.add_row("Best feedback eval", best.get("best_feedback_evaluation_url") or best.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best accuracy eval", best.get("best_accuracy_evaluation_url") or best.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Manifest", (payload.get("artifact_pointer") or {}).get("manifest") or "—")
+    table.add_row("Runtime log", (payload.get("artifact_pointer") or {}).get("runtime_log") or "—")
+    console.print(table)
+
+    cycles = Table(title="Cycles")
+    cycles.add_column("Cycle", style="cyan")
+    cycles.add_column("Status", style="white")
+    cycles.add_column("Version", style="magenta")
+    cycles.add_column("Feedback AC1", style="green")
+    cycles.add_column("Accuracy AC1", style="green")
+    for cycle in payload.get("cycles") or []:
+        cycles.add_row(
+            str(cycle.get("cycle") or "—"),
+            str(cycle.get("status") or "—"),
+            str(cycle.get("version_id") or "—"),
+            f"{cycle['feedback_alignment']:.4f}" if cycle.get("feedback_alignment") is not None else "—",
+            f"{cycle['accuracy_alignment']:.4f}" if cycle.get("accuracy_alignment") is not None else "—",
+        )
+    console.print(cycles)
 
 
 # Add to CLI

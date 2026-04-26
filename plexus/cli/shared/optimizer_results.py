@@ -21,6 +21,7 @@ from plexus.dashboard.api.models.task import Task
 
 logger = logging.getLogger(__name__)
 
+LAB_EVALUATION_BASE_URL = "https://lab.callcriteria.com/lab/evaluations"
 OPTIMIZER_ARTIFACT_SCHEMA_VERSION = 1
 OPTIMIZER_ARTIFACTS_METADATA_KEY = "optimizer_artifacts"
 OPTIMIZER_MANIFEST_SUFFIX = "optimizer/manifest.json"
@@ -97,6 +98,12 @@ def _download_json_from_s3(*, bucket_name: str, key: str) -> Dict[str, Any]:
     return parsed
 
 
+def _download_text_from_s3(*, bucket_name: str, key: str) -> str:
+    s3 = boto3.client("s3")
+    response = s3.get_object(Bucket=bucket_name, Key=key)
+    return response["Body"].read().decode("utf-8")
+
+
 def _download_json_from_s3_key(*, bucket_name: str, key: str) -> Dict[str, Any]:
     if not key:
         raise RuntimeError("S3 key is required.")
@@ -127,6 +134,71 @@ def _sort_by_updated_at_desc(items: Iterable[Dict[str, Any]]) -> List[Dict[str, 
         key=lambda item: _parse_iso_datetime(item.get("updatedAt")) or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
+
+
+def _evaluation_url(evaluation_id: Optional[str]) -> Optional[str]:
+    return f"{LAB_EVALUATION_BASE_URL}/{evaluation_id}" if evaluation_id else None
+
+
+def _finite_number(value: Any) -> Optional[float]:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _parse_metrics(value: Any) -> Dict[str, Optional[float]]:
+    parsed = value
+    if isinstance(parsed, str) and parsed.strip():
+        try:
+            parsed = json.loads(parsed)
+        except Exception:
+            return {"accuracy": None, "alignment": None}
+
+    if isinstance(parsed, list):
+        accuracy = None
+        alignment = None
+        for metric in parsed:
+            if not isinstance(metric, dict):
+                continue
+            name = str(metric.get("name") or metric.get("label") or "").lower()
+            number = _finite_number(metric.get("value"))
+            if number is None:
+                continue
+            if accuracy is None and "accuracy" in name:
+                accuracy = number
+            if alignment is None and ("alignment" in name or "ac1" in name):
+                alignment = number
+        return {"accuracy": accuracy, "alignment": alignment}
+
+    if isinstance(parsed, dict):
+        return {
+            "accuracy": _finite_number(parsed.get("accuracy")),
+            "alignment": (
+                _finite_number(parsed.get("alignment"))
+                or _finite_number(parsed.get("ac1"))
+                or _finite_number(parsed.get("agreement"))
+            ),
+        }
+
+    return {"accuracy": None, "alignment": None}
+
+
+def _extract_evaluation_metadata(parameters: Any) -> Dict[str, Optional[str]]:
+    params = _parse_json_dict(parameters)
+    metadata = _parse_json_dict(params.get("metadata"))
+    return {
+        "notes": params.get("notes") if isinstance(params.get("notes"), str) else None,
+        "baseline_evaluation_id": (
+            metadata.get("baseline")
+            or metadata.get("baseline_evaluation_id")
+            or params.get("baseline")
+            or params.get("baseline_evaluation_id")
+        ),
+        "current_baseline_evaluation_id": (
+            metadata.get("current_baseline")
+            or metadata.get("current_baseline_evaluation_id")
+            or params.get("current_baseline")
+            or params.get("current_baseline_evaluation_id")
+        ),
+    }
 
 
 def _extract_status(iteration: Dict[str, Any]) -> str:
@@ -641,6 +713,31 @@ class OptimizerResultsService:
             )
         return records
 
+    def summarize_optimizer_run(self, run: OptimizerRunRecord) -> Dict[str, Any]:
+        manifest = run.manifest or {}
+        summary = manifest.get("summary") or {}
+        best = manifest.get("best") or {}
+        winning_feedback_metrics = best.get("winning_feedback_metrics") or {}
+        winning_accuracy_metrics = best.get("winning_accuracy_metrics") or {}
+        return {
+            "procedure_id": run.procedure.get("id"),
+            "name": run.procedure.get("name"),
+            "status": run.procedure.get("status"),
+            "updated_at": run.procedure.get("updatedAt"),
+            "indexed": run.indexed,
+            "completed_cycles": summary.get("completed_cycles"),
+            "configured_max_iterations": summary.get("configured_max_iterations"),
+            "stop_reason": summary.get("stop_reason"),
+            "winning_version_id": best.get("winning_version_id"),
+            "best_feedback_evaluation_id": best.get("best_feedback_evaluation_id"),
+            "best_feedback_evaluation_url": _evaluation_url(best.get("best_feedback_evaluation_id")),
+            "best_accuracy_evaluation_id": best.get("best_accuracy_evaluation_id"),
+            "best_accuracy_evaluation_url": _evaluation_url(best.get("best_accuracy_evaluation_id")),
+            "best_feedback_alignment": winning_feedback_metrics.get("alignment"),
+            "best_accuracy_alignment": winning_accuracy_metrics.get("alignment"),
+            "artifact_pointer": run.artifact_pointer,
+        }
+
     def _list_score_versions(self, score_id: str, *, limit: int = 200) -> List[Dict[str, Any]]:
         query = """
         query ListScoreVersionByScoreIdAndCreatedAtForOptimizer($scoreId: String!, $limit: Int, $nextToken: String) {
@@ -754,6 +851,118 @@ class OptimizerResultsService:
         )
         return candidates
 
+    def summarize_optimizer_candidate(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        feedback_metrics = candidate.get("best_feedback_metrics") or {}
+        accuracy_metrics = candidate.get("best_accuracy_metrics") or {}
+        return {
+            "version_id": candidate.get("version_id"),
+            "runs": candidate.get("runs") or [],
+            "best_feedback_evaluation_id": candidate.get("best_feedback_evaluation_id"),
+            "best_feedback_evaluation_url": _evaluation_url(candidate.get("best_feedback_evaluation_id")),
+            "best_accuracy_evaluation_id": candidate.get("best_accuracy_evaluation_id"),
+            "best_accuracy_evaluation_url": _evaluation_url(candidate.get("best_accuracy_evaluation_id")),
+            "best_feedback_alignment": candidate.get("best_feedback_alignment"),
+            "best_accuracy_alignment": candidate.get("best_accuracy_alignment"),
+            "best_feedback_accuracy": feedback_metrics.get("accuracy"),
+            "best_accuracy_accuracy": accuracy_metrics.get("accuracy"),
+            "created_at": candidate.get("created_at"),
+            "updated_at": candidate.get("updated_at"),
+            "note": candidate.get("note"),
+            "branch": candidate.get("branch"),
+            "parent_version_id": candidate.get("parent_version_id"),
+            "pinned": bool(candidate.get("pinned")),
+        }
+
+    def list_score_evaluations(
+        self,
+        score_id: str,
+        *,
+        version_id: Optional[str] = None,
+        sort_by: str = "updated",
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        query = """
+        query ListEvaluationByScoreIdAndUpdatedAtForOptimizerReview(
+            $scoreId: String!
+            $limit: Int
+            $nextToken: String
+        ) {
+            listEvaluationByScoreIdAndUpdatedAt(scoreId: $scoreId, sortDirection: DESC, limit: $limit, nextToken: $nextToken) {
+                items {
+                    id
+                    type
+                    status
+                    createdAt
+                    updatedAt
+                    scoreVersionId
+                    accuracy
+                    processedItems
+                    totalItems
+                    elapsedSeconds
+                    estimatedRemainingSeconds
+                    parameters
+                    metrics
+                }
+                nextToken
+            }
+        }
+        """
+        rows: List[Dict[str, Any]] = []
+        next_token: Optional[str] = None
+        fetch_limit = max(limit * 3, limit)
+        while len(rows) < fetch_limit:
+            variables: Dict[str, Any] = {
+                "scoreId": score_id,
+                "limit": min(100, fetch_limit - len(rows)),
+            }
+            if next_token:
+                variables["nextToken"] = next_token
+            result = self.client.execute(query, variables)
+            payload = result.get("listEvaluationByScoreIdAndUpdatedAt", {})
+            page_items = payload.get("items") or []
+            rows.extend(item for item in page_items if isinstance(item, dict))
+            next_token = payload.get("nextToken")
+            if not next_token:
+                break
+
+        evaluations: List[Dict[str, Any]] = []
+        for row in rows:
+            if version_id and row.get("scoreVersionId") != version_id:
+                continue
+            parsed_metrics = _parse_metrics(row.get("metrics"))
+            metadata = _extract_evaluation_metadata(row.get("parameters"))
+            evaluations.append(
+                {
+                    "evaluation_id": row.get("id"),
+                    "evaluation_url": _evaluation_url(row.get("id")),
+                    "type": row.get("type"),
+                    "status": row.get("status"),
+                    "score_version_id": row.get("scoreVersionId"),
+                    "created_at": row.get("createdAt"),
+                    "updated_at": row.get("updatedAt"),
+                    "accuracy": _finite_number(row.get("accuracy")) or parsed_metrics.get("accuracy"),
+                    "alignment": parsed_metrics.get("alignment"),
+                    "processed_items": row.get("processedItems"),
+                    "total_items": row.get("totalItems"),
+                    "elapsed_seconds": row.get("elapsedSeconds"),
+                    "estimated_remaining_seconds": row.get("estimatedRemainingSeconds"),
+                    "notes": metadata.get("notes"),
+                    "baseline_evaluation_id": metadata.get("baseline_evaluation_id"),
+                    "current_baseline_evaluation_id": metadata.get("current_baseline_evaluation_id"),
+                }
+            )
+
+        if sort_by == "accuracy":
+            evaluations.sort(key=lambda item: item.get("accuracy") if item.get("accuracy") is not None else -1, reverse=True)
+        elif sort_by == "alignment":
+            evaluations.sort(key=lambda item: item.get("alignment") if item.get("alignment") is not None else -1, reverse=True)
+        else:
+            evaluations.sort(
+                key=lambda item: _parse_iso_datetime(item.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True,
+            )
+        return evaluations[:limit]
+
     def build_promotion_packet_for_score(
         self,
         score_id: str,
@@ -806,3 +1015,181 @@ class OptimizerResultsService:
             "branch": selected.get("branch"),
             "runs": selected.get("runs") or [],
         }
+
+    def build_optimizer_review_packet_for_score(
+        self,
+        score_id: str,
+        *,
+        score_name: str,
+        scorecard_name: str,
+        champion_version_id: Optional[str],
+    ) -> Dict[str, Any]:
+        runs = self.list_optimizer_runs_for_score(score_id)
+        candidates = self.list_optimizer_candidates_for_score(score_id)
+        unindexed_count = sum(1 for run in runs if not run.indexed)
+        best_candidate = candidates[0] if candidates else None
+        promotion_packet = None
+        recommendation = "No indexed optimizer candidates were found."
+        if best_candidate:
+            promotion_packet = self.build_promotion_packet_for_score(
+                score_id,
+                score_name=score_name,
+                scorecard_name=scorecard_name,
+                champion_version_id=champion_version_id,
+                version_id=best_candidate["version_id"],
+            )
+            if promotion_packet["is_champion"]:
+                recommendation = "Best indexed candidate is already champion."
+            else:
+                recommendation = "Best indexed candidate differs from champion; review evaluations and promote manually if accepted."
+
+        return {
+            "score_id": score_id,
+            "score_name": score_name,
+            "scorecard_name": scorecard_name,
+            "champion_version_id": champion_version_id,
+            "best_candidate": self.summarize_optimizer_candidate(best_candidate) if best_candidate else None,
+            "promotion_packet": promotion_packet,
+            "unindexed_run_count": unindexed_count,
+            "indexed_run_count": len(runs) - unindexed_count,
+            "latest_runs": [self.summarize_optimizer_run(run) for run in runs[:5]],
+            "promotion_recommendation": recommendation,
+        }
+
+    def summarize_optimizer_procedure(
+        self,
+        procedure_id: str,
+        *,
+        include_runtime_log: bool = False,
+        include_events: bool = False,
+        log_lines: int = 80,
+    ) -> Dict[str, Any]:
+        procedure = self._load_procedure_record(procedure_id)
+        metadata = _parse_json_dict(procedure.get("metadata"))
+        artifact_pointer = _parse_json_dict(metadata.get(OPTIMIZER_ARTIFACTS_METADATA_KEY))
+        manifest_key = artifact_pointer.get("manifest")
+        if not manifest_key:
+            raise RuntimeError(
+                f"Procedure {procedure_id} is not indexed. Run 'plexus procedure index-optimizer-run {procedure_id}' first."
+            )
+        manifest = self.load_indexed_manifest_for_procedure(procedure)
+        cycles = [
+            {
+                "cycle": cycle.get("cycle"),
+                "status": cycle.get("status"),
+                "version_id": cycle.get("version_id"),
+                "feedback_evaluation_id": cycle.get("feedback_evaluation_id"),
+                "feedback_evaluation_url": _evaluation_url(cycle.get("feedback_evaluation_id")),
+                "accuracy_evaluation_id": cycle.get("accuracy_evaluation_id"),
+                "accuracy_evaluation_url": _evaluation_url(cycle.get("accuracy_evaluation_id")),
+                "feedback_alignment": (cycle.get("feedback_metrics") or {}).get("alignment"),
+                "accuracy_alignment": (cycle.get("accuracy_metrics") or {}).get("alignment"),
+                "accepted": cycle.get("accepted"),
+                "candidate_count": len(cycle.get("candidates") or []),
+                "candidates": [
+                    {
+                        "index": candidate.get("index"),
+                        "version_id": candidate.get("version_id"),
+                        "feedback_evaluation_id": candidate.get("feedback_evaluation_id"),
+                        "feedback_evaluation_url": _evaluation_url(candidate.get("feedback_evaluation_id")),
+                        "accuracy_evaluation_id": candidate.get("accuracy_evaluation_id"),
+                        "accuracy_evaluation_url": _evaluation_url(candidate.get("accuracy_evaluation_id")),
+                        "feedback_alignment": (candidate.get("feedback_metrics") or {}).get("alignment"),
+                        "accuracy_alignment": (candidate.get("accuracy_metrics") or {}).get("alignment"),
+                    }
+                    for candidate in (cycle.get("candidates") or [])
+                    if isinstance(candidate, dict)
+                ],
+            }
+            for cycle in manifest.get("cycles", [])
+            if isinstance(cycle, dict)
+        ]
+        raw_summary = manifest.get("summary") or {}
+        raw_baseline = manifest.get("baseline") or {}
+        raw_best = manifest.get("best") or {}
+        baseline_feedback_metrics = raw_baseline.get("feedback_metrics") or {}
+        baseline_accuracy_metrics = raw_baseline.get("accuracy_metrics") or {}
+        winning_feedback_metrics = raw_best.get("winning_feedback_metrics") or {}
+        winning_accuracy_metrics = raw_best.get("winning_accuracy_metrics") or {}
+        payload: Dict[str, Any] = {
+            "procedure_id": procedure_id,
+            "procedure": manifest.get("procedure"),
+            "summary": {
+                "current_cycle": raw_summary.get("current_cycle"),
+                "completed_cycles": raw_summary.get("completed_cycles"),
+                "configured_max_iterations": raw_summary.get("configured_max_iterations"),
+                "stop_reason": raw_summary.get("stop_reason"),
+                "procedure_summary": raw_summary.get("procedure_summary"),
+            },
+            "baseline": {
+                "version_id": raw_baseline.get("version_id"),
+                "original_feedback_evaluation_id": raw_baseline.get("original_feedback_evaluation_id"),
+                "original_feedback_evaluation_url": _evaluation_url(raw_baseline.get("original_feedback_evaluation_id")),
+                "original_accuracy_evaluation_id": raw_baseline.get("original_accuracy_evaluation_id"),
+                "original_accuracy_evaluation_url": _evaluation_url(raw_baseline.get("original_accuracy_evaluation_id")),
+                "current_feedback_evaluation_id": raw_baseline.get("current_feedback_evaluation_id"),
+                "current_feedback_evaluation_url": _evaluation_url(raw_baseline.get("current_feedback_evaluation_id")),
+                "current_accuracy_evaluation_id": raw_baseline.get("current_accuracy_evaluation_id"),
+                "current_accuracy_evaluation_url": _evaluation_url(raw_baseline.get("current_accuracy_evaluation_id")),
+                "feedback_alignment": baseline_feedback_metrics.get("alignment"),
+                "feedback_accuracy": baseline_feedback_metrics.get("accuracy"),
+                "accuracy_alignment": baseline_accuracy_metrics.get("alignment"),
+                "accuracy_accuracy": baseline_accuracy_metrics.get("accuracy"),
+            },
+            "best": {
+                "winning_version_id": raw_best.get("winning_version_id"),
+                "last_accepted_version_id": raw_best.get("last_accepted_version_id"),
+                "best_feedback_evaluation_id": raw_best.get("best_feedback_evaluation_id"),
+                "best_feedback_evaluation_url": _evaluation_url(raw_best.get("best_feedback_evaluation_id")),
+                "best_accuracy_evaluation_id": raw_best.get("best_accuracy_evaluation_id"),
+                "best_accuracy_evaluation_url": _evaluation_url(raw_best.get("best_accuracy_evaluation_id")),
+                "feedback_alignment": winning_feedback_metrics.get("alignment"),
+                "feedback_accuracy": winning_feedback_metrics.get("accuracy"),
+                "accuracy_alignment": winning_accuracy_metrics.get("alignment"),
+                "accuracy_accuracy": winning_accuracy_metrics.get("accuracy"),
+            },
+            "cycles": cycles,
+            "artifact_pointer": artifact_pointer,
+        }
+        bucket_name = resolve_task_output_attachment_bucket_name()
+        if (include_runtime_log or include_events) and not bucket_name:
+            raise RuntimeError("aws.storage.task_attachments_bucket is required to load optimizer artifacts.")
+        if include_runtime_log:
+            runtime_key = artifact_pointer.get("runtime_log")
+            runtime_text = _download_text_from_s3(bucket_name=bucket_name, key=runtime_key) if runtime_key else ""
+            runtime_lines = runtime_text.splitlines()
+            payload["runtime_log_excerpt"] = "\n".join(runtime_lines[-log_lines:])
+        if include_events:
+            events_key = artifact_pointer.get("events")
+            events_text = _download_text_from_s3(bucket_name=bucket_name, key=events_key) if events_key else ""
+            payload["events_excerpt"] = "\n".join(events_text.splitlines()[-log_lines:])
+        return payload
+
+    @staticmethod
+    def render_promotion_packets_markdown(packets: List[Dict[str, Any]]) -> str:
+        lines = [
+            "| Score | Version | Champion | Feedback Eval | Feedback AC1 | Accuracy Eval | Accuracy AC1 | Guidelines |",
+            "| --- | --- | --- | --- | ---: | --- | ---: | --- |",
+        ]
+        for packet in packets:
+            lines.append(
+                "| {score} | {version} | {champion} | {fb_eval} | {fb_ac1} | {acc_eval} | {acc_ac1} | {guidelines} |".format(
+                    score=packet.get("score_name") or "",
+                    version=packet.get("version_id") or "",
+                    champion="yes" if packet.get("is_champion") else "no",
+                    fb_eval=packet.get("best_feedback_evaluation_url") or "",
+                    fb_ac1=(
+                        f"{packet['best_feedback_alignment']:.4f}"
+                        if isinstance(packet.get("best_feedback_alignment"), (int, float))
+                        else ""
+                    ),
+                    acc_eval=packet.get("best_accuracy_evaluation_url") or "",
+                    acc_ac1=(
+                        f"{packet['best_accuracy_alignment']:.4f}"
+                        if isinstance(packet.get("best_accuracy_alignment"), (int, float))
+                        else ""
+                    ),
+                    guidelines=packet.get("guidelines_relative_path") or "",
+                )
+            )
+        return "\n".join(lines)
