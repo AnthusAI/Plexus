@@ -16,6 +16,7 @@ from plexus.rubric_memory import (
     RubricEvidencePackRequest,
     RubricEvidencePackService,
     RubricHistoryEvent,
+    TactusRubricEvidenceSynthesizer,
 )
 
 
@@ -108,6 +109,30 @@ def _snippet(
         retrieval_score=retrieval_score,
         policy_concepts=["billing"],
         evidence_classification=evidence_classification,
+    )
+
+
+def test_tactus_synthesizer_extracts_done_last_call_reason():
+    synthesizer = TactusRubricEvidenceSynthesizer()
+    raw_call = (
+        "{'name': 'done', 'args': {'reason': '{\"score_version_id\": "
+        "\"version-1\"}'}, 'result': '<Lua table at 0x123>'}"
+    )
+
+    assert synthesizer._extract_done_reason(raw_call) == (
+        '{"score_version_id": "version-1"}'
+    )
+
+
+def test_tactus_synthesizer_extracts_finish_pack_json():
+    synthesizer = TactusRubricEvidenceSynthesizer()
+    raw_call = (
+        "{'name': 'finish', 'args': {'pack_json': '{\"score_version_id\": "
+        "\"version-1\"}'}, 'result': '<Lua table at 0x123>'}"
+    )
+
+    assert synthesizer._extract_done_reason(raw_call) == (
+        '{"score_version_id": "version-1"}'
     )
 
 
