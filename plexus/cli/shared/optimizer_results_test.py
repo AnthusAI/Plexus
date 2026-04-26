@@ -260,13 +260,14 @@ def test_list_score_evaluations_filters_sorts_and_extracts_metadata():
                             "scoreVersionId": "version-1",
                             "updatedAt": "2026-04-25T10:00:00+00:00",
                             "accuracy": 75.0,
+                            "cost": 0.4,
                             "processedItems": 10,
                             "totalItems": 10,
                             "parameters": json.dumps({
                                 "notes": "baseline",
                                 "metadata": {"baseline_evaluation_id": "eval-base"},
                             }),
-                            "metrics": json.dumps({"alignment": 0.51}),
+                            "metrics": json.dumps({"alignment": 0.51, "precision": 0.72, "recall": 0.81}),
                         },
                         {
                             "id": "eval-high",
@@ -275,13 +276,27 @@ def test_list_score_evaluations_filters_sorts_and_extracts_metadata():
                             "scoreVersionId": "version-2",
                             "updatedAt": "2026-04-25T11:00:00+00:00",
                             "accuracy": 91.0,
+                            "cost": 0.2,
                             "processedItems": 12,
                             "totalItems": 12,
                             "parameters": json.dumps({
                                 "notes": "candidate",
                                 "metadata": {"current_baseline_evaluation_id": "eval-current"},
                             }),
-                            "metrics": json.dumps({"alignment": 0.83}),
+                            "metrics": json.dumps({"alignment": 0.83, "precision": 0.91, "recall": 0.62}),
+                        },
+                        {
+                            "id": "eval-missing-cost",
+                            "type": "feedback",
+                            "status": "COMPLETED",
+                            "scoreVersionId": "version-3",
+                            "updatedAt": "2026-04-25T12:00:00+00:00",
+                            "accuracy": 82.0,
+                            "cost": None,
+                            "processedItems": 14,
+                            "totalItems": 14,
+                            "parameters": json.dumps({"notes": "missing cost"}),
+                            "metrics": json.dumps({"alignment": 0.70, "recall": 0.93}),
                         },
                     ],
                     "nextToken": None,
@@ -291,10 +306,22 @@ def test_list_score_evaluations_filters_sorts_and_extracts_metadata():
     service = OptimizerResultsService(EvaluationClient())
     rows = service.list_score_evaluations("score-1", sort_by="alignment")
 
-    assert [row["evaluation_id"] for row in rows] == ["eval-high", "eval-low"]
+    assert [row["evaluation_id"] for row in rows] == ["eval-high", "eval-missing-cost", "eval-low"]
     assert rows[0]["evaluation_url"].endswith("/eval-high")
     assert rows[0]["notes"] == "candidate"
     assert rows[0]["current_baseline_evaluation_id"] == "eval-current"
+    assert rows[0]["precision"] == 0.91
+    assert rows[0]["recall"] == 0.62
+    assert rows[0]["cost"] == 0.2
+
+    by_precision = service.list_score_evaluations("score-1", sort_by="precision")
+    assert [row["evaluation_id"] for row in by_precision] == ["eval-high", "eval-low", "eval-missing-cost"]
+
+    by_recall = service.list_score_evaluations("score-1", sort_by="recall")
+    assert [row["evaluation_id"] for row in by_recall] == ["eval-missing-cost", "eval-low", "eval-high"]
+
+    by_cost = service.list_score_evaluations("score-1", sort_by="cost")
+    assert [row["evaluation_id"] for row in by_cost] == ["eval-high", "eval-low", "eval-missing-cost"]
 
     filtered = service.list_score_evaluations("score-1", version_id="version-1")
     assert [row["evaluation_id"] for row in filtered] == ["eval-low"]

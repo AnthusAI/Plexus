@@ -1,0 +1,31 @@
+{
+  "id": "plx-0e1d2965-ca2a-4294-991e-a8bd4b913a9a",
+  "title": "Clarify optimizer evaluation links and expand metric sorting",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "57eaca82-8173-46cc-a10c-5143b9aade84",
+      "author": "ryan",
+      "text": "Starting implementation. Scope: clarify stored-manifest best evaluation labels, remove informal eval wording from visible optimizer UI/CLI labels, and expand score/version evaluation sorting to alignment, accuracy, precision, recall, and cost without schema/API changes.",
+      "created_at": "2026-04-26T15:26:35.587078Z"
+    },
+    {
+      "id": "6a673a15-5b22-4e16-a531-0349bcf33c7d",
+      "author": "ryan",
+      "text": "Implemented metric-aware evaluation sorting and terminology cleanup. Verified: Python optimizer results tests pass, focused dashboard Jest tests pass, score evaluations CLI help exposes precision/recall/cost sort options, and dashboard typecheck passes.",
+      "created_at": "2026-04-26T15:32:46.648701Z"
+    }
+  ],
+  "created_at": "2026-04-26T15:26:29.408646Z",
+  "updated_at": "2026-04-26T15:32:46.687167Z",
+  "closed_at": "2026-04-26T15:32:46.687167Z",
+  "custom": {}
+}

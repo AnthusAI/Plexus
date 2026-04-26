@@ -150,11 +150,14 @@ def _parse_metrics(value: Any) -> Dict[str, Optional[float]]:
         try:
             parsed = json.loads(parsed)
         except Exception:
-            return {"accuracy": None, "alignment": None}
+            return {"accuracy": None, "alignment": None, "precision": None, "recall": None, "cost": None}
 
     if isinstance(parsed, list):
         accuracy = None
         alignment = None
+        precision = None
+        recall = None
+        cost = None
         for metric in parsed:
             if not isinstance(metric, dict):
                 continue
@@ -166,7 +169,13 @@ def _parse_metrics(value: Any) -> Dict[str, Optional[float]]:
                 accuracy = number
             if alignment is None and ("alignment" in name or "ac1" in name):
                 alignment = number
-        return {"accuracy": accuracy, "alignment": alignment}
+            if precision is None and "precision" in name:
+                precision = number
+            if recall is None and "recall" in name:
+                recall = number
+            if cost is None and "cost" in name:
+                cost = number
+        return {"accuracy": accuracy, "alignment": alignment, "precision": precision, "recall": recall, "cost": cost}
 
     if isinstance(parsed, dict):
         return {
@@ -176,9 +185,18 @@ def _parse_metrics(value: Any) -> Dict[str, Optional[float]]:
                 or _finite_number(parsed.get("ac1"))
                 or _finite_number(parsed.get("agreement"))
             ),
+            "precision": _finite_number(parsed.get("precision")),
+            "recall": _finite_number(parsed.get("recall")),
+            "cost": (
+                _finite_number(parsed.get("cost"))
+                or _finite_number(parsed.get("total_cost"))
+                or _finite_number(parsed.get("totalCost"))
+                or _finite_number(parsed.get("cost_per_item"))
+                or _finite_number(parsed.get("costPerItem"))
+            ),
         }
 
-    return {"accuracy": None, "alignment": None}
+    return {"accuracy": None, "alignment": None, "precision": None, "recall": None, "cost": None}
 
 
 def _extract_evaluation_metadata(parameters: Any) -> Dict[str, Optional[str]]:
@@ -315,8 +333,8 @@ def _render_optimizer_runtime_log(manifest: Dict[str, Any]) -> str:
         f"Stop reason: {summary.get('stop_reason')}",
         f"Baseline version: {baseline.get('version_id')}",
         f"Winning version: {best.get('winning_version_id')}",
-        f"Best feedback evaluation: {best.get('best_feedback_evaluation_id')}",
-        f"Best accuracy evaluation: {best.get('best_accuracy_evaluation_id')}",
+        f"Best feedback alignment evaluation: {best.get('best_feedback_evaluation_id')}",
+        f"Best regression alignment evaluation: {best.get('best_accuracy_evaluation_id')}",
         "",
         "=== CYCLES ===",
     ]
@@ -896,6 +914,7 @@ class OptimizerResultsService:
                     updatedAt
                     scoreVersionId
                     accuracy
+                    cost
                     processedItems
                     totalItems
                     elapsedSeconds
@@ -942,6 +961,9 @@ class OptimizerResultsService:
                     "updated_at": row.get("updatedAt"),
                     "accuracy": _finite_number(row.get("accuracy")) or parsed_metrics.get("accuracy"),
                     "alignment": parsed_metrics.get("alignment"),
+                    "precision": parsed_metrics.get("precision"),
+                    "recall": parsed_metrics.get("recall"),
+                    "cost": _finite_number(row.get("cost")) or parsed_metrics.get("cost"),
                     "processed_items": row.get("processedItems"),
                     "total_items": row.get("totalItems"),
                     "elapsed_seconds": row.get("elapsedSeconds"),
@@ -956,6 +978,19 @@ class OptimizerResultsService:
             evaluations.sort(key=lambda item: item.get("accuracy") if item.get("accuracy") is not None else -1, reverse=True)
         elif sort_by == "alignment":
             evaluations.sort(key=lambda item: item.get("alignment") if item.get("alignment") is not None else -1, reverse=True)
+        elif sort_by == "precision":
+            evaluations.sort(key=lambda item: item.get("precision") if item.get("precision") is not None else -1, reverse=True)
+        elif sort_by == "recall":
+            evaluations.sort(key=lambda item: item.get("recall") if item.get("recall") is not None else -1, reverse=True)
+        elif sort_by == "cost":
+            evaluations.sort(
+                key=lambda item: (
+                    item.get("cost") is None,
+                    item.get("cost") if item.get("cost") is not None else float("inf"),
+                    datetime.max.replace(tzinfo=timezone.utc)
+                    - (_parse_iso_datetime(item.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc)),
+                )
+            )
         else:
             evaluations.sort(
                 key=lambda item: _parse_iso_datetime(item.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc),
@@ -1168,7 +1203,7 @@ class OptimizerResultsService:
     @staticmethod
     def render_promotion_packets_markdown(packets: List[Dict[str, Any]]) -> str:
         lines = [
-            "| Score | Version | Champion | Feedback Eval | Feedback AC1 | Accuracy Eval | Accuracy AC1 | Guidelines |",
+            "| Score | Version | Champion | Feedback Alignment Evaluation | Feedback AC1 | Regression Alignment Evaluation | Regression AC1 | Guidelines |",
             "| --- | --- | --- | --- | ---: | --- | ---: | --- |",
         ]
         for packet in packets:

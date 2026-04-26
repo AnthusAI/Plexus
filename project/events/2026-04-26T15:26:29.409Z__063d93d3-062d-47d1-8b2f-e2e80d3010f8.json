@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "063d93d3-062d-47d1-8b2f-e2e80d3010f8",
+  "issue_id": "plx-0e1d2965-ca2a-4294-991e-a8bd4b913a9a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T15:26:29.409Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "priority": 2,
+    "status": "open",
+    "title": "Clarify optimizer evaluation links and expand metric sorting"
+  }
+}

@@ -1678,8 +1678,8 @@ def promotion_packets(scorecard: str, scores: str, output: str):
     table.add_column("Version", style="magenta")
     table.add_column("Champion", style="yellow")
     table.add_column("Feedback AC1", style="green")
-    table.add_column("Accuracy AC1", style="green")
-    table.add_column("Feedback Eval", style="blue")
+    table.add_column("Regression AC1", style="green")
+    table.add_column("Feedback Alignment Evaluation", style="blue")
     for packet in packets:
         table.add_row(
             packet.get("score_name") or "—",
