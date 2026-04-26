@@ -143,6 +143,9 @@ export type ScoreEvaluationView = {
   scoreVersionId?: string | null
   accuracy?: number | null
   alignment?: number | null
+  precision?: number | null
+  recall?: number | null
+  cost?: number | null
   baselineEvaluationId?: string | null
   currentBaselineEvaluationId?: string | null
   processedItems?: number | null
@@ -269,24 +272,36 @@ function toFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function parseEvaluationMetrics(rawMetrics: unknown): { accuracy: number | null; alignment: number | null } {
+function parseEvaluationMetrics(rawMetrics: unknown): {
+  accuracy: number | null
+  alignment: number | null
+  precision: number | null
+  recall: number | null
+  cost: number | null
+} {
   const metrics = safeJsonParse<any>(rawMetrics)
   if (!metrics) {
-    return { accuracy: null, alignment: null }
+    return { accuracy: null, alignment: null, precision: null, recall: null, cost: null }
   }
 
   if (Array.isArray(metrics)) {
     let accuracy: number | null = null
     let alignment: number | null = null
+    let precision: number | null = null
+    let recall: number | null = null
+    let cost: number | null = null
     for (const metric of metrics) {
       if (!metric || typeof metric !== 'object') continue
       const name = String(metric.name ?? metric.label ?? '').toLowerCase()
       const value = toFiniteNumber(metric.value)
       if (value == null) continue
-      if (!accuracy && name.includes('accuracy')) accuracy = value
-      if (!alignment && (name.includes('alignment') || name.includes('ac1'))) alignment = value
+      if (accuracy == null && name.includes('accuracy')) accuracy = value
+      if (alignment == null && (name.includes('alignment') || name.includes('ac1'))) alignment = value
+      if (precision == null && name.includes('precision')) precision = value
+      if (recall == null && name.includes('recall')) recall = value
+      if (cost == null && name.includes('cost')) cost = value
     }
-    return { accuracy, alignment }
+    return { accuracy, alignment, precision, recall, cost }
   }
 
   if (typeof metrics === 'object') {
@@ -296,10 +311,18 @@ function parseEvaluationMetrics(rawMetrics: unknown): { accuracy: number | null;
         toFiniteNumber((metrics as any).alignment) ??
         toFiniteNumber((metrics as any).ac1) ??
         toFiniteNumber((metrics as any).agreement),
+      precision: toFiniteNumber((metrics as any).precision),
+      recall: toFiniteNumber((metrics as any).recall),
+      cost:
+        toFiniteNumber((metrics as any).cost) ??
+        toFiniteNumber((metrics as any).total_cost) ??
+        toFiniteNumber((metrics as any).totalCost) ??
+        toFiniteNumber((metrics as any).cost_per_item) ??
+        toFiniteNumber((metrics as any).costPerItem),
     }
   }
 
-  return { accuracy: null, alignment: null }
+  return { accuracy: null, alignment: null, precision: null, recall: null, cost: null }
 }
 
 export function manifestTouchesVersion(
@@ -547,6 +570,7 @@ export async function loadScoreEvaluations(scoreId: string, limit: number = 100)
             elapsedSeconds
             estimatedRemainingSeconds
             metrics
+            cost
             task {
               id
               type
@@ -603,6 +627,9 @@ export async function loadScoreEvaluations(scoreId: string, limit: number = 100)
       scoreVersionId: item.scoreVersionId ?? null,
       accuracy: toFiniteNumber(item.accuracy) ?? parsed.accuracy,
       alignment: parsed.alignment,
+      precision: parsed.precision,
+      recall: parsed.recall,
+      cost: toFiniteNumber(item.cost) ?? parsed.cost,
       baselineEvaluationId,
       currentBaselineEvaluationId,
       processedItems: toFiniteNumber(item.processedItems),

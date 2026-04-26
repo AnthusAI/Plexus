@@ -453,7 +453,7 @@ export function ScoreOptimizerWorkbench({
                       <Button variant="outline" size="sm" asChild>
                         <a href={evaluationUrl(best.best_feedback_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
                           <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                          Feedback eval
+                          Feedback evaluation
                         </a>
                       </Button>
                     )}
@@ -461,7 +461,7 @@ export function ScoreOptimizerWorkbench({
                       <Button variant="outline" size="sm" asChild>
                         <a href={evaluationUrl(best.best_accuracy_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
                           <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                          Accuracy eval
+                          Regression alignment evaluation
                         </a>
                       </Button>
                     )}
@@ -509,9 +509,9 @@ export function ScoreOptimizerWorkbench({
 
                 <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
                   <div>Feedback AC1: {candidate.bestFeedbackAlignment?.toFixed(4) ?? '—'}</div>
-                  <div>Accuracy AC1: {candidate.bestAccuracyAlignment?.toFixed(4) ?? '—'}</div>
-                  <div>Feedback eval: {candidate.bestFeedbackEvaluationId || '—'}</div>
-                  <div>Accuracy eval: {candidate.bestAccuracyEvaluationId || '—'}</div>
+                  <div>Regression AC1: {candidate.bestAccuracyAlignment?.toFixed(4) ?? '—'}</div>
+                  <div>Feedback evaluation: {candidate.bestFeedbackEvaluationId || '—'}</div>
+                  <div>Regression alignment evaluation: {candidate.bestAccuracyEvaluationId || '—'}</div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -550,7 +550,7 @@ export function ScoreOptimizerWorkbench({
                     <Button variant="outline" size="sm" asChild>
                       <a href={evaluationUrl(candidate.bestFeedbackEvaluationId) ?? '#'} target="_blank" rel="noreferrer">
                         <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        Feedback eval
+                        Feedback evaluation
                       </a>
                     </Button>
                   )}
@@ -558,7 +558,7 @@ export function ScoreOptimizerWorkbench({
                     <Button variant="outline" size="sm" asChild>
                       <a href={evaluationUrl(candidate.bestAccuracyEvaluationId) ?? '#'} target="_blank" rel="noreferrer">
                         <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        Accuracy eval
+                        Regression alignment evaluation
                       </a>
                     </Button>
                   )}

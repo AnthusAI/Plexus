@@ -1749,8 +1749,8 @@ def optimizer_runs(scorecard: str, score: str, limit: int, output: str):
     table.add_column("Cycles", style="green")
     table.add_column("Stop", style="yellow")
     table.add_column("Winning Version", style="magenta")
-    table.add_column("Feedback Eval", style="blue")
-    table.add_column("Accuracy Eval", style="blue")
+    table.add_column("Feedback Alignment Evaluation", style="blue")
+    table.add_column("Regression Alignment Evaluation", style="blue")
     for row in payload:
         cycles = "—"
         if row["completed_cycles"] is not None:
@@ -1805,10 +1805,10 @@ def optimizer_review(scorecard: str, score: str, output: str):
     table.add_column("Value", style="white")
     table.add_row("Champion", packet.get("champion_version_id") or "—")
     table.add_row("Best version", best.get("version_id") or "—")
-    table.add_row("Best feedback eval", promotion.get("best_feedback_evaluation_url") or "—")
-    table.add_row("Best accuracy eval", promotion.get("best_accuracy_evaluation_url") or "—")
+    table.add_row("Best feedback alignment evaluation", promotion.get("best_feedback_evaluation_url") or "—")
+    table.add_row("Best regression alignment evaluation", promotion.get("best_accuracy_evaluation_url") or "—")
     table.add_row("Feedback AC1", f"{best['best_feedback_alignment']:.4f}" if best.get("best_feedback_alignment") is not None else "—")
-    table.add_row("Accuracy AC1", f"{best['best_accuracy_alignment']:.4f}" if best.get("best_accuracy_alignment") is not None else "—")
+    table.add_row("Regression AC1", f"{best['best_accuracy_alignment']:.4f}" if best.get("best_accuracy_alignment") is not None else "—")
     table.add_row("Guidelines", promotion.get("guidelines_relative_path") or "—")
     table.add_row("Indexed runs", str(packet.get("indexed_run_count", 0)))
     table.add_row("Unindexed runs", str(packet.get("unindexed_run_count", 0)))
@@ -1851,9 +1851,9 @@ def optimizer_candidates(scorecard: str, score: str, limit_runs: int, detail: st
     table.add_column("Version", style="magenta")
     table.add_column("Pinned", style="yellow")
     table.add_column("Feedback AC1", style="green")
-    table.add_column("Accuracy AC1", style="green")
-    table.add_column("Feedback Eval", style="blue")
-    table.add_column("Accuracy Eval", style="blue")
+    table.add_column("Regression AC1", style="green")
+    table.add_column("Feedback Alignment Evaluation", style="blue")
+    table.add_column("Regression Alignment Evaluation", style="blue")
     table.add_column("Runs", style="cyan")
     for candidate in candidates:
         table.add_row(
@@ -1875,7 +1875,7 @@ scores.add_command(optimizer_candidates)
 @click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
 @click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
 @click.option('--version', 'version_id', default=None, help='Optional score version ID filter')
-@click.option('--sort', 'sort_by', type=click.Choice(['updated', 'accuracy', 'alignment']), default='updated', show_default=True)
+@click.option('--sort', 'sort_by', type=click.Choice(['updated', 'alignment', 'accuracy', 'precision', 'recall', 'cost']), default='updated', show_default=True)
 @click.option('--limit', '-l', default=25, show_default=True, help='Maximum number of evaluations to show')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
 def score_evaluations(scorecard: str, score: str, version_id: Optional[str], sort_by: str, limit: int, output: str):
@@ -1910,6 +1910,9 @@ def score_evaluations(scorecard: str, score: str, version_id: Optional[str], sor
     table.add_column("Status", style="white")
     table.add_column("Accuracy", style="green")
     table.add_column("AC1", style="green")
+    table.add_column("Precision", style="green")
+    table.add_column("Recall", style="green")
+    table.add_column("Cost", style="green")
     table.add_column("Items", style="yellow")
     table.add_column("Updated", style="dim")
     for row in evaluations:
@@ -1922,6 +1925,9 @@ def score_evaluations(scorecard: str, score: str, version_id: Optional[str], sor
             row.get("status") or "—",
             f"{row['accuracy']:.2f}" if row.get("accuracy") is not None else "—",
             f"{row['alignment']:.4f}" if row.get("alignment") is not None else "—",
+            f"{row['precision']:.4f}" if row.get("precision") is not None else "—",
+            f"{row['recall']:.4f}" if row.get("recall") is not None else "—",
+            f"{row['cost']:.4f}" if row.get("cost") is not None else "—",
             f"{processed or 0}/{total or 0}" if processed is not None or total is not None else "—",
             row.get("updated_at") or "—",
         )
@@ -1965,10 +1971,10 @@ def promotion_packet(scorecard: str, score: str, version_id: Optional[str], outp
     table.add_row("Version", packet["version_id"])
     table.add_row("Champion", "yes" if packet["is_champion"] else "no")
     table.add_row("Current champion", packet.get("champion_version_id") or "—")
-    table.add_row("Best feedback eval", packet.get("best_feedback_evaluation_id") or "—")
-    table.add_row("Best accuracy eval", packet.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Best feedback alignment evaluation", packet.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", packet.get("best_accuracy_evaluation_id") or "—")
     table.add_row("Feedback URL", packet.get("best_feedback_evaluation_url") or "—")
-    table.add_row("Accuracy URL", packet.get("best_accuracy_evaluation_url") or "—")
+    table.add_row("Regression URL", packet.get("best_accuracy_evaluation_url") or "—")
     table.add_row("Guidelines", packet.get("guidelines_relative_path") or "—")
     table.add_row("Pinned", "yes" if packet.get("pinned") else "no")
     console.print(table)

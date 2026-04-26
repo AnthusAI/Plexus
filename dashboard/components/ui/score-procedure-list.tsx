@@ -324,7 +324,7 @@ export function ScoreProcedureList({
                                     score: scoreName,
                                     version_id: winningVersionId,
                                     feedback_evaluation_url: evaluationUrl(best?.best_feedback_evaluation_id),
-                                    accuracy_evaluation_url: evaluationUrl(best?.best_accuracy_evaluation_id),
+                                    regression_evaluation_url: evaluationUrl(best?.best_accuracy_evaluation_id),
                                     guidelines_relative_path: scorecardGuideRelativePath(scorecardName, scoreName),
                                   },
                                   null,
@@ -352,7 +352,7 @@ export function ScoreProcedureList({
                           <DropdownMenuItem asChild>
                             <a href={evaluationUrl(best.best_feedback_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
                               <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                              Open best feedback eval
+                              Open best feedback alignment evaluation
                             </a>
                           </DropdownMenuItem>
                         )}
@@ -360,7 +360,7 @@ export function ScoreProcedureList({
                           <DropdownMenuItem asChild>
                             <a href={evaluationUrl(best.best_accuracy_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
                               <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                              Open best accuracy eval
+                              Open best regression alignment evaluation
                             </a>
                           </DropdownMenuItem>
                         )}
