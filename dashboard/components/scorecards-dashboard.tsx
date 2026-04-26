@@ -572,6 +572,7 @@ export default function ScorecardsComponent({
                         order: score.order,
                         type: score.type,
                         externalId: score.externalId,
+                        championVersionId: score.championVersionId,
                       }))
                     }
                   };
@@ -1535,6 +1536,7 @@ export default function ScorecardsComponent({
                           order: score.order,
                           type: score.type,
                           externalId: score.externalId,
+                          championVersionId: score.championVersionId,
                         }))
                       }
                     }
