@@ -36,74 +36,86 @@ describe('ScoreProcedureList', () => {
   beforeEach(() => {
     jest.clearAllMocks()
 
-    mockGraphql.mockImplementationOnce(async () => ({
-      data: {
-        listProcedureByScoreIdAndUpdatedAt: {
-          items: [
-            {
-              id: 'proc-1',
-              name: 'Optimizer Run 1',
-              description: 'Procedure note 1',
-              status: 'COMPLETED',
-              metadata: JSON.stringify({
-                optimizer_artifacts: {
-                  manifest: 'tasks/task-1/optimizer/manifest.json',
-                  events: 'tasks/task-1/optimizer/events.jsonl',
-                  runtime_log: 'tasks/task-1/optimizer/runtime.log',
+    mockGraphql.mockImplementation(async ({ query }: { query: string }) => {
+      if (query.includes('listTaskByScoreId')) {
+        return {
+          data: {
+            listTaskByScoreId: {
+              items: [
+                {
+                  id: 'task-1',
+                  type: 'Procedure',
+                  status: 'COMPLETED',
+                  target: 'procedure/run/proc-1',
+                  command: '',
+                  description: 'Task description that should not be treated as procedure note',
+                  dispatchStatus: null,
+                  metadata: null,
+                  createdAt: '2026-04-25T00:00:00Z',
+                  startedAt: '2026-04-25T00:01:00Z',
+                  completedAt: '2026-04-25T00:05:00Z',
+                  estimatedCompletionAt: null,
+                  errorMessage: null,
+                  errorDetails: null,
+                  currentStageId: 'stage-final',
+                  stages: {
+                    items: [
+                      {
+                        id: 'stage-start',
+                        name: 'Start',
+                        order: 1,
+                        status: 'COMPLETED',
+                        statusMessage: 'Initialized optimizer',
+                      },
+                      {
+                        id: 'stage-final',
+                        name: 'Finalizing',
+                        order: 2,
+                        status: 'COMPLETED',
+                        statusMessage: 'Saved optimizer result',
+                      },
+                    ],
+                  },
                 },
-              }),
-              updatedAt: '2026-04-25T00:00:00Z',
-              scoreVersionId: 'version-0',
-              task: {
-                id: 'task-1',
-                type: 'Procedure',
+              ],
+            },
+          },
+        }
+      }
+
+      return {
+        data: {
+          listProcedureByScoreIdAndUpdatedAt: {
+            items: [
+              {
+                id: 'proc-1',
+                name: 'Optimizer Run 1',
+                description: 'Procedure note 1',
                 status: 'COMPLETED',
-                target: 'proc-1',
-                command: '',
-                description: 'Task description that should not be treated as procedure note',
-                dispatchStatus: null,
-                metadata: null,
-                createdAt: '2026-04-25T00:00:00Z',
-                startedAt: '2026-04-25T00:01:00Z',
-                completedAt: '2026-04-25T00:05:00Z',
-                estimatedCompletionAt: null,
-                errorMessage: null,
-                errorDetails: null,
-                currentStageId: 'stage-final',
-                stages: {
-                  items: [
-                    {
-                      id: 'stage-start',
-                      name: 'Start',
-                      order: 1,
-                      status: 'COMPLETED',
-                      statusMessage: 'Initialized optimizer',
-                    },
-                    {
-                      id: 'stage-final',
-                      name: 'Finalizing',
-                      order: 2,
-                      status: 'COMPLETED',
-                      statusMessage: 'Saved optimizer result',
-                    },
-                  ],
-                },
+                metadata: JSON.stringify({
+                  optimizer_artifacts: {
+                    manifest: 'tasks/task-1/optimizer/manifest.json',
+                    events: 'tasks/task-1/optimizer/events.jsonl',
+                    runtime_log: 'tasks/task-1/optimizer/runtime.log',
+                  },
+                }),
+                updatedAt: '2026-04-25T00:00:00Z',
+                scoreVersionId: 'version-0',
               },
-            },
-            {
-              id: 'proc-2',
-              name: 'Other Run',
-              description: 'Procedure note 2',
-              status: 'FAILED',
-              metadata: null,
-              updatedAt: '2026-04-24T00:00:00Z',
-              scoreVersionId: 'version-x',
-              task: null,
-            },
-          ],
+              {
+                id: 'proc-2',
+                name: 'Other Run',
+                description: 'Procedure note 2',
+                status: 'FAILED',
+                metadata: null,
+                updatedAt: '2026-04-24T00:00:00Z',
+                scoreVersionId: 'version-x',
+              },
+            ],
+          },
         },
-      },
-    }))
+      }
+    })
 
     mockDownloadData.mockImplementation(({ path }: { path: string }) => {
       if (path === 'tasks/task-1/optimizer/manifest.json') {
