@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Sequence
 
@@ -11,6 +12,8 @@ from plexus.rubric_memory import (
     ConfidenceLevel,
     EvidenceClassification,
     EvidenceSnippet,
+    LocalRubricMemoryCorpusResolver,
+    LocalRubricMemorySource,
     RubricAuthorityResolver,
     RubricEvidencePack,
     RubricEvidencePackRequest,
@@ -134,6 +137,164 @@ def test_tactus_synthesizer_extracts_finish_pack_json():
     assert synthesizer._extract_done_reason(raw_call) == (
         '{"score_version_id": "version-1"}'
     )
+
+
+def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
+    cache_root = tmp_path / "dashboard" / "scorecards"
+    monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+
+    paths = LocalRubricMemoryCorpusResolver().resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Medication Review: Dosage",
+    )
+
+    assert paths.scorecard_root == cache_root / "SelectQuote HCS Medium-Risk"
+    assert paths.score_knowledge_base == (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "Medication Review- Dosage.knowledge-base"
+    )
+    assert paths.scorecard_knowledge_base == (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "scorecard.knowledge-base"
+    )
+
+
+def test_retriever_temp_corpus_infers_date_folder_metadata(tmp_path):
+    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    source_file = score_root / "2026-04-24" / "client" / "source.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("Dosage calibration note.", encoding="utf-8")
+
+    retriever = BiblicusRubricEvidenceRetriever(
+        corpus_sources=[
+            LocalRubricMemorySource(root=score_root, scope_level="score")
+        ]
+    )
+
+    working_root = retriever._create_working_corpus_source()
+    copied_file = working_root / "00-score" / "2026-04-24" / "client" / "source.md"
+    sidecar = copied_file.with_name("source.md.biblicus.yml")
+    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+
+    assert metadata["scope_level"] == "score"
+    assert metadata["source_uri"] == source_file.resolve().as_uri()
+    assert metadata["source_timestamp"] == "2026-04-24T00:00:00"
+    assert source_file.with_name("source.md.biblicus.yml").exists() is False
+
+
+def test_retriever_temp_corpus_leaves_unknown_date_without_timestamp(tmp_path):
+    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    source_file = score_root / "unknown-date" / "source.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("Undated dosage note.", encoding="utf-8")
+
+    retriever = BiblicusRubricEvidenceRetriever(
+        corpus_sources=[
+            LocalRubricMemorySource(root=score_root, scope_level="score")
+        ]
+    )
+
+    working_root = retriever._create_working_corpus_source()
+    sidecar = (
+        working_root
+        / "00-score"
+        / "unknown-date"
+        / "source.md.biblicus.yml"
+    )
+    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+
+    assert metadata["scope_level"] == "score"
+    assert "source_timestamp" not in metadata
+
+
+def test_retriever_temp_corpus_combines_scorecard_and_score_scopes(tmp_path):
+    scorecard_root = tmp_path / "scorecard.knowledge-base"
+    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    scorecard_file = scorecard_root / "2026-04-01" / "scorecard.md"
+    score_file = score_root / "2026-04-24" / "score.md"
+    scorecard_file.parent.mkdir(parents=True)
+    score_file.parent.mkdir(parents=True)
+    scorecard_file.write_text("Shared scorecard note.", encoding="utf-8")
+    score_file.write_text("Score-local dosage note.", encoding="utf-8")
+
+    retriever = BiblicusRubricEvidenceRetriever(
+        corpus_sources=[
+            LocalRubricMemorySource(
+                root=scorecard_root,
+                scope_level="scorecard",
+            ),
+            LocalRubricMemorySource(root=score_root, scope_level="score"),
+        ]
+    )
+
+    working_root = retriever._create_working_corpus_source()
+    scorecard_metadata = json.loads(
+        (
+            working_root
+            / "00-scorecard"
+            / "2026-04-01"
+            / "scorecard.md.biblicus.yml"
+        ).read_text(encoding="utf-8")
+    )
+    score_metadata = json.loads(
+        (
+            working_root
+            / "01-score"
+            / "2026-04-24"
+            / "score.md.biblicus.yml"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert scorecard_metadata["scope_level"] == "scorecard"
+    assert score_metadata["scope_level"] == "score"
+    assert scorecard_metadata["source_timestamp"] == "2026-04-01T00:00:00"
+    assert score_metadata["source_timestamp"] == "2026-04-24T00:00:00"
+
+
+def test_retriever_temp_corpus_rejects_missing_knowledge_base_folder(tmp_path):
+    missing_root = tmp_path / "missing.knowledge-base"
+    retriever = BiblicusRubricEvidenceRetriever(
+        corpus_sources=[
+            LocalRubricMemorySource(root=missing_root, scope_level="score")
+        ]
+    )
+
+    with pytest.raises(FileNotFoundError, match="knowledge-base folder"):
+        retriever._create_working_corpus_source()
+
+
+@pytest.mark.asyncio
+async def test_biblicus_retriever_preserves_inferred_date_and_scope(tmp_path):
+    source_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    source_file = source_root / "2026-04-24" / "source.md"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(
+        "Dosage policy memory: verify current medication strengths.",
+        encoding="utf-8",
+    )
+    retriever = BiblicusRubricEvidenceRetriever(
+        corpus_sources=[
+            LocalRubricMemorySource(root=source_root, scope_level="score")
+        ],
+        max_total_items=5,
+    )
+
+    evidence = await retriever.retrieve(
+        RubricEvidencePackRequest(
+            scorecard_identifier="SelectQuote HCS Medium-Risk",
+            score_identifier="Medication Review: Dosage",
+            score_version_id="version-1",
+            rubric_text="Verify medication dosage.",
+            topic_hint="dosage medication strengths",
+        )
+    )
+
+    assert len(evidence) == 1
+    assert evidence[0].scope_level == "score"
+    assert evidence[0].source_timestamp.isoformat() == "2026-04-24T00:00:00"
+    assert evidence[0].source_uri == source_file.resolve().as_uri()
 
 
 @pytest.mark.asyncio
