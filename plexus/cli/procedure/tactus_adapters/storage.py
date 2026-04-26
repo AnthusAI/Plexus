@@ -359,7 +359,25 @@ class PlexusStorageAdapter:
                 metadata: $metadata
             }) {
                 id
+                name
+                description
+                status
+                featured
+                isTemplate
+                code
+                category
+                version
+                isDefault
+                parentProcedureId
+                rootNodeId
+                waitingOnMessageId
                 metadata
+                createdAt
+                updatedAt
+                accountId
+                scorecardId
+                scoreId
+                scoreVersionId
             }
         }
         """
@@ -468,8 +486,25 @@ class PlexusStorageAdapter:
                 waitingOnMessageId: $waitingOnMessageId
             }) {
                 id
+                name
+                description
                 status
+                featured
+                isTemplate
+                code
+                category
+                version
+                isDefault
+                parentProcedureId
+                rootNodeId
                 waitingOnMessageId
+                metadata
+                createdAt
+                updatedAt
+                accountId
+                scorecardId
+                scoreId
+                scoreVersionId
             }
         }
         """

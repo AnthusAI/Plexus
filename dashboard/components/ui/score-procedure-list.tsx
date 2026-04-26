@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { generateClient } from 'aws-amplify/api'
 import { Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -26,6 +27,8 @@ import {
   evaluationUrl,
   findBestOptimizerEvaluation,
   loadOptimizerRuns,
+  mergeTaskIntoProcedureRun,
+  mergeTaskStageIntoProcedureRun,
   manifestTouchesVersion,
   OPTIMIZER_DATASETS,
   OPTIMIZER_METRICS,
@@ -33,8 +36,19 @@ import {
   optimizerMetricLabel,
   compareOptimizerMetricValues,
   openArtifactText,
+  procedureIdFromTaskTarget,
+  procedureRunMatchesTask,
+  procedureToOptimizerRunView,
+  PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
+  PROCEDURE_DELETE_SUBSCRIPTION_FOR_CARDS,
+  PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  refreshOptimizerRunManifest,
   scorecardGuideRelativePath,
   scoreVersionUrl,
+  TASK_CREATE_SUBSCRIPTION_FOR_CARDS,
+  TASK_STAGE_CREATE_SUBSCRIPTION_FOR_CARDS,
+  TASK_STAGE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  TASK_UPDATE_SUBSCRIPTION_FOR_CARDS,
   type OptimizerDatasetKey,
   type OptimizerMetricKey,
   type OptimizerRunView,
@@ -46,6 +60,11 @@ type ProcedureSort =
   | 'status'
   | 'cycles'
   | `${OptimizerDatasetKey}_${OptimizerMetricKey}`
+
+const getAmplifyClient = (() => {
+  let client: any = null
+  return () => (client ??= generateClient())
+})()
 
 export interface ScoreProcedureListProps {
   scoreId: string
@@ -198,6 +217,20 @@ export function ScoreProcedureList({
   const [bestEvaluationDataset, setBestEvaluationDataset] = React.useState<OptimizerDatasetKey>('feedback')
   const [bestEvaluationMetric, setBestEvaluationMetric] = React.useState<OptimizerMetricKey>('alignment')
   const [sortBy, setSortBy] = React.useState<ProcedureSort>('updated')
+  const runsRef = React.useRef<OptimizerRunView[]>([])
+  const manifestRefreshTimersRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  React.useEffect(() => {
+    runsRef.current = runs
+  }, [runs])
+
+  React.useEffect(
+    () => () => {
+      manifestRefreshTimersRef.current.forEach((timer) => clearTimeout(timer))
+      manifestRefreshTimersRef.current.clear()
+    },
+    []
+  )
   const metricSortOptions = React.useMemo(
     () =>
       OPTIMIZER_DATASETS.flatMap((dataset) =>
@@ -237,6 +270,159 @@ export function ScoreProcedureList({
       cancelled = true
     }
   }, [scoreId])
+
+  const scheduleManifestRefresh = React.useCallback((procedureId: string) => {
+    const existingTimer = manifestRefreshTimersRef.current.get(procedureId)
+    if (existingTimer) clearTimeout(existingTimer)
+
+    const timer = setTimeout(() => {
+      manifestRefreshTimersRef.current.delete(procedureId)
+      const currentRun = runsRef.current.find((run) => run.procedureId === procedureId)
+      if (!currentRun?.manifestKey) return
+      void refreshOptimizerRunManifest(currentRun).then((refreshedRun) => {
+        setRuns((previous) =>
+          previous.map((run) => (run.procedureId === refreshedRun.procedureId ? refreshedRun : run))
+        )
+      })
+    }, 1500)
+
+    manifestRefreshTimersRef.current.set(procedureId, timer)
+  }, [])
+
+  React.useEffect(() => {
+    if (!scoreId) return
+
+    const subscriptions: Array<{ unsubscribe: () => void }> = []
+    const subscribe = (query: string, onNext: (data: any) => void, label: string) => {
+      try {
+        const result = getAmplifyClient().graphql({ query }) as any
+        if (!result || typeof result.subscribe !== 'function') return
+        const subscription = result.subscribe({
+          next: ({ data }: { data?: any }) => onNext(data),
+          error: (error: Error) => {
+            console.error(`${label} subscription error:`, error)
+          },
+        })
+        subscriptions.push(subscription)
+      } catch (error) {
+        console.error(`Failed to set up ${label} subscription:`, error)
+      }
+    }
+
+    const upsertProcedure = (rawProcedure: any) => {
+      if (!rawProcedure?.id) return
+      if (rawProcedure.scoreId && rawProcedure.scoreId !== scoreId) return
+      void procedureToOptimizerRunView(rawProcedure, null).then((nextRun) => {
+        setRuns((previous) => {
+          const existingIndex = previous.findIndex((run) => run.procedureId === nextRun.procedureId)
+          if (existingIndex < 0) return [nextRun, ...previous]
+          const next = [...previous]
+          next[existingIndex] = {
+            ...previous[existingIndex],
+            ...nextRun,
+            task: previous[existingIndex].task ?? nextRun.task,
+          }
+          return next
+        })
+        scheduleManifestRefresh(nextRun.procedureId)
+      })
+    }
+
+    subscribe(
+      PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => upsertProcedure(data?.onCreateProcedure),
+      'create procedure'
+    )
+    subscribe(
+      PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => upsertProcedure(data?.onUpdateProcedure),
+      'update procedure'
+    )
+    subscribe(
+      PROCEDURE_DELETE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const deleted = data?.onDeleteProcedure
+        if (!deleted?.id) return
+        if (deleted.scoreId && deleted.scoreId !== scoreId) return
+        setRuns((previous) => previous.filter((run) => run.procedureId !== deleted.id))
+      },
+      'delete procedure'
+    )
+    subscribe(
+      TASK_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const task = data?.onCreateTask
+        const procedureId = procedureIdFromTaskTarget(task?.target)
+        if (!procedureId) return
+        setRuns((previous) =>
+          previous.map((run) =>
+            procedureRunMatchesTask(run, task) ? mergeTaskIntoProcedureRun(run, task) : run
+          )
+        )
+        scheduleManifestRefresh(procedureId)
+      },
+      'task create'
+    )
+    subscribe(
+      TASK_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const task = data?.onUpdateTask
+        const procedureId = procedureIdFromTaskTarget(task?.target)
+        if (!procedureId) return
+        setRuns((previous) =>
+          previous.map((run) =>
+            procedureRunMatchesTask(run, task) ? mergeTaskIntoProcedureRun(run, task) : run
+          )
+        )
+        scheduleManifestRefresh(procedureId)
+      },
+      'task update'
+    )
+    subscribe(
+      TASK_STAGE_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const stage = data?.onCreateTaskStage
+        if (!stage?.taskId) return
+        let touchedProcedureId: string | null = null
+        setRuns((previous) =>
+          previous.map((run) => {
+            if (run.task?.id !== stage.taskId) return run
+            touchedProcedureId = run.procedureId
+            return mergeTaskStageIntoProcedureRun(run, stage)
+          })
+        )
+        if (touchedProcedureId) scheduleManifestRefresh(touchedProcedureId)
+      },
+      'task stage create'
+    )
+    subscribe(
+      TASK_STAGE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const stage = data?.onUpdateTaskStage
+        if (!stage?.taskId) return
+        let touchedProcedureId: string | null = null
+        setRuns((previous) =>
+          previous.map((run) => {
+            if (run.task?.id !== stage.taskId) return run
+            touchedProcedureId = run.procedureId
+            return mergeTaskStageIntoProcedureRun(run, stage)
+          })
+        )
+        if (touchedProcedureId) scheduleManifestRefresh(touchedProcedureId)
+      },
+      'task stage update'
+    )
+
+    return () => {
+      subscriptions.forEach((subscription) => {
+        try {
+          subscription.unsubscribe()
+        } catch {
+          // Ignore unsubscribe errors from already-closed observables.
+        }
+      })
+    }
+  }, [scheduleManifestRefresh, scoreId])
 
   const applySort = React.useCallback((nextSort: ProcedureSort) => {
     setIsApplyingControls(true)

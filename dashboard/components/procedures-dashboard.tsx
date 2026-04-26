@@ -19,6 +19,13 @@ import { ProceduresGauges } from "@/components/ProceduresGauges"
 import { ProceduresDashboardSkeleton } from "@/components/loading-skeleton"
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
 import { useInView } from "react-intersection-observer"
+import {
+  PROCEDURE_CARD_FIELDS,
+  PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
+  PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  procedureIdFromTaskTarget,
+  TASK_CARD_FIELDS,
+} from "@/components/ui/optimizer-results-utils"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -43,56 +50,6 @@ const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWi
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
-
-const SUBSCRIBE_ON_CREATE_PROCEDURE = `
-  subscription OnCreateProcedure {
-    onCreateProcedure {
-      id
-      name
-      featured
-      code
-      rootNodeId
-      createdAt
-      updatedAt
-      accountId
-      scorecardId
-      scorecard {
-        id
-        name
-      }
-      scoreId
-      score {
-        id
-        name
-      }
-    }
-  }
-`
-
-const SUBSCRIBE_ON_UPDATE_PROCEDURE = `
-  subscription OnUpdateProcedure {
-    onUpdateProcedure {
-      id
-      name
-      featured
-      code
-      rootNodeId
-      createdAt
-      updatedAt
-      accountId
-      scorecardId
-      scorecard {
-        id
-        name
-      }
-      scoreId
-      score {
-        id
-        name
-      }
-    }
-  }
-`
 
 interface ProceduresDashboardProps {
   initialSelectedProcedureId?: string | null
@@ -205,24 +162,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               nextToken: $nextToken
             ) {
               items {
-                id
-                name
-                featured
-                code
-                rootNodeId
-                createdAt
-                updatedAt
-                accountId
-                scorecardId
-                scorecard {
-                  id
-                  name
-                }
-                scoreId
-                score {
-                  id
-                  name
-                }
+                ${PROCEDURE_CARD_FIELDS}
               }
               nextToken
             }
@@ -268,35 +208,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 limit: $limit
               ) {
                 items {
-                  id
-                  type
-                  status
-                  target
-                  command
-                  description
-                  dispatchStatus
-                  metadata
-                  createdAt
-                  startedAt
-                  completedAt
-                  estimatedCompletionAt
-                  errorMessage
-                  errorDetails
-                  currentStageId
-                  stages {
-                    items {
-                      id
-                      name
-                      order
-                      status
-                      statusMessage
-                      startedAt
-                      completedAt
-                      estimatedCompletionAt
-                      processedItems
-                      totalItems
-                    }
-                  }
+                  ${TASK_CARD_FIELDS}
                 }
               }
             }
@@ -311,25 +223,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         if (requestId !== loadRequestIdRef.current) return
 
         const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
-        const procedureTasks = allTasks.filter((task: Task) => {
-          try {
-            const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-            return metadata && metadata.procedure_id
-          } catch {
-            return false
-          }
-        })
-
         const procedureTaskMap = new Map<string, Task>()
-        procedureTasks.forEach((task: Task) => {
-          try {
-            const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-            if (metadata && metadata.procedure_id) {
-              procedureTaskMap.set(metadata.procedure_id, task)
-            }
-          } catch {
-            // Ignore parsing errors
-          }
+        allTasks.forEach((task: Task) => {
+          const procedureId = procedureIdFromTaskTarget(task.target)
+          if (procedureId) procedureTaskMap.set(procedureId, task)
         })
 
         procedureTaskMapRef.current = procedureTaskMap
@@ -384,24 +281,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               nextToken: $nextToken
             ) {
               items {
-                id
-                name
-                featured
-                code
-                rootNodeId
-                createdAt
-                updatedAt
-                accountId
-                scorecardId
-                scorecard {
-                  id
-                  name
-                }
-                scoreId
-                score {
-                  id
-                  name
-                }
+                ${PROCEDURE_CARD_FIELDS}
               }
               nextToken
             }
@@ -450,30 +330,23 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       next: (value: any) => {
         const { type, data } = value;
         
-        // Check if this is a procedure task by looking for procedure_id in metadata
-        if (data?.metadata) {
-          try {
-            const metadata = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
-            if (metadata?.procedure_id) {
-              console.log(`Updating procedure ${metadata.procedure_id} with task data:`, data);
-              
-              // Update the procedures list with new task data, preserving stages
-              setProcedures(prevProcedures =>
-                sortProceduresByStartTime(prevProcedures.map(procedure => {
-                  if (procedure.id === metadata.procedure_id) {
-                    // Merge new task data with existing task, preserving stages
-                    const updatedTask = procedure.task 
-                      ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
-                      : data;
-                    return { ...procedure, task: updatedTask };
-                  }
-                  return procedure;
-                }))
-              );
-            }
-          } catch (error) {
-            console.error('Error parsing task metadata:', error);
-          }
+        const procedureId = procedureIdFromTaskTarget(data?.target);
+        if (procedureId) {
+          console.log(`Updating procedure ${procedureId} with task data:`, data);
+
+          // Update the procedures list with new task data, preserving stages
+          setProcedures(prevProcedures =>
+            sortProceduresByStartTime(prevProcedures.map(procedure => {
+              if (procedure.id === procedureId) {
+                // Merge new task data with existing task, preserving stages
+                const updatedTask = procedure.task
+                  ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
+                  : data;
+                return { ...procedure, task: updatedTask };
+              }
+              return procedure;
+            }))
+          );
         }
       },
       error: (error: any) => {
@@ -545,7 +418,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
     try {
       const createSub = (getAmplifyClient().graphql({
-        query: SUBSCRIBE_ON_CREATE_PROCEDURE
+        query: PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onCreateProcedure: any } }) => {
           const procedure = data?.onCreateProcedure;
@@ -564,7 +437,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
     try {
       const updateSub = (getAmplifyClient().graphql({
-        query: SUBSCRIBE_ON_UPDATE_PROCEDURE
+        query: PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS
       }) as unknown as { subscribe: Function }).subscribe({
         next: ({ data }: { data?: { onUpdateProcedure: any } }) => {
           const updated = data?.onUpdateProcedure;
@@ -832,23 +705,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
             createProcedure(input: $input) {
-              id
-              name
-              description
-              featured
-              isTemplate
-              parentProcedureId
-              code
-              category
-              version
-              status
-              metadata
-              rootNodeId
-              scorecardId
-              scoreId
-              accountId
-              createdAt
-              updatedAt
+              ${PROCEDURE_CARD_FIELDS}
             }
           }
         `,

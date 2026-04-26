@@ -1,10 +1,27 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { ScoreEvaluationList } from '../score-evaluation-list'
 
 const mockGraphql = jest.fn()
+const subscriptionHandlers: Record<string, Array<(payload: any) => void>> = {}
+
+function subscriptionResult(key: string) {
+  return {
+    subscribe: ({ next }: { next: (payload: any) => void }) => {
+      subscriptionHandlers[key] = subscriptionHandlers[key] ?? []
+      subscriptionHandlers[key].push(next)
+      return { unsubscribe: jest.fn() }
+    },
+  }
+}
+
+function emitSubscription(key: string, data: any) {
+  for (const handler of subscriptionHandlers[key] ?? []) {
+    handler({ data })
+  }
+}
 
 jest.mock('aws-amplify/api', () => ({
   generateClient: () => ({
@@ -19,6 +36,10 @@ jest.mock('@/components/EvaluationTask', () => ({
       <div>{task.id}</div>
       <div>{task.description}</div>
       <div data-testid={`notes-${task.id}`}>{task?.data?.parameters ?? ''}</div>
+      <div data-testid={`status-${task.id}`}>{task?.data?.task?.status ?? ''}</div>
+      <div data-testid={`stages-${task.id}`}>
+        {(task?.data?.task?.stages?.items ?? []).map((stage: any) => `${stage.name}:${stage.status}`).join('|')}
+      </div>
       {controlButtons}
     </div>
   ),
@@ -27,8 +48,17 @@ jest.mock('@/components/EvaluationTask', () => ({
 describe('ScoreEvaluationList', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
-    mockGraphql.mockResolvedValue({
+    mockGraphql.mockImplementation(({ query }: { query: string }) => {
+      const text = String(query)
+      if (text.includes('onCreateEvaluation')) return subscriptionResult('createEvaluation')
+      if (text.includes('onUpdateEvaluation')) return subscriptionResult('updateEvaluation')
+      if (text.includes('onDeleteEvaluation')) return subscriptionResult('deleteEvaluation')
+      if (text.includes('onUpdateTaskStage')) return subscriptionResult('updateTaskStage')
+      if (text.includes('onUpdateTask')) return subscriptionResult('updateTask')
+
+      return Promise.resolve({
       data: {
         listEvaluationByScoreIdAndUpdatedAt: {
           items: [
@@ -43,6 +73,12 @@ describe('ScoreEvaluationList', () => {
               accuracy: 92.5,
               cost: 0.4,
               metrics: JSON.stringify({ alignment: 0.88, precision: 0.72, recall: 0.81 }),
+              taskId: 'task-eval-1',
+              task: {
+                id: 'task-eval-1',
+                status: 'COMPLETED',
+                stages: { items: [] },
+              },
             },
             {
               id: 'eval-2',
@@ -71,6 +107,7 @@ describe('ScoreEvaluationList', () => {
           ],
         },
       },
+      })
     })
   })
 
@@ -122,5 +159,78 @@ describe('ScoreEvaluationList', () => {
     await waitFor(() => {
       expect(idsInOrder()).toEqual(['eval-2', 'eval-1', 'eval-3'])
     })
+  })
+
+  it('inserts matching realtime evaluations and ignores other scores', async () => {
+    render(<ScoreEvaluationList scoreId="score-1" scope="score" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('eval-1')).toBeInTheDocument()
+    })
+
+    act(() => {
+      emitSubscription('createEvaluation', {
+        onCreateEvaluation: {
+          id: 'eval-other-score',
+          type: 'feedback',
+          status: 'COMPLETED',
+          scoreId: 'score-other',
+          scoreVersionId: 'version-x',
+          createdAt: '2026-04-26T00:00:00Z',
+          updatedAt: '2026-04-26T00:00:00Z',
+          metrics: JSON.stringify({ alignment: 0.99 }),
+        },
+      })
+      emitSubscription('createEvaluation', {
+        onCreateEvaluation: {
+          id: 'eval-live',
+          type: 'feedback',
+          status: 'RUNNING',
+          scoreId: 'score-1',
+          scoreVersionId: 'version-live',
+          createdAt: '2026-04-26T00:00:00Z',
+          updatedAt: '2026-04-26T00:00:00Z',
+          metrics: JSON.stringify({ alignment: 0.65 }),
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('eval-live')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('eval-other-score')).not.toBeInTheDocument()
+  })
+
+  it('updates visible evaluation task and stage data from realtime task subscriptions', async () => {
+    render(<ScoreEvaluationList scoreId="score-1" scope="score" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('eval-1')).toBeInTheDocument()
+    })
+
+    act(() => {
+      emitSubscription('updateTask', {
+        onUpdateTask: {
+          id: 'task-eval-1',
+          status: 'RUNNING',
+          target: 'evaluation/feedback/test',
+          stages: { items: [] },
+        },
+      })
+      emitSubscription('updateTaskStage', {
+        onUpdateTaskStage: {
+          id: 'stage-live',
+          taskId: 'task-eval-1',
+          name: 'Score items',
+          order: 2,
+          status: 'RUNNING',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status-eval-1')).toHaveTextContent('RUNNING')
+    })
+    expect(screen.getByTestId('stages-eval-1')).toHaveTextContent('Score items:RUNNING')
   })
 })
