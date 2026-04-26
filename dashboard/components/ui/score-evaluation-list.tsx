@@ -68,6 +68,28 @@ function normalizeTaskStatus(status: string | null | undefined): EvaluationTaskS
   return 'PENDING'
 }
 
+function EvaluationListSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="Loading evaluations">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="rounded-lg bg-card p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <div className="h-4 w-48 rounded bg-muted animate-pulse" />
+              <div className="h-3 w-72 rounded bg-muted animate-pulse" />
+            </div>
+            <div className="h-8 w-20 rounded bg-muted animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 w-full rounded bg-muted animate-pulse" />
+            <div className="h-3 w-3/4 rounded bg-muted animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function toEvaluationTaskData(evaluation: ScoreEvaluationView): EvaluationTaskData {
   const type = evaluation.type ?? 'unknown'
   const status = normalizeTaskStatus(evaluation.task?.status ?? evaluation.status)
@@ -165,6 +187,7 @@ export function ScoreEvaluationList({
 }: ScoreEvaluationListProps) {
   const [evaluations, setEvaluations] = React.useState<ScoreEvaluationView[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isApplyingControls, setIsApplyingControls] = React.useState(false)
   const [sortBy, setSortBy] = React.useState<EvaluationSort>('updated')
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [typeFilter, setTypeFilter] = React.useState('all')
@@ -173,6 +196,7 @@ export function ScoreEvaluationList({
     let cancelled = false
 
     const loadEvaluations = async () => {
+      setEvaluations([])
       setIsLoading(true)
       try {
         const loadedEvaluations = await loadScoreEvaluations(scoreId)
@@ -196,6 +220,14 @@ export function ScoreEvaluationList({
       cancelled = true
     }
   }, [scoreId])
+
+  const applyControlChange = React.useCallback((apply: () => void) => {
+    setIsApplyingControls(true)
+    apply()
+    requestAnimationFrame(() => {
+      setIsApplyingControls(false)
+    })
+  }, [])
 
   const visibleEvaluations = React.useMemo(() => {
     const filteredByScope =
@@ -227,6 +259,7 @@ export function ScoreEvaluationList({
       ? 'All evaluations for this score, newest first by default.'
       : 'Evaluations created for the selected version.'
   const usesSlotSurface = surface === 'slot'
+  const shouldShowListSkeleton = isLoading || isApplyingControls
 
   if (scope === 'version' && !versionId) {
     return (
@@ -259,7 +292,7 @@ export function ScoreEvaluationList({
             id={`evaluation-sort-${scope}`}
             className="rounded-md border-0 bg-background px-3 py-1.5 text-sm focus:outline-none"
             value={sortBy}
-            onChange={(event) => setSortBy(event.target.value as EvaluationSort)}
+            onChange={(event) => applyControlChange(() => setSortBy(event.target.value as EvaluationSort))}
           >
             <option value="updated">Updated</option>
             <option value="alignment">Alignment</option>
@@ -276,7 +309,7 @@ export function ScoreEvaluationList({
             id={`evaluation-status-${scope}`}
             className="rounded-md border-0 bg-background px-3 py-1.5 text-sm focus:outline-none"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(event) => applyControlChange(() => setStatusFilter(event.target.value))}
           >
             {statuses.map((status) => (
               <option key={status} value={status}>
@@ -292,7 +325,7 @@ export function ScoreEvaluationList({
             id={`evaluation-type-${scope}`}
             className="rounded-md border-0 bg-background px-3 py-1.5 text-sm focus:outline-none"
             value={typeFilter}
-            onChange={(event) => setTypeFilter(event.target.value)}
+            onChange={(event) => applyControlChange(() => setTypeFilter(event.target.value))}
           >
             {types.map((type) => (
               <option key={type} value={type}>
@@ -302,6 +335,9 @@ export function ScoreEvaluationList({
           </select>
         </div>
 
+        {shouldShowListSkeleton ? (
+          <EvaluationListSkeleton />
+        ) : (
         <div className="space-y-3">
           {!isLoading && visibleEvaluations.length === 0 && (
             <div className="text-sm text-muted-foreground">No evaluations found for this scope yet.</div>
@@ -357,6 +393,7 @@ export function ScoreEvaluationList({
             )
           })}
         </div>
+        )}
         </div>
         </div>
       </div>

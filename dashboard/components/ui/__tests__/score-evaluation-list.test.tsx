@@ -108,12 +108,19 @@ describe('ScoreEvaluationList', () => {
     const sortSelect = screen.getByLabelText(/^Sort$/i)
 
     await user.selectOptions(sortSelect, 'precision')
-    expect(idsInOrder()).toEqual(['eval-2', 'eval-1', 'eval-3'])
+    expect(screen.getByLabelText('Loading evaluations')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(idsInOrder()).toEqual(['eval-2', 'eval-1', 'eval-3'])
+    })
 
     await user.selectOptions(sortSelect, 'recall')
-    expect(idsInOrder()).toEqual(['eval-3', 'eval-1', 'eval-2'])
+    await waitFor(() => {
+      expect(idsInOrder()).toEqual(['eval-3', 'eval-1', 'eval-2'])
+    })
 
     await user.selectOptions(sortSelect, 'cost')
-    expect(idsInOrder()).toEqual(['eval-2', 'eval-1', 'eval-3'])
+    await waitFor(() => {
+      expect(idsInOrder()).toEqual(['eval-2', 'eval-1', 'eval-3'])
+    })
   })
 })
