@@ -235,18 +235,20 @@ function ScoreVersionContentSkeleton({ label = 'Loading version...' }: { label?:
   )
 }
 
-// Helper function to fetch most recent evaluation for a score
-async function fetchMostRecentEvaluation(scoreId: string) {
+// Helper function to fetch the most recent evaluation for the champion score version.
+async function fetchMostRecentChampionEvaluation(championVersionId?: string | null) {
+  if (!championVersionId) return null
+
   try {
     const response = await getAmplifyClient().graphql({
       query: `
-        query ListEvaluationByScoreIdAndUpdatedAt(
-          $scoreId: String!
+        query ListEvaluationByScoreVersionIdAndCreatedAt(
+          $scoreVersionId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
         ) {
-          listEvaluationByScoreIdAndUpdatedAt(
-            scoreId: $scoreId
+          listEvaluationByScoreVersionIdAndCreatedAt(
+            scoreVersionId: $scoreVersionId
             sortDirection: $sortDirection
             limit: $limit
           ) {
@@ -254,18 +256,19 @@ async function fetchMostRecentEvaluation(scoreId: string) {
               id
               metrics
               createdAt
+              scoreVersionId
             }
           }
         }
       `,
       variables: {
-        scoreId,
+        scoreVersionId: championVersionId,
         sortDirection: 'DESC',
         limit: 1
       }
     }) as GraphQLResult<any>
 
-    const evaluation = response.data?.listEvaluationByScoreIdAndUpdatedAt?.items?.[0]
+    const evaluation = response.data?.listEvaluationByScoreVersionIdAndCreatedAt?.items?.[0]
     return evaluation || null
   } catch (error) {
     console.error('Error fetching evaluation:', error)
@@ -424,12 +427,6 @@ function transformEvaluationToSummary(evaluation: any) {
       ? JSON.parse(evaluation.metrics)
       : evaluation.metrics
 
-    const otherMetricsSegments = [
-      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-      { start: 60, end: 85, color: 'var(--gauge-converging)' },
-      { start: 85, end: 100, color: 'var(--gauge-great)' }
-    ]
-
     const alignmentSegments = [
       { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // -1 to 0
       { start: 50, end: 60, color: 'var(--gauge-converging)' },   // 0 to 0.2
@@ -438,36 +435,23 @@ function transformEvaluationToSummary(evaluation: any) {
       { start: 90, end: 100, color: 'var(--gauge-great)' }        // 0.8 to 1.0
     ]
 
-    // Metrics format: array of {name, value} objects
-    // Get the first metric (should be accuracy)
-    const firstMetric = metrics[0]
-    if (!firstMetric || typeof firstMetric.value !== 'number') {
+    const alignmentMetric = Array.isArray(metrics)
+      ? metrics.find(metric => metric?.name === 'Alignment' && typeof metric.value === 'number')
+      : null
+
+    if (!alignmentMetric) {
       return null
     }
 
-    // Special handling for Alignment (Gwet's AC1)
-    if (firstMetric.name === 'Alignment') {
-      return {
-        gauge: {
-          value: firstMetric.value,
-          label: firstMetric.name,
-          segments: alignmentSegments,
-          min: -1,           // AC1 ranges from -1 to 1
-          max: 1,
-          valueUnit: '',     // No percentage sign
-          decimalPlaces: 2,  // Show 2 decimal places
-          backgroundColor: 'var(--gauge-background)',
-        },
-        evaluationId: evaluation.id
-      }
-    }
-
-    // Default handling for other metrics
     return {
       gauge: {
-        value: firstMetric.value,
-        label: firstMetric.name,
-        segments: otherMetricsSegments,
+        value: alignmentMetric.value,
+        label: alignmentMetric.name,
+        segments: alignmentSegments,
+        min: -1,           // AC1 ranges from -1 to 1
+        max: 1,
+        valueUnit: '',     // No percentage sign
+        decimalPlaces: 2,  // Show 2 decimal places
         backgroundColor: 'var(--gauge-background)',
       },
       evaluationId: evaluation.id
@@ -506,7 +490,7 @@ const GridContent = React.memo(({
 
     async function loadMetrics() {
       setIsLoadingMetrics(true)
-      const evaluation = await fetchMostRecentEvaluation(score.id)
+      const evaluation = await fetchMostRecentChampionEvaluation(score.championVersionId)
 
       if (isMounted) {
         if (evaluation) {
@@ -522,7 +506,7 @@ const GridContent = React.memo(({
     return () => {
       isMounted = false
     }
-  }, [score.id])
+  }, [score.championVersionId])
 
   return (
     <div className="flex items-start gap-4">
