@@ -1,11 +1,28 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { ScoreProcedureList } from '../score-procedure-list'
 
 const mockGraphql = jest.fn()
 const mockDownloadData = jest.fn()
+const subscriptionHandlers: Record<string, Array<(payload: any) => void>> = {}
+
+function subscriptionResult(key: string) {
+  return {
+    subscribe: ({ next }: { next: (payload: any) => void }) => {
+      subscriptionHandlers[key] = subscriptionHandlers[key] ?? []
+      subscriptionHandlers[key].push(next)
+      return { unsubscribe: jest.fn() }
+    },
+  }
+}
+
+function emitSubscription(key: string, data: any) {
+  for (const handler of subscriptionHandlers[key] ?? []) {
+    handler({ data })
+  }
+}
 
 jest.mock('aws-amplify/api', () => ({
   generateClient: () => ({
@@ -35,8 +52,14 @@ jest.mock('@/components/ProcedureTask', () => ({
 describe('ScoreProcedureList', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
-    mockGraphql.mockImplementation(async ({ query }: { query: string }) => {
+    mockGraphql.mockImplementation(({ query }: { query: string }) => {
+      if (query.includes('onCreateProcedure')) return subscriptionResult('createProcedure')
+      if (query.includes('onUpdateProcedure')) return subscriptionResult('updateProcedure')
+      if (query.includes('onDeleteProcedure')) return subscriptionResult('deleteProcedure')
+      if (query.includes('onUpdateTaskStage')) return subscriptionResult('updateTaskStage')
+      if (query.includes('onUpdateTask')) return subscriptionResult('updateTask')
       if (query.includes('listTaskByAccountIdAndUpdatedAt')) {
         return {
           data: {
@@ -227,5 +250,71 @@ describe('ScoreProcedureList', () => {
     })
 
     expect(screen.queryByText('Other Run')).not.toBeInTheDocument()
+  })
+
+  it('inserts live matching procedures and updates task/stage state', async () => {
+    render(
+      <ScoreProcedureList
+        scoreId="score-1"
+        scorecardId="scorecard-1"
+        scoreName="Medication Review: Prescriber"
+        scorecardName="SelectQuote HCS Medium-Risk"
+        scope="score"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Optimizer Run 1')).toBeInTheDocument()
+    })
+
+    act(() => {
+      emitSubscription('createProcedure', {
+        onCreateProcedure: {
+          id: 'proc-live',
+          name: 'Live Procedure',
+          description: 'Live procedure note',
+          status: 'PENDING',
+          metadata: null,
+          createdAt: '2026-04-26T00:00:00Z',
+          updatedAt: '2026-04-26T00:00:00Z',
+          scoreId: 'score-1',
+          scoreVersionId: 'version-live',
+          accountId: 'account-1',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Live Procedure')).toBeInTheDocument()
+    })
+
+    act(() => {
+      emitSubscription('updateTask', {
+        onUpdateTask: {
+          id: 'task-live',
+          type: 'Procedure',
+          status: 'RUNNING',
+          target: 'procedure/run/proc-live',
+          command: 'procedure run',
+          description: 'Runtime task description',
+          stages: { items: [] },
+        },
+      })
+      emitSubscription('updateTaskStage', {
+        onUpdateTaskStage: {
+          id: 'stage-live',
+          taskId: 'task-live',
+          name: 'Cycle 1',
+          order: 1,
+          status: 'RUNNING',
+          statusMessage: 'Evaluating candidates',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('procedure-task-status-proc-live')).toHaveTextContent('RUNNING')
+    })
+    expect(screen.getByTestId('procedure-task-stages-proc-live')).toHaveTextContent('Cycle 1:RUNNING:Evaluating candidates')
   })
 })

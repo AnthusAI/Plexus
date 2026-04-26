@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { generateClient } from 'aws-amplify/api'
 import { Copy, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -9,13 +10,29 @@ import EvaluationTask, { type EvaluationTaskData } from '@/components/Evaluation
 import { cn } from '@/lib/utils'
 import {
   copyText,
+  EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  evaluationToScoreEvaluationView,
   loadScoreEvaluations,
+  mergeTaskIntoEvaluation,
+  mergeTaskStageIntoEvaluation,
+  taskMatchesEvaluation,
+  TASK_CREATE_SUBSCRIPTION_FOR_CARDS,
+  TASK_STAGE_CREATE_SUBSCRIPTION_FOR_CARDS,
+  TASK_STAGE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  TASK_UPDATE_SUBSCRIPTION_FOR_CARDS,
   type ScoreEvaluationView,
 } from '@/components/ui/optimizer-results-utils'
 
 type EvaluationScope = 'score' | 'version'
 type EvaluationSort = 'updated' | 'alignment' | 'accuracy' | 'precision' | 'recall' | 'cost'
 type EvaluationTaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
+
+const getAmplifyClient = (() => {
+  let client: any = null
+  return () => (client ??= generateClient())
+})()
 
 export interface ScoreEvaluationListProps {
   scoreId: string
@@ -227,6 +244,123 @@ export function ScoreEvaluationList({
     void loadEvaluations()
     return () => {
       cancelled = true
+    }
+  }, [scoreId])
+
+  React.useEffect(() => {
+    if (!scoreId) return
+
+    const subscriptions: Array<{ unsubscribe: () => void }> = []
+    const subscribe = (query: string, onNext: (data: any) => void, label: string) => {
+      try {
+        const result = getAmplifyClient().graphql({ query }) as any
+        if (!result || typeof result.subscribe !== 'function') return
+        const subscription = result.subscribe({
+          next: ({ data }: { data?: any }) => onNext(data),
+          error: (error: Error) => {
+            console.error(`${label} subscription error:`, error)
+          },
+        })
+        subscriptions.push(subscription)
+      } catch (error) {
+        console.error(`Failed to set up ${label} subscription:`, error)
+      }
+    }
+
+    const upsertEvaluation = (rawEvaluation: any) => {
+      if (!rawEvaluation?.id) return
+      if (rawEvaluation.scoreId && rawEvaluation.scoreId !== scoreId) return
+      const nextEvaluation = evaluationToScoreEvaluationView(rawEvaluation)
+      setEvaluations((previous) => {
+        const existingIndex = previous.findIndex((evaluation) => evaluation.id === nextEvaluation.id)
+        if (existingIndex < 0) return [nextEvaluation, ...previous]
+        const next = [...previous]
+        next[existingIndex] = {
+          ...previous[existingIndex],
+          ...nextEvaluation,
+          task: nextEvaluation.task ?? previous[existingIndex].task,
+        }
+        return next
+      })
+    }
+
+    subscribe(
+      EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => upsertEvaluation(data?.onCreateEvaluation),
+      'create evaluation'
+    )
+    subscribe(
+      EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => upsertEvaluation(data?.onUpdateEvaluation),
+      'update evaluation'
+    )
+    subscribe(
+      EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const deleted = data?.onDeleteEvaluation
+        if (!deleted?.id) return
+        if (deleted.scoreId && deleted.scoreId !== scoreId) return
+        setEvaluations((previous) => previous.filter((evaluation) => evaluation.id !== deleted.id))
+      },
+      'delete evaluation'
+    )
+    subscribe(
+      TASK_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const task = data?.onCreateTask
+        if (!task?.id) return
+        setEvaluations((previous) =>
+          previous.map((evaluation) =>
+            taskMatchesEvaluation(task, evaluation) ? mergeTaskIntoEvaluation(evaluation, task) : evaluation
+          )
+        )
+      },
+      'task create'
+    )
+    subscribe(
+      TASK_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const task = data?.onUpdateTask
+        if (!task?.id) return
+        setEvaluations((previous) =>
+          previous.map((evaluation) =>
+            taskMatchesEvaluation(task, evaluation) ? mergeTaskIntoEvaluation(evaluation, task) : evaluation
+          )
+        )
+      },
+      'task update'
+    )
+    subscribe(
+      TASK_STAGE_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const stage = data?.onCreateTaskStage
+        if (!stage?.taskId) return
+        setEvaluations((previous) =>
+          previous.map((evaluation) => mergeTaskStageIntoEvaluation(evaluation, stage))
+        )
+      },
+      'task stage create'
+    )
+    subscribe(
+      TASK_STAGE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const stage = data?.onUpdateTaskStage
+        if (!stage?.taskId) return
+        setEvaluations((previous) =>
+          previous.map((evaluation) => mergeTaskStageIntoEvaluation(evaluation, stage))
+        )
+      },
+      'task stage update'
+    )
+
+    return () => {
+      subscriptions.forEach((subscription) => {
+        try {
+          subscription.unsubscribe()
+        } catch {
+          // Ignore unsubscribe errors from already-closed observables.
+        }
+      })
     }
   }, [scoreId])
 

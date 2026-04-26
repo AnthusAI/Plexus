@@ -688,7 +688,25 @@ class OptimizerResultsService:
             mutation UpdateProcedureOptimizerArtifacts($input: UpdateProcedureInput!) {
                 updateProcedure(input: $input) {
                     id
+                    name
+                    description
+                    status
+                    featured
+                    isTemplate
+                    code
+                    category
+                    version
+                    isDefault
+                    parentProcedureId
+                    rootNodeId
+                    waitingOnMessageId
                     metadata
+                    createdAt
+                    updatedAt
+                    accountId
+                    scorecardId
+                    scoreId
+                    scoreVersionId
                 }
             }
             """
