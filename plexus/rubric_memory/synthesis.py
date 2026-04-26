@@ -36,10 +36,12 @@ class TactusRubricEvidenceSynthesizer:
         provider: str = "bedrock",
         model: str = "us.anthropic.claude-sonnet-4-6",
         procedure_id: str = "rubric_evidence_pack_synthesis",
+        max_tokens: int = 12000,
     ):
         self.provider = provider
         self.model = model
         self.procedure_id = procedure_id
+        self.max_tokens = max_tokens
 
     async def synthesize(
         self,
@@ -123,8 +125,10 @@ class TactusRubricEvidenceSynthesizer:
             / "rubric_evidence_synthesis.tac"
         )
         tac_template = tac_path.read_text(encoding="utf-8")
-        return tac_template.replace("{{PROVIDER}}", self.provider).replace(
-            "{{MODEL}}", self.model
+        return (
+            tac_template.replace("{{PROVIDER}}", self.provider)
+            .replace("{{MODEL}}", self.model)
+            .replace("{{MAX_TOKENS}}", str(self.max_tokens))
         )
 
     def _build_synthesis_prompt(self, payload: dict) -> str:
@@ -179,6 +183,10 @@ class TactusRubricEvidenceSynthesizer:
         reason = args.get("pack_json") or args.get("reason")
         if isinstance(reason, str) and reason.strip():
             return reason.strip()
+        if call.get("name") == "finish":
+            raise ValueError(
+                "Rubric evidence synthesis called finish without pack_json."
+            )
         return text
 
     def _strip_json_fence(self, text: str) -> str:
