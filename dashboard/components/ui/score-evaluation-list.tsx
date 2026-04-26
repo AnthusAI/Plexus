@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/optimizer-results-utils'
 
 type EvaluationScope = 'score' | 'version'
-type EvaluationSort = 'updated' | 'accuracy' | 'alignment'
+type EvaluationSort = 'updated' | 'alignment' | 'accuracy' | 'precision' | 'recall' | 'cost'
 type EvaluationTaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
 
 export interface ScoreEvaluationListProps {
@@ -27,22 +27,26 @@ export interface ScoreEvaluationListProps {
 
 function sortEvaluations(items: ScoreEvaluationView[], sortBy: EvaluationSort) {
   const updatedAtMs = (item: ScoreEvaluationView) => new Date(item.updatedAt ?? item.createdAt ?? 0).getTime()
+  const sortMetric = (
+    left: ScoreEvaluationView,
+    right: ScoreEvaluationView,
+    metric: Exclude<EvaluationSort, 'updated'>,
+    direction: 'asc' | 'desc' = 'desc'
+  ) => {
+    const leftValue = left[metric]
+    const rightValue = right[metric]
+    const leftHasMetric = typeof leftValue === 'number'
+    const rightHasMetric = typeof rightValue === 'number'
+    if (leftHasMetric && rightHasMetric && leftValue !== rightValue) {
+      return direction === 'asc' ? leftValue! - rightValue! : rightValue! - leftValue!
+    }
+    if (leftHasMetric !== rightHasMetric) return leftHasMetric ? -1 : 1
+    return updatedAtMs(right) - updatedAtMs(left)
+  }
 
   return [...items].sort((left, right) => {
-    if (sortBy === 'accuracy') {
-      const leftAccuracy = typeof left.accuracy === 'number'
-      const rightAccuracy = typeof right.accuracy === 'number'
-      if (leftAccuracy && rightAccuracy && left.accuracy !== right.accuracy) return right.accuracy! - left.accuracy!
-      if (leftAccuracy !== rightAccuracy) return leftAccuracy ? -1 : 1
-      return updatedAtMs(right) - updatedAtMs(left)
-    }
-
-    if (sortBy === 'alignment') {
-      const leftAlignment = typeof left.alignment === 'number'
-      const rightAlignment = typeof right.alignment === 'number'
-      if (leftAlignment && rightAlignment && left.alignment !== right.alignment) return right.alignment! - left.alignment!
-      if (leftAlignment !== rightAlignment) return leftAlignment ? -1 : 1
-      return updatedAtMs(right) - updatedAtMs(left)
+    if (sortBy !== 'updated') {
+      return sortMetric(left, right, sortBy, sortBy === 'cost' ? 'asc' : 'desc')
     }
 
     return updatedAtMs(right) - updatedAtMs(left)
@@ -76,6 +80,15 @@ function toEvaluationTaskData(evaluation: ScoreEvaluationView): EvaluationTaskDa
       : null,
     typeof evaluation.alignment === 'number'
       ? { name: 'Alignment', value: evaluation.alignment, priority: true, maximum: 1 }
+      : null,
+    typeof evaluation.precision === 'number'
+      ? { name: 'Precision', value: evaluation.precision, priority: false, maximum: 1 }
+      : null,
+    typeof evaluation.recall === 'number'
+      ? { name: 'Recall', value: evaluation.recall, priority: false, maximum: 1 }
+      : null,
+    typeof evaluation.cost === 'number'
+      ? { name: 'Cost', value: evaluation.cost, priority: false, unit: '$' }
       : null,
   ].filter((metric): metric is NonNullable<typeof metric> => metric !== null)
   const parameters =
@@ -245,8 +258,11 @@ export function ScoreEvaluationList({
             onChange={(event) => setSortBy(event.target.value as EvaluationSort)}
           >
             <option value="updated">Updated</option>
-            <option value="accuracy">Accuracy</option>
             <option value="alignment">Alignment</option>
+            <option value="accuracy">Accuracy</option>
+            <option value="precision">Precision</option>
+            <option value="recall">Recall</option>
+            <option value="cost">Cost</option>
           </select>
 
           <label className="text-sm text-muted-foreground" htmlFor={`evaluation-status-${scope}`}>
