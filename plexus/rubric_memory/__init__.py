@@ -15,6 +15,7 @@ from .models import (
     RubricEvidencePackRequest,
     RubricHistoryEvent,
 )
+from .preparation import PreparedRubricMemoryCorpus, RubricMemoryPreparedCorpusManager
 from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
 from .retrieval import BiblicusRubricEvidenceRetriever, RubricEvidenceRetriever
 from .service import RubricEvidencePackService
@@ -29,6 +30,7 @@ __all__ = [
     "LocalRubricMemoryCorpusPaths",
     "LocalRubricMemoryCorpusResolver",
     "LocalRubricMemorySource",
+    "PreparedRubricMemoryCorpus",
     "RubricAuthority",
     "RubricAuthorityError",
     "RubricAuthorityResolver",
@@ -37,6 +39,7 @@ __all__ = [
     "RubricEvidencePackRequest",
     "RubricEvidencePackService",
     "RubricEvidenceRetriever",
+    "RubricMemoryPreparedCorpusManager",
     "RubricMemoryQueryPlan",
     "RubricMemoryQueryPlanner",
     "RubricEvidenceSynthesizer",
