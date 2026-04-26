@@ -1733,25 +1733,7 @@ def optimizer_runs(scorecard: str, score: str, limit: int, output: str):
 
     context = _resolve_optimizer_score_context(client, scorecard, score)
     runs = context["service"].list_optimizer_runs_for_score(context["score_id"], limit=limit)
-    payload = []
-    for run in runs:
-        manifest = run.manifest or {}
-        summary = manifest.get("summary") or {}
-        best = manifest.get("best") or {}
-        payload.append({
-            "procedure_id": run.procedure.get("id"),
-            "name": run.procedure.get("name"),
-            "status": run.procedure.get("status"),
-            "updated_at": run.procedure.get("updatedAt"),
-            "indexed": run.indexed,
-            "completed_cycles": summary.get("completed_cycles"),
-            "configured_max_iterations": summary.get("configured_max_iterations"),
-            "stop_reason": summary.get("stop_reason"),
-            "winning_version_id": best.get("winning_version_id"),
-            "best_feedback_evaluation_id": best.get("best_feedback_evaluation_id"),
-            "best_accuracy_evaluation_id": best.get("best_accuracy_evaluation_id"),
-            "manifest": (run.artifact_pointer or {}).get("manifest"),
-        })
+    payload = [context["service"].summarize_optimizer_run(run) for run in runs]
 
     if output == 'json':
         click.echo(json.dumps(payload, indent=2, default=str))
@@ -1790,12 +1772,60 @@ def optimizer_runs(scorecard: str, score: str, limit: int, output: str):
 scores.add_command(optimizer_runs)
 
 
+@score.command(name="optimizer-review")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def optimizer_review(scorecard: str, score: str, output: str):
+    """Build a compact agent review packet for optimizer results on one score."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    packet = context["service"].build_optimizer_review_packet_for_score(
+        context["score_id"],
+        score_name=context["score_name"],
+        scorecard_name=context["scorecard_name"],
+        champion_version_id=context["champion_version_id"],
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(packet, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(packet, sys.stdout)
+        return
+
+    promotion = packet.get("promotion_packet") or {}
+    best = packet.get("best_candidate") or {}
+    table = Table(title=f"Optimizer Review for {context['score_name']}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Champion", packet.get("champion_version_id") or "—")
+    table.add_row("Best version", best.get("version_id") or "—")
+    table.add_row("Best feedback eval", promotion.get("best_feedback_evaluation_url") or "—")
+    table.add_row("Best accuracy eval", promotion.get("best_accuracy_evaluation_url") or "—")
+    table.add_row("Feedback AC1", f"{best['best_feedback_alignment']:.4f}" if best.get("best_feedback_alignment") is not None else "—")
+    table.add_row("Accuracy AC1", f"{best['best_accuracy_alignment']:.4f}" if best.get("best_accuracy_alignment") is not None else "—")
+    table.add_row("Guidelines", promotion.get("guidelines_relative_path") or "—")
+    table.add_row("Indexed runs", str(packet.get("indexed_run_count", 0)))
+    table.add_row("Unindexed runs", str(packet.get("unindexed_run_count", 0)))
+    table.add_row("Recommendation", packet.get("promotion_recommendation") or "—")
+    console.print(table)
+
+
+scores.add_command(optimizer_review)
+
+
 @score.command(name="optimizer-candidates")
 @click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
 @click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
 @click.option('--limit-runs', default=25, show_default=True, help='Number of indexed runs to aggregate')
+@click.option('--detail', type=click.Choice(['summary', 'full']), default='summary', show_default=True)
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
-def optimizer_candidates(scorecard: str, score: str, limit_runs: int, output: str):
+def optimizer_candidates(scorecard: str, score: str, limit_runs: int, detail: str, output: str):
     """List optimizer candidate versions and their best visible evaluations for a score."""
     client = create_client()
     if not client:
@@ -1806,6 +1836,8 @@ def optimizer_candidates(scorecard: str, score: str, limit_runs: int, output: st
         context["score_id"],
         limit_runs=limit_runs,
     )
+    if detail != 'full':
+        candidates = [context["service"].summarize_optimizer_candidate(candidate) for candidate in candidates]
 
     if output == 'json':
         click.echo(json.dumps(candidates, indent=2, default=str))
@@ -1837,6 +1869,66 @@ def optimizer_candidates(scorecard: str, score: str, limit_runs: int, output: st
 
 
 scores.add_command(optimizer_candidates)
+
+
+@score.command(name="evaluations")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--version', 'version_id', default=None, help='Optional score version ID filter')
+@click.option('--sort', 'sort_by', type=click.Choice(['updated', 'accuracy', 'alignment']), default='updated', show_default=True)
+@click.option('--limit', '-l', default=25, show_default=True, help='Maximum number of evaluations to show')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def score_evaluations(scorecard: str, score: str, version_id: Optional[str], sort_by: str, limit: int, output: str):
+    """List concise evaluations for a score, optionally filtered to one version."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    evaluations = context["service"].list_score_evaluations(
+        context["score_id"],
+        version_id=version_id,
+        sort_by=sort_by,
+        limit=limit,
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(evaluations, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(evaluations, sys.stdout)
+        return
+
+    title = f"Evaluations for {context['score_name']}"
+    if version_id:
+        title += f" ({version_id})"
+    table = Table(title=title)
+    table.add_column("Evaluation", style="cyan")
+    table.add_column("Version", style="magenta")
+    table.add_column("Type", style="white")
+    table.add_column("Status", style="white")
+    table.add_column("Accuracy", style="green")
+    table.add_column("AC1", style="green")
+    table.add_column("Items", style="yellow")
+    table.add_column("Updated", style="dim")
+    for row in evaluations:
+        total = row.get("total_items")
+        processed = row.get("processed_items")
+        table.add_row(
+            row.get("evaluation_id") or "—",
+            row.get("score_version_id") or "—",
+            row.get("type") or "—",
+            row.get("status") or "—",
+            f"{row['accuracy']:.2f}" if row.get("accuracy") is not None else "—",
+            f"{row['alignment']:.4f}" if row.get("alignment") is not None else "—",
+            f"{processed or 0}/{total or 0}" if processed is not None or total is not None else "—",
+            row.get("updated_at") or "—",
+        )
+    console.print(table)
+
+
+scores.add_command(score_evaluations)
 
 
 @score.command(name="promotion-packet")
