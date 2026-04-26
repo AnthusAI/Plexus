@@ -56,13 +56,14 @@ class RubricEvidencePackService:
             history=history,
             confidence_inputs=confidence_inputs,
         )
-        return self._shape_response(request, pack, confidence_inputs)
+        return self._shape_response(request, pack, confidence_inputs, evidence)
 
     def _shape_response(
         self,
         request: RubricEvidencePackRequest,
         pack: RubricEvidencePack,
         confidence_inputs: ConfidenceInputs,
+        evidence: Sequence[EvidenceSnippet],
     ) -> RubricEvidencePack:
         confidence = self._clamp_confidence(
             pack.confidence, confidence_inputs.suggested_confidence
@@ -76,11 +77,47 @@ class RubricEvidencePackService:
         return pack.model_copy(
             update={
                 "score_version_id": request.score_version_id,
+                "supporting_evidence": self._supporting_evidence(pack, evidence),
+                "conflicting_evidence": self._conflicting_evidence(pack, evidence),
                 "confidence": confidence,
                 "confidence_inputs": confidence_inputs,
                 "history_of_change": history,
             }
         )
+
+    def _supporting_evidence(
+        self,
+        pack: RubricEvidencePack,
+        evidence: Sequence[EvidenceSnippet],
+    ) -> list[EvidenceSnippet]:
+        if pack.supporting_evidence:
+            return pack.supporting_evidence
+        return [
+            snippet
+            for snippet in evidence
+            if snippet.evidence_classification
+            not in {
+                EvidenceClassification.RUBRIC_CONFLICTING,
+                EvidenceClassification.POSSIBLE_STALE_RUBRIC,
+            }
+        ]
+
+    def _conflicting_evidence(
+        self,
+        pack: RubricEvidencePack,
+        evidence: Sequence[EvidenceSnippet],
+    ) -> list[EvidenceSnippet]:
+        if pack.conflicting_evidence:
+            return pack.conflicting_evidence
+        return [
+            snippet
+            for snippet in evidence
+            if snippet.evidence_classification
+            in {
+                EvidenceClassification.RUBRIC_CONFLICTING,
+                EvidenceClassification.POSSIBLE_STALE_RUBRIC,
+            }
+        ]
 
     def _dedupe_and_rank(
         self, evidence: Sequence[EvidenceSnippet]

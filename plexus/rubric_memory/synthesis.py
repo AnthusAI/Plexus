@@ -143,13 +143,15 @@ class TactusRubricEvidenceSynthesizer:
             "Confidence inputs computed by Python:\n"
             f"{json.dumps(payload['confidence_inputs'], ensure_ascii=False, indent=2)}\n\n"
             "Use this exact JSON object shape for pack_json. Fill empty strings and "
-            "choose evidence lists/classification based on the context:\n"
+            "choose the top-level classification based on the context. Leave "
+            "supporting_evidence and conflicting_evidence empty; Python attaches "
+            "retrieved provenance after synthesis:\n"
             f"{json.dumps(payload['output_template'], ensure_ascii=False, indent=2)}\n\n"
             "Allowed classifications: "
             + ", ".join(payload["output_contract"]["evidence_classification_values"])
             + ". Allowed confidence values: "
             + ", ".join(payload["output_contract"]["confidence_values"])
-            + "."
+            + ". Do not copy raw evidence objects into the output JSON."
         )
 
     def _extract_text(self, result: object) -> str:

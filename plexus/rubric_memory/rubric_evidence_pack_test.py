@@ -16,9 +16,11 @@ from plexus.rubric_memory import (
     LocalRubricMemorySource,
     RubricAuthorityResolver,
     RubricEvidencePack,
+    RubricEvidencePackContextFormatter,
     RubricEvidencePackRequest,
     RubricEvidencePackService,
     RubricHistoryEvent,
+    RubricMemoryQueryPlanner,
     TactusRubricEvidenceSynthesizer,
 )
 
@@ -90,6 +92,29 @@ class _CapturingSynthesizer:
         )
 
 
+class _EmptyEvidenceSynthesizer:
+    async def synthesize(
+        self,
+        *,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+        history: Sequence[RubricHistoryEvent],
+        confidence_inputs: ConfidenceInputs,
+    ) -> RubricEvidencePack:
+        return RubricEvidencePack(
+            score_version_id=request.score_version_id,
+            rubric_reading="The official rubric is authoritative.",
+            evidence_classification=EvidenceClassification.RUBRIC_SUPPORTED,
+            supporting_evidence=[],
+            conflicting_evidence=[],
+            history_of_change=list(history),
+            likely_reason_for_disagreement="The model missed a policy cue.",
+            confidence=confidence_inputs.suggested_confidence,
+            confidence_inputs=confidence_inputs,
+            open_questions=[],
+        )
+
+
 def _snippet(
     text: str,
     *,
@@ -112,6 +137,86 @@ def _snippet(
         retrieval_score=retrieval_score,
         policy_concepts=["billing"],
         evidence_classification=evidence_classification,
+    )
+
+
+def _history_event(
+    summary: str,
+    *,
+    source_uri: str,
+    source_timestamp: str,
+    scope_level: str = "score",
+) -> RubricHistoryEvent:
+    return RubricHistoryEvent(
+        source_timestamp=source_timestamp,
+        source_uri=source_uri,
+        scope_level=scope_level,
+        authority_level="medium",
+        summary=summary,
+        evidence_classification=EvidenceClassification.HISTORICAL_CONTEXT,
+    )
+
+
+def _formatter_pack() -> RubricEvidencePack:
+    return RubricEvidencePack(
+        score_version_id="score-version-1",
+        rubric_reading="Official rubric says current medication dosage must be verified.",
+        evidence_classification=EvidenceClassification.RUBRIC_SUPPORTED,
+        supporting_evidence=[
+            _snippet(
+                "Newer but highest-ranked supporting evidence.",
+                source_uri="notes/new-ranked-first.md",
+                scope_level="score",
+                authority_level="high",
+                source_timestamp="2026-04-21T00:00:00",
+                retrieval_score=99.0,
+            ),
+            _snippet(
+                "Older lower-ranked supporting evidence.",
+                source_uri="notes/older-ranked-second.md",
+                scope_level="scorecard",
+                source_timestamp="2026-02-24T00:00:00",
+                retrieval_score=10.0,
+            ),
+        ],
+        conflicting_evidence=[
+            _snippet(
+                "Old stale policy.",
+                source_uri="notes/stale.md",
+                scope_level="scorecard",
+                source_timestamp="2026-03-01T00:00:00",
+                evidence_classification=(
+                    EvidenceClassification.POSSIBLE_STALE_RUBRIC
+                ),
+            )
+        ],
+        history_of_change=[
+            _history_event(
+                "Newest policy discussion.",
+                source_uri="notes/history-new.md",
+                source_timestamp="2026-04-21T00:00:00",
+            ),
+            _history_event(
+                "Oldest policy discussion.",
+                source_uri="notes/history-old.md",
+                source_timestamp="2026-02-24T00:00:00",
+            ),
+        ],
+        likely_reason_for_disagreement="The model counted a non-current medication.",
+        confidence=ConfidenceLevel.HIGH,
+        confidence_inputs=ConfidenceInputs(
+            score_version_id="score-version-1",
+            total_evidence_count=3,
+            score_scope_evidence_count=1,
+            scorecard_scope_evidence_count=2,
+            unknown_scope_evidence_count=0,
+            high_authority_evidence_count=1,
+            low_authority_evidence_count=0,
+            conflicting_or_stale_evidence_count=1,
+            chronological_evidence_count=2,
+            suggested_confidence=ConfidenceLevel.HIGH,
+        ),
+        open_questions=["Confirm whether stale note has been superseded."],
     )
 
 
@@ -176,6 +281,142 @@ def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
         / "SelectQuote HCS Medium-Risk"
         / "scorecard.knowledge-base"
     )
+
+
+def test_query_planner_derives_retrieval_phrases_from_request():
+    request = RubricEvidencePackRequest(
+        scorecard_identifier="SelectQuote HCS Medium-Risk",
+        score_identifier="Medication Review: Dosage",
+        score_version_id="version-1",
+        rubric_text=(
+            "The agent must verify dosage for current medications. "
+            "Completed short-course medications should be excluded."
+        ),
+        score_code=(
+            "prompt: 'Confirm Medication Name, Dosage, Prescriber, "
+            "Pharmacy, and Schedule for all medications'"
+        ),
+        transcript_text=(
+            "The agent verified dofetilide 500 microgram and confirmed "
+            "doxycycline was a 7-day supply."
+        ),
+        model_explanation="Doxycycline and dofetilide dosage were not verified.",
+        feedback_comment="All dosages verified for medications taken.",
+    )
+
+    plan = RubricMemoryQueryPlanner(max_phrases=80).plan(request)
+    phrases = " | ".join(plan.retrieval_phrases).lower()
+
+    assert "medication review" in phrases
+    assert "dosage" in phrases
+    assert "current medications" in phrases
+    assert "completed short-course medications" in phrases
+    assert "medication name" in phrases
+    assert "dofetilide" in phrases
+    assert "doxycycline" in phrases
+    assert len(plan.retrieval_phrases) <= 80
+    assert "runtime retrieval phrases:" in plan.expanded_query_text
+
+
+def test_context_formatter_includes_summary_and_machine_context():
+    context = RubricEvidencePackContextFormatter().format(_formatter_pack())
+
+    assert "# Rubric Evidence Pack Context" in context
+    assert "Score version authority: `score-version-1`" in context
+    assert "Evidence classification: `rubric_supported`" in context
+    assert "Confidence: `high`" in context
+    assert "Official rubric says current medication dosage must be verified." in context
+    assert "Confirm whether stale note has been superseded." in context
+    assert "## Machine Context JSON" in context
+    assert '"supporting": 2' in context
+    assert '"conflicting_or_stale": 1' in context
+
+
+def test_context_formatter_sorts_history_without_reranking_evidence():
+    context = RubricEvidencePackContextFormatter().format(_formatter_pack())
+
+    history_old_index = context.index("notes/history-old.md")
+    history_new_index = context.index("notes/history-new.md")
+    ranked_new_index = context.index("notes/new-ranked-first.md")
+    ranked_old_index = context.index("notes/older-ranked-second.md")
+
+    assert history_old_index < history_new_index
+    assert ranked_new_index < ranked_old_index
+    assert "Use it for policy evolution, not relevance ranking." in context
+    assert "Do not infer chronology from this ordering." in context
+
+
+def test_context_formatter_retains_source_provenance():
+    context = RubricEvidencePackContextFormatter().format(_formatter_pack())
+    machine_json = context.split("```json\n", 1)[1].split("\n```", 1)[0]
+    machine_context = json.loads(machine_json)
+
+    provenance = machine_context["supporting_evidence_provenance"][0]
+    assert provenance["source_uri"] == "notes/new-ranked-first.md"
+    assert provenance["scope_level"] == "score"
+    assert provenance["source_timestamp"] == "2026-04-21T00:00:00"
+    assert provenance["authority_level"] == "high"
+    assert provenance["evidence_classification"] == "historical_context"
+    assert machine_context["confidence_inputs"]["score_version_id"] == (
+        "score-version-1"
+    )
+
+
+def test_source_window_expansion_finds_policy_section(tmp_path):
+    source_file = tmp_path / "selectrx-script.md"
+    source_file.write_text(
+        "\n".join(
+            [
+                "Agent Script for SelectRx",
+                "",
+                "Introduction & Presentation",
+                "Medication packets are helpful for customers.",
+                *["General introductory text." for _ in range(120)],
+                "Step 4 - Patient Care",
+                "Verify each medication that comes up for Review ESI Meds.",
+                "CSAs are required to confirm Medication Name, Dosage, "
+                "Prescriber, Pharmacy, and Schedule for ALL medications.",
+                "Ask whether the member is still taking each medication.",
+                "If the medication is no longer prescribed, mark it appropriately.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    request = RubricEvidencePackRequest(
+        scorecard_identifier="SelectQuote HCS Medium-Risk",
+        score_identifier="Medication Review: Dosage",
+        score_version_id="version-1",
+        rubric_text=(
+            "The agent must verify current medication dosage and schedule. "
+            "No longer prescribed medications are excluded."
+        ),
+        score_code=(
+            "Confirm Medication Name, Dosage, Prescriber, Pharmacy, and Schedule."
+        ),
+        transcript_text="The call discussed whether medications were still taking.",
+        model_explanation="Medication dosage was missed.",
+        feedback_comment="All dosages verified for medications taken.",
+    )
+    query_plan = RubricMemoryQueryPlanner().plan(request)
+    retriever = BiblicusRubricEvidenceRetriever(
+        corpus_root=tmp_path,
+        source_window_characters=1200,
+    )
+    header_snippet = EvidenceSnippet(
+        snippet_text="Agent Script for SelectRx\n\nIntroduction & Presentation",
+        source_uri=source_file.resolve().as_uri(),
+        scope_level="score",
+        source_type="text/markdown",
+        authority_level="unknown",
+        retrieval_score=1.0,
+    )
+
+    expanded = retriever._expand_snippet_from_source(header_snippet, query_plan)
+
+    assert "Medication Name, Dosage, Prescriber" in expanded.snippet_text
+    assert "Introduction & Presentation" not in expanded.snippet_text
+    assert expanded.source_uri == header_snippet.source_uri
+    assert expanded.scope_level == header_snippet.scope_level
 
 
 def test_retriever_temp_corpus_infers_date_folder_metadata(tmp_path):
@@ -379,6 +620,34 @@ async def test_scorecard_shared_evidence_is_available_without_score_local_eviden
     assert [snippet.source_uri for snippet in synthesizer.evidence] == ["notes/shared.md"]
     assert pack.confidence_inputs.score_scope_evidence_count == 0
     assert pack.confidence_inputs.scorecard_scope_evidence_count == 1
+
+
+@pytest.mark.asyncio
+async def test_service_attaches_evidence_when_synthesizer_leaves_lists_empty():
+    supporting = _snippet(
+        "Current dosage policy.",
+        source_uri="notes/supporting.md",
+        scope_level="score",
+    )
+    conflicting = _snippet(
+        "Old conflicting policy.",
+        source_uri="notes/conflicting.md",
+        scope_level="score",
+        evidence_classification=EvidenceClassification.POSSIBLE_STALE_RUBRIC,
+    )
+    service = RubricEvidencePackService(
+        retriever=_StaticRetriever([supporting, conflicting]),
+        synthesizer=_EmptyEvidenceSynthesizer(),
+    )
+
+    pack = await service.generate(_request())
+
+    assert [snippet.source_uri for snippet in pack.supporting_evidence] == [
+        "notes/supporting.md"
+    ]
+    assert [snippet.source_uri for snippet in pack.conflicting_evidence] == [
+        "notes/conflicting.md"
+    ]
 
 
 @pytest.mark.asyncio
