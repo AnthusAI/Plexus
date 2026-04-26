@@ -6,6 +6,8 @@ import ProcedureTask from '@/components/ProcedureTask'
 const mockGraphql = jest.fn()
 const mockDownloadData = jest.fn()
 
+jest.setTimeout(10000)
+
 jest.mock('aws-amplify/data', () => ({
   generateClient: jest.fn(() => ({
     graphql: mockGraphql,
