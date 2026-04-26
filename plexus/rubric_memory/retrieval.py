@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 import shutil
 from datetime import date, datetime, time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Protocol, Sequence
 
+from .local_corpus import LocalRubricMemoryCorpusResolver, LocalRubricMemorySource
 from .models import EvidenceClassification, EvidenceSnippet, RubricEvidencePackRequest
 
 
@@ -20,6 +23,9 @@ class RubricEvidenceRetriever(Protocol):
 class BiblicusRubricEvidenceRetriever:
     """Retrieve rubric-memory evidence from one local Biblicus corpus folder."""
 
+    _SIDECAR_SUFFIX = ".biblicus.yml"
+    _DATE_FOLDER_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
     _BIBLICUS_DERIVED_DIRS = {
         ".biblicus",
         "analysis",
@@ -31,18 +37,58 @@ class BiblicusRubricEvidenceRetriever:
 
     def __init__(
         self,
-        corpus_root: str | Path,
+        corpus_root: str | Path | None = None,
         *,
+        corpus_sources: Sequence[LocalRubricMemorySource] | None = None,
         retriever_id: str = "scan",
         max_total_items: int = 12,
         maximum_total_characters: int = 12000,
     ):
-        self.corpus_root = Path(corpus_root).resolve()
+        if (corpus_root is None) == (corpus_sources is None):
+            raise ValueError(
+                "Provide exactly one of corpus_root or corpus_sources."
+            )
+        if corpus_sources is None:
+            self.corpus_sources = [
+                LocalRubricMemorySource(
+                    root=Path(corpus_root).resolve(),
+                    scope_level="unknown",
+                )
+            ]
+        else:
+            self.corpus_sources = [
+                LocalRubricMemorySource(
+                    root=source.root.resolve(),
+                    scope_level=source.scope_level,
+                )
+                for source in corpus_sources
+            ]
         self.retriever_id = retriever_id
         self.max_total_items = max_total_items
         self.maximum_total_characters = maximum_total_characters
         self._knowledge_base: Any | None = None
         self._temp_dir: TemporaryDirectory[str] | None = None
+
+    @classmethod
+    def from_local_score(
+        cls,
+        *,
+        scorecard_name: str,
+        score_name: str,
+        retriever_id: str = "scan",
+        max_total_items: int = 12,
+        maximum_total_characters: int = 12000,
+    ) -> "BiblicusRubricEvidenceRetriever":
+        paths = LocalRubricMemoryCorpusResolver().resolve(
+            scorecard_name=scorecard_name,
+            score_name=score_name,
+        )
+        return cls(
+            corpus_sources=paths.sources,
+            retriever_id=retriever_id,
+            max_total_items=max_total_items,
+            maximum_total_characters=maximum_total_characters,
+        )
 
     async def retrieve(
         self, request: RubricEvidencePackRequest
@@ -80,14 +126,67 @@ class BiblicusRubricEvidenceRetriever:
     def _create_working_corpus_source(self) -> Path:
         self._temp_dir = TemporaryDirectory(prefix="plexus-rubric-memory-")
         working_root = Path(self._temp_dir.name) / "corpus"
+        working_root.mkdir(parents=True, exist_ok=True)
+        (working_root / ".biblicusignore").write_text(
+            "*.biblicus.yml\n**/*.biblicus.yml\n",
+            encoding="utf-8",
+        )
 
         def ignore_derived(directory: str, names: list[str]) -> list[str]:
-            if Path(directory).resolve() != self.corpus_root:
-                return []
             return [name for name in names if name in self._BIBLICUS_DERIVED_DIRS]
 
-        shutil.copytree(self.corpus_root, working_root, ignore=ignore_derived)
+        for index, source in enumerate(self.corpus_sources):
+            self._validate_source(source)
+            destination = working_root / f"{index:02d}-{source.scope_level}"
+            shutil.copytree(source.root, destination, ignore=ignore_derived)
+            self._write_temp_metadata_sidecars(source, destination)
         return working_root
+
+    def _validate_source(self, source: LocalRubricMemorySource) -> None:
+        if not source.root.exists():
+            raise FileNotFoundError(
+                f"Rubric memory knowledge-base folder does not exist: {source.root}"
+            )
+        if not source.root.is_dir():
+            raise NotADirectoryError(
+                f"Rubric memory knowledge-base path is not a directory: {source.root}"
+            )
+
+    def _write_temp_metadata_sidecars(
+        self,
+        source: LocalRubricMemorySource,
+        destination_root: Path,
+    ) -> None:
+        for copied_path in sorted(destination_root.rglob("*")):
+            if not copied_path.is_file():
+                continue
+            if copied_path.name.endswith(self._SIDECAR_SUFFIX):
+                continue
+            relative_path = copied_path.relative_to(destination_root)
+            original_path = source.root / relative_path
+            metadata: dict[str, Any] = {
+                "scope_level": source.scope_level,
+                "source_uri": original_path.resolve().as_uri(),
+            }
+            source_timestamp = self._infer_source_timestamp(relative_path)
+            if source_timestamp is not None:
+                metadata["source_timestamp"] = source_timestamp.isoformat()
+            copied_path.with_name(
+                copied_path.name + self._SIDECAR_SUFFIX
+            ).write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+    def _infer_source_timestamp(self, relative_path: Path) -> datetime | None:
+        for part in reversed(relative_path.parts[:-1]):
+            if not self._DATE_FOLDER_PATTERN.match(part):
+                continue
+            try:
+                return datetime.combine(date.fromisoformat(part), time.min)
+            except ValueError:
+                return None
+        return None
 
     def _build_query_text(self, request: RubricEvidencePackRequest) -> str:
         parts = [
@@ -106,7 +205,9 @@ class BiblicusRubricEvidenceRetriever:
 
     def _map_evidence(self, evidence: Any) -> EvidenceSnippet:
         metadata = getattr(evidence, "metadata", None) or {}
-        source_uri = str(getattr(evidence, "source_uri", "") or "").strip()
+        source_uri = self._metadata_optional_text(metadata, "source_uri") or str(
+            getattr(evidence, "source_uri", "") or ""
+        ).strip()
         snippet_text = str(getattr(evidence, "text", "") or "").strip()
         if not source_uri:
             source_uri = str(getattr(evidence, "item_id", "") or "").strip()
