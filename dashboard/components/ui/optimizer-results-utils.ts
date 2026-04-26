@@ -527,27 +527,7 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
             metadata
             updatedAt
             scoreVersionId
-          }
-        }
-      }
-    `,
-    variables: {
-      scoreId,
-      sortDirection: 'DESC',
-      limit,
-    },
-  }) as any
-
-  const procedures: ProcedureRecord[] = response.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
-  const procedureIds = new Set(procedures.map((procedure) => procedure.id))
-
-  let tasksByProcedureId = new Map<string, NonNullable<OptimizerRunView['task']>>()
-  try {
-    const tasksResponse = await client.graphql({
-      query: `
-        query ListTaskByScoreIdForProcedureWorkbench($scoreId: String!) {
-          listTaskByScoreId(scoreId: $scoreId) {
-            items {
+            task {
               id
               type
               status
@@ -580,70 +560,16 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
             }
           }
         }
-      `,
-      variables: { scoreId },
-    }) as any
-
-    const taskItems = tasksResponse.data?.listTaskByScoreId?.items ?? []
-    for (const task of taskItems) {
-      const targetProcedureId = typeof task?.target === 'string' ? task.target : null
-      if (!targetProcedureId || !procedureIds.has(targetProcedureId)) continue
-      const type = String(task?.type ?? '').toLowerCase()
-      if (!type.includes('procedure')) continue
-
-      const mappedTask = {
-        id: task.id,
-        type: task.type ?? null,
-        status: task.status ?? null,
-        target: task.target ?? null,
-        command: task.command ?? null,
-        description: task.description ?? null,
-        dispatchStatus: task.dispatchStatus ?? null,
-        metadata: task.metadata ?? null,
-        createdAt: task.createdAt ?? null,
-        startedAt: task.startedAt ?? null,
-        completedAt: task.completedAt ?? null,
-        estimatedCompletionAt: task.estimatedCompletionAt ?? null,
-        errorMessage: task.errorMessage ?? null,
-        errorDetails: task.errorDetails ?? null,
-        currentStageId: task.currentStageId ?? null,
-        stages: task.stages
-          ? {
-              items: (task.stages.items ?? []).map((stage: any) => ({
-                id: String(stage.id ?? ''),
-                name: String(stage.name ?? ''),
-                order: typeof stage.order === 'number' ? stage.order : 0,
-                status: String(stage.status ?? 'PENDING'),
-                statusMessage: stage.statusMessage ?? null,
-                startedAt: stage.startedAt ?? null,
-                completedAt: stage.completedAt ?? null,
-                estimatedCompletionAt: stage.estimatedCompletionAt ?? null,
-                processedItems: toFiniteNumber(stage.processedItems),
-                totalItems: toFiniteNumber(stage.totalItems),
-              })),
-            }
-          : null,
-      } satisfies NonNullable<OptimizerRunView['task']>
-
-      const existing = tasksByProcedureId.get(targetProcedureId)
-      if (!existing) {
-        tasksByProcedureId.set(targetProcedureId, mappedTask)
-        continue
       }
-      const existingUpdatedAt = new Date(
-        existing.completedAt ?? existing.startedAt ?? existing.createdAt ?? 0
-      ).getTime()
-      const candidateUpdatedAt = new Date(
-        mappedTask.completedAt ?? mappedTask.startedAt ?? mappedTask.createdAt ?? 0
-      ).getTime()
-      if (candidateUpdatedAt >= existingUpdatedAt) {
-        tasksByProcedureId.set(targetProcedureId, mappedTask)
-      }
-    }
-  } catch (error) {
-    console.error('Failed to load procedure tasks for score', scoreId, error)
-    tasksByProcedureId = new Map()
-  }
+    `,
+    variables: {
+      scoreId,
+      sortDirection: 'DESC',
+      limit,
+    },
+  }) as any
+
+  const procedures: ProcedureRecord[] = response.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
 
   return Promise.all(
     procedures.map(async (procedure) => {
@@ -684,7 +610,41 @@ export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Pr
           : null,
         manifest,
         scoreVersionId: procedure.scoreVersionId ?? null,
-        task: tasksByProcedureId.get(procedure.id) ?? null,
+        task: procedure.task
+          ? {
+              id: procedure.task.id,
+              type: procedure.task.type ?? null,
+              status: procedure.task.status ?? null,
+              target: procedure.task.target ?? null,
+              command: procedure.task.command ?? null,
+              description: procedure.task.description ?? null,
+              dispatchStatus: procedure.task.dispatchStatus ?? null,
+              metadata: procedure.task.metadata ?? null,
+              createdAt: procedure.task.createdAt ?? null,
+              startedAt: procedure.task.startedAt ?? null,
+              completedAt: procedure.task.completedAt ?? null,
+              estimatedCompletionAt: procedure.task.estimatedCompletionAt ?? null,
+              errorMessage: procedure.task.errorMessage ?? null,
+              errorDetails: procedure.task.errorDetails ?? null,
+              currentStageId: procedure.task.currentStageId ?? null,
+              stages: procedure.task.stages
+                ? {
+                    items: (procedure.task.stages.items ?? []).map((stage: any) => ({
+                      id: String(stage.id ?? ''),
+                      name: String(stage.name ?? ''),
+                      order: typeof stage.order === 'number' ? stage.order : 0,
+                      status: String(stage.status ?? 'PENDING'),
+                      statusMessage: stage.statusMessage ?? null,
+                      startedAt: stage.startedAt ?? null,
+                      completedAt: stage.completedAt ?? null,
+                      estimatedCompletionAt: stage.estimatedCompletionAt ?? null,
+                      processedItems: toFiniteNumber(stage.processedItems),
+                      totalItems: toFiniteNumber(stage.totalItems),
+                    })),
+                  }
+                : null,
+            }
+          : null,
       } satisfies OptimizerRunView
     })
   )

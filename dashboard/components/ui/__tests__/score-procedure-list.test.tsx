@@ -23,6 +23,10 @@ jest.mock('@/components/ProcedureTask', () => ({
     <div>
       <div>{procedure.title}</div>
       <div>{procedure.description}</div>
+      <div data-testid={`procedure-task-status-${procedure.id}`}>{procedure.task?.status ?? ''}</div>
+      <div data-testid={`procedure-task-stages-${procedure.id}`}>
+        {(procedure.task?.stages?.items ?? []).map((stage: any) => `${stage.name}:${stage.status}:${stage.statusMessage}`).join('|')}
+      </div>
       {controlButtons}
     </div>
   ),
@@ -50,6 +54,41 @@ describe('ScoreProcedureList', () => {
               }),
               updatedAt: '2026-04-25T00:00:00Z',
               scoreVersionId: 'version-0',
+              task: {
+                id: 'task-1',
+                type: 'Procedure',
+                status: 'COMPLETED',
+                target: 'proc-1',
+                command: '',
+                description: 'Task description that should not be treated as procedure note',
+                dispatchStatus: null,
+                metadata: null,
+                createdAt: '2026-04-25T00:00:00Z',
+                startedAt: '2026-04-25T00:01:00Z',
+                completedAt: '2026-04-25T00:05:00Z',
+                estimatedCompletionAt: null,
+                errorMessage: null,
+                errorDetails: null,
+                currentStageId: 'stage-final',
+                stages: {
+                  items: [
+                    {
+                      id: 'stage-start',
+                      name: 'Start',
+                      order: 1,
+                      status: 'COMPLETED',
+                      statusMessage: 'Initialized optimizer',
+                    },
+                    {
+                      id: 'stage-final',
+                      name: 'Finalizing',
+                      order: 2,
+                      status: 'COMPLETED',
+                      statusMessage: 'Saved optimizer result',
+                    },
+                  ],
+                },
+              },
             },
             {
               id: 'proc-2',
@@ -59,32 +98,7 @@ describe('ScoreProcedureList', () => {
               metadata: null,
               updatedAt: '2026-04-24T00:00:00Z',
               scoreVersionId: 'version-x',
-            },
-          ],
-        },
-      },
-    }))
-    mockGraphql.mockImplementationOnce(async () => ({
-      data: {
-        listTaskByScoreId: {
-          items: [
-            {
-              id: 'task-1',
-              type: 'Procedure',
-              status: 'COMPLETED',
-              target: 'proc-1',
-              command: '',
-              description: 'Task description that should not be treated as procedure note',
-              dispatchStatus: null,
-              metadata: null,
-              createdAt: '2026-04-25T00:00:00Z',
-              startedAt: null,
-              completedAt: null,
-              estimatedCompletionAt: null,
-              errorMessage: null,
-              errorDetails: null,
-              currentStageId: null,
-              stages: { items: [] },
+              task: null,
             },
           ],
         },
@@ -155,6 +169,9 @@ describe('ScoreProcedureList', () => {
 
     expect(screen.getByText('Procedure note 1')).toBeInTheDocument()
     expect(screen.queryByText(/Task description that should not be treated as procedure note/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('procedure-task-status-proc-1')).toHaveTextContent('COMPLETED')
+    expect(screen.getByTestId('procedure-task-stages-proc-1')).toHaveTextContent('Start:COMPLETED:Initialized optimizer')
+    expect(screen.getByTestId('procedure-task-stages-proc-1')).toHaveTextContent('Finalizing:COMPLETED:Saved optimizer result')
     expect(screen.getByRole('option', { name: /best feedback precision/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /best regression recall/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /best feedback cost/i })).toBeInTheDocument()
