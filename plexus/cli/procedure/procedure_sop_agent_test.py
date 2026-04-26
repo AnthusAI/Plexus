@@ -46,10 +46,10 @@ class TestProcedureProcedureDefinition:
         available_tools = procedure_def.get_allowed_tools()
         assert "plexus_evaluation_score_result_find" in available_tools
         assert "plexus_evaluation_info" in available_tools
+        assert "plexus_rubric_memory_evidence_pack" in available_tools
         assert "upsert_procedure_node" in available_tools
         assert "stop_procedure" in available_tools
-        # Should have exactly 4 tools for evaluation analysis
-        assert len(available_tools) == 4
+        assert len(available_tools) == 5
     
     def test_procedure_prompts_load_from_yaml_config(self):
         """Test that procedure procedure definition loads prompts from YAML configuration."""

@@ -27,11 +27,11 @@ async def test_procedure_definition_returns_correct_tools():
     # Verify the expected evaluation tools are present
     assert "plexus_evaluation_score_result_find" in allowed_tools
     assert "plexus_evaluation_info" in allowed_tools
+    assert "plexus_rubric_memory_evidence_pack" in allowed_tools
     assert "upsert_procedure_node" in allowed_tools
     assert "stop_procedure" in allowed_tools
 
-    # Verify it's exactly 4 tools
-    assert len(allowed_tools) == 4
+    assert len(allowed_tools) == 5
 
 
 @pytest.mark.asyncio
