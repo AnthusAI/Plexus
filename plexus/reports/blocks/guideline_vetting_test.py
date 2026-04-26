@@ -92,3 +92,58 @@ async def test_analyze_items_marks_contradiction_as_not_reference_eligible():
     result = results[0]
     assert result["verdict"] == "contradiction"
     assert result["associated_dataset_eligible"] is False
+
+
+@pytest.mark.asyncio
+async def test_analyze_items_includes_and_validates_rubric_memory_citations():
+    captured_prompts = []
+
+    def bedrock_vote(prompt: str, _use_thinking: bool = False):
+        captured_prompts.append(prompt)
+        return {
+            "contradicts": False,
+            "category": None,
+            "reason": "Aligned with rubric memory.",
+            "guideline_quote": "Allows this behavior.",
+            "citation_ids": ["support:01:abc"],
+        }
+
+    def openai_vote(prompt: str, _reasoning_effort: str = "low"):
+        captured_prompts.append(prompt)
+        return {
+            "contradicts": False,
+            "category": None,
+            "reason": "Consistent with cited context.",
+            "guideline_quote": "Allows this behavior.",
+            "citation_ids": ["support:01:abc"],
+        }
+
+    item = SimpleNamespace(
+        id="fi-3",
+        itemId="item-3",
+        initialAnswerValue="No",
+        finalAnswerValue="No",
+        editCommentValue="Reviewer confirms no issue.",
+        editorName="Reviewer",
+        editedAt=None,
+        isInvalid=False,
+        item=None,
+    )
+    rubric_memory_context = {
+        "markdown_context": "Rubric Memory Citation Context\n`support:01:abc` script evidence",
+        "citation_index": [{"id": "support:01:abc"}],
+    }
+
+    service = GuidelineVettingService(invoke_bedrock=bedrock_vote, invoke_openai=openai_vote)
+    results = await service.analyze_items(
+        items=[item],
+        guidelines="Guideline text",
+        max_concurrent=2,
+        score_results_by_item={},
+        rubric_memory_contexts_by_item={"item-3": rubric_memory_context},
+    )
+
+    assert "Rubric Memory Citation Context" in captured_prompts[0]
+    assert results[0]["citation_ids"] == ["support:01:abc"]
+    assert results[0]["citation_validation"]["missing_ids"] == []
+    assert results[0]["rubric_memory_citation_count"] == 1
