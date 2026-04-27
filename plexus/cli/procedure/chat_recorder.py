@@ -733,6 +733,23 @@ class ProcedureChatRecorder:
             if not account_id:
                 raise ValueError("Could not resolve account ID. Is PLEXUS_ACCOUNT_KEY set?")
 
+            explicit_session_id = None
+            if isinstance(context, dict):
+                explicit_session_id = (
+                    context.get('chat_session_id')
+                    or context.get('session_id')
+                    or context.get('sessionId')
+                )
+            if isinstance(explicit_session_id, str) and explicit_session_id.strip():
+                self.session_id = explicit_session_id.strip()
+                self.account_id = account_id
+                self.sequence_number = self._get_latest_sequence_number_for_session(self.session_id)
+                logger.info(
+                    f"Reusing explicit chat session: {self.session_id} for account: {account_id} "
+                    f"(last sequence: {self.sequence_number})"
+                )
+                return self.session_id
+
             resume_session_id = self._get_resume_session_id()
             if resume_session_id:
                 self.session_id = resume_session_id
