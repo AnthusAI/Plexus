@@ -1007,7 +1007,8 @@ class Score(BaseModel):
                 'configuration': (code_content or '').strip(),
                 'note': note or 'Updated via Score.create_version_from_code()',
                 # Do not mark as featured - these are test versions from procedures
-                'isFeatured': False
+                'isFeatured': False,
+                'featuredKey': 'unfeatured'
             }
             
             # Add guidelines if provided

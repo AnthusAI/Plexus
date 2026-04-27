@@ -22,10 +22,130 @@
       "author": "ryan",
       "text": "Hotfix: CI showed Amplify Gen2 does not allow boolean isFeatured as an index sort key. Switched the new featured-version GSI to use a materialized string featuredKey while preserving isFeatured as the product flag. Local dashboard typecheck passes in the hotfix worktree.",
       "created_at": "2026-04-27T19:06:56.148764Z"
+    },
+    {
+      "id": "80fe66e3-7684-4269-8a09-884467dce45f",
+      "author": "ryan",
+      "text": "Replayed ScoreVersion management UI/CLI/MCP implementation onto clean branch from deployed schema commit. Code patch excludes obsolete pre-hotfix schema diff; local validation will run on this clean branch.",
+      "created_at": "2026-04-27T20:00:56.806497Z"
+    },
+    {
+      "id": "dfea3802-e70a-4699-a9a2-6f30d3a36f56",
+      "author": "ryan",
+      "text": "Acceptance checks on clean ScoreVersion branch: Python compile passed; focused MCP promotion guard test passed; CLI version-diff works against live Prescriber versions; clean dashboard dev server on localhost:3011 returns 200 for a score-version route after using the deployed schema artifacts.",
+      "created_at": "2026-04-27T20:31:33.353193Z"
+    },
+    {
+      "id": "9d557cd9-ef0d-482e-b89c-0c683d2cbc50",
+      "author": "ryan",
+      "text": "UI correction: favorite rendering now treats featuredKey=featured as the source of truth instead of legacy isFeatured booleans. Version rows use a single Lucide star control that fills only for true favorites; pinned rows no longer show a duplicate solid star on the left.",
+      "created_at": "2026-04-27T20:45:36.225649Z"
+    },
+    {
+      "id": "a547744c-2855-400f-928e-e163aad398cd",
+      "author": "ryan",
+      "text": "Investigating favorite toggle failure reported from frontend. Goal: identify whether the updateScoreVersion mutation is failing due to schema/auth/backend behavior or whether the UI is losing the real GraphQL error and showing an empty object.",
+      "created_at": "2026-04-27T21:09:17.896415Z"
+    },
+    {
+      "id": "d1d16e09-ad17-47b7-8d56-92342444680d",
+      "author": "ryan",
+      "text": "Fixed favorite toggle persistence. Root cause: AppSync requires createdAt when updating featuredKey because it is part of the composite byScoreIdAndFeaturedKeyAndCreatedAt sort key. Frontend, CLI, and MCP now include createdAt in the update input. Verified live CLI pin and unpin both succeed, restoring the tested Prescriber version to unpinned. Also removed noisy Monaco YAML setup console logs and changed the frontend catch path to log formatAmplifyError instead of an empty object.",
+      "created_at": "2026-04-27T21:12:40.678261Z"
+    },
+    {
+      "id": "cd6e8de3-b2c2-4fe9-ba1d-8ad13b19a27f",
+      "author": "ryan",
+      "text": "Implementing low-risk favorite reorder animation in ScoreSidebarVersionHistory using existing framer-motion LayoutGroup/motion.div wrappers. Scope is UI-only: no schema/API/data-flow changes.",
+      "created_at": "2026-04-27T21:28:50.482608Z"
+    },
+    {
+      "id": "b64f70a4-04d7-4d58-a8de-e8282d199681",
+      "author": "ryan",
+      "text": "Favorite reorder animation implemented with framer-motion LayoutGroup and motion row wrappers. Active dashboard dev server recompiled the score-version route successfully after the change. Full dashboard typecheck was started but stopped after several minutes without output to avoid leaving a long-running process; this change is isolated to the sidebar component.",
+      "created_at": "2026-04-27T21:33:02.658574Z"
+    },
+    {
+      "id": "8ab777f3-d123-4bcf-b459-6293f4378d23",
+      "author": "ryan",
+      "text": "Implementing related ScoreVersion header cards: parent, previous champion, and next champion. Scope is frontend only, reusing existing parentVersionId and metadata.championHistory plus targeted getScoreVersion hydration.",
+      "created_at": "2026-04-27T21:38:35.219638Z"
+    },
+    {
+      "id": "9887c561-f6b2-4e5e-bcca-6168d080fca9",
+      "author": "ryan",
+      "text": "Related version header cards implemented. The score-version route in the active dev server compiled and served successfully after mirroring the component changes. Full dashboard typecheck was started but stopped after ~90 seconds of no output to avoid leaving a long-running process; git diff --check passed.",
+      "created_at": "2026-04-27T21:43:11.892280Z"
+    },
+    {
+      "id": "4b7f1faa-5d1d-4718-806d-0be91918aabf",
+      "author": "ryan",
+      "text": "Tweaking related ScoreVersion card presentation: put relationship label and timestamp on one line, and use the Lucide Link icon in normal text color for the open-version action.",
+      "created_at": "2026-04-27T21:53:41.697973Z"
+    },
+    {
+      "id": "8013feac-08f9-4eec-b432-28fc8b32e9b5",
+      "author": "ryan",
+      "text": "Adjusted related version card header: relationship label and related timestamp now render on one line, and the open-version action is a normal text-color Lucide Link icon.",
+      "created_at": "2026-04-27T21:54:11.331286Z"
+    },
+    {
+      "id": "e5c839a7-c1a1-46e7-819f-327539f50e37",
+      "author": "ryan",
+      "text": "Refining score-version comparison UI icons so every comparison/diff action consistently uses the GitCompareArrows icon.",
+      "created_at": "2026-04-27T21:55:42.801037Z"
+    },
+    {
+      "id": "7e04c76e-6206-41a8-b559-45e1b79a1ee3",
+      "author": "ryan",
+      "text": "Adjusting related ScoreVersion cards so the standard timestamp component keeps its icon, and the related-version link icon sits immediately after the timestamp.",
+      "created_at": "2026-04-27T21:56:51.025802Z"
+    },
+    {
+      "id": "4262b8d7-1396-450f-9fef-d38bb9311f31",
+      "author": "ryan",
+      "text": "Investigating champion promotion failure from the score-version UI. Goal: fix the real promotion mutation/path and improve error reporting enough that future failures are diagnosable.",
+      "created_at": "2026-04-27T21:58:05.146494Z"
+    },
+    {
+      "id": "34f4ff51-e33b-4a49-a00a-6927444eb65b",
+      "author": "ryan",
+      "text": "Refining expanded related ScoreVersion cards so the compare action is compact and aligned to the right of the note instead of appearing as a larger primary row.",
+      "created_at": "2026-04-27T22:01:13.580875Z"
+    },
+    {
+      "id": "a76f7200-8d02-4a33-ac33-6e08de6eb067",
+      "author": "ryan",
+      "text": "Tightening related ScoreVersion card header spacing by removing extra left padding before the expand caret while preserving the card body padding.",
+      "created_at": "2026-04-27T22:02:00.724149Z"
+    },
+    {
+      "id": "7d799e74-7e0c-401e-a5ad-b0a6c263a6c1",
+      "author": "ryan",
+      "text": "Adjusting expanded related ScoreVersion cards so the compact Compare action aligns flush to the right edge with no extra right padding.",
+      "created_at": "2026-04-27T22:05:28.484830Z"
+    },
+    {
+      "id": "28e68bd1-be3d-44f8-8328-945d697cef36",
+      "author": "ryan",
+      "text": "Changing the compact related-version Compare action to use the muted button surface rather than the stronger secondary button color.",
+      "created_at": "2026-04-27T22:06:15.632148Z"
+    },
+    {
+      "id": "da71d998-6724-4c07-a437-55d20ec148b1",
+      "author": "ryan",
+      "text": "Fixing score-version header layout so the top-right actions/ellipsis slot overlays the header instead of reducing the content column width. Related cards should flow underneath and use full width.",
+      "created_at": "2026-04-27T22:09:58.678126Z"
+    },
+    {
+      "id": "23f03b81-8257-4efb-98dc-bf00ee6226e3",
+      "author": "ryan",
+      "text": "Refining ScoreVersion note typography: remove residual left padding from expanded related-version notes and increase both selected-version and related-version note text size.",
+      "created_at": "2026-04-27T22:11:07.437949Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T19:06:56.148764Z",
+  "updated_at": "2026-04-27T22:11:07.437949Z",
   "closed_at": null,
   "custom": {}
 }
