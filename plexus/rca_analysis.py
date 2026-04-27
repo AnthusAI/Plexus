@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+
 logger = logging.getLogger(__name__)
 
 MISCLASSIFICATION_CATEGORIES = (
@@ -637,7 +639,7 @@ def extract_misclassification_evidence_flags(
         "messages": [{"role": "user", "content": prompt}],
     })
     response = client.invoke_model(
-        modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        modelId=CLAUDE_HAIKU_45_MODEL_ID,
         body=body,
         contentType="application/json",
         accept="application/json",
@@ -1107,7 +1109,7 @@ def explain_misclassification_item_classification(
         "messages": [{"role": "user", "content": prompt}],
     })
     response = client.invoke_model(
-        modelId="anthropic.claude-3-haiku-20240307-v1:0",
+        modelId=CLAUDE_HAIKU_45_MODEL_ID,
         body=body,
         contentType="application/json",
         accept="application/json",
@@ -1682,7 +1684,7 @@ def analyze_score_result(
                 "messages": messages,
             })
             resp = client.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                modelId=CLAUDE_HAIKU_45_MODEL_ID,
                 body=body,
                 contentType="application/json",
                 accept="application/json",

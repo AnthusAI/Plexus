@@ -20,6 +20,7 @@ except ImportError:
     OLLAMA_AVAILABLE = False
 
 from plexus.CustomLogging import logging
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 
 from langchain_community.chat_models import ChatVertexAI
 
@@ -227,7 +228,7 @@ class LangChainUser:
                     logging.error(f"ChatOpenAI init unexpected error: {type(e).__name__}: {e}")
                     raise
         elif params.model_provider == "BedrockChat":
-            model_name = params.model_name or "anthropic.claude-3-haiku-20240307-v1:0"
+            model_name = params.model_name or CLAUDE_HAIKU_45_MODEL_ID
             
             if "gpt-oss" in model_name.lower():
                 bedrock_kwargs = {

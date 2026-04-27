@@ -13,6 +13,7 @@ from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.item import Item  # Add Item model import
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 
 from .base import BaseReportBlock
 from . import feedback_utils
@@ -663,7 +664,7 @@ class FeedbackAlignment(BaseReportBlock):
             from tactus.adapters.memory import MemoryStorage
 
             provider = self.config.get("memory_llm_provider", "bedrock")
-            model = self.config.get("memory_llm_model", "anthropic.claude-3-haiku-20240307-v1:0")
+            model = self.config.get("memory_llm_model", CLAUDE_HAIKU_45_MODEL_ID)
 
             # Reasoning models (gpt-5 / o3 series) use the Responses API and
             # do not support the Chat Completions tool format, so we use a
