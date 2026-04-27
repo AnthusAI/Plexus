@@ -216,7 +216,7 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
+        .secondaryIndexes((idx: (field: ScoreVersionIndexFields) => any) => [
             idx("scoreId").sortKeys(["createdAt"]),
             idx("isFeatured").sortKeys(["scoreId", "createdAt"]).name("byIsFeaturedAndScoreIdAndCreatedAt")
         ]),
