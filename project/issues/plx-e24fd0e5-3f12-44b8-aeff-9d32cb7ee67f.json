@@ -136,10 +136,16 @@
       "author": "ryan",
       "text": "Fixing score-version header layout so the top-right actions/ellipsis slot overlays the header instead of reducing the content column width. Related cards should flow underneath and use full width.",
       "created_at": "2026-04-27T22:09:58.678126Z"
+    },
+    {
+      "id": "23f03b81-8257-4efb-98dc-bf00ee6226e3",
+      "author": "ryan",
+      "text": "Refining ScoreVersion note typography: remove residual left padding from expanded related-version notes and increase both selected-version and related-version note text size.",
+      "created_at": "2026-04-27T22:11:07.437949Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T22:09:58.678126Z",
+  "updated_at": "2026-04-27T22:11:07.437949Z",
   "closed_at": null,
   "custom": {}
 }
