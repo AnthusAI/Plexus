@@ -47,7 +47,6 @@ RECORD_TYPES = [
     'evaluations',     # Low volume
     'procedures',      # Low volume
     'chatSessions',    # Low volume
-    'graphNodes',      # Low volume
     'feedbackItems',   # Medium volume
     'feedbackItemsByScorecard',
     'feedbackItemsByScore',

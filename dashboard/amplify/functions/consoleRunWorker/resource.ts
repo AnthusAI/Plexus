@@ -1,14 +1,15 @@
-import { CfnOutput, Duration, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, NestedStack, NestedStackProps } from "aws-cdk-lib";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 
-interface ConsoleRunWorkerStackProps extends StackProps {
+interface ConsoleRunWorkerStackProps extends NestedStackProps {
   plexusApiUrl?: string;
   plexusApiKey?: string;
   workerImageUri?: string;
+  environmentName?: string;
 }
 
 interface ParsedEcrImageUri {
@@ -54,19 +55,22 @@ const parseEcrImageUri = (imageUri: string): ParsedEcrImageUri => {
   return { repositoryName, tagOrDigest: tag };
 }
 
-export class ConsoleRunWorkerStack extends Stack {
+export class ConsoleRunWorkerStack extends NestedStack {
   public readonly queue: sqs.Queue;
   public readonly deadLetterQueue: sqs.Queue;
   public readonly workerFunction: lambda.DockerImageFunction;
 
   constructor(scope: Construct, id: string, props: ConsoleRunWorkerStackProps = {}) {
     super(scope, id, props);
+    const environmentName = (props.environmentName || "staging").toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
     this.deadLetterQueue = new sqs.Queue(this, "ConsoleRunWorkerDlq", {
+      queueName: `plexus-console-run-worker-${environmentName}-dlq`,
       retentionPeriod: Duration.days(14),
     });
 
     this.queue = new sqs.Queue(this, "ConsoleRunWorkerQueue", {
+      queueName: `plexus-console-run-worker-${environmentName}-queue`,
       visibilityTimeout: Duration.minutes(15),
       retentionPeriod: Duration.days(4),
       deadLetterQueue: {

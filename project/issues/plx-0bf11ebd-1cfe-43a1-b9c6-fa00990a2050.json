@@ -3,16 +3,65 @@
   "title": "Remove GraphNode model and related control-plane cruft",
   "description": "",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
   "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "033d77d3-55d2-4bd9-aeb9-2aa0d1d10535",
+      "author": "ryan",
+      "text": "Starting GraphNode removal implementation on a fresh feature branch from develop. Scope: remove GraphNode schema/UI/MCP/runtime/metrics surfaces while keeping schema index changes to one index per surviving table.",
+      "created_at": "2026-04-27T11:37:17.644833Z"
+    },
+    {
+      "id": "a1a34434-3655-40c6-820a-19ad9077d7c1",
+      "author": "ryan",
+      "text": "Investigating staging Amplify job 118 failure: backend synth/typecheck passed, but CDK asset publish failed for ConsoleRunWorkerStack Template (current_account-current_region) before CloudFormation update. Fixing stack env resolution so staging can reach schema deployment validation.",
+      "created_at": "2026-04-27T12:20:45.017090Z"
+    },
+    {
+      "id": "70d69a58-db5d-482f-9201-365da6cc520f",
+      "author": "ryan",
+      "text": "Patched dashboard/amplify/backend.ts to force explicit env on ConsoleRunWorkerStack (account/region from CDK_DEFAULT_* with AWS_* fallback) and fail fast if unresolved, so CDK does not synthesize current_account-current_region during staging deploy.",
+      "created_at": "2026-04-27T12:21:33.630985Z"
+    },
+    {
+      "id": "2fdde07b-18a6-4347-bea9-ae2e9b31da13",
+      "author": "ryan",
+      "text": "Staging job 119 failed before deploy on backend type-check: workerImageUri passed in backend.ts but ConsoleRunWorkerStackProps in staging branch lacks that field. Preparing follow-up staging commit to align backend.ts and consoleRunWorker/resource.ts so deploy can proceed to CloudFormation.",
+      "created_at": "2026-04-27T12:28:31.020732Z"
+    },
+    {
+      "id": "1d3e3322-6881-4ddd-9229-5ed01f914b28",
+      "author": "ryan",
+      "text": "Job 120 failure isolated: staging branch env is missing CONSOLE_WORKER_IMAGE_URI. Next action: update Amplify staging branch environment variable to match main and rerun deploy to validate CloudFormation/schema change path.",
+      "created_at": "2026-04-27T12:34:09.505031Z"
+    },
+    {
+      "id": "852a8da9-1cd7-4333-9fb4-6ff9e2f19ec5",
+      "author": "ryan",
+      "text": "Job 121 failure root cause: cross-environment reference requires explicit physical name for ConsoleRunWorkerQueue. Implementing explicit queue names (queue + DLQ) in ConsoleRunWorkerStack and redeploying staging.",
+      "created_at": "2026-04-27T12:39:32.777876Z"
+    },
+    {
+      "id": "ee3f7ef6-1026-4b13-bfc5-d2422b1ab0f3",
+      "author": "ryan",
+      "text": "Job 122 failure: cross-environment reference now on startConsoleRun-lambda ServiceRole. Next fix: move ConsoleRunWorkerStack to NestedStack under backend.stack and remove explicit env wiring to keep all references same-environment.",
+      "created_at": "2026-04-27T12:45:06.131021Z"
+    },
+    {
+      "id": "2e234b81-33cc-4b44-aa2c-957b8470735d",
+      "author": "ryan",
+      "text": "Performed targeted staging->feature reconciliation by cherry-picking today's staging commits. GraphNode/schema commit was already present (empty pick skipped). Applied staging-aligned backend deltas for console worker env/queue/nested-stack behavior onto feature branch.",
+      "created_at": "2026-04-27T13:27:07.806656Z"
+    }
+  ],
   "created_at": "2026-04-25T15:15:43.216098Z",
-  "updated_at": "2026-04-25T15:15:43.216098Z",
+  "updated_at": "2026-04-27T13:27:07.806656Z",
   "closed_at": null,
   "custom": {}
 }

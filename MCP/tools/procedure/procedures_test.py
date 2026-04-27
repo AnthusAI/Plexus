@@ -79,7 +79,6 @@ class TestProcedureRunMCP:
                 "procedure_name": "Test Procedure",
                 "scorecard_name": "Test Scorecard",
                 "score_name": "Test Score",
-                "node_count": 5,
                 "options": {},
             },
         }
@@ -428,9 +427,6 @@ class TestExistingProcedureTools:
         mock_info.procedure.accountId = "acc-123"
         mock_info.procedure.scorecardId = "scorecard-123"
         mock_info.procedure.scoreId = "score-123"
-        mock_info.procedure.rootNodeId = "node-123"
-        mock_info.node_count = 3
-        mock_info.version_count = 5
         mock_info.scorecard_name = "Test Scorecard"
         mock_info.score_name = "Test Score"
         mock_service.get_procedure_info.return_value = mock_info
@@ -641,7 +637,6 @@ class TestProcedureChatMessagesMCP:
                             "id": "sess-1",
                             "status": "ACTIVE",
                             "procedureId": "proc-1",
-                            "nodeId": None,
                             "createdAt": "2026-04-21T00:00:00Z",
                             "messages": {
                                 "items": [
@@ -702,7 +697,6 @@ class TestProcedureChatMessagesMCP:
                                     "id": "sess-1",
                                     "status": "ACTIVE",
                                     "procedureId": "proc-1",
-                                    "nodeId": None,
                                     "createdAt": "2026-04-21T00:00:00Z",
                                     "messages": {
                                         "items": [
