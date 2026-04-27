@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "82f74a81-2cc2-492a-b853-621722bea8cb",
+  "issue_id": "plx-ad6b3884-24c3-4c0e-a699-753f3cf7729b",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-27T18:14:34.849Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "Feature: Compare arbitrary score versions\n\nAs a lab worker, I want to compare any two score versions, so that I can understand code and guideline changes before promotion or client reporting.\n\nScenario: Compare two versions\nGiven two score versions exist for a score\nWhen I choose them in the compare UI or tool\nThen I see code and guideline diffs for the selected left and right versions."
+      }
+    }
+  }
+}
