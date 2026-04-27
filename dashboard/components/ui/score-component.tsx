@@ -72,8 +72,7 @@ export interface ScoreVersion {
   scoreId: string
   configuration: string // YAML string
   guidelines?: string
-  isFeatured: boolean
-  featuredKey?: string
+  isFeatured?: string | null
   isChampion?: boolean
   note?: string
   branch?: string
@@ -125,6 +124,8 @@ const assertGraphQLSuccess = (response: any, action: string) => {
     throw new Error(`${action}: ${response.errors.map((error: any) => error?.message || String(error)).join('; ')}`)
   }
 }
+
+const isScoreVersionPinned = (version?: Pick<ScoreVersion, 'isFeatured'> | null) => version?.isFeatured === 'true'
 
 const buildChampionMetadata = ({
   metadata,
@@ -1660,7 +1661,7 @@ const DetailContent = React.memo(({
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => onToggleFeature?.(selectedVersion.id)}>
                             <Star className="mr-2 h-4 w-4" />
-                            {selectedVersion.featuredKey === 'featured' ? 'Unstar Version' : 'Star Version'}
+                            {isScoreVersionPinned(selectedVersion) ? 'Unstar Version' : 'Star Version'}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleOpenVersionDiff()}>
                             <GitCompareArrows className="mr-2 h-4 w-4" />
@@ -2270,7 +2271,6 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
-              featuredKey
               note
               branch
               parentVersionId
@@ -2398,7 +2398,6 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
-              featuredKey
               note
               branch
               parentVersionId
@@ -2436,7 +2435,6 @@ export function ScoreComponent({
                 configuration
                 guidelines
                 isFeatured
-                featuredKey
                 note
                 branch
                 parentVersionId
@@ -2475,9 +2473,9 @@ export function ScoreComponent({
             $sortDirection: ModelSortDirection
             $limit: Int
           ) {
-            listScoreVersionByScoreIdAndFeaturedKeyAndCreatedAt(
+            listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt(
               scoreId: $scoreId,
-              featuredKeyCreatedAt: { beginsWith: { featuredKey: "featured" } },
+              isFeaturedCreatedAt: { beginsWith: { isFeatured: "true" } },
               sortDirection: $sortDirection,
               limit: $limit
             ) {
@@ -2487,7 +2485,6 @@ export function ScoreComponent({
                 configuration
                 guidelines
                 isFeatured
-                featuredKey
                 note
                 branch
                 parentVersionId
@@ -2504,12 +2501,12 @@ export function ScoreComponent({
           limit: 100,
         }
       }) as GraphQLResult<{
-        listScoreVersionByScoreIdAndFeaturedKeyAndCreatedAt?: {
+        listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt?: {
           items: ScoreVersion[]
         }
       }>;
 
-      return response.data?.listScoreVersionByScoreIdAndFeaturedKeyAndCreatedAt?.items ?? [];
+      return response.data?.listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt?.items ?? [];
     };
 
     const selectPreferredVersion = async (
@@ -2844,7 +2841,7 @@ export function ScoreComponent({
     try {
       const version = versions.find(v => v.id === versionId);
       if (!version) return;
-      const isPinned = version.featuredKey === 'featured';
+      const isPinned = isScoreVersionPinned(version);
       const nextPinned = !isPinned;
 
       // Enable API call to persist the feature status
@@ -2854,15 +2851,13 @@ export function ScoreComponent({
             updateScoreVersion(input: $input) {
               id
               isFeatured
-              featuredKey
             }
           }
         `,
         variables: {
           input: {
             id: String(versionId),
-            isFeatured: nextPinned,
-            featuredKey: nextPinned ? 'featured' : 'unfeatured',
+            isFeatured: nextPinned ? 'true' : null,
             createdAt: version.createdAt,
           }
         }
@@ -2872,7 +2867,7 @@ export function ScoreComponent({
       // This ensures UI is updated even if we can't verify the response format
       setVersions(prev => prev.map(v => 
         v.id === versionId
-          ? { ...v, isFeatured: nextPinned, featuredKey: nextPinned ? 'featured' : 'unfeatured' }
+          ? { ...v, isFeatured: nextPinned ? 'true' : null }
           : v
       ));
 
@@ -3016,8 +3011,7 @@ export function ScoreComponent({
         scoreId: String(score.id),
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
-        isFeatured: false,
-        featuredKey: 'unfeatured',
+        isFeatured: null,
         note: versionNote || 'Updated score configuration',
         createdAt: now,
         updatedAt: now
@@ -3032,7 +3026,6 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
-              featuredKey
               note
               createdAt
               updatedAt

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d96d4491-e45f-48b7-8d28-1bc97394f7bc",
+  "issue_id": "plx-1d97c730-85f5-494a-9025-8040804ace75",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-27T23:14:54.218Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Remove the extra ScoreVersion featuredKey mirror field. Make isFeatured the single string field used for pinned state and indexing, with value \"true\" when pinned and absent/null otherwise. Update dashboard, CLI, and MCP to use one field consistently.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Replace ScoreVersion featured mirror with string state"
+  }
+}
