@@ -6,6 +6,9 @@ import os
 import sys
 import json
 import logging
+import difflib
+import uuid
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Union, Optional, Annotated
 from io import StringIO
 from fastmcp import FastMCP
@@ -136,6 +139,84 @@ def register_score_tools(mcp: FastMCP):
             "champion_version_id": score.get("championVersionId"),
             "service": OptimizerResultsService(client),
         }
+
+    def _fetch_score_version_for_management(client, version_id: str) -> Dict[str, Any]:
+        query = """
+        query GetScoreVersionForManagement($id: ID!) {
+          getScoreVersion(id: $id) {
+            id
+            scoreId
+            configuration
+            guidelines
+            isFeatured
+            note
+            branch
+            parentVersionId
+            metadata
+            createdAt
+            updatedAt
+          }
+        }
+        """
+        version = (client.execute(query, {"id": version_id}).get("getScoreVersion") or {})
+        if not version:
+            raise ValueError(f"Score version not found: {version_id}")
+        return version
+
+    def _build_unified_diff(left_text: str, right_text: str, left_label: str, right_label: str) -> str:
+        return "".join(difflib.unified_diff(
+            (left_text or "").splitlines(keepends=True),
+            (right_text or "").splitlines(keepends=True),
+            fromfile=left_label,
+            tofile=right_label,
+        ))
+
+    def _build_champion_metadata(
+        metadata: Optional[Dict[str, Any]],
+        *,
+        score_id: str,
+        version_id: str,
+        transition_id: str,
+        incoming: bool,
+        entered_at: Optional[str] = None,
+        exited_at: Optional[str] = None,
+        previous_champion_version_id: Optional[str] = None,
+        next_champion_version_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        next_metadata: Dict[str, Any] = dict(metadata or {})
+        history = list(next_metadata.get("championHistory") or [])
+        if incoming:
+            history.append({
+                "scoreId": score_id,
+                "versionId": version_id,
+                "enteredAt": entered_at,
+                "exitedAt": None,
+                "previousChampionVersionId": previous_champion_version_id,
+                "nextChampionVersionId": None,
+                "transitionId": transition_id,
+            })
+        else:
+            open_index = next((idx for idx in range(len(history) - 1, -1, -1) if not history[idx].get("exitedAt")), None)
+            if open_index is None:
+                history.append({
+                    "scoreId": score_id,
+                    "versionId": version_id,
+                    "enteredAt": None,
+                    "exitedAt": exited_at,
+                    "previousChampionVersionId": None,
+                    "nextChampionVersionId": next_champion_version_id,
+                    "transitionId": transition_id,
+                    "inferred": True,
+                })
+            else:
+                history[open_index] = {
+                    **history[open_index],
+                    "exitedAt": exited_at,
+                    "nextChampionVersionId": next_champion_version_id,
+                    "transitionId": transition_id,
+                }
+        next_metadata["championHistory"] = history
+        return next_metadata
     
     @mcp.tool()
     async def plexus_score_info(
@@ -368,7 +449,10 @@ def register_score_tools(mcp: FastMCP):
                                 items {{
                                     id
                                     createdAt
+                                    isFeatured
+                                    parentVersionId
                                     note
+                                    metadata
                                 }}
                             }}
                         }}
@@ -389,7 +473,11 @@ def register_score_tools(mcp: FastMCP):
                                 {
                                     "id": v.get('id'),
                                     "createdAt": v.get('createdAt'),
-                                    "note": v.get('note')
+                                    "note": v.get('note'),
+                                    "isFeatured": v.get('isFeatured'),
+                                    "parentVersionId": v.get('parentVersionId'),
+                                    "isChampion": v.get('id') == score.get('championVersionId'),
+                                    "metadata": v.get('metadata'),
                                 }
                                 for v in all_versions
                             ]
@@ -415,6 +503,7 @@ def register_score_tools(mcp: FastMCP):
                                 note
                                 isFeatured
                                 parentVersionId
+                                metadata
                             }}
                         }}
                         """
@@ -439,6 +528,7 @@ def register_score_tools(mcp: FastMCP):
                                 "note": version_data.get('note'),
                                 "isFeatured": version_data.get('isFeatured'),
                                 "parentVersionId": version_data.get('parentVersionId'),
+                                "metadata": version_data.get('metadata'),
                                 "isChampion": target_version_id == score.get('championVersionId')
                             }
                             
@@ -1858,14 +1948,21 @@ def register_score_tools(mcp: FastMCP):
                 return "Error: Could not create dashboard client."
 
             version_query = """
-            query GetScoreVersionForChampionGuard($id: ID!) {
-                getScoreVersion(id: $id) {
+            query GetScoreVersionForChampionGuard($scoreId: ID!, $versionId: ID!) {
+                getScore(id: $scoreId) {
                     id
+                    championVersionId
+                }
+                getScoreVersion(id: $versionId) {
+                    id
+                    scoreId
                     configuration
+                    metadata
                 }
             }
             """
-            version_result = client.execute(version_query, {"id": version_id})
+            version_result = client.execute(version_query, {"scoreId": score_id, "versionId": version_id})
+            score_data = version_result.get("getScore") or {}
             version_data = version_result.get("getScoreVersion") or {}
             shadow_invalid_feedback_item_ids = extract_shadow_invalid_feedback_item_ids_from_yaml_text(
                 version_data.get("configuration") or ""
@@ -1883,6 +1980,14 @@ def register_score_tools(mcp: FastMCP):
                     "versionId": version_id,
                     "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
                 }
+            if version_data.get("scoreId") != score_id:
+                return {
+                    "success": False,
+                    "error": "VERSION_SCORE_MISMATCH",
+                    "message": f"Version {version_id} does not belong to score {score_id}.",
+                    "scoreId": score_id,
+                    "versionId": version_id,
+                }
 
             mutation = """
             mutation UpdateScore($input: UpdateScoreInput!) {
@@ -1893,16 +1998,55 @@ def register_score_tools(mcp: FastMCP):
             }
             """
             try:
+                previous_champion_version_id = score_data.get("championVersionId")
+                previous_version_data: Dict[str, Any] = {}
+                if previous_champion_version_id and previous_champion_version_id != version_id:
+                    previous_version_data = _fetch_score_version_for_management(client, previous_champion_version_id)
+
                 result = client.execute(mutation, {'input': {
                     'id': score_id,
                     'championVersionId': version_id
                 }})
                 if result and 'updateScore' in result:
                     updated = result['updateScore']
+                    promoted_at = datetime.now(timezone.utc).isoformat()
+                    transition_id = str(uuid.uuid4())
+                    incoming_metadata = _build_champion_metadata(
+                        version_data.get("metadata"),
+                        score_id=score_id,
+                        version_id=version_id,
+                        entered_at=promoted_at,
+                        previous_champion_version_id=previous_champion_version_id if previous_champion_version_id != version_id else None,
+                        transition_id=transition_id,
+                        incoming=True,
+                    )
+                    update_version_mutation = """
+                    mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
+                        updateScoreVersion(input: $input) {
+                            id
+                            metadata
+                        }
+                    }
+                    """
+                    client.execute(update_version_mutation, {"input": {"id": version_id, "metadata": incoming_metadata}})
+                    if previous_champion_version_id and previous_champion_version_id != version_id:
+                        outgoing_metadata = _build_champion_metadata(
+                            previous_version_data.get("metadata"),
+                            score_id=score_id,
+                            version_id=previous_champion_version_id,
+                            exited_at=promoted_at,
+                            next_champion_version_id=version_id,
+                            transition_id=transition_id,
+                            incoming=False,
+                        )
+                        client.execute(update_version_mutation, {"input": {"id": previous_champion_version_id, "metadata": outgoing_metadata}})
                     return {
                         "success": True,
                         "scoreId": updated['id'],
-                        "championVersionId": updated['championVersionId']
+                        "championVersionId": updated['championVersionId'],
+                        "previousChampionVersionId": previous_champion_version_id,
+                        "transitionId": transition_id,
+                        "promotedAt": promoted_at,
                     }
                 else:
                     return f"Error: Failed to set champion: {result}"
@@ -1917,6 +2061,113 @@ def register_score_tools(mcp: FastMCP):
             if captured:
                 logger.warning(f"Captured unexpected stdout during plexus_score_set_champion: {captured}")
             sys.stdout = old_stdout
+
+    class ScoreVersionPinRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        version_id: Annotated[str, Field(description="ScoreVersion ID to pin or unpin")]
+        pinned: Annotated[bool, Field(description="Whether the version should be pinned/starred")] = True
+
+    @mcp.tool()
+    async def plexus_score_version_pin(request: ScoreVersionPinRequest) -> Dict[str, Any]:
+        """Pin or unpin a ScoreVersion using isFeatured."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            version = _fetch_score_version_for_management(client, request.version_id)
+            if version.get("scoreId") != context["score_id"]:
+                return _structured_error(
+                    f"Version {request.version_id} belongs to score {version.get('scoreId')}, not {context['score_id']}",
+                    error="wrong_score",
+                )
+
+            mutation = """
+            mutation UpdateScoreVersionPin($input: UpdateScoreVersionInput!) {
+              updateScoreVersion(input: $input) {
+                id
+                scoreId
+                isFeatured
+                updatedAt
+              }
+            }
+            """
+            updated = (client.execute(
+                mutation,
+                {
+                    "input": {
+                        "id": request.version_id,
+                        "isFeatured": "true" if request.pinned else None,
+                        "createdAt": version.get("createdAt"),
+                    }
+                },
+            ).get("updateScoreVersion") or {})
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "version_id": updated.get("id") or request.version_id,
+                "pinned": updated.get("isFeatured") == "true",
+            }
+        except Exception as e:
+            logger.error(f"Error pinning score version: {e}", exc_info=True)
+            return _structured_error("Failed to pin score version", error=str(e))
+
+    class ScoreVersionDiffRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        left_version_id: Annotated[str, Field(description="Left/original ScoreVersion ID")]
+        right_version_id: Annotated[str, Field(description="Right/modified ScoreVersion ID")]
+        include: Annotated[str, Field(description='"code", "guidelines", or "both"')] = "both"
+
+    @mcp.tool()
+    async def plexus_score_version_diff(request: ScoreVersionDiffRequest) -> Dict[str, Any]:
+        """Return code and/or guideline diffs between two ScoreVersions."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            left = _fetch_score_version_for_management(client, request.left_version_id)
+            right = _fetch_score_version_for_management(client, request.right_version_id)
+            for label, version in (("left", left), ("right", right)):
+                if version.get("scoreId") != context["score_id"]:
+                    return _structured_error(
+                        f"{label} version {version.get('id')} belongs to score {version.get('scoreId')}, not {context['score_id']}",
+                        error="wrong_score",
+                    )
+
+            include_code = request.include in ("code", "both")
+            include_guidelines = request.include in ("guidelines", "both")
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "left_version_id": request.left_version_id,
+                "right_version_id": request.right_version_id,
+                "code_diff": _build_unified_diff(
+                    left.get("configuration") or "",
+                    right.get("configuration") or "",
+                    f"{request.left_version_id}/code.yaml",
+                    f"{request.right_version_id}/code.yaml",
+                ) if include_code else None,
+                "guidelines_diff": _build_unified_diff(
+                    left.get("guidelines") or "",
+                    right.get("guidelines") or "",
+                    f"{request.left_version_id}/guidelines.md",
+                    f"{request.right_version_id}/guidelines.md",
+                ) if include_guidelines else None,
+            }
+        except Exception as e:
+            logger.error(f"Error diffing score versions: {e}", exc_info=True)
+            return _structured_error("Failed to diff score versions", error=str(e))
 
     class ScoreOptimizerRunsRequest(BaseModel):
         scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
@@ -2334,7 +2585,7 @@ async def _create_version_from_code_with_parent(
             'scoreId': score.id,
             'configuration': (code_content or '').strip(),
             'note': note or 'Updated via MCP score update tool',
-            'isFeatured': True  # Mark as featured by default
+            'isFeatured': None
         }
         
         # Add guidelines if provided
