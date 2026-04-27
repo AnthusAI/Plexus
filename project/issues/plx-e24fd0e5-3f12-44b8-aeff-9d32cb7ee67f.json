@@ -3,7 +3,7 @@
   "title": "Implement ScoreVersion management schema and tools",
   "description": "Implement the ScoreVersion management feature: schema field/index, frontend pin/diff/history UI, CLI and MCP tools, and champion promotion metadata updates. Keep the GraphQL schema delta limited to ScoreVersion.metadata plus one featured-version index.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -142,10 +142,16 @@
       "author": "ryan",
       "text": "Refining ScoreVersion note typography: remove residual left padding from expanded related-version notes and increase both selected-version and related-version note text size.",
       "created_at": "2026-04-27T22:11:07.437949Z"
+    },
+    {
+      "id": "a00d7186-5ee5-43b4-a160-d05c8594ac80",
+      "author": "ryan",
+      "text": "Merged PR #220 into develop with squash commit 0bdcd5e0: feat(scoreversions): add version management tools and UI. Develop CI run 25022392159 passed.",
+      "created_at": "2026-04-27T22:27:30.687493Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T22:11:07.437949Z",
-  "closed_at": null,
+  "updated_at": "2026-04-27T22:27:32.180854Z",
+  "closed_at": "2026-04-27T22:27:32.180854Z",
   "custom": {}
 }
