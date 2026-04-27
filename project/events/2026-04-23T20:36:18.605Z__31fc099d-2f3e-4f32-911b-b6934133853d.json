@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "31fc099d-2f3e-4f32-911b-b6934133853d",
+  "issue_id": "plx-81591cfc-5179-4d8a-8608-884c76c328fe",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T20:36:18.605Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Use the recent Medication Review: Dosage optimizer and contradiction-report evidence to identify the exact contradiction-heavy feedback set, prepare SME-facing policy questions or explicit invalidation candidates, and establish the cleaned slice required before further meaningful optimizer restarts. Direct CLI logs and stored report artifacts are the source of truth.",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-3d9714df-787a-44bc-8908-61108ced4042",
+    "priority": 1,
+    "status": "open",
+    "title": "Triaging Dosage contradiction set before further optimizer restarts"
+  }
+}

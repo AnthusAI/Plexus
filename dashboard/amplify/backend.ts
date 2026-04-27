@@ -109,14 +109,6 @@ if (procedureCfnTable) {
     };
 }
 
-const graphNodeTable = backend.data.resources.tables.GraphNode;
-const graphNodeCfnTable = graphNodeTable.node.defaultChild as dynamodb.CfnTable;
-if (graphNodeCfnTable) {
-    graphNodeCfnTable.streamSpecification = {
-        streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
-    };
-}
-
 const chatSessionTable = backend.data.resources.tables.ChatSession;
 const chatSessionCfnTable = chatSessionTable.node.defaultChild as dynamodb.CfnTable;
 if (chatSessionCfnTable) {
@@ -150,6 +142,7 @@ const taskDispatcherStack = new TaskDispatcherStack(
 const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
 const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
 const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
+const consoleWorkerEnvironmentName = ((process.env.AWS_BRANCH || 'staging').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')) || 'staging';
 
 if (!resolvedDataApiUrl || !resolvedDataApiKey) {
     throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
@@ -160,12 +153,13 @@ if (!consoleWorkerImageUri) {
 }
 
 const consoleRunWorkerStack = new ConsoleRunWorkerStack(
-    backend.createStack('ConsoleRunWorkerStack'),
+    backend.stack,
     'ConsoleRunWorker',
     {
         plexusApiUrl: resolvedDataApiUrl,
         plexusApiKey: resolvedDataApiKey,
         workerImageUri: consoleWorkerImageUri,
+        environmentName: consoleWorkerEnvironmentName,
     }
 );
 

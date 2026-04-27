@@ -1,0 +1,49 @@
+{
+  "id": "plx-f1d25a9f-1ea3-450f-91b9-8911ba7f26b1",
+  "title": "Fix false stale timeout for active procedure runs",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "951fe8b9-ba1f-4b18-847d-bd8bdb8d950d",
+      "author": "ryan",
+      "text": "Root cause investigation: procedure d010b142-1b67-48e3-b408-150ab2727e83 did not crash in the direct CLI log; it completed its own stop/finalize path after detecting changed feedback. The task was later marked STALLED and ultimately FAILED with SIGTERM because stale-timeout relies on chat silence and same-host PID checks. Planned fix: add task runtime heartbeat updates from procedure stage/progress events, use heartbeat as a primary activity signal in stale-timeout, and avoid timing out foreign-host runtimes that cannot be verified locally.",
+      "created_at": "2026-04-25T15:19:22.220388Z"
+    },
+    {
+      "id": "63aaa4a7-9339-40f5-b815-f75cbaef3c12",
+      "author": "ryan",
+      "text": "Implementation update: added  at procedure start, refreshes on MCP stage/progress updates, and stale-timeout now prefers the freshest activity signal across chat, heartbeat, and startedAt. Foreign-host runtimes are now skipped instead of being treated as dead. Running focused procedure timeout and transport tests now.",
+      "created_at": "2026-04-25T15:21:32.447413Z"
+    },
+    {
+      "id": "3d842320-f345-46ee-9cfb-d93877628242",
+      "author": "ryan",
+      "text": "Implementation update: added runtime heartbeat metadata at procedure start, refreshes on MCP stage and progress updates, and stale-timeout now prefers the freshest activity signal across chat, heartbeat, and startedAt. Foreign-host runtimes are skipped instead of being treated as dead. Focused procedure timeout and transport tests are passing.",
+      "created_at": "2026-04-25T15:21:48.237818Z"
+    },
+    {
+      "id": "fd5f926e-938c-43c8-953e-b6b25b1398cc",
+      "author": "ryan",
+      "text": "Procedure-focused validation: replayed the Dosage failure timeline locally against timeout_stale_procedures. Without runtime heartbeat metadata, the same timeline times out as before. With runtime.lastHeartbeatAt injected on the same timeline, the run is skipped as fresh_no_chat_runtime with activity_source runtime_heartbeat. This confirms the fix targets the actual failure mode rather than only satisfying unit tests.",
+      "created_at": "2026-04-25T15:28:22.504530Z"
+    },
+    {
+      "id": "46fa89fa-568a-4c9c-b701-484efa94be34",
+      "author": "ryan",
+      "text": "User requested live procedure validation after the timeout fix. Verifying the direct CLI optimize command shape now so I can launch a fresh Dosage procedure run and observe real procedure/task records.",
+      "created_at": "2026-04-25T16:24:47.374643Z"
+    }
+  ],
+  "created_at": "2026-04-25T15:19:08.506463Z",
+  "updated_at": "2026-04-25T16:24:47.374643Z",
+  "closed_at": null,
+  "custom": {}
+}

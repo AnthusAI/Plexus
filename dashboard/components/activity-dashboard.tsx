@@ -288,6 +288,8 @@ function transformTaskToActivity(task: ProcessedTask) {
         predictedClassDistribution: parsedPredictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
         parameters: (evaluation.parameters as string | null) ?? null,
+        baseline_evaluation_id: (evaluation as any).baseline_evaluation_id ?? null,
+        current_baseline_evaluation_id: (evaluation as any).current_baseline_evaluation_id ?? null,
         scoreResults: evaluation.scoreResults?.map((result: {
           id: string;
           value: string | number;
@@ -384,6 +386,8 @@ function transformTaskToActivity(task: ProcessedTask) {
       isDatasetClassDistributionBalanced: (metadata as any)?.isDatasetClassDistributionBalanced ?? null,
       predictedClassDistribution: (metadata as any)?.predictedClassDistribution ?? undefined,
       isPredictedClassDistributionBalanced: (metadata as any)?.isPredictedClassDistributionBalanced ?? null,
+      baseline_evaluation_id: (metadata as any)?.baseline_evaluation_id ?? null,
+      current_baseline_evaluation_id: (metadata as any)?.current_baseline_evaluation_id ?? null,
       scoreResults: [],
       task: {
         id: task.id,

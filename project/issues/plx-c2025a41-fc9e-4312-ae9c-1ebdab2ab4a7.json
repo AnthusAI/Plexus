@@ -1,0 +1,31 @@
+{
+  "id": "plx-c2025a41-fc9e-4312-ae9c-1ebdab2ab4a7",
+  "title": "task Add evaluations rate gauge to procedures dashboard and verify procedures aggregation",
+  "description": "Replace removed graph-node gauge slot with evaluations-rate gauge on Procedures dashboard, and validate/fix AggregatedMetrics procedure counting so procedure-rate gauge is accurate.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e11f02ea-a86a-4f26-b2e2-9acbd985aa95",
+      "author": "ryan",
+      "text": "Implemented first pass: ProceduresGauges now displays Procedures/hour plus Evaluations/hour from AggregatedMetrics, and metrics aggregation infra now discovers/subscribes to the Procedure table stream. Local validation passing: ProceduresGauges Jest test, metrics aggregator pytest, dashboard typecheck, and metrics CDK synth.",
+      "created_at": "2026-04-27T16:22:17.765841Z"
+    },
+    {
+      "id": "239cd11c-4a5e-454a-b0af-2721f0b7651b",
+      "author": "ryan",
+      "text": "Adjusted Procedures dashboard gauges to mirror the Evaluations dashboard two-gauge plus histogram layout and added time-range support to procedure metrics so both procedures and evaluations series navigate together.",
+      "created_at": "2026-04-27T16:38:18.323679Z"
+    }
+  ],
+  "created_at": "2026-04-27T15:07:53.196191Z",
+  "updated_at": "2026-04-27T16:38:18.323679Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-e7b583db-281f-40cc-bca1-5224761fdfe1",
+  "title": "Run 180-day feedback evaluation for Prescriber prescribed-by patch candidate",
+  "description": "Run a last-180-days Medication Review: Prescriber feedback evaluation against non-champion candidate version 770575d5-b3dd-4939-a19d-64ac99fb592e after the approved prescribed-by clarification patch. Champion promotion is policy-blocked for the agent, so evaluate the candidate version directly instead. Record evaluation ID and outcome for release decision-making.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "36e035d5-e2ac-4381-8591-4d059ccf5696",
+      "author": "ryan",
+      "text": "Dispatched 180-day Prescriber feedback evaluation against version 770575d5-b3dd-4939-a19d-64ac99fb592e. Evaluation ID: ce5eb2fc-ca4e-41f8-8900-1a0d855c7b75. Task ID: cc8ee9b7-f1dd-4e32-af84-e68dda9f6ed8. Current status: RUNNING. Latest mid-run snapshot at 25/49 processed items: Alignment 0.2845786963434022, Accuracy 64.0, Precision 70.0, Recall 53.84615384615385. Champion promotion was not performed because agent policy blocks champion promotion; candidate version was evaluated directly instead.",
+      "created_at": "2026-04-23T20:09:55.398279Z"
+    },
+    {
+      "id": "c60e7fd8-ac64-48ed-8a07-4437b347c896",
+      "author": "ryan",
+      "text": "Started a second 180-day Prescriber feedback evaluation against updated candidate version ba041b6a-8786-4f31-b082-31b5f999b0e7 after adding the explicit at-most-one-miss clarification while retaining the prescribed-by recognition patch. Evaluation ID: 4e5cbf7b-060b-4c5b-89f9-59c224f8a6b8. Task ID: ea578df6-4153-45be-9bb9-89c59bf8e6bf. Champion promotion was requested again but not performed because agent policy blocks champion promotion; candidate version was evaluated directly.",
+      "created_at": "2026-04-23T20:12:18.962254Z"
+    }
+  ],
+  "created_at": "2026-04-23T20:05:07.380157Z",
+  "updated_at": "2026-04-23T20:12:18.962254Z",
+  "closed_at": null,
+  "custom": {}
+}

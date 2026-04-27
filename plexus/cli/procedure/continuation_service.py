@@ -16,6 +16,7 @@ invoking ProcedureService.run_experiment or run_experiment_with_task_tracking
 after calling these functions.
 """
 
+import json
 import logging
 import yaml
 from typing import Dict, Any, Optional
@@ -42,6 +43,24 @@ _UPDATE_PROCEDURE_CODE_MUTATION = """
             code: $code
         }) {
             id
+            name
+            description
+            status
+            featured
+            isTemplate
+            code
+            category
+            version
+            isDefault
+            parentProcedureId
+            waitingOnMessageId
+            metadata
+            createdAt
+            updatedAt
+            accountId
+            scorecardId
+            scoreId
+            scoreVersionId
         }
     }
 """
@@ -50,7 +69,24 @@ _CREATE_PROCEDURE_MUTATION = """
     mutation CreateProcedure($input: CreateProcedureInput!) {
         createProcedure(input: $input) {
             id
+            name
+            description
+            status
+            featured
+            isTemplate
+            code
+            category
+            version
+            isDefault
+            parentProcedureId
+            waitingOnMessageId
+            metadata
+            createdAt
+            updatedAt
             accountId
+            scorecardId
+            scoreId
+            scoreVersionId
         }
     }
 """
@@ -71,6 +107,19 @@ def _count_completed_cycles(client, procedure_id: str) -> int:
     storage = PlexusStorageAdapter(client, procedure_id)
     iterations = storage.state_get(procedure_id, 'iterations') or []
     return len(iterations) if isinstance(iterations, (list, tuple)) else 0
+
+
+def _parse_json_object(value: Any) -> Dict[str, Any]:
+    """Best-effort parse of JSON-like object payloads."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _update_yaml_params(code: str, max_iterations: int, hint: Optional[str]) -> str:
@@ -100,6 +149,88 @@ def _update_yaml_params(code: str, max_iterations: int, hint: Optional[str]) -> 
 
     parsed['params'] = params
     return yaml.dump(parsed, default_flow_style=False, allow_unicode=True, width=10000)
+
+
+def build_continuation_context(
+    client,
+    procedure_id: str,
+    *,
+    max_iterations: int,
+    hint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Reconstruct optimizer context for continue/branch redispatches.
+
+    Continuation runs do not get the original CLI `context` automatically. Recover it
+    from the best available sources, in increasing confidence order:
+      1) procedure YAML resolved params
+      2) existing task metadata.run_parameters
+      3) recent baseline evaluation parameters
+      4) preserved optimizer State / procedure identifiers
+    """
+    from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
+    from plexus.cli.shared.experiment_runner import (
+        _extract_run_parameters_from_procedure_yaml,
+        _find_existing_task_for_procedure,
+    )
+    from plexus.dashboard.api.models.task import Task
+
+    procedure = _load_procedure(client, procedure_id)
+    context: Dict[str, Any] = _extract_run_parameters_from_procedure_yaml(procedure.get("code"))
+
+    task_id = _find_existing_task_for_procedure(procedure_id, procedure.get("accountId"), client)
+    if task_id:
+        task = Task.get_by_id(task_id, client)
+        if task:
+            task_metadata = _parse_json_object(getattr(task, "metadata", None))
+            run_parameters = task_metadata.get("run_parameters")
+            if isinstance(run_parameters, dict):
+                context.update(run_parameters)
+
+    storage = PlexusStorageAdapter(client, procedure_id)
+    recent_baseline_id = storage.state_get(procedure_id, "recent_baseline_id")
+    if recent_baseline_id:
+        evaluation_result = client.execute(
+            """
+            query GetEvaluation($id: ID!) {
+                getEvaluation(id: $id) {
+                    id
+                    parameters
+                }
+            }
+            """,
+            {"id": recent_baseline_id},
+        )
+        evaluation = (evaluation_result or {}).get("getEvaluation") or {}
+        evaluation_params = _parse_json_object(evaluation.get("parameters"))
+        if "days" in evaluation_params:
+            context["days"] = evaluation_params.get("days")
+        if "requested_max_items" in evaluation_params:
+            context["max_samples"] = evaluation_params.get("requested_max_items")
+        elif "max_items" in evaluation_params and "max_samples" not in context:
+            context["max_samples"] = evaluation_params.get("max_items")
+        if "sampling_mode" in evaluation_params:
+            context["sampling_mode"] = evaluation_params.get("sampling_mode")
+
+    scorecard_id = storage.state_get(procedure_id, "scorecard_id") or procedure.get("scorecardId")
+    score_id = storage.state_get(procedure_id, "score_id") or procedure.get("scoreId")
+    scorecard_name = storage.state_get(procedure_id, "scorecard_name")
+    score_name = storage.state_get(procedure_id, "score_name")
+
+    if scorecard_id:
+        context["scorecard"] = scorecard_id
+    elif scorecard_name and "scorecard" not in context:
+        context["scorecard"] = scorecard_name
+
+    if score_id:
+        context["score"] = score_id
+    elif score_name and "score" not in context:
+        context["score"] = score_name
+
+    context["max_iterations"] = max_iterations
+    if hint is not None and hint.strip():
+        context["hint"] = hint.strip()
+
+    return context
 
 
 def prepare_continuation(

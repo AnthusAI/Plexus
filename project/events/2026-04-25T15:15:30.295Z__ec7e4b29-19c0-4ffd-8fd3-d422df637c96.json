@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ec7e4b29-19c0-4ffd-8fd3-d422df637c96",
+  "issue_id": "plx-b972e743-60a7-4dc7-acb8-25e6ea6b6505",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-25T15:15:30.295Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Implement zero-schema optimizer indexing, score workbench, and agent utilities",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "labels": []
+  }
+}
