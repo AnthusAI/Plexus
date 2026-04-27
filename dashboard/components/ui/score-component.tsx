@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit, Star, GitCompareArrows, History } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit, Star, GitCompareArrows, History, Link as LinkIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -378,22 +378,25 @@ function RelatedScoreVersionCard({
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 flex items-center gap-2">
                 {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
-                <div className="min-w-0">
-                  <div className="text-xs font-medium truncate">{label}</div>
-                  <div className="text-xs text-muted-foreground truncate">
+                <div className="min-w-0 flex items-center gap-1.5 text-xs truncate">
+                  <span className="font-medium truncate">{label}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground truncate">
                     {relatedVersion
                       ? <Timestamp time={relatedVersion.createdAt} variant="relative" showIcon={false} className="text-xs" />
                       : failedToLoad
                         ? `Unavailable: ${relatedVersionId}`
                         : `Loading: ${relatedVersionId}`}
-                  </div>
+                  </span>
                 </div>
               </div>
               {relatedVersion && (
                 <span
                   role="button"
                   tabIndex={0}
-                  className="shrink-0 text-xs text-primary hover:text-primary/80"
+                  aria-label="Open related version"
+                  title="Open related version"
+                  className="shrink-0 rounded-sm p-1 text-foreground hover:bg-card"
                   onClick={(event) => {
                     event.stopPropagation()
                     onSelect?.(relatedVersion)
@@ -406,7 +409,7 @@ function RelatedScoreVersionCard({
                     }
                   }}
                 >
-                  Open version
+                  <LinkIcon className="h-4 w-4" />
                 </span>
               )}
             </div>
