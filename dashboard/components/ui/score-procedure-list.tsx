@@ -24,9 +24,17 @@ import {
 import { cn } from '@/lib/utils'
 import {
   copyText,
+  currentProcedureFeedbackEvaluationId,
+  EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  evaluationToScoreEvaluationView,
   evaluationUrl,
   findBestOptimizerEvaluation,
+  hydrateProcedureRunFeedbackEvaluation,
+  hydrateProcedureRunsFeedbackEvaluations,
   loadOptimizerRuns,
+  mergeFeedbackEvaluationIntoProcedureRun,
   mergeTaskIntoProcedureRun,
   mergeTaskStageIntoProcedureRun,
   manifestTouchesVersion,
@@ -160,6 +168,7 @@ function toProcedureTaskData(
           })) ?? [],
       },
     },
+    feedbackEvaluationSummary: run.feedbackEvaluationSummary ?? null,
   }
 }
 
@@ -250,8 +259,9 @@ export function ScoreProcedureList({
       setIsLoading(true)
       try {
         const loadedRuns = await loadOptimizerRuns(scoreId)
+        const hydratedRuns = await hydrateProcedureRunsFeedbackEvaluations(loadedRuns)
         if (!cancelled) {
-          setRuns(loadedRuns)
+          setRuns(hydratedRuns)
         }
       } catch (error) {
         console.error('Failed to load procedures:', error)
@@ -280,9 +290,11 @@ export function ScoreProcedureList({
       const currentRun = runsRef.current.find((run) => run.procedureId === procedureId)
       if (!currentRun?.manifestKey) return
       void refreshOptimizerRunManifest(currentRun).then((refreshedRun) => {
-        setRuns((previous) =>
-          previous.map((run) => (run.procedureId === refreshedRun.procedureId ? refreshedRun : run))
-        )
+        void hydrateProcedureRunFeedbackEvaluation(refreshedRun).then((hydratedRun) => {
+          setRuns((previous) =>
+            previous.map((run) => (run.procedureId === hydratedRun.procedureId ? hydratedRun : run))
+          )
+        })
       })
     }, 1500)
 
@@ -321,6 +333,7 @@ export function ScoreProcedureList({
             ...previous[existingIndex],
             ...nextRun,
             task: previous[existingIndex].task ?? nextRun.task,
+            feedbackEvaluationSummary: previous[existingIndex].feedbackEvaluationSummary ?? nextRun.feedbackEvaluationSummary,
           }
           return next
         })
@@ -347,6 +360,44 @@ export function ScoreProcedureList({
         setRuns((previous) => previous.filter((run) => run.procedureId !== deleted.id))
       },
       'delete procedure'
+    )
+    subscribe(
+      EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const rawEvaluation = data?.onCreateEvaluation
+        if (!rawEvaluation?.id) return
+        if (rawEvaluation.scoreId && rawEvaluation.scoreId !== scoreId) return
+        const evaluation = evaluationToScoreEvaluationView(rawEvaluation)
+        setRuns((previous) => previous.map((run) => mergeFeedbackEvaluationIntoProcedureRun(run, evaluation)))
+      },
+      'create evaluation'
+    )
+    subscribe(
+      EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const rawEvaluation = data?.onUpdateEvaluation
+        if (!rawEvaluation?.id) return
+        if (rawEvaluation.scoreId && rawEvaluation.scoreId !== scoreId) return
+        const evaluation = evaluationToScoreEvaluationView(rawEvaluation)
+        setRuns((previous) => previous.map((run) => mergeFeedbackEvaluationIntoProcedureRun(run, evaluation)))
+      },
+      'update evaluation'
+    )
+    subscribe(
+      EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
+      (data) => {
+        const deleted = data?.onDeleteEvaluation
+        if (!deleted?.id) return
+        if (deleted.scoreId && deleted.scoreId !== scoreId) return
+        setRuns((previous) =>
+          previous.map((run) =>
+            currentProcedureFeedbackEvaluationId(run.manifest) === deleted.id
+              ? { ...run, feedbackEvaluationSummary: null }
+              : run
+          )
+        )
+      },
+      'delete evaluation'
     )
     subscribe(
       TASK_CREATE_SUBSCRIPTION_FOR_CARDS,

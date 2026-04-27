@@ -114,6 +114,59 @@ describe('ProcedureTask optimizer auth flow', () => {
     })
   })
 
+  it('renders grid notes above status and shows feedback accuracy performance', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          description: 'Procedure note for the operator',
+          task: {
+            ...baseProcedure.task,
+            status: 'COMPLETED',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            completedAt: '2026-01-01T00:05:00.000Z',
+            currentStageId: 'stage-final',
+            stages: {
+              items: [
+                {
+                  id: 'stage-start',
+                  name: 'Start',
+                  order: 1,
+                  status: 'COMPLETED',
+                  statusMessage: 'Started procedure',
+                },
+                {
+                  id: 'stage-final',
+                  name: 'Finalizing',
+                  order: 2,
+                  status: 'COMPLETED',
+                  statusMessage: 'Final stage complete',
+                },
+              ],
+            },
+          },
+          feedbackEvaluationSummary: {
+            id: 'eval-feedback-1',
+            status: 'COMPLETED',
+            accuracy: 87,
+            processedItems: 87,
+            totalItems: 100,
+          },
+        } as any}
+      />
+    )
+
+    const card = screen.getAllByRole('button')[0]
+    expect(screen.getByText('Procedure note for the operator')).toBeInTheDocument()
+    expect(screen.getByText('Final stage complete')).toBeInTheDocument()
+    expect(screen.getAllByText('87%').length).toBeGreaterThan(0)
+    expect(card).toHaveTextContent('Elapsed:')
+    expect(card.textContent?.indexOf('Procedure note for the operator')).toBeLessThan(
+      card.textContent?.indexOf('Final stage complete') ?? 0
+    )
+  })
+
   it('hydrates offloaded optimizer state from Amplify Storage procedures path', async () => {
     const metadataState = {
       state: {
