@@ -37,6 +37,7 @@ import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-dispatch'
 import { createTask } from '@/utils/data-operations'
+import { formatAmplifyError } from '@/utils/amplify-client'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
@@ -2577,6 +2578,7 @@ export function ScoreComponent({
             id: String(versionId),
             isFeatured: nextPinned,
             featuredKey: nextPinned ? 'featured' : 'unfeatured',
+            createdAt: version.createdAt,
           }
         }
       });
@@ -2591,7 +2593,7 @@ export function ScoreComponent({
 
       toast.success('Version feature status updated');
     } catch (error) {
-      console.error('Error toggling feature:', error);
+      console.error('Error toggling version favorite:', formatAmplifyError(error));
       toast.error('Failed to update version feature status');
     }
   };
