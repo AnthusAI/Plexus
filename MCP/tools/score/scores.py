@@ -149,7 +149,6 @@ def register_score_tools(mcp: FastMCP):
             configuration
             guidelines
             isFeatured
-            featuredKey
             note
             branch
             parentVersionId
@@ -451,7 +450,6 @@ def register_score_tools(mcp: FastMCP):
                                     id
                                     createdAt
                                     isFeatured
-                                    featuredKey
                                     parentVersionId
                                     note
                                     metadata
@@ -477,7 +475,6 @@ def register_score_tools(mcp: FastMCP):
                                     "createdAt": v.get('createdAt'),
                                     "note": v.get('note'),
                                     "isFeatured": v.get('isFeatured'),
-                                    "featuredKey": v.get('featuredKey'),
                                     "parentVersionId": v.get('parentVersionId'),
                                     "isChampion": v.get('id') == score.get('championVersionId'),
                                     "metadata": v.get('metadata'),
@@ -505,7 +502,6 @@ def register_score_tools(mcp: FastMCP):
                                 updatedAt
                                 note
                                 isFeatured
-                                featuredKey
                                 parentVersionId
                                 metadata
                             }}
@@ -531,7 +527,6 @@ def register_score_tools(mcp: FastMCP):
                                 "updatedAt": version_data.get('updatedAt'),
                                 "note": version_data.get('note'),
                                 "isFeatured": version_data.get('isFeatured'),
-                                "featuredKey": version_data.get('featuredKey'),
                                 "parentVersionId": version_data.get('parentVersionId'),
                                 "metadata": version_data.get('metadata'),
                                 "isChampion": target_version_id == score.get('championVersionId')
@@ -2097,7 +2092,6 @@ def register_score_tools(mcp: FastMCP):
                 id
                 scoreId
                 isFeatured
-                featuredKey
                 updatedAt
               }
             }
@@ -2107,8 +2101,7 @@ def register_score_tools(mcp: FastMCP):
                 {
                     "input": {
                         "id": request.version_id,
-                        "isFeatured": request.pinned,
-                        "featuredKey": "featured" if request.pinned else "unfeatured",
+                        "isFeatured": "true" if request.pinned else None,
                         "createdAt": version.get("createdAt"),
                     }
                 },
@@ -2118,7 +2111,7 @@ def register_score_tools(mcp: FastMCP):
                 "score_id": context["score_id"],
                 "score_name": context["score_name"],
                 "version_id": updated.get("id") or request.version_id,
-                "pinned": updated.get("featuredKey") == "featured",
+                "pinned": updated.get("isFeatured") == "true",
             }
         except Exception as e:
             logger.error(f"Error pinning score version: {e}", exc_info=True)
@@ -2592,8 +2585,7 @@ async def _create_version_from_code_with_parent(
             'scoreId': score.id,
             'configuration': (code_content or '').strip(),
             'note': note or 'Updated via MCP score update tool',
-            'isFeatured': False,
-            'featuredKey': 'unfeatured'
+            'isFeatured': None
         }
         
         # Add guidelines if provided
