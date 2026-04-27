@@ -1608,8 +1608,8 @@ const DetailContent = React.memo(({
               </div>
             ) : selectedVersion && (
               <div className="p-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                <div className="relative">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-medium text-sm">
                         {selectedVersion.id === championVersionId ? 'Champion Version' : 'Version'}
@@ -1644,7 +1644,7 @@ const DetailContent = React.memo(({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 ml-3">
+                  <div className="absolute right-0 top-0 flex items-center gap-2">
                     {selectedVersion && (
                       <ShadcnDropdownMenu>
                         <DropdownMenuTrigger asChild>
