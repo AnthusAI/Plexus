@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "54b555e3-5ade-499f-9cac-25a6d96bc00d",
+  "issue_id": "plx-09d41f93-1c1b-490e-82b6-09a04ddf4e00",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T17:46:08.895Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "ProcedureTask cards in score/version procedure lists are only showing a coarse complete status and no task stage/status-line details, while EvaluationTask cards correctly show stages, status, and notes. Restore the procedure task view-model mapping so ProcedureTask receives the task-stage information it expects.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Restore procedure task stage details in score-scoped procedure lists"
+  }
+}

@@ -52,12 +52,4 @@
   "updated_at": "2026-04-24T12:51:50.343424Z",
   "closed_at": "2026-04-24T12:51:50.343424Z",
   "custom": {}
-}ix set: canonical baseline-id pass-through, adapter/TaskDisplay propagation, and overlap-safe same-x marker rendering. Focused dashboard Jest regressions and dashboard typecheck passed before the cleanup commit.",
-      "created_at": "2026-04-24T12:51:50.343Z"
-    }
-  ],
-  "created_at": "2026-04-23T19:19:13.570564Z",
-  "updated_at": "2026-04-24T12:51:50.343Z",
-  "closed_at": null,
-  "custom": {}
 }

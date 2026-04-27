@@ -43,6 +43,25 @@ _UPDATE_PROCEDURE_CODE_MUTATION = """
             code: $code
         }) {
             id
+            name
+            description
+            status
+            featured
+            isTemplate
+            code
+            category
+            version
+            isDefault
+            parentProcedureId
+            rootNodeId
+            waitingOnMessageId
+            metadata
+            createdAt
+            updatedAt
+            accountId
+            scorecardId
+            scoreId
+            scoreVersionId
         }
     }
 """
@@ -51,7 +70,25 @@ _CREATE_PROCEDURE_MUTATION = """
     mutation CreateProcedure($input: CreateProcedureInput!) {
         createProcedure(input: $input) {
             id
+            name
+            description
+            status
+            featured
+            isTemplate
+            code
+            category
+            version
+            isDefault
+            parentProcedureId
+            rootNodeId
+            waitingOnMessageId
+            metadata
+            createdAt
+            updatedAt
             accountId
+            scorecardId
+            scoreId
+            scoreVersionId
         }
     }
 """
