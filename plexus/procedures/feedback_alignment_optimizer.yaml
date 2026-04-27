@@ -311,7 +311,7 @@ agents:
   cycle_analyst:
     provider: openai
     model: gpt-5-mini
-    max_tokens: 1200
+    max_tokens: 16000
     verbosity: low
     system_prompt: |
       You analyze optimization results and produce compact planning guidance.
@@ -347,7 +347,7 @@ agents:
   report_writer:
     provider: openai
     model: gpt-5-mini
-    max_tokens: 900
+    max_tokens: 16000
     verbosity: low
     system_prompt: |
       You write short optimizer reports for humans and downstream tooling.
@@ -399,7 +399,7 @@ agents:
   early_stop_advisor:
     provider: openai
     model: gpt-5.4-mini
-    temperature: 0
+    temperature: 1
     system_prompt: |
       You are an escalation advisor for a score optimization run.
 
@@ -3065,7 +3065,8 @@ code: |
         mode = "contradictions",
         days = tostring(params.days or 90),
         max_feedback_items = 100,
-        num_topics = 8
+        num_topics = 8,
+        include_rubric_memory = false
       },
       cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
       ttl_hours = ttl,
@@ -7083,7 +7084,8 @@ code: |
         mode = "contradictions",
         days = tostring(params.days or 90),
         max_feedback_items = 400,
-        num_topics = 12
+        num_topics = 12,
+        include_rubric_memory = false
       },
       cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name,
       ttl_hours = 4,

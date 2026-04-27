@@ -8,6 +8,7 @@ from typing import Any, Iterable, Literal, Optional, Sequence
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import EvidenceSnippet, RubricEvidencePack
+from .models import RubricEvidencePackRequest
 
 
 class RubricMemoryCitation(BaseModel):
@@ -63,6 +64,28 @@ class RubricMemoryCitationFormatter:
         citations = self._citations(pack)
         machine_context = self._machine_context(pack, citations)
         markdown = self._markdown_context(pack, citations, machine_context)
+        return RubricMemoryCitationContext(
+            markdown_context=markdown,
+            citation_index=citations,
+            machine_context=machine_context,
+            diagnostics=[],
+        )
+
+    def from_retrieved_evidence(
+        self,
+        *,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+    ) -> RubricMemoryCitationContext:
+        """Format retrieved evidence as LLM input context without synthesis."""
+        citations = self._retrieval_citations(request, evidence)
+        machine_context = self._retrieval_machine_context(request, evidence, citations)
+        markdown = self._retrieval_markdown_context(
+            request=request,
+            evidence=evidence,
+            citations=citations,
+            machine_context=machine_context,
+        )
         return RubricMemoryCitationContext(
             markdown_context=markdown,
             citation_index=citations,
@@ -132,6 +155,137 @@ class RubricMemoryCitationFormatter:
                 )
             )
         return result
+
+    def _retrieval_citations(
+        self,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+    ) -> list[RubricMemoryCitation]:
+        citations = [
+            RubricMemoryCitation(
+                id=f"rubric:{self._short_hash(request.score_version_id)}",
+                kind="official_rubric",
+                excerpt=self._excerpt(request.rubric_text),
+                source_uri=f"score-version:{request.score_version_id}",
+                scope_level="official_rubric",
+                authority_level="official",
+                score_version_id=request.score_version_id,
+                evidence_classification="official_rubric",
+            )
+        ]
+        for index, snippet in enumerate(evidence, 1):
+            stable_material = "|".join(
+                [
+                    request.score_version_id,
+                    "retrieved",
+                    snippet.source_uri,
+                    snippet.scope_level,
+                    snippet.evidence_classification.value,
+                    " ".join(snippet.snippet_text.split())[:400],
+                ]
+            )
+            citations.append(
+                RubricMemoryCitation(
+                    id=f"evidence:{index:02d}:{self._short_hash(stable_material)}",
+                    kind="corpus_evidence",
+                    excerpt=self._excerpt(snippet.snippet_text),
+                    source_uri=snippet.source_uri,
+                    scope_level=snippet.scope_level,
+                    source_timestamp=snippet.source_timestamp,
+                    authority_level=snippet.authority_level,
+                    score_version_id=request.score_version_id,
+                    evidence_classification=snippet.evidence_classification.value,
+                )
+            )
+        return citations
+
+    def _retrieval_markdown_context(
+        self,
+        *,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+        citations: Sequence[RubricMemoryCitation],
+        machine_context: dict[str, Any],
+    ) -> str:
+        lines = [
+            "# Rubric Memory Citation Context",
+            "",
+            "## Authority",
+            f"- Score version authority: `{request.score_version_id}`",
+            "- Official rubric authority is canonical; retrieved corpus evidence may explain history, interpretation, stale areas, or gaps but does not override the rubric by itself.",
+            "",
+            "## Official Rubric Excerpt",
+            f"{self._excerpt(request.rubric_text, 1200)} [{citations[0].id}]",
+            "",
+            "## Chronological Policy Memory",
+            "This section is sorted oldest to newest. Use it for policy evolution, not relevance ranking.",
+        ]
+        dated_evidence = sorted(
+            [snippet for snippet in evidence if snippet.source_timestamp is not None],
+            key=lambda snippet: (
+                snippet.source_timestamp.isoformat() if snippet.source_timestamp else "",
+                snippet.source_uri,
+            ),
+        )
+        if not dated_evidence:
+            lines.append("- No dated policy-memory evidence was retrieved.")
+        else:
+            for snippet in dated_evidence:
+                lines.append(
+                    f"- {self._timestamp(snippet.source_timestamp)} `{snippet.scope_level}` "
+                    f"`{snippet.evidence_classification.value}`: "
+                    f"{self._excerpt(snippet.snippet_text, 360)} Source: {snippet.source_uri}"
+                )
+
+        lines.extend(
+            [
+                "",
+                "## Ranked Retrieved Evidence",
+                "This section preserves retrieval ranking. Use exact citation IDs when making policy-memory claims.",
+            ]
+        )
+        for citation in citations:
+            timestamp = self._timestamp(citation.source_timestamp)
+            lines.append(
+                f"- `{citation.id}` `{citation.kind}` `{citation.scope_level}` "
+                f"`{citation.evidence_classification}` {timestamp}: "
+                f"{citation.excerpt}"
+            )
+            if citation.source_uri:
+                lines.append(f"  Source: {citation.source_uri}")
+
+        lines.extend(
+            [
+                "",
+                "## Machine Context JSON",
+                "```json",
+                json.dumps(machine_context, sort_keys=True, separators=(",", ":")),
+                "```",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
+    def _retrieval_machine_context(
+        self,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+        citations: Sequence[RubricMemoryCitation],
+    ) -> dict[str, Any]:
+        return {
+            "score_version_id": request.score_version_id,
+            "context_kind": "retrieval_only",
+            "evidence_counts": {
+                "retrieved": len(evidence),
+                "score": sum(1 for snippet in evidence if snippet.scope_level == "score"),
+                "prefix": sum(1 for snippet in evidence if snippet.scope_level == "prefix"),
+                "scorecard": sum(1 for snippet in evidence if snippet.scope_level == "scorecard"),
+                "dated": sum(1 for snippet in evidence if snippet.source_timestamp is not None),
+                "citations": len(citations),
+            },
+            "citation_index": [
+                citation.model_dump(mode="json") for citation in citations
+            ],
+        }
 
     def _markdown_context(
         self,
