@@ -188,6 +188,7 @@ describe("ConversationViewer streaming updates", () => {
     mockChatMessageOnCreate.mockReset()
     mockChatMessageOnUpdate.mockReset()
     mockGraphql.mockReset()
+    delete process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET
 
     mockChatSessionList.mockResolvedValue({
       data: [
@@ -225,17 +226,6 @@ describe("ConversationViewer streaming updates", () => {
       data: {
         id: "msg-user-2",
         createdAt: "2026-03-27T00:00:02.000Z",
-      },
-    })
-
-    mockGraphql.mockResolvedValue({
-      data: {
-        startConsoleRun: {
-          accepted: true,
-          taskId: "task-1",
-          runId: "run-1",
-          queuedAt: "2026-03-27T00:00:03.000Z",
-        },
       },
     })
 
@@ -314,29 +304,20 @@ describe("ConversationViewer streaming updates", () => {
 
     await waitFor(() => {
       expect(mockChatMessageCreate).toHaveBeenCalled()
-      expect(mockGraphql).toHaveBeenCalled()
       expect(screen.getByText("Thinking")).toBeInTheDocument()
     })
 
     const messageCreateCall = mockChatMessageCreate.mock.calls[0] || []
     expect(messageCreateCall[1]).toBeUndefined()
-
-    const dispatchCall = mockGraphql.mock.calls[0]?.[0]
-    expect(dispatchCall?.authMode).toBeUndefined()
-    expect(dispatchCall?.variables?.clientInstrumentation).toBeTruthy()
-    const instrumentation = JSON.parse(dispatchCall.variables.clientInstrumentation)
-    expect(instrumentation.client_history_snapshot).toEqual([
+    const createdMessage = messageCreateCall[0]
+    expect(createdMessage.responseTarget).toBe("cloud")
+    expect(createdMessage.responseStatus).toBe("PENDING")
+    const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata.instrumentation.client_history_snapshot).toEqual([
       { role: "ASSISTANT", content: "Hel" },
       { role: "USER", content: "Test thinking state" },
     ])
-
-    await waitFor(() => {
-      const taskStatusCall = mockGraphql.mock.calls
-        .map(call => call?.[0])
-        .find((args: any) => String(args?.query || "").includes("GetTaskStatus"))
-      expect(taskStatusCall).toBeDefined()
-      expect(taskStatusCall?.authMode).toBeUndefined()
-    })
+    expect(mockGraphql).not.toHaveBeenCalled()
 
     await act(async () => {
       subscriptions.messageCreate?.next({
@@ -400,14 +381,41 @@ describe("ConversationViewer streaming updates", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit" }))
 
     await waitFor(() => {
-      expect(mockGraphql).toHaveBeenCalled()
+      expect(mockChatMessageCreate).toHaveBeenCalled()
     })
 
-    const dispatchCall = mockGraphql.mock.calls[0]?.[0]
-    const instrumentation = JSON.parse(dispatchCall.variables.clientInstrumentation)
-    expect(instrumentation.client_history_snapshot).toEqual([
+    const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
+    const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata.instrumentation.client_history_snapshot).toEqual([
       { role: "USER", content: "Multiply that by three." },
     ])
+  })
+
+  it("uses local response target from environment when creating a user message", async () => {
+    process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET = "local:ryan"
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Use my local worker." },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+    })
+
+    const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
+    expect(createdMessage.responseTarget).toBe("local:ryan")
+    expect(createdMessage.responseStatus).toBe("PENDING")
+    expect(mockGraphql).not.toHaveBeenCalled()
   })
 
   it("renders TOOL_CALL and TOOL_RESPONSE as separate Tool components", async () => {
