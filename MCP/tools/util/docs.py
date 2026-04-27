@@ -33,6 +33,7 @@ def register_docs_tool(mcp: FastMCP):
         - optimizer-objective-precision: Guidance for precision and precision_safe optimization objectives (reduce false positives)
         - optimizer-objective-recall: Guidance for recall and recall_safe optimization objectives (reduce false negatives)
         - optimizer-objective-cost: Guidance for cost_efficiency optimization objective (maximize agreement per dollar)
+        - rubric-memory: Guide to scorecard knowledge-base folders, temporal source conventions, retrieval-only citation contexts, and RubricEvidencePack synthesis
         """
         old_stdout = sys.stdout
         temp_stdout = StringIO()
@@ -52,6 +53,7 @@ def register_docs_tool(mcp: FastMCP):
                 "optimizer-objective-precision": "optimizer-objective-precision.md",
                 "optimizer-objective-recall": "optimizer-objective-recall.md",
                 "optimizer-objective-cost": "optimizer-objective-cost.md",
+                "rubric-memory": "rubric-memory.md",
             }
 
             if filename not in valid_files:
@@ -92,5 +94,4 @@ def register_docs_tool(mcp: FastMCP):
                     f"Captured unexpected stdout during get_plexus_documentation: {captured_output}"
                 )
             sys.stdout = old_stdout
-
 
