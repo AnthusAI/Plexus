@@ -2109,6 +2109,7 @@ def register_score_tools(mcp: FastMCP):
                         "id": request.version_id,
                         "isFeatured": request.pinned,
                         "featuredKey": "featured" if request.pinned else "unfeatured",
+                        "createdAt": version.get("createdAt"),
                     }
                 },
             ).get("updateScoreVersion") or {})
