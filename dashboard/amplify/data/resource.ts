@@ -47,8 +47,7 @@ type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId"
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "rootNodeId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
-type GraphNodeIndexFields = "accountId" | "procedureId" | "parentNodeId" | "name" | "status" | "createdAt" | "updatedAt";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -83,7 +82,6 @@ const schema = a.schema({
             dataSources: a.hasMany('DataSource', 'accountId'),
             dataSets: a.hasMany('DataSet', 'accountId'),
             procedures: a.hasMany('Procedure', 'accountId'),
-            graphNodes: a.hasMany('GraphNode', 'accountId'),
             chatSessions: a.hasMany('ChatSession', 'accountId'),
             chatMessages: a.hasMany('ChatMessage', 'accountId')
         })
@@ -890,7 +888,6 @@ const schema = a.schema({
             category: a.string(), // For templates: e.g., "hypothesis_generation", "beam_search"
             version: a.string(), // For templates: version (e.g., "1.0", "2.1")
             isDefault: a.boolean(), // For templates: whether this is the default for the category
-            rootNodeId: a.id(),
             status: a.string(), // Execution status: PENDING, RUNNING, WAITING_FOR_HUMAN, COMPLETE, ERROR
             waitingOnMessageId: a.string(), // ID of PENDING_* message blocking execution
             metadata: a.json(), // Checkpoints, state, and lua_state for idempotent execution
@@ -904,7 +901,6 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
-            nodes: a.hasMany('GraphNode', 'procedureId'),
             chatSessions: a.hasMany('ChatSession', 'procedureId'),
             chatMessages: a.hasMany('ChatMessage', 'procedureId'),
         })
@@ -917,35 +913,8 @@ const schema = a.schema({
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("parentProcedureId").sortKeys(["updatedAt"]),
-            idx("rootNodeId"),
             idx("category").sortKeys(["version"]).name("byCategory"),
             idx("status").sortKeys(["updatedAt"]).name("byStatus")
-        ]),
-
-    GraphNode: a
-        .model({
-            accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            procedureId: a.id().required(),
-            procedure: a.belongsTo('Procedure', 'procedureId'),
-            parentNodeId: a.id(),
-            parentNode: a.belongsTo('GraphNode', 'parentNodeId'),
-            childNodes: a.hasMany('GraphNode', 'parentNodeId'),
-            name: a.string(),
-            status: a.string(),
-            metadata: a.json(), // Consolidated field for code, hypothesis, insight, value, etc.
-            chatSessions: a.hasMany('ChatSession', 'nodeId'),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: GraphNodeIndexFields) => any) => [
-            idx("accountId").sortKeys(["createdAt"]).name("byAccountAndCreatedAt"),
-            idx("procedureId").sortKeys(["createdAt"]).name("nodesByProcedureCreatedAt"),
-            idx("parentNodeId").name("nodesByParent")
         ]),
 
     ChatSession: a
@@ -958,8 +927,6 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             procedureId: a.string(),
             procedure: a.belongsTo('Procedure', 'procedureId'),
-            nodeId: a.string(),
-            node: a.belongsTo('GraphNode', 'nodeId'),
             name: a.string(),
             category: a.string(),
             status: a.enum(['ACTIVE', 'COMPLETED', 'ERROR']),
@@ -975,7 +942,6 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("procedureId").sortKeys(["createdAt"]),
-            idx("nodeId").sortKeys(["createdAt"]),
             idx("status").sortKeys(["updatedAt"])
         ]),
 
