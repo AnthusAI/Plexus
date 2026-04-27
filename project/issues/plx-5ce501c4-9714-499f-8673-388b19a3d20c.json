@@ -1,0 +1,25 @@
+{
+  "id": "plx-5ce501c4-9714-499f-8673-388b19a3d20c",
+  "title": "Add frontend best-version metric options",
+  "description": "Expose frontend controls for best optimizer versions and sorting by precision, recall, and cost, not only alignment/accuracy. Keep this zero-schema and use existing indexed optimizer/evaluation data.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "beb1da38-5a61-459f-8908-4387f5884c16",
+      "author": "ryan",
+      "text": "Implemented frontend metric controls for optimizer procedure/version surfaces: procedure sorting now supports feedback/regression alignment, accuracy, precision, recall, and cost; procedure menus expose matching best evaluation and best version actions; optimizer workbench candidate sorting now supports the same metric set. Verified focused Jest tests and dashboard typecheck.",
+      "created_at": "2026-04-26T16:19:36.629052Z"
+    }
+  ],
+  "created_at": "2026-04-26T16:12:05.408681Z",
+  "updated_at": "2026-04-26T16:19:45.099950Z",
+  "closed_at": "2026-04-26T16:19:45.099950Z",
+  "custom": {}
+}

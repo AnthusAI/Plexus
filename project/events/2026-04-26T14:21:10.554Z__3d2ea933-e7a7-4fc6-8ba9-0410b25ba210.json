@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3d2ea933-e7a7-4fc6-8ba9-0410b25ba210",
+  "issue_id": "plx-87872cfa-3f9d-4a1e-bcc1-70ff14877894",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T14:21:10.554Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Add agent-focused optimizer discovery CLI and MCP tools"
+  }
+}

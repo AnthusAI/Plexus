@@ -1,0 +1,25 @@
+{
+  "id": "plx-f316fe78-65af-4d89-97f4-475d27ec9464",
+  "title": "UI: strict note-source mapping for score procedure/evaluation lists",
+  "description": "Implement strict note source mapping: procedure notes from Procedure.description only; evaluation notes from evaluation.parameters.notes via EvaluationTaskData.parameters.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "02250a83-a709-4a0c-9621-70dfd1270fc0",
+      "author": "ryan",
+      "text": "Implemented strict notes mapping: procedure notes now sourced from Procedure.description only; evaluation notes passed via evaluation.parameters -> EvaluationTaskData.parameters. Added/updated focused tests and validated with dashboard typecheck.",
+      "created_at": "2026-04-25T21:38:38.614570Z"
+    }
+  ],
+  "created_at": "2026-04-25T21:36:55.867480Z",
+  "updated_at": "2026-04-25T21:38:38.661974Z",
+  "closed_at": "2026-04-25T21:38:38.661974Z",
+  "custom": {}
+}

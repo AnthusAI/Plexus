@@ -9,6 +9,9 @@ module.exports = {
     '^@number-flow/react$': '<rootDir>/__mocks__/number-flow-react.js',
     '^remark-gfm$': '<rootDir>/__mocks__/remark-gfm.js',
     '^remark-breaks$': '<rootDir>/__mocks__/remark-breaks.js',
+    '^@streamdown/(cjk|code|math|mermaid)$': '<rootDir>/__mocks__/streamdown-plugin.js',
+    '^streamdown$': '<rootDir>/__mocks__/streamdown.js',
+    '^nanoid$': '<rootDir>/__mocks__/nanoid.js',
   },
   testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/'],
   transform: {

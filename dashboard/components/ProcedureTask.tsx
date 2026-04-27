@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useMemo, useTransition } from 'react'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import { TaskStatus } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -7,6 +8,8 @@ import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, Fil
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
+import { ProgressBarTiming } from '@/components/ui/progress-bar-timing'
+import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -48,6 +51,7 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
 import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
+import { PROCEDURE_CARD_FIELDS, type ProcedureFeedbackEvaluationSummary } from "@/components/ui/optimizer-results-utils"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
 import ReactMarkdown from "react-markdown"
@@ -146,6 +150,7 @@ export interface ProcedureTaskData extends BaseTaskData {
       }>
     }
   } | null
+  feedbackEvaluationSummary?: ProcedureFeedbackEvaluationSummary | null
 }
 
 export interface ProcedureTaskProps {
@@ -745,7 +750,9 @@ export default function ProcedureTask({
     await getAmplifyClient().graphql({
       query: `
         mutation UpdateProcedure($input: UpdateProcedureInput!) {
-          updateProcedure(input: $input) { id }
+          updateProcedure(input: $input) {
+            ${PROCEDURE_CARD_FIELDS}
+          }
         }
       `,
       variables: { input: { id: procedureId, code: newYaml } }
@@ -823,7 +830,9 @@ export default function ProcedureTask({
       const createResult = await getAmplifyClient().graphql({
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
-            createProcedure(input: $input) { id }
+            createProcedure(input: $input) {
+              ${PROCEDURE_CARD_FIELDS}
+            }
           }
         `,
         variables: {
@@ -930,6 +939,38 @@ export default function ProcedureTask({
     };
   });
   
+  const currentStage = procedure.task?.currentStageId
+    ? procedure.task.stages?.items?.find((stage) =>
+        stage.id === procedure.task?.currentStageId || stage.name === procedure.task?.currentStageId
+      )
+    : undefined
+
+  const taskStatusMessage = (() => {
+    const stageItems = procedure.task?.stages?.items ?? []
+    if (!stageItems.length) return undefined
+    if (effectiveTaskStatus === 'FAILED') {
+      return stageItems.find((stage) => stage.status === 'FAILED')?.statusMessage
+    }
+    if (effectiveTaskStatus === 'COMPLETED') {
+      return [...stageItems].reverse().find((stage) => stage.statusMessage)?.statusMessage
+    }
+    return (
+      stageItems.find((stage) => stage.status === 'RUNNING')?.statusMessage ??
+      currentStage?.statusMessage ??
+      undefined
+    )
+  })()
+
+  const feedbackEvaluationSummary = procedure.feedbackEvaluationSummary ?? null
+  const feedbackProgress =
+    feedbackEvaluationSummary?.processedItems != null &&
+    feedbackEvaluationSummary?.totalItems != null &&
+    feedbackEvaluationSummary.totalItems > 0
+      ? (feedbackEvaluationSummary.processedItems / feedbackEvaluationSummary.totalItems) * 100
+      : feedbackEvaluationSummary?.status === 'COMPLETED'
+        ? 100
+        : 0
+
   const taskObject = {
     id: procedure.id,
     type: 'Procedure',
@@ -942,9 +983,7 @@ export default function ProcedureTask({
     output: (procedure as any).output, // May not exist in type definition yet
     data: taskData,
     stages: formattedStages, // Use formatted stages with colors
-    currentStageName: procedure.task?.currentStageId
-      ? procedure.task.stages?.items?.find(s => s.id === procedure.task?.currentStageId)?.name
-      : undefined, // Resolve ID to name
+    currentStageName: currentStage?.name,
     processedItems: (procedure as any).processedItems, // May not exist in type definition yet
     totalItems: (procedure as any).totalItems, // May not exist in type definition yet
     startedAt: procedure.task?.startedAt, // Get from task
@@ -1094,12 +1133,14 @@ export default function ProcedureTask({
                   <span className="truncate">{props.task.score}</span>
                 </div>
               )}
-              {props.task.description && (
-                <div className="text-sm text-muted-foreground truncate">
-                  {props.task.description}
-                </div>
-              )}
               <Timestamp time={props.task.time} variant="relative" />
+              <ProgressBarTiming
+                startedAt={props.task.startedAt}
+                completedAt={props.task.completedAt}
+                estimatedTimeRemaining={undefined}
+                isInProgress={props.task.status === 'RUNNING'}
+                className="text-muted-foreground"
+              />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -1116,10 +1157,43 @@ export default function ProcedureTask({
   }
 
   const renderContent = () => (
-    <TaskContent variant={variant} task={taskObject}>
+    <TaskContent variant={variant} task={taskObject} hideTaskStatus={variant === 'grid'}>
       {variant === 'grid' ? (
-        // Empty grid content since all info is now in header
-        null
+        <div className="mt-auto space-y-2">
+          {taskObject.description && (
+            <div className="text-sm text-muted-foreground line-clamp-2">
+              {taskObject.description}
+            </div>
+          )}
+          <TaskStatus
+            showStages
+            stages={taskObject.stages || []}
+            stageConfigs={taskObject.stages || []}
+            currentStageName={taskObject.currentStageName}
+            processedItems={taskObject.processedItems}
+            totalItems={taskObject.totalItems}
+            startedAt={taskObject.startedAt}
+            estimatedCompletionAt={taskObject.estimatedCompletionAt}
+            status={taskObject.status || 'PENDING'}
+            command={taskObject.command}
+            statusMessage={taskStatusMessage}
+            errorMessage={taskObject.errorMessage}
+            completedAt={taskObject.completedAt}
+            truncateMessages
+            isSelected={isSelected}
+            variant="grid"
+            commandDisplay="hide"
+            statusMessageDisplay="always"
+            hideElapsedTime
+          />
+          {feedbackEvaluationSummary && (
+            <EvaluationListAccuracyBar
+              progress={feedbackProgress}
+              accuracy={feedbackEvaluationSummary.accuracy ?? 0}
+              isSelected={isSelected}
+            />
+          )}
+        </div>
       ) : (
         <div className="p-3">
           {/* Parameters section - collapsed by default */}

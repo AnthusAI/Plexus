@@ -1,0 +1,18 @@
+{
+  "id": "plx-cf02795e-6fed-4fbe-bac5-c756482452fc",
+  "title": "Remove ChatSession.nodeId and reclaim the nodeId index",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-25T15:15:43.228642Z",
+  "updated_at": "2026-04-25T15:15:43.228642Z",
+  "closed_at": null,
+  "custom": {}
+}
