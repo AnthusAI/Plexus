@@ -1,334 +1,87 @@
-import asyncio
-import json
 import logging
 import os
-import socket
-import traceback
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from plexus.cli.procedure.service import ProcedureService
-from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
+from boto3.dynamodb.types import TypeDeserializer
+
+from plexus.console.chat_runtime import (
+    PRODUCTION_RESPONSE_TARGET,
+    build_response_owner,
+    normalize_response_target,
+    process_console_message,
+)
 from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.models.task import Task
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TERMINAL_TASK_STATUSES = {"COMPLETED", "WAITING_FOR_HUMAN", "FAILED", "CANCELED"}
-RUNNING_REENTRY_GRACE_SECONDS = int(os.getenv("CONSOLE_WORKER_RUNNING_REENTRY_GRACE_SECONDS", "900"))
+deserializer = TypeDeserializer()
 
 
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _deserialize_dynamo_item(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: deserializer.deserialize(value) for key, value in raw.items()}
 
 
-def _parse_iso_timestamp(value: Any) -> Optional[datetime]:
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
-    if not text:
-        return None
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+def _resolve_client() -> PlexusDashboardClient:
+    api_url = str(os.getenv("PLEXUS_API_URL") or "").strip()
+    api_key = str(os.getenv("PLEXUS_API_KEY") or "").strip()
+    if not api_url or not api_key:
+        raise RuntimeError("PLEXUS_API_URL and PLEXUS_API_KEY are required")
+    return PlexusDashboardClient(api_url=api_url, api_key=api_key)
 
 
-def _running_task_is_recent(task: Task) -> bool:
-    started_at_raw = getattr(task, "startedAt", None)
-    started_at = _parse_iso_timestamp(started_at_raw)
-    if not started_at:
-        return False
-    age_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
-    return age_seconds >= 0 and age_seconds < RUNNING_REENTRY_GRACE_SECONDS
-
-
-def _parse_metadata(raw: Any) -> Dict[str, Any]:
-    if isinstance(raw, dict):
-        return dict(raw)
-    if isinstance(raw, str):
-        value = raw.strip()
-        if not value:
-            return {}
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            return {}
-    return {}
-
-
-def _merge_console_instrumentation(task: Task, markers: Dict[str, Any]) -> Dict[str, Any]:
-    metadata = _parse_metadata(task.metadata)
-    console_chat = metadata.get("console_chat")
-    if not isinstance(console_chat, dict):
-        console_chat = {}
-        metadata["console_chat"] = console_chat
-
-    instrumentation = console_chat.get("instrumentation")
-    if not isinstance(instrumentation, dict):
-        instrumentation = {}
-        console_chat["instrumentation"] = instrumentation
-
-    instrumentation.update(markers)
-    return metadata
-
-
-def _task_update(task: Task, **updates: Any) -> None:
-    payload = {
-        "accountId": task.accountId,
-        "type": task.type,
-        "status": updates.pop("status", task.status),
-        "target": task.target,
-        "command": task.command,
-        "updatedAt": updates.pop("updatedAt", _iso_now()),
-    }
-    payload.update(updates)
-    task.update(**payload)
-
-    if "status" in payload:
-        task.status = payload["status"]
-    if "metadata" in payload:
-        task.metadata = payload["metadata"]
-    if "dispatchStatus" in payload:
-        task.dispatchStatus = payload["dispatchStatus"]
-
-
-def _load_task(client: PlexusDashboardClient, task_id: str) -> Task:
-    task = Task.get_by_id(task_id, client)
-    if not task:
-        raise RuntimeError(f"Task {task_id} was not found")
-    return task
-
-
-def _resolve_account_id(payload: Dict[str, Any], task: Task) -> str:
-    account_id = str(payload.get("accountId") or "").strip()
-    if account_id:
-        return account_id
-    if task.accountId:
-        return str(task.accountId).strip()
-    raise RuntimeError("Missing accountId for console run payload")
-
-
-def _run_console_job(payload: Dict[str, Any]) -> None:
-    task_id = str(payload.get("taskId") or "").strip()
-    procedure_id = str(payload.get("procedureId") or "").strip()
-    run_id = str(payload.get("runId") or "").strip()
-    payload_api_url = str(payload.get("apiUrl") or "").strip()
-    payload_api_key = str(payload.get("apiKey") or "").strip()
-    if not task_id or not procedure_id:
-        raise RuntimeError("SQS payload must include taskId and procedureId")
-
-    resolved_api_url = payload_api_url or str(os.getenv("PLEXUS_API_URL") or "").strip()
-    resolved_api_key = payload_api_key or str(os.getenv("PLEXUS_API_KEY") or "").strip()
-    if not resolved_api_url or not resolved_api_key:
-        raise RuntimeError("Missing required API URL or API key")
-
-    previous_api_url = os.getenv("PLEXUS_API_URL")
-    previous_api_key = os.getenv("PLEXUS_API_KEY")
-    os.environ["PLEXUS_API_URL"] = resolved_api_url
-    os.environ["PLEXUS_API_KEY"] = resolved_api_key
-
-    client = PlexusDashboardClient(api_url=resolved_api_url, api_key=resolved_api_key)
-    task = _load_task(client, task_id)
-    current_status = str(getattr(task, "status", "") or "").upper()
-
-    if current_status in TERMINAL_TASK_STATUSES:
-        logger.info("Skipping task %s because it is already terminal (%s)", task_id, current_status)
-        return
-
-    if current_status == "RUNNING" and _running_task_is_recent(task):
-        logger.info("Skipping task %s duplicate delivery while task is already RUNNING", task_id)
-        return
-
-    account_id = _resolve_account_id(payload, task)
-    worker_node_id = f"console-run-worker/{socket.gethostname()}"
-
-    dequeued_at = _iso_now()
-    metadata_with_dequeue = _merge_console_instrumentation(
-        task,
-        {
-            "worker_dequeued_at": dequeued_at,
-            "worker_run_id": run_id or None,
-            "worker_node_id": worker_node_id,
-        },
-    )
-    _task_update(
-        task,
-        status="RUNNING",
-        dispatchStatus="DISPATCHED",
-        startedAt=dequeued_at,
-        workerNodeId=worker_node_id,
-        metadata=json.dumps(metadata_with_dequeue),
-    )
-
-    init_done_at = _iso_now()
-    metadata_init_done = _merge_console_instrumentation(
-        task,
-        {
-            "worker_init_done_at": init_done_at,
-        },
-    )
-    _task_update(
-        task,
-        metadata=json.dumps(metadata_init_done),
-    )
-
-    runtime_init_done_at = _iso_now()
-    metadata_runtime_init = _merge_console_instrumentation(
-        task,
-        {
-            "runtime_init_done_at": runtime_init_done_at,
-        },
-    )
-    _task_update(
-        task,
-        metadata=json.dumps(metadata_runtime_init),
-    )
-
-    # Build explicit console context from task metadata so detached runs do not
-    # depend solely on post-hoc history lookups.
-    task_metadata = _parse_metadata(task.metadata)
-    console_chat = task_metadata.get("console_chat")
-    if not isinstance(console_chat, dict):
-        console_chat = {}
-    instrumentation = console_chat.get("instrumentation")
-    if not isinstance(instrumentation, dict):
-        instrumentation = {}
-
-    os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
-
-    run_options: Dict[str, Any] = {}
-    trigger_message_content = console_chat.get("trigger_message_content")
-    if isinstance(trigger_message_content, str) and trigger_message_content.strip():
-        run_options["console_user_message"] = trigger_message_content.strip()
-
-    client_history_snapshot = instrumentation.get("client_history_snapshot")
-    if isinstance(client_history_snapshot, list) and len(client_history_snapshot) > 0:
-        run_options["console_session_history"] = client_history_snapshot
-
-    # Fallback hydration for legacy/partial dispatch payloads.
-    # This keeps follow-up continuity even when client instrumentation is sparse.
-    if not run_options.get("console_user_message") or not run_options.get("console_session_history"):
-        try:
-            recorder = ProcedureChatRecorder(client, procedure_id)
-            recorder.account_id = account_id
-            if not run_options.get("console_user_message"):
-                latest_trigger = recorder.get_latest_console_trigger_message(account_id)
-                if isinstance(latest_trigger, str) and latest_trigger.strip():
-                    run_options["console_user_message"] = latest_trigger.strip()
-            if not run_options.get("console_session_history"):
-                history = recorder.get_console_session_history(account_id)
-                if isinstance(history, list) and history:
-                    run_options["console_session_history"] = history
-        except Exception as hydrate_error:
-            logger.warning("Console worker history hydration fallback failed: %s", hydrate_error)
-
-    try:
-        service = ProcedureService(client)
-        result = asyncio.run(
-            service.run_experiment(
-                procedure_id,
-                account_id=account_id,
-                **run_options,
-            )
-        )
-        procedure_status = str(result.get("status") or "").upper()
-        if procedure_status == "WAITING_FOR_HUMAN":
-            mapped_status = "WAITING_FOR_HUMAN"
-        elif bool(result.get("success")):
-            mapped_status = "COMPLETED"
-        else:
-            mapped_status = "FAILED"
-
-        completed_at = _iso_now()
-        metadata_completed = _merge_console_instrumentation(
-            task,
-            {
-                "worker_run_completed_at": completed_at,
-                "worker_result_status": procedure_status or None,
-            },
-        )
-        task_update_payload: Dict[str, Any] = {
-            "status": mapped_status,
-            "dispatchStatus": "DISPATCHED",
-            "metadata": json.dumps(metadata_completed),
-            "output": json.dumps(result, default=str),
-            "updatedAt": completed_at,
-        }
-        if mapped_status in TERMINAL_TASK_STATUSES:
-            task_update_payload["completedAt"] = completed_at
-        _task_update(
-            task,
-            **task_update_payload,
-        )
-    except Exception as exc:
-        failed_at = _iso_now()
-        metadata_failed = _merge_console_instrumentation(
-            task,
-            {
-                "worker_run_failed_at": failed_at,
-            },
-        )
-        _task_update(
-            task,
-            status="FAILED",
-            dispatchStatus="DISPATCHED",
-            completedAt=failed_at,
-            metadata=json.dumps(metadata_failed),
-            errorMessage=str(exc),
-            errorDetails=json.dumps(
-                {
-                    "message": str(exc),
-                    "traceback": traceback.format_exc(),
-                }
-            ),
-            updatedAt=failed_at,
-        )
-        raise
-    finally:
-        if os.environ.get("PLEXUS_DISPATCH_TASK_ID") == task_id:
-            os.environ.pop("PLEXUS_DISPATCH_TASK_ID", None)
-        if previous_api_url is None:
-            os.environ.pop("PLEXUS_API_URL", None)
-        else:
-            os.environ["PLEXUS_API_URL"] = previous_api_url
-        if previous_api_key is None:
-            os.environ.pop("PLEXUS_API_KEY", None)
-        else:
-            os.environ["PLEXUS_API_KEY"] = previous_api_key
-
-
-def handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     records = event.get("Records") or []
     if not records:
-        logger.info("No SQS records to process")
-        return {"processed": 0}
+        logger.info("No ChatMessage stream records to process")
+        return {"processed": 0, "skipped": 0, "batchItemFailures": []}
+
+    expected_target = normalize_response_target(
+        os.getenv("CONSOLE_RESPONSE_TARGET") or PRODUCTION_RESPONSE_TARGET
+    )
+    request_id = getattr(context, "aws_request_id", None)
+    owner = build_response_owner(expected_target, request_id=request_id)
+    client = _resolve_client()
 
     failures = []
     processed = 0
+    skipped = 0
 
     for record in records:
-        message_id = str(record.get("messageId") or "")
-        body = record.get("body")
+        event_name = str(record.get("eventName") or "").upper()
+        sequence_number = str(record.get("dynamodb", {}).get("SequenceNumber") or record.get("eventID") or "")
+        if event_name != "INSERT":
+            skipped += 1
+            continue
+
+        new_image = record.get("dynamodb", {}).get("NewImage")
+        if not isinstance(new_image, dict):
+            skipped += 1
+            continue
+
         try:
-            payload = json.loads(body) if isinstance(body, str) else {}
-            if not isinstance(payload, dict):
-                raise RuntimeError("SQS body must decode to a JSON object")
-            _run_console_job(payload)
-            processed += 1
+            message = _deserialize_dynamo_item(new_image)
+            if process_console_message(
+                client,
+                message,
+                expected_target=expected_target,
+                owner=owner,
+            ):
+                processed += 1
+            else:
+                skipped += 1
         except Exception as exc:
-            logger.error("Failed processing console run record %s: %s", message_id, exc, exc_info=True)
-            failures.append({"itemIdentifier": message_id})
+            logger.error(
+                "Failed processing ChatMessage stream record %s: %s",
+                sequence_number,
+                exc,
+                exc_info=True,
+            )
+            if sequence_number:
+                failures.append({"itemIdentifier": sequence_number})
 
     return {
         "processed": processed,
+        "skipped": skipped,
         "batchItemFailures": failures,
     }
