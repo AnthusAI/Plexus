@@ -144,6 +144,7 @@ const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
 const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
 const cdkAccount = (process.env.CDK_DEFAULT_ACCOUNT || process.env.AWS_ACCOUNT_ID || '').trim();
 const cdkRegion = (process.env.CDK_DEFAULT_REGION || process.env.AWS_REGION || '').trim();
+const consoleWorkerEnvironmentName = ((process.env.AWS_BRANCH || 'staging').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')) || 'staging';
 
 if (!resolvedDataApiUrl || !resolvedDataApiKey) {
     throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
@@ -166,6 +167,7 @@ const consoleRunWorkerStack = new ConsoleRunWorkerStack(
         plexusApiUrl: resolvedDataApiUrl,
         plexusApiKey: resolvedDataApiKey,
         workerImageUri: consoleWorkerImageUri,
+        environmentName: consoleWorkerEnvironmentName,
         env: {
             account: cdkAccount,
             region: cdkRegion,
