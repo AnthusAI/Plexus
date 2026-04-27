@@ -34,10 +34,22 @@
       "author": "derek",
       "text": "Created branch chore/plx-9baee9-rca-dependency-constraints from develop to preserve current Plexus dependency work-in-progress while Tactus release PR is pending. Preparing checkpoint commit with pyproject/lock/env settings and Kanbus artifacts.",
       "created_at": "2026-04-27T16:23:59.854996282Z"
+    },
+    {
+      "id": "95919a90-9610-417c-bb29-d3e7675bf3bc",
+      "author": "derek",
+      "text": "Checkpoint complete: created branch chore/plx-9baee9-rca-dependency-constraints from develop, committed dependency/lock updates (f4d74354) plus required Kanbus event artifact from push hook (20992d55), and pushed branch to origin for safekeeping.",
+      "created_at": "2026-04-27T16:24:14.040869510Z"
+    },
+    {
+      "id": "074f890b-3018-4edc-bfb4-8ec6c2a71024",
+      "author": "derek",
+      "text": "Resolution confirmed after tactus 0.46.3 release: Plexus lock now resolves tactus 0.46.3 + biblicus 1.10.1, and runtime signature check shows ReinforcementMemory.__init__ includes max_exemplars. Proceeding to finalize branch and PR readiness.",
+      "created_at": "2026-04-27T17:49:34.097196524Z"
     }
   ],
   "created_at": "2026-04-24T23:18:43.500721568Z",
-  "updated_at": "2026-04-27T16:23:59.854996282Z",
+  "updated_at": "2026-04-27T17:49:34.097196524Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",

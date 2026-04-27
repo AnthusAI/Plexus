@@ -523,14 +523,14 @@ vision = ["Pillow (>=9.2.0)", "accelerate (>=0.19.0)"]
 
 [[package]]
 name = "biblicus"
-version = "1.9.1"
+version = "1.10.1"
 description = "Command line interface and Python library for corpus ingestion, retrieval, and evaluation."
 optional = false
-python-versions = ">=3.9"
+python-versions = "<3.14,>=3.10"
 groups = ["main"]
 files = [
-    {file = "biblicus-1.9.1-py3-none-any.whl", hash = "sha256:00d19831fa6a71293150f3c8b6bfda37274e621c1619efc8e652e5059956b5ea"},
-    {file = "biblicus-1.9.1.tar.gz", hash = "sha256:d6e59134df8666b2f9b22fbbf431c3c2f21dd0d3ba290bfb9bca55c557010de0"},
+    {file = "biblicus-1.10.1-py3-none-any.whl", hash = "sha256:283afe4a46d59cd8f876351ca54555c5f7d8278349623aaff2808ebb66980d3b"},
+    {file = "biblicus-1.10.1.tar.gz", hash = "sha256:3de6cd5b21981512cd88e68ce1cbdecfa15ae609b3896d35e412cddac6c73ba3"},
 ]
 
 [package.dependencies]
@@ -547,19 +547,19 @@ aws = ["boto3 (>=1.34)"]
 azure = ["azure-storage-blob (>=12.20)"]
 datasets = ["datasets (>=2.18.0)"]
 deepgram = ["deepgram-sdk (>=3.0)"]
-dev = ["behave (>=1.2.6)", "black (>=24.0)", "boto3 (>=1.34)", "coverage[toml] (>=7.0)", "myst-parser (>=2.0)", "pytest (>=8.0)", "python-semantic-release (>=9.0.0)", "ruff (>=0.4.0)", "sphinx (>=7.0)", "sphinx_rtd_theme (>=2.0)"]
-docling = ["docling[vlm] (>=2.0.0)"]
-docling-mlx = ["docling[mlx-vlm] (>=2.0.0)"]
+docling = ["docling[vlm] (>=2.84.0)"]
+docling-mlx = ["docling[mlx-vlm] (>=2.84.0)"]
 dspy = ["dspy (>=2.5)", "litellm (>=1.0)"]
-markitdown = ["markitdown[all] (>=0.1.0) ; python_version >= \"3.10\""]
+markitdown = ["markitdown[all] (>=0.1.0) ; python_version >= \"3.10\" and python_version < \"3.14\""]
 markov-analysis = ["hmmlearn (>=0.3.0)"]
 neo4j = ["neo4j (>=5.0.0)"]
 ner = ["spacy (>=3.7.0)"]
-ocr = ["rapidocr-onnxruntime (>=1.3.0)"]
+ocr = ["rapidocr-onnxruntime (>=1.3.0) ; python_version < \"3.13\""]
 openai = ["openai (>=1.0)"]
 paddleocr = ["huggingface_hub (>=0.20.0)", "paddleocr (>=2.7.0)", "paddlepaddle (>=2.5.0)", "requests (>=2.28.0)"]
+reinforcement-memory = ["bertopic (>=0.17.4)", "virtuus (>=0.5.0)"]
 tesseract = ["pillow (>=10.0.0)", "pytesseract (>=0.3.10)"]
-topic-modeling = ["bertopic (>=0.15.0)"]
+topic-modeling = ["bertopic (>=0.17.4)"]
 unstructured = ["python-docx (>=1.1.0)", "unstructured (>=0.12.0)"]
 
 [[package]]
@@ -7401,14 +7401,14 @@ diagrams = ["jinja2", "railroad-diagrams"]
 
 [[package]]
 name = "pypdf"
-version = "6.10.1"
+version = "6.10.2"
 description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "pypdf-6.10.1-py3-none-any.whl", hash = "sha256:6331940d3bfe75b7e6601d35db7adabab5fc1d716efaeb384e3c0c3957d033de"},
-    {file = "pypdf-6.10.1.tar.gz", hash = "sha256:62e6ca7f65aaa28b3d192addb44f97296e4be1748f57ed0f4efb2d4915841880"},
+    {file = "pypdf-6.10.2-py3-none-any.whl", hash = "sha256:aa53be9826655b51c96741e5d7983ca224d898ac0a77896e64636810517624aa"},
+    {file = "pypdf-6.10.2.tar.gz", hash = "sha256:7d09ce108eff6bf67465d461b6ef352dcb8d84f7a91befc02f904455c6eea11d"},
 ]
 
 [package.extras]
@@ -9054,25 +9054,25 @@ py-cpuinfo = "*"
 
 [[package]]
 name = "tactus"
-version = "0.46.2"
+version = "0.46.3"
 description = "Tactus: Lua-based DSL for agentic workflows"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "tactus-0.46.2-py3-none-any.whl", hash = "sha256:4e31d5f983dcc3b79dc15edffe121b6a333a74f1f0e525081e7ded41ee5e574f"},
-    {file = "tactus-0.46.2.tar.gz", hash = "sha256:1b52c140ccf6a6bbccbf60eb9c4ed9ca1a77a7e7e502443b13ed35c7a7f502c2"},
+    {file = "tactus-0.46.3-py3-none-any.whl", hash = "sha256:40c6541e13cc8a284acc56e9fe240b7c95e5623484c8a1c2273bf9b152ad4e17"},
+    {file = "tactus-0.46.3.tar.gz", hash = "sha256:6977dc63d2484cdd329a565c5b43bb0147db2daba47d2dc3cf1afe160419e7ca"},
 ]
 
 [package.dependencies]
 aiohttp = ">=3.13.4"
 antlr4-python3-runtime = "4.13.1"
 behave = ">=1.2.6"
-biblicus = ">=1.0.0"
+biblicus = ">=1.10.0,<2.0.0"
 boto3 = ">=1.28.0"
 click = ">=8.1,<8.2"
 dotyaml = ">=0.1.4"
-dspy = {version = ">=3.1.2", markers = "python_version < \"3.15\""}
+dspy = {version = ">=3.1.3,<3.2.0", markers = "python_version < \"3.15\""}
 flask = ">=3.0.0"
 flask-cors = ">=4.0.0"
 gherkin-official = ">=28.0.0"
@@ -9091,7 +9091,7 @@ opentelemetry-sdk = ">=1.39.1"
 pyarrow = ">=14.0"
 pydantic = ">=2.0"
 pydantic-ai-slim = "1.56.0"
-pypdf = ">=6.9.2"
+pypdf = ">=6.10.2"
 python-dotenv = ">=1.0.0"
 pyyaml = "*"
 rapidfuzz = ">=3.0.0"
@@ -10487,4 +10487,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "352a2586fc6456a2a20b65261b3027cd254fc352756a4b0f59b406ee7c86f600"
+content-hash = "e9aa6892c711be3ed0d5c506ea82038b370fca4d874b5c20a7c771923f015e79"
