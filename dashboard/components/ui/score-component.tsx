@@ -109,6 +109,23 @@ interface CreateScoreVersionResponse {
   createScoreVersion: ScoreVersion
 }
 
+const parseScoreVersionMetadata = (metadata: unknown): Record<string, any> => {
+  if (!metadata) return {}
+  if (typeof metadata === 'string') {
+    const trimmed = metadata.trim()
+    if (!trimmed) return {}
+    const parsed = JSON.parse(trimmed)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  return typeof metadata === 'object' && !Array.isArray(metadata) ? metadata as Record<string, any> : {}
+}
+
+const assertGraphQLSuccess = (response: any, action: string) => {
+  if (response?.errors?.length) {
+    throw new Error(`${action}: ${response.errors.map((error: any) => error?.message || String(error)).join('; ')}`)
+  }
+}
+
 const buildChampionMetadata = ({
   metadata,
   scoreId,
@@ -120,7 +137,7 @@ const buildChampionMetadata = ({
   transitionId,
   incoming,
 }: {
-  metadata?: Record<string, any> | null
+  metadata?: unknown
   scoreId: string
   versionId: string
   enteredAt?: string | null
@@ -130,9 +147,7 @@ const buildChampionMetadata = ({
   transitionId: string
   incoming: boolean
 }) => {
-  const nextMetadata = {
-    ...(metadata && typeof metadata === 'object' ? metadata : {}),
-  }
+  const nextMetadata = parseScoreVersionMetadata(metadata)
   const history = Array.isArray(nextMetadata.championHistory)
     ? [...nextMetadata.championHistory]
     : []
@@ -3109,7 +3124,7 @@ export function ScoreComponent({
         : `${versionId}-${promotedAt}`;
 
       // Update the Score record to set this as the champion version
-      await getAmplifyClient().graphql({
+      const updateScoreResponse = await getAmplifyClient().graphql({
         query: `
           mutation UpdateScoreChampion($input: UpdateScoreInput!) {
             updateScore(input: $input) {
@@ -3125,9 +3140,10 @@ export function ScoreComponent({
           }
         }
       });
+      assertGraphQLSuccess(updateScoreResponse, 'Update score champion');
 
       const updateVersionMetadata = async (targetVersionId: string, metadata: Record<string, any>) => {
-        await getAmplifyClient().graphql({
+        const updateMetadataResponse = await getAmplifyClient().graphql({
           query: `
             mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
               updateScoreVersion(input: $input) {
@@ -3139,10 +3155,11 @@ export function ScoreComponent({
           variables: {
             input: {
               id: String(targetVersionId),
-              metadata,
+              metadata: JSON.stringify(metadata),
             }
           }
         });
+        assertGraphQLSuccess(updateMetadataResponse, 'Update score version champion metadata');
       };
 
       const incomingMetadata = buildChampionMetadata({
@@ -3199,8 +3216,9 @@ export function ScoreComponent({
 
       toast.success('Version promoted to champion');
     } catch (error) {
-      console.error('Error promoting version to champion:', error);
-      toast.error('Failed to promote version to champion');
+      const message = formatAmplifyError(error);
+      console.error('Error promoting version to champion:', message);
+      toast.error(`Failed to promote version to champion: ${message}`);
     }
   };
 
