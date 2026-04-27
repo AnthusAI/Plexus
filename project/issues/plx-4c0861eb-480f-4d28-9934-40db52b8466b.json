@@ -1,0 +1,25 @@
+{
+  "id": "plx-4c0861eb-480f-4d28-9934-40db52b8466b",
+  "title": "Investigate feedback-score misassociation in analysis reports",
+  "description": "",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "df54eca1-3509-4130-8e81-af79a035e2df",
+      "author": "derek",
+      "text": "Epic complete: feedback-score misassociation investigation and UI mapping fix merged to develop via PR #205.",
+      "created_at": "2026-04-24T18:09:32.955757860Z"
+    }
+  ],
+  "created_at": "2026-04-24T17:47:31.513540883Z",
+  "updated_at": "2026-04-24T18:09:32.955757860Z",
+  "closed_at": "2026-04-24T18:09:32.943047844Z",
+  "custom": {}
+}

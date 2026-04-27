@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8f02753a-f2cf-45c1-bd50-850243eff447",
+  "issue_id": "plx-bc8f6c54-3ed9-40f9-aad8-a95685df6624",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T19:51:47.678Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "After Prescriber contradiction review and any explicitly approved invalidations are complete, build a deterministic associated dataset for Medication Review: Prescriber from the cleaned 90-day feedback window, then relaunch the optimizer from version 63892e5d-bacc-483c-89ff-429ff2131100 with a hint preferring GPT 5.4 mini. Constraints: keep RelevantWindowsTranscriptFilter, do not retry full-context removal, do not retry GPT 5.4 nano, do not retry extractor-ledger, and only test narrow SRX doctor-link confirmation rules after contradiction cleanup. Use direct CLI logs as the source of truth for the optimizer run. Do not start until exact invalidation approvals are recorded.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Build Prescriber vetted regression slice and restart optimizer from GPT-5.4-mini baseline"
+  }
+}

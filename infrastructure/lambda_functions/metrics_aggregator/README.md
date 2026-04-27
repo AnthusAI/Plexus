@@ -2,7 +2,7 @@
 
 ## Overview
 
-This Lambda function replaces the client-side metrics aggregation system with a serverless cloud-based solution. It provides **real-time** aggregation of counts for Items, Score Results, Tasks, and Evaluations with minimal latency.
+This Lambda function replaces the client-side metrics aggregation system with a serverless cloud-based solution. It provides **real-time** aggregation of counts for Items, Score Results, Tasks, Evaluations, and Procedures with minimal latency.
 
 ## Architecture
 
@@ -38,6 +38,7 @@ Update AggregatedMetrics table
   - Score Results: 100 records or 15 seconds
   - Tasks: 1 record or 15 seconds
   - Evaluations: 1 record or 15 seconds
+  - Procedures: 1 record or 15 seconds
 
 ### 4. **Hierarchical Buckets**
 - **1-minute**: Most granular, directly counted
@@ -211,4 +212,3 @@ Processing items for account acc-abc123...
 3. **Verify**: Compare counts with client-side system during transition period
 4. **Disable**: Once verified, remove client-side aggregation code
 5. **Optimize**: If needed, add caching or reduce query window based on actual usage patterns
-

@@ -1,0 +1,91 @@
+{
+  "id": "plx-bc8f6c54-3ed9-40f9-aad8-a95685df6624",
+  "title": "Build Prescriber vetted regression slice and restart optimizer from GPT-5.4-mini baseline",
+  "description": "After Prescriber contradiction review and any explicitly approved invalidations are complete, build a deterministic associated dataset for Medication Review: Prescriber from the cleaned 90-day feedback window, then relaunch the optimizer from version 63892e5d-bacc-483c-89ff-429ff2131100 with a hint preferring GPT 5.4 mini. Constraints: keep RelevantWindowsTranscriptFilter, do not retry full-context removal, do not retry GPT 5.4 nano, do not retry extractor-ledger, and only test narrow SRX doctor-link confirmation rules after contradiction cleanup. Use direct CLI logs as the source of truth for the optimizer run. Do not start until exact invalidation approvals are recorded.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9b404598-6b0f-4b7f-a309-3b82af98a309",
+      "author": "ryan",
+      "text": "Execution gate: do not build the dataset or restart the optimizer until the user explicitly approves exact Prescriber invalidation IDs from plx-e61376. Planned restart baseline is 63892e5d-bacc-483c-89ff-429ff2131100. Exact optimizer hint to inject once unblocked: Prefer GPT 5.4 mini for any model-choice hypothesis. Do not retry GPT 5.4 nano. The best prior model result came from the gpt-5.4-mini line, and the later nano retry regressed. Keep RelevantWindowsTranscriptFilter, avoid full-context removal, and only test narrow SRX prescriber-link confirmation rules after contradiction cleanup.",
+      "created_at": "2026-04-23T19:52:57.649925Z"
+    },
+    {
+      "id": "220ad27b-5786-4605-94ca-4def22790890",
+      "author": "ryan",
+      "text": "Post-approval restart is now active. Plan for this run: after invalidating 305141716 (73c423c3-1ac0-4400-bcfe-82db678665b1) and 309504413 (43709332-f4e0-4338-b3e1-e59121b47c92), start a fresh Medication Review: Prescriber optimizer run for 180 days / 20 cycles from start version 63892e5d-bacc-483c-89ff-429ff2131100 with the recorded GPT 5.4 mini preference hint and without retrying the previously rejected structural directions.",
+      "created_at": "2026-04-23T20:38:11.838035Z"
+    },
+    {
+      "id": "9e635d38-ebef-4b77-898b-82c6942175b8",
+      "author": "ryan",
+      "text": "Launched fresh direct-CLI Prescriber optimizer after approved invalidations. Source-of-truth log: /tmp/prescriber-optimizer-20260423-163856.log. Procedure: cab4382c-09a9-4458-bfb0-cd6da0ca3fb5. Task: 1fee3c37-6853-4cdf-b67e-5fe8f7fffc05. Chat session: e510a6ab-cef7-4245-9020-a85a41c9e5d8. Launch parameters confirmed in task metadata: days=180, max_samples=200, max_iterations=20, start_version=63892e5d-bacc-483c-89ff-429ff2131100, hint=Prefer GPT 5.4 mini... Runtime is past Tactus startup and into live tool-driven execution.",
+      "created_at": "2026-04-23T20:41:10.241626Z"
+    },
+    {
+      "id": "50c950b9-fd16-4dcd-a190-99da2bda2683",
+      "author": "ryan",
+      "text": "Investigating Prescriber optimizer failure for procedure cab4382c-09a9-4458-bfb0-cd6da0ca3fb5. Starting from direct CLI/process evidence instead of dashboard state. Will capture the exact failing phase/exception from /tmp/prescriber-optimizer-20260423-163856.log, then correlate with procedure/task/chat records before deciding whether to patch, restart, or mark as transient.",
+      "created_at": "2026-04-23T20:57:41.945001Z"
+    },
+    {
+      "id": "bc2dc712-1854-466a-8348-fc2f33742c5a",
+      "author": "ryan",
+      "text": "Failure root cause captured from direct CLI log and persisted task state for procedure cab4382c-09a9-4458-bfb0-cd6da0ca3fb5. Exact error: Insufficient feedback data to build a regression dataset for version 63892e5d-bacc-483c-89ff-429ff2131100. Only 47 items available (need 200, minimum 50). Failure occurred during optimizer bootstrap/evaluation, before any iterations ran. This is a data-volume gate triggered after the two approved invalidations reduced the cleaned 180-day Prescriber pool below the optimizer minimum.",
+      "created_at": "2026-04-23T20:58:26.261843Z"
+    },
+    {
+      "id": "69068577-a4fe-4a0f-ba3e-35b9483e7851",
+      "author": "ryan",
+      "text": "Additional failure probe: widening Prescriber dataset build to 365 days and all available history still returns only 47 qualifying items for start version 63892e5d-bacc-483c-89ff-429ff2131100. This is not a narrow 180-day-window miss; the cleaned Prescriber feedback pool currently available to the dataset builder is intrinsically below the optimizer minimum. Any immediate restart with the same optimizer guard will fail again until either the minimum is lowered or the dataset source changes.",
+      "created_at": "2026-04-23T20:58:56.364395Z"
+    },
+    {
+      "id": "6a6e4695-7a26-4530-82ab-c39861d177f7",
+      "author": "ryan",
+      "text": "Root-cause mechanics: the optimizer sets min_acceptable = max(floor(max_samples / 4), 15). Our launch used max_samples=200, so the bootstrap required at least 50 regression rows. The cleaned Prescriber pool now has only 47 rows, so the run failed deterministically. Minimal no-code recovery: relaunch the same optimizer with max_samples <= 188 (47*4) so the 47-row cleaned dataset satisfies the built-in minimum. This preserves 180 days / 20 cycles / same start version / same hint.",
+      "created_at": "2026-04-23T20:59:20.334845Z"
+    },
+    {
+      "id": "a99d1669-fe28-4670-8cdc-6be83eab85bc",
+      "author": "ryan",
+      "text": "Continuing after the failed Prescriber restart. Investigating whether a 365-day window actually increases usable feedback rows or whether the bottleneck is version-specific dataset eligibility / label availability. Will avoid launching another optimizer until the data-volume path is clear and any still-running Prescriber optimizer process is accounted for.",
+      "created_at": "2026-04-23T21:17:49.592003Z"
+    },
+    {
+      "id": "bf64361c-d43a-42ed-b70d-666cf487b0c1",
+      "author": "ryan",
+      "text": "365-day/all-time probe complete. Prescriber does not gain usable volume beyond the current cleaned pool: dataset builder returns 47 qualifying rows in all tested modes (365 days with start version 63892e5d-bacc-483c-89ff-429ff2131100, 365 days without version pin, all-time with version pin, all-time without version pin). Feedback alignment at 365 days also reports total_found=47. Fresh 365-day contradictions report fetched 61 historical feedback items but only 45 were eligible after excluding 15 already-invalid items and 1 duplicate; it found 6 remaining contradictions across 3 topic groups. Conclusion: widening the time window does not solve the optimizer bootstrap failure. The remaining work is contradiction/feedback-quality triage on a small pool, not unlocking a larger dataset. Separate note: the older Prescriber optimizer process for procedure 26d26b35-3f96-434e-b7cd-9f14cb7dead0 is still alive locally and actively writing to /tmp/optimizer-prescriber-post-guard-restart-20260423.log even though the dashboard procedure record is marked STALLED by timeout scan, so direct CLI/process evidence and dashboard state are currently diverged for that run.",
+      "created_at": "2026-04-23T21:21:22.248474Z"
+    },
+    {
+      "id": "6efa0b27-b4f0-49c8-9c49-0cbe20791d38",
+      "author": "ryan",
+      "text": "User escalated from diagnosis to remediation. Next action: verify whether the older Prescriber process (procedure 26d26b35-3f96-434e-b7cd-9f14cb7dead0, local pid 95388) is still making trustworthy progress. If not, terminate it and relaunch a clean direct-CLI optimizer run with parameters that satisfy the regression-dataset bootstrap gate.",
+      "created_at": "2026-04-23T21:39:35.093847Z"
+    },
+    {
+      "id": "59898e63-c420-4421-81d8-549ce19f4010",
+      "author": "ryan",
+      "text": "The older Prescriber optimizer process (previously associated with procedure 26d26b35-3f96-434e-b7cd-9f14cb7dead0) is no longer alive locally, so there is no remaining process collision to clean up. Proceeding with a fresh direct-CLI relaunch using max_samples=188 so the current 47-row cleaned dataset satisfies the optimizer bootstrap minimum without any code change.",
+      "created_at": "2026-04-23T21:39:49.701643Z"
+    },
+    {
+      "id": "b4c0552f-af52-40c4-bc7e-949fe0f34f0b",
+      "author": "ryan",
+      "text": "Previous Prescriber optimizer launch cab4382c-09a9-4458-bfb0-cd6da0ca3fb5 failed at bootstrap because the cleaned regression pool has only 47 qualifying rows and max_samples=200 implies a hard minimum of 50 rows. Verified that widening to 365 days or all-time does not increase the usable pool beyond 47. Relaunched clean from direct CLI with days=365, max_samples=188, max_iterations=20, start_version=63892e5d-bacc-483c-89ff-429ff2131100, and the recorded GPT 5.4 mini hint. New live run: procedure=175ddd08-5d42-4519-828a-118015348800 task=f6a2c021-46a7-402b-9e61-2c21333e106c chat=f97ea77b-6429-4008-9829-dd91ef9d9db5 log=/tmp/prescriber-optimizer-relaunch-20260423-173949.log pid=54245. Direct CLI log shows the associated dataset was accepted at 47 rows (dataset 9ad2c963-125b-40ac-806f-c4ab6e7b5483), then the optimizer progressed into fresh baseline evaluation dispatch and root-cause analysis, which is past the prior failure point.",
+      "created_at": "2026-04-23T21:44:22.489112Z"
+    }
+  ],
+  "created_at": "2026-04-23T19:51:47.677766Z",
+  "updated_at": "2026-04-23T21:44:22.489112Z",
+  "closed_at": null,
+  "custom": {}
+}

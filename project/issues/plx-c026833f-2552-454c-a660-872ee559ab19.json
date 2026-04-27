@@ -1,0 +1,25 @@
+{
+  "id": "plx-c026833f-2552-454c-a660-872ee559ab19",
+  "title": "Stabilize evaluation-list loading state test",
+  "description": "Dashboard CI failed in score-evaluation-list loading skeleton assertion after recent loading-state work. Keep the intended sort/filter loading feedback deterministic so CI and UX agree.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7122f5c4-0abe-4552-9330-985163604ca5",
+      "author": "ryan",
+      "text": "Fixed by keeping score evaluation sort/filter loading feedback visible for a deterministic short window, matching the intended skeleton UX and stabilizing CI.",
+      "created_at": "2026-04-26T18:12:28.755180Z"
+    }
+  ],
+  "created_at": "2026-04-26T18:11:39.309221Z",
+  "updated_at": "2026-04-26T18:12:28.776206Z",
+  "closed_at": "2026-04-26T18:12:28.776206Z",
+  "custom": {}
+}

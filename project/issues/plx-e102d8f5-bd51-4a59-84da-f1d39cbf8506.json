@@ -10,9 +10,22 @@
   "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "3cd19b12-b622-47ad-a4d5-ba8ba0ab4b52",
+      "author": "ryan",
+      "text": "Investigating failed procedure 570b9c15-a15e-400b-a61c-3aec7cc1b928 from direct CLI log and task/procedure records before applying a fix and restart.",
+      "created_at": "2026-04-23T21:46:01.629678Z"
+    },
+    {
+      "id": "a7b7b0cf-7578-4bab-9bed-e814b5a6f2b8",
+      "author": "ryan",
+      "text": "Restarted Suco optimizer after stale-timeout fix. New procedure: 6e449ba6-e496-4718-8155-dcfbf7c72025. New task: e715e46e-6def-4f8b-a1f3-44917b14f9e8. Verifying it survives long evaluation phases without being marked STALLED for chat silence alone.",
+      "created_at": "2026-04-23T21:49:09.648968Z"
+    }
+  ],
   "created_at": "2026-04-23T12:05:42.001681Z",
-  "updated_at": "2026-04-23T12:05:51.137875Z",
+  "updated_at": "2026-04-23T21:49:09.648968Z",
   "closed_at": null,
   "custom": {}
 }

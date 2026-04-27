@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "92bc79c0-f98c-4ccb-a554-9aa94711e9a7",
+  "issue_id": "plx-f316fe78-65af-4d89-97f4-475d27ec9464",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-25T21:36:55.869Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement strict note source mapping: procedure notes from Procedure.description only; evaluation notes from evaluation.parameters.notes via EvaluationTaskData.parameters.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "UI: strict note-source mapping for score procedure/evaluation lists"
+  }
+}

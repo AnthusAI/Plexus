@@ -1,0 +1,49 @@
+{
+  "id": "plx-9e8215e2-a74a-4fbc-89b1-d21882454048",
+  "title": "Debug and fix cross-repo feedback score linkage for Appropriate Rebuttal- AI",
+  "description": "",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4c0861eb-480f-4d28-9934-40db52b8466b",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c83a3998-7b78-4ea9-90c1-96048ad4b438",
+      "author": "derek",
+      "text": "Started investigation. Scope: trace feedback capture in Call-Criteria-Python and feedback analysis/reporting in Plexus; verify score_id/score_name mapping path and isolate where mismap occurs.",
+      "created_at": "2026-04-24T17:47:35.231595102Z"
+    },
+    {
+      "id": "2ec277f7-9c84-434c-9150-16b41347d0a3",
+      "author": "derek",
+      "text": "Root cause candidate found in dashboard rendering: Score detail file selection in dashboard/components/ui/scorecard-evaluation.tsx prefers scoreIndex-derived filename (score-N-results.json). Backend sorts scores after generating files, so index-based lookup can bind a score to another score's detail file/comment set. Plan: prioritize score.indexed_items_file mapping, fallback to index only for legacy payloads.",
+      "created_at": "2026-04-24T17:50:23.647030114Z"
+    },
+    {
+      "id": "2909cb2c-a448-47c4-aad6-69106381d37c",
+      "author": "derek",
+      "text": "Implemented fix in dashboard/components/ui/scorecard-evaluation.tsx: detail-file resolution now prefers score.indexed_items_file (identity-based), and only falls back to scoreIndex filename for legacy payloads. This prevents comments/details from being sourced from another score when backend sorts score rows.",
+      "created_at": "2026-04-24T17:50:47.784282234Z"
+    },
+    {
+      "id": "f1922bf9-020d-41d7-bc9d-82a58f8cc0a7",
+      "author": "derek",
+      "text": "Implemented and merged visual mapping fix into develop. Root cause: index-based score detail file lookup could cross-wire comments after score sorting. Resolution: prioritize per-score indexed_items_file, keep index fallback for legacy payloads.",
+      "created_at": "2026-04-24T18:09:29.766950203Z"
+    },
+    {
+      "id": "8408053d-70e1-43ff-bf45-a331354e1738",
+      "author": "derek",
+      "text": "Completed and merged to develop via PR #205.",
+      "created_at": "2026-04-24T18:09:32.931103779Z"
+    }
+  ],
+  "created_at": "2026-04-24T17:47:33.063711111Z",
+  "updated_at": "2026-04-24T18:09:32.931103779Z",
+  "closed_at": "2026-04-24T18:09:32.918728396Z",
+  "custom": {}
+}

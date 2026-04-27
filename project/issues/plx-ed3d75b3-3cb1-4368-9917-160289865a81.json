@@ -1,0 +1,55 @@
+{
+  "id": "plx-ed3d75b3-3cb1-4368-9917-160289865a81",
+  "title": "Restore dual-baseline rendering for optimizer evaluation cards",
+  "description": "Cycle 2+ optimizer synthesis evaluations still store both baseline_evaluation_id and current_baseline_evaluation_id, but the dashboard evaluation/task card renders baseline information inconsistently after the first cycle.\n\nAcceptance criteria:\n- Evaluation cards use canonical baseline_evaluation_id and current_baseline_evaluation_id fields.\n- Later-cycle optimizer evaluations show both original baseline and current best baseline when both exist.\n- Regression coverage prevents future drift between stage evidence and evaluation-card baseline rendering.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "43e9953c-6a6f-46eb-9f1b-f1b7506190c2",
+      "author": "ryan",
+      "text": "[2026-04-23] Started implementation. Confirmed runtime/evaluation records still carry baseline_evaluation_id and current_baseline_evaluation_id for later-cycle synthesis evals; dashboard EvaluationTask is mixing stage-ref rendering with parameter.metadata parsing. Fix will canonicalize those baseline fields in the transformed evaluation/task data and restore dual-baseline rendering for cycle 2+ cards.",
+      "created_at": "2026-04-23T19:19:21.786178Z"
+    },
+    {
+      "id": "59a68e9b-83d1-4ac9-a50f-77e832816374",
+      "author": "ryan",
+      "text": "[2026-04-23] Implemented dashboard-side dual-baseline fix on develop. Canonicalized baseline refs by carrying baseline_evaluation_id/current_baseline_evaluation_id through transformEvaluation -> EvaluationCard -> EvaluationTask, removed EvaluationTask's metadata-parsing baseline source, and restored explicit Original baseline / Current best baseline detail rows. Validation: dashboard focused Jest regression passed (components/__tests__/EvaluationTask.memo.test.tsx, utils/data-operations.test.ts) and dashboard typecheck passed.",
+      "created_at": "2026-04-23T19:23:04.302043Z"
+    },
+    {
+      "id": "f90c72e3-48cb-4a05-92dc-519a00ea77d3",
+      "author": "ryan",
+      "text": "[2026-04-23] Continued investigation after user still reported a single visible baseline line. Confirmed additional adapters were dropping canonical baseline ids and patched ActivityDashboard, EvaluationToolOutput, and TaskDisplay. Current open question is whether the user-visible line is from the candidate-assessment stage evidence block or a different procedure-page renderer, so I am switching to direct UI inspection.",
+      "created_at": "2026-04-23T19:42:50.279230Z"
+    },
+    {
+      "id": "a74df125-f0d3-4eb2-9589-98e03aeafd26",
+      "author": "ryan",
+      "text": "Changed overlapping dual-baseline rendering to a vertical split at the same x-position: original baseline marker renders on the top half, current best baseline marker on the bottom half. This preserves true metric position while keeping both markers visible when baseline accuracies are identical.",
+      "created_at": "2026-04-23T19:51:22.307434Z"
+    },
+    {
+      "id": "e2c1d379-e0c4-46d5-bec6-944cfa01875a",
+      "author": "ryan",
+      "text": "Implemented the overlap rendering refinement: when original baseline and current best baseline land at the same x-position, the markers now split vertically at that position instead of shifting horizontally. Added a focused dashboard regression test for the identical-accuracy case.",
+      "created_at": "2026-04-23T20:17:19.221884Z"
+    },
+    {
+      "id": "003aa389-940a-438d-8ae9-63cb28fac534",
+      "author": "ryan",
+      "text": "Branch-cleanup note: the dashboard dual-baseline rendering fixes and overlap visualization refinement are part of the current dirty worktree on chore/med-review-guideline-scope-audit. This branch cleanup commit will preserve the canonical baseline-id pass-through, TaskDisplay/activity-dashboard adapter fixes, and the vertical-split overlapping baseline marker rendering before the next optimizer-behavior branch is created.",
+      "created_at": "2026-04-24T12:51:16.312554Z"
+    }
+  ],
+  "created_at": "2026-04-23T19:19:13.570564Z",
+  "updated_at": "2026-04-24T12:51:50.343424Z",
+  "closed_at": "2026-04-24T12:51:50.343424Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e5e10ee9-4742-4399-b3b7-d759910fb1fc",
+  "issue_id": "plx-8aa9b5ad-ca5a-4d8e-beb9-8d20faa18be8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T17:07:28.971Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Change score-level procedure/evaluation replacement panel slot from warning tint to bg-background and remove excessive outer padding. Keep only standard side and bottom spacing.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "priority": 2,
+    "status": "open",
+    "title": "Adjust score-level panel slot background and padding"
+  }
+}

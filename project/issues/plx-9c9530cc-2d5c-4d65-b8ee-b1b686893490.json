@@ -1,0 +1,139 @@
+{
+  "id": "plx-9c9530cc-2d5c-4d65-b8ee-b1b686893490",
+  "title": "Restart Medication Review optimizer procedures for Prescriber, Dosage, and Individual Confirmation",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5132c044-5912-4a64-b5d0-46dc452b1e0f",
+      "author": "ryan",
+      "text": "Restarted all three Medication Review optimizer procedures with the standard settings (days=180, max_samples=100, max_iterations=20). Prescriber: procedure 030e4295-3ba4-4fcb-8c86-14a85023b751 / task ca61c4dc-f463-4751-958c-0f2b3261a5ed. Dosage: procedure ca359007-779f-4cc3-98d4-b51981852d1e / task b433cfc2-8129-4fee-ab6a-4d846c4bf26f. Individual Confirmation: procedure 68ba350d-d2b0-4047-952c-6e9be064a28d / task 6620e2da-2552-4fee-bbcd-7575ab85e4e3. All three task records are RUNNING with the expected run_parameters and no immediate errorMessage.",
+      "created_at": "2026-04-24T05:05:54.989496Z"
+    },
+    {
+      "id": "3fad2b1c-3037-4542-b4ca-4e80136f40d7",
+      "author": "ryan",
+      "text": "Tracing the Medication Review overnight blocker to a shared optimizer/runtime bug: malformed tool-call args are being recorded into Tool.last_call(...), and the optimizer later crashes on direct .args.command reads. Implementing a writer-side normalization fix plus optimizer-side safe arg access, then all three runs will be restarted on the patched snapshot.",
+      "created_at": "2026-04-24T05:34:54.051942Z"
+    },
+    {
+      "id": "ff48079f-040c-4ffa-9ba4-fddf15c9eab7",
+      "author": "ryan",
+      "text": "Implemented tool-call arg normalization in the Lua agent runtime, replaced unsafe .args.* reads in the feedback optimizer with a safe helper, and passed focused regressions (30/30). Restarting Medication Review Prescriber, Dosage, and Individual Confirmation on the patched snapshot now.",
+      "created_at": "2026-04-24T05:40:57.787832Z"
+    },
+    {
+      "id": "7e76cba2-d62d-4406-948f-e3a5475e81a3",
+      "author": "ryan",
+      "text": "Restarted all three Medication Review optimizers on the patched snapshot. Prescriber: procedure dcaf93a5-da16-4b5d-896d-9bfb96216d55, task 2679a32f-88d9-4be7-a01a-91a3da2cbdde. Dosage: procedure 99e8a7d3-447b-4b0e-850f-9c0b73a9c5b3, task b82ac029-c504-4ca2-b43f-55709b8739aa. Individual Confirmation: procedure 5287fbae-d9d5-4b1b-b916-5bdc4065fd20, task b7788a08-312b-49d6-a0ac-8cb336369a20. Focused runtime/config tests are green. The previous function-object args crash has not recurred so far; Individual Confirmation is now progressing through baseline evaluation instead of dying in cycle 1.",
+      "created_at": "2026-04-24T05:45:01.645122Z"
+    },
+    {
+      "id": "22ee999c-ec93-4d4f-820c-33b0cabd6c1f",
+      "author": "ryan",
+      "text": "Found and fixed the cycle-2 Prescriber crash: the optimizer trunc() helper could byte-slice multibyte UTF-8 and manufacture invalid strings that later blew up in plexus_evaluation_run argument normalization. Updated feedback_alignment_optimizer.yaml to use utf8_clean() + UTF-8-safe string.sub only, added a regression test, and restarted all three Medication Review optimizers on the new snapshot. Prescriber: procedure 1b044d92-8813-4d1f-925b-267dab24a4bc, task bdbe113a-e7a6-4d9f-b6fa-7398a0b91a88. Dosage: procedure ee768779-4eb8-4627-ab3c-145d555326c6, task 36369cb3-da51-4967-845d-1f3cd087bd26. Individual Confirmation: procedure def29ab8-0dd2-455f-89d2-9b1950600646, task 6c0e55bb-01dd-44cf-a3cd-9ab19ae09816. Old malformed-args crash is gone; current watch target is cycle 2+ stability.",
+      "created_at": "2026-04-24T06:39:51.100010Z"
+    },
+    {
+      "id": "448fbeac-31fa-48b1-a409-c253392d165d",
+      "author": "ryan",
+      "text": "Added a second optimizer fix for Prescriber cycle-2 failure: the optimizer trunc() helper was byte-slicing multibyte UTF-8 and corrupting tool-call note strings. Replaced it with utf8_clean() + UTF-8-safe string.sub, added a regression, and restarted all three Medication Review runs again. New IDs: Prescriber procedure 1b044d92-8813-4d1f-925b-267dab24a4bc / task bdbe113a-e7a6-4d9f-b6fa-7398a0b91a88; Dosage procedure ee768779-4eb8-4627-ab3c-145d555326c6 / task 36369cb3-da51-4967-845d-1f3cd087bd26; Individual Confirmation procedure def29ab8-0dd2-455f-89d2-9b1950600646 / task 6c0e55bb-01dd-44cf-a3cd-9ab19ae09816. Also launched local watchdog /tmp/med_review_watchdog.py to poll every 5 minutes and relaunch any of the three if the process dies before cycle 10.",
+      "created_at": "2026-04-24T06:42:05.619347Z"
+    },
+    {
+      "id": "17bcf06d-5d95-445d-abc7-3607f31f50da",
+      "author": "ryan",
+      "text": "Tracing overnight Medication Review stability. Found new Individual Confirmation root cause: optimizer YAML legitimately depends on agent.clear_history(), agent.history:add/get/count_tokens(), and agent({message=...}), but AgentPrimitive does not implement that interface. Patching AgentPrimitive itself now so all three overnight runs stop relying on undefined behavior.",
+      "created_at": "2026-04-24T07:06:08.982783Z"
+    },
+    {
+      "id": "6ee06581-8c7b-49b7-91fd-d84ed81e185c",
+      "author": "ryan",
+      "text": "Patched AgentPrimitive to implement the Lua-facing optimizer contract directly: clear_history(), history:add/get/count_tokens, and callable agent({message=...}). This was the root cause of the new Individual Confirmation cycle-1 crash ('function' object has no attribute 'add'). Focused regressions passed (AgentPrimitive + optimizer config = 34 passed). Restarted all three Medication Review optimizers on fresh snapshots under a fresh watchdog. Current live watchdog PID: 92304. Active optimizer PIDs: Prescriber 91919, Dosage 91923, Individual Confirmation 91921. Current log files: /tmp/med-review-prescriber-utf8-fix-20260424.log, /tmp/med-review-dosage-utf8-fix-20260424.log, /tmp/med-review-individual-confirmation-utf8-fix-20260424.log.",
+      "created_at": "2026-04-24T07:13:59.954660Z"
+    },
+    {
+      "id": "1e18c464-f50f-4937-993e-66d50621dc55",
+      "author": "ryan",
+      "text": "Confirmed overnight blocker: Prescriber, Dosage, and Individual Confirmation all completed multi-cycle optimizer work and then failed at final task-output persistence. Shared error: task_output_storage cannot resolve the task-attachments bucket inside the CLI procedure runtime. Patching the shared bucket resolver now, then relaunching the three Medication Review procedures under the watchdog.",
+      "created_at": "2026-04-24T12:01:06.808Z"
+    },
+    {
+      "id": "6875bbd0-b314-43eb-81a1-9b16df7a66f5",
+      "author": "ryan",
+      "text": "Patched task_output_storage to resolve the task attachments bucket from dashboard/amplify_outputs.json when config/env do not provide it, and moved CommandTasks attachment uploads onto the same shared resolver. Focused storage/experiment-runner tests are now green. Relaunching Prescriber, Dosage, and Individual Confirmation on the patched snapshot now.",
+      "created_at": "2026-04-24T12:03:15.478434Z"
+    },
+    {
+      "id": "26c60d51-c3d8-40bd-8196-32056bb9fe5c",
+      "author": "ryan",
+      "text": "Branch-cleanup note: the optimizer runtime hardening work currently in the dirty worktree (agent primitive interface completion, malformed tool-call arg normalization, UTF-8-safe truncation, and related optimizer YAML guards) is being preserved on chore/med-review-guideline-scope-audit in one cleanup commit before the new plateau/escalation feature branch is cut.",
+      "created_at": "2026-04-24T12:51:16.327691Z"
+    },
+    {
+      "id": "5c7b54c8-6314-4da4-a6e7-6794b77406ee",
+      "author": "ryan",
+      "text": "Operational update: killed the lingering local Medication Review optimizer processes/watchdog, verified  works on preserved optimizer state, and am now continuing the plateau-stopped multi-cycle runs from their recorded cycle counts toward 10 total cycles from direct CLI.",
+      "created_at": "2026-04-24T13:09:30.605780Z"
+    },
+    {
+      "id": "dedc01a8-a153-4127-afd5-404e95a510a4",
+      "author": "ryan",
+      "text": "Continuation runs failed immediately because procedure continue/branch redispatches without restoring the original optimizer context. The optimizer startup expects params.score and params.scorecard, but resumed runs only had YAML defaults plus preserved state. Working fix: reconstruct continuation context from preserved state and baseline evaluation parameters, then pass that context explicitly on redispatch.",
+      "created_at": "2026-04-24T13:19:11.141673Z"
+    },
+    {
+      "id": "67d00939-3901-405a-8faf-cb1c3cc0db2e",
+      "author": "ryan",
+      "text": "Implementing the plateau-search inversion on the optimizer: keep the bold lane alive, remove plateau-based early stop, add reframe/full_rewrite plateau slots, and then launch a fresh Dosage optimizer on the new snapshot.",
+      "created_at": "2026-04-24T18:27:27.041720Z"
+    },
+    {
+      "id": "7b8cd953-b4fb-4e82-9ad4-37104eba3e60",
+      "author": "ryan",
+      "text": "Plateau inversion is now implemented and green in focused tests. Launching a fresh Medication Review: Dosage optimizer from the new snapshot so it uses the widened plateau search (recent_bold preserved, reframe/full_rewrite lanes added, no plateau-based early stop).",
+      "created_at": "2026-04-24T18:28:37.093100Z"
+    },
+    {
+      "id": "2b65d558-e89e-415c-9b42-e18f1fc34bb4",
+      "author": "ryan",
+      "text": "Landed optimizer plateau inversion work on the feature branch: no plateau-based early stop, no hypothesis-slot shrink, recent_bold preserved, and reframe/full_rewrite lanes added. Also launched a fresh Dosage optimizer on the new snapshot.",
+      "created_at": "2026-04-24T18:31:40.412629Z"
+    },
+    {
+      "id": "08cc7bc4-7e19-4589-a47c-26b698e312d8",
+      "author": "ryan",
+      "text": "Analyzing Medication Review: Prescriber and Medication Review: Individual Confirmation to identify the best optimizer-produced candidate versions versus current champions, then running fresh comparison evaluations before any promotion decision.",
+      "created_at": "2026-04-24T19:55:46.900716Z"
+    },
+    {
+      "id": "1aba44e5-bddf-462c-9495-1e59f52b55e4",
+      "author": "ryan",
+      "text": "Fresh champion-vs-candidate comparisons completed for Medication Review: Prescriber and Medication Review: Individual Confirmation. Best candidate versions confirmed as 3c2347f7-5cff-4cc0-b097-598ab8b00946 (Prescriber) and 6ac86d0f-f3d3-4693-b6a1-3efbca9f3ea5 (Individual Confirmation). Both candidates beat current champions on the associated-dataset accuracy comparison, and both are also ahead on the 180-day feedback comparison metrics.",
+      "created_at": "2026-04-24T20:19:22.545115Z"
+    },
+    {
+      "id": "4401cdc9-00e9-4dd0-8276-060aff528206",
+      "author": "ryan",
+      "text": "Re-reviewing recent Medication Review optimizer results to identify the strongest recent versions/evaluations for client-facing evidence, since newer Dosage evaluations appear to outperform the earlier comparison set.",
+      "created_at": "2026-04-24T20:54:31.455743Z"
+    },
+    {
+      "id": "0e8b4966-1e01-4964-a9f7-f87e2c941ab3",
+      "author": "ryan",
+      "text": "Selecting promotable Medication Review split-score versions and applying champion promotion where warranted, with client-facing evaluation URLs captured for each score.",
+      "created_at": "2026-04-24T21:08:59.492504Z"
+    }
+  ],
+  "created_at": "2026-04-24T05:03:37.133012Z",
+  "updated_at": "2026-04-24T21:08:59.492504Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-969edf2c-9a25-4a9d-9dca-dbc3bc97c0ae",
+  "title": "Show score-grid gauge from champion-version evaluation",
+  "description": "Scorecard score-grid gauges currently use the newest evaluation for the score, regardless of scoreVersionId. They should show the latest alignment metric for the current champion version only.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b7d796f0-2a31-4ce1-b534-0d31ef7dfc66",
+      "author": "ryan",
+      "text": "Fixed the scorecard score-grid metric source. Grid score cards now carry championVersionId, query listEvaluationByScoreVersionIdAndCreatedAt for the champion version, and render the Alignment metric explicitly instead of using the latest score-wide evaluation.",
+      "created_at": "2026-04-26T18:49:19.121950Z"
+    }
+  ],
+  "created_at": "2026-04-26T18:48:08.002476Z",
+  "updated_at": "2026-04-26T18:49:19.135496Z",
+  "closed_at": "2026-04-26T18:49:19.135496Z",
+  "custom": {}
+}

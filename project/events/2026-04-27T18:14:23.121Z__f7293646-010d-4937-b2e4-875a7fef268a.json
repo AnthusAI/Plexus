@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f7293646-010d-4937-b2e4-875a7fef268a",
+  "issue_id": "plx-fb52fc85-7e60-4999-a558-96e3b5bae143",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-27T18:14:23.121Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Star important score versions"
+  }
+}

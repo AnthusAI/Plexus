@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "65747984-6adc-4320-8f2c-41ce0972779d",
+  "issue_id": "plx-ed3d75b3-3cb1-4368-9917-160289865a81",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T19:19:13.573Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Cycle 2+ optimizer synthesis evaluations still store both baseline_evaluation_id and current_baseline_evaluation_id, but the dashboard evaluation/task card renders baseline information inconsistently after the first cycle.\n\nAcceptance criteria:\n- Evaluation cards use canonical baseline_evaluation_id and current_baseline_evaluation_id fields.\n- Later-cycle optimizer evaluations show both original baseline and current best baseline when both exist.\n- Regression coverage prevents future drift between stage evidence and evaluation-card baseline rendering.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Restore dual-baseline rendering for optimizer evaluation cards"
+  }
+}

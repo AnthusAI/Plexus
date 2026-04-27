@@ -1,0 +1,25 @@
+{
+  "id": "plx-76a5e627-1de1-4e20-827b-a5a3b0bda85f",
+  "title": "Clarify Dosage current-use rubric and promote revised champion",
+  "description": "",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-3d9714df-787a-44bc-8908-61108ced4042",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "67fdea5e-f54c-4f8a-bc59-31377b5dd536",
+      "author": "ryan",
+      "text": "Implemented Dosage rubric clarification in a clean feature worktree and pushed new score version e389ad22-d42d-4124-9201-2fcf2d264fe9. Clarification added: meds the customer says are not currently using / not in the pill box / not part of the current regimen are excluded from the SRX miss count; customer uncertainty does not count as successful dosage confirmation. Validation feedback evaluation 62af71ce-a7a6-4869-b2dc-8030391291b3 is materially weaker than the prior cleaned-slice champion (current run at 52/52 items, Accuracy 78.8462, Alignment 0.5783265757464061 vs prior 82.6923 / 0.653974121996303), but champion was manually promoted per requested rubric decision. New live champion: e389ad22-d42d-4124-9201-2fcf2d264fe9. Restarted Dosage optimizer with max-iterations 10 as procedure 4647ca6d-2624-4c01-9177-7c7403ed5920, task 01c4f711-b7fd-4b4d-aaef-2939ff08bae8, logging to /tmp/optimizer-dosage-current-use-20260423-10cycle.log.",
+      "created_at": "2026-04-23T21:23:38.184735Z"
+    }
+  ],
+  "created_at": "2026-04-23T21:03:10.120093Z",
+  "updated_at": "2026-04-23T21:23:38.184735Z",
+  "closed_at": null,
+  "custom": {}
+}

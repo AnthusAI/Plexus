@@ -89,6 +89,24 @@ def reset_checkpoints(client, procedure_id: str, after_step: Optional[str] = Non
                 status: "PENDING"
             }) {
                 id
+                name
+                description
+                status
+                featured
+                isTemplate
+                code
+                category
+                version
+                isDefault
+                parentProcedureId
+                waitingOnMessageId
+                metadata
+                createdAt
+                updatedAt
+                accountId
+                scorecardId
+                scoreId
+                scoreVersionId
             }
         }
     """
@@ -157,6 +175,24 @@ def reset_checkpoints_only(client, procedure_id: str) -> Dict[str, Any]:
                 status: "PENDING"
             }) {
                 id
+                name
+                description
+                status
+                featured
+                isTemplate
+                code
+                category
+                version
+                isDefault
+                parentProcedureId
+                waitingOnMessageId
+                metadata
+                createdAt
+                updatedAt
+                accountId
+                scorecardId
+                scoreId
+                scoreVersionId
             }
         }
     """

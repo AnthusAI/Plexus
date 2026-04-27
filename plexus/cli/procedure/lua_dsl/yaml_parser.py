@@ -45,6 +45,7 @@ class ProcedureYAMLParser:
         ProcedureYAMLParser._validate_required_fields(config)
 
         # Validate specific sections
+        ProcedureYAMLParser._validate_no_removed_graphnode_api(config)
         ProcedureYAMLParser._validate_params(config.get('params', {}))
         ProcedureYAMLParser._validate_outputs(config.get('outputs', {}))
         ProcedureYAMLParser._validate_agents(config.get('agents', {}))
@@ -52,6 +53,21 @@ class ProcedureYAMLParser:
 
         logger.info(f"Successfully parsed procedure: {config.get('name')}")
         return config
+
+    @staticmethod
+    def _validate_no_removed_graphnode_api(config: Dict[str, Any]) -> None:
+        """Reject removed node-backed procedure APIs."""
+        workflow = config.get('workflow')
+        if isinstance(workflow, str) and (
+            'GraphNode' in workflow
+            or 'Session.load_from_node' in workflow
+            or 'Session.save_to_node' in workflow
+        ):
+            raise ProcedureConfigError(
+                "Procedure YAML references removed GraphNode APIs. "
+                "GraphNode and node-backed session persistence are not supported; "
+                "use State, Checkpoint, Procedure, and attachment-backed procedure metadata instead."
+            )
 
     @staticmethod
     def _validate_required_fields(config: Dict[str, Any]) -> None:

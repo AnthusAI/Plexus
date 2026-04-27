@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d88c45f5-deaf-4f99-93ed-68c2c1c3f193",
+  "issue_id": "plx-ecc8f01b-7a4a-465e-bc7e-404a76723b97",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T18:35:15.238Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Procedure cards in score/version procedure lists load without a toast now, but the segmented progress bar still only shows the generic completed segment instead of actual task stages. Trace ProcedureTask's expected stage shape and fix the score procedure adapter.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Restore ProcedureTask segmented stages in score version lists"
+  }
+}

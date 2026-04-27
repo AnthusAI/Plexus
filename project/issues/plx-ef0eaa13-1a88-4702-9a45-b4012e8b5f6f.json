@@ -1,0 +1,25 @@
+{
+  "id": "plx-ef0eaa13-1a88-4702-9a45-b4012e8b5f6f",
+  "title": "Fix version procedure loading toast",
+  "description": "Selecting Procedures for a score version can show a Failed to load procedures toast without useful console detail. Diagnose and fix the version-scoped procedure loading path so it loads reliably and reports actionable errors.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8c38d311-99f1-41f4-bac2-23020854a1d1",
+      "author": "ryan",
+      "text": "Fixed by removing the invalid nested Procedure.task query. Procedures remain task-backed through Task.target, so the score procedure workbench now queries Procedure records and Task records separately, then hydrates procedure cards by matching procedure/run/<id> or procedure/<id>. Regression test covers stage/status propagation through that path.",
+      "created_at": "2026-04-26T18:18:45.056598Z"
+    }
+  ],
+  "created_at": "2026-04-26T18:16:21.238438Z",
+  "updated_at": "2026-04-26T18:18:45.080567Z",
+  "closed_at": "2026-04-26T18:18:45.080567Z",
+  "custom": {}
+}

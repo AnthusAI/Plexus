@@ -226,6 +226,24 @@ class LocalExecutionContext(ExecutionContext):
             mutation UpdateProcedureMetadata($id: ID!, $metadata: AWSJSON!) {
                 updateProcedure(input: {id: $id, metadata: $metadata}) {
                     id
+                    name
+                    description
+                    status
+                    featured
+                    isTemplate
+                    code
+                    category
+                    version
+                    isDefault
+                    parentProcedureId
+                    waitingOnMessageId
+                    metadata
+                    createdAt
+                    updatedAt
+                    accountId
+                    scorecardId
+                    scoreId
+                    scoreVersionId
                 }
             }
         """
@@ -252,6 +270,24 @@ class LocalExecutionContext(ExecutionContext):
                     waitingOnMessageId: $waitingOnMessageId
                 }) {
                     id
+                    name
+                    description
+                    status
+                    featured
+                    isTemplate
+                    code
+                    category
+                    version
+                    isDefault
+                    parentProcedureId
+                    waitingOnMessageId
+                    metadata
+                    createdAt
+                    updatedAt
+                    accountId
+                    scorecardId
+                    scoreId
+                    scoreVersionId
                 }
             }
         """

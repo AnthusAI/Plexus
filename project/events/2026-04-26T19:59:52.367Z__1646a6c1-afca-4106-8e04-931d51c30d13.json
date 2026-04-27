@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1646a6c1-afca-4106-8e04-931d51c30d13",
+  "issue_id": "plx-773f88c2-c984-49f5-9554-8226c2831b1d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T19:59:52.367Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update ProcedureTask cards to match EvaluationTask grid layout and show the current optimizer feedback accuracy evaluation live across score procedure lists and the procedures dashboard.\n\nBehavior:\n- Procedure cards show timestamp, duration, notes, status, task stages, and feedback accuracy bar in a consistent order.\n- Score-scoped and version-scoped procedure lists hydrate the current optimizer feedback evaluation and update it via realtime evaluation subscriptions.\n- Procedures dashboard uses the same presentational ProcedureTask data when optimizer artifacts are available.\n\nFeature: Live procedure feedback performance\nScenario: A procedure has a current optimizer feedback evaluation\nGiven a procedure card is shown for an optimizer run\nWhen the run manifest identifies the current accepted feedback evaluation\nThen the card shows that evaluation's accuracy progress bar and updates it when the evaluation changes.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "priority": 2,
+    "status": "open",
+    "title": "Show live procedure feedback performance on scorecards"
+  }
+}
