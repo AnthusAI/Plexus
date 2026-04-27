@@ -42,7 +42,7 @@ def test_handler_processes_cloud_targeted_insert(monkeypatch):
     calls = []
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(
         app,
         "process_console_message",
@@ -62,7 +62,7 @@ def test_handler_skips_local_target_when_cloud_worker_does_not_claim(monkeypatch
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: False)
 
     result = app.handler(
@@ -79,7 +79,7 @@ def test_handler_ignores_non_insert_records(monkeypatch):
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
 
     result = app.handler(
         {"Records": [_stream_record(event_name="MODIFY")]},
@@ -94,7 +94,7 @@ def test_handler_reports_partial_batch_failure_when_processing_raises(monkeypatc
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
 
     def fail_processing(*_args, **_kwargs):
         raise RuntimeError("boom")
@@ -112,7 +112,7 @@ def test_handler_skips_insert_without_new_image(monkeypatch):
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
 
     result = app.handler(
         {
