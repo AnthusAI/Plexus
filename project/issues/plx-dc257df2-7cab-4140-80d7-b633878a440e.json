@@ -1,0 +1,25 @@
+{
+  "id": "plx-dc257df2-7cab-4140-80d7-b633878a440e",
+  "title": "Replace Sonnet 4 and older Haiku analysis models with Haiku 4.5",
+  "description": "Hard-replace hard-coded Bedrock Sonnet 4 and older Claude 3 Haiku model IDs in report/RCA/evaluation analysis helper paths with Claude Haiku 4.5 (us.anthropic.claude-haiku-4-5-20251001-v1:0). Keep score YAML/runtime defaults and unrelated chat/optimizer defaults out of scope.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cab71a13-1431-451e-a697-62d3d57326a5",
+      "author": "ryan",
+      "text": "Implemented Haiku 4.5 replacement in a separate hotfix worktree. Replaced Sonnet 4 and older Claude 3 Haiku model IDs in report/RCA/evaluation analysis helper paths, added shared Bedrock model constant, renamed contradiction report Bedrock vote labels to haiku, and validated focused Python tests plus dashboard typecheck.",
+      "created_at": "2026-04-27T19:53:21.873023Z"
+    }
+  ],
+  "created_at": "2026-04-27T19:40:52.313691Z",
+  "updated_at": "2026-04-27T19:53:21.873023Z",
+  "closed_at": null,
+  "custom": {}
+}
