@@ -475,7 +475,6 @@ def versions(id: str, pinned_only: bool):
                     createdAt
                     updatedAt
                     isFeatured
-                    featuredKey
                     parentVersionId
                     note
                 }}
@@ -508,7 +507,7 @@ def versions(id: str, pinned_only: bool):
             return
         
         def is_pinned_version(version):
-            return version.get('featuredKey') == 'featured'
+            return version.get('isFeatured') == 'true'
 
         if pinned_only:
             versions = [version for version in versions if is_pinned_version(version)]
@@ -1365,8 +1364,7 @@ def push(scorecard: str, score: str, note: str):
                 'configuration': cleaned_yaml_content,
                 'note': note,
                 # Never auto-promote to champion via CLI push
-                'isFeatured': False,
-                'featuredKey': 'unfeatured'
+                'isFeatured': None
             }
         }
 
@@ -1751,7 +1749,6 @@ def _fetch_score_version_for_management(client, version_id: str) -> dict:
         configuration
         guidelines
         isFeatured
-        featuredKey
         note
         branch
         parentVersionId
@@ -1798,7 +1795,6 @@ def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, outpu
         id
         scoreId
         isFeatured
-        featuredKey
         updatedAt
       }
     }
@@ -1808,8 +1804,7 @@ def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, outpu
         {
             "input": {
                 "id": version_id,
-                "isFeatured": pinned,
-                "featuredKey": "featured" if pinned else "unfeatured",
+                "isFeatured": "true" if pinned else None,
                 "createdAt": version.get("createdAt"),
             }
         },
@@ -1819,7 +1814,7 @@ def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, outpu
         "score_id": context["score_id"],
         "score_name": context["score_name"],
         "version_id": updated.get("id") or version_id,
-        "pinned": updated.get("featuredKey") == "featured",
+        "pinned": updated.get("isFeatured") == "true",
     }
 
     if output == 'json':
