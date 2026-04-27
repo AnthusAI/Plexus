@@ -76,10 +76,22 @@
       "author": "ryan",
       "text": "Related version header cards implemented. The score-version route in the active dev server compiled and served successfully after mirroring the component changes. Full dashboard typecheck was started but stopped after ~90 seconds of no output to avoid leaving a long-running process; git diff --check passed.",
       "created_at": "2026-04-27T21:43:11.892280Z"
+    },
+    {
+      "id": "4b7f1faa-5d1d-4718-806d-0be91918aabf",
+      "author": "ryan",
+      "text": "Tweaking related ScoreVersion card presentation: put relationship label and timestamp on one line, and use the Lucide Link icon in normal text color for the open-version action.",
+      "created_at": "2026-04-27T21:53:41.697973Z"
+    },
+    {
+      "id": "8013feac-08f9-4eec-b432-28fc8b32e9b5",
+      "author": "ryan",
+      "text": "Adjusted related version card header: relationship label and related timestamp now render on one line, and the open-version action is a normal text-color Lucide Link icon.",
+      "created_at": "2026-04-27T21:54:11.331286Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T21:43:11.892280Z",
+  "updated_at": "2026-04-27T21:54:11.331286Z",
   "closed_at": null,
   "custom": {}
 }
