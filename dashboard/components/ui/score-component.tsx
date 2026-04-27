@@ -431,8 +431,8 @@ function RelatedScoreVersionCard({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="flex items-start justify-between gap-3 pl-2 pb-2">
-            <div className="min-w-0 flex-1 text-xs text-muted-foreground">
+          <div className="flex items-start justify-between gap-3 pb-2">
+            <div className="min-w-0 flex-1 text-sm text-muted-foreground">
               {relatedVersion?.note || (failedToLoad ? 'This related version could not be loaded.' : 'Loading related version details...')}
             </div>
             <Button
@@ -1621,7 +1621,7 @@ const DetailContent = React.memo(({
                     <div className="text-xs text-muted-foreground mb-2">
                       <Timestamp time={selectedVersion.createdAt} variant="relative" className="text-xs" />
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                       {selectedVersion.note || 'No note'}
                     </div>
                     {relatedVersionTargets.length > 0 && (
