@@ -40,6 +40,26 @@ def test_resolve_account_id_falls_back_to_client_resolver():
     assert account_id == "acct-fallback"
 
 
+@pytest.mark.asyncio
+async def test_start_session_reuses_explicit_console_session_from_context(monkeypatch):
+    client = Mock()
+    recorder = ProcedureChatRecorder(client, "builtin:console/chat")
+    monkeypatch.setattr(recorder, "_get_latest_sequence_number_for_session", lambda session_id: 7)
+
+    session_id = await recorder.start_session(
+        {
+            "account_id": "acct-console",
+            "chat_session_id": "session-console",
+        }
+    )
+
+    assert session_id == "session-console"
+    assert recorder.session_id == "session-console"
+    assert recorder.account_id == "acct-console"
+    assert recorder.sequence_number == 7
+    client.execute.assert_not_called()
+
+
 def test_get_latest_console_trigger_message_returns_chat_content():
     client = Mock()
     client.execute.side_effect = [
