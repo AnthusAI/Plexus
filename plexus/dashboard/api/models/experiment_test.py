@@ -37,12 +37,13 @@ class TestProcedure(unittest.TestCase):
         """Test that fields() returns the correct GraphQL fields."""
         fields = Procedure.fields()
         expected_fields = [
-            'id', 'featured', 'rootNodeId', 'createdAt', 'updatedAt',
+            'id', 'featured', 'createdAt', 'updatedAt',
             'accountId', 'scorecardId', 'scoreId'
         ]
         
         for field in expected_fields:
             self.assertIn(field, fields)
+        self.assertNotIn('rootNodeId', fields)
     
     def test_from_dict(self):
         """Test creating a Procedure from dictionary data."""

@@ -16,6 +16,7 @@ from plexus.rubric_memory import (
     EvidenceSnippet,
     LocalRubricMemoryCorpusResolver,
     LocalRubricMemorySource,
+    RubricAuthority,
     RubricMemoryPreparedCorpusManager,
     RubricMemoryContextProvider,
     RubricAuthorityResolver,
@@ -32,6 +33,7 @@ from plexus.rubric_memory import (
     SMEQuestionAnswerStatus,
     SMEQuestionGateAction,
     TactusRubricEvidenceSynthesizer,
+    TactusRubricMemorySMEQuestionGateSynthesizer,
     candidate_agenda_items_from_markdown,
     format_gated_sme_agenda,
     validate_rubric_memory_citations,
@@ -266,12 +268,34 @@ def test_tactus_synthesizer_rejects_finish_without_pack_json():
 
 
 def test_tactus_synthesizer_loads_configured_token_budget():
-    synthesizer = TactusRubricEvidenceSynthesizer(max_tokens=12000)
+    synthesizer = TactusRubricEvidenceSynthesizer(max_tokens=16000)
 
     tac_source = synthesizer._load_tac_source()
 
-    assert "max_tokens = 12000" in tac_source
+    assert "max_tokens = 16000" in tac_source
     assert "{{MAX_TOKENS}}" not in tac_source
+
+
+def test_tactus_synthesizer_accepts_control_characters_in_llm_json():
+    raw_text = '{"score_version_id":"version-1","rubric_reading":"line 1\nline 2"}'
+
+    parsed = json.loads(
+        TactusRubricEvidenceSynthesizer()._strip_json_fence(raw_text),
+        strict=False,
+    )
+
+    assert parsed["rubric_reading"] == "line 1\nline 2"
+
+
+def test_sme_gate_synthesizer_accepts_control_characters_in_llm_json():
+    raw_text = '{"items":[],"final_agenda_markdown":"line 1\nline 2"}'
+
+    parsed = json.loads(
+        TactusRubricMemorySMEQuestionGateSynthesizer()._strip_json_fence(raw_text),
+        strict=False,
+    )
+
+    assert parsed["final_agenda_markdown"] == "line 1\nline 2"
 
 
 def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
@@ -1094,6 +1118,101 @@ async def test_context_provider_records_prepared_corpus_and_query_plan_diagnosti
         "dosage verification",
         "current medication",
     ]
+
+
+@pytest.mark.asyncio
+async def test_context_provider_retrieves_item_context_without_synthesis(monkeypatch):
+    class _AuthorityResolver:
+        def __init__(self, _api_client):
+            pass
+
+        async def resolve(self, score_id):
+            assert score_id == "score-1"
+            return RubricAuthority(
+                score_version_id="score-version-1",
+                rubric_text="Official dosage rubric.",
+                score_code="classifier prompt",
+            )
+
+    class _DiagnosticRetriever:
+        def __init__(self):
+            self.requests = []
+            self.last_prepared_corpus = SimpleNamespace(
+                status="reused",
+                corpus_root="/tmp/prepared/corpus",
+                fingerprint="fingerprint-1",
+            )
+            self.last_query_plan = SimpleNamespace(
+                retrieval_phrases=["dosage verification"]
+            )
+
+        async def retrieve(self, request):
+            self.requests.append(request)
+            return [
+                _snippet(
+                    "SelectRx script says verify Medication Name, Dosage, Prescriber, Pharmacy, and Schedule.",
+                    source_uri="file:///kb/selectrx.md",
+                    scope_level="score",
+                    source_timestamp="2026-04-01T00:00:00",
+                )
+            ]
+
+    retriever = _DiagnosticRetriever()
+    created_retrievers = []
+
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.RubricAuthorityResolver",
+        _AuthorityResolver,
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_local_score",
+        lambda **_kwargs: created_retrievers.append(retriever) or retriever,
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.RubricEvidencePackService",
+        lambda **_kwargs: pytest.fail("retrieval-only context must not build evidence packs"),
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.TactusRubricEvidenceSynthesizer",
+        lambda: pytest.fail("retrieval-only context must not run Tactus synthesis"),
+    )
+
+    contexts = await RubricMemoryContextProvider(api_client=object()).retrieve_for_score_items(
+        scorecard_identifier="Scorecard A",
+        score_identifier="Medication Review: Dosage",
+        score_id="score-1",
+        item_contexts=[
+            {
+                "key": "item-1",
+                "model_value": "No",
+                "model_explanation": "Missing dosage.",
+                "feedback_value": "Yes",
+                "feedback_comment": "The dosage was verified.",
+            },
+            {
+                "key": "item-2",
+                "model_value": "Yes",
+                "model_explanation": "Dosage verified.",
+                "feedback_value": "No",
+                "feedback_comment": "Multiple meds lacked dosage.",
+            },
+        ],
+    )
+
+    assert len(created_retrievers) == 1
+    assert len(retriever.requests) == 2
+    assert set(contexts) == {"item-1", "item-2"}
+    context = contexts["item-1"]
+    assert context.machine_context["context_kind"] == "retrieval_only"
+    assert context.machine_context["evidence_counts"]["score"] == 1
+    assert "SelectRx script" in context.markdown_context
+    assert any(citation.id.startswith("rubric:") for citation in context.citation_index)
+    assert any(citation.id.startswith("evidence:01:") for citation in context.citation_index)
+    diagnostics_by_kind = {
+        diagnostic["kind"]: diagnostic for diagnostic in context.diagnostics
+    }
+    assert diagnostics_by_kind["prepared_corpus"]["status"] == "reused"
+    assert diagnostics_by_kind["query_plan"]["generated_phrase_count"] == 1
 
 
 @pytest.mark.asyncio
