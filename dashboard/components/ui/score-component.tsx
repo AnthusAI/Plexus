@@ -431,20 +431,20 @@ function RelatedScoreVersionCard({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="px-2 pb-2 space-y-2">
-            <div className="text-xs text-muted-foreground">
+          <div className="flex items-start justify-between gap-3 px-2 pb-2">
+            <div className="min-w-0 flex-1 text-xs text-muted-foreground">
               {relatedVersion?.note || (failedToLoad ? 'This related version could not be loaded.' : 'Loading related version details...')}
             </div>
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              className="h-8"
+              className="h-6 shrink-0 px-2 text-xs"
               disabled={!relatedVersion}
               onClick={() => relatedVersion && onCompare?.(relatedVersion.id, currentVersion.id)}
             >
-              <GitCompareArrows className="mr-2 h-4 w-4" />
-              Compare with this version
+              <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
+              Compare
             </Button>
           </div>
         </CollapsibleContent>
