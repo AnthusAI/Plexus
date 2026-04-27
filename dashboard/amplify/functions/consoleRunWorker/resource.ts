@@ -9,6 +9,7 @@ interface ConsoleRunWorkerStackProps extends StackProps {
   plexusApiUrl?: string;
   plexusApiKey?: string;
   workerImageUri?: string;
+  environmentName?: string;
 }
 
 interface ParsedEcrImageUri {
@@ -61,12 +62,15 @@ export class ConsoleRunWorkerStack extends Stack {
 
   constructor(scope: Construct, id: string, props: ConsoleRunWorkerStackProps = {}) {
     super(scope, id, props);
+    const environmentName = (props.environmentName || "staging").toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
     this.deadLetterQueue = new sqs.Queue(this, "ConsoleRunWorkerDlq", {
+      queueName: `plexus-console-run-worker-${environmentName}-dlq`,
       retentionPeriod: Duration.days(14),
     });
 
     this.queue = new sqs.Queue(this, "ConsoleRunWorkerQueue", {
+      queueName: `plexus-console-run-worker-${environmentName}-queue`,
       visibilityTimeout: Duration.minutes(15),
       retentionPeriod: Duration.days(4),
       deadLetterQueue: {
