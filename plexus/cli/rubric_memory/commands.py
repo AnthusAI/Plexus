@@ -52,5 +52,9 @@ def prewarm(
     click.echo(f"prepared_corpus_path: {prepared.corpus_root}")
     click.echo(f"manifest_path: {prepared.manifest_path}")
     click.echo(f"source_file_count: {prepared.source_file_count}")
+    for source in paths.sources:
+        click.echo(f"included_knowledge_base[{source.scope_level}]: {source.root}")
     click.echo(f"scorecard_knowledge_base: {paths.scorecard_knowledge_base}")
+    for prefix_knowledge_base in paths.prefix_knowledge_bases:
+        click.echo(f"prefix_knowledge_base: {prefix_knowledge_base}")
     click.echo(f"score_knowledge_base: {paths.score_knowledge_base}")

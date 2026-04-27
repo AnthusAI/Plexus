@@ -145,9 +145,11 @@ class RubricEvidencePackService:
         normalized = scope_level.strip().lower().replace("_", "-")
         if normalized in {"score", "score-specific", "score-local"}:
             return 0
-        if normalized in {"scorecard", "scorecard-shared", "scorecard-level"}:
+        if normalized in {"prefix", "score-prefix", "score-family"}:
             return 1
-        return 2
+        if normalized in {"scorecard", "scorecard-shared", "scorecard-level"}:
+            return 2
+        return 3
 
     def _authority_rank(self, authority_level: str) -> int:
         normalized = authority_level.strip().lower().replace("_", "-")
@@ -193,10 +195,18 @@ class RubricEvidencePackService:
         score_scope_count = sum(
             1 for snippet in evidence if self._scope_rank(snippet.scope_level) == 0
         )
-        scorecard_scope_count = sum(
+        prefix_scope_count = sum(
             1 for snippet in evidence if self._scope_rank(snippet.scope_level) == 1
         )
-        unknown_scope_count = len(evidence) - score_scope_count - scorecard_scope_count
+        scorecard_scope_count = sum(
+            1 for snippet in evidence if self._scope_rank(snippet.scope_level) == 2
+        )
+        unknown_scope_count = (
+            len(evidence)
+            - score_scope_count
+            - prefix_scope_count
+            - scorecard_scope_count
+        )
         high_authority_count = sum(
             1 for snippet in evidence if self._authority_rank(snippet.authority_level) == 0
         )
@@ -220,6 +230,7 @@ class RubricEvidencePackService:
             score_version_id=score_version_id,
             total_evidence_count=len(evidence),
             score_scope_evidence_count=score_scope_count,
+            prefix_scope_evidence_count=prefix_scope_count,
             scorecard_scope_evidence_count=scorecard_scope_count,
             unknown_scope_evidence_count=unknown_scope_count,
             high_authority_evidence_count=high_authority_count,
@@ -229,6 +240,7 @@ class RubricEvidencePackService:
             suggested_confidence=self._suggest_confidence(
                 total_count=len(evidence),
                 score_scope_count=score_scope_count,
+                prefix_scope_count=prefix_scope_count,
                 scorecard_scope_count=scorecard_scope_count,
                 chronological_count=chronological_count,
             ),
@@ -239,6 +251,7 @@ class RubricEvidencePackService:
         *,
         total_count: int,
         score_scope_count: int,
+        prefix_scope_count: int,
         scorecard_scope_count: int,
         chronological_count: int,
     ) -> ConfidenceLevel:
@@ -247,7 +260,7 @@ class RubricEvidencePackService:
         if score_scope_count == 0:
             return (
                 ConfidenceLevel.MEDIUM
-                if scorecard_scope_count >= 2
+                if prefix_scope_count >= 1 or scorecard_scope_count >= 2
                 else ConfidenceLevel.LOW
             )
         if total_count >= 3 and chronological_count >= 2:
