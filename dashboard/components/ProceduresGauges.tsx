@@ -14,21 +14,21 @@ type ProceduresChartPoint = {
 
 // Configuration for procedures-specific gauges.
 const proceduresGaugesConfig: BaseGaugesConfig = {
-  // Use grid layout to match ItemsGauges pattern
+  // Match EvaluationTasksGauges: two gauges side-by-side with the histogram filling the remaining space.
   layout: 'grid',
   gridCols: {
-    base: 1,
-    sm: 2,
-    md: 3,
-    lg: 4,
-    xl: 5
+    base: 2,
+    sm: 3,
+    md: 4,
+    lg: 5,
+    xl: 6
   },
   chartSpan: {
-    base: 1,
+    base: 2,
     sm: 1,
-    md: 1,
-    lg: 2,
-    xl: 3
+    md: 2,
+    lg: 3,
+    xl: 4
   },
   
   gauges: [
@@ -108,17 +108,23 @@ export function ProceduresGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: ProceduresGaugesProps) {
+  const [timeRange, setTimeRange] = React.useState<{ start: Date; end: Date; period: 'hour' | 'day' | 'week' } | null>(null)
+
   // Use procedures and evaluations metrics for the Procedures dashboard.
   const { 
     metrics: proceduresMetrics, 
     isLoading: isProceduresLoading, 
     error: proceduresError 
-  } = useProceduresMetrics()
+  } = useProceduresMetrics({
+    timeRange: timeRange || undefined
+  })
   const {
     metrics: evaluationsMetrics,
     isLoading: isEvaluationsLoading,
     error: evaluationsError
-  } = useEvaluationsMetrics()
+  } = useEvaluationsMetrics({
+    timeRange: timeRange || undefined
+  })
 
   const chartDataByTime = new Map<string, ProceduresChartPoint>()
 
@@ -179,6 +185,8 @@ export function ProceduresGauges({
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
       onErrorClick={onErrorClick}
+      enableTimeNavigation={true}
+      onTimeRangeChange={setTimeRange}
     />
   )
 }
