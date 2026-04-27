@@ -2,10 +2,11 @@
 
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { Copy, ExternalLink } from 'lucide-react'
+import { Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import EvaluationTask, { type EvaluationTaskData } from '@/components/EvaluationTask'
 import { cn } from '@/lib/utils'
 import {
@@ -518,22 +519,38 @@ export function ScoreEvaluationList({
                   data: toEvaluationTaskData(evaluation),
                 }}
                 controlButtons={
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button variant="secondary" size="sm" asChild>
-                      <a href={`/lab/evaluations/${evaluation.id}`} target="_blank" rel="noreferrer">
-                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        Open
-                      </a>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void copyText(`/lab/evaluations/${evaluation.id}`, 'Evaluation path copied')}
-                    >
-                      <Copy className="mr-2 h-3.5 w-3.5" />
-                      Path
-                    </Button>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-md bg-border"
+                        aria-label="More options"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <a href={`/lab/evaluations/${evaluation.id}`} target="_blank" rel="noreferrer">
+                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                          Open evaluation
+                        </a>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => void copyText(`/lab/evaluations/${evaluation.id}`, 'Evaluation path copied')}
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy evaluation path
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => void copyText(evaluation.id, 'Evaluation ID copied')}
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy evaluation ID
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 }
               />
             </div>
