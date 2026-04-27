@@ -20,17 +20,26 @@ import { ProceduresDashboardSkeleton } from "@/components/loading-skeleton"
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
 import { useInView } from "react-intersection-observer"
 import {
+  EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  evaluationToScoreEvaluationView,
+  feedbackEvaluationSummaryFromView,
+  hydrateProcedureRunsFeedbackEvaluations,
   PROCEDURE_CARD_FIELDS,
   PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
   PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
   procedureIdFromTaskTarget,
+  procedureToOptimizerRunView,
   TASK_CARD_FIELDS,
+  type ProcedureFeedbackEvaluationSummary,
 } from "@/components/ui/optimizer-results-utils"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
 type ProcedureWithTask = Procedure & {
   task?: Task | null
+  feedbackEvaluationSummary?: ProcedureFeedbackEvaluationSummary | null
 }
 
 const PROCEDURE_PAGE_SIZE = 25
@@ -87,6 +96,22 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const hasLoadedProceduresOnceRef = useRef(false)
   const procedureTaskMapRef = useRef<Map<string, Task>>(new Map())
   const { ref: sentinelRef, inView } = useInView({ threshold: 0 })
+
+  const hydrateProcedurePerformanceSummaries = useCallback(async (
+    procedureItems: ProcedureWithTask[]
+  ): Promise<ProcedureWithTask[]> => {
+    const runs = await Promise.all(
+      procedureItems.map((procedure) => procedureToOptimizerRunView(procedure, procedure.task ?? null))
+    )
+    const hydratedRuns = await hydrateProcedureRunsFeedbackEvaluations(runs)
+    const summariesByProcedureId = new Map(
+      hydratedRuns.map((run) => [run.procedureId, run.feedbackEvaluationSummary ?? null])
+    )
+    return procedureItems.map((procedure) => ({
+      ...procedure,
+      feedbackEvaluationSummary: summariesByProcedureId.get(procedure.id) ?? null,
+    }))
+  }, [])
 
   // All hooks must be at the top before any conditional returns
   const handleSelectProcedure = useCallback((id: string | null) => {
@@ -191,6 +216,19 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setIsInitialLoading(false)
       setIsFetchingProcedures(false)
       hasLoadedProceduresOnceRef.current = true
+      void hydrateProcedurePerformanceSummaries(firstPageWithoutTasks).then((hydrated) => {
+        if (requestId !== loadRequestIdRef.current) return
+        setProcedures((previous) =>
+          sortProceduresByStartTime(
+            previous.map((procedure) => {
+              const hydratedProcedure = hydrated.find((item) => item.id === procedure.id)
+              return hydratedProcedure
+                ? { ...procedure, feedbackEvaluationSummary: hydratedProcedure.feedbackEvaluationSummary ?? null }
+                : procedure
+            })
+          )
+        )
+      })
 
       // Phase B: hydrate task/status data in background without blocking rendered cards
       setIsHydratingTasks(true)
@@ -231,12 +269,24 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
         procedureTaskMapRef.current = procedureTaskMap
 
+        const proceduresWithTasks = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt?.items
+          ? firstPageItems.map((procedure: Procedure) => ({
+              ...procedure,
+              task: procedureTaskMap.get(procedure.id) || null,
+            }))
+          : []
+        const hydratedProceduresWithTasks = await hydrateProcedurePerformanceSummaries(proceduresWithTasks)
+
         setProcedures(prev =>
           sortProceduresByStartTime(
-            prev.map(procedure => ({
-              ...procedure,
-              task: procedureTaskMap.get(procedure.id) || null
-            }))
+            prev.map(procedure => {
+              const hydratedProcedure = hydratedProceduresWithTasks.find((item) => item.id === procedure.id)
+              return {
+                ...procedure,
+                task: procedureTaskMap.get(procedure.id) || null,
+                feedbackEvaluationSummary: hydratedProcedure?.feedbackEvaluationSummary ?? procedure.feedbackEvaluationSummary ?? null,
+              }
+            })
           )
         )
 
@@ -260,7 +310,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       setIsFetchingProcedures(false)
       setIsHydratingTasks(false)
     }
-  }, [selectedAccount?.id, isLoadingAccounts])
+  }, [hydrateProcedurePerformanceSummaries, selectedAccount?.id, isLoadingAccounts])
 
   const loadMoreProcedures = useCallback(async () => {
     if (!selectedAccount?.id || !nextToken || isLoadingMore) return
@@ -303,8 +353,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         ...procedure,
         task: taskMap.get(procedure.id) ?? null
       }))
+      const hydratedMerged = await hydrateProcedurePerformanceSummaries(merged)
 
-      setProcedures(prev => sortProceduresByStartTime([...prev, ...merged]))
+      setProcedures(prev => sortProceduresByStartTime([...prev, ...hydratedMerged]))
       setNextToken(newNextToken)
       setHasMore(!!newNextToken)
     } catch (err) {
@@ -312,7 +363,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     } finally {
       setIsLoadingMore(false)
     }
-  }, [selectedAccount?.id, nextToken, isLoadingMore])
+  }, [hydrateProcedurePerformanceSummaries, selectedAccount?.id, nextToken, isLoadingMore])
 
   useEffect(() => {
     loadProcedures()
@@ -423,10 +474,19 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         next: ({ data }: { data?: { onCreateProcedure: any } }) => {
           const procedure = data?.onCreateProcedure;
           if (!procedure || procedure.accountId !== accountId) return;
+          const procedureWithTask = { ...procedure, task: null } as ProcedureWithTask
           setProcedures(prev => {
             if (prev.some(p => p.id === procedure.id)) return prev;
-            return sortProceduresByStartTime([{ ...procedure, task: null }, ...prev]);
+            return sortProceduresByStartTime([procedureWithTask, ...prev]);
           });
+          void hydrateProcedurePerformanceSummaries([procedureWithTask]).then(([hydratedProcedure]) => {
+            if (!hydratedProcedure) return
+            setProcedures(prev =>
+              sortProceduresByStartTime(
+                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
+              )
+            )
+          })
         },
         error: (error: Error) => console.error('Error in create procedure subscription:', error)
       });
@@ -442,11 +502,24 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         next: ({ data }: { data?: { onUpdateProcedure: any } }) => {
           const updated = data?.onUpdateProcedure;
           if (!updated || updated.accountId !== accountId) return;
+          let existingTask: Task | null | undefined = null
           setProcedures(prev =>
             sortProceduresByStartTime(
-              prev.map(p => p.id === updated.id ? { ...p, ...updated } : p)
+              prev.map(p => {
+                if (p.id !== updated.id) return p
+                existingTask = p.task
+                return { ...p, ...updated, task: p.task }
+              })
             )
           );
+          void hydrateProcedurePerformanceSummaries([{ ...updated, task: existingTask ?? null } as ProcedureWithTask]).then(([hydratedProcedure]) => {
+            if (!hydratedProcedure) return
+            setProcedures(prev =>
+              sortProceduresByStartTime(
+                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
+              )
+            )
+          })
         },
         error: (error: Error) => console.error('Error in update procedure subscription:', error)
       });
@@ -455,12 +528,80 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       console.error('Failed to set up update procedure subscription:', error);
     }
 
+    const upsertEvaluationSummary = (rawEvaluation: any) => {
+      if (!rawEvaluation?.id) return
+      const summary = feedbackEvaluationSummaryFromView(evaluationToScoreEvaluationView(rawEvaluation))
+      if (!summary) return
+      setProcedures(prev =>
+        prev.map(procedure =>
+          procedure.feedbackEvaluationSummary?.id === summary.id
+            ? { ...procedure, feedbackEvaluationSummary: summary }
+            : procedure
+        )
+      )
+    }
+
+    try {
+      const evaluationCreateResult = getAmplifyClient().graphql({
+        query: EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe?: Function }
+      if (typeof evaluationCreateResult.subscribe === 'function') {
+        const evaluationCreateSub = evaluationCreateResult.subscribe({
+          next: ({ data }: { data?: { onCreateEvaluation: any } }) => upsertEvaluationSummary(data?.onCreateEvaluation),
+          error: (error: Error) => console.error('Error in create evaluation subscription:', error)
+        })
+        subscriptionHandlers.push(evaluationCreateSub)
+      }
+    } catch (error) {
+      console.error('Failed to set up create evaluation subscription:', error)
+    }
+
+    try {
+      const evaluationUpdateResult = getAmplifyClient().graphql({
+        query: EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe?: Function }
+      if (typeof evaluationUpdateResult.subscribe === 'function') {
+        const evaluationUpdateSub = evaluationUpdateResult.subscribe({
+          next: ({ data }: { data?: { onUpdateEvaluation: any } }) => upsertEvaluationSummary(data?.onUpdateEvaluation),
+          error: (error: Error) => console.error('Error in update evaluation subscription:', error)
+        })
+        subscriptionHandlers.push(evaluationUpdateSub)
+      }
+    } catch (error) {
+      console.error('Failed to set up update evaluation subscription:', error)
+    }
+
+    try {
+      const evaluationDeleteResult = getAmplifyClient().graphql({
+        query: EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe?: Function }
+      if (typeof evaluationDeleteResult.subscribe === 'function') {
+        const evaluationDeleteSub = evaluationDeleteResult.subscribe({
+          next: ({ data }: { data?: { onDeleteEvaluation: any } }) => {
+            const deleted = data?.onDeleteEvaluation
+            if (!deleted?.id) return
+            setProcedures(prev =>
+              prev.map(procedure =>
+                procedure.feedbackEvaluationSummary?.id === deleted.id
+                  ? { ...procedure, feedbackEvaluationSummary: null }
+                  : procedure
+              )
+            )
+          },
+          error: (error: Error) => console.error('Error in delete evaluation subscription:', error)
+        })
+        subscriptionHandlers.push(evaluationDeleteSub)
+      }
+    } catch (error) {
+      console.error('Failed to set up delete evaluation subscription:', error)
+    }
+
     return () => {
       subscriptionHandlers.forEach(sub => {
         try { sub.unsubscribe(); } catch {}
       });
     };
-  }, [selectedAccount?.id]);
+  }, [hydrateProcedurePerformanceSummaries, selectedAccount?.id]);
 
   const handleEditProcedure = useCallback((procedureId: string) => {
     console.log('Edit procedure:', procedureId)
@@ -808,6 +949,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       ? { name: procedure.scorecard.name }
       : (procedure.name ? { name: procedure.name } : null),
     score: procedure.score ? { name: procedure.score.name } : null,
+    description: procedure.description || undefined,
     task: procedure.task ? {
       id: procedure.task.id,
       type: procedure.task.type || 'Procedure',
@@ -827,7 +969,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       stages: procedure.task.stages ? {
         items: (procedure.task.stages as any)?.items || []
       } : undefined
-    } : undefined
+    } : undefined,
+    feedbackEvaluationSummary: procedure.feedbackEvaluationSummary ?? null,
   }), [])
   
 
