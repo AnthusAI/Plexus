@@ -26,7 +26,6 @@ const mockGraphQLClient = {
               {
                 id: 'session-1',
                 procedureId: variables.procedureId,
-                nodeId: 'node-root',
                 name: 'Initial Setup Session',
                 category: 'Setup',
                 status: 'COMPLETED',
@@ -36,7 +35,6 @@ const mockGraphQLClient = {
               {
                 id: 'session-2',
                 procedureId: variables.procedureId,
-                nodeId: 'node-hypothesis-1',
                 name: 'Hypothesis Generation - Greetings',
                 category: 'Hypothesize',
                 status: 'COMPLETED',
@@ -46,7 +44,6 @@ const mockGraphQLClient = {
               {
                 id: 'session-3',
                 procedureId: variables.procedureId,
-                nodeId: 'node-hypothesis-2',
                 name: 'Context Analysis Session',
                 category: 'Analyze',
                 status: 'ACTIVE',

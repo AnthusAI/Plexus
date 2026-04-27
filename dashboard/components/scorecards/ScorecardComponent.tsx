@@ -61,6 +61,7 @@ export interface ScorecardData {
           guidelines?: string
           order: number
           type: string
+          championVersionId?: string
         }>
       }
     }>
@@ -925,6 +926,7 @@ export const DetailContent = React.memo(function DetailContent({
               order: score.order,
               key: score.key || '',
               externalId: (score as any).externalId || score.id,
+              championVersionId: (score as any).championVersionId,
               icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             

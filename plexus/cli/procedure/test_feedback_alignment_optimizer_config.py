@@ -128,3 +128,64 @@ def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
 
     assert "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion." in code
     assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code
+
+
+def test_optimizer_yaml_uses_safe_tool_call_arg_helper_instead_of_direct_args_dereferences():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function tool_call_arg(call, key, default)" in code
+    assert ".args.command" not in code
+    assert ".args.reason" not in code
+    assert ".args.version_note" not in code
+    assert ".args.old_str" not in code
+    assert ".args.new_str" not in code
+
+
+def test_optimizer_yaml_uses_utf8_safe_truncation_without_byte_slicing():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function trunc(s, maxlen)" in code
+    assert "local str = utf8_clean(tostring(s))" in code
+    assert "return utf8_clean(string.sub(str, 1, maxlen))" in code
+    assert "string.char(string.byte(str, i))" not in code
+
+
+def test_optimizer_yaml_rebaselines_continuations_when_feedback_target_advanced():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local continuation_rebaseline = false" in code
+    assert "Continuation detected newer feedback target" in code
+    assert "if not is_continuation or continuation_rebaseline then" in code
+    assert 'if not is_continuation then' in code
+    assert 'State.set("iterations", {})' in code
+
+
+def test_optimizer_yaml_escalates_plateaus_instead_of_stopping_or_shrinking():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'stop_reason = "improvement_plateau"' not in code
+    assert 'stop_reason = "early_stopped"' not in code
+    assert "Conservatism mode" not in code
+    assert "ULTRA-CONSERVATIVE" not in code
+    assert 'hyp_slots = {"recent_incremental"}' not in code
+    assert 'hyp_slots = {"recent_incremental", "structural"}' not in code
+    assert 'table.insert(slots, "reframe")' in code
+    assert 'table.insert(slots, "full_rewrite")' in code
+    assert 'The run is stuck. Search harder instead of shrinking the hypothesis set.' in code
+    assert 'Recent cycles are flat. Broaden search instead of reducing ambition.' in code
+
+
+def test_optimizer_yaml_keeps_bold_lane_and_uses_escalation_advisor():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'done(escalation_mode=\\"escalate\\", reason=...)' in code
+    assert 'done(escalation_mode=\\"ultra_creative\\", reason=...)' in code
+    assert 'Plateau escalation advisor' in code
+    assert 'OBJECTIVE: Reframe the problem (cross-cycle reinterpretation)' in code
+    assert 'OBJECTIVE: Full rewrite from a new framing' in code
+    assert 'Removing a harmful filter is a valid structural hypothesis.' in code

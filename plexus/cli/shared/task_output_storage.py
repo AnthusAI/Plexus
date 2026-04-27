@@ -2,12 +2,72 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
+from plexus.config.loader import ConfigLoader
 
 TASK_OUTPUT_PREVIEW_CHARS = 800
 TASK_OUTPUT_ATTACHMENT_BUCKET_ENV = "AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME"
+TASK_OUTPUT_ATTACHMENT_BUCKET_CONFIG_KEY = "aws.storage.task_attachments_bucket"
+TASK_OUTPUT_ATTACHMENT_BUCKET_AMPLIFY_NAME = "taskAttachments"
+
+
+def _candidate_amplify_outputs_paths() -> List[Path]:
+    repo_root = Path(__file__).resolve().parents[3]
+    return [
+        repo_root / "dashboard" / "amplify_outputs.json",
+        repo_root / "amplify_outputs.json",
+    ]
+
+
+def _load_task_attachment_bucket_from_amplify_outputs() -> Optional[str]:
+    for path in _candidate_amplify_outputs_paths():
+        try:
+            if not path.exists():
+                continue
+            amplify_outputs = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        buckets = amplify_outputs.get("storage", {}).get("buckets", [])
+        if not isinstance(buckets, list):
+            continue
+
+        for bucket in buckets:
+            if not isinstance(bucket, dict):
+                continue
+            if bucket.get("name") != TASK_OUTPUT_ATTACHMENT_BUCKET_AMPLIFY_NAME:
+                continue
+            bucket_name = bucket.get("bucket_name")
+            if isinstance(bucket_name, str) and bucket_name.strip():
+                return bucket_name.strip()
+
+    return None
+
+
+def resolve_task_output_attachment_bucket_name(
+    explicit_bucket_name: Optional[str] = None,
+) -> Optional[str]:
+    if explicit_bucket_name:
+        return explicit_bucket_name
+
+    env_bucket = os.getenv(TASK_OUTPUT_ATTACHMENT_BUCKET_ENV)
+    if env_bucket:
+        return env_bucket
+
+    loader = ConfigLoader()
+    loader.load_config()
+    configured_bucket = loader.get_config_value(TASK_OUTPUT_ATTACHMENT_BUCKET_CONFIG_KEY)
+    if isinstance(configured_bucket, str) and configured_bucket.strip():
+        return configured_bucket.strip()
+
+    amplify_bucket = _load_task_attachment_bucket_from_amplify_outputs()
+    if amplify_bucket:
+        return amplify_bucket
+
+    return None
 
 
 def upload_task_attachment_bytes(
@@ -135,10 +195,12 @@ def persist_task_output_artifact(
     if not task_id:
         raise ValueError("task_id is required to persist task output artifacts.")
 
-    resolved_bucket_name = bucket_name or os.getenv(TASK_OUTPUT_ATTACHMENT_BUCKET_ENV)
+    resolved_bucket_name = resolve_task_output_attachment_bucket_name(bucket_name)
     if not resolved_bucket_name:
         raise RuntimeError(
-            f"{TASK_OUTPUT_ATTACHMENT_BUCKET_ENV} is required to persist task output attachments."
+            f"{TASK_OUTPUT_ATTACHMENT_BUCKET_CONFIG_KEY} or dashboard/amplify_outputs.json "
+            f"storage.buckets[name={TASK_OUTPUT_ATTACHMENT_BUCKET_AMPLIFY_NAME}].bucket_name "
+            f"is required to persist task output attachments."
         )
 
     serialized_payload, attachment_name, content_type = _serialize_task_output_payload(

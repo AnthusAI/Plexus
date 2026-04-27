@@ -46,6 +46,8 @@ export type EvaluationTaskData = BaseTaskData & {
   startedAt?: string
   errorMessage?: string
   errorDetails?: any
+  baseline_evaluation_id?: string | null
+  current_baseline_evaluation_id?: string | null
   confusionMatrix?: ConfusionMatrix
   task?: TaskData | null
 }

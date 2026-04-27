@@ -20,6 +20,7 @@ import os
 
 from .shared.naming import get_resource_name
 from .shared.config import EnvironmentConfig
+from .metrics_aggregation_config import METRICS_STREAM_CONFIGS, METRICS_TABLE_TYPES
 
 
 class MetricsAggregationStack(Stack):
@@ -65,7 +66,7 @@ class MetricsAggregationStack(Stack):
 
         # Build tables dict from Secrets Manager configuration
         tables = {}
-        table_types = ['item', 'scoreresult', 'task', 'evaluation']
+        table_types = METRICS_TABLE_TYPES
 
         for table_type in table_types:
             secret_prefix = f"table-{table_type.lower()}"
@@ -184,12 +185,7 @@ class MetricsAggregationStack(Stack):
         )
         
         # Configure stream event sources with table-specific batch settings
-        stream_configs = {
-            'item': {'batch_size': 10, 'batch_window': 15},
-            'scoreresult': {'batch_size': 100, 'batch_window': 15},  # Fixed: lowercase to match table_types
-            'task': {'batch_size': 1, 'batch_window': 15},
-            'evaluation': {'batch_size': 1, 'batch_window': 15}
-        }
+        stream_configs = METRICS_STREAM_CONFIGS
         
         # Add event sources for each discovered table
         for table_key, table_info in tables.items():
@@ -225,4 +221,3 @@ class MetricsAggregationStack(Stack):
             print(f"Added stream event source for {table_key}: "
                   f"batch_size={config_data['batch_size']}, "
                   f"batch_window={config_data['batch_window']}s")
-

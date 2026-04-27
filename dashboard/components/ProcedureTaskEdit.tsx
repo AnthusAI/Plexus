@@ -18,7 +18,6 @@ import { useYamlLinter, useLintMessageHandler } from "@/hooks/use-yaml-linter"
 import YamlLinterPanel from "@/components/ui/yaml-linter-panel"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 import ProcedureTask from "./ProcedureTask"
-import GraphNodesList from "./graph-nodes-list"
 import { useAccount } from '@/app/contexts/AccountContext'
 import ScorecardContext from '@/components/ScorecardContext'
 import { ConfigurableParametersForm } from "@/components/ui/ConfigurableParametersForm"
@@ -27,6 +26,7 @@ import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import { CardButton } from "@/components/CardButton"
 import { X } from "lucide-react"
+import { PROCEDURE_CARD_FIELDS } from "@/components/ui/optimizer-results-utils"
 
 type ParameterValues = ParameterValue
 import * as yaml from 'js-yaml'
@@ -136,7 +136,6 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
               id
               featured
               code
-              rootNodeId
               createdAt
               updatedAt
               accountId
@@ -224,12 +223,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
           query: `
             mutation UpdateProcedure($input: UpdateProcedureInput!) {
               updateProcedure(input: $input) {
-                id
-                featured
-                code
-                scorecardId
-                scoreId
-                updatedAt
+                ${PROCEDURE_CARD_FIELDS}
               }
             }
           `,
@@ -252,13 +246,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
           query: `
             mutation CreateProcedure($input: CreateProcedureInput!) {
               createProcedure(input: $input) {
-                id
-                featured
-                code
-                scorecardId
-                scoreId
-                createdAt
-                updatedAt
+                ${PROCEDURE_CARD_FIELDS}
               }
             }
           `,
@@ -509,13 +497,6 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
             </AccordionItem>
           </Accordion>
 
-
-          {/* Procedure Nodes section - only show when not in edit mode and procedureId exists */}
-          {!isEditMode && procedureId && (
-            <div className="mt-6 bg-background rounded-lg p-4">
-              <GraphNodesList procedureId={procedureId} />
-            </div>
-          )}
         </div>
         
         {/* Save/Cancel Bar - appears when in edit mode */}

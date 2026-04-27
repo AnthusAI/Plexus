@@ -150,6 +150,8 @@ export interface EvaluationTaskData extends BaseTaskData {
   task?: TaskData | null
   universalCode?: string | null
   parameters?: string | null
+  baseline_evaluation_id?: string | null
+  current_baseline_evaluation_id?: string | null
   dataSetId?: string | null
 }
 
@@ -1439,7 +1441,10 @@ const DetailContent = React.memo(({
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                 <div>
-                                  Baseline: {stageRef.baseline_evaluation_id ?? 'Unavailable'} ({stageRef.baseline_status ?? 'Unknown'})
+                                  Original baseline: {stageRef.baseline_evaluation_id ?? data.baseline_evaluation_id ?? 'Unavailable'} ({stageRef.baseline_status ?? 'Unknown'})
+                                </div>
+                                <div>
+                                  Current best baseline: {data.current_baseline_evaluation_id ?? 'Unavailable'}
                                 </div>
                                 <div>
                                   Candidate: {stageRef.candidate_evaluation_id ?? 'Unavailable'} ({stageRef.candidate_status ?? 'Unknown'})
@@ -1978,6 +1983,8 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
+  const hasInlineActionMenu = Boolean(onShare || onDelete)
+  const hasGridActions = variant === 'grid' && (Boolean(controlButtons) || hasInlineActionMenu)
 
   const evaluationNotes = useMemo(() => {
     try {
@@ -2035,26 +2042,13 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
 
-  // Fetch baseline metrics when a baseline evaluation ID is stored in parameters.metadata
   const baselineEvaluationId = useMemo(() => {
-    try {
-      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
-      const metadata = parseJsonDeep(params?.metadata) as Record<string, unknown> | null
-      return typeof metadata?.baseline === 'string' ? metadata.baseline : null
-    } catch {
-      return null
-    }
-  }, [data.parameters])
+    return typeof data.baseline_evaluation_id === 'string' ? data.baseline_evaluation_id : null
+  }, [data.baseline_evaluation_id])
 
   const currentBaselineEvaluationId = useMemo(() => {
-    try {
-      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
-      const metadata = parseJsonDeep(params?.metadata) as Record<string, unknown> | null
-      return typeof metadata?.current_baseline === 'string' ? metadata.current_baseline : null
-    } catch {
-      return null
-    }
-  }, [data.parameters])
+    return typeof data.current_baseline_evaluation_id === 'string' ? data.current_baseline_evaluation_id : null
+  }, [data.current_baseline_evaluation_id])
 
   const dataSetIdFromParameters = useMemo(() => {
     try {
@@ -2536,9 +2530,17 @@ ${categoryLines}${mechanicalLines}
               {/* Grid variant: show all metadata inline in header */}
               {variant !== 'detail' && (
                 <>
-                  {props.task.name && (
-                    <div className="font-semibold text-sm truncate">{props.task.name}</div>
-                  )}
+                  {props.task.name ? (
+                    <div className="font-semibold text-sm min-w-0 flex items-center gap-1.5">
+                      {hasGridActions && <FlaskConical className="h-4 w-4 flex-shrink-0 text-muted-foreground" />}
+                      <span className="truncate">{props.task.name}</span>
+                    </div>
+                  ) : hasGridActions ? (
+                    <div className="font-semibold text-sm min-w-0 flex items-center gap-1.5">
+                      <FlaskConical className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="truncate">{props.task.type}</span>
+                    </div>
+                  ) : null}
                   {props.task.description && (
                     <div className="text-sm text-muted-foreground truncate">
                       {props.task.description}
@@ -2568,10 +2570,13 @@ ${categoryLines}${mechanicalLines}
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex items-center gap-2">
-                    <div className="text-muted-foreground">
-                      <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                    </div>
-                    {(onShare || onDelete) && (
+                    {!hasGridActions && (
+                      <div className="text-muted-foreground">
+                        <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                      </div>
+                    )}
+                    {controlButtons}
+                    {hasInlineActionMenu && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <CardButton
@@ -2606,17 +2611,19 @@ ${categoryLines}${mechanicalLines}
                       </DropdownMenu>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground text-center">
-                    {(() => {
-                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
-                      return (
-                        <>
-                          {firstWord}<br />
-                          {restWords.join(' ')}
-                        </>
-                      );
-                    })()}
-                  </div>
+                  {!hasGridActions && (
+                    <div className="text-xs text-muted-foreground text-center">
+                      {(() => {
+                        const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                        return (
+                          <>
+                            {firstWord}<br />
+                            {restWords.join(' ')}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -2720,6 +2727,32 @@ ${categoryLines}${mechanicalLines}
                 <span className="font-mono truncate max-w-[22rem]">{taskWithDefaults.dataSetId}</span>
                 <Link
                   href={`/lab/datasets/${taskWithDefaults.dataSetId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {baselineEvaluationId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Original baseline:</span>
+                <span className="font-mono truncate max-w-[22rem]">{baselineEvaluationId}</span>
+                <Link
+                  href={`/lab/evaluations/${baselineEvaluationId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {currentBaselineEvaluationId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Current best baseline:</span>
+                <span className="font-mono truncate max-w-[22rem]">{currentBaselineEvaluationId}</span>
+                <Link
+                  href={`/lab/evaluations/${currentBaselineEvaluationId}`}
                   className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >

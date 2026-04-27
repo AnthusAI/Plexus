@@ -87,8 +87,8 @@ Each run follows this structure:
 2. **Champion pull** — Fetch current score configuration YAML as starting point.
 
 3. **Baseline evaluations** — Run both:
-   - **Accuracy eval**: Fixed regression dataset (same items every cycle)
-   - **Feedback eval**: Latest human feedback (sampling_mode=newest, up to max_samples)
+   - **Accuracy evaluation**: Fixed regression dataset (same items every cycle)
+   - **Feedback evaluation**: Latest human feedback (sampling_mode=newest, up to max_samples)
 
 4. **Initial RCA** — Extract root cause analysis from baseline: confusion matrix,
    error categories, representative evidence items.
