@@ -52,10 +52,22 @@
       "author": "ryan",
       "text": "Fixed favorite toggle persistence. Root cause: AppSync requires createdAt when updating featuredKey because it is part of the composite byScoreIdAndFeaturedKeyAndCreatedAt sort key. Frontend, CLI, and MCP now include createdAt in the update input. Verified live CLI pin and unpin both succeed, restoring the tested Prescriber version to unpinned. Also removed noisy Monaco YAML setup console logs and changed the frontend catch path to log formatAmplifyError instead of an empty object.",
       "created_at": "2026-04-27T21:12:40.678261Z"
+    },
+    {
+      "id": "cd6e8de3-b2c2-4fe9-ba1d-8ad13b19a27f",
+      "author": "ryan",
+      "text": "Implementing low-risk favorite reorder animation in ScoreSidebarVersionHistory using existing framer-motion LayoutGroup/motion.div wrappers. Scope is UI-only: no schema/API/data-flow changes.",
+      "created_at": "2026-04-27T21:28:50.482608Z"
+    },
+    {
+      "id": "b64f70a4-04d7-4d58-a8de-e8282d199681",
+      "author": "ryan",
+      "text": "Favorite reorder animation implemented with framer-motion LayoutGroup and motion row wrappers. Active dashboard dev server recompiled the score-version route successfully after the change. Full dashboard typecheck was started but stopped after several minutes without output to avoid leaving a long-running process; this change is isolated to the sidebar component.",
+      "created_at": "2026-04-27T21:33:02.658574Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T21:12:40.678261Z",
+  "updated_at": "2026-04-27T21:33:02.658574Z",
   "closed_at": null,
   "custom": {}
 }
