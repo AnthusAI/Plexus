@@ -218,7 +218,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("scoreId").sortKeys(["createdAt"]),
-            idx("scoreId").sortKeys(["isFeatured", "createdAt"]).name("byScoreIdAndIsFeaturedAndCreatedAt")
+            idx("isFeatured").sortKeys(["scoreId", "createdAt"]).name("byIsFeaturedAndScoreIdAndCreatedAt")
         ]),
 
     Evaluation: a
