@@ -130,10 +130,16 @@
       "author": "ryan",
       "text": "Changing the compact related-version Compare action to use the muted button surface rather than the stronger secondary button color.",
       "created_at": "2026-04-27T22:06:15.632148Z"
+    },
+    {
+      "id": "da71d998-6724-4c07-a437-55d20ec148b1",
+      "author": "ryan",
+      "text": "Fixing score-version header layout so the top-right actions/ellipsis slot overlays the header instead of reducing the content column width. Related cards should flow underneath and use full width.",
+      "created_at": "2026-04-27T22:09:58.678126Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T22:06:15.632148Z",
+  "updated_at": "2026-04-27T22:09:58.678126Z",
   "closed_at": null,
   "custom": {}
 }
