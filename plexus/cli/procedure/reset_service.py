@@ -99,7 +99,6 @@ def reset_checkpoints(client, procedure_id: str, after_step: Optional[str] = Non
                 version
                 isDefault
                 parentProcedureId
-                rootNodeId
                 waitingOnMessageId
                 metadata
                 createdAt
@@ -186,7 +185,6 @@ def reset_checkpoints_only(client, procedure_id: str) -> Dict[str, Any]:
                 version
                 isDefault
                 parentProcedureId
-                rootNodeId
                 waitingOnMessageId
                 metadata
                 createdAt
