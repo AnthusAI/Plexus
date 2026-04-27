@@ -52,10 +52,16 @@
       "author": "ryan",
       "text": "Job 122 failure: cross-environment reference now on startConsoleRun-lambda ServiceRole. Next fix: move ConsoleRunWorkerStack to NestedStack under backend.stack and remove explicit env wiring to keep all references same-environment.",
       "created_at": "2026-04-27T12:45:06.131021Z"
+    },
+    {
+      "id": "2e234b81-33cc-4b44-aa2c-957b8470735d",
+      "author": "ryan",
+      "text": "Performed targeted staging->feature reconciliation by cherry-picking today's staging commits. GraphNode/schema commit was already present (empty pick skipped). Applied staging-aligned backend deltas for console worker env/queue/nested-stack behavior onto feature branch.",
+      "created_at": "2026-04-27T13:27:07.806656Z"
     }
   ],
   "created_at": "2026-04-25T15:15:43.216098Z",
-  "updated_at": "2026-04-27T12:45:06.131021Z",
+  "updated_at": "2026-04-27T13:27:07.806656Z",
   "closed_at": null,
   "custom": {}
 }
