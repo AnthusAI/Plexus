@@ -24,9 +24,16 @@ from plexus.rubric_memory import (
     RubricEvidencePackRequest,
     RubricEvidencePackService,
     RubricMemoryCitationFormatter,
+    RubricMemoryGatedSMEQuestion,
     RubricHistoryEvent,
     RubricMemoryQueryPlanner,
+    RubricMemorySMEQuestionGateRequest,
+    RubricMemorySMEQuestionGateService,
+    SMEQuestionAnswerStatus,
+    SMEQuestionGateAction,
     TactusRubricEvidenceSynthesizer,
+    candidate_agenda_items_from_markdown,
+    format_gated_sme_agenda,
     validate_rubric_memory_citations,
 )
 
@@ -713,6 +720,187 @@ def test_citation_validation_reports_missing_and_omitted_without_failing():
     omitted = validate_rubric_memory_citations([], context, require_citation=True)
     assert omitted.omitted_citations is True
     assert "no citation IDs" in omitted.warnings[0]
+
+
+def _sme_gate_request() -> RubricMemorySMEQuestionGateRequest:
+    context = RubricMemoryCitationFormatter().from_pack(_formatter_pack())
+    return RubricMemorySMEQuestionGateRequest(
+        scorecard_identifier="Scorecard A",
+        score_identifier="Score A",
+        score_version_id="score-version-1",
+        rubric_memory_context=context,
+        candidate_agenda_items=candidate_agenda_items_from_markdown(
+            "### Is the script enough?\n"
+            "Question: Should SelectRx script details count?\n\n"
+            "### Should we update the rubric?\n"
+            "Question: The notes say yes but the rubric is silent."
+        ),
+        optimizer_context="Cycle found dosage policy uncertainty.",
+    )
+
+
+class _GateSynthesizer:
+    def __init__(self, raw_result):
+        self.raw_result = raw_result
+        self.requests = []
+
+    async def synthesize(self, *, request):
+        self.requests.append(request)
+        return self.raw_result
+
+
+@pytest.mark.asyncio
+async def test_sme_question_gate_suppresses_answered_questions():
+    request = _sme_gate_request()
+    citation_id = request.rubric_memory_context.citation_index[0].id
+    synthesizer = _GateSynthesizer({
+        "items": [
+            {
+                "id": request.candidate_agenda_items[0].id,
+                "original_text": request.candidate_agenda_items[0].text,
+                "final_text": "",
+                "action": "suppress",
+                "answer_status": "answered_by_rubric",
+                "rationale": "The official rubric already answers this.",
+                "citation_ids": [citation_id],
+            }
+        ],
+        "final_agenda_markdown": "(No SME decisions needed this cycle)",
+    })
+
+    result = await RubricMemorySMEQuestionGateService(
+        synthesizer=synthesizer
+    ).gate(request)
+
+    assert result.summary_counts["suppressed"] == 1
+    assert result.summary_counts["final"] == 0
+    assert result.final_agenda_markdown == "(No SME decisions needed this cycle)"
+    assert result.suppressed_items[0].citation_ids == [citation_id]
+
+
+@pytest.mark.asyncio
+async def test_sme_question_gate_transforms_corpus_answer_into_codification_decision():
+    request = _sme_gate_request()
+    citation_id = next(
+        citation.id
+        for citation in request.rubric_memory_context.citation_index
+        if citation.id.startswith("support:01:")
+    )
+    final_text = (
+        "### Codify SelectRx script evidence\n"
+        "Question: Should the rubric explicitly say that the SelectRx script "
+        "supports dosage verification?"
+    )
+    synthesizer = _GateSynthesizer({
+        "items": [
+            {
+                "id": request.candidate_agenda_items[1].id,
+                "original_text": request.candidate_agenda_items[1].text,
+                "final_text": final_text,
+                "action": "transform",
+                "answer_status": "answered_by_corpus",
+                "rationale": "Corpus evidence answers the policy but rubric text is silent.",
+                "citation_ids": [citation_id],
+            }
+        ],
+        "final_agenda_markdown": final_text + "\nCitations: " + citation_id,
+    })
+
+    result = await RubricMemorySMEQuestionGateService(
+        synthesizer=synthesizer
+    ).gate(request)
+
+    assert result.summary_counts["transformed"] == 1
+    assert result.final_items[0].action == SMEQuestionGateAction.TRANSFORM
+    assert result.final_items[0].answer_status == SMEQuestionAnswerStatus.ANSWERED_BY_CORPUS
+    assert "explicitly say" in result.final_agenda_markdown
+    assert result.final_items[0].citation_ids == [citation_id]
+
+
+@pytest.mark.asyncio
+async def test_sme_question_gate_keeps_conflicting_evidence_and_reports_bad_citations():
+    request = _sme_gate_request()
+    synthesizer = _GateSynthesizer({
+        "items": [
+            {
+                "id": request.candidate_agenda_items[0].id,
+                "original_text": request.candidate_agenda_items[0].text,
+                "final_text": request.candidate_agenda_items[0].text,
+                "action": "keep",
+                "answer_status": "conflicting_evidence",
+                "rationale": "Sources conflict and SMEs must decide which governs.",
+                "citation_ids": ["missing:citation"],
+            }
+        ],
+        "final_agenda_markdown": request.candidate_agenda_items[0].text,
+    })
+
+    result = await RubricMemorySMEQuestionGateService(
+        synthesizer=synthesizer
+    ).gate(request)
+
+    assert result.summary_counts["kept"] == 1
+    assert result.summary_counts["citation_warnings"] == 1
+    assert result.final_items[0].citation_ids == []
+    assert "Missing rubric-memory citation IDs" in result.citation_diagnostics[0]["warnings"][0]
+
+
+@pytest.mark.asyncio
+async def test_sme_question_gate_keeps_true_open_question():
+    request = _sme_gate_request()
+    citation_id = request.rubric_memory_context.citation_index[0].id
+    synthesizer = _GateSynthesizer({
+        "items": [
+            {
+                "id": request.candidate_agenda_items[0].id,
+                "original_text": request.candidate_agenda_items[0].text,
+                "final_text": request.candidate_agenda_items[0].text,
+                "action": "keep",
+                "answer_status": "true_open_question",
+                "rationale": "No source answers the decision.",
+                "citation_ids": [citation_id],
+            }
+        ],
+        "final_agenda_markdown": request.candidate_agenda_items[0].text,
+    })
+
+    result = await RubricMemorySMEQuestionGateService(
+        synthesizer=synthesizer
+    ).gate(request)
+
+    assert result.summary_counts["kept"] == 1
+    assert result.final_items[0].answer_status == SMEQuestionAnswerStatus.TRUE_OPEN_QUESTION
+    assert result.final_items[0].citation_ids == [citation_id]
+
+
+def test_sme_agenda_markdown_parser_and_formatter_are_deterministic():
+    markdown = (
+        "## SME AGENDA\n\n"
+        "### First decision\nQuestion: One?\n\n"
+        "### Second decision\nQuestion: Two?"
+    )
+
+    first = candidate_agenda_items_from_markdown(markdown)
+    second = candidate_agenda_items_from_markdown(markdown)
+
+    assert [item.id for item in first] == [item.id for item in second]
+    assert len(first) == 2
+    assert candidate_agenda_items_from_markdown("(No SME decisions needed this cycle)") == []
+
+    formatted = format_gated_sme_agenda([
+        RubricMemoryGatedSMEQuestion(
+            id="q1",
+            original_text="Question?",
+            final_text="Codify this?",
+            action=SMEQuestionGateAction.TRANSFORM,
+            answer_status=SMEQuestionAnswerStatus.PARTIALLY_ANSWERED,
+            rationale="Corpus partly answers it.",
+            citation_ids=["support:01:test"],
+        )
+    ])
+
+    assert "Codify this?" in formatted
+    assert "support:01:test" in formatted
 
 
 @pytest.mark.asyncio

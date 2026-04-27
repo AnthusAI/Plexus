@@ -84,6 +84,19 @@ def _merge_context_value(explicit_value: str, fetched_value: str) -> str:
     return explicit_value if explicit_value else fetched_value
 
 
+def _coerce_json_object(value, *, field_name: str) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return {}
+        parsed = json.loads(stripped)
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError(f"{field_name} must be a JSON object.")
+
+
 def register_rubric_memory_tools(server):
     """Register rubric-memory tools."""
 
@@ -200,4 +213,57 @@ def register_rubric_memory_tools(server):
             )
         except Exception as exc:
             logger.warning("plexus_rubric_memory_evidence_pack failed: %s", exc)
+            return json.dumps({"success": False, "error": str(exc)})
+
+    @server.tool()
+    async def plexus_rubric_memory_sme_question_gate(
+        scorecard_identifier: str,
+        score_identifier: str,
+        score_version_id: str,
+        candidate_agenda_markdown: str,
+        rubric_memory_context: dict | str,
+        optimizer_context: str = "",
+    ) -> str:
+        """
+        Gate proposed SME agenda questions against rubric-memory citations.
+
+        The gate suppresses questions already answered by official rubric/corpus
+        evidence and transforms corpus-supported gaps into rubric codification
+        decisions.
+        """
+        try:
+            from plexus.rubric_memory import (
+                RubricMemoryCitationContext,
+                RubricMemorySMEQuestionGateRequest,
+                RubricMemorySMEQuestionGateService,
+                candidate_agenda_items_from_markdown,
+            )
+
+            context = RubricMemoryCitationContext.model_validate(
+                _coerce_json_object(
+                    rubric_memory_context,
+                    field_name="rubric_memory_context",
+                )
+            )
+            candidate_items = candidate_agenda_items_from_markdown(
+                candidate_agenda_markdown,
+            )
+            request = RubricMemorySMEQuestionGateRequest(
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                score_version_id=score_version_id,
+                rubric_memory_context=context,
+                candidate_agenda_items=candidate_items,
+                optimizer_context=optimizer_context,
+            )
+            result = await RubricMemorySMEQuestionGateService().gate(request)
+            return json.dumps(
+                {
+                    "success": True,
+                    **result.model_dump(mode="json"),
+                },
+                default=str,
+            )
+        except Exception as exc:
+            logger.warning("plexus_rubric_memory_sme_question_gate failed: %s", exc)
             return json.dumps({"success": False, "error": str(exc)})

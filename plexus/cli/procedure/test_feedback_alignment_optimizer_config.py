@@ -73,6 +73,23 @@ def test_optimizer_yaml_defines_safe_encode_for_score_test_failure_details():
     assert 'safe_encode(test_result.predictions)' in code
 
 
+def test_optimizer_yaml_gates_sme_questions_with_rubric_memory():
+    config = _load_optimizer_config()
+    code = config["code"]
+    tools = config["agents"]["code_editor"]["tools"]
+    system_prompt = config["agents"]["code_editor"]["system_prompt"]
+
+    assert "plexus_rubric_memory_sme_question_gate" in tools
+    assert "Before concluding that SME input is needed, check rubric memory." in system_prompt
+    assert "local function gate_sme_agenda" in code
+    assert '"plexus_rubric_memory_sme_question_gate"' in code
+    assert '"cycle_" .. tostring(cycle) .. "_sme_agenda"' in code
+    assert '"end_of_run_sme_agenda"' in code
+    assert 'State.set("sme_agenda_raw"' in code
+    assert 'State.set("sme_agenda_gated"' in code
+    assert 'State.set("sme_question_gate_diagnostics"' in code
+
+
 def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch():
     config = _load_optimizer_config()
     code = config["code"]
