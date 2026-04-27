@@ -70,8 +70,6 @@ async def demo_mcp_server_creation():
         'experiment_name': 'AI MCP Integration Demo',
         'scorecard_name': 'Demo Scorecard',
         'score_name': 'Demo Score',
-        'node_count': 1,
-        'version_count': 1,
         'options': {'demo_mode': True}
     }
     
@@ -188,8 +186,6 @@ async def demo_experiment_service_integration():
     mock_procedure_info.name = 'AI MCP Integration Demo'
     mock_procedure_info.scorecard_name = 'Demo Scorecard'
     mock_procedure_info.score_name = 'Demo Score'
-    mock_procedure_info.node_count = 1
-    mock_procedure_info.version_count = 1
     
     service.get_procedure_info = Mock(return_value=mock_procedure_info)
     service.get_experiment_yaml = Mock(return_value=DEMO_EXPERIMENT_YAML)

@@ -14,7 +14,7 @@ import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
-import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
+import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
 import { ProceduresDashboardSkeleton } from "@/components/loading-skeleton"
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
@@ -630,7 +630,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       const { data: newProcedure } = await (getAmplifyClient().models.Procedure.create as any)({
         featured: procedure.featured || false,
         code: procedure.code || null, // Copy the code if it exists
-        rootNodeId: null, // Will be set after creating nodes
         scorecardId: procedure.scorecardId,
         scoreId: procedure.scoreId,
         accountId: selectedAccount.id,
@@ -823,7 +822,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         code: processedCode,
         category: template.category || undefined,
         version: template.version || undefined,
-        rootNodeId: null, // Will be set when nodes are created
         status: 'PENDING',
         metadata: JSON.stringify({
           templateId: template.id,
@@ -942,7 +940,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       ? `${procedure.scorecard.name} - ${procedure.score?.name || 'Score'}`
       : (procedure.name || 'Procedure'),
     featured: procedure.featured || false,
-    rootNodeId: procedure.rootNodeId || undefined,
     createdAt: procedure.createdAt,
     updatedAt: procedure.updatedAt,
     scorecard: procedure.scorecard

@@ -274,45 +274,6 @@ This document serves as the authoritative roadmap from the [DSL_SPECIFICATION.md
 
 ---
 
-### 1.7 Graph Primitives
-
-**Spec Reference:** DSL_SPECIFICATION.md lines 1049-1058
-
-**Implementation:** `plexus/cli/procedure/lua_dsl/primitives/graph.py`
-
-| Method | Spec Line | Implementation | Signature | Status |
-|--------|-----------|----------------|-----------|--------|
-| `GraphNode.root()` | 1049 | graph.py:243-271 | `def root(self) -> Optional[NodeWrapper]` | ✅ |
-| `GraphNode.current()` | 1050 | graph.py:273-291 | `def current(self) -> Optional[NodeWrapper]` | ✅ |
-| `GraphNode.create()` | 1051 | graph.py:176-241 | `def create(self, content: str, metadata: Optional[Dict] = None, parent_node_id: Optional[str] = None) -> NodeWrapper` | ✅ |
-| `GraphNode.set_current()` | 1052 | graph.py:293-314 | `def set_current(self, node_id: str) -> bool` | ✅ |
-
-**Node Methods:** (Implemented via NodeWrapper class)
-
-| Method | Spec Line | Implementation | Signature | Status |
-|--------|-----------|----------------|-----------|--------|
-| `node:children()` | 1053 | graph.py:45-65 | `def children(self) -> List[NodeWrapper]` | ✅ |
-| `node:parent()` | 1054 | graph.py:67-90 | `def parent(self) -> Optional[NodeWrapper]` | ✅ |
-| `node:score()` | 1055 | graph.py:92-105 | `def score(self) -> Optional[Any]` | ✅ |
-| `node:metadata()` | 1056 | graph.py:107-118 | `def metadata(self) -> Dict` | ✅ |
-| `node:set_metadata()` | 1057 | graph.py:120-147 | `def set_metadata(self, key: str, value: Any) -> bool` | ✅ |
-
-**Key Implementation Details:**
-- GraphNode primitive interfaces with `GraphNode` database model
-- Node methods implemented via `NodeWrapper` class (lines 24-150)
-- NodeWrapper wraps GraphNode database objects and exposes Lua-callable methods
-- All methods (create, root, current) return NodeWrapper instances
-- Root node accessed via procedure's root_node_id
-- Supports hierarchical procedure graphs with full navigation capability
-
-**Test Coverage:**
-- Location: `plexus/cli/procedure/lua_dsl/tests/test_graph_primitives.py` ✅ EXISTS
-- 43 comprehensive unit tests covering all 9 methods
-- Tests include GraphNode methods, NodeWrapper methods, tree navigation, metadata operations
-- All tests passing - validates correct NodeWrapper implementation
-
----
-
 ### 1.8 Agent Primitives
 
 **Spec Reference:** DSL_SPECIFICATION.md lines 996-1000
@@ -590,7 +551,7 @@ lua_state: Dict[str, Any]
 
 All primitives injected into Lua globals:
 - Human, Session, State, Stage, Stop, Tool, Iterations
-- GraphNode, Log, Retry, Json, File, Step, Checkpoint
+- Log, Retry, Json, File, Step, Checkpoint
 - System, Procedure
 - Agent primitives (Worker, etc.) based on YAML config
 - Sleep function
@@ -660,8 +621,6 @@ Non-blocking primitives (notify, alert):
 | Stop | 2 | 2 | 2 | 0 | ✅ (covered by control 56 tests) |
 | Tool | 3 | 3 | 3 | 0 | ✅ (covered by control tests) |
 | Iterations | 2 | 2 | 2 | 0 | ✅ (covered by control tests) |
-| GraphNode | 4 | 4 | 4 | 0 | ✅ 43 unit tests |
-| Node Methods | 5 | 5 | 5 | 0 | ✅ (covered by GraphNode) |
 | Agent | 1 | 1 | 1 | 0 | ✅ 13 unit tests (turn) |
 | Step | 1 | 1 | 1 | 0 | ✅ 12 unit tests |
 | Checkpoint | 4 | 4 | 4 | 0 | ✅ (covered by Step tests) |

@@ -127,7 +127,6 @@ def _update_procedure_status_and_metadata(
             version
             isDefault
             parentProcedureId
-            rootNodeId
             metadata
             waitingOnMessageId
             createdAt
