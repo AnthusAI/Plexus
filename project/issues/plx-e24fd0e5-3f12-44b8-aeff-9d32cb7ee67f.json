@@ -40,10 +40,22 @@
       "author": "ryan",
       "text": "UI correction: favorite rendering now treats featuredKey=featured as the source of truth instead of legacy isFeatured booleans. Version rows use a single Lucide star control that fills only for true favorites; pinned rows no longer show a duplicate solid star on the left.",
       "created_at": "2026-04-27T20:45:36.225649Z"
+    },
+    {
+      "id": "a547744c-2855-400f-928e-e163aad398cd",
+      "author": "ryan",
+      "text": "Investigating favorite toggle failure reported from frontend. Goal: identify whether the updateScoreVersion mutation is failing due to schema/auth/backend behavior or whether the UI is losing the real GraphQL error and showing an empty object.",
+      "created_at": "2026-04-27T21:09:17.896415Z"
+    },
+    {
+      "id": "d1d16e09-ad17-47b7-8d56-92342444680d",
+      "author": "ryan",
+      "text": "Fixed favorite toggle persistence. Root cause: AppSync requires createdAt when updating featuredKey because it is part of the composite byScoreIdAndFeaturedKeyAndCreatedAt sort key. Frontend, CLI, and MCP now include createdAt in the update input. Verified live CLI pin and unpin both succeed, restoring the tested Prescriber version to unpinned. Also removed noisy Monaco YAML setup console logs and changed the frontend catch path to log formatAmplifyError instead of an empty object.",
+      "created_at": "2026-04-27T21:12:40.678261Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T20:45:36.225649Z",
+  "updated_at": "2026-04-27T21:12:40.678261Z",
   "closed_at": null,
   "custom": {}
 }

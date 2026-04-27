@@ -1805,7 +1805,14 @@ def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, outpu
     """
     updated = (client.execute(
         mutation,
-        {"input": {"id": version_id, "isFeatured": pinned, "featuredKey": "featured" if pinned else "unfeatured"}},
+        {
+            "input": {
+                "id": version_id,
+                "isFeatured": pinned,
+                "featuredKey": "featured" if pinned else "unfeatured",
+                "createdAt": version.get("createdAt"),
+            }
+        },
     ).get("updateScoreVersion") or {})
     payload = {
         "success": True,
