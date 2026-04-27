@@ -77,7 +77,10 @@ describe('ProceduresGauges', () => {
 
     const call = mockBaseGauges.mock.calls[0][0]
     expect(call.config.gauges).toHaveLength(2)
+    expect(call.config.gridCols).toEqual({ base: 2, sm: 3, md: 4, lg: 5, xl: 6 })
+    expect(call.config.chartSpan).toEqual({ base: 2, sm: 1, md: 2, lg: 3, xl: 4 })
     expect(call.config.chartAreas.map((area: any) => area.dataKey)).toEqual(['procedures', 'evaluations'])
+    expect(call.enableTimeNavigation).toBe(true)
     expect(call.data.proceduresPerHour).toBe(2)
     expect(call.data.evaluationsPerHour).toBe(3)
     expect(call.data.chartData).toEqual([

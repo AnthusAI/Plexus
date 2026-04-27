@@ -694,11 +694,22 @@ export function useTaskMetrics(config: MetricsConfig = {}): UseUnifiedMetricsRes
 /**
  * Hook for procedures metrics.
  */
-export function useProceduresMetrics(): UseUnifiedMetricsResult {
+export function useProceduresMetrics(config: MetricsConfig = {}): UseUnifiedMetricsResult {
   const { selectedAccount } = useAccount()
   const [metrics, setMetrics] = useState<UnifiedMetricsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const memoizedConfig = useMemo(() => config, [
+    JSON.stringify({
+      ...config,
+      timeRange: config.timeRange ? {
+        start: config.timeRange.start.getTime(),
+        end: config.timeRange.end.getTime(),
+        period: config.timeRange.period
+      } : undefined
+    })
+  ])
 
   const fetchMetrics = useCallback(async () => {
     if (!selectedAccount) {
@@ -713,19 +724,23 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
 
     try {
       const now = new Date()
-      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      const last60min = new Date(now.getTime() - 60 * 60 * 1000)
+      const chartEnd = memoizedConfig.timeRange?.end || now
+      const chartStart = memoizedConfig.timeRange?.start || new Date(chartEnd.getTime() - 24 * 60 * 60 * 1000)
+      const gaugeEnd = chartEnd
+      const gaugeStart = new Date(gaugeEnd.getTime() - 60 * 60 * 1000)
+      const dailyStart = new Date(chartEnd.getTime() - 24 * 60 * 60 * 1000)
+      const dailyEnd = chartEnd
 
-      const proceduresRecords = await queryAggregatedMetrics(selectedAccount.id, 'procedures', last24h, now)
+      const proceduresRecords = await queryAggregatedMetrics(selectedAccount.id, 'procedures', chartStart, chartEnd)
 
       // Calculate hourly metrics (last 60 minutes)
-      const proceduresHourly = calculateMetricsFromRecords(proceduresRecords, last60min, now)
+      const proceduresHourly = calculateMetricsFromRecords(proceduresRecords, gaugeStart, gaugeEnd)
 
       // Calculate 24h totals
-      const procedures24h = calculateMetricsFromRecords(proceduresRecords, last24h, now)
+      const procedures24h = calculateMetricsFromRecords(proceduresRecords, dailyStart, dailyEnd)
 
       // Generate chart data
-      const chartData = generateChartData(proceduresRecords, [], last24h, now, 'day')
+      const chartData = generateChartData(proceduresRecords, [], chartStart, chartEnd, memoizedConfig.timeRange?.period || 'day')
 
       // Calculate peaks with higher baselines for procedures
       const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for procedures
@@ -750,7 +765,7 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
         scoreResultsTotal24h: 0,
 
         chartData,
-        lastUpdated: now,
+        lastUpdated: chartEnd,
         hasErrorsLast24h,
         totalErrors24h
       }
@@ -762,7 +777,7 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
       setIsLoading(false)
     }
-  }, [selectedAccount])
+  }, [selectedAccount, memoizedConfig])
 
   // Initial fetch and periodic refresh
   useEffect(() => {
