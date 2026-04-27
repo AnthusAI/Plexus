@@ -104,7 +104,6 @@ const getStatusDisplay = (status?: string): { text: string; variant: 'default' |
 export interface ProcedureTaskData extends BaseTaskData {
   id: string
   featured: boolean
-  rootNodeId?: string
   createdAt: string
   updatedAt: string
   scorecardId?: string
