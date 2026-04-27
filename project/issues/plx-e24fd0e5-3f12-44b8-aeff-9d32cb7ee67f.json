@@ -100,10 +100,16 @@
       "author": "ryan",
       "text": "Adjusting related ScoreVersion cards so the standard timestamp component keeps its icon, and the related-version link icon sits immediately after the timestamp.",
       "created_at": "2026-04-27T21:56:51.025802Z"
+    },
+    {
+      "id": "4262b8d7-1396-450f-9fef-d38bb9311f31",
+      "author": "ryan",
+      "text": "Investigating champion promotion failure from the score-version UI. Goal: fix the real promotion mutation/path and improve error reporting enough that future failures are diagnosable.",
+      "created_at": "2026-04-27T21:58:05.146494Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T21:56:51.025802Z",
+  "updated_at": "2026-04-27T21:58:05.146494Z",
   "closed_at": null,
   "custom": {}
 }
