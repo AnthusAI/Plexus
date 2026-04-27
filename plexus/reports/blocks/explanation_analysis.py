@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 from plexus.dashboard.api.models.scorecard import Scorecard
 
 from . import feedback_utils
@@ -594,7 +595,7 @@ class ExplanationAnalysis(FeedbackAlignment):
                 }
             )
             response = client.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                modelId=CLAUDE_HAIKU_45_MODEL_ID,
                 body=body,
                 contentType="application/json",
                 accept="application/json",
