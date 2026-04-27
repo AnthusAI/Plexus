@@ -12,10 +12,405 @@ import inspect
 import asyncio
 import queue
 import threading
+import uuid
 import yaml
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
+
+
+def _to_float(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value: Any) -> Optional[int]:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _serialize_cost_event(event: Any) -> Optional[Dict[str, Any]]:
+    if event is None:
+        return None
+
+    cost = _to_float(getattr(event, "total_cost", None))
+    if cost is None:
+        cost = _to_float(getattr(event, "cost", None))
+    if cost is None:
+        return None
+
+    timestamp = getattr(event, "timestamp", None)
+    if hasattr(timestamp, "isoformat"):
+        timestamp = timestamp.isoformat()
+
+    return {
+        "agent_name": getattr(event, "agent_name", None),
+        "provider": getattr(event, "provider", None),
+        "model": getattr(event, "model", None),
+        "prompt_tokens": _to_int(getattr(event, "prompt_tokens", None)),
+        "completion_tokens": _to_int(getattr(event, "completion_tokens", None)),
+        "total_tokens": _to_int(getattr(event, "total_tokens", None)),
+        "prompt_cost": _to_float(getattr(event, "prompt_cost", None)),
+        "completion_cost": _to_float(getattr(event, "completion_cost", None)),
+        "cost": cost,
+        "cache_hit": bool(getattr(event, "cache_hit", False)),
+        "request_id": getattr(event, "request_id", None),
+        "timestamp": timestamp,
+    }
+
+
+def _cost_event_signature(entry: Dict[str, Any]) -> str:
+    request_id = entry.get("request_id")
+    if isinstance(request_id, str) and request_id:
+        return f"request:{request_id}"
+    return "|".join(
+        str(entry.get(key))
+        for key in (
+            "agent_name",
+            "provider",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "cost",
+            "timestamp",
+        )
+    )
+
+
+def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_events: List[Any]) -> None:
+    if not cost_events:
+        return
+
+    state_get = getattr(storage, "state_get", None)
+    state_set = getattr(storage, "state_set", None)
+    if not callable(state_get) or not callable(state_set):
+        return
+
+    try:
+        costs = state_get(procedure_id, "costs", {}) or {}
+        if not isinstance(costs, dict):
+            costs = {}
+
+        inference = costs.get("inference") or {}
+        if not isinstance(inference, dict):
+            inference = {}
+
+        entries = inference.get("entries") or []
+        if not isinstance(entries, list):
+            entries = []
+        seen_signatures = inference.get("seen_signatures") or {}
+        if not isinstance(seen_signatures, dict):
+            seen_signatures = {}
+
+        added = 0
+        for event in cost_events:
+            serialized = _serialize_cost_event(event)
+            if not serialized:
+                continue
+            signature = _cost_event_signature(serialized)
+            if seen_signatures.get(signature):
+                continue
+            entries.append(serialized)
+            seen_signatures[signature] = True
+            added += 1
+
+        if added == 0:
+            return
+
+        inference_total = 0.0
+        by_agent: Dict[str, float] = {}
+        by_model: Dict[str, float] = {}
+        grouped_breakdown: Dict[str, Dict[str, Any]] = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_cost = _to_float(entry.get("cost"))
+            if entry_cost is None:
+                continue
+            inference_total += entry_cost
+
+            agent_name = entry.get("agent_name")
+            if isinstance(agent_name, str) and agent_name:
+                by_agent[agent_name] = by_agent.get(agent_name, 0.0) + entry_cost
+
+            model_name = entry.get("model")
+            if isinstance(model_name, str) and model_name:
+                by_model[model_name] = by_model.get(model_name, 0.0) + entry_cost
+
+            provider_name = entry.get("provider")
+            provider_key = provider_name if isinstance(provider_name, str) and provider_name else ""
+            model_key = model_name if isinstance(model_name, str) and model_name else ""
+            breakdown_key = f"{provider_key}|{model_key}"
+            row = grouped_breakdown.get(breakdown_key)
+            if row is None:
+                row = {
+                    "provider": provider_key or None,
+                    "model": model_key or None,
+                    "spent_usd": 0.0,
+                    "reused_usd": 0.0,
+                    "referenced_usd": 0.0,
+                    "llm_calls": 0,
+                    "evaluation_runs": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "cached_tokens": 0,
+                }
+                grouped_breakdown[breakdown_key] = row
+
+            prompt_tokens = _to_int(entry.get("prompt_tokens")) or 0
+            completion_tokens = _to_int(entry.get("completion_tokens")) or 0
+            total_tokens = _to_int(entry.get("total_tokens"))
+            if total_tokens is None:
+                total_tokens = prompt_tokens + completion_tokens
+            row["spent_usd"] += entry_cost
+            row["referenced_usd"] += entry_cost
+            row["llm_calls"] += 1
+            row["prompt_tokens"] += prompt_tokens
+            row["completion_tokens"] += completion_tokens
+            row["total_tokens"] += total_tokens
+            if entry.get("cache_hit") is True:
+                row["cached_tokens"] += total_tokens
+
+        inference["entries"] = entries
+        inference["seen_signatures"] = seen_signatures
+        inference["total"] = inference_total
+        inference["by_agent"] = by_agent
+        inference["by_model"] = by_model
+        inference["breakdown"] = sorted(
+            grouped_breakdown.values(),
+            key=lambda item: float(item.get("referenced_usd", 0.0)),
+            reverse=True,
+        )
+        costs["inference"] = inference
+
+        evaluation = costs.get("evaluation") or {}
+        if not isinstance(evaluation, dict):
+            evaluation = {}
+        eval_incurred = _to_float(evaluation.get("incurred_total")) or 0.0
+        eval_reused = _to_float(evaluation.get("reused_total")) or 0.0
+        eval_total = _to_float(evaluation.get("total"))
+        if eval_total is None:
+            eval_total = eval_incurred + eval_reused
+
+        totals = costs.get("totals") or {}
+        if not isinstance(totals, dict):
+            totals = {}
+        totals["evaluation"] = {
+            "incurred": eval_incurred,
+            "reused": eval_reused,
+            "total": eval_total,
+        }
+        totals["inference"] = {"total": inference_total}
+        totals["overall"] = {
+            "incurred": eval_incurred + inference_total,
+            "total": eval_total + inference_total,
+        }
+        costs["totals"] = totals
+
+        state_set(procedure_id, "costs", costs)
+    except Exception as exc:
+        logger.warning("Failed persisting inference costs to state: %s", exc)
+
+
+def _normalize_tactus_result(result: Any) -> Dict[str, Any]:
+    """Normalize runtime results so wrapped logical failures are surfaced as top-level failures."""
+    if not isinstance(result, dict):
+        return {"success": False, "error": "Tactus runtime returned non-dict result"}
+
+    top_level_success = bool(result.get("success"))
+    nested_result = result.get("result")
+    if not top_level_success or not isinstance(nested_result, dict):
+        return result
+
+    nested_success = nested_result.get("success")
+    nested_status = str(nested_result.get("status") or "").strip().lower()
+    nested_failed = nested_success is False or nested_status in {"error", "failed", "cancelled", "canceled"}
+    if not nested_failed:
+        return result
+
+    normalized = dict(result)
+    normalized["success"] = False
+    if not normalized.get("error"):
+        normalized["error"] = (
+            nested_result.get("error")
+            or nested_result.get("message")
+            or "Tactus runtime returned nested failure result"
+        )
+    if not normalized.get("message") and nested_result.get("message"):
+        normalized["message"] = nested_result.get("message")
+    return normalized
+
+
+def _complete_all_task_stages(client: Any, task_id: str) -> None:
+    """
+    Mark all PENDING or RUNNING task stages as COMPLETED.
+
+    Called after procedure execution finishes so the dashboard stage display
+    reflects completion rather than staying stuck at the last active stage.
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    logger.info(f"[STAGE_COMPLETE] Task {task_id}: found {len(stages)} stages")
+    if not stages:
+        logger.warning(f"[STAGE_COMPLETE] No stages found for task {task_id}")
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    for stage in stages:
+        stage_status = stage.get("status")
+        stage_id = stage.get("id")
+        if stage_status in ("PENDING", "RUNNING"):
+            logger.info(f"[STAGE_COMPLETE] Marking stage {stage_id} (order {stage.get('order')}) COMPLETED")
+            client.execute(update_mutation, {
+                "input": {"id": stage_id, "status": "COMPLETED", "completedAt": now}
+            })
+            logger.info(f"[STAGE_COMPLETE] Stage {stage_id} marked COMPLETED")
+        else:
+            logger.info(f"[STAGE_COMPLETE] Stage {stage_id} already {stage_status}, skipping")
+
+
+def _fail_all_task_stages(client: Any, task_id: str, error_message: str = "") -> None:
+    """
+    Mark all PENDING or RUNNING task stages as FAILED.
+
+    Called after procedure execution errors so the dashboard stage display
+    reflects the failure rather than appearing as COMPLETED.
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    logger.info(f"[STAGE_FAIL] Task {task_id}: found {len(stages)} stages")
+    if not stages:
+        logger.warning(f"[STAGE_FAIL] No stages found for task {task_id}")
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    short_error = error_message[:500] if error_message else ""
+    for stage in stages:
+        stage_status = stage.get("status")
+        stage_id = stage.get("id")
+        if stage_status in ("PENDING", "RUNNING"):
+            logger.info(f"[STAGE_FAIL] Marking stage {stage_id} (order {stage.get('order')}) FAILED")
+            client.execute(update_mutation, {
+                "input": {
+                    "id": stage_id,
+                    "status": "FAILED",
+                    "completedAt": now,
+                    "statusMessage": short_error,
+                }
+            })
+            logger.info(f"[STAGE_FAIL] Stage {stage_id} marked FAILED")
+        else:
+            logger.info(f"[STAGE_FAIL] Stage {stage_id} already {stage_status}, skipping")
+
+
+def _advance_task_to_running_stage(client: Any, task_id: str, target_order: int) -> None:
+    """
+    Advance a task's stages so that stages before target_order are COMPLETED
+    and the stage at target_order is RUNNING.
+
+    Args:
+        client: PlexusDashboardClient
+        task_id: ID of the Task whose stages to update
+        target_order: The order number of the stage to mark RUNNING
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    if not stages:
+        logger.debug("No TaskStages found for task %s; skipping stage advance.", task_id)
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    for stage in stages:
+        order = stage.get("order", 0)
+        if order < target_order:
+            if stage.get("status") != "COMPLETED":
+                client.execute(update_mutation, {
+                    "input": {"id": stage["id"], "status": "COMPLETED", "completedAt": now}
+                })
+        elif order == target_order:
+            if stage.get("status") != "RUNNING":
+                client.execute(update_mutation, {
+                    "input": {"id": stage["id"], "status": "RUNNING", "startedAt": now}
+                })
 
 
 class _PlexusTraceLogBridge:
@@ -29,9 +424,10 @@ class _PlexusTraceLogBridge:
 
     supports_streaming = True
 
-    def __init__(self, trace_sink: Any):
+    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None):
         self.trace_sink = trace_sink
         self.cost_events = []
+        self._on_cost_event = on_cost_event
         self._events: "queue.Queue[Any]" = queue.Queue()
         self._closed = threading.Event()
         self._worker = threading.Thread(
@@ -49,7 +445,13 @@ class _PlexusTraceLogBridge:
 
         if CostEvent is not None and isinstance(event, CostEvent):
             self.cost_events.append(event)
-            return
+            if callable(self._on_cost_event):
+                try:
+                    self._on_cost_event(event)
+                except Exception as exc:
+                    logger.warning("Failed processing incremental cost event: %s", exc)
+            # Also forward cost events to the trace sink so assistant/tool chat
+            # messages can receive live per-turn cost metadata updates.
 
         try:
             self._events.put_nowait(event)
@@ -57,20 +459,24 @@ class _PlexusTraceLogBridge:
             logger.warning("Failed queueing trace event for persistence: %s", exc)
 
     def _worker_main(self) -> None:
-        while not self._closed.is_set() or not self._events.empty():
-            try:
-                event = self._events.get(timeout=0.05)
-            except queue.Empty:
-                continue
+        loop = asyncio.new_event_loop()
+        try:
+            while not self._closed.is_set() or not self._events.empty():
+                try:
+                    event = self._events.get(timeout=0.05)
+                except queue.Empty:
+                    continue
 
-            try:
-                record_fn = getattr(self.trace_sink, "record", None)
-                if callable(record_fn):
-                    asyncio.run(record_fn(event))
-            except Exception as exc:
-                logger.warning("Failed recording streamed trace event: %s", exc)
-            finally:
-                self._events.task_done()
+                try:
+                    record_fn = getattr(self.trace_sink, "record", None)
+                    if callable(record_fn):
+                        loop.run_until_complete(record_fn(event))
+                except Exception as exc:
+                    logger.warning("Failed recording streamed trace event: %s", exc)
+                finally:
+                    self._events.task_done()
+        finally:
+            loop.close()
 
     async def flush(self) -> None:
         await asyncio.to_thread(self._events.join)
@@ -345,39 +751,37 @@ async def _execute_tactus(
                     if 'State.' in lua_source and 'State = ' not in lua_source:
                         shim_parts.append(
                             "if State == nil then\n"
-                            "  local __legacy_state = {}\n"
                             "  State = {\n"
                             "    get = function(key, default)\n"
-                            "      local value = __legacy_state[key]\n"
-                            "      if value == nil then\n"
-                            "        return default\n"
+                            "      if _state_primitive ~= nil then\n"
+                            "        local value = _state_primitive.get(key)\n"
+                            "        if value == nil then return default end\n"
+                            "        return value\n"
                             "      end\n"
-                            "      return value\n"
+                            "      return default\n"
                             "    end,\n"
                             "    set = function(key, value)\n"
-                            "      __legacy_state[key] = value\n"
+                            "      if _state_primitive ~= nil then\n"
+                            "        _state_primitive.set(key, value)\n"
+                            "      end\n"
                             "      return value\n"
                             "    end,\n"
                             "    increment = function(key, amount)\n"
-                            "      local current = __legacy_state[key]\n"
-                            "      if type(current) ~= 'number' then\n"
-                            "        current = 0\n"
+                            "      if _state_primitive ~= nil then\n"
+                            "        return _state_primitive.increment(key, amount or 1)\n"
                             "      end\n"
-                            "      local delta = amount or 1\n"
-                            "      __legacy_state[key] = current + delta\n"
-                            "      return __legacy_state[key]\n"
+                            "      return 0\n"
                             "    end,\n"
                             "    append = function(key, value)\n"
-                            "      local current = __legacy_state[key]\n"
-                            "      if type(current) ~= 'table' then\n"
-                            "        current = {}\n"
+                            "      if _state_primitive ~= nil then\n"
+                            "        _state_primitive.append(key, value)\n"
                             "      end\n"
-                            "      table.insert(current, value)\n"
-                            "      __legacy_state[key] = current\n"
-                            "      return current\n"
                             "    end,\n"
                             "    all = function()\n"
-                            "      return __legacy_state\n"
+                            "      if _state_primitive ~= nil then\n"
+                            "        return _state_primitive.all()\n"
+                            "      end\n"
+                            "      return {}\n"
                             "    end\n"
                             "  }\n"
                             "end\n"
@@ -393,10 +797,16 @@ async def _execute_tactus(
                             "      if State ~= nil and State.set ~= nil then\n"
                             "        State.set(\"stage\", value)\n"
                             "      end\n"
+                            "      local stage_tool = Tool.get(\"plexus_set_procedure_stage\")\n"
+                            "      if stage_tool ~= nil then stage_tool({stage = value}) end\n"
                             "      return value\n"
                             "    end,\n"
                             "    get = function()\n"
                             "      return __stage_value\n"
+                            "    end,\n"
+                            "    progress = function(current, total)\n"
+                            "      local progress_tool = Tool.get(\"plexus_set_stage_progress\")\n"
+                            "      if progress_tool ~= nil then progress_tool({current = current, total = total}) end\n"
                             "    end\n"
                             "  }\n"
                             "end\n"
@@ -447,6 +857,42 @@ async def _execute_tactus(
                     elif context is None:
                         context = legacy_input
 
+                # CRITICAL FIX: For YAML format with class: Tactus, the Tactus runtime does NOT
+                # automatically inject context dict values into the params table in Lua.
+                # We need to manually inject params by prepending Lua code that builds the params table.
+                # This ensures params.scorecard, params.score, etc. are available in the Lua code.
+                if parsed_source.get('class') == 'Tactus' and context:
+                    lua_source = parsed_source.get('code') or parsed_source.get('procedure')
+                    if isinstance(lua_source, str):
+                        # Build params table from context dict, applying YAML defaults for missing params
+                        params_dict = {}
+                        params_schema = parsed_source.get('params', {})
+                        for param_name, param_def in params_schema.items():
+                            if param_name in context:
+                                raw_value = context[param_name]
+                                # Coerce numeric context values back to string if the
+                                # schema declares type: string. This handles the case
+                                # where the CLI --set parser converts "45425" → int(45425)
+                                # but the param is an identifier that must stay as string.
+                                if (isinstance(raw_value, (int, float))
+                                        and isinstance(param_def, dict)
+                                        and param_def.get('type') == 'string'):
+                                    raw_value = str(raw_value)
+                                params_dict[param_name] = raw_value
+                            elif isinstance(param_def, dict) and param_def.get('default') is not None:
+                                params_dict[param_name] = param_def['default']
+
+                        if params_dict:
+                            # Inject params initialization at the start of Lua code
+                            params_lua = _lua_table_literal(params_dict)
+                            injected_lua = f"-- Injected params from runtime context\nparams = {params_lua}\n\n{lua_source}"
+                            if 'code' in parsed_source:
+                                parsed_source['code'] = injected_lua
+                            else:
+                                parsed_source['procedure'] = injected_lua
+                            procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+                            logger.info(f"Injected params into Lua code: {list(params_dict.keys())}")
+
                 lua_source = parsed_source.get('procedure')
                 if (
                     isinstance(lua_source, str)
@@ -493,16 +939,32 @@ async def _execute_tactus(
         # Create Plexus adapters
         storage = PlexusStorageAdapter(client, procedure_id)
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
-        hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
+        # Allow callers to inject a custom HITL adapter (e.g. TerminalHITLAdapter for CLI)
+        hitl = options.pop("hitl_adapter", None)
+        if hitl is None:
+            hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
         trace_sink = PlexusTraceSink(chat_recorder)
-        log_bridge = _PlexusTraceLogBridge(trace_sink)
+
+        def _on_incremental_cost_event(event: Any) -> None:
+            # Persist each inference cost event as it arrives so dashboards can
+            # display near-real-time optimizer spend during long-running cycles.
+            _persist_inference_costs_to_state(storage, procedure_id, [event])
+
+        log_bridge = _PlexusTraceLogBridge(
+            trace_sink,
+            on_cost_event=_on_incremental_cost_event,
+        )
 
         # Create Tactus runtime with Plexus adapters.
         # Support both newer and older runtime signatures.
         _runtime_param_names: list = [
             "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
-            "trace_sink", "log_handler", "mcp_server", "openai_api_key",
+            "trace_sink", "log_handler", "mcp_server", "openai_api_key", "run_id",
         ]
+        # Generate a unique run_id for this invocation so that checkpoints from
+        # previous runs (which have run_id=None) are never replayed.
+        invocation_run_id = str(uuid.uuid4())
+
         runtime_kwargs: Dict[str, Any] = {
             "procedure_id": procedure_id,
             "storage_backend": storage,
@@ -512,6 +974,7 @@ async def _execute_tactus(
             "log_handler": log_bridge,
             "mcp_server": mcp_server,
             "openai_api_key": _api_key,
+            "run_id": invocation_run_id,
         }
         supports_chat_recorder = True
         try:
@@ -568,13 +1031,37 @@ async def _execute_tactus(
             except Exception:
                 mcp_client_for_bridge = None
 
+        # Register score editor tools on transport BEFORE load_tools() so they appear
+        # in the bridged toolset registry alongside the Plexus MCP tools.
+        if mcp_server and hasattr(mcp_server, "transport") and getattr(mcp_server.transport, "connected", False):
+            try:
+                from .tactus_adapters.score_editor_toolset import ScoreEditorToolset
+                score_editor_instance = ScoreEditorToolset.register_on_transport(
+                    mcp_server.transport, mcp_client=mcp_client_for_bridge
+                )
+                # Pre-populate scorecard/score from execution context so the toolset
+                # can auto-load YAML even when the orchestrator LLM strips args from
+                # score_editor_setup (DSPy tool conversion drops all args).
+                if isinstance(context, dict):
+                    if context.get("scorecard"):
+                        score_editor_instance._scorecard = str(context["scorecard"])
+                    if context.get("score"):
+                        score_editor_instance._score = str(context["score"])
+                    logger.info(
+                        "ScoreEditorToolset pre-populated from context: scorecard=%s score=%s",
+                        score_editor_instance._scorecard, score_editor_instance._score,
+                    )
+            except Exception as exc:
+                logger.warning("Could not register ScoreEditorToolset: %s", exc)
+
         if mcp_client_for_bridge:
             try:
                 from tactus.adapters.mcp import PydanticAIMCPAdapter
                 from pydantic_ai.toolsets import FunctionToolset
 
                 mcp_adapter = PydanticAIMCPAdapter(
-                    mcp_client_for_bridge, tool_primitive=runtime.tool_primitive
+                    mcp_client_for_bridge,
+                    runtime=runtime,
                 )
                 mcp_tools = await mcp_adapter.load_tools()
                 if mcp_tools and "plexus" not in runtime.toolset_registry:
@@ -583,6 +1070,13 @@ async def _execute_tactus(
                         "Registered bridged MCP toolset 'plexus' with %d tool(s)",
                         len(mcp_tools),
                     )
+                    # Also register each tool individually so agent configs can reference
+                    # specific tool names (e.g., tools: [plexus_scorecard_info]) instead of
+                    # only the whole toolset name "plexus".
+                    for tool in mcp_tools:
+                        tool_name = getattr(tool, "name", None)
+                        if tool_name and tool_name not in runtime.toolset_registry:
+                            runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
 
@@ -653,10 +1147,43 @@ async def _execute_tactus(
         if callable(mark_runtime_execute_started):
             mark_runtime_execute_started()
 
+        # Advance task stage to the second stage (e.g. "Baseline Evaluation") now
+        # that the procedure is actually executing, giving the dashboard live feedback.
+        _task_id = options.pop("_task_id_for_stage_tracking", None)
+        if _task_id:
+            try:
+                _advance_task_to_running_stage(client, _task_id, target_order=2)
+            except Exception as _se:
+                logger.debug("Could not advance task stage at execution start: %s", _se)
+
+        # Inject procedure_id into State so Lua code can use it (e.g. for chat mailbox polling).
+        # This is best-effort — if it fails, mailbox polling will be silently skipped.
+        try:
+            storage.state_set(procedure_id, "_procedure_id", procedure_id)
+        except Exception as _inject_err:
+            logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
+
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
-        result = await runtime.execute(procedure_source, runtime_context, format="yaml")
+        result = _normalize_tactus_result(
+            await runtime.execute(procedure_source, runtime_context, format="yaml")
+        )
         if log_bridge:
             await log_bridge.flush()
+            _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
+
+        execution_succeeded = bool(isinstance(result, dict) and result.get("success"))
+
+        if _task_id:
+            try:
+                if execution_succeeded:
+                    _complete_all_task_stages(client, _task_id)
+                else:
+                    task_error = ""
+                    if isinstance(result, dict):
+                        task_error = str(result.get("error") or result.get("message") or "")
+                    _fail_all_task_stages(client, _task_id, task_error)
+            except Exception as _ce:
+                logger.warning("Could not finalize task stages after execution: %s", _ce, exc_info=True)
 
         # Ensure Console receives a meaningful assistant message from procedure output.
         # Some runtime/trace combinations emit only placeholder completion events.
@@ -684,12 +1211,18 @@ async def _execute_tactus(
         if log_bridge:
             try:
                 await log_bridge.flush()
+                _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
             except Exception as flush_error:
                 logger.warning("Failed flushing trace log bridge after error: %s", flush_error)
             try:
                 await log_bridge.close()
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after error: %s", close_error)
+        if _task_id:
+            try:
+                _fail_all_task_stages(client, _task_id, str(e))
+            except Exception as _ce:
+                logger.warning("Could not fail task stages after error: %s", _ce, exc_info=True)
         logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
             'success': False,

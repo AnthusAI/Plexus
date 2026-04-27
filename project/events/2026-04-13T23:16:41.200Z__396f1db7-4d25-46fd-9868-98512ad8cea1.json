@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "396f1db7-4d25-46fd-9868-98512ad8cea1",
+  "issue_id": "plx-7548fc53-1170-481d-bf47-3c3281e0b2ee",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-13T23:16:41.200Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Recover Plexus CI/CD Pipeline failures on run 24370882488 (dashboard npm ci lock mismatch + 4 Python test failures).",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix develop CI failures from 2026-04-13 runs"
+  }
+}

@@ -13,17 +13,8 @@ import { useConsoleArtifact } from "@/components/console/use-console-artifact"
 import ScorecardContext from "@/components/ScorecardContext"
 import { activityConfig, TaskDispatchButton, type TaskDispatchConfig, type TaskUiAction } from "@/components/task-dispatch"
 import { Button } from "@/components/ui/button"
-import { createTask, getClient } from "@/utils/data-operations"
+import { createTask } from "@/utils/data-operations"
 
-const LIST_ACCOUNT_BY_KEY_QUERY = `
-  query ListConsoleAccountByKey($key: String!, $limit: Int) {
-    listAccountByKey(key: $key, limit: $limit) {
-      items {
-        id
-      }
-    }
-  }
-`
 
 function ArtifactPlaceholder({
   icon,
@@ -59,11 +50,8 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
   const workspaceRef = React.useRef<HTMLDivElement | null>(null)
   const artifactPaneRef = React.useRef<HTMLElement | null>(null)
   const [workspaceWidth, setWorkspaceWidth] = React.useState(0)
-  const [fallbackAccountId, setFallbackAccountId] = React.useState<string | null>(null)
   const selectedProcedureId = CONSOLE_BUILTIN_PROCEDURE_ID
   const selectedAccountId = selectedAccount?.id?.trim() || null
-  const defaultAccountKey = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY?.trim() || ""
-  const effectiveAccountId = selectedAccountId || fallbackAccountId
   const normalizedRouteSessionId = routeSessionId?.trim() || undefined
   const [selectedSessionId, setSelectedSessionId] = React.useState<string | undefined>(normalizedRouteSessionId)
 
@@ -101,43 +89,6 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
     }
   }, [getSessionIdFromPathname])
 
-  React.useEffect(() => {
-    if (selectedAccountId) {
-      setFallbackAccountId(null)
-      return
-    }
-    if (!defaultAccountKey) {
-      return
-    }
-
-    let cancelled = false
-
-    const loadFallbackAccountId = async () => {
-      try {
-        const client = getClient() as any
-        const response = await client.graphql({
-          query: LIST_ACCOUNT_BY_KEY_QUERY,
-          variables: { key: defaultAccountKey, limit: 1 },
-          authMode: 'apiKey',
-        })
-        const id = response?.data?.listAccountByKey?.items?.[0]?.id
-        if (!cancelled && typeof id === 'string' && id.trim()) {
-          setFallbackAccountId(id.trim())
-        }
-      } catch (error) {
-        console.error('[ConsoleDashboard] failed to resolve fallback account id', {
-          defaultAccountKey,
-          error,
-        })
-      }
-    }
-
-    void loadFallbackAccountId()
-
-    return () => {
-      cancelled = true
-    }
-  }, [defaultAccountKey, selectedAccountId])
 
   const handleSelectSession = React.useCallback((sessionId: string) => {
     const normalizedSessionId = sessionId.trim()
@@ -165,7 +116,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
   }, [openArtifact])
 
   const handleRunConsoleRepl = React.useCallback(async () => {
-    if (!effectiveAccountId) {
+    if (!selectedAccountId) {
       toast.error("Console account context is unavailable")
       return
     }
@@ -175,7 +126,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
         type: "Procedure Run",
         target: `procedure/run/${selectedProcedureId}`,
         command: `procedure run ${selectedProcedureId}`,
-        accountId: effectiveAccountId,
+        accountId: selectedAccountId,
         dispatchStatus: "PENDING",
         status: "PENDING",
       })
@@ -188,7 +139,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
       console.error("Error queueing console REPL run:", error)
       toast.error("Error queueing console REPL run")
     }
-  }, [effectiveAccountId, selectedProcedureId])
+  }, [selectedAccountId, selectedProcedureId])
 
   const actionsConfig = React.useMemo<TaskDispatchConfig>(() => {
     const showActivityAction: TaskUiAction = {
@@ -359,7 +310,7 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
         <div className="w-0 min-w-0 flex-1 overflow-hidden">
           <ConsoleChatElementsAdapter
             procedureId={selectedProcedureId}
-            accountId={effectiveAccountId ?? undefined}
+            accountId={selectedAccountId ?? undefined}
             selectedSessionId={selectedSessionId}
             onSessionSelect={handleSelectSession}
           />

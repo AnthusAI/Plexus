@@ -1,0 +1,37 @@
+{
+  "id": "plx-5e4bb6d9-cca6-4249-acbc-6b2efa69f2e7",
+  "title": "Rearchitect CMG Edu Branding and Matching to single-request gpt-5.4-nano ScoreVersion",
+  "description": "Create a new non-champion ScoreVersion for CMG Edu Branding and Matching based on the current champion.\n\nScope:\n- Pull current champion configuration\n- Rework logic to perform the full YES/NO classification in one LLM request (single decision pass)\n- Set model to `gpt-5.4-nano`\n- Push as a new ScoreVersion\n\nDefinition of Done:\n- New ScoreVersion created successfully from champion baseline\n- Configuration uses exactly one LLM classification request path\n- Model is `gpt-5.4-nano`\n- Kanbus log contains command trail and resulting ScoreVersion ID",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "38787985-bcee-4c3e-b6a9-c7a87b47d712",
+      "author": "ryan",
+      "text": "Work started.\n\nPlan:\n1) Identify CMG Edu Branding and Matching score + current champion version.\n2) Pull champion YAML locally.\n3) Re-architect prompt/structure to a single LLM classification request path.\n4) Set model to gpt-5.4-nano.\n5) Push as new non-champion ScoreVersion and record version ID.",
+      "created_at": "2026-04-10T11:56:52.995861Z"
+    },
+    {
+      "id": "b8c97d89-e44b-4e78-b1a2-c49af340da78",
+      "author": "ryan",
+      "text": "Discovery update:\n- Resolved scorecard via ID 1039 -> CMG - EDU v1.0.\n- Resolved target score: Branding and Matching (ID 45425).\n- Pulled champion YAML and guidelines.\n- Champion version: db3df9e6-2f78-4f0a-9876-48bd16515cdd.\n- Local file: scorecards/CMG - EDU v1.0/Branding and Matching.yaml.\n\nNext: rewrite tactus_code to a single-agent-call architecture and set model_name to gpt-5.4-nano, then push new ScoreVersion.",
+      "created_at": "2026-04-10T12:03:05.554331Z"
+    },
+    {
+      "id": "722164f5-3548-4572-8730-0ad49f578a92",
+      "author": "ryan",
+      "text": "Implementation complete:\n- Replaced champion tactus_code architecture for score 45425 (Branding and Matching) with a single LLM request path.\n- New logic builds one consolidated schools block and issues exactly one Agent call for the whole transcript/metadata.\n- Updated model to gpt-5.4-nano at both score-level model_name and Agent model.\n\nPush result:\n- Command: python -m plexus.cli score push --scorecard 1039 --score \"Branding and Matching\" --note \"Single-request rearchitecture with gpt-5.4-nano\"\n- Previous champion: db3df9e6-2f78-4f0a-9876-48bd16515cdd\n- New ScoreVersion: c918b11b-8fca-4dbd-b7b4-d130e5f98e94\n- Push output confirmed: \"Changes detected: code. Creating new version.\" and successful creation.",
+      "created_at": "2026-04-10T12:05:26.149106Z"
+    }
+  ],
+  "created_at": "2026-04-10T11:56:50.431359Z",
+  "updated_at": "2026-04-10T12:05:30.138381Z",
+  "closed_at": "2026-04-10T12:05:30.138381Z",
+  "custom": {}
+}

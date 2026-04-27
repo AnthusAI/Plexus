@@ -1,0 +1,39 @@
+{
+  "id": "plx-072c435e-59aa-4872-a3a6-3f5a911648d5",
+  "title": "Add default-on balanced curation to score dataset-curate",
+  "description": "## Summary\nAdd default-on balanced curation to `plexus score dataset-curate`.\n\n## Purpose\nReduce class-skew in associated datasets while preserving practical dataset size.\n\n## Acceptance Criteria\n- `--max-items` is the final output cap.\n- Balancing is enabled by default.\n- `--no-balance` explicitly disables balancing.\n- Selection/output are deterministic.\n- Command output includes before/after class distribution summary fields.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-01fa7055-82c6-4329-8f2d-c0b1e118c9fd",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "dc895f61-31b1-4fee-b8a2-bdac476c0f83",
+      "author": "ryan",
+      "text": "Implemented default-on balancing in score dataset-curate with explicit --no-balance opt-out. Changes: (1) curation path now supports full qualifying scan mode for balancing; (2) added deterministic balanced selector that round-robins champion-YAML class buckets and then fills remaining slots in source order to preserve final size up to --max-items; (3) result payload now includes balance_applied, class_list_used, and class_distribution_before/after; (4) CLI wired with --no-balance and balance pass-through. Added tests for balancing selector/distribution and CLI flag behavior. Verification: pytest -q plexus/cli/dataset/curation_test.py plexus/cli/score/scores_dataset_curate_test.py tests/scores/test_score_validation.py -q => pass; py_compile on changed modules => pass.",
+      "created_at": "2026-04-03T00:41:35.083338Z"
+    },
+    {
+      "id": "95ed8471-3365-4ae6-b46d-ec3ad651a852",
+      "author": "ryan",
+      "text": "Completed and verified in branch.",
+      "created_at": "2026-04-03T00:41:35.133389Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.402767Z",
+  "updated_at": "2026-04-03T00:41:35.133389Z",
+  "closed_at": "2026-04-03T00:41:35.107684Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

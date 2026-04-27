@@ -1,0 +1,79 @@
+{
+  "id": "plx-d4fc7b31-50dd-433f-a48e-671488c88533",
+  "title": "Update skills/plexus-score-optimizer/SKILL.md with report-first contradiction and approval-gated invalidation guidance",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e3e58924-14bc-42cb-b478-41c13dfff1ef",
+      "author": "ryan",
+      "text": "Started skill update. Scope: add high-level optimizer framing around contradiction analysis, SME/rubric questions, and approval-gated feedback invalidation; keep existing mechanical guidance and add CLI-first report/invalidation steps.",
+      "created_at": "2026-04-22T18:01:08.482529Z"
+    },
+    {
+      "id": "61fd3f93-889a-47e9-b779-3eb259be3496",
+      "author": "ryan",
+      "text": "Updated the optimizer skill guidance. Added high-level framing for contradiction analysis as part of optimization, explicit SME/rubric-question handling, report-first triage guidance, approval-gated single-item invalidation via CLI, and CLI-based commands for score info, contradiction reports, dispatcher use, optimizer launch, and advanced manual procedure workflows. Verified CLI help for procedure optimize, feedback report contradictions, and feedback invalidate. Focused invalidation tests and CLI import smoke are green.",
+      "created_at": "2026-04-22T18:05:31.123111Z"
+    },
+    {
+      "id": "88d066e1-f871-4384-ac97-747ef683d237",
+      "author": "ryan",
+      "text": "Continuing the same skill task. New scope: add mechanical hints drawn from today's failure mode so the agent knows how to fetch contradiction report payloads, recognize when the report has actually completed, and filter candidate invalidations from the report before asking the user to approve any group.",
+      "created_at": "2026-04-22T18:14:40.355544Z"
+    },
+    {
+      "id": "5f3fd24c-5d69-411f-bf33-1f50c6598cb3",
+      "author": "ryan",
+      "text": "Patched the optimizer skill with a new mechanics section for contradiction work. Added concrete hints for recognizing when a contradictions report has actually completed, loading the stored report payload via the existing ReportBlock attachment helper, filtering candidate invalidation groups from exemplar fields like edit_comment/reason/guideline_quote, and restating approved groups before any manual invalidation command is run. This is meant to prevent the exact failure mode from today's Prescriber invalidation triage.",
+      "created_at": "2026-04-22T18:15:35.401774Z"
+    },
+    {
+      "id": "1b2eac3b-1d3e-4f0e-b22d-eae249293acb",
+      "author": "ryan",
+      "text": "Completed the follow-up skill refinement. Added concrete mechanics for contradiction-report work: completion signals to trust, a repo-Python command for loading stored FeedbackContradictions payloads from ReportBlock attachments, exemplar fields to filter on, and a stricter approval-first invalidation sequence.",
+      "created_at": "2026-04-22T18:16:00.401531Z"
+    },
+    {
+      "id": "73cb2493-93b7-4349-bdc3-41d5398eee4f",
+      "author": "ryan",
+      "text": "Starting follow-up optimizer skill consolidation. Scope: merge the best run/debugging guidance from score-optimizer-agent into plexus-score-optimizer, keep contradiction/invalidation workflow in the canonical skill, and delete the duplicate score-optimizer-agent skill file after verifying there are no repo references.",
+      "created_at": "2026-04-22T18:31:13.971614Z"
+    },
+    {
+      "id": "8b96fb19-bffc-45d8-a29a-5b0499709051",
+      "author": "ryan",
+      "text": "Continuing optimizer skill consolidation. Restoring the canonical plexus-score-optimizer skill from HEAD after the interrupted deletion, then merging in direct-CLI run/debug guidance, local PID kill workflow, stale-timeout usage, and the existing contradiction/invalidation process before removing the duplicate score-optimizer-agent skill.",
+      "created_at": "2026-04-22T18:41:35.935581Z"
+    },
+    {
+      "id": "44665f54-600a-482a-ad76-107e2d0813f2",
+      "author": "ryan",
+      "text": "Completed optimizer skill consolidation. Restored the canonical plexus-score-optimizer skill, merged in the best direct-CLI optimizer run and debug guidance from the deleted score-optimizer-agent skill, added explicit local PID lookup and kill workflow, added procedure timeout-stale usage and interpretation guidance including the raw-account caveat and automatic background stale scan note, preserved the contradiction-report-first invalidation workflow, and removed the duplicate score-optimizer-agent skill file after confirming there were no remaining repo references.",
+      "created_at": "2026-04-22T18:46:27.160690Z"
+    },
+    {
+      "id": "8ce28de8-8bec-4389-ae13-5f792ff45a73",
+      "author": "ryan",
+      "text": "Follow-up lesson learned from live contradiction comparison work: the optimizer skill should explicitly mention `python -m plexus.cli report list --limit ...` and `python -m plexus.cli report show <report_id>` as the operator path for locating the exact historical pre-change contradictions report before comparing pre/post invalidation or pre/post rubric results. Closing this comment-only follow-up under the existing skill task rather than creating a new code path.",
+      "created_at": "2026-04-22T18:51:29.165800Z"
+    },
+    {
+      "id": "6a4c0fb6-20fb-46ef-9320-cbf23901280b",
+      "author": "ryan",
+      "text": "Added one more operator note to the canonical optimizer skill from live contradiction work: use report list with a limit to locate the exact historical contradictions report by timestamp and title, then use report show plus the existing ReportBlock attachment helper to load the full historical payload for pre/post comparisons. This prevents guessing from summaries when comparing pre- and post-invalidation contradiction sets.",
+      "created_at": "2026-04-22T18:52:58.173749Z"
+    }
+  ],
+  "created_at": "2026-04-22T18:00:56.477337Z",
+  "updated_at": "2026-04-22T18:53:20.744019Z",
+  "closed_at": "2026-04-22T18:53:20.744019Z",
+  "custom": {}
+}

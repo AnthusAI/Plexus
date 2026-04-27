@@ -217,6 +217,7 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         inferences: Number(evaluationData.data?.inferences) || 0,
         accuracy: typeof evaluationData.data?.accuracy === 'number' ? evaluationData.data.accuracy : 0,
         cost: evaluationData.data?.cost ?? null,
+        costDetails: evaluationData.data?.costDetails ?? null,
         status: evaluationData.data?.status || 'PENDING',
         startedAt: evaluationData.data?.startedAt,
         elapsedSeconds: evaluationData.data?.elapsedSeconds ?? null,

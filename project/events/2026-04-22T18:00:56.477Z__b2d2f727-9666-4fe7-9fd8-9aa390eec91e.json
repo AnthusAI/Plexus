@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b2d2f727-9666-4fe7-9fd8-9aa390eec91e",
+  "issue_id": "plx-d4fc7b31-50dd-433f-a48e-671488c88533",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T18:00:56.477Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+    "priority": 2,
+    "status": "open",
+    "title": "Update skills/plexus-score-optimizer/SKILL.md with report-first contradiction and approval-gated invalidation guidance"
+  }
+}

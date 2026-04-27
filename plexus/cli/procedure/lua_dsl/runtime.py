@@ -24,7 +24,6 @@ from .primitives import (
     StopPrimitive,
     ToolPrimitive,
     AgentPrimitive,
-    GraphNodePrimitive,
     HumanPrimitive,
     SystemPrimitive
 )
@@ -87,7 +86,6 @@ class LuaDSLRuntime:
         self.iterations_primitive: Optional[IterationsPrimitive] = None
         self.stop_primitive: Optional[StopPrimitive] = None
         self.tool_primitive: Optional[ToolPrimitive] = None
-        self.graph_primitive: Optional[GraphNodePrimitive] = None
         self.human_primitive: Optional[HumanPrimitive] = None
         self.system_primitive: Optional[SystemPrimitive] = None
         self.step_primitive: Optional[StepPrimitive] = None
@@ -311,7 +309,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -347,7 +345,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -383,7 +381,7 @@ class LuaDSLRuntime:
                     pass
             if chat_recorder and chat_recorder.session_id:
                 try:
-                    await chat_recorder.end_session(status='COMPLETED')
+                    await chat_recorder.end_session(status='FAILED')
                 except Exception as e:
                     logger.warning(f"Failed to end chat session: {e}")
 
@@ -409,11 +407,6 @@ class LuaDSLRuntime:
         self.iterations_primitive = IterationsPrimitive()
         self.stop_primitive = StopPrimitive()
         self.tool_primitive = ToolPrimitive()
-        self.graph_primitive = GraphNodePrimitive(
-            client=self.client,
-            procedure_id=self.procedure_id,
-            account_id=self.account_id
-        )
 
         logger.debug("All primitives initialized")
 
@@ -480,12 +473,13 @@ class LuaDSLRuntime:
             from langchain_core.tools import tool
 
             @tool
-            def done(reason: str, success: bool = True) -> str:
+            def done(reason: str, success: bool = True, decision: str = "") -> str:
                 """Signal completion of the task.
 
                 Args:
                     reason: Brief explanation of completion
                     success: True if completed successfully
+                    decision: Optional decision value (e.g. 'abort', 'continue', 'keep', 'revert')
 
                 Returns:
                     Acknowledgment message
@@ -494,14 +488,17 @@ class LuaDSLRuntime:
 
             langchain_tools.append(done)
 
-            # Create LLM with tools
-            from langchain_openai import ChatOpenAI
+            # Create LLM from agent config
+            from plexus.cli.procedure.model_config import ModelConfig
 
-            llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.7,
-                openai_api_key=self.openai_api_key
+            model_name = agent_config.get('model', 'gpt-5')
+            temperature = agent_config.get('temperature')
+            model_cfg = ModelConfig(
+                model=model_name,
+                temperature=temperature,
+                openai_api_key=self.openai_api_key,
             )
+            llm = model_cfg.create_langchain_llm()
 
             llm_with_tools = llm.bind_tools(langchain_tools)
 
@@ -539,7 +536,6 @@ class LuaDSLRuntime:
         self.lua_sandbox.inject_primitive("Iterations", self.iterations_primitive)
         self.lua_sandbox.inject_primitive("Stop", self.stop_primitive)
         self.lua_sandbox.inject_primitive("Tool", self.tool_primitive)
-        self.lua_sandbox.inject_primitive("GraphNode", self.graph_primitive)
 
         # Inject checkpoint primitives
         self.lua_sandbox.inject_primitive("Step", self.step_primitive)
@@ -596,12 +592,15 @@ class LuaDSLRuntime:
         self.lua_sandbox.set_global("Sleep", sleep_wrapper)
         logger.info("Injected Sleep function")
 
-        # Inject agent primitives (capitalized names)
+        # Inject agent primitives (both original and capitalized names)
         for agent_name, agent_primitive in self.agents.items():
-            # Capitalize first letter for Lua convention (Worker, Assistant, etc.)
+            # Inject with original name (e.g., code_editor) for YAML code that uses it directly
+            self.lua_sandbox.inject_primitive(agent_name, agent_primitive)
+            # Also inject capitalized for Lua convention (Worker, Assistant, etc.)
             lua_name = agent_name.capitalize()
-            self.lua_sandbox.inject_primitive(lua_name, agent_primitive)
-            logger.info(f"Injected agent primitive: {lua_name}")
+            if lua_name != agent_name:
+                self.lua_sandbox.inject_primitive(lua_name, agent_primitive)
+            logger.info(f"Injected agent primitive: {agent_name} (also as {lua_name})")
 
         logger.debug("All primitives injected into Lua sandbox")
 

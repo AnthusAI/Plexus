@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f912bccd-c745-4c40-be75-7a55e947d3a3",
+  "issue_id": "plx-5c945e36-1343-41f9-8f1b-792febf4e07d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T15:45:35.577Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix optimizer contradictions report cache reuse"
+  }
+}

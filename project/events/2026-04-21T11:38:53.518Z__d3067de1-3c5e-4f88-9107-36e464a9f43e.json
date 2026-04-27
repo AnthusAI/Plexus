@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d3067de1-3c5e-4f88-9107-36e464a9f43e",
+  "issue_id": "plx-ff392123-4dd4-4199-a290-051ac1398edb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T11:38:53.518Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create and validate classifier guidelines for the Suco - Home Improvement Project Timeline AI score so reviewers and the model share the same class definitions and decision criteria.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Define Project Timeline AI guidelines for Suco Home Improvement"
+  }
+}

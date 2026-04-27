@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1e46a5a8-7e44-4b05-892c-6028b52b6c03",
+  "issue_id": "plx-9fc88385-c7d5-47c7-b7e3-a19d225d5b14",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:33:51.612Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Add score-page Associated Datasets panel with label distribution"
+  }
+}

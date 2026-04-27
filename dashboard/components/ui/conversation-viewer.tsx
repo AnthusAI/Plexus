@@ -1,9 +1,10 @@
 "use client"
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { getClient } from '@/utils/data-operations'
+import { formatAmplifyError } from '@/utils/amplify-client'
 import {
   Conversation,
-  ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
@@ -37,6 +38,7 @@ import {
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
+  ChevronDownIcon,
   MoreHorizontal,
   Trash2,
   AlertCircle,
@@ -55,6 +57,14 @@ import {
 } from "@/lib/procedure-hitl"
 import { cn } from "@/lib/utils"
 
+const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
+const STANDARD_SESSION_CATEGORY = 'Optimize'
+
+const EVALUATION_TOOL_NAMES = new Set([
+  'plexus_evaluation_run',
+  'plexus_evaluation_info',
+])
+
 // Types for the conversation data
 export interface ChatMessage {
   id: string
@@ -69,6 +79,12 @@ export interface ChatMessage {
   parentMessageId?: string
   accountId?: string
   procedureId?: string
+  responseTarget?: string
+  responseStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  responseOwner?: string
+  responseStartedAt?: string
+  responseCompletedAt?: string
+  responseError?: string
   createdAt: string
   sequenceNumber?: number
   sessionId?: string
@@ -95,7 +111,6 @@ type PendingAssistantState = {
   requestedAt: string
   baselineAssistantCreatedAt?: string | null
   triggerMessageId?: string
-  taskId?: string
 }
 
 type ConsoleToolViewModel = {
@@ -128,40 +143,6 @@ export interface ConversationViewerProps {
   defaultAccountIdForNewSession?: string
 }
 
-const START_CONSOLE_RUN_MUTATION = `
-  mutation StartConsoleRun(
-    $sessionId: String!
-    $procedureId: String!
-    $triggerMessageId: String!
-    $clientInstrumentation: AWSJSON
-  ) {
-    startConsoleRun(
-      sessionId: $sessionId
-      procedureId: $procedureId
-      triggerMessageId: $triggerMessageId
-      clientInstrumentation: $clientInstrumentation
-    ) {
-      runId
-      taskId
-      accepted
-      queuedAt
-    }
-  }
-`
-
-const GET_TASK_STATUS_QUERY = `
-  query GetTaskStatus($id: ID!) {
-    getTask(id: $id) {
-      id
-      status
-      dispatchStatus
-      errorMessage
-      updatedAt
-    }
-  }
-`
-
-const API_KEY_AUTH_OPTIONS = { authMode: 'apiKey' as const }
 
 // Helper function to format JSON with proper newlines
 const formatJsonWithNewlines = (obj: any): string => {
@@ -325,6 +306,12 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
     parentMessageId: msg.parentMessageId,
     accountId: msg.accountId,
     procedureId: msg.procedureId,
+    responseTarget: msg.responseTarget,
+    responseStatus: msg.responseStatus,
+    responseOwner: msg.responseOwner,
+    responseStartedAt: msg.responseStartedAt,
+    responseCompletedAt: msg.responseCompletedAt,
+    responseError: msg.responseError,
     createdAt: msg.createdAt,
     sequenceNumber: msg.sequenceNumber,
     sessionId: msg.sessionId
@@ -604,6 +591,19 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
   const type = toToolType(toolName)
 
   if (message.messageType === 'TOOL_CALL') {
+    if (message.toolResponse !== undefined && message.toolResponse !== null) {
+      // Tool call has completed — show as a single completed component
+      const errorText = extractToolErrorText(message)
+      const output = message.toolResponse
+      return {
+        type,
+        toolName,
+        state: errorText ? 'output-error' : 'output-available',
+        input: message.toolParameters || {},
+        output,
+        errorText,
+      }
+    }
     return {
       type,
       toolName,
@@ -631,18 +631,18 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
 // Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
-  maxLines = 10, 
+  maxLines,
   className = "whitespace-pre-wrap break-words",
   enableMarkdown = true
-}: { 
-  content: string, 
+}: {
+  content: string,
   maxLines?: number,
   className?: string,
   enableMarkdown?: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lines = content.split('\n')
-  const shouldTruncate = lines.length > maxLines
+  const shouldTruncate = maxLines != null && lines.length > maxLines
   const displayContent = shouldTruncate && !isExpanded 
     ? lines.slice(0, maxLines).join('\n') + '...'
     : content
@@ -710,14 +710,14 @@ function CollapsibleText({
 
 const getMessageTypeColor = (role?: string, messageType?: string, humanInteraction?: string) => {
   const badgeStyles = {
-    blue: 'border-transparent bg-blue-100 text-blue-800 dark:bg-blue-800/40 dark:text-blue-200',
-    yellow: 'border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-800/40 dark:text-yellow-200',
-    red: 'border-transparent bg-red-100 text-red-800 dark:bg-red-800/40 dark:text-red-200',
-    redCritical: 'border-transparent bg-red-200 text-red-900 dark:bg-red-800/60 dark:text-red-100',
-    green: 'border-transparent bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-200',
-    purple: 'border-transparent bg-purple-100 text-purple-800 dark:bg-purple-800/40 dark:text-purple-200',
-    orange: 'border-transparent bg-orange-100 text-orange-800 dark:bg-orange-800/40 dark:text-orange-200',
-    gray: 'border-transparent bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-200',
+    blue: 'bg-info text-primary-foreground',
+    yellow: 'bg-warning text-primary-foreground',
+    red: 'bg-false text-primary-foreground',
+    redCritical: 'bg-false text-primary-foreground',
+    green: 'bg-true text-primary-foreground',
+    purple: 'bg-info text-primary-foreground',
+    orange: 'bg-warning text-primary-foreground',
+    gray: 'bg-neutral text-primary-foreground',
   } as const
 
   // Check humanInteraction first for special message types
@@ -799,7 +799,415 @@ const getRowFromMessage = (message: ChatMessage): ConversationRow => {
   }
 }
 
-function ConversationViewer({ 
+type MessageCostSummary = {
+  schema_version?: number
+  total_usd?: number
+  llm_calls?: number
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  cached_tokens?: number
+  breakdown?: Array<Record<string, unknown>>
+}
+
+type MessageCostMetadata = {
+  kind?: string
+  billing_mode?: string
+  live?: boolean
+  summary?: MessageCostSummary
+}
+
+const hasMeaningfulCostSummary = (summary: MessageCostSummary | null | undefined): boolean => {
+  if (!summary || typeof summary !== 'object') {
+    return false
+  }
+  const totalUsd = typeof summary.total_usd === 'number' ? summary.total_usd : 0
+  const llmCalls = typeof summary.llm_calls === 'number' ? summary.llm_calls : 0
+  const promptTokens = typeof summary.prompt_tokens === 'number' ? summary.prompt_tokens : 0
+  const completionTokens = typeof summary.completion_tokens === 'number' ? summary.completion_tokens : 0
+  const totalTokens = typeof summary.total_tokens === 'number' ? summary.total_tokens : 0
+  const cachedTokens = typeof summary.cached_tokens === 'number' ? summary.cached_tokens : 0
+  const hasBreakdown = Array.isArray(summary.breakdown) && summary.breakdown.length > 0
+  return (
+    totalUsd > 0
+    || llmCalls > 0
+    || promptTokens > 0
+    || completionTokens > 0
+    || totalTokens > 0
+    || cachedTokens > 0
+    || hasBreakdown
+  )
+}
+
+const getMessageCostMetadata = (message: ChatMessage): MessageCostMetadata | null => {
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const cost = (metadata as Record<string, unknown>).cost
+  if (!cost || typeof cost !== 'object' || Array.isArray(cost)) {
+    return null
+  }
+  return cost as MessageCostMetadata
+}
+
+const formatUsd = (value: number | undefined): string => `$${(value || 0).toFixed(4)}`
+
+// Props passed into each virtualized row
+interface MessageRowProps {
+  row: ConversationRow
+  enableHitlActions: boolean
+  responseParentIds: Set<string>
+  submittedMessageIds: Set<string>
+  submittingMessageIds: Set<string>
+  hitlTextByMessage: Record<string, string>
+  hitlSubmitErrors: Record<string, string>
+  setHitlTextByMessage: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  submitHitlResponse: (message: ChatMessage, action: string, text?: string) => Promise<void>
+}
+
+const MemoizedMessageRow = React.memo(function MessageRow({
+  row,
+  enableHitlActions,
+  responseParentIds,
+  submittedMessageIds,
+  submittingMessageIds,
+  hitlTextByMessage,
+  hitlSubmitErrors,
+  setHitlTextByMessage,
+  submitHitlResponse,
+}: MessageRowProps) {
+  const message = row.message
+  const toolViewModel = mapMessageToToolViewModel(message)
+  const controlEnvelope = getControlEnvelope(message.metadata)
+  const requestType = (
+    controlEnvelope?.request_type
+    || mapPendingInteractionToRequestType(message.humanInteraction)
+  ).toLowerCase()
+  const messageIsPending = enableHitlActions && isPendingHumanInteraction(message.humanInteraction)
+  const responseExists = responseParentIds.has(message.id)
+  const isSubmitted = responseExists || submittedMessageIds.has(message.id)
+  const isSubmitting = submittingMessageIds.has(message.id)
+  const currentInput = hitlTextByMessage[message.id] || ''
+  const messageTypeLabel = getMessageTypeLabel(message)
+  const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
+  const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
+  const costMetadata = getMessageCostMetadata(message)
+  const costSummary = costMetadata?.summary
+  const hasCostSummary = hasMeaningfulCostSummary(costSummary)
+  const costTotal = typeof costSummary?.total_usd === 'number' ? costSummary.total_usd : undefined
+  const showInlineCostBadge = !(
+    message.role === 'ASSISTANT' && message.messageType === 'MESSAGE'
+  )
+  const costBadgeLabel = costMetadata && hasCostSummary && showInlineCostBadge
+    ? `${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costTotal)}`
+    : null
+  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge || Boolean(costBadgeLabel)
+
+  return (
+    <Message
+      from={row.from}
+      data-message-id={row.id}
+      data-from={row.from}
+      className="max-w-full"
+    >
+      <div className="flex items-start">
+        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+          {showMetadataBadges && (
+            <div className="mb-2 flex items-center gap-2">
+              {showMessageTypeBadge && (
+                <Badge
+                  variant="pill"
+                  className={`text-xs px-1.5 py-0 font-normal ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                >
+                  {messageTypeLabel}
+                </Badge>
+              )}
+              {showToolNameBadge && (
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-neutral text-primary-foreground">
+                  {message.toolName}
+                </Badge>
+              )}
+              {costBadgeLabel && (
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-info text-primary-foreground">
+                  {costBadgeLabel}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {toolViewModel ? (
+            <div className="space-y-2">
+              <Tool
+                defaultOpen={
+                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                  toolViewModel.state === 'output-error'
+                }
+              >
+                <ToolHeader
+                  toolType={toolViewModel.type}
+                  state={toolViewModel.state}
+                  toolName={toolViewModel.toolName}
+                />
+                <ToolContent>
+                  {(message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE') && toolViewModel.input !== undefined && (
+                    <ToolInput input={toolViewModel.input} />
+                  )}
+                  {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
+                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                      <React.Suspense fallback={
+                        <div className="rounded-md bg-card p-3">
+                          <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
+                          <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
+                        </div>
+                      }>
+                        <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                      </React.Suspense>
+                    ) : (
+                      <ToolOutput
+                        errorText={toolViewModel.errorText}
+                        output={
+                          <div className="font-mono whitespace-pre-wrap break-words">
+                            {toolViewModel.output === undefined || toolViewModel.output === null
+                              ? 'No output'
+                              : typeof toolViewModel.output === 'string'
+                                ? toolViewModel.output
+                                : formatJsonWithNewlines(toolViewModel.output)}
+                          </div>
+                        }
+                      />
+                    )
+                  )}
+                </ToolContent>
+              </Tool>
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
+                    <div>Total: {formatUsd(costSummary.total_usd)}</div>
+                    <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
+                    <div>Tokens: {costSummary.total_tokens ?? 0}</div>
+                    {Array.isArray(costSummary.breakdown) && costSummary.breakdown.length > 0 && (
+                      <table className="w-full mt-2">
+                        <thead className="text-muted-foreground/70">
+                          <tr>
+                            <th className="text-left font-medium">Model</th>
+                            <th className="text-right font-medium">Spent</th>
+                            <th className="text-right font-medium">Reused</th>
+                            <th className="text-right font-medium">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {costSummary.breakdown.map((row: any, idx: number) => (
+                            <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`}>
+                              <td className="py-0.5 pr-2">{row.provider || 'unknown'} / {row.model || 'unknown'}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.spent_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.reused_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{Number(row.total_tokens ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm space-y-2">
+              <CollapsibleText content={message.content} />
+              {costMetadata && costSummary && hasCostSummary && (
+                <details className="group rounded-md bg-card/60 text-xs">
+                  <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
+                      <ChevronDownIcon className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="space-y-1 px-3 pb-3 tabular-nums">
+                    <div>Total: {formatUsd(costSummary.total_usd)}</div>
+                    <div>LLM calls: {costSummary.llm_calls ?? 0}</div>
+                    <div>Prompt tokens: {costSummary.prompt_tokens ?? 0}</div>
+                    <div>Completion tokens: {costSummary.completion_tokens ?? 0}</div>
+                    {Array.isArray(costSummary.breakdown) && costSummary.breakdown.length > 0 && (
+                      <table className="w-full mt-2">
+                        <thead className="text-muted-foreground/70">
+                          <tr>
+                            <th className="text-left font-medium">Model</th>
+                            <th className="text-right font-medium">Spent</th>
+                            <th className="text-right font-medium">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {costSummary.breakdown.map((row: any, idx: number) => (
+                            <tr key={`${row.provider ?? 'none'}|${row.model ?? 'none'}|${idx}`}>
+                              <td className="py-0.5 pr-2">{row.provider || 'unknown'} / {row.model || 'unknown'}</td>
+                              <td className="py-0.5 text-right">{formatUsd(Number(row.referenced_usd ?? row.spent_usd ?? 0))}</td>
+                              <td className="py-0.5 text-right">{Number(row.total_tokens ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          {messageIsPending && (
+            <div className="mt-3 space-y-3 rounded-md border border-border p-3">
+              {!controlEnvelope && (
+                <div className="text-xs text-red-600">
+                  Pending request is missing canonical `metadata.control`.
+                </div>
+              )}
+              {hitlSubmitErrors[message.id] && (
+                <div className="text-xs text-red-600">
+                  {hitlSubmitErrors[message.id]}
+                </div>
+              )}
+
+              {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
+                <Textarea
+                  value={currentInput}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setHitlTextByMessage((prev) => ({
+                      ...prev,
+                      [message.id]: value,
+                    }))
+                  }}
+                  rows={requestType === 'review' ? 6 : 4}
+                  placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
+                  disabled={isSubmitting}
+                />
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                {isSubmitted && (
+                  <Badge
+                    variant="pill"
+                    className="bg-true text-primary-foreground text-xs px-1.5 py-0 font-normal"
+                  >
+                    Response submitted
+                  </Badge>
+                )}
+
+                {!isSubmitted && requestType === 'approval' && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'approve')
+                        } catch (error) {
+                          console.error('Failed submitting approval response', error)
+                        }
+                      }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'reject')
+                        } catch (error) {
+                          console.error('Failed submitting rejection response', error)
+                        }
+                      }}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                )}
+
+                {!isSubmitted && requestType === 'input' && (
+                  <Button
+                    size="sm"
+                    disabled={isSubmitting || !controlEnvelope}
+                    onClick={async () => {
+                      try {
+                        await submitHitlResponse(message, 'submit', currentInput)
+                      } catch (error) {
+                        console.error('Failed submitting input response', error)
+                      }
+                    }}
+                  >
+                    Submit
+                  </Button>
+                )}
+
+                {!isSubmitted && requestType === 'review' && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'approve', currentInput)
+                        } catch (error) {
+                          console.error('Failed submitting review approval', error)
+                        }
+                      }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmitting || !controlEnvelope}
+                      onClick={async () => {
+                        try {
+                          await submitHitlResponse(message, 'request_changes', currentInput)
+                        } catch (error) {
+                          console.error('Failed submitting review feedback', error)
+                        }
+                      }}
+                    >
+                      Request Changes
+                    </Button>
+                  </>
+                )}
+
+                {!isSubmitted && requestType === 'escalation' && (
+                  <Button
+                    size="sm"
+                    disabled={isSubmitting || !controlEnvelope}
+                    onClick={async () => {
+                      try {
+                        await submitHitlResponse(message, 'acknowledge', currentInput)
+                      } catch (error) {
+                        console.error('Failed submitting escalation acknowledgment', error)
+                      }
+                    }}
+                  >
+                    Acknowledge
+                  </Button>
+                )}
+
+                {isSubmitting && (
+                  <Badge variant="pill" className="bg-warning text-primary-foreground text-xs px-1.5 py-0 font-normal">Submitting...</Badge>
+                )}
+              </div>
+            </div>
+          )}
+        </MessageContent>
+      </div>
+    </Message>
+  )
+})
+
+function ConversationViewer({
   sessions: propSessions, 
   messages: propMessages, 
   selectedSessionId: propSelectedSessionId,
@@ -837,7 +1245,8 @@ function ConversationViewer({
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const promptSubmitLockRef = React.useRef(false)
-  const reportedTerminalTaskIdsRef = React.useRef<Set<string>>(new Set())
+  const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const [atBottom, setAtBottom] = useState(true)
   const authFailureReportedRef = React.useRef(false)
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
@@ -928,7 +1337,6 @@ function ConversationViewer({
     sessionId: string,
     requestedAt: string,
     triggerMessageId?: string,
-    taskId?: string,
   ) => {
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
@@ -937,7 +1345,6 @@ function ConversationViewer({
         requestedAt,
         baselineAssistantCreatedAt,
         triggerMessageId,
-        taskId,
       },
     }))
   }, [messages])
@@ -999,74 +1406,6 @@ function ConversationViewer({
     })
   }, [messages, pendingAssistantBySession])
 
-  useEffect(() => {
-    const pendingEntries = Object.entries(pendingAssistantBySession)
-    if (!pendingEntries.length) {
-      return
-    }
-
-    let cancelled = false
-
-    const pollPendingTaskStatuses = async () => {
-      const client = getClient() as any
-      for (const [sessionId, pendingState] of pendingEntries) {
-        const explicitTaskId = (pendingState.taskId || '').trim()
-        const fallbackTaskId = (pendingState.triggerMessageId || '').trim()
-          ? `console-run-${(pendingState.triggerMessageId || '').trim()}`
-          : ''
-        const taskId = explicitTaskId || fallbackTaskId
-        if (!taskId) {
-          continue
-        }
-
-        try {
-          const response = await client.graphql({
-            query: GET_TASK_STATUS_QUERY,
-            variables: { id: taskId },
-            authMode: 'apiKey',
-          })
-          if (cancelled) {
-            return
-          }
-
-          const task = response?.data?.getTask
-          const taskStatus = String(task?.status || '').toUpperCase()
-          if (!taskStatus || taskStatus === 'PENDING' || taskStatus === 'RUNNING') {
-            continue
-          }
-
-          clearPendingAssistant(sessionId)
-
-          if ((taskStatus === 'FAILED' || taskStatus === 'CANCELED') && !reportedTerminalTaskIdsRef.current.has(taskId)) {
-            reportedTerminalTaskIdsRef.current.add(taskId)
-            const errorText = typeof task?.errorMessage === 'string' && task.errorMessage.trim()
-              ? task.errorMessage.trim()
-              : `Assistant run ${taskStatus.toLowerCase()}.`
-            toast.error(errorText)
-            console.error('[ConsoleChat] assistant run terminal state', {
-              sessionId,
-              taskId,
-              status: taskStatus,
-              errorMessage: task?.errorMessage,
-            })
-          }
-        } catch (error) {
-          if (markAuthUnavailable(error, 'pending_task_poll')) {
-            return
-          }
-          console.error('[ConsoleChat] pending task poll failed', { sessionId, taskId, error })
-        }
-      }
-    }
-
-    const timer = window.setInterval(pollPendingTaskStatuses, 4000)
-    pollPendingTaskStatuses()
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [pendingAssistantBySession, clearPendingAssistant, isAuthUnavailable, markAuthUnavailable])
-  
   const handleSessionSelect = (sessionId: string) => {
     setInternalSelectedSessionId(sessionId)
     if (onSessionSelect) {
@@ -1106,86 +1445,9 @@ function ConversationViewer({
     })
   }
 
-  const startConsoleRun = React.useCallback(async (
-    sessionId: string,
-    procedureIdToRun: string,
-    triggerMessageId: string,
-    clientInstrumentation: Record<string, unknown> = {},
-  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
-    const client = getClient() as any
-    const response = await client.graphql({
-      query: START_CONSOLE_RUN_MUTATION,
-      variables: {
-        sessionId,
-        procedureId: procedureIdToRun,
-        triggerMessageId,
-        clientInstrumentation: JSON.stringify(clientInstrumentation),
-      },
-      authMode: 'apiKey',
-    })
-
-    const result = response?.data?.startConsoleRun
-    if (!result?.accepted || !result?.taskId || !result?.runId || !result?.queuedAt) {
-      throw new Error('Failed to queue procedure run after chat input')
-    }
-    return {
-      taskId: result.taskId,
-      runId: result.runId,
-      queuedAt: result.queuedAt,
-    }
-  }, [])
-
-  const enqueueProcedureRunTask = async (
-    procedureIdToRun: string,
-    sessionId: string,
-    pendingMessageId: string,
-    responseMessageId: string,
-    requestId: string
-  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
-    return startConsoleRun(
-      sessionId,
-      procedureIdToRun,
-      responseMessageId,
-      {
-        hitl_resume: {
-          pending_message_id: pendingMessageId,
-          response_message_id: responseMessageId,
-          request_id: requestId,
-        },
-      },
-    )
-  }
-
-  const enqueueProcedureRunFromChat = React.useCallback(async (
-    procedureIdToRun: string,
-    triggerMessageId: string,
-    sessionId: string,
-    clientTiming: Record<string, unknown> = {},
-  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
-    const instrumentation: Record<string, unknown> = {
-      ...clientTiming,
-      client_dispatch_request_started_at: new Date().toISOString(),
-    }
-
-    try {
-      const dispatchResult = await startConsoleRun(
-        sessionId,
-        procedureIdToRun,
-        triggerMessageId,
-        instrumentation,
-      )
-      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
-      instrumentation.client_dispatch_request_accepted = true
-      instrumentation.queue_task_id = dispatchResult.taskId
-      instrumentation.queue_run_id = dispatchResult.runId
-      instrumentation.queue_accepted_at = dispatchResult.queuedAt
-      return dispatchResult
-    } catch (error) {
-      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
-      instrumentation.client_dispatch_request_accepted = false
-      throw error
-    }
-  }, [startConsoleRun])
+  const getConsoleResponseTarget = React.useCallback(() => (
+    process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET?.trim() || 'cloud'
+  ), [])
 
   const submitHitlResponse = async (
     pendingMessage: ChatMessage,
@@ -1216,6 +1478,7 @@ function ConversationViewer({
         inputText,
       })
       const respondedAt = new Date().toISOString()
+      const responseTarget = getConsoleResponseTarget()
       const responseMetadata = {
         control: {
           request_id: control.request_id,
@@ -1239,28 +1502,22 @@ function ConversationViewer({
         humanInteraction: 'RESPONSE',
         content: JSON.stringify({ value: responseValue }),
         metadata: JSON.stringify(responseMetadata),
+        responseTarget,
+        responseStatus: 'PENDING',
         createdAt: respondedAt,
-      }, API_KEY_AUTH_OPTIONS)
+      })
       const responseMessageId = created?.data?.id
       if (!responseMessageId) {
         throw new Error('Failed to persist RESPONSE message')
       }
 
-      const dispatchResult = await enqueueProcedureRunTask(
-        pendingMessage.procedureId,
-        pendingMessage.sessionId,
-        pendingMessage.id,
-        responseMessageId,
-        control.request_id
-      )
       markPendingAssistant(
         pendingMessage.sessionId,
         respondedAt,
         responseMessageId,
-        dispatchResult.taskId,
       )
 
-      toast.success('Response submitted. Procedure resume queued.')
+      toast.success('Response submitted.')
 
       setInternalMessages(prev => {
         const responseMessage: ChatMessage = {
@@ -1274,6 +1531,8 @@ function ConversationViewer({
           humanInteraction: 'RESPONSE',
           content: JSON.stringify({ value: responseValue }),
           metadata: responseMetadata,
+          responseTarget,
+          responseStatus: 'PENDING',
           createdAt: respondedAt,
         }
         const deduped = prev.filter(message => message.id !== responseMessageId)
@@ -1323,8 +1582,7 @@ function ConversationViewer({
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
-          authMode: 'apiKey',
-        }, API_KEY_AUTH_OPTIONS)
+        })
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
@@ -1334,7 +1592,7 @@ function ConversationViewer({
         // that's not in the index list yet, fetch by id and inject it.
         if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
           try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, API_KEY_AUTH_OPTIONS)
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId })
             const selectedSession = selectedSessionResponse?.data
             if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
               mergedSessions = [selectedSession, ...fetchedSessions]
@@ -1384,9 +1642,7 @@ function ConversationViewer({
             procedureId: effectiveId,
             limit: 1000,
             nextToken,
-            authMode: 'apiKey',
           }, {
-            authMode: 'apiKey',
             selectionSet: [
               'id',
               'content',
@@ -1454,8 +1710,7 @@ function ConversationViewer({
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
-          authMode: 'apiKey',
-        }, API_KEY_AUTH_OPTIONS)
+        })
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
@@ -1463,7 +1718,7 @@ function ConversationViewer({
 
         if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
           try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, API_KEY_AUTH_OPTIONS)
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId })
             const selectedSession = selectedSessionResponse?.data
             if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
               mergedSessions = [selectedSession, ...fetchedSessions]
@@ -1551,7 +1806,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatSession.onCreate(API_KEY_AUTH_OPTIONS as any).subscribe({
+      const subscription = getClient().models.ChatSession.onCreate().subscribe({
         next: () => {
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
@@ -1648,9 +1903,7 @@ function ConversationViewer({
             procedureId: effectiveId,
             limit: 1000,
             nextToken,
-            authMode: 'apiKey',
           }, {
-            authMode: 'apiKey',
             selectionSet: [
               'id',
               'content',
@@ -1722,7 +1975,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      createSubscription = getClient().models.ChatMessage.onCreate(API_KEY_AUTH_OPTIONS as any).subscribe({
+      createSubscription = getClient().models.ChatMessage.onCreate().subscribe({
         next: (payload: any) => {
           const incoming = extractSubscriptionMessage(payload)
           if (incoming) {
@@ -1746,7 +1999,7 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      updateSubscription = getClient().models.ChatMessage.onUpdate(API_KEY_AUTH_OPTIONS as any).subscribe({
+      updateSubscription = getClient().models.ChatMessage.onUpdate().subscribe({
         next: (payload: any) => {
           const incoming = extractSubscriptionMessage(payload)
           if (incoming) {
@@ -1880,10 +2133,10 @@ function ConversationViewer({
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: 'Console Chat',
+      category: STANDARD_SESSION_CATEGORY,
       createdAt,
       updatedAt: createdAt,
-    }, API_KEY_AUTH_OPTIONS)
+    })
 
     const sessionId = created?.data?.id
     if (!sessionId) {
@@ -1894,7 +2147,7 @@ function ConversationViewer({
       id: sessionId,
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
-      category: created?.data?.category || 'Console Chat',
+      category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
@@ -1998,6 +2251,7 @@ function ConversationViewer({
 
         const clientSendStartedAt = new Date().toISOString()
         const nowIso = new Date().toISOString()
+        const responseTarget = getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
@@ -2008,6 +2262,8 @@ function ConversationViewer({
           messageType: 'MESSAGE',
           humanInteraction: 'CHAT',
           content: nextValue,
+          responseTarget,
+          responseStatus: 'PENDING',
           createdAt: nowIso,
         }
 
@@ -2022,6 +2278,14 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
+          const dispatchMessageText = nextValue.length > 4000
+            ? `${nextValue.slice(0, 4000)}…`
+            : nextValue
+          const clientHistorySnapshot = buildClientHistorySnapshot(
+            messages,
+            targetSessionId,
+            nextValue,
+          )
           const created = await (client.models.ChatMessage.create as any)({
             accountId: targetSessionAccountId,
             sessionId: targetSessionId,
@@ -2035,9 +2299,14 @@ function ConversationViewer({
               sent_at: nowIso,
               instrumentation: {
                 client_send_started_at: clientSendStartedAt,
+                client_prompt_length_chars: nextValue.length,
+                client_user_message_text: dispatchMessageText,
+                client_history_snapshot: clientHistorySnapshot,
               },
             }),
-          }, API_KEY_AUTH_OPTIONS)
+            responseTarget,
+            responseStatus: 'PENDING',
+          })
 
           const createdMessageId = created?.data?.id
           if (!createdMessageId) {
@@ -2052,32 +2321,10 @@ function ConversationViewer({
               : message
           )))
 
-          const dispatchMessageText = nextValue.length > 4000
-            ? `${nextValue.slice(0, 4000)}…`
-            : nextValue
-          const clientHistorySnapshot = buildClientHistorySnapshot(
-            messages,
-            targetSessionId,
-            nextValue,
-          )
-
-          const dispatchResult = await enqueueProcedureRunFromChat(
-            targetSessionProcedureId,
-            createdMessageId,
-            targetSessionId,
-            {
-              client_send_started_at: clientSendStartedAt,
-              client_user_message_created_at: persistedCreatedAt,
-              client_prompt_length_chars: nextValue.length,
-              client_user_message_text: dispatchMessageText,
-              client_history_snapshot: clientHistorySnapshot,
-            },
-          )
           markPendingAssistant(
             targetSessionId,
             persistedCreatedAt,
             createdMessageId,
-            dispatchResult.taskId,
           )
 
           setPromptValue('')
@@ -2093,7 +2340,7 @@ function ConversationViewer({
             )))
           }
 
-          const errorMessage = getErrorMessage(error, 'Failed to send chat message')
+          const errorMessage = formatAmplifyError(error) || getErrorMessage(error, 'Failed to send chat message')
           console.error('[ConsoleChat] send/dispatch failure', {
             messagePersisted,
             sessionId: targetSessionId,
@@ -2124,8 +2371,8 @@ function ConversationViewer({
       isCreatingSession,
       messages,
       createNewSession,
-      enqueueProcedureRunFromChat,
       clearPendingAssistant,
+      getConsoleResponseTarget,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -2149,7 +2396,7 @@ function ConversationViewer({
         style={!isSidebarCollapsed ? { width: sidebarWidth } : undefined}
       >
         {/* Sidebar Header */}
-        <div className="p-3 border-b border-border flex items-center justify-between">
+        <div data-testid="conversation-sidebar-header" className="h-12 px-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
             <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
           )}
@@ -2240,19 +2487,17 @@ function ConversationViewer({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Session Header */}
         {selectedSession && (
-          <div className="border-b border-border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <h3 className="font-medium text-sm">
+          <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
+            <div className="flex h-full items-center justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex items-center gap-2">
+                  <h3 className="font-medium text-sm truncate">
                     {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
                   </h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                    <span>
-                      {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
-                    </span>
-                  </div>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
+                  </span>
                 </div>
               </div>
               
@@ -2288,291 +2533,89 @@ function ConversationViewer({
         {/* Messages List */}
         <div className="min-h-0 flex-1">
           <Conversation className="h-full">
-            <ConversationContent className="gap-4 px-3 py-3">
-              {isAuthUnavailable ? (
+            {isAuthUnavailable ? (
+              <ConversationEmptyState
+                title="Console unavailable"
+                description="GraphQL access is unauthorized in this environment. Check API URL/key and restart dev."
+                icon={<AlertCircle className="h-12 w-12 opacity-50" />}
+              />
+            ) : !selectedSessionId ? (
+              <ConversationEmptyState
+                title="No session selected"
+                description="Select a chat session to view messages"
+                icon={<MessageSquare className="h-12 w-12 opacity-50" />}
+              />
+            ) : selectedSessionMissing ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3">
                 <ConversationEmptyState
-                  title="Console unavailable"
-                  description="GraphQL access is unauthorized in this environment. Check API URL/key and restart dev."
+                  title="Session not found"
+                  description="The session in this URL is unavailable for the current account. Select another session or create a new one."
                   icon={<AlertCircle className="h-12 w-12 opacity-50" />}
                 />
-              ) : !selectedSessionId ? (
-                <ConversationEmptyState
-                  title="No session selected"
-                  description="Select a chat session to view messages"
-                  icon={<MessageSquare className="h-12 w-12 opacity-50" />}
-                />
-              ) : selectedSessionMissing ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3">
-                  <ConversationEmptyState
-                    title="Session not found"
-                    description="The session in this URL is unavailable for the current account. Select another session or create a new one."
-                    icon={<AlertCircle className="h-12 w-12 opacity-50" />}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleCreateSession}
-                    disabled={isAuthUnavailable || !canCreateSession || isCreatingSession}
-                  >
-                    Create New Session
-                  </Button>
-                </div>
-              ) : conversationRows.length === 0 ? (
-                <ConversationEmptyState
-                  title="No messages in this session"
-                  description="Run the console REPL or send a message to start this session."
-                  icon={<MessageSquare className="h-12 w-12 opacity-50" />}
-                />
-              ) : (
-                conversationRows.map((row) => {
-                  const message = row.message
-                  const toolViewModel = mapMessageToToolViewModel(message)
-                  const controlEnvelope = getControlEnvelope(message.metadata)
-                  const requestType = (
-                    controlEnvelope?.request_type
-                    || mapPendingInteractionToRequestType(message.humanInteraction)
-                  ).toLowerCase()
-                  const messageIsPending = enableHitlActions && isPendingHumanInteraction(message.humanInteraction)
-                  const responseExists = responseParentIds.has(message.id)
-                  const isSubmitted = responseExists || submittedMessageIds.has(message.id)
-                  const isSubmitting = submittingMessageIds.has(message.id)
-                  const currentInput = hitlTextByMessage[message.id] || ''
-                  const messageTypeLabel = getMessageTypeLabel(message)
-                  const showMessageTypeBadge = shouldShowMessageTypeBadge(message)
-                  const showToolNameBadge = Boolean(message.toolName) && !toolViewModel
-                  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge
-
-                  return (
-                    <Message
-                      key={row.id}
-                      from={row.from}
-                      data-message-id={row.id}
-                      data-from={row.from}
-                      className="max-w-full"
-                    >
-                      <div className="flex items-start">
-                        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                          {showMetadataBadges && (
-                            <div className="mb-2 flex items-center gap-2">
-                              {showMessageTypeBadge && (
-                                <Badge
-                                  variant="secondary"
-                                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
-                                >
-                                  {messageTypeLabel}
-                                </Badge>
-                              )}
-
-                              {showToolNameBadge && (
-                                <Badge variant="outline" className="text-xs">
-                                  {message.toolName}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-
-                          {toolViewModel ? (
-                            <Tool
-                              defaultOpen={
-                                toolViewModel.state === 'output-available'
-                                || toolViewModel.state === 'output-error'
-                                || toolViewModel.state === 'output-denied'
-                              }
-                            >
-                              <ToolHeader
-                                toolType={toolViewModel.type}
-                                state={toolViewModel.state}
-                                toolName={toolViewModel.toolName}
-                              />
-                              <ToolContent>
-                                {message.messageType === 'TOOL_CALL' && (
-                                  <ToolInput input={toolViewModel.input} />
-                                )}
-                                {message.messageType === 'TOOL_RESPONSE' && (
-                                  <ToolOutput
-                                    errorText={toolViewModel.errorText}
-                                    output={
-                                      <div className="font-mono whitespace-pre-wrap break-words">
-                                        {toolViewModel.output === undefined || toolViewModel.output === null
-                                          ? 'No output'
-                                          : typeof toolViewModel.output === 'string'
-                                            ? toolViewModel.output
-                                            : formatJsonWithNewlines(toolViewModel.output)}
-                                      </div>
-                                    }
-                                  />
-                                )}
-                              </ToolContent>
-                            </Tool>
-                          ) : (
-                            <div className="text-sm">
-                              <CollapsibleText content={message.content} maxLines={10} />
-                            </div>
-                          )}
-
-                          {messageIsPending && (
-                            <div className="mt-3 space-y-3 rounded-md border border-border p-3">
-                              {!controlEnvelope && (
-                                <div className="text-xs text-red-600">
-                                  Pending request is missing canonical `metadata.control`.
-                                </div>
-                              )}
-                              {hitlSubmitErrors[message.id] && (
-                                <div className="text-xs text-red-600">
-                                  {hitlSubmitErrors[message.id]}
-                                </div>
-                              )}
-
-                              {(requestType === 'input' || requestType === 'review' || requestType === 'escalation') && !isSubmitted && (
-                                <Textarea
-                                  value={currentInput}
-                                  onChange={(event) => {
-                                    const value = event.target.value
-                                    setHitlTextByMessage((prev) => ({
-                                      ...prev,
-                                      [message.id]: value,
-                                    }))
-                                  }}
-                                  rows={requestType === 'review' ? 6 : 4}
-                                  placeholder={requestType === 'review' ? 'Review notes (optional)' : 'Enter response'}
-                                  disabled={isSubmitting}
-                                />
-                              )}
-
-                              <div className="flex flex-wrap items-center gap-2">
-                                {isSubmitted && (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-green-700/60 bg-green-50 text-green-700 dark:border-green-400/40 dark:bg-green-900/40 dark:text-green-200"
-                                  >
-                                    Response submitted
-                                  </Badge>
-                                )}
-
-                                {!isSubmitted && requestType === 'approval' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'approve')
-                                        } catch (error) {
-                                          console.error('Failed submitting approval response', error)
-                                        }
-                                      }}
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'reject')
-                                        } catch (error) {
-                                          console.error('Failed submitting rejection response', error)
-                                        }
-                                      }}
-                                    >
-                                      Reject
-                                    </Button>
-                                  </>
-                                )}
-
-                                {!isSubmitted && requestType === 'input' && (
-                                  <Button
-                                    size="sm"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'submit', currentInput)
-                                      } catch (error) {
-                                        console.error('Failed submitting input response', error)
-                                      }
-                                    }}
-                                  >
-                                    Submit
-                                  </Button>
-                                )}
-
-                                {!isSubmitted && requestType === 'review' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'approve', currentInput)
-                                        } catch (error) {
-                                          console.error('Failed submitting review approval', error)
-                                        }
-                                      }}
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isSubmitting || !controlEnvelope}
-                                      onClick={async () => {
-                                        try {
-                                          await submitHitlResponse(message, 'request_changes', currentInput)
-                                        } catch (error) {
-                                          console.error('Failed submitting review feedback', error)
-                                        }
-                                      }}
-                                    >
-                                      Request Changes
-                                    </Button>
-                                  </>
-                                )}
-
-                                {!isSubmitted && requestType === 'escalation' && (
-                                  <Button
-                                    size="sm"
-                                    disabled={isSubmitting || !controlEnvelope}
-                                    onClick={async () => {
-                                      try {
-                                        await submitHitlResponse(message, 'acknowledge', currentInput)
-                                      } catch (error) {
-                                        console.error('Failed submitting escalation acknowledgment', error)
-                                      }
-                                    }}
-                                  >
-                                    Acknowledge
-                                  </Button>
-                                )}
-
-                                {isSubmitting && (
-                                  <Badge variant="outline">Submitting...</Badge>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </MessageContent>
-                      </div>
-                    </Message>
-                  )
-                })
-              )}
-              {showThinkingPlaceholder && (
-                <Message
-                  key={`thinking-${selectedSessionId}`}
-                  from="assistant"
-                  data-message-id={`thinking-${selectedSessionId}`}
-                  data-from="assistant"
-                  className="max-w-full"
+                <Button
+                  size="sm"
+                  onClick={handleCreateSession}
+                  disabled={!canCreateSession || isCreatingSession}
                 >
-                  <div className="flex items-start">
-                    <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                      <Shimmer className="text-sm">Thinking</Shimmer>
-                    </MessageContent>
+                  Create New Session
+                </Button>
+              </div>
+            ) : conversationRows.length === 0 && !showThinkingPlaceholder ? (
+              <ConversationEmptyState
+                title="No messages in this session"
+                description="Run the console REPL or send a message to start this session."
+                icon={<MessageSquare className="h-12 w-12 opacity-50" />}
+              />
+            ) : (
+              <Virtuoso
+                ref={virtuosoRef}
+                className="h-full"
+                data={conversationRows}
+                followOutput="smooth"
+                initialTopMostItemIndex={Math.max(0, conversationRows.length - 1)}
+                atBottomStateChange={setAtBottom}
+                atBottomThreshold={50}
+                overscan={600}
+                increaseViewportBy={{ top: 400, bottom: 400 }}
+                itemContent={(_index, row) => (
+                  <div className="px-3 py-2">
+                    <MemoizedMessageRow
+                      row={row}
+                      enableHitlActions={enableHitlActions}
+                      responseParentIds={responseParentIds}
+                      submittedMessageIds={submittedMessageIds}
+                      submittingMessageIds={submittingMessageIds}
+                      hitlTextByMessage={hitlTextByMessage}
+                      hitlSubmitErrors={hitlSubmitErrors}
+                      setHitlTextByMessage={setHitlTextByMessage}
+                      submitHitlResponse={submitHitlResponse}
+                    />
                   </div>
-                </Message>
-              )}
-            </ConversationContent>
-            <ConversationScrollButton />
+                )}
+                components={{
+                  Footer: showThinkingPlaceholder ? () => (
+                    <div className="px-3 py-2">
+                      <Message
+                        from="assistant"
+                        data-message-id={`thinking-${selectedSessionId}`}
+                        data-from="assistant"
+                        className="max-w-full"
+                      >
+                        <div className="flex items-start">
+                          <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                            <Shimmer className="text-sm">Thinking</Shimmer>
+                          </MessageContent>
+                        </div>
+                      </Message>
+                    </div>
+                  ) : undefined,
+                }}
+              />
+            )}
+            <ConversationScrollButton
+              isAtBottom={atBottom}
+              virtuosoRef={virtuosoRef}
+            />
           </Conversation>
         </div>
         <div className="border-t border-border bg-background px-3 py-3">

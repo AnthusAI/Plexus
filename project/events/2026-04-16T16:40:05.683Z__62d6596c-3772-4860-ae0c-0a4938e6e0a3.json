@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "62d6596c-3772-4860-ae0c-0a4938e6e0a3",
+  "issue_id": "plx-c4e7c9d4-bba3-4dad-ba48-a5cd3de43587",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-16T16:40:05.683Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create a shared Excalidraw palette for documentation diagrams and document the one approved workflow for reusing it. Move the existing optimizer palette to documentation/diagrams/palette.excalidraw, add documentation/diagrams/README.md, and update any references to the old path so optimizer procedure diagrams use the shared style.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Standardize Excalidraw palette and diagram README for optimizer procedure docs"
+  }
+}

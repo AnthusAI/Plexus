@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5268449c-4015-4cfe-b69e-0ca07482e6b4",
+  "issue_id": "plx-18b43c65-dcc3-4d46-a67a-e484afd62b95",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T11:39:12.228Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Project Timeline AI guidelines for Suco - Home Improvement\n\nScenario: Agent asks the project timeline with the required conditional phrasing and valid options\nGiven a transcript where the agent asks about start timing using the approved conditional phrasing and valid options\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Customer gives the timeline proactively\nGiven a transcript where the customer clearly provides the timeline without needing the agent to list all valid options\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Agent omits required phrasing, uses invalid options, fails to re-ask after intent changes, or leaves an unclear timeline unclarified\nGiven a transcript where one of those failures occurs\nWhen the reviewer evaluates the conversation\nThen the score should be No",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-ff392123-4dd4-4199-a290-051ac1398edb",
+    "priority": 2,
+    "status": "open",
+    "title": "As a reviewer, I want Project Timeline AI guidelines that distinguish compliant timeline qualification from missing or invalid timeline handling, so that scoring is consistent"
+  }
+}

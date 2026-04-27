@@ -3,16 +3,29 @@
   "title": "Unify RCA behavior across all feedback-backed evaluation paths",
   "description": "## Summary\nApply one RCA contract across all feedback-backed evaluation paths.\n\n## Deliverables\n- Use the same RCA behavior in `FeedbackEvaluation` and the accuracy-with-feedback-dataset path.\n- Remove split-brain behavior between the two code paths.\n- Keep one correct RCA implementation path rather than parallel variants.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "512e2258-09c4-408a-a979-aa69400c93ec",
+      "author": "ryan",
+      "text": "Starting implementation: align accuracy-with-feedback path to the same RCA contract/shape used by FeedbackEvaluation and remove remaining split behavior in persistence/completion semantics.",
+      "created_at": "2026-04-02T14:17:13.889131Z"
+    },
+    {
+      "id": "1c4cdb04-087a-4231-bd97-07aa16539581",
+      "author": "ryan",
+      "text": "Implemented contract unification: both FeedbackEvaluation.run and accuracy-with-feedback path now use shared FeedbackEvaluation RCA contract helpers (root_cause_contract_outcome + apply_root_cause_contract_to_parameters). This removes duplicate/split RCA completion logic.",
+      "created_at": "2026-04-02T14:22:43.778079Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:33.371562Z",
-  "updated_at": "2026-04-02T12:49:33.371562Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T14:22:43.800152Z",
+  "closed_at": "2026-04-02T14:22:43.800152Z",
   "custom": {}
 }

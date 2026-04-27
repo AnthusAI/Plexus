@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 from tactus.core.exceptions import ProcedureWaitingForHuman
 from tactus.protocols.models import HITLRequest, HITLResponse
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,11 @@ class PlexusHITLAdapter:
         }
         """
         try:
-            result = self.client.execute(mutation, {"input": message_data})
+            result = self.client.execute(
+                mutation,
+                {"input": message_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             if isinstance(result, dict) and result.get("errors"):
                 logger.error("GraphQL error creating canonical HITL message: %s", result["errors"])
                 return None
@@ -308,6 +313,7 @@ class PlexusHITLAdapter:
                         "humanInteraction": "CANCELLED",
                     }
                 },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
             )
             if self.storage_adapter:
                 metadata = self.storage_adapter.load_procedure_metadata(procedure_id)

@@ -1,0 +1,18 @@
+{
+  "id": "plx-4703d980-50b6-44b1-b0d1-dffe3674fc8e",
+  "title": "Restart 59125 optimizers at 12 iterations",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-21T23:23:15.297693Z",
+  "updated_at": "2026-04-21T23:24:38.192887Z",
+  "closed_at": "2026-04-21T23:24:38.192887Z",
+  "custom": {}
+}

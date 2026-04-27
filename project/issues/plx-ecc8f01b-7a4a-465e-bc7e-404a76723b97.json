@@ -1,0 +1,25 @@
+{
+  "id": "plx-ecc8f01b-7a4a-465e-bc7e-404a76723b97",
+  "title": "Restore ProcedureTask segmented stages in score version lists",
+  "description": "Procedure cards in score/version procedure lists load without a toast now, but the segmented progress bar still only shows the generic completed segment instead of actual task stages. Trace ProcedureTask's expected stage shape and fix the score procedure adapter.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "59b05cc9-6f09-463e-9187-f3ae585414a4",
+      "author": "ryan",
+      "text": "Changed procedure-list task hydration to query tasks by account and match Task.target to procedure/run/<procedureId> or procedure/<procedureId>. Task.scoreId is not reliable for procedure task lookup, which left ProcedureTask with no stages and only the generic completion segment.",
+      "created_at": "2026-04-26T18:36:59.671452Z"
+    }
+  ],
+  "created_at": "2026-04-26T18:35:15.236634Z",
+  "updated_at": "2026-04-26T18:36:59.690257Z",
+  "closed_at": "2026-04-26T18:36:59.690257Z",
+  "custom": {}
+}

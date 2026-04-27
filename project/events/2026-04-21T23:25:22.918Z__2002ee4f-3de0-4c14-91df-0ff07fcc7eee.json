@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2002ee4f-3de0-4c14-91df-0ff07fcc7eee",
+  "issue_id": "plx-44001d39-d1e1-42bb-a537-fe2e6b310cc3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T23:25:22.918Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Commit and push current integration state"
+  }
+}

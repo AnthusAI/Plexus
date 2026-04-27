@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0ed2ca83-e62c-46b5-a132-3a8296e6ec88",
+  "issue_id": "plx-82dcd5cb-5918-4f55-834a-6d9c219b85f5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-18T09:52:17.704Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "T Run PS Mismatch - Modality optimizer for Prime - EDU 3rd Party"
+  }
+}

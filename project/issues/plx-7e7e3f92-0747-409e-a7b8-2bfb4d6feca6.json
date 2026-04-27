@@ -1,0 +1,18 @@
+{
+  "id": "plx-7e7e3f92-0747-409e-a7b8-2bfb4d6feca6",
+  "title": "Agent speech collapsed/truncated in conversation viewer",
+  "description": "",
+  "type": "bug",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-03T12:42:57.626839Z",
+  "updated_at": "2026-04-03T12:42:57.626839Z",
+  "closed_at": null,
+  "custom": {}
+}

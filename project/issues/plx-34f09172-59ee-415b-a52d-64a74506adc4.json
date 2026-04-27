@@ -1,0 +1,37 @@
+{
+  "id": "plx-34f09172-59ee-415b-a52d-64a74506adc4",
+  "title": "Align Medication Review Dosage SPM logic and retrieval with published rubric",
+  "description": "The current Medication Review: Dosage champion code is looser than the published SPM guideline and has a retrieval mismatch. The prompt allows SPM passes for medication-specific current-use/no-change confirmations that do not necessarily include dosage details, while the guideline still says the patient acknowledges or provides dosage details. The implementation also claims certain unchanged-regimen patterns count, but the transcript-window keywords do not cover several of those phrases, so the model may miss the very evidence it is told to credit. Decide whether to tighten code to the rubric or broaden the rubric to the code, and align retrieval keywords to the chosen rule.",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d856c7eb-ce41-4d1b-a2e6-196d825a6634",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d25127c4-4c97-433b-9047-252029a7d9f4",
+      "author": "ryan",
+      "text": "User requested live alignment and evaluation. Preparing a minimal champion-based Dosage update that leaves SRX unchanged and tightens only the SPM prompt to match the published guideline: SPM Yes must reflect medication-specific dosage discussion with acknowledged or provided dosage details, not mere current-use or generic unchanged/no-changes talk. Plan is: create the new version from champion 5fd8ee3d-614a-4fa2-bb62-eca306cd7f44, smoke-test the exact version, then promote and launch a 180-day feedback evaluation.",
+      "created_at": "2026-04-23T20:11:01.072497Z"
+    },
+    {
+      "id": "f2cfc389-8a0d-47aa-9498-dc0d7f90198e",
+      "author": "ryan",
+      "text": "Created Dosage version a6136bb1-f0f0-43bc-b684-a2df65ef43c7 from champion 5fd8ee3d-614a-4fa2-bb62-eca306cd7f44 with a minimal SPM prompt alignment to the published guideline, and the exact version passed a 3-sample mechanical smoke test.",
+      "created_at": "2026-04-23T20:12:02.761637Z"
+    },
+    {
+      "id": "21902cb8-40bb-41fd-98bf-be30ae359ed8",
+      "author": "ryan",
+      "text": "Promoted Dosage version a6136bb1-f0f0-43bc-b684-a2df65ef43c7 to champion and dispatched a fresh 180-day feedback evaluation pinned to that version. Evaluation ID: 0417ba95-f00f-4706-aed0-0b5a588663d4. Task ID: a3fda773-8b39-4e99-9ae6-15f6cbf509a7. Sampling mode: newest. Max feedback items: 200. Leaving this sub-task in progress until the background evaluation completes and results are reviewed.",
+      "created_at": "2026-04-23T20:13:06.161589Z"
+    }
+  ],
+  "created_at": "2026-04-23T19:57:23.591401Z",
+  "updated_at": "2026-04-23T20:13:06.161589Z",
+  "closed_at": null,
+  "custom": {}
+}

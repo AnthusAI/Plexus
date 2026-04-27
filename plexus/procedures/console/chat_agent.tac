@@ -215,11 +215,37 @@ local assistant_prompt = "You are the Plexus Console assistant in an ongoing cha
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
                          "Respond to the latest user message now."
 
+local MAX_ASSISTANT_ITERATIONS = 8
+
 local assistant_result = nil
 if deterministic_response ~= nil and deterministic_response ~= "" then
   assistant_result = { response = deterministic_response }
 else
-  assistant_result = assistant({ message = assistant_prompt })
+  -- Agentic loop: the LLM may call tools repeatedly before producing its final
+  -- user-facing answer. AgentPrimitive appends executed ToolMessages to the
+  -- conversation automatically, so subsequent turns see tool results.
+  local response = nil
+  for i = 1, MAX_ASSISTANT_ITERATIONS do
+    if i == 1 then
+      response = assistant({ message = assistant_prompt })
+    else
+      -- Follow-up turn: no new user message; history already contains the
+      -- tool results from the prior turn and the LLM will reason over them.
+      response = assistant({})
+    end
+    local tool_calls = response and response.tool_calls
+    local has_tool_calls = false
+    if type(tool_calls) == "table" then
+      for _ in pairs(tool_calls) do
+        has_tool_calls = true
+        break
+      end
+    end
+    if not has_tool_calls then
+      break
+    end
+  end
+  assistant_result = response
 end
 
 local final_response = ""

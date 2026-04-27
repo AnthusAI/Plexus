@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a8261576-09f9-4a10-ac99-6851615d3d93",
+  "issue_id": "plx-d020d815-4e82-4c91-b1e8-9c77245a5b37",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T14:36:56.631Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Add score-optimizer-agent skill for CLI optimizer runs"
+  }
+}

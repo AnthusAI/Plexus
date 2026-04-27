@@ -1,0 +1,43 @@
+{
+  "id": "plx-22e6fa71-1220-42e9-8c73-03a0a9c4692d",
+  "title": "Investigate recent procedure failures and summarize causes",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d5a1e22e-275e-483f-acee-a749dc66cbda",
+      "author": "ryan",
+      "text": "Recent procedure failure summary so far: Medication Review Dosage, Medication Review Individual Confirmation, and Suco Income/Name all failed in the final task-output attachment persistence step with the same error: AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME missing in the CLI process. Investigating a config-loader-backed fix so attachment-only persistence works in standard procedure runs.",
+      "created_at": "2026-04-24T04:41:11.758012Z"
+    },
+    {
+      "id": "fa617ff0-57a9-432c-9d79-9608fd9c8bd5",
+      "author": "ryan",
+      "text": "Verified recent procedure failures share one cause: task-output attachment bucket resolution. Running focused task-output storage and experiment-runner regressions before restarting the Suco optimizer.",
+      "created_at": "2026-04-24T04:56:20.285698Z"
+    },
+    {
+      "id": "fc53881c-bd78-461f-bdb6-1fcd653728c1",
+      "author": "ryan",
+      "text": "Restarted Suco optimizer after confirming focused task-output attachment tests passed. New procedure: 62ddaa87-6475-4f8a-a4a1-3f6bde0812f2. New task: a8d55acd-c6e3-47cc-ba20-c333bd914370.",
+      "created_at": "2026-04-24T04:57:07.920128Z"
+    },
+    {
+      "id": "dcd96102-875e-4172-8675-b17f4708382d",
+      "author": "ryan",
+      "text": "Branch-cleanup note: the attachment-only task-output persistence follow-up and canonical bucket-resolution fixes are part of the current dirty worktree on chore/med-review-guideline-scope-audit. This cleanup commit will preserve the shared task_output_storage/CommandTasks changes before the next optimizer-behavior branch is created.",
+      "created_at": "2026-04-24T12:51:16.321940Z"
+    }
+  ],
+  "created_at": "2026-04-24T04:40:11.935243Z",
+  "updated_at": "2026-04-24T12:51:16.321940Z",
+  "closed_at": null,
+  "custom": {}
+}

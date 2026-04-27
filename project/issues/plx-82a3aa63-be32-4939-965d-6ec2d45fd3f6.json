@@ -1,0 +1,49 @@
+{
+  "id": "plx-82a3aa63-be32-4939-965d-6ec2d45fd3f6",
+  "title": "Merge and verify PR #78 score validation contract",
+  "description": "## Summary\nLand/adapt PR #78 score validation support in this branch and verify runtime behavior.\n\n## Purpose\nUse the score validation contract (including `valid_classes`) as a stable prerequisite for downstream dataset balancing work.\n\n## Acceptance Criteria\n- Validation configuration is usable in score YAML in this repo.\n- Tests pass for the class-validation path.\n- No schema migration is required for this PR #78 validation contract work.\n- Findings and verification output are logged in Kanbus comments.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b77ca691-c7d6-4500-83a6-2f1952db7896",
+      "author": "ryan",
+      "text": "Execution order gate activated: this sub-task is now in progress and is the prerequisite for class-resolver/balancing work.",
+      "created_at": "2026-04-03T00:34:19.856948Z"
+    },
+    {
+      "id": "331455f3-f3bd-42cb-a1fe-31596ba889f0",
+      "author": "ryan",
+      "text": "Starting implementation pass for PR #78 gate. I verified current  does not contain automatic Score.Result validation wiring yet. Next steps: add runtime validation contract in Score base class, add targeted tests, update score YAML docs, and run focused pytest for validation path.",
+      "created_at": "2026-04-03T00:36:54.908792Z"
+    },
+    {
+      "id": "7cf346c9-c144-49c9-8682-9ddaba51067c",
+      "author": "ryan",
+      "text": "Starting implementation pass for PR #78 gate. Verified that Score base class currently lacks automatic Score.Result validation wiring. Next: add runtime validation contract in Score base class, add targeted tests, update score YAML docs, and run focused pytest for the validation path.",
+      "created_at": "2026-04-03T00:36:57.486674Z"
+    },
+    {
+      "id": "fc78fe6b-af8a-4708-a9cd-16a227066438",
+      "author": "ryan",
+      "text": "Implemented PR #78 validation gate in-tree. Added automatic Score.Result validation in Score base class via parameters.validation contract (value/explanation rules), including valid_classes/patterns/min/max-length enforcement and invalid-regex parse errors. Added focused test suite at tests/scores/test_score_validation.py and updated score YAML docs with validation examples/behavior. Verification: pytest -q tests/scores/test_score_validation.py plexus/scores/Score_test.py -q => pass; python -m py_compile plexus/scores/Score.py tests/scores/test_score_validation.py => pass. Confirmed no GraphQL/schema migration needed for this feature since behavior is runtime/YAML-driven in score execution layer.",
+      "created_at": "2026-04-03T00:38:35.905214Z"
+    },
+    {
+      "id": "af2578aa-6175-4009-9957-fa76eb1fa0ae",
+      "author": "ryan",
+      "text": "Completed: PR #78 validation contract merged/adapted and verified in this branch.",
+      "created_at": "2026-04-03T00:38:37.922617Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.148939Z",
+  "updated_at": "2026-04-03T00:38:37.922617Z",
+  "closed_at": "2026-04-03T00:38:37.902360Z",
+  "custom": {}
+}

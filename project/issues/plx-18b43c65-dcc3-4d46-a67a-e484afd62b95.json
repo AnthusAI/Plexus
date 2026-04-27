@@ -1,0 +1,31 @@
+{
+  "id": "plx-18b43c65-dcc3-4d46-a67a-e484afd62b95",
+  "title": "As a reviewer, I want Project Timeline AI guidelines that distinguish compliant timeline qualification from missing or invalid timeline handling, so that scoring is consistent",
+  "description": "Feature: Project Timeline AI guidelines for Suco - Home Improvement\n\nScenario: Agent asks the project timeline with the required conditional phrasing and valid options\nGiven a transcript where the agent asks about start timing using the approved conditional phrasing and valid options\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Customer gives the timeline proactively\nGiven a transcript where the customer clearly provides the timeline without needing the agent to list all valid options\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Agent omits required phrasing, uses invalid options, fails to re-ask after intent changes, or leaves an unclear timeline unclarified\nGiven a transcript where one of those failures occurs\nWhen the reviewer evaluates the conversation\nThen the score should be No",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ff392123-4dd4-4199-a290-051ac1398edb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "aa051d55-0b3e-4392-9ecb-5e22ccd0a61b",
+      "author": "ryan",
+      "text": "Pulled the current Project Timeline AI score from Plexus. The champion version has no attached guidelines, so I am checking the prior guidelines-sync version before drafting a replacement and validating it.",
+      "created_at": "2026-04-21T11:39:31.644840Z"
+    },
+    {
+      "id": "0159be74-c104-4c28-b73f-cf08c69a80ab",
+      "author": "ryan",
+      "text": "Validated the new Project Timeline AI guidelines with skills/plexus-guidelines/validate_guidelines.py and pushed them to Plexus as score version 783227c8-e204-4468-beaa-e02995463d93. The new version is not champion-promoted; this change adds the missing guidelines document.",
+      "created_at": "2026-04-21T11:40:17.049590Z"
+    }
+  ],
+  "created_at": "2026-04-21T11:39:12.228442Z",
+  "updated_at": "2026-04-21T11:40:17.063619Z",
+  "closed_at": "2026-04-21T11:40:17.063619Z",
+  "custom": {}
+}

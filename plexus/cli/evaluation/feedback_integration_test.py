@@ -24,8 +24,10 @@ class TestFeedbackCommandIntegration:
         assert '--score' in result.output
         assert '--days' in result.output
         assert '--version' in result.output
-        assert '--max-samples' in result.output
+        assert '--max-items' in result.output
+        assert '--sampling-mode' in result.output
         assert '--sample-seed' in result.output
+        assert '--max-category-summary-items' in result.output
         assert 'WITHOUT --version' in result.output
         assert 'WITH --version' in result.output
     
@@ -70,20 +72,32 @@ class TestFeedbackCommandIntegration:
             '--score', 'nonexistent_score',
             '--days', '30',
             '--version', 'test_version_123',
-            '--max-samples', '50',
-            '--sample-seed', '42'
+            '--max-items', '50',
+            '--sampling-mode', 'random',
+            '--sample-seed', '42',
+            '--max-category-summary-items', '25'
         ])
         assert result.exit_code != 2, f"Argument parsing failed: {result.output}"
+
+    def test_feedback_command_rejects_removed_max_samples_option(self):
+        """Hard cutover: removed --max-samples should be rejected."""
+        runner = CliRunner()
+        result = runner.invoke(feedback, [
+            '--scorecard', 'test',
+            '--score', 'test',
+            '--max-samples', '50',
+        ])
+        assert result.exit_code == 2
+        assert 'No such option: --max-samples' in result.output
     
     def test_feedback_command_days_default(self):
-        """Test that days parameter has correct default."""
+        """Test that days parameter is optional (all-time when omitted)."""
         runner = CliRunner()
         
         # Run with minimal params (will fail, but we can check the help)
         result = runner.invoke(feedback, ['--help'])
         
-        # Check that default is documented
-        assert 'default: 7' in result.output or 'Default: 7' in result.output
+        assert '--days' in result.output
     
     def test_feedback_command_version_parameter_optional(self):
         """Test that version parameter is optional."""
@@ -207,6 +221,3 @@ class TestFeedbackCommandExamples:
             result = runner.invoke(feedback, example)
             # Should not be a Click parsing error (exit code 2)
             assert result.exit_code != 2, f"Example failed to parse: {example}\nOutput: {result.output}"
-
-
-

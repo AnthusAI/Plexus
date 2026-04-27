@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bdc918d3-33e1-4bee-983e-0bb72b991405",
+  "issue_id": "plx-7812544e-e98b-4c6e-80e3-78141c9aca02",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:02:43.499Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 2,
+    "status": "open",
+    "title": "Simplify reference dataset selection to one DataSet-owned path"
+  }
+}

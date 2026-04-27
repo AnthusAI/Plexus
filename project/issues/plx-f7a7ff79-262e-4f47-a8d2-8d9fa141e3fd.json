@@ -1,0 +1,26 @@
+{
+  "id": "plx-f7a7ff79-262e-4f47-a8d2-8d9fa141e3fd",
+  "title": "Compute category aggregates from item_classifications_all",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e7329ba2-5000-4576-8fd0-854b05b7d5ac",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-ad68bf59-6250-44a5-af12-559072f1c414",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-04-04T18:30:37.829091Z",
+  "updated_at": "2026-04-04T18:58:50.154142Z",
+  "closed_at": "2026-04-04T18:58:50.154142Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

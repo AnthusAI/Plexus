@@ -43,10 +43,22 @@
       "author": "derek.norrbom",
       "text": "Installed dependency-triage tooling into the active Python environment for future remediation work:\n- pipdeptree 2.31.0\n- pip-audit 2.10.0\n- pip-tools 7.5.3\n\nQuick verification:\n- pipdeptree --version\n- pip-audit --version\n- pip-compile --version\n\nNote: environment has pre-existing package metadata/constraint conflicts (reported by pipdeptree), which may affect global audit output quality but tools are installed and usable for requirements-level analysis.",
       "created_at": "2026-03-11T21:22:45.550894Z"
+    },
+    {
+      "id": "6b6b7e6e-5531-44f7-b5af-94591195e844",
+      "author": "derek",
+      "text": "Starting work for this request: bump tactus in score-processor-lambda to v0.46.0, build the lambda Docker image, and run smoke tests to verify install/runtime. I will record exact commands and results here.",
+      "created_at": "2026-04-15T18:52:04.830450028Z"
+    },
+    {
+      "id": "4a7fc705-2e1f-4e4e-a2fd-24311450e598",
+      "author": "derek",
+      "text": "Completed tactus bump and validation for score-processor-lambda.\n\nChanges:\n- Updated score-processor-lambda/requirements.txt from tactus==0.44.0 to tactus==0.46.0.\n\nValidation run:\n- make test (from score-processor-lambda) failed early because host shell lacked pytest (ModuleNotFoundError: No module named pytest).\n- Ran unit tests via project env: PYTHONPATH=score-processor-lambda poetry run pytest score-processor-lambda/tests/test_*.py -v -> 6 passed.\n- Ran container smoke path: make test-smoke (includes docker buildx build + smoke runner) -> PASS.\n- Smoke result summary: 10 passed, 0 failed and explicit version check logged tactus version matches: 0.46.0.\n\nNotes:\n- Container emitted a non-fatal CloudWatch handler warning (UnrecognizedClientException with test credentials), expected in local smoke context and did not affect test outcomes.",
+      "created_at": "2026-04-15T18:56:21.156846583Z"
     }
   ],
   "created_at": "2026-02-26T00:13:56.245115Z",
-  "updated_at": "2026-03-11T21:22:45.550894Z",
+  "updated_at": "2026-04-15T18:56:25.462758277Z",
   "closed_at": null,
   "custom": {
     "snyk_category": "dependency",

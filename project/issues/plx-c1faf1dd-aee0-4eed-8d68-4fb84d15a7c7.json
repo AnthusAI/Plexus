@@ -1,0 +1,18 @@
+{
+  "id": "plx-c1faf1dd-aee0-4eed-8d68-4fb84d15a7c7",
+  "title": "Split SelectQuote HCS Agent Misrepresentation into decision-element scores",
+  "description": "Create a new score decomposition for the SelectQuote HCS Medium-Risk Agent Misrepresentation workflow so each decision element is scored separately and a composite score aggregates the final result.",
+  "type": "initiative",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-21T17:08:32.445300Z",
+  "updated_at": "2026-04-21T17:08:32.445300Z",
+  "closed_at": null,
+  "custom": {}
+}

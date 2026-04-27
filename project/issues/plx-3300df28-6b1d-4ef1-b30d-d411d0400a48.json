@@ -3,7 +3,7 @@
   "title": "Add per-item misclassification classification to the evaluation RCA pipeline",
   "description": "## Summary\nAdd a per-item misclassification-classification stage to the evaluation RCA pipeline.\n\n## Deliverables\n- For each incorrect item, classify it into exactly one of the four categories.\n- Use all relevant per-item context available to the evaluation pipeline.\n- Keep this classification stage distinct from the optimization-focused RCA stage.\n- Ensure only `score_configuration_problem` items feed into score-fix recommendation logic.\n\n## Dependency note\nThis work should align with the RCA pipeline work under the reliability epic so the result persists reliably.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -11,21 +11,37 @@
   "labels": [],
   "dependencies": [
     {
-      "target": "plx-428bb6",
+      "target": "plx-428bb632-db9c-4f2b-a4bd-701aad13fcf6",
       "type": "blocked-by"
     },
     {
-      "target": "plx-e3a500",
+      "target": "plx-e3a50095-d3e0-4052-892e-ff533d84fd7d",
       "type": "blocked-by"
     },
     {
-      "target": "plx-3cbdef",
+      "target": "plx-3cbdef31-ea14-4b87-8f2e-def33a295c2a",
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "66fb20af-fb99-4b6a-b3a7-321120912ba1",
+      "author": "ryan",
+      "text": "Dependency plx-e3a500 completed: canonical item context/provenance payload now available in RCA exemplars. Next implementation step: run per-item classification over incorrect items and persist primary_category/rationale/confidence/evidence_snippets for each item in RCA payload.",
+      "created_at": "2026-04-04T14:30:26.044903Z"
+    },
+    {
+      "id": "1982b9b6-b7e4-4b16-a505-ec9bdf3928eb",
+      "author": "ryan",
+      "text": "Implemented per-item misclassification classification in RCA pipeline (standard and small-set). Each exemplar now includes misclassification_classification with primary_category, rationale, confidence, and evidence_snippets, derived from canonical item context. Recommendation logic now explicitly gates score-configuration suggestions to items classified as score_configuration_problem only; non-score-fix categories are excluded from config-change prompts.",
+      "created_at": "2026-04-04T14:33:47.225316Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.680034Z",
-  "updated_at": "2026-04-02T13:21:09.680034Z",
-  "closed_at": null,
-  "custom": {}
+  "updated_at": "2026-04-04T14:33:47.235747Z",
+  "closed_at": "2026-04-04T14:33:47.235747Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eea1094b-2328-470f-8ecf-4fc2f27b71a3",
+  "issue_id": "plx-ff5fca5f-6572-4fe5-8d0f-b42ada7102f4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T18:00:52.217Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Improve optimizer skill guidance for contradiction analysis and approved invalidation workflow"
+  }
+}

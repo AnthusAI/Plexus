@@ -1,0 +1,43 @@
+{
+  "id": "plx-3714e984-6799-4e43-a171-188380ac6962",
+  "title": "Harden procedure persistence against transient GraphQL throttling",
+  "description": "Long-running optimizer and procedure runs can fail after hours of useful work when AppSync/DynamoDB throttling hits procedure/task/chat persistence writes. Add throttling-aware retry/backoff in the dashboard GraphQL client plus a longer write policy for procedure-runtime persistence surfaces (procedure metadata/status, task stages/progress, chat/HITL writes), with regression tests proving retries succeed and exhausted retry windows fail clearly.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fa1fc299-311a-4158-930f-ad99751b5ef1",
+      "author": "ryan",
+      "text": "Started implementation. Confirmed the failure path is procedure-runtime persistence, not score logic:  performs S3 uploads and then a single  GraphQL mutation, and the shared GraphQL client currently treats AppSync/DynamoDB throttling as a fatal exception. Also confirmed adjacent high-risk write surfaces that can kill long optimizer runs on a single transient write failure: procedure status updates, task/stage progress updates, chat/session/HITL message writes, and MCP transport stage updates. Implementing a two-layer fix: bounded throttling-aware retry in the shared dashboard client plus a longer write policy for procedure-runtime persistence paths.",
+      "created_at": "2026-04-23T13:15:51.089424Z"
+    },
+    {
+      "id": "ca9eda60-83a7-4e3f-948e-a0c33425ea61",
+      "author": "ryan",
+      "text": "Implementation log: confirmed the failure path is procedure-runtime persistence rather than score logic. The key crash site is save_procedure_metadata in the tactus storage adapter, which uploads state to S3 and then performs a single GraphQL updateProcedure mutation. The shared dashboard GraphQL client currently exposes transient AppSync/DynamoDB throttling as a fatal exception with no application-level retry policy. Also confirmed adjacent high-risk write surfaces that can kill long optimizer runs on a single transient failure: procedure status updates, task/stage progress updates, chat/session/HITL writes, and MCP transport stage updates. Proceeding with a two-layer fix: bounded throttling-aware retry in the shared dashboard client plus a longer write policy for procedure-runtime persistence paths.",
+      "created_at": "2026-04-23T13:16:02.123669Z"
+    },
+    {
+      "id": "483171f0-d763-4990-a16e-1272d77c973d",
+      "author": "ryan",
+      "text": "Implementation update: added throttling-aware retry policies in the shared GraphQL client and wired the long-running write policy through procedure metadata/status persistence, execution-context mutations, task/stage updates, MCP stage transitions, chat/session writes, and canonical HITL writes. Focused validation passed with 156 pytest cases covering client retry behavior, storage persistence, MCP transport stage writes, HITL pending/cancel writes, chat recorder writes, task progress writes, and existing optimizer config/editor coverage. Remaining live verification is to rerun optimizer procedures against the real backend and confirm transient AppSync/DynamoDB throttling now blocks/retries instead of terminating the run.",
+      "created_at": "2026-04-23T13:24:07.780306Z"
+    },
+    {
+      "id": "3dfa0838-c47a-49a6-99b8-c94bb54c2bce",
+      "author": "ryan",
+      "text": "Validation update: focused retry-hardening suite passed (156 pytest cases). Also started a live one-cycle Prescriber optimizer smoke run in the real CLI/runtime after the persistence changes. It created procedure e267082b-0225-4387-8f59-e40ba33404fe and task 61818dbb-6ab1-4e62-bd38-a4f6ce4f77ce, and it progressed through task/stage creation and procedure launch without immediately hitting the previous fatal persistence-throttling path. This does not prove a real throttle event was exercised, but it confirms the retry changes do not break normal optimizer startup.",
+      "created_at": "2026-04-23T13:25:11.143960Z"
+    }
+  ],
+  "created_at": "2026-04-23T13:15:45.843090Z",
+  "updated_at": "2026-04-23T13:25:11.143960Z",
+  "closed_at": null,
+  "custom": {}
+}

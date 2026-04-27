@@ -1,0 +1,39 @@
+{
+  "id": "plx-8a498d43-a08d-44c5-b1c4-12e7cad241c1",
+  "title": "Add MCP tool wrapper for vetted-feedback reference dataset creation",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-c4495668-05d2-4aaa-9ca4-b605687f7834",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "05cef982-ceaa-4f90-85be-28de7b772ed3",
+      "author": "ryan",
+      "text": "Completed: added MCP tool  and registered dataset tools in MCP/server.py. Tool calls shared CLI builder path.",
+      "created_at": "2026-04-02T19:14:35.618330Z"
+    },
+    {
+      "id": "0f9b9719-9150-4c7e-bfa9-d238d8f27063",
+      "author": "ryan",
+      "text": "Clarification: implemented MCP tool plexus_dataset_reference_from_feedback and registered dataset tool module in MCP/server.py.",
+      "created_at": "2026-04-02T19:14:45.736356Z"
+    }
+  ],
+  "created_at": "2026-04-02T18:56:22.360283Z",
+  "updated_at": "2026-04-02T19:14:45.736356Z",
+  "closed_at": "2026-04-02T19:14:35.597078Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

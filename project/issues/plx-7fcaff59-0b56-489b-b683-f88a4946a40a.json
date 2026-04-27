@@ -3,7 +3,7 @@
   "title": "Implement evaluation value function and pairwise winner selection",
   "description": "## Summary\nAdd a value function over evaluation records plus a pairwise winner-selection wrapper for comparing evaluation outcomes.\n\n## Deliverables\n- Implement a quantitative core `value(E)`.\n- Implement a comparative wrapper `best_of(A, B)`.\n- Permit `inconclusive` when runs are not comparable enough.\n- Make AC1 primary with explicit guardrails for recall, precision, invalid RCA, sample-protocol mismatch, and related quality signals.\n\n## Dependency note\nThis should follow the reference dataset assignment/build work when the value function is intended to judge deterministic regression runs.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -11,26 +11,35 @@
   "labels": [],
   "dependencies": [
     {
-      "target": "plx-ff6ca4",
-      "type": "blocked-by"
-    },
-    {
       "target": "plx-ff6ca47c-11f4-44f2-b6d2-649aea1a9442",
       "type": "blocked-by"
     },
     {
-      "target": "plx-cc3cf3",
+      "target": "plx-cc3cf381-35c4-4d9f-875e-321308ae1fbf",
       "type": "blocked-by"
     },
     {
-      "target": "plx-612be1",
+      "target": "plx-612be1f3-14ba-4424-9e69-94a720bae8f0",
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "2b96d523-0acb-423e-81ac-953dd874161f",
+      "author": "ryan",
+      "text": "Starting implementation: quantitative value(E) and comparative best_of(A,B) with AC1-primary scoring, guardrails, protocol-comparability checks, and inconclusive outcome support.",
+      "created_at": "2026-04-02T15:44:57.129191Z"
+    },
+    {
+      "id": "e061a6fd-7cfe-484c-8a53-23c80da14ff4",
+      "author": "ryan",
+      "text": "Implemented evaluation value function and pairwise winner selection.\n\nAdded module:\n- plexus/cli/shared/evaluation_value_function.py\n\nCapabilities:\n- Quantitative core value(E) with AC1 primary score.\n- Guardrail penalties for low recall / low precision.\n- RCA validity penalty when root cause is required but missing.\n- Comparative wrapper best_of(A,B).\n- inconclusive outcomes for protocol mismatch, insufficient metrics, and ties.\n\nProtocol comparability checks include mode/days/max_samples/sample_seed/score identity fields.\n\nTests added:\n- plexus/cli/shared/evaluation_value_function_test.py\n- pytest result: 4 passed.\n\nThis provides a reusable decision primitive for deterministic workflow acceptance and candidate ranking.",
+      "created_at": "2026-04-02T15:45:42.205832Z"
+    }
+  ],
   "created_at": "2026-04-02T12:49:33.182210Z",
-  "updated_at": "2026-04-02T12:49:33.182210Z",
-  "closed_at": null,
+  "updated_at": "2026-04-02T15:45:48.239479Z",
+  "closed_at": "2026-04-02T15:45:48.239479Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"

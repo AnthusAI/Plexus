@@ -1,6 +1,7 @@
 """Functions to fetch and cache score configurations from the API."""
 
 import logging
+from io import StringIO
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Union, Tuple
 
@@ -63,6 +64,7 @@ def fetch_score_configurations(
         
     # Initialize configurations with empty dict
     configurations = {}
+    failed_fetches = []
     
     # If all scores are already in cache and we're using cache, load cached configurations
     if not needs_fetch and use_cache:
@@ -108,7 +110,9 @@ def fetch_score_configurations(
         logging.info(f"======================================")
         
         if not score_id or not score_name or not champion_version_id:
-            logging.error(f"Missing required properties for score: {score}")
+            message = f"Missing required properties for score: {score}"
+            logging.error(message)
+            failed_fetches.append(message)
             continue
         
         # Build the GraphQL query
@@ -130,7 +134,9 @@ def fetch_score_configurations(
             version_data = result.get('getScoreVersion', {})
             
             if not version_data or 'configuration' not in version_data:
-                logging.error(f"No configuration found for version: {champion_version_id}")
+                message = f"No configuration found for version: {champion_version_id}"
+                logging.error(message)
+                failed_fetches.append(message)
                 continue
                 
             # Parse the YAML content to ensure it's valid
@@ -180,15 +186,19 @@ def fetch_score_configurations(
                     if key not in ['name', 'key', 'id', 'version', 'parent']:
                         ordered_config[key] = value
                 
+                rendered_config = StringIO()
+                yaml.dump(ordered_config, rendered_config)
+                normalized_config_yaml = rendered_config.getvalue()
+
                 # Get the YAML file path
                 yaml_path = get_score_yaml_path(scorecard_name, score_name)
                 
                 # Write to file with proper formatting
                 with open(yaml_path, 'w') as f:
-                    yaml.dump(ordered_config, f)
+                    f.write(normalized_config_yaml)
                 
-                # Store the configuration in memory
-                configurations[score_id] = config_yaml
+                # Keep the in-memory configuration identical to the cached YAML on disk.
+                configurations[score_id] = normalized_config_yaml
                 
                 logging.info(f"==== CONFIGURATION SAVED ====")
                 logging.info(f"Score: {score_name}")
@@ -197,49 +207,30 @@ def fetch_score_configurations(
                 logging.info(f"===============================")
                 
             except Exception as e:
-                logging.error(f"Error parsing YAML for score {score_name}: {str(e)}")
+                message = f"Error parsing YAML for score {score_name}: {str(e)}"
+                logging.error(message)
+                failed_fetches.append(message)
                 continue
                 
         except Exception as e:
-            logging.error(f"Error fetching score version: {str(e)}")
+            message = f"Error fetching score version: {str(e)}"
+            logging.error(message)
+            failed_fetches.append(message)
             continue
+
+    # One-path contract: when bypassing cache, all requested API configurations must load.
+    if failed_fetches and not use_cache:
+        error_summary = "; ".join(failed_fetches)
+        raise ValueError(
+            "Failed to fetch score configuration(s) from API with use_cache=False: "
+            f"{error_summary}"
+        )
     
     # If we're using cache, load everything from cache
     if use_cache:
         logging.info("Using cached configurations - loading from disk")
         return load_cached_configurations(scorecard_data, target_scores)
     else:
-        # If we're not using cache, we need to return the in-memory configurations
-        # But we might need to fill in any missing configurations from the target_scores
-        # that weren't included in needs_fetch (if cache_status doesn't have all scores)
-        if len(configurations) < len(target_scores):
-            logging.info("Not using cache - returning in-memory configurations")
-            logging.info(f"Have {len(configurations)} configurations in memory, need {len(target_scores)}")
-            
-            # For any scores that are missing from configurations, load them from disk
-            # This ensures we have complete data even if cache_status was incomplete
-            for score in target_scores:
-                score_id = score.get('id')
-                if not score_id or score_id in configurations:
-                    continue
-                
-                score_name = score.get('name')
-                if not score_name:
-                    continue
-                
-                yaml_path = get_score_yaml_path(scorecard_name, score_name)
-                if not yaml_path.exists():
-                    logging.warning(f"Configuration file not found for {score_name}: {yaml_path}")
-                    continue
-                
-                try:
-                    with open(yaml_path, 'r') as f:
-                        configuration = f.read()
-                    configurations[score_id] = configuration
-                    logging.info(f"Added missing configuration for {score_name} from disk")
-                except Exception as e:
-                    logging.error(f"Error loading configuration for {score_name}: {str(e)}")
-        
         logging.info(f"Returning {len(configurations)} configurations from memory")
         return configurations
 

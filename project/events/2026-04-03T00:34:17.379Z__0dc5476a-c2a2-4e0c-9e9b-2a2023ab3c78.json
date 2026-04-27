@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "0dc5476a-c2a2-4e0c-9e9b-2a2023ab3c78",
+  "issue_id": "plx-9402abda-277d-414f-8f53-0225bba63e09",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.379Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nPersist associated-dataset stats at build time for UI consumption.\n\n## Purpose\nAllow score-page dataset visibility without expensive per-view parquet scans.\n\n## Acceptance Criteria\n- Newly curated associated datasets persist row count and label distribution metadata.\n- Persist class list and curation policy metadata used for build.\n- Score-page UI path can read these stats directly.\n- No on-demand parquet parsing is required for this feature path."
+      }
+    }
+  }
+}

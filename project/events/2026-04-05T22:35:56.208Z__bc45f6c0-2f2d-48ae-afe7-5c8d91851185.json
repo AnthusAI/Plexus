@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "bc45f6c0-2f2d-48ae-afe7-5c8d91851185",
+  "issue_id": "plx-eb6f7289-24a7-414c-9893-fe15b5895994",
+  "event_type": "dependency_added",
+  "occurred_at": "2026-04-05T22:35:56.208Z",
+  "actor_id": "ryan",
+  "payload": {
+    "dependency_type": "blocked-by",
+    "target_id": "plx-22533ff5-30cd-423a-8fbc-26af614f24af"
+  }
+}

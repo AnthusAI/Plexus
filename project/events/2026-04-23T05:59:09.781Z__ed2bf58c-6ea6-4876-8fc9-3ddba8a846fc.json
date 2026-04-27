@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ed2bf58c-6ea6-4876-8fc9-3ddba8a846fc",
+  "issue_id": "plx-3d9714df-787a-44bc-8908-61108ced4042",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T05:59:09.781Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Launch the Medication Review: Dosage optimizer with the stabilized cycle-control behavior using the direct CLI path. Use the current dosage optimizer baseline shape: 180-day feedback window, 100 feedback items, 100-sample regression dataset, and 20 max iterations.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 1,
+    "status": "open",
+    "title": "Run stabilized optimizer on Medication Review: Dosage"
+  }
+}

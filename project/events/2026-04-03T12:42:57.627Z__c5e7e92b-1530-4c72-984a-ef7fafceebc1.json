@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c5e7e92b-1530-4c72-984a-ef7fafceebc1",
+  "issue_id": "plx-7e7e3f92-0747-409e-a7b8-2bfb4d6feca6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T12:42:57.627Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Agent speech collapsed/truncated in conversation viewer",
+    "description": "",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

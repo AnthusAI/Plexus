@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "95b42f0d-9589-48a8-b1f9-591214627ed5",
+  "issue_id": "plx-fb162039-a256-46a1-a138-fbc1510318a0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-25T18:58:37.793Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Commit current list improvements, then remove procedure list muted wrapper and fix missing procedures in version scope.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "UI: score procedures/evaluations list task-card parity and procedure filtering"
+  }
+}

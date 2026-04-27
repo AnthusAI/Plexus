@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7947171c-1b9e-4e9b-9617-9db18e325889",
+  "issue_id": "plx-e46f05c4-a407-44a2-ace6-279a6ff34437",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T01:05:13.096Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Property Type and Home Value Metadata AI guidelines for Suco - Home Improvement\n\nScenario: Metadata matches supported property type and home value evidence\nGiven a transcript where property type and home value are discussed and the metadata matches the supported value or valid mapping\nWhen the reviewer evaluates the conversation\nThen the score should be Yes\n\nScenario: Metadata conflicts with the call or required probing is missing\nGiven a transcript where the metadata does not match the supported value or the agent failed to probe after a large value range\nWhen the reviewer evaluates the conversation\nThen the score should be No\n\nScenario: The metadata cannot be supported from the call\nGiven a transcript where property type or home value was not discussed or metadata appears blank or unsupported by the transcript\nWhen the reviewer evaluates the conversation\nThen the score should be NA",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-fe57be96-46e2-4aa7-aad2-ec8b47db45ee",
+    "priority": 2,
+    "status": "open",
+    "title": "As a reviewer, I want Property Type and Home Value Metadata AI guidelines that distinguish correct metadata alignment, mismatches, and unsupported cases, so that scoring is consistent"
+  }
+}

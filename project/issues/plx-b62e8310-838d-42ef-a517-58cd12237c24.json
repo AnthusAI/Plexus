@@ -1,0 +1,21 @@
+{
+  "id": "plx-b62e8310-838d-42ef-a517-58cd12237c24",
+  "title": "Fix FeedbackAnalysis date_range handling for YAML date objects",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-bdf46225-f6cd-441e-907f-ae08bfceb3bd",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-23T20:19:20.135922519Z",
+  "updated_at": "2026-04-23T20:21:29.319103731Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

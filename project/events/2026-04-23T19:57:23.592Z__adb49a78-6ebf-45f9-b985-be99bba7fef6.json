@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "adb49a78-6ebf-45f9-b985-be99bba7fef6",
+  "issue_id": "plx-7c94986a-017e-432b-afa3-453b7dffd678",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T19:57:23.592Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "A new draft version of Medication Review: Individual Confirmation has been created to make the bounded medication-review segment requirement explicit, forbid pooling scattered medication mentions across the call, and state that truncated fragments do not count unless the actual review exchange is visible. Draft version: f1040a1b-ab02-48db-9ed6-18af22703c55. Review the wording and promote/publish only after explicit approval.",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-d856c7eb-ce41-4d1b-a2e6-196d825a6634",
+    "priority": 3,
+    "status": "open",
+    "title": "Review and publish Individual Confirmation scope-clarification draft if approved"
+  }
+}

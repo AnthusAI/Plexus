@@ -1,0 +1,151 @@
+{
+  "id": "plx-e613769c-052f-4300-8a3a-5a509c72c6fb",
+  "title": "Review Medication Review contradiction invalidation candidates",
+  "description": "Review split-score contradiction exemplars after the April 22 rubric/code promotion and determine which older feedback items should be invalidated under the current Medication Review rubric.\n\nIn scope:\n- Medication Review: Prescriber\n- Medication Review: Dosage\n- Medication Review: Pharmacy\n- Medication Review: Individual Confirmation\n\nFocus:\n- older labels that require all medications instead of most\n- older labels that count excluded/discontinued/not-current meds\n- older labels that apply SRX rules to SPM calls\n- pharmacy labels that accept vague or system-only pharmacy verification despite the published current-pharmacy rubric\n\nDo not invalidate automatically; prepare and review candidate lists first.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6bc73d30-9c09-40f5-bbd0-cdf3dadd3440",
+      "author": "ryan",
+      "text": "User approved the first narrow Prescriber invalidation batch from the contradictions report only. Approved items: 306181806, 305252079, 305141717, 305262577, 305252085. Explicitly excluding the SPM-vs-SRX contradiction items from this batch.",
+      "created_at": "2026-04-22T18:16:45.953628Z"
+    },
+    {
+      "id": "fc378d39-1caa-467d-81c3-44af2a40a932",
+      "author": "ryan",
+      "text": "Executed the first approved  invalidation batch from the contradictions report. Invalidated exactly these item external IDs and feedback item IDs:  (),  (),  (),  (), and  (). Explicitly did not invalidate the SPM-vs-SRX Prescriber contradiction items in this batch. Note: the existing CLI/model invalidation helper is mechanically broken because  needs the current composite-key fields (, , , , etc.). Per-item invalidation succeeded by running the raw mutation with those existing fields included.",
+      "created_at": "2026-04-22T18:20:24.871054Z"
+    },
+    {
+      "id": "81b5d731-9ac9-4b7c-b23a-c1ca86be09de",
+      "author": "ryan",
+      "text": "Executed the first approved Medication Review: Prescriber invalidation batch from the contradictions report. Invalidated exactly these item external IDs and feedback item IDs: 306181806 (71febae1-9a45-4d58-a19b-bf31d810ca58), 305252079 (9f1f8fab-0a02-42d0-893a-697625b3cdf7), 305141717 (f2d731f8-f411-4d30-b896-3a05f28c6f7a), 305262577 (e3c7d333-4c9a-42dd-bbe6-650ce23d36b5), and 305252085 (fb01a831-745c-4147-abb1-2d21c81bb485). Explicitly did not invalidate the SPM-vs-SRX Prescriber contradiction items in this batch. Note: the existing CLI/model invalidation helper is mechanically broken because updateFeedbackItem needs the current composite-key fields (accountId, scorecardId, scoreId, editedAt, etc.). Per-item invalidation succeeded by running the raw mutation with those existing fields included.",
+      "created_at": "2026-04-22T18:20:35.307114Z"
+    },
+    {
+      "id": "d0c7d85a-fac8-43c0-9495-edce0fd02451",
+      "author": "ryan",
+      "text": "Rerunning the Medication Review: Prescriber contradictions report after the first approved invalidation batch and comparing it to the most recent pre-invalidation contradictions report. Goal: verify how the contradiction counts and exemplar set changed after invalidating the old all-meds Prescriber labels.",
+      "created_at": "2026-04-22T18:48:24.620061Z"
+    },
+    {
+      "id": "05417cb1-e684-49bd-8a68-be825d8da5dc",
+      "author": "ryan",
+      "text": "Reran Medication Review: Prescriber contradictions after the first approved invalidation batch and compared the fresh report against the latest true pre-invalidation report. Fresh post-invalidation report: 8d2253ea-f590-414e-9ede-b01aa11b9ac8 created 2026-04-22 18:50 UTC. Latest pre-invalidation baseline: b509fc02-1b39-45b0-a59f-e868a7319566 created 2026-04-22 18:11 UTC. Before: 54 analyzed, 10 contradictions, 44 aligned. After: 49 analyzed, 7 contradictions, 42 aligned. The five invalidated Prescriber items are fully absent from the fresh contradiction set: 306181806, 305252079, 305141717, 305262577, 305252085. Remaining contradiction set is now: 305141718, 305879339, 305881523, 305930388, 307498132, 307516904, 309504278. Net effect: contradiction rate dropped from 10/54 (18.5 percent) to 7/49 (14.3 percent). Two contradictions surfaced in the fresh selected set that were not in the 18:11 report exemplar list: 305141718 and 309504278. This appears to be normal post-invalidation resurfacing from the remaining eligible pool rather than a failure of the invalidation batch.",
+      "created_at": "2026-04-22T18:52:58.173748Z"
+    },
+    {
+      "id": "6e78dbdd-ab43-45d8-b0f1-ec429eed3a69",
+      "author": "ryan",
+      "text": "Ran post-fix feedback evaluation for Medication Review: Prescriber (eval 7ccfb878-ef0c-43f7-ac4d-5ef326951a10) and verified invalidated feedback IDs are excluded (intersection count 0 against the 5 invalidated IDs).",
+      "created_at": "2026-04-22T19:28:30.614558Z"
+    },
+    {
+      "id": "e0e06ac6-c39d-41fc-a245-11fa0a828ffa",
+      "author": "ryan",
+      "text": "User approved invalidating contradiction-driven Prescriber feedback items. Proceeding with the contradiction group while leaving likely real score-bug items in place for optimizer follow-up.",
+      "created_at": "2026-04-22T19:38:52.381328Z"
+    },
+    {
+      "id": "8b00e405-d4dc-4422-869b-6cfb061399f4",
+      "author": "ryan",
+      "text": "Starting Prescriber optimizer to 20 cycles after contradiction cleanup. Will also update the canonical optimizer skill with the conservative contradiction-invalidation workflow used here, then begin the same process on the next Medication Review score.",
+      "created_at": "2026-04-22T19:56:25.059226Z"
+    },
+    {
+      "id": "fbd868dd-5cb7-43eb-8ca0-d51fd0ab3916",
+      "author": "ryan",
+      "text": "Beginning the same contradictions-report plus fresh-evaluation triage for Medication Review: Dosage, since it uses the same threshold-style SRX rubric (two or more misses => No; no more than one miss => Yes).",
+      "created_at": "2026-04-22T19:58:19.950691Z"
+    },
+    {
+      "id": "d5d74120-8aee-4a00-ad75-8c60b4d9d0ca",
+      "author": "ryan",
+      "text": "Prescriber optimizer relaunched successfully via direct CLI using /Users/ryan/miniconda3/bin/python after earlier SCORE_NOT_FOUND failure on explicit start_version pull. New procedure: 9029e3b7-1890-4e38-8909-330337b3803f. Also started Medication Review: Dosage contradiction triage with fresh 180-day contradictions report + eval 30533ae5-eae0-4c96-8917-ebe457d2b6e5. Clean initial invalidation shortlist is currently: a2032807-0f2a-431a-878e-116af9c82bfe, a3a6640c-f1fe-46ae-ad17-1caa662ddf42, 8b777a9b-29ff-448a-ae57-b19978ee30c5, 22ce6344-d998-43a3-90f4-0030f24f5f47. Important separate finding: Dosage champion still has parse_from_start=true and guidelines missing, and several false negatives appear to be parser/config artifacts rather than contradictory labels.",
+      "created_at": "2026-04-22T20:10:47.354850Z"
+    },
+    {
+      "id": "ef5ddfdd-6cc8-4081-8127-c0742341c1b6",
+      "author": "ryan",
+      "text": "Continuing with Dosage before launching its optimizer. Rationale: post-invalidation contradiction count improved (14 -> 9), but the live Dosage champion still shows a real config problem (parse_from_start=true and missing published guidelines on the champion version), so optimization would currently learn from parser/config noise. Next step is to fix Dosage code+guidelines together, verify via evaluation, then start the Dosage optimizer on the cleaned signal.",
+      "created_at": "2026-04-22T20:51:47.395126Z"
+    },
+    {
+      "id": "6c7d253c-39ce-4833-851b-cf9d1ee483c8",
+      "author": "ryan",
+      "text": "Prescriber optimizer startup bug fixed via CLI score-pull resolver patch. Current clean run: procedure 75231fc3-823a-4654-8192-ecc016f6b8d1. Also updated RCA handling to avoid false missing-context clustering and documented conservative contradiction-driven invalidation workflow in skills/plexus-score-optimizer/SKILL.md.",
+      "created_at": "2026-04-22T21:02:04.272476Z"
+    },
+    {
+      "id": "49cc7967-e116-430a-8251-b0465c8a7287",
+      "author": "ryan",
+      "text": "Starting new contradictions-first recovery pass for Medication Review: Prescriber. Scope for this pass:\n- use procedure 695a6bcd-f17c-4d04-ae68-358a5e2cfe0b and stalled follow-up 26d26b35-3f96-434e-b7cd-9f14cb7dead0 as primary evidence\n- freeze and extract exact contradiction candidates with transcript/edit-comment evidence\n- do not invalidate anything without explicit approval of exact IDs\n- after approval, build a vetted deterministic regression slice\n- restart optimizer from version 63892e5d-bacc-483c-89ff-429ff2131100, not champion, with an explicit hint preferring GPT 5.4 mini and forbidding GPT 5.4 nano/full-context reset/extractor-ledger retries\nCurrent step: collect the operator packet and candidate groups for approval.",
+      "created_at": "2026-04-23T19:45:44.825591Z"
+    },
+    {
+      "id": "61e01e89-1a9d-4ffd-902f-f27e8fda1458",
+      "author": "ryan",
+      "text": "Pulled a fresh 90-day Prescriber contradictions block for contradictions-first triage. Current result: 47 eligible items analyzed, 10 contradictions, 37 aligned. No invalidation performed. Next step: extract exact candidate groups, identify likely true contradictions vs policy-gap/implementation cases, and prepare SME-facing clarification questions before requesting approval on any exact IDs.",
+      "created_at": "2026-04-23T19:47:48.430062Z"
+    },
+    {
+      "id": "a2f91882-bcaf-4161-92cd-22199b3e44b6",
+      "author": "ryan",
+      "text": "Fresh 90-day Prescriber contradictions packet completed from report fab5a6a8-8304-417f-9ea9-3ff5e4a9391b. Exact contradiction set recovered from the persisted ReportBlock attachment. Clean invalidation candidates pending user approval: 309504453 (f859ce53-0907-4160-8746-6e73a58f3cc0), 309504386 (868edab3-f263-4598-aee1-3043786875e6), 309504413 (43709332-f4e0-4338-b3e1-e59121b47c92), 308538589 (d8f59b46-3af4-41f6-9130-71779062d65c), 305262247 (d4977d12-1b3e-4e97-9f6e-a3bed718244a), 305141716 (73c423c3-1ac0-4400-bcfe-82db678665b1). Common pattern: reviewer left final Yes/agree even though the score explanation itself says multiple current medications remained unverified and ends in No. Hold for explicit approval only; no invalidation performed.",
+      "created_at": "2026-04-23T19:51:34.184971Z"
+    },
+    {
+      "id": "0403b97f-6213-4731-855b-b9cfbc1df5bc",
+      "author": "ryan",
+      "text": "Preparing another Medication Review: Prescriber contradictions run after the two approved rule clarifications were implemented in candidate version ba041b6a-8786-4f31-b082-31b5f999b0e7. First checking whether the FeedbackContradictions block can target a non-champion score version so the rerun reflects the updated guidelines rather than the still-champion older version.",
+      "created_at": "2026-04-23T20:18:19.790865Z"
+    },
+    {
+      "id": "ff7296a3-7fd9-4c8d-8595-66c1eced9c3d",
+      "author": "ryan",
+      "text": "Confirmed from plexus/reports/blocks/feedback_contradictions.py that the FeedbackContradictions block currently fetches guidelines from the score championVersionId only. It does not accept a score_version_id override, so a rerun after non-champion guideline tweaks will still analyze against the current champion rule set. Running a fresh 90-day Prescriber contradictions report anyway for comparability and documenting that limitation explicitly.",
+      "created_at": "2026-04-23T20:20:42.153391Z"
+    },
+    {
+      "id": "34cbc2d6-d572-4212-b66a-886c922fe786",
+      "author": "ryan",
+      "text": "Reran Medication Review: Prescriber contradictions via direct CLI. Fresh report: 66a18447-765c-4fdc-a007-74ac220b5d0b (block 6aa7691b-abfe-40fa-89ea-80f75118bfa7). Result: 47 analyzed, 7 contradictions, 40 aligned, 5 topic clusters. Important implementation note: despite the known champion-only fetch path in FeedbackContradictions, the stored output guidelines on this run include both approved clarifications (prescribed-by recognition and explicit at-most-one-miss language). Need to reconcile that with the separate score-info tool still reporting the older championVersionId before assuming promotion state.",
+      "created_at": "2026-04-23T20:24:08.754435Z"
+    },
+    {
+      "id": "5807da76-dd1b-4ebf-bade-aeca1b658353",
+      "author": "ryan",
+      "text": "Starting the Prescriber triangulation pass requested by the user. Goal: combine three evidence streams for Medication Review: Prescriber — (1) the fresh contradictions report, (2) mistakes from the latest 180-day feedback evaluation(s), and (3) repeat-offender / recurring issue evidence from the latest optimizer procedures — to identify clean invalidation candidates, gray-zone review items, and any contradictions that are corroborated by multiple analysis types.",
+      "created_at": "2026-04-23T20:30:49.493776Z"
+    },
+    {
+      "id": "9c3904a1-15ea-43d4-8715-34bfca3cbb81",
+      "author": "ryan",
+      "text": "Completed Prescriber triangulation across three sources: latest contradictions report 66a18447-765c-4fdc-a007-74ac220b5d0b / block 6aa7691b-abfe-40fa-89ea-80f75118bfa7, latest 180-day feedback evaluation 4e5cbf7b-060b-4c5b-89f9-59c224f8a6b8, and optimizer recurrence from procedures 695a6bcd-f17c-4d04-ae68-358a5e2cfe0b plus 26d26b35-3f96-434e-b7cd-9f14cb7dead0. Overlap summary: all three sources = 308538589 and 309504448; contradiction+evaluation only = 305141716 and 309504413; contradiction+recurrence only = 309504386 and 309504453; evaluation+recurrence only = 305262247, 306169979, 308889128. Important navigation result: 309504386, 309504453, and previously disputed 307498132 are correct on the latest candidate evaluation (predicted Yes / actual yes), so they now look like stale champion/report-path contradictions rather than invalidation targets. The strongest current invalidation review items are 305141716 and 309504413 because both still appear as contradiction exemplars and current-eval errors under the approved rubric. The all-three items 308538589 and 309504448 remain gray-zone because the contradiction signal says the review label looks wrong, but both optimizer recurrence and eval RCA repeatedly attribute them to RelevantWindowsTranscriptFilter preprocessing loss; do not invalidate those first. Evaluation+recurrence-only items 305262247, 306169979, and 308889128 look like real score/configuration or hard borderline cases to keep in the vetted regression slice, not contradiction cleanup. Net: remaining work is mostly score/preprocessing navigation, not open SME policy on the already-settled Prescriber thresholds.",
+      "created_at": "2026-04-23T20:36:18.323298Z"
+    },
+    {
+      "id": "d3aadcb3-0244-4b41-b69f-d23904b074b9",
+      "author": "ryan",
+      "text": "User approved invalidating the two triangulation-backed Prescriber contradiction items only: 305141716 (73c423c3-1ac0-4400-bcfe-82db678665b1) and 309504413 (43709332-f4e0-4338-b3e1-e59121b47c92). Rationale: both remain contradiction exemplars and current-evaluation errors under the approved rubric. Proceeding with exact-item invalidation now; gray-zone preprocessing cases remain excluded.",
+      "created_at": "2026-04-23T20:38:11.835053Z"
+    },
+    {
+      "id": "278ca5c2-27ae-4dd7-b1b0-07617cb848e6",
+      "author": "ryan",
+      "text": "Invalidated exactly the two approved Prescriber contradiction items via targeted feedback invalidation: 305141716 (73c423c3-1ac0-4400-bcfe-82db678665b1) and 309504413 (43709332-f4e0-4338-b3e1-e59121b47c92). Both returned updated=true and already_invalid=false. No other Prescriber feedback items were touched.",
+      "created_at": "2026-04-23T20:38:26.497835Z"
+    }
+  ],
+  "created_at": "2026-04-22T14:30:09.933567Z",
+  "updated_at": "2026-04-23T20:38:26.497835Z",
+  "closed_at": null,
+  "custom": {}
+}

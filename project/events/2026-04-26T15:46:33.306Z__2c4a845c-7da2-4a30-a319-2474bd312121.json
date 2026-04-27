@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2c4a845c-7da2-4a30-a319-2474bd312121",
+  "issue_id": "plx-2f635706-21ef-43df-b82b-5e69a06b05f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T15:46:33.306Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Full dashboard CI imports score procedure cards through broad score dashboard tests and fails to resolve ESM-only @streamdown/* packages from Jest. Fix the test configuration so ProcedureTask imports remain usable in full dashboard unit runs.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix dashboard Jest Streamdown ESM resolution"
+  }
+}

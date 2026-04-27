@@ -1,0 +1,49 @@
+{
+  "id": "plx-7e60f108-9b13-4822-9853-0c4916343d9c",
+  "title": "Resolve PR #164 CodeQL findings after develop drift",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5cce3efa-1858-4ca0-b5cf-e6219e7279ae",
+      "author": "derek",
+      "text": "Starting implementation: branch from latest develop, resolve CodeQL findings on PR #164, run targeted validation, open follow-up PR to develop.",
+      "created_at": "2026-04-14T18:38:21.262383065Z"
+    },
+    {
+      "id": "07c04dfa-a00c-4aae-a0be-94f09d1f5455",
+      "author": "derek",
+      "text": "Applied CodeQL follow-up fixes from PR #164 comments in dashboard/components/ui/conversation-viewer.tsx: removed unused useCallback import and simplified unreachable isAuthUnavailable condition in selectedSessionMissing button disabled state. Local lint tooling is currently broken/hanging in this environment (next lint flag mismatch and eslint config crash), so validation is change-scope review plus minimal diff.",
+      "created_at": "2026-04-14T18:41:05.926037710Z"
+    },
+    {
+      "id": "fc2004fb-1b41-418b-80c2-603dc2555ada",
+      "author": "derek",
+      "text": "Opened follow-up PR to develop for CodeQL fixes and review freshness: https://github.com/AnthusAI/Plexus/pull/165",
+      "created_at": "2026-04-14T18:51:51.027400562Z"
+    },
+    {
+      "id": "a6d9606a-fd60-4a26-835b-fe2ee99dde51",
+      "author": "derek",
+      "text": "Investigated CI failure on PR #164 (Actions job 71329262238). Root cause: conversation-viewer-streaming-updates tests assumed eager list rendering, but ConversationViewer now uses react-virtuoso virtualization. Added deterministic react-virtuoso test mock in conversation-viewer-streaming-updates.test.tsx so message rows render in JSDOM; targeted test now passes (5/5).",
+      "created_at": "2026-04-14T19:05:18.391262099Z"
+    },
+    {
+      "id": "3764dd1b-c851-4946-ba2f-ed879e07bfbc",
+      "author": "derek",
+      "text": "Pushed follow-up commit d5852b7a to PR #165 to fix CI unit test regression from virtualization in conversation viewer streaming tests. Verified with dashboard ci:unit: 51 suites / 418 tests passing.",
+      "created_at": "2026-04-14T19:05:57.759888286Z"
+    }
+  ],
+  "created_at": "2026-04-14T18:38:19.054032316Z",
+  "updated_at": "2026-04-14T19:05:57.759888286Z",
+  "closed_at": null,
+  "custom": {}
+}

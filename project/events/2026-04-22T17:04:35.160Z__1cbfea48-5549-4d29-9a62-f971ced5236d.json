@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1cbfea48-5549-4d29-9a62-f971ced5236d",
+  "issue_id": "plx-4c40b818-7f04-437a-b471-7ab29db8a195",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T17:04:35.160Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": "ryan",
+    "description": "Implement the single-item feedback invalidation workflow described in plx-f21daa, including deterministic identifier resolution, GraphQL mutation plumbing, CLI registration, MCP registration, and automated tests.\n\nNotes:\n- This tool is for operator-approved targeted invalidation only.\n- It must not batch invalidate or silently choose among multiple candidate feedback items.\n- Prefer shared resolution logic between CLI and MCP to keep behavior identical.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-9c0031ce-2dfc-4026-bdc4-5b00cf0352aa",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement feedback invalidate CLI and MCP tool"
+  }
+}

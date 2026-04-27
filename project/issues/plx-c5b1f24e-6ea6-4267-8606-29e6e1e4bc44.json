@@ -1,0 +1,31 @@
+{
+  "id": "plx-c5b1f24e-6ea6-4267-8606-29e6e1e4bc44",
+  "title": "Update live Medication Review split-score rubric and composite logic",
+  "description": "Implementation task for the current-medication policy and Medication Review composite fix in SelectQuote HCS Medium-Risk.\n\nAcceptance criteria:\n- Update live score versions in Plexus for the affected Medication Review scores.\n- Validate guideline markdown before pushing guideline-bearing changes.\n- Verify direct predictions after the change.\n- Record final promoted or non-promoted state in Kanbus.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d74b2db6-3ae4-4a66-80de-a157ec85d81d",
+      "author": "ryan",
+      "text": "Started implementation. Initial inspection findings: Medication Review: Dosage already excludes no-longer-taken/discontinued meds in the live prompt, but Medication Review: Prescriber does not. Medication Review (Composite) uses older hand-rolled dependency aggregation code and is the most likely source of the client-reported mismatch where the composite can disagree with the four split scores. Plan: patch Prescriber rubric/code for current-medication exclusions, add/normalize guidelines for the affected split scores, simplify/repair composite aggregation logic, then verify with direct predictions.",
+      "created_at": "2026-04-22T13:19:56.181914Z"
+    },
+    {
+      "id": "9cd21517-52eb-43b3-84c2-91b58683c84e",
+      "author": "ryan",
+      "text": "Implemented Medication Review split-score updates and ran 180-day feedback evaluations on the new versions.\n\nNew versions created:\n- Prescriber: `edc3048a-6e2c-455c-8937-c635b0c02525`\n- Dosage: `2a57e656-be2f-4751-b55d-2e7b22f347d1`\n- Pharmacy: `1891ccac-6622-481f-a5e8-1ad74655af02`\n- Individual Confirmation: `392ac104-15dc-4d31-a3d6-ac8dde5125ff`\n\nChanges pushed:\n- Removed `parse_from_start` from all four split scores so final labels parse from the end of the response.\n- Updated Prescriber and Dosage to exclude medications the customer no longer takes, discontinued medications, and completed short-course medications such as finished antibiotics from SRX miss counting.\n\nSanity check:\n- `Medication Review: Dosage` on item `294232132` now returns `Yes` with a matching explanation, fixing the prior explanation/value contradiction.\n\n180-day feedback evaluations:\n- Prescriber eval `3b059ca8-34dc-446c-ba33-513364794009`: 57 items, Accuracy 68.42%, Alignment 0.3996, dominant RCA = score configuration with 4 mechanical missing-context failures.\n- Dosage eval `9d62ea21-626f-44b4-a885-e839e42c58b8`: 55 items, Accuracy 65.45%, Alignment 0.3234, dominant RCA = score configuration with 5 mechanical missing-context failures.\n- Pharmacy eval `d0252006-82e0-40e3-9138-aff6a09c1af1`: 52 items, Accuracy 96.15%, Alignment 0.9568, RCA points to guideline-gap ambiguity rather than score logic.\n- Individual Confirmation eval `81d8f9e6-0a4c-4170-9579-594f0986589a`: 54 items, Accuracy 90.74%, Alignment 0.8519, dominant RCA = mechanical missing-context failures.\n\nFollow-up tasks created:\n- `plx-23c032` Investigate Medication Review composite mismatch after split-score parse fix\n- `plx-6ecb47` Fix Medication Review feedback-eval mechanical missing-context failures\n- `plx-a63322` Add official guidelines for Medication Review Pharmacy and Individual Confirmation",
+      "created_at": "2026-04-22T13:43:06.742987Z"
+    }
+  ],
+  "created_at": "2026-04-22T13:19:51.525218Z",
+  "updated_at": "2026-04-22T13:43:09.276268Z",
+  "closed_at": "2026-04-22T13:43:09.276268Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "95140bba-9cf5-45b8-875a-0e1bc40dc36b",
+  "issue_id": "plx-9baee99f-132e-48e5-83e4-cf23325d9aa9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-24T23:18:43.501Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Update Plexus and Tactus dependency constraints to enforce Biblicus max_exemplars support and prevent RCA stack resolver drift.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Adjust dependency constraints for Biblicus + RCA stack compatibility"
+  }
+}

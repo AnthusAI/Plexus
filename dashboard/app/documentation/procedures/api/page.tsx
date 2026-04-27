@@ -310,7 +310,7 @@ end`}</code>
             </li>
           </ul>
           <p className="text-muted-foreground mt-4">
-            Includes detailed documentation for: Tool, Session, Control, GraphNode primitives and more.
+            Includes detailed documentation for: Tool, Session, Control, State, Checkpoint primitives and more.
           </p>
         </section>
 

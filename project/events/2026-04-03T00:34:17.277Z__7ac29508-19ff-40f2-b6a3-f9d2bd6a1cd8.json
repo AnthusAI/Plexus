@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "7ac29508-19ff-40f2-b6a3-f9d2bd6a1cd8",
+  "issue_id": "plx-82a3aa63-be32-4939-965d-6ec2d45fd3f6",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.277Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nLand/adapt PR #78 score validation support in this branch and verify runtime behavior.\n\n## Purpose\nUse the score validation contract (including `valid_classes`) as a stable prerequisite for downstream dataset balancing work.\n\n## Acceptance Criteria\n- Validation configuration is usable in score YAML in this repo.\n- Tests pass for the class-validation path.\n- No schema migration is required for this PR #78 validation contract work.\n- Findings and verification output are logged in Kanbus comments."
+      }
+    }
+  }
+}

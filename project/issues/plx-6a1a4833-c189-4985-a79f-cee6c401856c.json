@@ -1,0 +1,31 @@
+{
+  "id": "plx-6a1a4833-c189-4985-a79f-cee6c401856c",
+  "title": "Extract shared guideline-voting engine for contradiction/alignment analysis",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f16ec75a-8c5c-4622-b82b-88686260c22d",
+      "author": "ryan",
+      "text": "Started implementation. First deliverable is extracting DRY per-item guideline voting into a reusable service used by both contradictions and aligned report modes, with strict dataset eligibility=unanimous non-contradiction.",
+      "created_at": "2026-04-02T18:57:32.471257Z"
+    },
+    {
+      "id": "79d21e36-adab-49d0-b737-407bad80b165",
+      "author": "ryan",
+      "text": "Completed: extracted shared guideline-vetting voting engine to plexus/reports/blocks/guideline_vetting.py with per-item verdict/confidence/vote traces and strict reference eligibility (unanimous non-contradiction). Added unit tests in guideline_vetting_test.py.",
+      "created_at": "2026-04-02T19:14:14.536844Z"
+    }
+  ],
+  "created_at": "2026-04-02T18:56:22.306083Z",
+  "updated_at": "2026-04-02T19:14:14.536844Z",
+  "closed_at": "2026-04-02T19:14:14.515413Z",
+  "custom": {}
+}

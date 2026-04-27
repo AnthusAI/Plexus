@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5457665c-3268-4993-897e-e5de961d1fd3",
+  "issue_id": "plx-740ac0ee-f536-48f4-b4a7-73d1f887c188",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-19T21:07:20.047Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## User Story As an optimizer operator I want each procedure run to report incurred evaluation spend separately from optimizer inference spend So that I can understand total run cost and where money is being spent  ## Behavior Spec ",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Track optimizer run costs with evaluation vs inference breakdown"
+  }
+}

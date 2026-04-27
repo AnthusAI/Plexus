@@ -3,7 +3,7 @@
   "title": "Align release and branch-protection workflows with platform-ci reusable workflows",
   "description": "",
   "type": "chore",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -34,10 +34,16 @@
       "author": "derek.norrbom",
       "text": "Patched infrastructure/github-rulesets/main-branch-protection.json to include required_status_checks rule matching live ruleset contexts: Python Tests (3.11), Python Tests (3.12), Dashboard Unit Tests, Dashboard Storybook Tests.",
       "created_at": "2026-03-24T17:57:22.630506Z"
+    },
+    {
+      "id": "7bff9ad0-cb36-4d53-b347-deca730585e2",
+      "author": "ryan",
+      "text": "Release and branch-protection workflows aligned with platform-ci reusable workflows.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-24T17:31:06.299454Z",
-  "updated_at": "2026-03-24T17:57:22.630506Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {}
 }

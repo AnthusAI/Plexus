@@ -3,7 +3,7 @@
   "title": "requirements.txt",
   "description": "Snyk vulnerabilities found in `requirements.txt`.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -37,11 +37,17 @@
       "author": "derek.norrbom",
       "text": "Applied change to make root requirements.txt a direct-dependency manifest from pyproject.toml for Snyk free-tier parity, instead of a pip-compile lockfile.\n- Updated .github/workflows/requirements-sync.yml to export project dependencies with Python/tomllib.\n- Regenerated requirements.txt.\n- Current root requirements.txt now has 67 direct dependency lines.",
       "created_at": "2026-03-11T21:46:11.551792Z"
+    },
+    {
+      "id": "d3fda0c9-57df-4fbd-86e2-f4dcf81205b2",
+      "author": "ryan",
+      "text": "requirements.txt removed April 2 as part of Poetry migration. Snyk scans poetry.lock directly; requirements.txt was redundant.",
+      "created_at": "2026-04-04T19:21:44.261289Z"
     }
   ],
   "created_at": "2026-03-11T21:27:00.617011Z",
-  "updated_at": "2026-03-11T21:46:11.551792Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:21:44.261289Z",
+  "closed_at": "2026-04-04T19:21:44.261289Z",
   "custom": {
     "snyk_category": "dependency",
     "snyk_target_file": "requirements.txt"

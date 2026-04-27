@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "713f2971-05a6-4529-9b2d-a36d988f8c45",
+  "issue_id": "plx-c026833f-2552-454c-a660-872ee559ab19",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T18:11:39.309Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Dashboard CI failed in score-evaluation-list loading skeleton assertion after recent loading-state work. Keep the intended sort/filter loading feedback deterministic so CI and UX agree.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Stabilize evaluation-list loading state test"
+  }
+}

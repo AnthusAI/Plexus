@@ -1,0 +1,25 @@
+{
+  "id": "plx-bdf46225-f6cd-441e-907f-ae08bfceb3bd",
+  "title": "Report parameter UX improvements",
+  "description": "",
+  "type": "initiative",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8d0ad492-dbbf-4d5c-9dfd-8b5acb84df0b",
+      "author": "derek",
+      "text": "Initiative scope delivered through PR #192, PR #193 (develop->main promotion), and PR #194 (code-quality follow-up). Closing initiative.",
+      "created_at": "2026-04-21T19:22:35.098997768Z"
+    }
+  ],
+  "created_at": "2026-04-21T16:23:14.536962814Z",
+  "updated_at": "2026-04-21T19:22:35.111734378Z",
+  "closed_at": "2026-04-21T19:22:35.111734378Z",
+  "custom": {}
+}

@@ -3,9 +3,9 @@
  */
 
 import yaml from 'js-yaml'
-import { ParameterConfig, ParameterDefinition } from '@/types/parameters'
+import { ParameterConfig, ParameterDefinition, DateRangeValue } from '@/types/parameters'
 
-type RawParameterType = 'string' | 'text' | 'number' | 'boolean' | 'select' | string
+type RawParameterType = 'string' | 'text' | 'number' | 'boolean' | 'select' | 'date' | 'date_range' | string
 
 function toTitleCase(value: string): string {
   return value
@@ -20,6 +20,8 @@ function normalizeParameterType(type: RawParameterType): ParameterDefinition['ty
   if (type === 'number') return 'number'
   if (type === 'boolean') return 'boolean'
   if (type === 'select') return 'select'
+  if (type === 'date') return 'date'
+  if (type === 'date_range') return 'date_range'
   return 'text'
 }
 
@@ -46,40 +48,42 @@ function normalizeParameterDefinition(name: string, raw: any): ParameterDefiniti
   }
 }
 
+function extractDefinitionsFromParsedConfig(
+  config: ParameterConfig & { params?: Record<string, any> } | undefined
+): ParameterDefinition[] {
+  if (Array.isArray(config?.parameters)) {
+    return config.parameters
+  }
+  if (config?.params && typeof config.params === 'object') {
+    return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
+  }
+  return []
+}
+
 /**
  * Extract parameter definitions from YAML content
  * Supports frontmatter format: parameters section before --- separator
  */
 export function parseParametersFromYaml(yamlContent: string): ParameterDefinition[] {
   try {
-    // Check for YAML frontmatter (parameters section before ---)
-    if (yamlContent.includes('---')) {
-      const parts = yamlContent.split('---')
-      if (parts.length >= 2) {
-        // First part is the frontmatter
-        const frontmatter = parts[0].trim()
-        if (frontmatter) {
-          const config = yaml.load(frontmatter) as ParameterConfig & { params?: Record<string, any> }
-          if (Array.isArray(config?.parameters)) {
-            return config.parameters
-          }
-          if (config?.params && typeof config.params === 'object') {
-            return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
-          }
-          return []
+    // Support "YAML header + --- + markdown body" templates used by reports.
+    // We only treat the section before the first line containing exactly '---'
+    // as candidate parameter config; everything after can be markdown/code fences.
+    const separatorMatch = yamlContent.match(/^\s*---\s*$/m)
+    if (separatorMatch && separatorMatch.index !== undefined) {
+      const header = yamlContent.slice(0, separatorMatch.index).trim()
+      if (header) {
+        const parsedHeader = yaml.load(header) as ParameterConfig & { params?: Record<string, any> }
+        const headerDefinitions = extractDefinitionsFromParsedConfig(parsedHeader)
+        if (headerDefinitions.length > 0) {
+          return headerDefinitions
         }
       }
     }
-    
-    // Fallback: try to parse the whole thing
+
+    // Parse the full YAML document
     const config = yaml.load(yamlContent) as ParameterConfig & { params?: Record<string, any> }
-    if (Array.isArray(config?.parameters)) {
-      return config.parameters
-    }
-    if (config?.params && typeof config.params === 'object') {
-      return Object.entries(config.params).map(([name, raw]) => normalizeParameterDefinition(name, raw))
-    }
-    return []
+    return extractDefinitionsFromParsedConfig(config)
   } catch (error) {
     console.error('Error parsing parameters from YAML:', error)
     return []
@@ -156,6 +160,45 @@ export function validateParameters(
             })
           }
           break
+
+        case 'date':
+          if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} must be a valid date`
+            })
+          }
+          break
+
+        case 'date_range': {
+          const range = value as DateRangeValue
+          const start = typeof range?.start === 'string' ? range.start : ''
+          const end = typeof range?.end === 'string' ? range.end : ''
+
+          if (def.required && (!start || !end)) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} requires both start and end dates`
+            })
+            break
+          }
+
+          if ((start && Number.isNaN(Date.parse(start))) || (end && Number.isNaN(Date.parse(end)))) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} must include valid start and end dates`
+            })
+            break
+          }
+
+          if (start && end && new Date(start) > new Date(end)) {
+            errors.push({
+              parameter: def.name,
+              message: `${def.label} start date must be before or equal to end date`
+            })
+          }
+          break
+        }
       }
     }
 
@@ -205,6 +248,9 @@ export function getDefaultValues(definitions: ParameterDefinition[]): Record<str
           break
         case 'date':
           defaults[def.name] = ''
+          break
+        case 'date_range':
+          defaults[def.name] = { start: '', end: '' }
           break
       }
     }

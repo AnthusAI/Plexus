@@ -5,7 +5,8 @@ Dataset tools for Plexus MCP Server
 import os
 import sys
 import logging
-from typing import Dict, Any, Union, Optional
+import json
+from typing import Dict, Any, Union, Optional, List
 from io import StringIO
 from fastmcp import FastMCP
 
@@ -283,4 +284,299 @@ def register_dataset_tools(mcp: FastMCP):
             if captured_output:
                 logger.warning(f"Captured unexpected stdout during dataset_load: {captured_output}")
             # Restore original stdout
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_dataset_build_from_feedback_window(
+        scorecard: str,
+        score: str,
+        max_items: int = 100,
+        days: Optional[int] = None,
+        balance: bool = True,
+        score_version_id: Optional[str] = None,
+    ) -> str:
+        """
+        Build a balanced associated dataset from recent qualifying feedback items.
+
+        Creates a deterministic dataset that can be used for reproducible evaluations.
+        Uses round-robin class balancing by default to ensure equal representation.
+
+        Parameters:
+        - scorecard: Scorecard identifier (id/key/name/external id)
+        - score: Score identifier (id/key/name/external id)
+        - max_items: Maximum items to include (default: 100). Use 200 for robust regression sets.
+        - days: Lookback window in days. If omitted, searches all available feedback history.
+        - balance: Apply class balancing via round-robin selection (default: True).
+                   Set to False to include more items when feedback is scarce.
+        - score_version_id: Optional specific version to use for class label resolution.
+                            If omitted, uses the champion version.
+
+        Returns:
+        - JSON payload with dataset_id, rows_written, class_distribution_after,
+          balance_applied, qualifying_found, and other curation metadata.
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        try:
+            try:
+                from plexus.cli.dataset.datasets import create_client
+                from plexus.cli.dataset.curation import build_associated_dataset_from_feedback_window
+                from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+                from plexus.cli.evaluation.evaluations import validate_dataset_materialization
+            except ImportError as exc:
+                return f"Error: Could not import required modules: {exc}"
+
+            client = create_client()
+
+            # Resolve scorecard and score to IDs
+            scorecard_id = resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                return f"Error: Could not resolve scorecard '{scorecard}'"
+            score_id = resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                return f"Error: Could not resolve score '{score}' in scorecard '{scorecard}'"
+
+            result = build_associated_dataset_from_feedback_window(
+                client=client,
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                max_items=max_items,
+                days=days,
+                balance=balance,
+                class_source_score_version_id=score_version_id or None,
+            )
+            dataset_id = result.get("dataset_id")
+            dataset_file = result.get("dataset_file") or result.get("s3_key")
+            readiness = validate_dataset_materialization(
+                {
+                    "id": dataset_id,
+                    "file": dataset_file,
+                }
+            )
+            if not readiness.get("is_materialized"):
+                reason = readiness.get("materialization_error") or "unknown"
+                return (
+                    "Error: dataset build completed without a materialized file pointer. "
+                    f"dataset_id={dataset_id} reason={reason}"
+                )
+
+            result["dataset_file"] = dataset_file
+            result["is_materialized"] = True
+            result["materialization_error"] = None
+            return json.dumps(result, default=str)
+        except Exception as exc:
+            logger.error("Error building dataset from feedback window: %s", exc, exc_info=True)
+            return f"Error: {str(exc)}"
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_dataset_build_from_feedback_window: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_dataset_check_associated(
+        scorecard: str,
+        score: str,
+        score_version_id: Optional[str] = None,
+        days: Optional[int] = None,
+    ) -> str:
+        """
+        Check whether a score has an existing associated dataset and return its metadata.
+
+        Use this to determine if a deterministic regression dataset already exists
+        before creating a new one.
+
+        Parameters:
+        - scorecard: Scorecard identifier (id/key/name/external id)
+        - score: Score identifier (id/key/name/external id)
+        - score_version_id: Optional specific score version to match against the dataset target.
+        - days: Optional lookback window used when matching optimizer feedback targets.
+
+        Returns:
+        - JSON payload with has_dataset, dataset_id, dataset_name, created_at,
+          and row_count (if available from build context).
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        try:
+            try:
+                from plexus.cli.dataset.datasets import create_client
+                from plexus.cli.evaluation.evaluations import list_associated_datasets_for_score
+                from plexus.cli.evaluation.evaluations import validate_dataset_materialization
+                from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
+                from plexus.cli.shared.optimizer_shadow_invalidation import (
+                    resolve_score_version_shadow_invalidation_metadata,
+                )
+            except ImportError as exc:
+                return f"Error: Could not import required modules: {exc}"
+
+            client = create_client()
+
+            # Resolve scorecard and score to IDs
+            scorecard_id = resolve_scorecard_identifier(client, scorecard)
+            if not scorecard_id:
+                return f"Error: Could not resolve scorecard '{scorecard}'"
+            score_id = resolve_score_identifier(client, scorecard_id, score)
+            if not score_id:
+                return f"Error: Could not resolve score '{score}' in scorecard '{scorecard}'"
+
+            expected_feedback_target_hash = None
+            if score_version_id is not None or days is not None:
+                target_metadata = resolve_score_version_shadow_invalidation_metadata(
+                    client,
+                    score_id=score_id,
+                    score_version_id=score_version_id,
+                    days=days,
+                )
+                expected_feedback_target_hash = target_metadata.get("feedback_target_hash")
+
+            datasets = list_associated_datasets_for_score(client, score_id)
+            if not datasets:
+                return json.dumps({
+                    "has_dataset": False,
+                    "dataset_id": None,
+                    "dataset_name": None,
+                    "created_at": None,
+                    "row_count": None,
+                    "is_materialized": False,
+                    "dataset_file": None,
+                    "materialization_error": None,
+                    "feedback_target_hash": expected_feedback_target_hash,
+                })
+
+            dataset = None
+            row_count = None
+            stored_feedback_target_hash = None
+            for candidate in datasets:
+                candidate_row_count = None
+                candidate_feedback_target_hash = None
+                if candidate.get("dataSourceVersionId"):
+                    try:
+                        dsv_result = client.execute(
+                            """
+                            query GetDataSourceVersion($id: ID!) {
+                                getDataSourceVersion(id: $id) {
+                                    id
+                                    yamlConfiguration
+                                }
+                            }
+                            """,
+                            {"id": candidate["dataSourceVersionId"]}
+                        )
+                        dsv = dsv_result.get("getDataSourceVersion")
+                        if dsv and dsv.get("yamlConfiguration"):
+                            import yaml
+
+                            config = yaml.safe_load(dsv["yamlConfiguration"])
+                            if isinstance(config, dict):
+                                stats = config.get("dataset_stats", {})
+                                candidate_row_count = stats.get("row_count")
+                                candidate_feedback_target_hash = stats.get("feedback_target_hash")
+                    except Exception as e:
+                        logger.warning("Could not read dataset build metadata from DataSourceVersion: %s", e)
+
+                if expected_feedback_target_hash and candidate_feedback_target_hash != expected_feedback_target_hash:
+                    continue
+
+                dataset = candidate
+                row_count = candidate_row_count
+                stored_feedback_target_hash = candidate_feedback_target_hash
+                break
+
+            if not dataset:
+                return json.dumps({
+                    "has_dataset": False,
+                    "dataset_id": None,
+                    "dataset_name": None,
+                    "created_at": None,
+                    "row_count": None,
+                    "is_materialized": False,
+                    "dataset_file": None,
+                    "materialization_error": None,
+                    "feedback_target_hash": expected_feedback_target_hash,
+                })
+
+            readiness = validate_dataset_materialization(dataset)
+            return json.dumps({
+                "has_dataset": True,
+                "dataset_id": dataset.get("id"),
+                "dataset_name": dataset.get("name"),
+                "created_at": dataset.get("createdAt"),
+                "row_count": row_count,
+                "is_materialized": bool(readiness.get("is_materialized")),
+                "dataset_file": readiness.get("dataset_file"),
+                "materialization_error": readiness.get("materialization_error"),
+                "feedback_target_hash": stored_feedback_target_hash or expected_feedback_target_hash,
+            }, default=str)
+        except Exception as exc:
+            logger.error("Error checking associated dataset: %s", exc, exc_info=True)
+            return f"Error: {str(exc)}"
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_dataset_check_associated: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_dataset_associated_from_feedback(
+        scorecard: str,
+        score: str,
+        feedback_item_ids: List[str],
+        source_report_block_id: Optional[str] = None,
+        eligibility_rule: str = "unanimous non-contradiction",
+    ) -> str:
+        """
+        Build an associated dataset directly from explicit vetted feedback IDs.
+
+        Parameters:
+        - scorecard: Scorecard identifier (id/key/name/external id)
+        - score: Score identifier (id/key/name/external id)
+        - feedback_item_ids: Explicit feedback item IDs to include (labels come from finalAnswerValue)
+        - source_report_block_id: Optional report block ID for provenance
+        - eligibility_rule: Eligibility rule string recorded in provenance/build context
+
+        Returns:
+        - JSON payload with dataset_id, row_count, and provenance summary
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+        try:
+            try:
+                from plexus.cli.dataset.datasets import create_client, build_associated_dataset_from_feedback_ids
+            except ImportError as exc:
+                return f"Error: Could not import dataset builder: {exc}"
+
+            if not isinstance(feedback_item_ids, list) or not feedback_item_ids:
+                return "Error: feedback_item_ids must be a non-empty list of feedback item IDs."
+
+            client = create_client()
+            result = build_associated_dataset_from_feedback_ids(
+                client=client,
+                scorecard_identifier=scorecard,
+                score_identifier=score,
+                feedback_item_ids=feedback_item_ids,
+                source_report_block_id=source_report_block_id,
+                eligibility_rule=eligibility_rule,
+                task_id=None,
+            )
+            return json.dumps(result)
+        except Exception as exc:
+            logger.error("Error creating associated dataset from feedback IDs: %s", exc, exc_info=True)
+            return f"Error: {str(exc)}"
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_dataset_associated_from_feedback: %s",
+                    captured_output,
+                )
             sys.stdout = old_stdout

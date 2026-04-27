@@ -1,0 +1,40 @@
+{
+  "id": "plx-855543e0-c976-47f1-b03d-5780539f95a8",
+  "title": "Create Excalidraw runtime scoring architecture diagram",
+  "description": "Implementation task for the runtime scoring architecture diagram.\n\nScope:\n- Inspect existing diagram palette and related architecture diagrams.\n- Create a new Excalidraw file in the documentation diagrams area.\n- Show Azure-hosted Tethr Kubernetes runtime placement, AWS-hosted GraphQL control plane, and the in-cluster data API for Items, Score Results, and Feedback Items.\n- Keep the styling consistent with the existing documentation diagrams.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-29862d34-7e20-4dde-981a-46487c231fce",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b6ec46eb-da68-4f9e-95c7-a74c9caab990",
+      "author": "ryan",
+      "text": "Starting diagram work. I inspected the repository diagram standard and confirmed that the new architecture diagram should reuse the shared Excalidraw palette and live under documentation/diagrams. Next step is to inspect existing Azure/AWS architecture diagrams and then draft a new runtime scoring diagram as a separate file so it does not interfere with unrelated in-flight diagram edits.",
+      "created_at": "2026-04-20T22:25:28.356968Z"
+    },
+    {
+      "id": "1fc088bf-bc96-4049-ad35-e9b630aaa458",
+      "author": "ryan",
+      "text": "Visual direction chosen from the existing diagram set: pale cloud-boundary containers, gray subsystem containers, white service cards, and direct labeled arrows. Planned content is an AWS control-plane area on the left, an Azure/Tethr Kubernetes runtime area on the right, and explicit runtime arrows from the Plexus scoring pod to the AWS GraphQL control plane and the in-cluster data API.",
+      "created_at": "2026-04-20T22:26:20.428984Z"
+    },
+    {
+      "id": "c4b6b7d0-a843-4c08-a877-35ddda9d68c7",
+      "author": "ryan",
+      "text": "Drafted the new Excalidraw asset at documentation/diagrams/Runtime Scoring Architecture.excalidraw. The diagram uses the existing repository styling and explicitly separates the AWS control plane from the Azure/Tethr runtime plane, with labeled runtime edges from the scoring pod to the AWS GraphQL API and to the in-cluster data API for Items, Score Results, and Feedback Items.",
+      "created_at": "2026-04-20T22:28:35.097463Z"
+    }
+  ],
+  "created_at": "2026-04-20T22:25:23.579528Z",
+  "updated_at": "2026-04-20T22:28:35.097463Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
