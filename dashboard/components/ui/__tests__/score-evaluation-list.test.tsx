@@ -112,6 +112,7 @@ describe('ScoreEvaluationList', () => {
   })
 
   it('renders score-scoped evaluations with metrics and actions', async () => {
+    const user = userEvent.setup()
     render(<ScoreEvaluationList scoreId="score-1" scope="score" />)
 
     await waitFor(() => {
@@ -120,7 +121,10 @@ describe('ScoreEvaluationList', () => {
 
     expect(screen.getAllByText(/Feedback · COMPLETED/i).length).toBeGreaterThan(0)
     expect(screen.getByTestId('notes-eval-1')).toHaveTextContent('Evaluation note 1')
-    expect(screen.getAllByRole('link', { name: /^Open$/i })[0]).toHaveAttribute('href', '/lab/evaluations/eval-1')
+    await user.click(screen.getAllByRole('button', { name: /more options/i })[0])
+    expect(screen.getByRole('menuitem', { name: /open evaluation/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /copy evaluation path/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /copy evaluation id/i })).toBeInTheDocument()
   })
 
   it('filters version-scoped evaluations to the selected version', async () => {
