@@ -27,7 +27,7 @@ class BucketCounter:
         
         Args:
             account_id: Account ID for these metrics
-            record_type: Type of records ('items', 'scoreResults', 'tasks', 'evaluations')
+            record_type: Type of records ('items', 'scoreResults', 'tasks', 'evaluations', 'procedures')
         """
         self.account_id = account_id
         self.record_type = record_type
@@ -213,4 +213,3 @@ def parse_iso_datetime(timestamp_str: str) -> datetime:
     except (ValueError, AttributeError):
         # Fall back to current time if parsing fails
         return datetime.now(timezone.utc)
-

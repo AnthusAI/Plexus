@@ -167,6 +167,22 @@ describe('ProcedureTask optimizer auth flow', () => {
     )
   })
 
+  it('shows compact left icon/title in grid header when action controls are present', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          description: 'Procedure note for action layout',
+        } as any}
+        controlButtons={<button type="button" aria-label="Procedure actions">actions</button>}
+      />
+    )
+
+    expect(screen.getByLabelText('Procedure actions')).toBeInTheDocument()
+    expect(screen.getByText(/^Procedure$/)).toBeInTheDocument()
+  })
+
   it('hydrates offloaded optimizer state from Amplify Storage procedures path', async () => {
     const metadataState = {
       state: {
