@@ -369,7 +369,6 @@ class PlexusStorageAdapter:
                 version
                 isDefault
                 parentProcedureId
-                rootNodeId
                 waitingOnMessageId
                 metadata
                 createdAt
@@ -496,7 +495,6 @@ class PlexusStorageAdapter:
                 version
                 isDefault
                 parentProcedureId
-                rootNodeId
                 waitingOnMessageId
                 metadata
                 createdAt

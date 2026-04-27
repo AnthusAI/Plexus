@@ -698,7 +698,6 @@ class OptimizerResultsService:
                     version
                     isDefault
                     parentProcedureId
-                    rootNodeId
                     waitingOnMessageId
                     metadata
                     createdAt
