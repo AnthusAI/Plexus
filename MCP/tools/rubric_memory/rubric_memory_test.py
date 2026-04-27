@@ -1,7 +1,9 @@
 from rubric_memory.rubric_memory import (
+    _coerce_json_object,
     _fetch_feedback_item_context,
     _fetch_score_result_context,
     _merge_context_value,
+    register_rubric_memory_tools,
 )
 
 
@@ -69,3 +71,26 @@ def test_fetch_feedback_item_context_hydrates_transcript_and_feedback_fields():
 def test_merge_context_value_prefers_explicit_value():
     assert _merge_context_value("explicit", "fetched") == "explicit"
     assert _merge_context_value("", "fetched") == "fetched"
+
+
+def test_coerce_json_object_accepts_dict_and_json_string():
+    assert _coerce_json_object({"a": 1}, field_name="context") == {"a": 1}
+    assert _coerce_json_object('{"a": 1}', field_name="context") == {"a": 1}
+
+
+def test_register_rubric_memory_tools_includes_sme_question_gate():
+    class FakeServer:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def decorator(func):
+                self.tools[func.__name__] = func
+                return func
+            return decorator
+
+    server = FakeServer()
+    register_rubric_memory_tools(server)
+
+    assert "plexus_rubric_memory_evidence_pack" in server.tools
+    assert "plexus_rubric_memory_sme_question_gate" in server.tools

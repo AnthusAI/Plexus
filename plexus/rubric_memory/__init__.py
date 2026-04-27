@@ -27,6 +27,18 @@ from .provider import RubricMemoryContextProvider
 from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
 from .retrieval import BiblicusRubricEvidenceRetriever, RubricEvidenceRetriever
 from .service import RubricEvidencePackService
+from .sme_question_gate import (
+    RubricMemoryGatedSMEQuestion,
+    RubricMemorySMEQuestion,
+    RubricMemorySMEQuestionGateRequest,
+    RubricMemorySMEQuestionGateResult,
+    RubricMemorySMEQuestionGateService,
+    SMEQuestionAnswerStatus,
+    SMEQuestionGateAction,
+    TactusRubricMemorySMEQuestionGateSynthesizer,
+    candidate_agenda_items_from_markdown,
+    format_gated_sme_agenda,
+)
 from .synthesis import RubricEvidenceSynthesizer, TactusRubricEvidenceSynthesizer
 
 __all__ = [
@@ -52,11 +64,21 @@ __all__ = [
     "RubricMemoryCitationFormatter",
     "RubricMemoryCitationValidation",
     "RubricMemoryContextProvider",
+    "RubricMemoryGatedSMEQuestion",
     "RubricMemoryPreparedCorpusManager",
     "RubricMemoryQueryPlan",
     "RubricMemoryQueryPlanner",
+    "RubricMemorySMEQuestion",
+    "RubricMemorySMEQuestionGateRequest",
+    "RubricMemorySMEQuestionGateResult",
+    "RubricMemorySMEQuestionGateService",
+    "SMEQuestionAnswerStatus",
+    "SMEQuestionGateAction",
+    "TactusRubricMemorySMEQuestionGateSynthesizer",
     "RubricEvidenceSynthesizer",
     "RubricHistoryEvent",
     "TactusRubricEvidenceSynthesizer",
+    "candidate_agenda_items_from_markdown",
+    "format_gated_sme_agenda",
     "validate_rubric_memory_citations",
 ]

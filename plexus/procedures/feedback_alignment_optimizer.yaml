@@ -191,6 +191,7 @@ agents:
       - str_replace_editor: view or edit score_config.yaml
       - submit_score_version: submit current edits for evaluation
       - plexus_rubric_memory_evidence_pack: retrieve rubric-memory citation context for policy-sensitive hypotheses or disputed items
+      - plexus_rubric_memory_sme_question_gate: check proposed SME questions against rubric-memory citations before asking SMEs
       - done: signal you cannot improve current hypothesis
 
       LANGGRAPH NODE CONTRACTS:
@@ -218,6 +219,10 @@ agents:
       cite exact citation IDs for policy claims, hypotheses, version notes, and
       cannot_improve conclusions. The official score version rubric remains canonical;
       corpus citations explain history, interpretation, stale areas, or gaps.
+      Before concluding that SME input is needed, check rubric memory. Do not ask SMEs
+      the same policy question again if the official rubric or cited corpus evidence
+      already answers it. If corpus evidence answers the question but the rubric does not,
+      frame the SME request as a decision to codify or update the rubric.
 
       FEW-SHOT EXAMPLES — use sparingly:
       Adding examples is tempting but usually counterproductive at scale. More than
@@ -278,6 +283,7 @@ agents:
       - str_replace_editor
       - submit_score_version
       - plexus_rubric_memory_evidence_pack
+      - plexus_rubric_memory_sme_question_gate
       - done
 
   cycle_analyst:
@@ -2880,6 +2886,7 @@ code: |
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
   local rubric_memory_briefing = ""
+  local rubric_memory_context = nil
   do
     local rm_ok, rm_result = pcall(call_plexus_tool, "plexus_rubric_memory_evidence_pack", {
       scorecard_identifier = params.scorecard,
@@ -2888,13 +2895,62 @@ code: |
       topic_hint = "Score-level optimizer rubric-memory briefing"
     }, {max_retries = 1})
     if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
+      rubric_memory_context = rm_result
       rubric_memory_briefing = rm_result.markdown_context
+      State.set("rubric_memory_context", rm_result)
       Human.notify({message = "Rubric-memory briefing loaded for optimizer planning.", level = "info"})
     elseif rm_ok and type(rm_result) == "table" and rm_result.error then
       Human.notify({message = "Rubric-memory briefing unavailable: " .. tostring(rm_result.error), level = "warning"})
     else
       Human.notify({message = "Rubric-memory briefing unavailable for this optimizer run.", level = "debug"})
     end
+  end
+
+  local function record_sme_question_gate(stage, raw_agenda, gate_result)
+    local records = State.get("sme_question_gate_diagnostics") or {}
+    table.insert(records, {
+      stage = stage,
+      raw_agenda = raw_agenda or "",
+      result = gate_result
+    })
+    State.set("sme_question_gate_diagnostics", records)
+  end
+
+  local function gate_sme_agenda(raw_agenda, stage, optimizer_context)
+    if not has_text(raw_agenda) or not rubric_memory_context then
+      return raw_agenda, nil
+    end
+    local score_version_id = ""
+    if type(rubric_memory_context.machine_context) == "table" then
+      score_version_id = rubric_memory_context.machine_context.score_version_id or ""
+    end
+    if not has_text(score_version_id) then
+      Human.notify({message = "SME question gate skipped: rubric-memory context has no score_version_id.", level = "warning"})
+      return raw_agenda, nil
+    end
+    local gate_ok, gate_result = pcall(call_plexus_tool, "plexus_rubric_memory_sme_question_gate", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_version_id = score_version_id,
+      candidate_agenda_markdown = raw_agenda,
+      rubric_memory_context = rubric_memory_context,
+      optimizer_context = optimizer_context or ""
+    }, {max_retries = 1})
+    if gate_ok and type(gate_result) == "table" and gate_result.success then
+      record_sme_question_gate(stage, raw_agenda, gate_result)
+      Human.notify({message = string.format(
+        "SME question gate applied (%s): suppressed=%s transformed=%s kept=%s",
+        stage,
+        tostring(gate_result.summary_counts and gate_result.summary_counts.suppressed or 0),
+        tostring(gate_result.summary_counts and gate_result.summary_counts.transformed or 0),
+        tostring(gate_result.summary_counts and gate_result.summary_counts.kept or 0)
+      ), level = "info"})
+      return gate_result.final_agenda_markdown or raw_agenda, gate_result
+    end
+    local err = gate_ok and type(gate_result) == "table" and gate_result.error or tostring(gate_result)
+    record_sme_question_gate(stage, raw_agenda, {success = false, error = err})
+    Human.notify({message = "SME question gate unavailable: " .. tostring(err), level = "warning"})
+    return raw_agenda, nil
   end
 
   -- ================================================================
@@ -6508,6 +6564,17 @@ code: |
             diag("SME agenda generation failed: " .. tostring(sme_err))
           end
         end
+        local raw_cycle_sme_agenda = sme_agenda
+        local cycle_gate_context = table.concat({
+          "Cycle " .. tostring(cycle) .. " SME agenda",
+          "Executive summary: " .. trunc(exec_summary, 500),
+          "Planning analysis: " .. trunc(syn_text, 900)
+        }, "\n")
+        sme_agenda = gate_sme_agenda(
+          raw_cycle_sme_agenda,
+          "cycle_" .. tostring(cycle) .. "_sme_agenda",
+          cycle_gate_context
+        )
 
         -- Backward-compat field: exec_summary doubles as the "diagnosis" for older dashboard code
         local diag_summary  = exec_summary
@@ -6542,6 +6609,7 @@ code: |
           analysis = syn_text,
           executive_summary = exec_summary or "",
           lab_report = lab_report or "",
+          sme_agenda_raw = raw_cycle_sme_agenda or "",
           sme_agenda = sme_agenda or "",
           diagnosis_summary = diag_summary or "",
           prescription_summary = presc_summary or "",
@@ -7459,6 +7527,19 @@ code: |
     if not ok then
       sme_agenda_text = "SME agenda generation failed: " .. tostring(err)
     end
+    local raw_end_sme_agenda = sme_agenda_text
+    State.set("sme_agenda_raw", raw_end_sme_agenda)
+    sme_agenda_text = gate_sme_agenda(
+      raw_end_sme_agenda,
+      "end_of_run_sme_agenda",
+      table.concat({
+        "End-of-run SME agenda",
+        "Executive summary: " .. trunc(executive_summary_text, 600),
+        "Lab report: " .. trunc(lab_report_text, 900),
+        "Residual errors: " .. trunc(residual_errors_text, 900)
+      }, "\n")
+    )
+    State.set("sme_agenda_gated", sme_agenda_text)
   end)
 
   -- Store results

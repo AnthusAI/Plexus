@@ -47,9 +47,10 @@ class TestProcedureProcedureDefinition:
         assert "plexus_evaluation_score_result_find" in available_tools
         assert "plexus_evaluation_info" in available_tools
         assert "plexus_rubric_memory_evidence_pack" in available_tools
+        assert "plexus_rubric_memory_sme_question_gate" in available_tools
         assert "upsert_procedure_node" in available_tools
         assert "stop_procedure" in available_tools
-        assert len(available_tools) == 5
+        assert len(available_tools) == 6
     
     def test_procedure_prompts_load_from_yaml_config(self):
         """Test that procedure procedure definition loads prompts from YAML configuration."""
