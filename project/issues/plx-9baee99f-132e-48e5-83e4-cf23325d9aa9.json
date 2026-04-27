@@ -3,7 +3,7 @@
   "title": "Adjust dependency constraints for Biblicus + RCA stack compatibility",
   "description": "Update Plexus and Tactus dependency constraints to enforce Biblicus max_exemplars support and prevent RCA stack resolver drift.",
   "type": "chore",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -46,11 +46,17 @@
       "author": "derek",
       "text": "Resolution confirmed after tactus 0.46.3 release: Plexus lock now resolves tactus 0.46.3 + biblicus 1.10.1, and runtime signature check shows ReinforcementMemory.__init__ includes max_exemplars. Proceeding to finalize branch and PR readiness.",
       "created_at": "2026-04-27T17:49:34.097196524Z"
+    },
+    {
+      "id": "78a173a9-f41b-4eb3-bb6d-2072ecd27372",
+      "author": "derek",
+      "text": "Task finalized: committed and pushed Plexus dependency updates including tactus ^0.46.3 and lock refresh; marked PR #210 ready for review. Validation confirms biblicus 1.10.1 with max_exemplars signature in runtime. No remaining open/in_progress tasks found for this dependency-fix scope.",
+      "created_at": "2026-04-27T17:49:54.110648557Z"
     }
   ],
   "created_at": "2026-04-24T23:18:43.500721568Z",
-  "updated_at": "2026-04-27T17:49:34.097196524Z",
-  "closed_at": null,
+  "updated_at": "2026-04-27T17:49:54.110648557Z",
+  "closed_at": "2026-04-27T17:49:54.100817594Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"
