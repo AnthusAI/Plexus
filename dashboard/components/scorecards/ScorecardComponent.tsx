@@ -61,6 +61,7 @@ export interface ScorecardData {
           guidelines?: string
           order: number
           type: string
+          championVersionId?: string
         }>
       }
     }>
@@ -71,7 +72,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScorecardData
   onEdit?: () => void
   onViewData?: () => void
-  onFeedbackAnalysis?: () => void
+  onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
   isSelected?: boolean
   onClick?: () => void
@@ -142,7 +143,7 @@ interface DetailContentProps {
   onToggleFullWidth?: () => void
   onClose?: () => void
   onViewData?: () => void
-  onFeedbackAnalysis?: () => void
+  onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
   onEdit?: () => void
   onEditChange?: (changes: Partial<ScorecardData>) => void
@@ -177,7 +178,7 @@ export const DetailContent = React.memo(function DetailContent({
   onToggleFullWidth,
   onClose,
   onViewData,
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   onEditChange,
   onAddSection,
@@ -602,11 +603,11 @@ export const DetailContent = React.memo(function DetailContent({
                     View Data
                   </DropdownMenu.Item>
                 )}
-                {onFeedbackAnalysis && (
+                {onFeedbackAlignment && (
                   <DropdownMenu.Item 
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={() => {
-                      onFeedbackAnalysis();
+                      onFeedbackAlignment();
                     }}
                   >
                     <MessageCircleMore className="mr-2 h-4 w-4" />
@@ -925,6 +926,7 @@ export const DetailContent = React.memo(function DetailContent({
               order: score.order,
               key: score.key || '',
               externalId: (score as any).externalId || score.id,
+              championVersionId: (score as any).championVersionId,
               icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             
@@ -1060,7 +1062,7 @@ export default function ScorecardComponent({
   score, 
   onEdit, 
   onViewData, 
-  onFeedbackAnalysis,
+  onFeedbackAlignment,
   onCostAnalysis,
   variant = 'grid', 
   isSelected,
@@ -1440,7 +1442,7 @@ export default function ScorecardComponent({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onViewData={onViewData}
-              onFeedbackAnalysis={onFeedbackAnalysis}
+              onFeedbackAlignment={onFeedbackAlignment}
               onCostAnalysis={onCostAnalysis}
               onEditChange={handleEditChange}
               onAddSection={handleAddSection}

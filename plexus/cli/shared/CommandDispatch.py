@@ -99,6 +99,20 @@ def _resolve_local_dispatch_timeout_seconds() -> int:
     return timeout
 
 
+def _build_local_run_args(task: Task) -> list[str]:
+    """
+    Build the local subprocess argv for a claimed task.
+
+    Programmatic report block tasks should run via `python -m plexus.cli` so
+    dispatcher execution uses the current workspace code instead of any older
+    `plexus` console script on PATH.
+    """
+    split_command = shlex.split(task.command or "")
+    if (task.type or "") == "ProgrammaticReportBlock":
+        return [sys.executable, "-m", "plexus.cli", *split_command]
+    return ["plexus", *split_command]
+
+
 def _validate_celery_requirements() -> None:
     required = [
         "AWS_ACCESS_KEY_ID",
@@ -174,7 +188,7 @@ def _list_pending_tasks_for_account(
 
         metadata = _normalize_metadata(task.get("metadata"))
         if metadata.get("dispatch_mode") == "console_async_worker":
-            # Console runs are dispatched via startConsoleRun -> SQS worker.
+            # Console chat responses are dispatched from ChatMessage stream handling.
             # Skip them in the generic dispatcher to avoid duplicate execution.
             continue
 
@@ -821,7 +835,7 @@ def dispatcher(account: Optional[str], interval: float, limit: int, once: bool, 
                     logging.info(f"Dispatched task {task.id} to Celery task {celery_task.id}")
                 else:
                     started_at = datetime.datetime.now(timezone.utc).isoformat()
-                    run_args = ["plexus"] + shlex.split(task.command)
+                    run_args = _build_local_run_args(task)
                     metadata = _normalize_metadata(task.metadata)
                     metadata["dispatch_mode"] = "local"
                     metadata["local_command"] = " ".join(run_args)
@@ -1080,8 +1094,8 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
             total_items=total_items,
             status_message="Processing items..."
         ),
-        "Finalizing": StageConfig(
-            order=3, 
+        "Analysis": StageConfig(
+            order=3,
             status_message="Computing metrics..."
         )
     }
@@ -1236,19 +1250,19 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             
             # If we've reached total items, advance to finalizing and exit immediately
             if current_item >= total_items:
-                tracker.advance_stage()  # Advance to "Finalizing" stage
+                tracker.advance_stage()  # Advance to "Analyzing" stage
                 break
-            
+
             # Only update API task periodically if we're still processing
             current_time = time.time()
             if current_time - last_api_update >= api_update_interval:
                 tracker.update(current_items=current_item)
                 last_api_update = current_time
-            
+
             # Sleep a tiny amount to allow for API updates and logging
             time.sleep(0.05)
-        
-        # Finalizing stage with just two messages
+
+        # Analyzing stage with just two messages
         finalizing_messages = [
             "Computing metrics...",
             "Generating report..."
@@ -1483,7 +1497,7 @@ def create_cli():
         pass
     
     # Import and register commands from restructured directories
-    from plexus.cli.score.scores import score
+    from plexus.cli.score.scores import scores
     from plexus.cli.scorecard.scorecards import scorecards
     from plexus.cli.evaluation.evaluations import evaluate
     from plexus.cli.data.operations import data
@@ -1501,7 +1515,8 @@ def create_cli():
     from plexus.cli.feedback.commands import feedback # Import the feedback command group
     
     # Add top-level commands
-    cli.add_command(score)
+    cli.add_command(scores)
+    cli.add_command(scores, name="score")
     cli.add_command(scorecards)
     cli.add_command(evaluate)
     cli.add_command(data)

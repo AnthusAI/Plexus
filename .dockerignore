@@ -23,6 +23,7 @@ tests/
 tmp/
 project/
 *.md
+!README.md
 *.txt
 *.csv
 *.json

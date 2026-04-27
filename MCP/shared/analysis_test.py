@@ -120,7 +120,7 @@ class TestAnalyzeScoreResult:
 
         with patch("boto3.client", return_value=mock_client):
             cause, fix = analyze_score_result(
-                transcript="Agent: SelectRx is a free service for you.",
+                primary_input="Agent: SelectRx is a free service for you.",
                 predicted="No",
                 correct="Yes",
                 explanation="Flagged as Ambiguous Cost Language",
@@ -143,7 +143,7 @@ class TestAnalyzeScoreResult:
 
         with patch("boto3.client", side_effect=Exception("Bedrock unavailable")):
             cause, fix = analyze_score_result(
-                transcript="Some transcript",
+                primary_input="Some input artifact",
                 predicted="No",
                 correct="Yes",
                 explanation="Some explanation",
@@ -174,7 +174,7 @@ class TestAnalyzeScoreResult:
 
         with patch("boto3.client", return_value=mock_client):
             analyze_score_result(
-                transcript="Some transcript",
+                primary_input="Some input artifact",
                 predicted="No",
                 correct="Yes",
                 explanation="Some explanation",
@@ -191,7 +191,7 @@ class TestPayloadRootCauseInclusion:
 
     def test_root_cause_included_when_available(self):
         """
-        GIVEN evaluation_info with parameters containing root_cause
+        GIVEN evaluation_info with first-class root_cause fields
         WHEN building the MCP payload
         THEN root_cause should be included in the payload
         """
@@ -215,28 +215,42 @@ class TestPayloadRootCauseInclusion:
             'started_at': None,
             'created_at': None,
             'updated_at': None,
-            'parameters': {
-                'root_cause': {
-                    'topics': [
-                        {
-                            'label': 'Free service false alarms',
-                            'member_count': 3,
-                            'exemplars': [
-                                {
-                                    'item_id': 'item-1',
-                                    'score_explanation': 'Flagged as Ambiguous Cost Language',
-                                    'detailed_cause': 'Model incorrectly flagged free service',
-                                    'suggested_fix': 'Add safe harbor for free service + copay',
-                                }
-                            ],
-                            'detailed_explanation': 'Pattern of false alarms...',
-                            'improvement_suggestion': 'Add a safe harbor rule...',
-                        }
-                    ],
-                    'overall_explanation': 'The score over-flags free service language.',
-                    'overall_improvement_suggestion': 'Add copay disclaimer safe harbor.',
+            'root_cause': {
+                'topics': [
+                    {
+                        'label': 'Free service false alarms',
+                        'member_count': 3,
+                        'exemplars': [
+                            {
+                                'item_id': 'item-1',
+                                'score_explanation': 'Flagged as Ambiguous Cost Language',
+                                'detailed_cause': 'Model incorrectly flagged free service',
+                                'suggested_fix': 'Add safe harbor for free service + copay',
+                            }
+                        ],
+                        'detailed_explanation': 'Pattern of false alarms...',
+                        'improvement_suggestion': 'Add a safe harbor rule...',
+                    }
+                ],
+                'overall_explanation': 'The score over-flags free service language.',
+                'overall_improvement_suggestion': 'Add copay disclaimer safe harbor.',
+                'misclassification_analysis': {
+                    'category_totals': {
+                        'score_configuration_problem': 3,
+                        'information_gap': 1,
+                        'guideline_gap_requires_sme': 0,
+                        'mechanical_malfunction': 0,
+                    }
                 }
-            }
+            },
+            'misclassification_analysis': {
+                'category_totals': {
+                    'score_configuration_problem': 3,
+                    'information_gap': 1,
+                    'guideline_gap_requires_sme': 0,
+                    'mechanical_malfunction': 0,
+                }
+            },
         }
 
         # Simulate the payload construction from evaluations.py
@@ -248,22 +262,24 @@ class TestPayloadRootCauseInclusion:
             "score": evaluation_info['score_name'],
         }
 
-        # This is the code we added
-        params = evaluation_info.get('parameters')
-        if params and isinstance(params, dict):
-            root_cause = params.get('root_cause')
-            if root_cause:
-                payload['root_cause'] = root_cause
+        root_cause = evaluation_info.get('root_cause')
+        if root_cause:
+            payload['root_cause'] = root_cause
+        misclassification_analysis = evaluation_info.get('misclassification_analysis')
+        if misclassification_analysis:
+            payload['misclassification_analysis'] = misclassification_analysis
 
         assert 'root_cause' in payload
+        assert 'misclassification_analysis' in payload
         assert payload['root_cause']['overall_explanation'] == 'The score over-flags free service language.'
         assert len(payload['root_cause']['topics']) == 1
         assert payload['root_cause']['topics'][0]['exemplars'][0]['detailed_cause'] == 'Model incorrectly flagged free service'
         assert payload['root_cause']['topics'][0]['exemplars'][0]['score_explanation'] == 'Flagged as Ambiguous Cost Language'
+        assert payload['misclassification_analysis']['category_totals']['information_gap'] == 1
 
     def test_root_cause_not_included_when_missing(self):
         """
-        GIVEN evaluation_info without root_cause in parameters
+        GIVEN evaluation_info without root_cause fields
         WHEN building the MCP payload
         THEN root_cause should NOT be in the payload
         """
@@ -272,32 +288,38 @@ class TestPayloadRootCauseInclusion:
         }
 
         payload = {}
-        params = evaluation_info.get('parameters')
-        if params and isinstance(params, dict):
-            root_cause = params.get('root_cause')
-            if root_cause:
-                payload['root_cause'] = root_cause
+        root_cause = evaluation_info.get('root_cause')
+        if root_cause:
+            payload['root_cause'] = root_cause
+        misclassification_analysis = evaluation_info.get('misclassification_analysis')
+        if misclassification_analysis:
+            payload['misclassification_analysis'] = misclassification_analysis
 
         assert 'root_cause' not in payload
+        assert 'misclassification_analysis' not in payload
 
-    def test_root_cause_not_included_when_parameters_none(self):
+    def test_root_cause_not_included_when_root_cause_none(self):
         """
-        GIVEN evaluation_info with parameters=None
+        GIVEN evaluation_info with root_cause=None
         WHEN building the MCP payload
         THEN root_cause should NOT be in the payload
         """
         evaluation_info = {
-            'parameters': None
+            'parameters': None,
+            'root_cause': None,
+            'misclassification_analysis': None,
         }
 
         payload = {}
-        params = evaluation_info.get('parameters')
-        if params and isinstance(params, dict):
-            root_cause = params.get('root_cause')
-            if root_cause:
-                payload['root_cause'] = root_cause
+        root_cause = evaluation_info.get('root_cause')
+        if root_cause:
+            payload['root_cause'] = root_cause
+        misclassification_analysis = evaluation_info.get('misclassification_analysis')
+        if misclassification_analysis:
+            payload['misclassification_analysis'] = misclassification_analysis
 
         assert 'root_cause' not in payload
+        assert 'misclassification_analysis' not in payload
 
 
 class TestScoreExplanationInExemplarDicts:

@@ -89,6 +89,7 @@ class Scorecard:
         self.total_cost = Decimal("0.0")
         self.scorecard_total_cost = Decimal("0.0")
         self.cost_per_text = Decimal("0.0")
+        self.cost_components = []
         # Track how many texts have been processed by this scorecard instance
         self.number_of_texts_processed = 0
 
@@ -698,8 +699,8 @@ class Scorecard:
                 self.completion_tokens += score_total_cost.get("completion_tokens", 0)
                 self.cached_tokens += score_total_cost.get("cached_tokens", 0)
                 self.llm_calls += score_total_cost.get("llm_calls", 0)
-                self.input_cost += score_total_cost.get("input_cost", 0)
-                self.output_cost += score_total_cost.get("output_cost", 0)
+                self.input_cost += Decimal(str(score_total_cost.get("input_cost", 0)))
+                self.output_cost += Decimal(str(score_total_cost.get("output_cost", 0)))
                 self.total_cost += Decimal(str(score_total_cost.get("total_cost", 0)))
                 self.scorecard_total_cost += Decimal(
                     str(score_total_cost.get("total_cost", 0))
@@ -707,6 +708,8 @@ class Scorecard:
                 self.cost_per_text += Decimal(
                     str(score_total_cost.get("cost_per_text", 0))
                 )
+                if isinstance(score_total_cost.get("components"), list):
+                    self.cost_components.extend(score_total_cost.get("components"))
 
                 # Log CloudWatch metrics for this individual score
                 total_tokens = score_total_cost.get(
@@ -805,6 +808,14 @@ class Scorecard:
                     f"BatchProcessingPause caught in get_score_result for {score}"
                 )
                 raise
+            finally:
+                if hasattr(score_instance, "cleanup"):
+                    try:
+                        await score_instance.cleanup()
+                    except Exception as cleanup_error:
+                        logging.error(
+                            f"Error cleaning up score instance for '{score}': {cleanup_error}"
+                        )
         else:
             # Defensive fallback to guarantee list return contract.
             return [
@@ -1290,6 +1301,7 @@ class Scorecard:
             "output_cost": self.output_cost,
             "total_cost": self.total_cost,
             "cost_per_text": cost_per_text,
+            "components": self.cost_components,
         }
 
     def get_model_name(self, name=None, id=None, key=None):

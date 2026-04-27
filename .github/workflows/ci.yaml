@@ -17,10 +17,51 @@ permissions:
   contents: write
 
 jobs:
+  version-sync:
+    name: Version Sync Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Validate pyproject and _version.py stay in sync
+      run: |
+        python - <<'PY'
+        import re
+        import sys
+        from pathlib import Path
+
+        pyproject_text = Path("pyproject.toml").read_text(encoding="utf-8")
+        version_file_text = Path("plexus/_version.py").read_text(encoding="utf-8")
+
+        pyproject_match = re.search(r'(?m)^version\s*=\s*"([^"]+)"\s*$', pyproject_text)
+        version_file_match = re.search(r'(?m)^__version__\s*=\s*"([^"]+)"\s*$', version_file_text)
+
+        if not pyproject_match or not version_file_match:
+            print("Unable to parse version from pyproject.toml or plexus/_version.py", file=sys.stderr)
+            sys.exit(1)
+
+        pyproject_version = pyproject_match.group(1)
+        version_file_version = version_file_match.group(1)
+
+        print(f"pyproject version: {pyproject_version}")
+        print(f"_version.py version: {version_file_version}")
+
+        if pyproject_version != version_file_version:
+            print(
+                "Version mismatch: pyproject.toml and plexus/_version.py must match. "
+                "Release automation should update both together.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        PY
+
   python-tests:
     name: Python Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: [version-sync]
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +193,128 @@ jobs:
           -c "magenta,blue" \
           "npx http-server storybook-static --port 6006 --address 127.0.0.1" \
           "npx wait-on --verbose --interval 1000 --timeout 30000 http-get://127.0.0.1:6006 && echo 'Server ready' && npm run test-storybook -- --url http://127.0.0.1:6006 --verbose"
+
+  publish-console-worker-image:
+    name: Publish Console Worker Image
+    needs:
+      - python-tests
+      - dashboard-unit-tests
+      - dashboard-storybook-tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: us-west-2
+      AMPLIFY_APP_NAME: Plexus
+      ECR_REPOSITORY: plexus-console-run-worker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_CONSOLE_WORKER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve Amplify identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+          AMPLIFY_APP_ID=$(aws amplify list-apps --query "apps[?name=='${AMPLIFY_APP_NAME}' && repository=='https://github.com/${GITHUB_REPOSITORY}'].appId | [0]" --output text)
+
+          if [ -z "$AMPLIFY_APP_ID" ] || [ "$AMPLIFY_APP_ID" = "None" ]; then
+            echo "Unable to resolve Amplify app id for ${AMPLIFY_APP_NAME} in ${GITHUB_REPOSITORY}" >&2
+            exit 1
+          fi
+
+          echo "ACCOUNT_ID=${ACCOUNT_ID}" >> "${GITHUB_ENV}"
+          echo "AMPLIFY_APP_ID=${AMPLIFY_APP_ID}" >> "${GITHUB_ENV}"
+          echo "AMPLIFY_BRANCH=${GITHUB_REF_NAME}" >> "${GITHUB_ENV}"
+
+      - name: Ensure ECR repository exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" >/dev/null 2>&1 || \
+          aws ecr create-repository \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-scanning-configuration scanOnPush=true >/dev/null
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@376925c9d111252e87ae59691e5a442dd100ef6a  # v2
+
+      - name: Build and push console worker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${GITHUB_SHA}"
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          docker build \
+            --platform linux/amd64 \
+            --file dashboard/amplify/functions/consoleRunWorker/Dockerfile \
+            --tag "${IMAGE_URI}" \
+            .
+          docker push "${IMAGE_URI}"
+
+          IMAGE_DIGEST=$(aws ecr describe-images \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-ids imageTag="${IMAGE_TAG}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [ -z "${IMAGE_DIGEST}" ] || [ "${IMAGE_DIGEST}" = "None" ]; then
+            echo "Unable to resolve pushed image digest for ${IMAGE_URI}" >&2
+            exit 1
+          fi
+
+          PINNED_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${IMAGE_DIGEST}"
+          echo "CONSOLE_WORKER_IMAGE_URI=${PINNED_IMAGE_URI}" >> "${GITHUB_ENV}"
+
+      - name: Update Amplify branch env var
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH_ENV_JSON=$(aws amplify get-branch \
+            --app-id "${AMPLIFY_APP_ID}" \
+            --branch-name "${AMPLIFY_BRANCH}" \
+            --query 'branch.environmentVariables' \
+            --output json)
+
+          UPDATED_BRANCH_ENV_JSON=$(echo "${BRANCH_ENV_JSON}" | jq -c --arg imageUri "${CONSOLE_WORKER_IMAGE_URI}" '. + {CONSOLE_WORKER_IMAGE_URI: $imageUri}')
+
+          aws amplify update-branch \
+            --app-id "${AMPLIFY_APP_ID}" \
+            --branch-name "${AMPLIFY_BRANCH}" \
+            --environment-variables "${UPDATED_BRANCH_ENV_JSON}" >/dev/null
+
+          RESOLVED_IMAGE_URI=$(aws amplify get-branch \
+            --app-id "${AMPLIFY_APP_ID}" \
+            --branch-name "${AMPLIFY_BRANCH}" \
+            --query 'branch.environmentVariables.CONSOLE_WORKER_IMAGE_URI' \
+            --output text)
+
+          if [ "${RESOLVED_IMAGE_URI}" != "${CONSOLE_WORKER_IMAGE_URI}" ]; then
+            echo "Amplify branch env var mismatch after update" >&2
+            exit 1
+          fi
+
+      - name: Trigger Amplify release job
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! aws amplify start-job \
+            --app-id "${AMPLIFY_APP_ID}" \
+            --branch-name "${AMPLIFY_BRANCH}" \
+            --job-type RELEASE \
+            --job-reason "Use prebuilt ConsoleRunWorker image ${GITHUB_SHA::7}" >/dev/null; then
+            echo "::warning::Unable to start Amplify release job automatically (a job may already be running)."
+          fi
 
   trigger-deployment:
     name: Trigger AWS Infrastructure CodePipeline

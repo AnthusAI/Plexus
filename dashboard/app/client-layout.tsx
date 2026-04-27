@@ -20,47 +20,68 @@ function inferRegionFromGraphqlUrl(url: string): string | null {
   }
 }
 
-function resolveAmplifyOutputs(): Record<string, any> | null {
+function loadLocalAmplifyOutputs(): Record<string, any> | null {
   try {
-    const outputs = require('@/amplify_outputs.json')
-    const endpointOverride = process.env.NEXT_PUBLIC_PLEXUS_API_URL?.trim()
-    const apiKeyOverride = process.env.NEXT_PUBLIC_PLEXUS_API_KEY?.trim()
-    const regionOverride = process.env.NEXT_PUBLIC_PLEXUS_API_REGION?.trim()
-
-    if (!endpointOverride && !apiKeyOverride) {
-      return outputs
-    }
-
-    if (!endpointOverride || !apiKeyOverride) {
-      console.warn(
-        'Partial Amplify data override detected. Both NEXT_PUBLIC_PLEXUS_API_URL and NEXT_PUBLIC_PLEXUS_API_KEY are required; ignoring override.',
-      )
-      return outputs
-    }
-
-    const resolvedRegion = regionOverride || inferRegionFromGraphqlUrl(endpointOverride) || outputs?.data?.aws_region
-    return {
-      ...outputs,
-      data: {
-        ...outputs.data,
-        url: endpointOverride,
-        api_key: apiKeyOverride,
-        aws_region: resolvedRegion,
-        default_authorization_type: "API_KEY",
-      },
-    }
+    return require('../amplify_outputs.json')
   } catch {
     return null
   }
 }
 
+function resolveAmplifyOutputs(): Record<string, any> | null {
+  const outputs = loadLocalAmplifyOutputs()
+  const endpointOverride = process.env.NEXT_PUBLIC_PLEXUS_API_URL?.trim()
+  const apiKeyOverride = process.env.NEXT_PUBLIC_PLEXUS_API_KEY?.trim()
+  const regionOverride = process.env.NEXT_PUBLIC_PLEXUS_API_REGION?.trim()
+
+  if (!endpointOverride && !apiKeyOverride) {
+    return outputs
+  }
+
+  if (!endpointOverride || !apiKeyOverride) {
+    throw new Error(
+      'Partial Amplify data override detected. Both NEXT_PUBLIC_PLEXUS_API_URL and NEXT_PUBLIC_PLEXUS_API_KEY are required.',
+    )
+  }
+
+  const resolvedRegion = regionOverride || inferRegionFromGraphqlUrl(endpointOverride) || outputs?.data?.aws_region
+  if (!resolvedRegion) {
+    throw new Error(
+      'Unable to determine Amplify GraphQL region. Set NEXT_PUBLIC_PLEXUS_API_REGION or provide a standard AppSync URL.',
+    )
+  }
+
+  const configuredData = outputs?.data || {}
+  const configuredDefaultAuth = configuredData.default_authorization_type
+  const configuredAuthTypes = Array.isArray(configuredData.authorization_types)
+    ? configuredData.authorization_types
+    : null
+
+  return {
+    ...(outputs || {}),
+    data: {
+      ...configuredData,
+      url: endpointOverride,
+      api_key: apiKeyOverride,
+      aws_region: resolvedRegion,
+      default_authorization_type: configuredDefaultAuth || "API_KEY",
+      authorization_types: configuredAuthTypes?.length ? configuredAuthTypes : ["API_KEY"],
+    },
+  }
+}
+
 // Only configure Amplify if we're not in a CI environment
 if (process.env.NODE_ENV !== 'test') {
-  const outputs = resolveAmplifyOutputs()
-  if (outputs) {
+  try {
+    const outputs = resolveAmplifyOutputs()
+    if (!outputs) {
+      throw new Error(
+        'Amplify outputs not found. Provide dashboard/amplify_outputs.json or set NEXT_PUBLIC_PLEXUS_API_URL and NEXT_PUBLIC_PLEXUS_API_KEY.',
+      )
+    }
     Amplify.configure(outputs);
-  } else {
-    console.warn('Amplify outputs not found - skipping configuration');
+  } catch (error) {
+    console.error('Amplify configuration failed:', error);
   }
 }
 
@@ -128,7 +149,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/advanced/universal-code',
     '/documentation/advanced/mcp-server',
     '/documentation/report-blocks',
-    '/documentation/report-blocks/feedback-analysis',
+    '/documentation/report-blocks/feedback-alignment',
     '/documentation/report-blocks/topic-analysis',
     '/login',
     '/signup',

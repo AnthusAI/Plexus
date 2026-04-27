@@ -85,9 +85,19 @@ class AggregatedMetrics(BaseModel):
         self.metadata = metadata
     
     @staticmethod
-    def generate_composite_key(record_type: str, time_range_start: datetime, number_of_minutes: int) -> str:
+    def generate_composite_key(
+        record_type: str,
+        time_range_start: datetime,
+        number_of_minutes: int,
+        scorecard_id: Optional[str] = None,
+        score_id: Optional[str] = None,
+    ) -> str:
         """Generate composite key for AggregatedMetrics."""
         time_str = time_range_start.isoformat().replace('+00:00', 'Z')
+        if score_id:
+            return f"{record_type}#{score_id}#{time_str}#{number_of_minutes}"
+        if scorecard_id:
+            return f"{record_type}#{scorecard_id}#{time_str}#{number_of_minutes}"
         return f"{record_type}#{time_str}#{number_of_minutes}"
 
     def __repr__(self) -> str:
@@ -324,7 +334,13 @@ class AggregatedMetrics(BaseModel):
             The created or updated AggregatedMetrics instance
         """
         # Generate composite key
-        composite_key = cls.generate_composite_key(record_type, time_range_start, number_of_minutes)
+        composite_key = cls.generate_composite_key(
+            record_type,
+            time_range_start,
+            number_of_minutes,
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+        )
         
         now = datetime.now(timezone.utc)
         

@@ -55,6 +55,8 @@ async def test_mcp_item_last_includes_cost_in_score_results(monkeypatch):
                   'createdByType': 'prediction', 'metadata': '{}', 'identifiers': '[]', 'attachedFiles': None,
                   'createdAt': '2025-01-01T00:00:00Z', 'updatedAt': '2025-01-01T00:00:00Z' }
             ]}},
+            # listIdentifierByItemIdAndPosition for identifiers
+            { 'listIdentifierByItemIdAndPosition': { 'items': [] } },
             # listScoreResultByItemId for score results
             { 'listScoreResultByItemId': { 'items': [ build_score_result(cost={'total_cost': 0.123}) ] } }
         ]

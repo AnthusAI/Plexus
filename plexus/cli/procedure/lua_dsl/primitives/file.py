@@ -59,8 +59,19 @@ class FilePrimitive:
 
         try:
             logger.debug(f"Reading file: {file_path}")
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except UnicodeDecodeError as ude:
+                # File has invalid UTF-8 bytes (e.g. from a non-ASCII character
+                # inserted by an LLM agent with a different encoding).  Fall back
+                # to latin-1 which can decode any byte sequence without error.
+                logger.warning(
+                    f"UTF-8 decode failed for {file_path} at byte {ude.start} "
+                    f"({ude.reason}); retrying with latin-1 fallback"
+                )
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    content = f.read()
             logger.info(f"Read {len(content)} bytes from {file_path}")
             return content
 

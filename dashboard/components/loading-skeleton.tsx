@@ -1,3 +1,4 @@
+import React from 'react'
 import ScorecardContext from './ScorecardContext'
 
 export function EvaluationDashboardSkeleton() {
@@ -284,6 +285,65 @@ export function ItemsDashboardSkeleton() {
       </div>
     </div>
   );
+}
+
+export function ProceduresDashboardSkeleton() {
+  return (
+    <div className="@container flex flex-col h-full p-3 overflow-hidden" data-testid="procedures-dashboard-skeleton">
+      {/* Header skeleton */}
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+        <div className="@[600px]:flex-grow w-full">
+          <ScorecardContext
+            selectedScorecard={null}
+            setSelectedScorecard={() => {}}
+            selectedScore={null}
+            setSelectedScore={() => {}}
+            skeletonMode={true}
+          />
+        </div>
+        <div className="flex-shrink-0">
+          <div className="h-9 w-28 rounded-md bg-muted animate-pulse" />
+        </div>
+      </div>
+
+      {/* Content skeleton */}
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="@container space-y-3 overflow-visible">
+          {/* Gauges block placeholder */}
+          <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+            <div className="h-48 rounded-lg bg-card animate-pulse" />
+            <div className="h-48 rounded-lg bg-card animate-pulse" />
+            <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 h-48 rounded-lg bg-card animate-pulse" />
+          </div>
+
+          {/* Procedure cards grid placeholder */}
+          <div className="grid gap-3 grid-cols-1 @[640px]:grid-cols-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-lg bg-card p-4 animate-pulse">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2 flex-1">
+                      <div className="h-5 w-2/3 rounded bg-muted" />
+                      <div className="h-4 w-1/3 rounded bg-muted" />
+                    </div>
+                    <div className="h-8 w-8 rounded bg-muted" />
+                  </div>
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-3 w-full rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Loading-more placeholder */}
+          <div className="space-y-3 pb-3">
+            <div className="h-24 rounded-lg bg-card animate-pulse" />
+            <div className="h-24 rounded-lg bg-card animate-pulse" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ItemsGauges skeleton component to match the real component structure
@@ -583,4 +643,123 @@ export function ItemCardSkeleton() {
       </div>
     </div>
   );
-} 
+}
+
+export function OptimizerMetricsChartSkeleton() {
+  return (
+    <div className="mb-4">
+      {/* Header row: icon + title + dataset toggle buttons */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-36 bg-muted rounded animate-pulse" style={{ animationDelay: '0.05s' }} />
+        </div>
+        <div className="flex gap-1">
+          <div className="h-6 w-20 bg-muted rounded animate-pulse" style={{ animationDelay: '0.1s' }} />
+          <div className="h-6 w-20 bg-muted rounded animate-pulse" style={{ animationDelay: '0.15s' }} />
+          <div className="h-6 w-20 bg-muted rounded animate-pulse" style={{ animationDelay: '0.2s' }} />
+        </div>
+      </div>
+
+      {/* Chart area */}
+      <div className="bg-card rounded-md p-3 animate-pulse" style={{ animationDelay: '0.1s' }}>
+        <div className="h-[260px] w-full relative">
+          {/* Y-axis labels */}
+          <div className="absolute left-0 top-0 bottom-6 w-8 flex flex-col justify-between">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-2 w-6 bg-muted/60 rounded" style={{ animationDelay: `${0.05 * i}s` }} />
+            ))}
+          </div>
+          {/* Chart body */}
+          <div className="absolute left-10 right-0 top-0 bottom-6">
+            {/* Grid lines */}
+            {[25, 50, 75].map((pct) => (
+              <div
+                key={pct}
+                className="absolute left-0 right-0 h-px bg-muted/30"
+                style={{ top: `${pct}%` }}
+              />
+            ))}
+            {/* Simulated line path */}
+            <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-r from-primary/10 via-primary/20 to-primary/10 rounded" />
+            <div className="absolute bottom-1/4 left-0 w-full h-1/3 bg-gradient-to-r from-chart-2/10 via-chart-2/20 to-chart-2/10 rounded" />
+          </div>
+          {/* X-axis labels */}
+          <div className="absolute left-10 right-0 bottom-0 h-5 flex justify-between">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-2 w-12 bg-muted/60 rounded mt-1" style={{ animationDelay: `${0.05 * i}s` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Legend row */}
+      <div className="flex gap-4 mt-2 px-1">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="flex items-center gap-1">
+            <div className="h-2 w-2 bg-muted rounded-full animate-pulse" style={{ animationDelay: `${0.05 * i}s` }} />
+            <div className="h-2 w-14 bg-muted rounded animate-pulse" style={{ animationDelay: `${0.05 * i + 0.02}s` }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function CycleHistoryTableSkeleton() {
+  return (
+    <div className="mt-4">
+      {/* Section header */}
+      <div className="h-4 w-12 bg-muted rounded animate-pulse mb-2" />
+
+      <table className="w-full text-xs border-separate border-spacing-y-0.5">
+        <thead>
+          {/* Two-row header matching actual table */}
+          <tr>
+            <th className="px-1 py-0.5"><div className="h-2 w-8 bg-muted/40 rounded animate-pulse" /></th>
+            <th className="px-1 py-0.5"><div className="h-2 w-8 bg-muted/40 rounded animate-pulse" /></th>
+            <th className="px-1 py-0.5" colSpan={5}><div className="h-2 w-16 bg-muted/40 rounded animate-pulse" /></th>
+            <th className="px-1 py-0.5" colSpan={5}><div className="h-2 w-16 bg-muted/40 rounded animate-pulse" /></th>
+            <th className="px-1 py-0.5" />
+            <th className="px-1 py-0.5" />
+          </tr>
+          <tr>
+            {[...Array(14)].map((_, i) => (
+              <th key={i} className="px-1 py-0">
+                <div className="h-2 w-6 bg-muted/30 rounded animate-pulse" style={{ animationDelay: `${0.02 * i}s` }} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[...Array(4)].map((_, rowIdx) => (
+            <tr key={rowIdx} style={{ animationDelay: `${rowIdx * 0.07}s` }}>
+              {/* Label cell */}
+              <td className="px-1 py-0.5">
+                <div className="h-3 w-14 bg-muted rounded animate-pulse" style={{ animationDelay: `${rowIdx * 0.07}s` }} />
+              </td>
+              {/* Status badge cell */}
+              <td className="px-1 py-0.5">
+                <div className="h-4 w-14 bg-muted rounded animate-pulse" style={{ animationDelay: `${rowIdx * 0.07 + 0.02}s` }} />
+              </td>
+              {/* 10 metric cells */}
+              {[...Array(10)].map((_, colIdx) => (
+                <td key={colIdx} className="px-1 py-0.5">
+                  <div className="h-3 w-8 bg-muted/60 rounded animate-pulse" style={{ animationDelay: `${rowIdx * 0.07 + colIdx * 0.01}s` }} />
+                </td>
+              ))}
+              {/* Version ID cell */}
+              <td className="px-1 py-0.5">
+                <div className="h-3 w-16 bg-muted/40 rounded animate-pulse" style={{ animationDelay: `${rowIdx * 0.07 + 0.1}s` }} />
+              </td>
+              {/* Link cell */}
+              <td className="px-1 py-0.5">
+                <div className="h-3 w-3 bg-muted/40 rounded animate-pulse" style={{ animationDelay: `${rowIdx * 0.07 + 0.12}s` }} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

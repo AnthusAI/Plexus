@@ -14,7 +14,7 @@ const meta: Meta<typeof ConfigurableParametersDialog> = {
       scorecards: [
         { id: 'scorecard-1', name: 'Customer Support Quality', accountId: 'mock-account-1' },
         { id: 'scorecard-2', name: 'Sales Call Effectiveness', accountId: 'mock-account-1' },
-        { id: 'scorecard-3', name: 'Product Feedback Analysis', accountId: 'mock-account-1' },
+        { id: 'scorecard-3', name: 'Product Feedback Alignment', accountId: 'mock-account-1' },
       ],
       scores: {
         'scorecard-1': [

@@ -32,9 +32,12 @@ export interface ScorecardReportProps extends ReportBlockProps {
   drillDownContent?: React.ReactNode;
   showTitle?: boolean;
   hideSummary?: boolean; // NEW: Control whether to hide the summary section
+  alwaysShowSummary?: boolean;
+  summaryFirst?: boolean;
   // Props for on-demand analysis drill-down
   scorecardId?: string;
   accountId?: string;
+  preserveScoreOrder?: boolean;
 }
 
 /**
@@ -50,8 +53,11 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   drillDownContent,
   showTitle,
   hideSummary = false,
+  alwaysShowSummary = false,
+  summaryFirst = false,
   scorecardId,
   accountId,
+  preserveScoreOrder = false,
   children,
   ...restProps
 }) => {
@@ -63,7 +69,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   }
 
   const hasData = scoreData.scores && scoreData.scores.length > 0;
-  const showSummary = hasData && scoreData.scores.length > 1 && !hideSummary;
+  const showSummary = hasData && !hideSummary && (alwaysShowSummary || scoreData.scores.length > 1);
 
   // Calculate accuracy segments if label distribution is available
   const accuracySegments: Segment[] = scoreData.label_distribution 
@@ -102,49 +108,8 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   const hasPrecisionGauge = showPrecisionRecall && averagePrecision > 0;
   const hasRecallGauge = showPrecisionRecall && averageRecall > 0;
 
-  // Prepare the content to pass to the ReportBlock
-  const scoreCardContent = (
-    <>
-      {/* Score Cards Section - Updated to use responsive container queries */}
-      {hasData && scoreData.scores.length > 0 && (
-        <div className="@container">
-          <div className="grid grid-cols-1 @[60rem]:grid-cols-2 gap-3">
-            {scoreData.scores
-              .map((scoreItem, originalIdx) => ({ // Add originalIndex before sorting
-                scoreData: scoreItem,
-                originalIndex: originalIdx
-              }))
-              .sort((a, b) => {
-                // Sort by accuracy if available, otherwise sorting can be customized
-                // Now access accuracy via a.scoreData.accuracy
-                if (a.scoreData.accuracy == null && b.scoreData.accuracy != null) return 1;
-                if (a.scoreData.accuracy != null && b.scoreData.accuracy == null) return -1;
-                if (a.scoreData.accuracy != null && b.scoreData.accuracy != null) {
-                  return a.scoreData.accuracy - b.scoreData.accuracy;
-                }
-                return 0;
-              })
-              .map((item, sortedMapIndex) => ( // item now contains scoreData and originalIndex
-                <ScorecardReportEvaluation 
-                  key={item.scoreData.id || `score-eval-${item.originalIndex}`} // Use originalIndex or id for a stable key
-                  score={item.scoreData}
-                  scoreIndex={item.originalIndex} // Pass the ORIGINAL index
-                  attachedFiles={restProps.attachedFiles}
-                  showPrecisionRecall={showPrecisionRecall}
-                  onCellSelection={onCellSelection}
-                  scorecardId={scorecardId}
-                  accountId={accountId}
-                  isSingleScore={scoreData.scores.length === 1}
-                  dateRange={scoreData.date_range}
-                />
-              ))}
-          </div>
-        </div>
-      )}
-
-      {/* Overall Card - Conditionally Rendered with flat styling */}
-      {showSummary && (
-        <div className="bg-card rounded-lg p-4 mt-4">
+  const summarySection = showSummary ? (
+    <div className="bg-card rounded-lg p-4 mt-4">
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-base font-medium">Overall</h3>
           </div>
@@ -224,8 +189,50 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
               totalItems={scoreData.total_items}
             />
           </div>
-        </div>
-      )}
+    </div>
+  ) : null;
+
+  const scoresSection = hasData && scoreData.scores.length > 0 ? (
+    <div className="@container">
+      <div className="grid grid-cols-1 @[60rem]:grid-cols-2 gap-3">
+        {scoreData.scores
+          .map((scoreItem, originalIdx) => ({
+            scoreData: scoreItem,
+            originalIndex: originalIdx
+          }))
+          .sort((a, b) => {
+            if (preserveScoreOrder) return 0;
+            if (a.scoreData.accuracy == null && b.scoreData.accuracy != null) return 1;
+            if (a.scoreData.accuracy != null && b.scoreData.accuracy == null) return -1;
+            if (a.scoreData.accuracy != null && b.scoreData.accuracy != null) {
+              return a.scoreData.accuracy - b.scoreData.accuracy;
+            }
+            return 0;
+          })
+          .map((item) => (
+            <ScorecardReportEvaluation 
+              key={item.scoreData.id || `score-eval-${item.originalIndex}`}
+              score={item.scoreData}
+              scoreIndex={item.originalIndex}
+              attachedFiles={restProps.attachedFiles}
+              showPrecisionRecall={showPrecisionRecall}
+              onCellSelection={onCellSelection}
+              scorecardId={scorecardId}
+              accountId={accountId}
+              isSingleScore={scoreData.scores.length === 1}
+              dateRange={scoreData.date_range}
+            />
+          ))}
+      </div>
+    </div>
+  ) : null;
+
+  // Prepare the content to pass to the ReportBlock
+  const scoreCardContent = (
+    <>
+      {summaryFirst && summarySection}
+      {scoresSection}
+      {!summaryFirst && summarySection}
 
       {!hasData && scoreData.scores && scoreData.scores.length === 0 && !children && (
         <div className="py-8 text-center text-muted-foreground">

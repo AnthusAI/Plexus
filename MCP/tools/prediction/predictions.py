@@ -6,12 +6,25 @@ import os
 import sys
 import json
 import logging
+from decimal import Decimal
 from typing import Dict, Any, List, Union, Optional
 from io import StringIO
 from fastmcp import FastMCP
 from plexus.scores.Score import Score
+from plexus.dashboard.api.models.item import Item as PlexusItem
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_decimals(obj):
+    """Recursively convert Decimal values to float for JSON serialization."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_decimals(v) for v in obj]
+    return obj
 
 
 def register_prediction_tools(mcp: FastMCP):
@@ -244,329 +257,230 @@ def register_prediction_tools(mcp: FastMCP):
                 # YAML mode: Use item IDs as-is for testing
                 logger.info(f"YAML mode: Using item IDs as-is: {target_item_ids}")
 
-            # Handle item data differently based on yaml mode
-            prediction_results_list = []
+            # Load scorecard once — same configuration for every item
+            use_cache = not no_cache
+            cache_mode = "YAML-only" if yaml else ("no-cache" if no_cache else "default")
+            logger.info(f"Using canonical Scorecard system to predict '{score_name}' from '{scorecard_name}' with {cache_mode} mode")
 
             try:
-                for target_id in target_item_ids:
-                    try:
-                        item_text = None
-                        metadata = {}
+                if yaml:
+                    if yaml_path:
+                        logger.info(f"Loading score configuration from specific YAML file: {yaml_path}")
+                        from plexus.scores.Scorecard import Scorecard
+                        import yaml as yaml_module
+                        with open(yaml_path, 'r') as f:
+                            yaml_content = f.read()
+                        score_config = yaml_module.safe_load(yaml_content)
+                        scorecard_data = {
+                            'name': scorecard_name,
+                            'sections': [{'name': 'Custom', 'scores': [score_config]}]
+                        }
+                        scorecard_instance = Scorecard(scorecard_data)
+                        scorecard_instance.yaml_only = True
+                        logger.info(f"Created scorecard instance from YAML file: {yaml_path}")
+                    else:
+                        logger.info("Loading scorecard from YAML files for dependency resolution (CLI-compatible path)")
+                        from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
+                        scorecard_instance = load_scorecard_from_yaml_files(scorecard_name, score_names=[score_name])
+                        scorecard_instance.yaml_only = True
+                        logger.info("Set scorecard_instance.yaml_only = True for local YAML processing")
+                else:
+                    logger.info("Loading scorecard from API for dependency resolution (CLI-compatible path)")
+                    from plexus.cli.evaluation.evaluations import load_scorecard_from_api
+                    scorecard_instance = load_scorecard_from_api(scorecard_name, score_names=[score_name], use_cache=use_cache, specific_version=resolved_version)
+            except Exception as load_error:
+                logger.error(f"Error loading scorecard: {str(load_error)}", exc_info=True)
+                return f"Error loading scorecard '{scorecard_name}': {str(load_error)}"
 
-                        if yaml:
-                            # YAML mode: Get item data but use local scoring
-                            # We still need real item data for proper testing, just use local YAML for scoring
-                            logger.info(f"YAML mode: Getting item data but using local score configuration for '{target_id}'")
+            # Resolve score name and build dependency graph once (shared across all items)
+            resolved_score_name = score_name
+            try:
+                if hasattr(scorecard_instance, 'scores') and isinstance(scorecard_instance.scores, list):
+                    for s in scorecard_instance.scores:
+                        s_name = s.get('name')
+                        if not s_name:
+                            continue
+                        if (
+                            s_name == score_name or
+                            str(s.get('id', '')) == str(score_name) or
+                            str(s.get('key', '')) == str(score_name) or
+                            str(s.get('externalId', '')) == str(score_name) or
+                            str(s.get('originalExternalId', '')) == str(score_name)
+                        ):
+                            resolved_score_name = s_name
+                            break
+                if resolved_score_name != score_name:
+                    logger.info(f"Resolved score identifier '{score_name}' to score name '{resolved_score_name}' for subset matching")
+            except Exception as _resolve_err:
+                logger.warning(f"Could not resolve score identifier '{score_name}' to name: {_resolve_err}")
 
-                            # Still get the real item data for testing purposes
-                            item_query = f"""
+            try:
+                _, name_to_id = scorecard_instance.build_dependency_graph([resolved_score_name])
+            except Exception:
+                name_to_id = {}
+
+            item_query_fields = """
+                        id
+                        text
+                        description
+                        metadata
+                        attachedFiles
+                        externalId
+                        createdAt
+                        updatedAt"""
+
+            async def _predict_one(target_id: str) -> dict:
+                """Fetch item data and run prediction for a single item."""
+                try:
+                    not_found_msg = (
+                        f"Item '{target_id}' not found (YAML mode still needs real item data)"
+                        if yaml else f"Item '{target_id}' not found"
+                    )
+                    item_query = f"""
                         query GetItem {{
-                            getItem(id: "{target_id}") {{
-                                id
-                                text
-                                description
-                                metadata
-                                attachedFiles
-                                externalId
-                                createdAt
-                                updatedAt
+                            getItem(id: "{target_id}") {{{item_query_fields}
                             }}
                         }}
                         """
+                    item_result = client.execute(item_query)
+                    item_data = item_result.get('getItem')
 
-                            item_result = client.execute(item_query)
-                            item_data = item_result.get('getItem')
+                    if not item_data:
+                        return {"item_id": target_id, "error": not_found_msg}
 
-                            if not item_data:
-                                prediction_results_list.append({
-                                    "item_id": target_id,
-                                    "error": f"Item '{target_id}' not found (YAML mode still needs real item data)"
-                                })
-                                continue
+                    item_text = item_data.get('text', '') or item_data.get('description', '')
+                    if not item_text:
+                        raise Exception("No text content found in item text or description fields")
 
-                            # Get the real item text content
-                            item_text = item_data.get('text', '') or item_data.get('description', '')
-                            if not item_text:
-                                raise Exception("No text content found in item text or description fields")
-
-                            # Handle metadata
-                            metadata_raw = item_data.get('metadata', {})
-                            if isinstance(metadata_raw, dict):
-                                metadata = metadata_raw
-                            else:
-                                try:
-                                    import json
-                                    metadata = json.loads(metadata_raw)
-                                except (json.JSONDecodeError, TypeError):
-                                    logger.warning(f"Failed to parse metadata for item {target_id}: {metadata_raw}")
-                                    metadata = {}
-                        else:
-                            # API mode: Get real item data
-                            item_query = f"""
-                        query GetItem {{
-                            getItem(id: "{target_id}") {{
-                                id
-                                text
-                                description
-                                metadata
-                                attachedFiles
-                                externalId
-                                createdAt
-                                updatedAt
-                            }}
-                        }}
-                        """
-
-                            item_result = client.execute(item_query)
-                            item_data = item_result.get('getItem')
-
-                            if not item_data:
-                                prediction_results_list.append({
-                                    "item_id": target_id,
-                                    "error": f"Item '{target_id}' not found"
-                                })
-                                continue
-
-                            # Get the item text content for prediction
-                            item_text = item_data.get('text', '') or item_data.get('description', '')
-                            if not item_text:
-                                raise Exception("No text content found in item text or description fields")
-
-                            # Handle both dict objects (from FeedbackItems) and JSON strings (from other sources)
-                            metadata_raw = item_data.get('metadata', {})
-                            if isinstance(metadata_raw, dict):
-                                metadata = metadata_raw
-                            else:
-                                try:
-                                    import json
-                                    metadata = json.loads(metadata_raw)
-                                except (json.JSONDecodeError, TypeError):
-                                    logger.warning(f"Failed to parse metadata for item {item_id}: {metadata_raw}")
-                                    metadata = {}
-
-                        # Call the actual prediction service using the shared CLI implementation
-                        logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
-
+                    metadata_raw = item_data.get('metadata', {})
+                    if isinstance(metadata_raw, dict):
+                        item_metadata = metadata_raw
+                    else:
                         try:
-                            # Use the canonical Scorecard dependency system for all predictions
-                            # This ensures consistent behavior with CLI, evaluations, and production
-                            # IMPORTANT: Do not call Scorecard.load() here (not available in this branch).
-                            # Instead, reuse the CLI loaders that support API-first and YAML-only modes.
+                            item_metadata = json.loads(metadata_raw)
+                        except (json.JSONDecodeError, TypeError):
+                            logger.warning(f"Failed to parse metadata for item {target_id}: {metadata_raw}")
+                            item_metadata = {}
 
-                            use_cache = not no_cache
-                            cache_mode = "YAML-only" if yaml else ("no-cache" if no_cache else "default")
-                            logger.info(f"Using canonical Scorecard system to predict '{score_name}' from '{scorecard_name}' with {cache_mode} mode")
+                    # Construct a full Item object so input sources (e.g. DeepgramInputSource)
+                    # that require the Item record (for attachedFiles, etc.) can function.
+                    try:
+                        item_obj = PlexusItem.from_dict(item_data, client)
+                    except Exception as e:
+                        logger.warning(f"Could not construct Item object for {target_id}: {e}")
+                        item_obj = None
 
-                            # Defer imports to runtime to avoid heavy module import on server startup
-                            if yaml:
-                                if yaml_path:
-                                    # Load from specific YAML file
-                                    logger.info(f"Loading score configuration from specific YAML file: {yaml_path}")
-                                    from plexus.scores.Scorecard import Scorecard
+                    logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
+                    logger.info(f"Running scorecard evaluation with canonical dependency resolution for score '{score_name}'")
 
-                                    # Read YAML content
-                                    with open(yaml_path, 'r') as f:
-                                        yaml_content = f.read()
+                    try:
+                        results = await scorecard_instance.score_entire_text(
+                            text=item_text,
+                            metadata=item_metadata,
+                            modality=None,
+                            subset_of_score_names=[resolved_score_name],
+                            item=item_obj
+                        )
 
-                                    # Create a minimal scorecard with this score
-                                    # We need to construct a scorecard structure that contains this score
-                                    import yaml as yaml_module
-                                    score_config = yaml_module.safe_load(yaml_content)
+                        score_result_obj = None
+                        target_result_id = name_to_id.get(resolved_score_name)
+                        if results:
+                            if target_result_id and target_result_id in results:
+                                score_result_obj = results[target_result_id]
+                            elif resolved_score_name in results:
+                                score_result_obj = results[resolved_score_name]
 
-                                    # Build scorecard structure
-                                    scorecard_data = {
-                                        'name': scorecard_name,
-                                        'sections': [
-                                            {
-                                                'name': 'Custom',
-                                                'scores': [score_config]
-                                            }
-                                        ]
-                                    }
-
-                                    scorecard_instance = Scorecard(scorecard_data)
-                                    scorecard_instance.yaml_only = True
-                                    logger.info(f"Created scorecard instance from YAML file: {yaml_path}")
-                                else:
-                                    # Load from standard YAML files
-                                    logger.info("Loading scorecard from YAML files for dependency resolution (CLI-compatible path)")
-                                    from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
-                                    scorecard_instance = load_scorecard_from_yaml_files(scorecard_name, score_names=[score_name])
-                                    # Set yaml flag IMMEDIATELY after creation so it's honored during score processing
-                                    scorecard_instance.yaml_only = True
-                                    logger.info("Set scorecard_instance.yaml_only = True for local YAML processing")
+                        if score_result_obj is None:
+                            if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
+                                logger.info(f"Score '{resolved_score_name}' not applicable due to unmet dependency conditions")
+                                prediction_result = {
+                                    "item_id": target_id,
+                                    "scores": [{
+                                        "name": score_name,
+                                        "value": None,
+                                        "explanation": "Not applicable due to unmet dependency conditions",
+                                        "cost": {}
+                                    }]
+                                }
                             else:
-                                logger.info("Loading scorecard from API for dependency resolution (CLI-compatible path)")
-                                from plexus.cli.evaluation.evaluations import load_scorecard_from_api
-                                scorecard_instance = load_scorecard_from_api(scorecard_name, score_names=[score_name], use_cache=use_cache, specific_version=resolved_version)
-                            
-                            # Use the battle-tested score_entire_text method which handles all dependency logic:
-                            # - Builds dependency graphs automatically
-                            # - Handles conditional dependencies (==, !=, in, not in)
-                            # - Processes scores in correct dependency order
-                            # - Skips scores when conditions aren't met
-                            # - Handles async processing with proper error handling
-                            logger.info(f"Running scorecard evaluation with canonical dependency resolution for score '{score_name}'")
-                            
-                            # Resolve requested score identifier to the actual score name for subset matching
-                            resolved_score_name = score_name
-                            try:
-                                if hasattr(scorecard_instance, 'scores') and isinstance(scorecard_instance.scores, list):
-                                    for s in scorecard_instance.scores:
-                                        s_name = s.get('name')
-                                        if not s_name:
-                                            continue
-                                        if (
-                                            s_name == score_name or
-                                            str(s.get('id', '')) == str(score_name) or
-                                            str(s.get('key', '')) == str(score_name) or
-                                            str(s.get('externalId', '')) == str(score_name) or
-                                            str(s.get('originalExternalId', '')) == str(score_name)
-                                        ):
-                                            resolved_score_name = s_name
-                                            break
-                                if resolved_score_name != score_name:
-                                    logger.info(f"Resolved score identifier '{score_name}' to score name '{resolved_score_name}' for subset matching")
-                            except Exception as _resolve_err:
-                                logger.warning(f"Could not resolve score identifier '{score_name}' to name: {_resolve_err}")
+                                raise Exception(f"No result found for score '{resolved_score_name}' via scorecard")
+                        else:
+                            logger.info(f"Successfully got result from canonical scorecard system for '{score_name}'")
+                            prediction_results = score_result_obj
 
-                            # Build name->id map to extract result by ID later
-                            try:
-                                _, name_to_id = scorecard_instance.build_dependency_graph([resolved_score_name])
-                            except Exception:
-                                name_to_id = {}
-
-
-                            results = await scorecard_instance.score_entire_text(
-                                text=item_text,
-                                metadata=metadata,
-                                modality=None,
-                                subset_of_score_names=[resolved_score_name]  # This automatically includes dependencies
-                            )
-                            
-                            # Extract the result for our target score
-                            # Extract by ID when available; fall back to name
-                            score_result_obj = None
-                            target_result_id = name_to_id.get(resolved_score_name)
-                            if results:
-                                if target_result_id and target_result_id in results:
-                                    score_result_obj = results[target_result_id]
-                                elif resolved_score_name in results:
-                                    score_result_obj = results[resolved_score_name]
-
-                            # Handle SKIPPED due to unmet dependency conditions
-                            if score_result_obj is None:
-                                if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
-                                    logger.info(f"Score '{resolved_score_name}' not applicable due to unmet dependency conditions")
-                                    prediction_result = {
-                                        "item_id": target_id,
-                                        "scores": [
-                                            {
-                                                "name": score_name,
-                                                "value": None,
-                                                "explanation": "Not applicable due to unmet dependency conditions",
-                                                "cost": {}
-                                            }
-                                        ]
-                                    }
-                                else:
-                                    raise Exception(f"No result found for score '{resolved_score_name}' via scorecard")
-                            else:
-                                scorecard_result = score_result_obj
-                                prediction_result = scorecard_result
-                                logger.info(f"Successfully got result from canonical scorecard system for '{score_name}'")
-                            
-                            # Process results from canonical Scorecard system
-                            # All results now come from scorecard_instance.score_entire_text()
-                            prediction_results = prediction_result
-                            
                             if prediction_results and hasattr(prediction_results, 'value') and prediction_results.value is not None:
                                 explanation = (
                                     getattr(prediction_results, 'explanation', None) or
-                                    prediction_results.metadata.get('explanation', '') if hasattr(prediction_results, 'metadata') and prediction_results.metadata else
-                                    ''
+                                    (prediction_results.metadata.get('explanation', '') if hasattr(prediction_results, 'metadata') and prediction_results.metadata else '')
                                 )
-                                
-                                # Extract costs from scorecard result
                                 costs = {}
                                 if hasattr(prediction_results, 'cost'):
                                     costs = prediction_results.cost
                                 elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
                                     costs = prediction_results.metadata.get('cost', {})
-                                
+
                                 prediction_result = {
                                     "item_id": target_id,
-                                    "scores": [
-                                        {
-                                            "name": score_name,
-                                            "value": prediction_results.value,
-                                            "explanation": explanation,
-                                            "cost": costs
-                                        }
-                                    ]
+                                    "scores": [{
+                                        "name": score_name,
+                                        "value": prediction_results.value,
+                                        "explanation": explanation,
+                                        "cost": costs
+                                    }]
                                 }
-                                
-                                # Extract trace information if available
+
                                 if include_trace:
                                     trace = None
-                                    # Check if the result has a trace attribute (not typical)
                                     if hasattr(prediction_results, 'trace'):
                                         trace = prediction_results.trace
-                                    # Check for trace in metadata (most common location)
                                     elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
                                         trace = prediction_results.metadata.get('trace')
-
-                                    # Always include trace field for debugging, even if None
                                     prediction_result["scores"][0]["trace"] = trace
-
-                                    # Also include full metadata for debugging if trace is missing
                                     if trace is None and hasattr(prediction_results, 'metadata') and prediction_results.metadata:
                                         prediction_result["scores"][0]["debug_metadata"] = prediction_results.metadata
                             else:
                                 raise Exception("No valid prediction value returned from canonical scorecard system")
-                            
-                        except Exception as pred_error:
-                            logger.error(f"Error running actual prediction: {str(pred_error)}", exc_info=True)
-                            # Fall back to indicating the error with full details
-                            import traceback
-                            error_traceback = traceback.format_exc()
-                            prediction_result = {
-                                "item_id": target_id,
-                                "scores": [
-                                    {
-                                        "name": score_name,
-                                        "value": "ERROR",
-                                        "explanation": f"Failed to execute prediction: {str(pred_error)}",
-                                        "error_details": {
-                                            "error_message": str(pred_error),
-                                            "error_type": type(pred_error).__name__,
-                                            "traceback": error_traceback
-                                        },
-                                        "cost": {}
-                                    }
-                                ]
-                            }
-                        
-                        # Add input data if requested
-                        if include_input:
-                            prediction_result["input"] = {
-                                "description": item_data.get('description'),
-                                "metadata": item_data.get('metadata'),
-                                "attachedFiles": item_data.get('attachedFiles'),
-                                "externalId": item_data.get('externalId')
-                            }
-                                            
-                        prediction_results_list.append(prediction_result)
-                        
-                    except Exception as item_error:
-                        logger.error(f"Error processing item '{target_id}': {str(item_error)}", exc_info=True)
-                        prediction_results_list.append({
+
+                    except Exception as pred_error:
+                        logger.error(f"Error running actual prediction: {str(pred_error)}", exc_info=True)
+                        import traceback
+                        prediction_result = {
                             "item_id": target_id,
-                            "error": f"Error processing item: {str(item_error)}"
-                        })
-            
+                            "scores": [{
+                                "name": score_name,
+                                "value": "ERROR",
+                                "explanation": f"Failed to execute prediction: {str(pred_error)}",
+                                "error_details": {
+                                    "error_message": str(pred_error),
+                                    "error_type": type(pred_error).__name__,
+                                    "traceback": traceback.format_exc()
+                                },
+                                "cost": {}
+                            }]
+                        }
+
+                    if include_input:
+                        prediction_result["input"] = {
+                            "description": item_data.get('description'),
+                            "metadata": item_data.get('metadata'),
+                            "attachedFiles": item_data.get('attachedFiles'),
+                            "externalId": item_data.get('externalId')
+                        }
+
+                    return prediction_result
+
+                except Exception as item_error:
+                    logger.error(f"Error processing item '{target_id}': {str(item_error)}", exc_info=True)
+                    return {"item_id": target_id, "error": f"Error processing item: {str(item_error)}"}
+
+            # Run all item predictions in parallel
+            try:
+                import asyncio
+                prediction_results_list = list(await asyncio.gather(
+                    *[_predict_one(tid) for tid in target_item_ids]
+                ))
             except Exception as loop_error:
-                logger.error(f"Error in prediction loop: {str(loop_error)}", exc_info=True)
+                logger.error(f"Error in prediction gather: {str(loop_error)}", exc_info=True)
                 return f"Error running predictions: {str(loop_error)}"
 
             # Format output based on requested format
@@ -598,8 +512,8 @@ def register_prediction_tools(mcp: FastMCP):
                 
                 return yaml.dump(result, default_flow_style=False, sort_keys=False)
             else:
-                # Return JSON format
-                return {
+                # Return JSON format (sanitize Decimals from DynamoDB)
+                return _sanitize_decimals({
                     "success": True,
                     "scorecard_name": scorecard_name,
                     "score_name": score_name,
@@ -614,7 +528,7 @@ def register_prediction_tools(mcp: FastMCP):
                     },
                     "predictions": prediction_results_list,
                     "note": "This MCP tool executes real predictions using the shared Plexus prediction service."
-                }
+                })
             
         except Exception as e:
             logger.error(f"Error running predictions: {str(e)}", exc_info=True)

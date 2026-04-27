@@ -52,6 +52,17 @@ export interface ScoreResultComponentProps {
   navigationControls?: React.ReactNode
   rcaDetailedCause?: string
   rcaSuggestedFix?: string
+  misclassificationCategory?: string
+  misclassificationConfidence?: string
+  misclassificationRationale?: string
+  misclassificationEvidenceQuote?: string
+  misclassificationConfigFixability?: string
+  misclassificationEvidence?: Array<{
+    source?: string
+    quote_or_fact?: string
+  }>
+  misclassificationMechanicalSubtype?: string
+  misclassificationMechanicalDetails?: string
 }
 
 
@@ -65,6 +76,14 @@ export function ScoreResultComponent({
   navigationControls,
   rcaDetailedCause,
   rcaSuggestedFix,
+  misclassificationCategory,
+  misclassificationConfidence,
+  misclassificationRationale,
+  misclassificationEvidenceQuote,
+  misclassificationConfigFixability,
+  misclassificationEvidence,
+  misclassificationMechanicalSubtype,
+  misclassificationMechanicalDetails,
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -348,7 +367,7 @@ export function ScoreResultComponent({
               <div>
                 <div className="flex items-center mb-1">
                   <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Root cause analysis</p>
+                  <p className="text-sm text-muted-foreground">Score-Configuration RCA</p>
                 </div>
                 <div className="bg-background rounded-md p-3">
                   <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
@@ -390,6 +409,62 @@ export function ScoreResultComponent({
                       {rcaSuggestedFix}
                     </ReactMarkdown>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {(misclassificationCategory || misclassificationRationale || (misclassificationEvidence && misclassificationEvidence.length > 0) || misclassificationMechanicalSubtype || misclassificationMechanicalDetails) && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Misclassification triage</p>
+                </div>
+                <div className="bg-background rounded-md p-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className={`border-0 ${getCategoryBadgeClass(misclassificationCategory)}`}>
+                      {getCategoryLabel(misclassificationCategory)}
+                    </Badge>
+                    <Badge variant="secondary" className={`border-0 ${getConfidenceBadgeClass(misclassificationConfidence)}`}>
+                      Triage confidence: {misclassificationConfidence ?? 'unknown'}
+                    </Badge>
+                  </div>
+                  {misclassificationRationale && (
+                    <p className="text-sm text-foreground">{misclassificationRationale}</p>
+                  )}
+                  {misclassificationEvidenceQuote && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Key evidence:</span>{' '}
+                      {misclassificationEvidenceQuote}
+                    </p>
+                  )}
+                  {misclassificationConfigFixability && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Config fixability:</span>{' '}
+                      {misclassificationConfigFixability.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {misclassificationEvidence && misclassificationEvidence.length > 0 && (
+                    <ul className="space-y-1">
+                      {misclassificationEvidence.map((snippet, index) => (
+                        <li key={`misclassification-evidence-${index}`} className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{snippet.source ?? 'source'}:</span>{' '}
+                          {snippet.quote_or_fact ?? 'No evidence text provided.'}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {misclassificationMechanicalSubtype && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Mechanical subtype:</span>{' '}
+                      {misclassificationMechanicalSubtype.replace(/_/g, ' ')}
+                    </p>
+                  )}
+                  {misclassificationMechanicalDetails && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Mechanical details:</span>{' '}
+                      {misclassificationMechanicalDetails}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -508,3 +583,40 @@ export function ScoreResultComponent({
     </div>
   )
 } 
+  const getCategoryLabel = (category?: string) => {
+    switch (category) {
+      case 'score_configuration_problem':
+        return 'Score configuration'
+      case 'information_gap':
+        return 'Information gap'
+      case 'guideline_gap_requires_sme':
+        return 'SME guideline gap'
+      case 'mechanical_malfunction':
+        return 'Mechanical malfunction'
+      default:
+        return category ? category.replace(/_/g, ' ') : 'Unclassified'
+    }
+  }
+
+  const getCategoryBadgeClass = (category?: string) => {
+    switch (category) {
+      case 'score_configuration_problem':
+        return 'bg-chart-1/20 text-chart-1'
+      case 'information_gap':
+        return 'bg-chart-2/20 text-chart-2'
+      case 'guideline_gap_requires_sme':
+        return 'bg-chart-3/20 text-chart-3'
+      case 'mechanical_malfunction':
+        return 'bg-chart-4/20 text-chart-4'
+      default:
+        return 'bg-muted text-muted-foreground'
+    }
+  }
+
+  const getConfidenceBadgeClass = (confidence?: string) => {
+    const value = (confidence ?? '').toLowerCase()
+    if (value === 'high') return 'bg-true/20 text-true'
+    if (value === 'medium') return 'bg-chart-3/20 text-chart-3'
+    if (value === 'low') return 'bg-false/20 text-false'
+    return 'bg-muted text-muted-foreground'
+  }

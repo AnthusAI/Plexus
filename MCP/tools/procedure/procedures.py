@@ -58,7 +58,6 @@ def register_procedure_tools(mcp):
         score_identifier: Annotated[str, Field(description="Score identifier (key, name, or ID)")]
         yaml_config: Annotated[Optional[str], Field(description="YAML configuration (uses default if not provided)")] = None
         featured: Annotated[bool, Field(description="Whether to mark as featured")] = False
-        create_root_node: Annotated[bool, Field(description="Whether to create a root node (default: True)")] = True
         template_id: Annotated[Optional[str], Field(description="Optional template ID to use for the procedure")] = None
         score_version_id: Annotated[Optional[str], Field(description="Optional score version ID to use for the procedure")] = None
     
@@ -125,7 +124,6 @@ def register_procedure_tools(mcp):
                 score_identifier=request.score_identifier,
                 yaml_config=request.yaml_config,
                 featured=request.featured,
-                create_root_node=request.create_root_node,
                 template_id=request.template_id,
                 score_version_id=request.score_version_id
             )
@@ -145,8 +143,6 @@ def register_procedure_tools(mcp):
                     "created_at": result.procedure.createdAt.isoformat(),
                     "scorecard_id": result.procedure.scorecardId,
                     "score_id": result.procedure.scoreId,
-                    "root_node_id": result.root_node.id,
-                    "initial_version_id": result.initial_version.id
                 }
             }
             
@@ -179,12 +175,13 @@ def register_procedure_tools(mcp):
                 "procedures": [
                     {
                         "id": exp.id,
+                        "name": getattr(exp, 'name', None),
+                        "status": getattr(exp, 'status', None),
                         "featured": exp.featured,
                         "created_at": exp.createdAt.isoformat(),
                         "updated_at": exp.updatedAt.isoformat(),
                         "scorecard_id": exp.scorecardId,
                         "score_id": exp.scoreId,
-                        "root_node_id": exp.rootNodeId
                     }
                     for exp in procedures
                 ]
@@ -218,17 +215,15 @@ def register_procedure_tools(mcp):
                 "success": True,
                 "procedure": {
                     "id": info.procedure.id,
+                    "status": getattr(info.procedure, 'status', None),
                     "featured": info.procedure.featured,
                     "created_at": info.procedure.createdAt.isoformat(),
                     "updated_at": info.procedure.updatedAt.isoformat(),
                     "account_id": info.procedure.accountId,
                     "scorecard_id": info.procedure.scorecardId,
                     "score_id": info.procedure.scoreId,
-                    "root_node_id": info.procedure.rootNodeId
                 },
                 "summary": {
-                    "node_count": info.node_count,
-                    "version_count": info.version_count,
                     "scorecard_name": info.scorecard_name,
                     "score_name": info.score_name
                 }
@@ -434,15 +429,18 @@ def register_procedure_tools(mcp):
             
             client = PlexusDashboardClient()
             
-            # Query for chat sessions associated with this procedure
+            # Query for chat sessions associated with this procedure using GSI
             query = '''
-            query ListChatSessions($procedureId: String!, $limit: Int!) {
-                listChatSessions(filter: {procedureId: {eq: $procedureId}}, limit: $limit) {
+            query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                listChatSessionByProcedureIdAndCreatedAt(
+                    procedureId: $procedureId
+                    sortDirection: DESC
+                    limit: $limit
+                ) {
                     items {
                         id
                         status
                         procedureId
-                        nodeId
                         createdAt
                         updatedAt
                         messages {
@@ -455,24 +453,24 @@ def register_procedure_tools(mcp):
                 }
             }
             '''
-            
+
             result = client.execute(query, {
                 'procedureId': request.procedure_id,
                 'limit': request.limit
             })
-            
+
             if 'errors' in result:
                 return {
                     "success": False,
                     "error": f"GraphQL errors: {result['errors']}"
                 }
-                
+
             # Handle both wrapped and unwrapped GraphQL responses
             sessions = []
             if 'data' in result:
-                sessions = result['data'].get('listChatSessions', {}).get('items', [])
-            elif 'listChatSessions' in result:
-                sessions = result['listChatSessions'].get('items', [])
+                sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+            elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
             
             # Process sessions to include message counts and types
             processed_sessions = []
@@ -486,7 +484,6 @@ def register_procedure_tools(mcp):
                 processed_sessions.append({
                     "id": session["id"],
                     "status": session["status"],
-                    "node_id": session.get("nodeId"),
                     "created_at": session["createdAt"],
                     "updated_at": session.get("updatedAt"),
                     "message_count": len(messages),
@@ -530,7 +527,6 @@ def register_procedure_tools(mcp):
                         id
                         status
                         procedureId
-                        nodeId
                         createdAt
                         messages {
                             items {
@@ -539,6 +535,7 @@ def register_procedure_tools(mcp):
                                 messageType
                                 toolName
                                 content
+                                toolResponse
                                 sequenceNumber
                                 parentMessageId
                                 createdAt
@@ -570,15 +567,18 @@ def register_procedure_tools(mcp):
                 
                 sessions = [session]
             else:
-                # Query for all sessions in the procedure
+                # Query for all sessions in the procedure using GSI (not filter scan)
                 query = '''
-                query ListChatSessions($procedureId: String!, $limit: Int!) {
-                    listChatSessions(filter: {procedureId: {eq: $procedureId}}, limit: $limit) {
+                query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                    listChatSessionByProcedureIdAndCreatedAt(
+                        procedureId: $procedureId
+                        sortDirection: DESC
+                        limit: $limit
+                    ) {
                         items {
                             id
                             status
                             procedureId
-                            nodeId
                             createdAt
                             messages {
                                 items {
@@ -587,6 +587,7 @@ def register_procedure_tools(mcp):
                                     messageType
                                     toolName
                                     content
+                                    toolResponse
                                     sequenceNumber
                                     parentMessageId
                                     createdAt
@@ -596,24 +597,24 @@ def register_procedure_tools(mcp):
                     }
                 }
                 '''
-                
+
                 result = client.execute(query, {
                     'procedureId': request.procedure_id,
                     'limit': request.limit
                 })
-                
+
                 if 'errors' in result:
                     return {
                         "success": False,
                         "error": f"GraphQL errors: {result['errors']}"
                     }
-                
+
                 # Handle both wrapped and unwrapped GraphQL responses
                 sessions = []
                 if 'data' in result:
-                    sessions = result['data'].get('listChatSessions', {}).get('items', [])
-                elif 'listChatSessions' in result:
-                    sessions = result['listChatSessions'].get('items', [])
+                    sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+                elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                    sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
             
             # Process sessions and messages
             processed_sessions = []
@@ -631,20 +632,19 @@ def register_procedure_tools(mcp):
                 session_tool_calls = []
                 session_tool_responses = []
                 processed_messages = []
-                
+
                 for msg in messages[:request.limit]:
                     msg_type = msg.get('messageType', 'MESSAGE')
                     role = msg.get('role', '')
-                    
-                    # Parse content if it's JSON
-                    content = msg.get('content', '')
-                    parsed_content = content
+
+                    raw_content = msg.get('content', '') or ''
+                    parsed_content = raw_content
                     try:
-                        if content.startswith('{') and content.endswith('}'):
-                            parsed_content = json.loads(content)
-                    except:
+                        if raw_content.startswith('{') and raw_content.endswith('}'):
+                            parsed_content = json.loads(raw_content)
+                    except (json.JSONDecodeError, TypeError, ValueError):
                         pass  # Keep as string if not valid JSON
-                    
+
                     processed_msg = {
                         "id": msg["id"],
                         "sequence_number": msg.get("sequenceNumber", 0),
@@ -654,14 +654,29 @@ def register_procedure_tools(mcp):
                         "created_at": msg["createdAt"],
                         "parent_message_id": msg.get("parentMessageId")
                     }
-                    
-                    # Add tool-specific fields if requested
-                    if msg_type == 'TOOL_CALL' and request.show_tool_calls:
+
+                    # Tool responses: SYSTEM role messages are tool responses in this schema
+                    is_tool_response = (role == 'SYSTEM' and msg.get('parentMessageId'))
+
+                    # Tool calls: toolResponse is stored on the TOOL_CALL row in this schema
+                    if msg_type == 'TOOL_CALL':
                         processed_msg["tool_name"] = msg.get("toolName")
                         session_tool_calls.append(msg["id"])
                         tool_calls += 1
-                        
-                    elif msg_type == 'TOOL_RESPONSE' and request.show_tool_responses:
+
+                        tool_response_raw = msg.get('toolResponse') or ''
+                        if request.show_tool_responses and tool_response_raw:
+                            tool_response_parsed = tool_response_raw
+                            try:
+                                if tool_response_raw.startswith('{') and tool_response_raw.endswith('}'):
+                                    tool_response_parsed = json.loads(tool_response_raw)
+                            except (json.JSONDecodeError, TypeError, ValueError):
+                                pass
+                            processed_msg["tool_response"] = tool_response_parsed
+                            session_tool_responses.append(msg["id"])
+                            tool_responses += 1
+
+                    elif (msg_type == 'TOOL_RESPONSE' or is_tool_response) and request.show_tool_responses:
                         processed_msg["tool_name"] = msg.get("toolName", "Unknown")
                         session_tool_responses.append(msg["id"])
                         tool_responses += 1
@@ -672,12 +687,17 @@ def register_procedure_tools(mcp):
                 # Check for missing tool responses
                 session_missing = 0
                 for call_id in session_tool_calls:
-                    # Find if there's a response with this call as parent
-                    has_response = any(
-                        resp_msg.get('parentMessageId') == call_id 
-                        for resp_msg in messages 
+                    # Tool response is either stored on the TOOL_CALL row (toolResponse)
+                    # or as a separate TOOL_RESPONSE / SYSTEM message referencing the call.
+                    call_msg = next((m for m in messages if m.get("id") == call_id), None)
+                    has_inline_response = bool(call_msg and (call_msg.get("toolResponse") or ""))
+                    has_child_response = any(
+                        resp_msg.get('parentMessageId') == call_id
+                        for resp_msg in messages
                         if resp_msg.get('messageType') == 'TOOL_RESPONSE'
+                        or (resp_msg.get('role') == 'SYSTEM' and resp_msg.get('parentMessageId'))
                     )
+                    has_response = has_inline_response or has_child_response
                     if not has_response:
                         session_missing += 1
                 
@@ -686,7 +706,6 @@ def register_procedure_tools(mcp):
                 processed_sessions.append({
                     "session_id": session["id"],
                     "status": session["status"],
-                    "node_id": session.get("nodeId"),
                     "created_at": session["createdAt"],
                     "message_count": len(processed_messages),
                     "tool_calls": len(session_tool_calls),
@@ -716,8 +735,178 @@ def register_procedure_tools(mcp):
                 "error": f"Failed to get chat messages: {str(e)}"
             }
     
+    # ------------------------------------------------------------------ #
+    # Continue / Branch tools                                             #
+    # ------------------------------------------------------------------ #
+
+    class ProcedureContinueRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="ID of the completed procedure to continue")]
+        additional_cycles: Annotated[int, Field(description="Number of additional optimizer cycles to run", ge=1)] = 3
+        hint: Annotated[Optional[str], Field(description="Optional instructions to guide the continuation run")] = None
+
+    @mcp.tool()
+    async def plexus_procedure_continue(request: ProcedureContinueRequest) -> Dict[str, Any]:
+        """Continue a completed optimizer procedure for additional cycles.
+
+        Updates the procedure's max_iterations param, clears Tactus replay
+        checkpoints (preserving accumulated State such as iterations, baselines,
+        and dataset), then re-dispatches the procedure.  The optimizer detects
+        prior iterations and skips expensive dataset/baseline initialization,
+        resuming from cycle N+1.
+
+        Use this after a procedure reaches its max_iterations limit and you want
+        to run more cycles, optionally with a new hint.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.procedure.continuation_service import prepare_continuation
+            from plexus.cli.procedure.service import ProcedureService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            info = prepare_continuation(
+                client,
+                request.procedure_id,
+                request.additional_cycles,
+                request.hint,
+            )
+
+            service = ProcedureService(client)
+            run_result = await service.run_experiment(request.procedure_id)
+
+            return {
+                "success": True,
+                "status": run_result.get('status', 'dispatched'),
+                "procedure_id": request.procedure_id,
+                "task_id": run_result.get('task_id'),
+                "completed_cycles": info['completed_cycles'],
+                "additional_cycles": info['additional_cycles'],
+                "new_max_iterations": info['new_max_iterations'],
+                "hint_applied": info['hint_applied'],
+            }
+        except Exception as e:
+            logger.error(f"Error continuing procedure: {e}")
+            return {"success": False, "error": str(e)}
+
+    class ProcedureBranchRequest(BaseModel):
+        source_procedure_id: Annotated[str, Field(description="ID of the source procedure to branch from")]
+        cycle: Annotated[int, Field(description="Branch from after this cycle number (1-based)", ge=1)]
+        additional_cycles: Annotated[int, Field(description="Number of cycles to run in the branch", ge=1)] = 3
+        hint: Annotated[Optional[str], Field(description="Optional instructions for the branch run")] = None
+        name: Annotated[Optional[str], Field(description="Name for the new branch procedure")] = None
+
+    @mcp.tool()
+    async def plexus_procedure_branch(request: ProcedureBranchRequest) -> Dict[str, Any]:
+        """Branch a procedure from cycle N into a new procedure.
+
+        Creates a new procedure whose State is a copy of the source procedure
+        truncated to cycle N, then dispatches it.  The optimizer detects the N
+        prior cycles and runs additional cycles from cycle N+1 with a fresh
+        exploration — no dataset rebuild or baseline re-evaluation.
+
+        Use this to explore a different optimization direction starting from an
+        earlier point in the source run, without modifying the source procedure.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.procedure.continuation_service import prepare_branch
+            from plexus.cli.procedure.service import ProcedureService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            info = prepare_branch(
+                client,
+                request.source_procedure_id,
+                request.cycle,
+                request.additional_cycles,
+                request.hint,
+                request.name,
+            )
+
+            target_id = info['target_id']
+            service = ProcedureService(client)
+            run_result = await service.run_experiment(target_id)
+
+            return {
+                "success": True,
+                "status": run_result.get('status', 'dispatched'),
+                "source_procedure_id": request.source_procedure_id,
+                "target_procedure_id": target_id,
+                "target_name": info['target_name'],
+                "task_id": run_result.get('task_id'),
+                "branched_from_cycle": request.cycle,
+                "additional_cycles": info['additional_cycles'],
+                "new_max_iterations": info['new_max_iterations'],
+                "hint_applied": info['hint_applied'],
+            }
+        except Exception as e:
+            logger.error(f"Error branching procedure: {e}")
+            return {"success": False, "error": str(e)}
+
+    class ProcedureIndexOptimizerRunRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to backfill into canonical optimizer artifacts")]
+        force: Annotated[bool, Field(description="Rewrite optimizer artifacts even if they already exist")] = False
+
+    @mcp.tool()
+    def plexus_procedure_index_optimizer_run(request: ProcedureIndexOptimizerRunRequest) -> Dict[str, Any]:
+        """Index or backfill one optimizer procedure into canonical task attachments."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            result = service.index_optimizer_run(request.procedure_id, force=request.force)
+            return {
+                "success": True,
+                "procedure_id": request.procedure_id,
+                "task_id": result["task_id"],
+                "pointer": result["pointer"],
+                "summary": result["manifest"].get("summary"),
+                "best": result["manifest"].get("best"),
+            }
+        except Exception as e:
+            logger.error(f"Error indexing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    class ProcedureOptimizerSummaryRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to summarize from indexed optimizer artifacts")]
+        include_runtime_log: Annotated[bool, Field(description="Include a trailing runtime.log excerpt")] = False
+        include_events: Annotated[bool, Field(description="Include a trailing events.jsonl excerpt")] = False
+        log_lines: Annotated[int, Field(description="Number of trailing lines to include for excerpts", ge=1)] = 80
+
+    @mcp.tool()
+    def plexus_procedure_optimizer_summary(request: ProcedureOptimizerSummaryRequest) -> Dict[str, Any]:
+        """Summarize one indexed optimizer procedure with cycles, candidates, evals, and artifact pointers."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            payload = service.summarize_optimizer_procedure(
+                request.procedure_id,
+                include_runtime_log=request.include_runtime_log,
+                include_events=request.include_events,
+                log_lines=request.log_lines,
+            )
+            return {"success": True, **payload}
+        except Exception as e:
+            logger.error(f"Error summarizing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
     # Register the stop tool
     from .stop import register_stop_tool
     register_stop_tool(mcp)
-    
+
     logger.info("Registered procedure management tools")

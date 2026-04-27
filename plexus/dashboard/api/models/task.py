@@ -586,7 +586,12 @@ class Task(BaseModel):
         }
 
         result = self._client.execute(mutation, {'input': input_data})
-        return self.from_dict(result['updateTask'], self._client)
+        updated_task = self.from_dict(result['updateTask'], self._client)
+
+        # Keep this instance in sync so callers that ignore the return value
+        # do not continue using stale task status or metadata.
+        self.__dict__.update(updated_task.__dict__)
+        return self
 
     @classmethod
     def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Task':

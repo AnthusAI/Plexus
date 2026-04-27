@@ -10,7 +10,8 @@ import type { Schema } from "@/amplify/data/resource"
 type ParameterValues = ParameterValue
 import { CheckCircle, XCircle } from 'lucide-react'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 interface ParametersDisplayProps {
   parameters: ParameterDefinition[]
@@ -38,7 +39,7 @@ export function ParametersDisplay({
 
         try {
           if (param.type === 'scorecard_select') {
-            const result = await client.graphql({
+            const result = await getAmplifyClient().graphql({
               query: `
                 query GetScorecard($id: ID!) {
                   getScorecard(id: $id) {
@@ -54,7 +55,7 @@ export function ParametersDisplay({
               names[param.name] = scorecard.name
             }
           } else if (param.type === 'score_select') {
-            const result = await client.graphql({
+            const result = await getAmplifyClient().graphql({
               query: `
                 query GetScore($id: ID!) {
                   getScore(id: $id) {
@@ -70,7 +71,7 @@ export function ParametersDisplay({
               names[param.name] = score.name
             }
           } else if (param.type === 'score_version_select') {
-            const result = await client.graphql({
+            const result = await getAmplifyClient().graphql({
               query: `
                 query GetScoreVersion($id: ID!) {
                   getScoreVersion(id: $id) {
@@ -115,6 +116,14 @@ export function ParametersDisplay({
         } catch {
           return String(value)
         }
+      case 'date_range': {
+        const start = value?.start ? new Date(value.start).toLocaleDateString() : ''
+        const end = value?.end ? new Date(value.end).toLocaleDateString() : ''
+        if (start && end) return `${start} - ${end}`
+        if (start) return `${start} -`
+        if (end) return `- ${end}`
+        return '—'
+      }
       case 'select':
         // Find the option label if options are defined
         if (param.options) {
@@ -171,13 +180,13 @@ export function ParametersDisplay({
 
   if (variant === 'table') {
     return (
-      <div className="border rounded-lg overflow-hidden">
+      <div className="rounded-lg overflow-hidden">
         <table className="w-full">
           <tbody>
             {parameters.map((param) => {
               const value = values[param.name]
               return (
-                <tr key={param.name} className="border-b last:border-b-0">
+                <tr key={param.name}>
                   <td className="pr-4 py-3 text-sm font-medium text-muted-foreground w-1/3">
                     {param.label}
                     {param.required && <span className="text-destructive ml-1">*</span>}
@@ -229,4 +238,3 @@ export function ParametersDisplay({
     </Card>
   )
 }
-

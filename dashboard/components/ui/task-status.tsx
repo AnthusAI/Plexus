@@ -46,7 +46,7 @@ export interface TaskStageConfig {
   color: string
   name: string
   order: number
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
   processedItems?: number
   totalItems?: number
   startedAt?: string
@@ -64,7 +64,7 @@ export interface TaskStatusProps {
   totalItems?: number
   startedAt?: string
   estimatedCompletionAt?: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
   command?: string
   statusMessage?: string
   errorMessage?: string
@@ -88,6 +88,7 @@ export interface TaskStatusProps {
   onCommandDisplayChange?: (display: 'show' | 'full') => void
   elapsedSeconds?: number | null
   estimatedRemainingSeconds?: number | null
+  hideElapsedTime?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -135,7 +136,8 @@ export const TaskStatus = React.memo(({
   statusMessageDisplay = 'always',
   onCommandDisplayChange,
   elapsedSeconds,
-  estimatedRemainingSeconds
+  estimatedRemainingSeconds,
+  hideElapsedTime = false
 }: TaskStatusProps) => {
 
   if (stages.length > 0) {
@@ -144,7 +146,6 @@ export const TaskStatus = React.memo(({
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const isInProgress = status === 'RUNNING'
-  const isFinished = status === 'COMPLETED' || status === 'FAILED'
   const isError = status === 'FAILED'
 
   // Memoize timing calculations
@@ -223,13 +224,15 @@ export const TaskStatus = React.memo(({
     if (runningStage) return runningStage.name;
 
     // Only fall back to task-level status when no stage is actively running
-    if (status === 'FAILED' || status === 'COMPLETED') return 'completion';
+    if (status === 'FAILED' || status === 'STALLED' || status === 'COMPLETED') return 'completion';
 
-    // If no running stage, find the first PENDING stage
-    const pendingStage = stageConfigs.find(s => s.status === 'PENDING');
+    // If no running stage, find the first PENDING stage (sorted by order)
+    const pendingStage = [...stageConfigs].sort((a, b) => a.order - b.order).find(s => s.status === 'PENDING');
     if (pendingStage) return pendingStage.name;
 
-    // Default to empty string if no stages found
+    // All stages are COMPLETED but task status hasn't caught up yet — show completion
+    if (stageConfigs.length > 0 && stageConfigs.every(s => s.status === 'COMPLETED')) return 'completion';
+
     return '';
   }, [currentStageName, status, stageConfigs]);
 
@@ -249,6 +252,7 @@ export const TaskStatus = React.memo(({
             isCompleted ? 'bg-primary' :
             isRunning ? 'bg-secondary' :
             stage.status === 'FAILED' ? 'bg-false' :
+            stage.status === 'STALLED' ? 'bg-neutral' :
             'bg-neutral'
           ),
           status: stage.status,
@@ -256,15 +260,17 @@ export const TaskStatus = React.memo(({
         };
       });
 
-    // Completion segment should only become active after last stage completes
+    // Completion segment becomes active when task is COMPLETED, or when all stages
+    // are COMPLETED (which may precede the task-level status update by a moment).
     const hasStages = orderedStages.length > 0;
     const lastStageCompleted = hasStages && orderedStages[orderedStages.length - 1].status === 'COMPLETED';
-    const completionActive = status === 'COMPLETED' && lastStageCompleted;
+    const allStagesCompleted = hasStages && orderedStages.every(s => s.status === 'COMPLETED');
+    const completionActive = !['FAILED', 'STALLED'].includes(status) && (status === 'COMPLETED' || allStagesCompleted) && lastStageCompleted;
     orderedStages.push({
       key: 'completion',
       label: 'Complete',
       color: completionActive ? 'bg-true' : (status === 'FAILED' ? 'bg-false' : 'bg-neutral'),
-      status: completionActive ? 'COMPLETED' : (status === 'FAILED' ? 'FAILED' : 'PENDING'),
+      status: completionActive ? 'COMPLETED' : ((status === 'FAILED' || status === 'STALLED') ? status : 'PENDING'),
       completed: completionActive
     });
 
@@ -448,7 +454,7 @@ export const TaskStatus = React.memo(({
             <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
             <span>{preExecutionStatus.message}</span>
           </div>
-        ) : (
+        ) : !hideElapsedTime ? (
           <ProgressBarTiming
             elapsedTime={elapsedTime}
             estimatedTimeRemaining={estimatedTimeRemaining}
@@ -457,7 +463,7 @@ export const TaskStatus = React.memo(({
             startedAt={startedAt}
             completedAt={completedAt}
           />
-        )}
+        ) : null}
         {showStages && (
           <ProgressBar
             progress={progress}
@@ -547,7 +553,7 @@ export const TaskStatus = React.memo(({
           <preExecutionStatus.icon className={`w-4 h-4 ${preExecutionStatus.animation}`} />
           <span>{preExecutionStatus.message}</span>
         </div>
-      ) : (
+      ) : !hideElapsedTime ? (
         startedAt && (
           <ProgressBarTiming
             elapsedTime={elapsedTime}
@@ -558,7 +564,7 @@ export const TaskStatus = React.memo(({
             completedAt={completedAt}
           />
         )
-      )}
+      ) : null}
       {showStages && (
         <SegmentedProgressBar
           segments={segments}
@@ -608,6 +614,7 @@ export const TaskStatus = React.memo(({
     prevProps.commandDisplay === nextProps.commandDisplay &&
     prevProps.statusMessageDisplay === nextProps.statusMessageDisplay &&
     prevProps.elapsedSeconds === nextProps.elapsedSeconds &&
-    prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds
+    prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds &&
+    prevProps.hideElapsedTime === nextProps.hideElapsedTime
   );
 }); 

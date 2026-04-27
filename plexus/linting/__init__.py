@@ -6,7 +6,7 @@ including syntax validation and domain-specific rule checking.
 """
 
 from .yaml_linter import YamlLinter, LintResult, LintMessage
-from .rules import RuleEngine, ValidationRule, ConfidenceConfigurationRule
+from .rules import RuleEngine, ValidationRule, ConfidenceConfigurationRule, ProcessorValidationRule
 from .schema_validator import SchemaValidator
 
 __all__ = [
@@ -16,5 +16,6 @@ __all__ = [
     'RuleEngine',
     'ValidationRule',
     'ConfidenceConfigurationRule',
+    'ProcessorValidationRule',
     'SchemaValidator'
 ]

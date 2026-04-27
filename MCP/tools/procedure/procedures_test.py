@@ -79,7 +79,6 @@ class TestProcedureRunMCP:
                 "procedure_name": "Test Procedure",
                 "scorecard_name": "Test Scorecard",
                 "score_name": "Test Score",
-                "node_count": 5,
                 "options": {},
             },
         }
@@ -428,9 +427,6 @@ class TestExistingProcedureTools:
         mock_info.procedure.accountId = "acc-123"
         mock_info.procedure.scorecardId = "scorecard-123"
         mock_info.procedure.scoreId = "score-123"
-        mock_info.procedure.rootNodeId = "node-123"
-        mock_info.node_count = 3
-        mock_info.version_count = 5
         mock_info.scorecard_name = "Test Scorecard"
         mock_info.score_name = "Test Score"
         mock_service.get_procedure_info.return_value = mock_info
@@ -611,3 +607,147 @@ class TestProcedureTestSpecsMCP:
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+class TestProcedureChatMessagesMCP:
+    def setup_method(self):
+        self.mock_mcp = Mock()
+        self.registered_tools = {}
+
+        def capture_tool(name=None):
+            def decorator(func):
+                tool_name = name or func.__name__
+                self.registered_tools[tool_name] = func
+                return func
+
+            return decorator
+
+        self.mock_mcp.tool = capture_tool
+
+    def test_chat_messages_surfaces_tool_response_on_tool_call_rows(self):
+        register_procedure_tools(self.mock_mcp)
+        tool = self.registered_tools["plexus_procedure_chat_messages"]
+
+        class FakeClient:
+            def execute(self, query, variables):
+                assert "getChatSession" in query
+                return {
+                    "data": {
+                        "getChatSession": {
+                            "id": "sess-1",
+                            "status": "ACTIVE",
+                            "procedureId": "proc-1",
+                            "createdAt": "2026-04-21T00:00:00Z",
+                            "messages": {
+                                "items": [
+                                    {
+                                        "id": "call-1",
+                                        "role": "ASSISTANT",
+                                        "messageType": "TOOL_CALL",
+                                        "toolName": "submit_score_version",
+                                        "content": "Tool call: submit_score_version",
+                                        "toolResponse": '{"success": false, "error": "YAML validation failed"}',
+                                        "sequenceNumber": 1,
+                                        "parentMessageId": None,
+                                        "createdAt": "2026-04-21T00:00:01Z",
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                }
+
+        with patch("plexus.dashboard.api.client.PlexusDashboardClient", return_value=FakeClient()):
+            request = MockRequest(
+                procedure_id="proc-1",
+                session_id="sess-1",
+                limit=50,
+                show_tool_calls=True,
+                show_tool_responses=True,
+            )
+            result = tool(request)
+
+        assert result["success"] is True
+        assert result["summary"]["tool_calls"] == 1
+        assert result["summary"]["tool_responses"] == 1
+        assert result["summary"]["missing_responses"] == 0
+        msg = result["sessions"][0]["messages"][0]
+        assert msg["tool_name"] == "submit_score_version"
+        assert isinstance(msg["tool_response"], dict)
+        assert msg["tool_response"]["error"] == "YAML validation failed"
+        assert msg["content"] == "Tool call: submit_score_version"
+
+    def test_chat_messages_list_query_includes_tool_response_and_counts_missing(self):
+        register_procedure_tools(self.mock_mcp)
+        tool = self.registered_tools["plexus_procedure_chat_messages"]
+
+        class FakeClient:
+            def __init__(self):
+                self.last_query = None
+
+            def execute(self, query, variables):
+                self.last_query = query
+                assert "listChatSessionByProcedureIdAndCreatedAt" in query
+                assert "toolResponse" in query  # Ensure list-query path selects toolResponse
+                return {
+                    "data": {
+                        "listChatSessionByProcedureIdAndCreatedAt": {
+                            "items": [
+                                {
+                                    "id": "sess-1",
+                                    "status": "ACTIVE",
+                                    "procedureId": "proc-1",
+                                    "createdAt": "2026-04-21T00:00:00Z",
+                                    "messages": {
+                                        "items": [
+                                            {
+                                                "id": "call-1",
+                                                "role": "ASSISTANT",
+                                                "messageType": "TOOL_CALL",
+                                                "toolName": "tool_a",
+                                                "content": "Tool call: tool_a",
+                                                "toolResponse": '{"ok": true}',
+                                                "sequenceNumber": 1,
+                                                "parentMessageId": None,
+                                                "createdAt": "2026-04-21T00:00:01Z",
+                                            },
+                                            {
+                                                "id": "call-2",
+                                                "role": "ASSISTANT",
+                                                "messageType": "TOOL_CALL",
+                                                "toolName": "tool_b",
+                                                "content": "Tool call: tool_b",
+                                                "toolResponse": "",
+                                                "sequenceNumber": 2,
+                                                "parentMessageId": None,
+                                                "createdAt": "2026-04-21T00:00:02Z",
+                                            },
+                                        ]
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                }
+
+        fake = FakeClient()
+        with patch("plexus.dashboard.api.client.PlexusDashboardClient", return_value=fake):
+            request = MockRequest(
+                procedure_id="proc-1",
+                session_id=None,
+                limit=50,
+                show_tool_calls=True,
+                show_tool_responses=True,
+            )
+            result = tool(request)
+
+        assert result["success"] is True
+        assert result["summary"]["tool_calls"] == 2
+        assert result["summary"]["tool_responses"] == 1
+        assert result["summary"]["missing_responses"] == 1
+        msgs = result["sessions"][0]["messages"]
+        call_1 = next(m for m in msgs if m["id"] == "call-1")
+        call_2 = next(m for m in msgs if m["id"] == "call-2")
+        assert "tool_response" in call_1
+        assert call_1["tool_response"]["ok"] is True
+        assert "tool_response" not in call_2

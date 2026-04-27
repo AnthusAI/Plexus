@@ -12,6 +12,22 @@ export function getClient(): ReturnType<typeof generateClient<Schema>> {
   return client;
 }
 
+/**
+ * Extract a human-readable message from an Amplify/AppSync error.
+ * Amplify's error objects have non-enumerable properties, so `JSON.stringify`
+ * and `console.error` both produce `{}`. This helper reads the actual fields.
+ */
+export function formatAmplifyError(error: unknown): string {
+  if (!error) return 'Unknown error'
+  if (typeof error === 'string') return error
+  const e = error as any
+  if (e.errors?.length) {
+    return e.errors.map((err: any) => err.message ?? JSON.stringify(err)).join('; ')
+  }
+  if (e.message) return e.message
+  try { return JSON.stringify(error) } catch { return String(error) }
+}
+
 export type GraphQLResponse<T> = GraphQLResult<T>;
 
 export async function graphqlRequest<T>(query: string, variables?: Record<string, any>): Promise<GraphQLResponse<T>> {
@@ -29,7 +45,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
     
     return response as GraphQLResponse<T>;
   } catch (error) {
-    console.error('GraphQL request error:', error);
+    console.error('GraphQL request error:', formatAmplifyError(error));
     throw error;
   }
 }
@@ -355,6 +371,7 @@ export const amplifyClient = {
       errorDetails?: any;
       scorecardId?: string;
       scoreId?: string;
+      scoreVersionId?: string;
       confusionMatrix?: any;
       scoreGoal?: string;
       datasetClassDistribution?: any;
@@ -652,6 +669,10 @@ export const amplifyClient = {
       description?: string
       file?: string
       attachedFiles?: string[]
+      isReferenceDataset?: boolean
+      provenance?: Record<string, any>
+      buildContext?: Record<string, any>
+      referenceAt?: string
       accountId: string
       scorecardId?: string
       scoreId?: string
@@ -667,6 +688,10 @@ export const amplifyClient = {
       description?: string
       file?: string
       attachedFiles?: string[]
+      isReferenceDataset?: boolean
+      provenance?: Record<string, any>
+      buildContext?: Record<string, any>
+      referenceAt?: string
       scorecardId?: string
       scoreId?: string
       scoreVersionId?: string

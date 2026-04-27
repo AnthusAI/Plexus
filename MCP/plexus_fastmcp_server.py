@@ -36,8 +36,11 @@ if using_stdio:
     class DummyRichModule(types.ModuleType):
         def __init__(self, name):
             super().__init__(name)
-            # Add __spec__ to prevent "is None" errors
-            self.__spec__ = types.SimpleNamespace(name=name, loader=None, origin=None, submodule_search_locations=[])
+            # Mark as a package and provide a minimal spec
+            self.__path__ = []
+            self.__spec__ = types.SimpleNamespace(
+                name=name, loader=None, origin=None, submodule_search_locations=[]
+            )
 
         def __getattr__(self, name):
             # Return a dummy object for any attribute access
@@ -70,6 +73,9 @@ if using_stdio:
             return False
         def __ge__(self, other):
             return True
+        def __hash__(self):
+            # Required for typing.Optional[DummyRichObject] to work
+            return id(type(self))
         def __iter__(self):
             # Make DummyRichObject iterable to prevent 'not iterable' errors
             return iter([])
@@ -79,39 +85,47 @@ if using_stdio:
             return self
         def __setitem__(self, key, value):
             pass
-    
-    # Replace the rich module in sys.modules BEFORE importing FastMCP
-    sys.modules['rich'] = DummyRichModule('rich')
-    sys.modules['rich.console'] = DummyRichModule('rich.console')
-    sys.modules['rich.logging'] = DummyRichModule('rich.logging')
-    sys.modules['rich.table'] = DummyRichModule('rich.table')
-    sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
-    sys.modules['rich.markdown'] = DummyRichModule('rich.markdown')
-    sys.modules['rich.panel'] = DummyRichModule('rich.panel')
-    sys.modules['rich.text'] = DummyRichModule('rich.text')
-    sys.modules['rich.progress'] = DummyRichModule('rich.progress')
-    sys.modules['rich.prompt'] = DummyRichModule('rich.prompt')
-    sys.modules['rich.status'] = DummyRichModule('rich.status')
-    sys.modules['rich.syntax'] = DummyRichModule('rich.syntax')
-    sys.modules['rich.tree'] = DummyRichModule('rich.tree')
-    sys.modules['rich.align'] = DummyRichModule('rich.align')
-    sys.modules['rich.columns'] = DummyRichModule('rich.columns')
-    sys.modules['rich.group'] = DummyRichModule('rich.group')
-    sys.modules['rich.layout'] = DummyRichModule('rich.layout')
-    sys.modules['rich.live'] = DummyRichModule('rich.live')
-    sys.modules['rich.rule'] = DummyRichModule('rich.rule')
-    sys.modules['rich.spinner'] = DummyRichModule('rich.spinner')
-    sys.modules['rich.style'] = DummyRichModule('rich.style')
-    sys.modules['rich.theme'] = DummyRichModule('rich.theme')
-    sys.modules['rich.box'] = DummyRichModule('rich.box')
-    sys.modules['rich.color'] = DummyRichModule('rich.color')
-    sys.modules['rich.console'] = DummyRichModule('rich.console')
-    sys.modules['rich.measure'] = DummyRichModule('rich.measure')
-    sys.modules['rich.padding'] = DummyRichModule('rich.padding')
-    sys.modules['rich.region'] = DummyRichModule('rich.region')
-    sys.modules['rich.segment'] = DummyRichModule('rich.segment')
-    sys.modules['rich.spacing'] = DummyRichModule('rich.spacing')
-    sys.modules['rich.terminal_theme'] = DummyRichModule('rich.terminal_theme')
+
+    # If Rich has already been imported (e.g. by fastmcp import above),
+    # don't clobber it with dummy modules. Doing so breaks Rich internals.
+    if 'rich' not in sys.modules:
+        # Replace the rich module in sys.modules BEFORE importing FastMCP
+        sys.modules['rich'] = DummyRichModule('rich')
+        sys.modules['rich.console'] = DummyRichModule('rich.console')
+        sys.modules['rich.logging'] = DummyRichModule('rich.logging')
+        sys.modules['rich.table'] = DummyRichModule('rich.table')
+        sys.modules['rich.traceback'] = DummyRichModule('rich.traceback')
+        sys.modules['rich.markdown'] = DummyRichModule('rich.markdown')
+        sys.modules['rich.panel'] = DummyRichModule('rich.panel')
+        sys.modules['rich.text'] = DummyRichModule('rich.text')
+        sys.modules['rich.progress'] = DummyRichModule('rich.progress')
+        sys.modules['rich.prompt'] = DummyRichModule('rich.prompt')
+        sys.modules['rich.status'] = DummyRichModule('rich.status')
+        sys.modules['rich.syntax'] = DummyRichModule('rich.syntax')
+        sys.modules['rich.tree'] = DummyRichModule('rich.tree')
+        sys.modules['rich.align'] = DummyRichModule('rich.align')
+        sys.modules['rich.columns'] = DummyRichModule('rich.columns')
+        sys.modules['rich.group'] = DummyRichModule('rich.group')
+        sys.modules['rich.layout'] = DummyRichModule('rich.layout')
+        sys.modules['rich.live'] = DummyRichModule('rich.live')
+        sys.modules['rich.rule'] = DummyRichModule('rich.rule')
+        sys.modules['rich.spinner'] = DummyRichModule('rich.spinner')
+        sys.modules['rich.style'] = DummyRichModule('rich.style')
+        sys.modules['rich.theme'] = DummyRichModule('rich.theme')
+        sys.modules['rich.box'] = DummyRichModule('rich.box')
+        sys.modules['rich.color'] = DummyRichModule('rich.color')
+        sys.modules['rich.console'] = DummyRichModule('rich.console')
+        sys.modules['rich.measure'] = DummyRichModule('rich.measure')
+        sys.modules['rich.padding'] = DummyRichModule('rich.padding')
+        sys.modules['rich.region'] = DummyRichModule('rich.region')
+        sys.modules['rich.segment'] = DummyRichModule('rich.segment')
+        sys.modules['rich.spacing'] = DummyRichModule('rich.spacing')
+        sys.modules['rich.terminal_theme'] = DummyRichModule('rich.terminal_theme')
+        sys.modules['rich.pretty'] = DummyRichModule('rich.pretty')
+        sys.modules['rich._emoji_codes'] = DummyRichModule('rich._emoji_codes')
+    else:
+        logger = logging.getLogger(__name__)
+        logger.info("Rich already imported; skipping dummy Rich module override for stdio.")
     
     # Configure FastMCP to not use Rich
     import fastmcp
@@ -401,13 +415,14 @@ mcp = FastMCP(
     - plexus_task_last: Get the most recent task for an account, with optional filtering by task type
     - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
-    ## Feedback Analysis & Score Testing Tools
-    - plexus_feedback_analysis: Generate comprehensive feedback analysis with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    ## Feedback Alignment & Score Testing Tools
+    - plexus_feedback_alignment: Generate comprehensive feedback alignment with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
+    - plexus_feedback_invalidate: Invalidate exactly one approved feedback item by feedback ID or item identifier
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
-    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
+    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback alignment and score testing guide)
     
     ## Experiment Tools
     - plexus_procedure_create: Create a new procedure
@@ -440,7 +455,6 @@ try:
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
     from tools.procedure.procedures import register_procedure_tools
-    from tools.procedure.procedure_nodes import register_procedure_node_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -456,7 +470,6 @@ try:
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
     register_procedure_tools(mcp)
-    register_procedure_node_tools(mcp)
 
     logger.info("Successfully registered separated tools")
 except ImportError as e:
@@ -645,7 +658,6 @@ if __name__ == "__main__":
         from tools.score.guidelines import register_guidelines_tools
         from tools.evaluation.evaluations import register_evaluation_tools
         from tools.procedure.procedures import register_procedure_tools
-        from tools.procedure.procedure_nodes import register_procedure_node_tools
         from tools.report.reports import register_report_tools
         from tools.feedback.feedback import register_feedback_tools
         from tools.task.tasks import register_task_tools
@@ -674,10 +686,6 @@ if __name__ == "__main__":
         print("Registering procedure tools...", file=sys.stderr)
         register_procedure_tools(mcp)
         print("✓ Registered procedure tools", file=sys.stderr)
-
-        print("Registering procedure node tools...", file=sys.stderr)
-        register_procedure_node_tools(mcp)
-        print("✓ Registered procedure node tools", file=sys.stderr)
 
         print("Registering report tools...", file=sys.stderr)
         register_report_tools(mcp)

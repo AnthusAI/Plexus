@@ -73,18 +73,20 @@ const isValidStatus = (status: string | undefined): status is 'PENDING' | 'RUNNI
 export const EvaluationCard = React.memo(({ 
   evaluation, 
   selectedEvaluationId, 
-  scorecardNames, 
-  scoreNames,
+  scorecardNames: _scorecardNames,
+  scoreNames: _scoreNames,
   onSelect,
   onDelete,
   evaluationRefsMap
 }: EvaluationCardProps) => {
   const [taskData, setTaskData] = React.useState<TaskData | null>(null)
+  const scorecardLabel = evaluation.scorecard?.name || evaluation.scorecardId || 'Scorecard loading'
+  const scoreLabel = evaluation.score?.name || evaluation.scoreId || 'Score loading'
 
   // Transform evaluation data into EvaluationTask format
   const evaluationTaskData: EvaluationTaskData = {
     id: evaluation.id,
-    title: scorecardNames[evaluation.id] || 'Unknown Scorecard',
+    title: scorecardLabel,
     accuracy: evaluation.accuracy ?? null,
     metrics: [], // Add metrics if available
     processedItems: Number(evaluation.processedItems || 0),
@@ -98,6 +100,10 @@ export const EvaluationCard = React.memo(({
     startedAt: evaluation.startedAt || undefined,
     errorMessage: evaluation.errorMessage || undefined,
     errorDetails: evaluation.errorDetails || null,
+    parameters: (evaluation as any).parameters ?? null,
+    baseline_evaluation_id: (evaluation as any).baseline_evaluation_id ?? null,
+    current_baseline_evaluation_id: (evaluation as any).current_baseline_evaluation_id ?? null,
+    dataSetId: (evaluation as any).dataSetId ?? null,
     scoreResults: evaluation.scoreResults as any, // Pass the transformed score results with itemIdentifiers
     task: taskData
   }
@@ -274,8 +280,8 @@ export const EvaluationCard = React.memo(({
         task={{
           id: evaluation.id,
           type: evaluation.type,
-          scorecard: scorecardNames[evaluation.id] || 'Unknown Scorecard',
-          score: scoreNames[evaluation.id] || 'Unknown Score',
+          scorecard: scorecardLabel,
+          score: scoreLabel,
           time: evaluation.createdAt,
           data: evaluationTaskData
         }}

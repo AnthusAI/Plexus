@@ -178,6 +178,59 @@ export default function EvaluationsPage() {
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Misclassification Triage</h2>
+          <p className="text-muted-foreground mb-4">
+            Score-Configuration RCA includes a misclassification triage layer that classifies each incorrect
+            item into one operator-facing category: score configuration problem, information gap,
+            guideline gap requiring SME clarification, or mechanical malfunction.
+          </p>
+          <p className="text-muted-foreground mb-4">
+            Dataset-backed accuracy evaluations also run this RCA automatically. Coverage is reported as
+            full/partial/none based on how many incorrect items retain <code>feedback_item_id</code> linkage.
+          </p>
+          <p className="text-muted-foreground mb-4">
+            Dataset-backed accuracy requires a materialized associated dataset:
+            <code> DataSet.file </code>
+            must point to parquet/csv. Preflight rejects non-materialized datasets early with explicit
+            reason codes so optimizer agents can rebuild before dispatching evaluations.
+          </p>
+          <p className="text-muted-foreground mb-4">
+            Evaluation detail views also surface category summaries, mechanical subtype breakdown,
+            evaluation-level red flags, and one primary next action recommendation so you can quickly decide
+            whether to continue score optimization or route work to data remediation, SME clarification, or
+            system debugging.
+          </p>
+          <p className="text-muted-foreground">
+            Open a topic in the RCA section to drill into item-level category, rationale, confidence, and
+            evidence snippets, then select the corresponding score result for full item context.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Reliable Feedback Runner</h2>
+          <p className="text-muted-foreground mb-4">
+            For feedback optimization loops, use <code>plexus evaluate feedback-runner</code> instead of
+            calling <code>plexus evaluate feedback</code> directly. The runner captures evaluation ID by
+            runner task ID, waits for terminal backend status, and summarizes final metrics + RCA from the
+            evaluation record.
+          </p>
+          <pre className="bg-muted p-4 rounded-lg overflow-x-auto mb-4">
+            <code>{`plexus evaluate feedback-runner \\
+  --scorecard 1039 \\
+  --score 45425 \\
+  --days 180 \\
+  --max-items 50 \\
+  --sampling-mode random \\
+  --kanbus-issue-id plx-9aa370`}</code>
+          </pre>
+          <p className="text-muted-foreground">
+            When <code>--kanbus-issue-id</code> is provided, the runner writes a standardized run summary
+            comment with evaluation ID, processed/total counts, AC1/accuracy/precision/recall, RCA presence,
+            and next-action context.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Using Evaluations</h2>
           <p className="text-muted-foreground mb-4">
             Evaluations are essential tools for developing reliable scorecards. Use them to:

@@ -244,8 +244,6 @@ def determine_record_type(event_source_arn: str) -> str:
         return 'evaluations'
     elif 'procedure' in arn_lower:
         return 'procedures'
-    elif 'graphnode' in arn_lower:
-        return 'graphNodes'
     elif 'chatsession' in arn_lower:
         return 'chatSessions'
     # chatMessages excluded - no accountId field, belongs to sessions
@@ -286,5 +284,4 @@ def update_buckets(graphql_client, bucket_counts: list) -> tuple:
                   f"({bucket['number_of_minutes']}min): {e}")
     
     return updates, errors
-
 

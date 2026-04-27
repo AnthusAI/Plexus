@@ -12,7 +12,8 @@ import { Sparkles, Beaker, FileCode2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { parseParametersFromYaml, hasParameters } from '@/lib/parameter-parser'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Types
 // NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
@@ -42,7 +43,7 @@ export default function TemplateSelector({ accountId, open, onOpenChange, onTemp
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      const result = await client.graphql({
+      const result = await getAmplifyClient().graphql({
         query: `
           query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!

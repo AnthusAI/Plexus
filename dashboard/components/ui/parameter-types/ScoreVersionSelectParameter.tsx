@@ -7,7 +7,8 @@ import { ParameterDefinition } from '@/types/parameters'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '@/amplify/data/resource'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 interface ScoreVersionSelectParameterProps {
   definition: ParameterDefinition
@@ -30,7 +31,7 @@ export function ScoreVersionSelectParameter({ definition, value, onChange, score
     const loadVersions = async () => {
       setIsLoading(true)
       try {
-        const result = await client.graphql({
+        const result = await getAmplifyClient().graphql({
           query: `
             query GetScoreVersionsByScoreId($scoreId: String!, $sortDirection: ModelSortDirection) {
               listScoreVersionByScoreIdAndCreatedAt(

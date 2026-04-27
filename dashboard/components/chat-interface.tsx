@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Send, Mic, Headphones } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 export interface ChatInterfaceViewProps {
   // Display props
@@ -194,7 +195,7 @@ export function ChatInterface({
       setError(null)
 
       // Use the accountId GSI for efficient querying
-      const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByAccountIdAndCreatedAt as any)({
+      const response: { data?: any[], nextToken?: string } = await (getAmplifyClient().models.ChatMessage.listChatMessageByAccountIdAndCreatedAt as any)({
         accountId: accountId,
         sortDirection: 'ASC',
         limit: 500,
@@ -295,7 +296,7 @@ export function ChatInterface({
 
     try {
       // @ts-ignore - Amplify Gen2 subscription type complexity
-      subscription = client.models.ChatMessage.onCreate().subscribe({
+      subscription = getAmplifyClient().models.ChatMessage.onCreate().subscribe({
         next: () => {
           loadMessages()
         },

@@ -1,33 +1,18 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode, ComponentType } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { BrandConfig, validateBrandConfig } from '@/types/brand-config';
-import { LogoVariant } from '@/components/logo-square';
-
-interface LogoComponentProps {
-  variant: LogoVariant;
-  className?: string;
-  shadowEnabled?: boolean;
-  shadowWidth?: string;
-  shadowIntensity?: number;
-}
 
 interface BrandContextValue {
   config: BrandConfig | null;
   loading: boolean;
   error: Error | null;
-  customLogoComponent: ComponentType<LogoComponentProps> | null;
-  logoLoading: boolean;
-  logoError: Error | null;
 }
 
 const BrandContext = createContext<BrandContextValue>({
   config: null,
   loading: false,
   error: null,
-  customLogoComponent: null,
-  logoLoading: false,
-  logoError: null,
 });
 
 export function useBrand() {
@@ -42,9 +27,6 @@ export function BrandProvider({ children }: BrandProviderProps) {
   const [config, setConfig] = useState<BrandConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [customLogoComponent, setCustomLogoComponent] = useState<ComponentType<LogoComponentProps> | null>(null);
-  const [logoLoading, setLogoLoading] = useState(false);
-  const [logoError, setLogoError] = useState<Error | null>(null);
   
   // Refs to track dynamically created elements
   const cssRef = React.useRef<HTMLLinkElement | null>(null);
@@ -148,69 +130,9 @@ export function BrandProvider({ children }: BrandProviderProps) {
     };
   }, [config]);
 
-  // Load custom logo component when config is loaded
-  useEffect(() => {
-    if (!config?.logo?.componentPath) {
-      return;
-    }
-
-    const componentPath = config.logo.componentPath;
-    setLogoLoading(true);
-
-    // Load the ES module by creating a script tag with type="module"
-    const scriptId = 'brand-custom-logo';
-    const existingScript = document.getElementById(scriptId);
-    if (existingScript) {
-      existingScript.remove();
-    }
-
-    const script = document.createElement('script');
-    script.id = scriptId;
-    script.type = 'module';
-    script.textContent = `
-      import CustomLogo from '${componentPath}';
-      window.__BRAND_CUSTOM_LOGO__ = CustomLogo;
-      window.dispatchEvent(new CustomEvent('brand-logo-loaded'));
-    `;
-
-    const handleLogoLoaded = () => {
-      const CustomLogo = (window as any).__BRAND_CUSTOM_LOGO__;
-      if (CustomLogo) {
-        setCustomLogoComponent(() => CustomLogo);
-        setLogoError(null);
-      } else {
-        throw new Error('Custom logo component not found on window object');
-      }
-      setLogoLoading(false);
-    };
-
-    const handleError = (err: any) => {
-      console.error('[BrandProvider] Failed to load custom logo component:', err);
-      setLogoError(err instanceof Error ? err : new Error(String(err)));
-      setCustomLogoComponent(null);
-      setLogoLoading(false);
-    };
-
-    window.addEventListener('brand-logo-loaded', handleLogoLoaded);
-    script.onerror = handleError;
-
-    document.head.appendChild(script);
-
-    // Cleanup
-    return () => {
-      window.removeEventListener('brand-logo-loaded', handleLogoLoaded);
-      const scriptToRemove = document.getElementById(scriptId);
-      if (scriptToRemove) {
-        scriptToRemove.remove();
-      }
-      delete (window as any).__BRAND_CUSTOM_LOGO__;
-    };
-  }, [config]);
-
   return (
-    <BrandContext.Provider value={{ config, loading, error, customLogoComponent, logoLoading, logoError }}>
+    <BrandContext.Provider value={{ config, loading, error }}>
       {children}
     </BrandContext.Provider>
   );
 }
-

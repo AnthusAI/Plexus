@@ -1,5 +1,10 @@
 import ReportsDashboard from '@/components/reports-dashboard'
 
-export default function ReportPage({ params }: { params: { id: string } }) {
-  return <ReportsDashboard initialSelectedReportId={params.id} />
-} 
+export default async function ReportPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  return <ReportsDashboard initialSelectedReportId={id} />
+}

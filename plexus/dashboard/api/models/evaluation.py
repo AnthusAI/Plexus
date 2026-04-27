@@ -6,22 +6,23 @@ This model represents individual Evaluations in the system, tracking:
 - Processing status and progress
 - Error states and details
 - Relationships to accounts, scorecards, and scores
-
-All mutations (create/update) are performed in background threads for 
-non-blocking operation.
 """
 
 import logging
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from threading import Thread
 from .base import BaseModel
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
+
+
+def _evaluation_cost_details_enabled() -> bool:
+    """Cost details are stored in parameters.metadata; GraphQL field is disabled."""
+    return False
 
 @dataclass
 class Evaluation(BaseModel):
@@ -35,6 +36,7 @@ class Evaluation(BaseModel):
     inferences: Optional[int] = None
     accuracy: Optional[float] = None
     cost: Optional[float] = None
+    costDetails: Optional[Dict] = None
     startedAt: Optional[datetime] = None
     elapsedSeconds: Optional[int] = None
     estimatedRemainingSeconds: Optional[int] = None
@@ -67,6 +69,7 @@ class Evaluation(BaseModel):
         inferences: Optional[int] = None,
         accuracy: Optional[float] = None,
         cost: Optional[float] = None,
+        costDetails: Optional[Dict] = None,
         startedAt: Optional[datetime] = None,
         elapsedSeconds: Optional[int] = None,
         estimatedRemainingSeconds: Optional[int] = None,
@@ -96,6 +99,7 @@ class Evaluation(BaseModel):
         self.inferences = inferences
         self.accuracy = accuracy
         self.cost = cost
+        self.costDetails = costDetails
         self.startedAt = startedAt
         self.elapsedSeconds = elapsedSeconds
         self.estimatedRemainingSeconds = estimatedRemainingSeconds
@@ -117,7 +121,7 @@ class Evaluation(BaseModel):
     @classmethod
     def fields(cls) -> str:
         """Fields to request in queries and mutations"""
-        return """
+        fields = """
             id
             type
             accountId
@@ -147,6 +151,9 @@ class Evaluation(BaseModel):
             isPredictedClassDistributionBalanced
             taskId
         """
+        if _evaluation_cost_details_enabled():
+            fields = fields.replace("            cost\n", "            cost\n            costDetails\n")
+        return fields
 
     @classmethod
     def create(
@@ -172,6 +179,8 @@ class Evaluation(BaseModel):
             'updatedAt': now,
             **kwargs
         }
+        if not _evaluation_cost_details_enabled():
+            input_data.pop('costDetails', None)
         
         if scorecardId:
             input_data['scorecardId'] = scorecardId
@@ -215,6 +224,7 @@ class Evaluation(BaseModel):
             inferences=data.get('inferences'),
             accuracy=data.get('accuracy'),
             cost=data.get('cost'),
+            costDetails=data.get('costDetails'),
             startedAt=data.get('startedAt'),
             elapsedSeconds=data.get('elapsedSeconds'),
             estimatedRemainingSeconds=data.get('estimatedRemainingSeconds'),
@@ -236,44 +246,50 @@ class Evaluation(BaseModel):
         )
 
     def update(self, **kwargs) -> None:
-        """Update Evaluation fields in a background thread.
-        
-        This is a non-blocking operation - the mutation is performed
-        in a background thread.
-        
+        """Update Evaluation fields synchronously.
+
+        Terminal lifecycle updates (for example RCA persistence + COMPLETED status)
+        must be durable before the process exits.
+
         Args:
             **kwargs: Fields to update
         """
-        def _update_Evaluation():
-            try:
-                # Always update the updatedAt timestamp
-                kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
-                    '+00:00', 'Z'
-                )
-                
-                mutation = """
-                mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                    updateEvaluation(input: $input) {
-                        %s
-                    }
+        try:
+            # Always update the updatedAt timestamp
+            kwargs['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
+                '+00:00', 'Z'
+            )
+            if not _evaluation_cost_details_enabled():
+                kwargs.pop("costDetails", None)
+
+            mutation = """
+            mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
+                updateEvaluation(input: $input) {
+                    %s
                 }
-                """ % self.fields()
-                
-                variables = {
-                    'input': {
-                        'id': self.id,
-                        **kwargs
-                    }
+            }
+            """ % self.fields()
+
+            variables = {
+                'input': {
+                    'id': self.id,
+                    **kwargs
                 }
-                
-                self._client.execute(mutation, variables)
-                
-            except Exception as e:
-                logger.error(f"Error updating Evaluation: {e}")
-        
-        # Spawn background thread
-        thread = Thread(target=_update_Evaluation, daemon=True)
-        thread.start()
+            }
+
+            result = self._client.execute(mutation, variables)
+            payload = (result or {}).get("updateEvaluation") or {}
+            for field, value in payload.items():
+                if field in ['createdAt', 'updatedAt', 'startedAt'] and isinstance(value, str):
+                    try:
+                        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    except Exception:
+                        pass
+                setattr(self, field, value)
+
+        except Exception as e:
+            logger.error(f"Error updating Evaluation: {e}")
+            raise
 
     @classmethod
     def get_by_id(cls, id: str, client: '_BaseAPIClient', include_score_results: bool = False) -> 'Evaluation':

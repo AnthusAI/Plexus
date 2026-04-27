@@ -22,6 +22,10 @@ export function RunReportButton() {
   }
 
   const handleDispatch = async (commandStr: string, target?: string) => {
+    if (isLoading) {
+      return;
+    }
+
     console.log('Dispatching report task with command:', commandStr, 'target:', target);
 
     try {

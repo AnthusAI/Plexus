@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 from plexus.dashboard.api.models.base import BaseModel
 
 if TYPE_CHECKING:
@@ -14,6 +14,8 @@ class DataSet(BaseModel):
     source: Optional[str]
     filePath: Optional[str]
     errorMessage: Optional[str]
+    provenance: Optional[Dict[str, Any]]
+    buildContext: Optional[Dict[str, Any]]
     createdAt: str
     updatedAt: str
     dataSourceId: str

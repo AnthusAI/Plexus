@@ -6,10 +6,61 @@ Provides:
 - Agent.turn({inject = "message"}) - Inject additional context
 """
 
+import json
 import logging
 from typing import Any, Dict, Optional, List
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_lua_mapping(value: Any) -> Any:
+    """Convert a Lua table proxy into a plain Python mapping when possible."""
+    try:
+        from lupa import lua_type
+    except Exception:  # pragma: no cover - lupa import failure is environment-specific
+        lua_type = None
+
+    if lua_type is not None:
+        try:
+            if lua_type(value) == 'table':
+                return {k: v for k, v in value.items()}
+        except Exception as exc:  # Defensive: keep original value when Lua proxy coercion fails
+            logger.debug("Failed to coerce Lua table proxy to dict: %s", exc)
+
+    return value
+
+
+class AgentHistoryAccessor:
+    """Lua-facing conversation history helper for AgentPrimitive."""
+
+    def __init__(self, agent: "AgentPrimitive"):
+        self._agent = agent
+
+    def add(self, message: Any) -> None:
+        normalized = self._agent._normalize_history_message(message)
+        self._agent._conversation.append(normalized)
+        self._agent._initialized = True
+        logger.debug(
+            "Agent '%s' history add: %s",
+            self._agent.name,
+            type(normalized).__name__,
+        )
+
+    def get(self) -> List[Any]:
+        return LuaHistoryView(self._agent.get_conversation())
+
+    def count_tokens(self) -> int:
+        from plexus.cli.procedure.conversation_utils import ConversationUtils
+
+        try:
+            return ConversationUtils._count_tokens_in_conversation(self._agent._conversation)
+        except Exception as exc:  # pragma: no cover - defensive only
+            logger.warning(
+                "Token counting failed for agent '%s' history: %s",
+                self._agent.name,
+                exc,
+            )
+            return 0
 
 
 class AgentResponse:
@@ -35,6 +86,20 @@ class AgentResponse:
 
     def __repr__(self) -> str:
         return f"AgentResponse(content_len={len(self.content)}, tools={len(self.tool_calls)})"
+
+
+class LuaHistoryView:
+    """1-indexed, nil-on-miss view for Lua iteration over Python message history."""
+
+    def __init__(self, messages: List[Any]):
+        self._messages = list(messages)
+
+    def __getitem__(self, index: Any) -> Any:
+        if not isinstance(index, int):
+            return None
+        if index < 1 or index > len(self._messages):
+            return None
+        return self._messages[index - 1]
 
 
 class AgentPrimitive:
@@ -89,10 +154,109 @@ class AgentPrimitive:
         self._conversation: List[Any] = []
         self._initialized = False
 
+        # Last turn's text content (accessible from Lua as agent.output)
+        self.output = None
+
+        # Lua-facing history helper expected by optimizer procedures.
+        self.history = AgentHistoryAccessor(self)
+
         # Recording queue (for async chat recording)
         self._recording_queue: List[Dict[str, Any]] = []
 
         logger.info(f"AgentPrimitive '{name}' initialized with {len(available_tools)} tools")
+
+    def _normalize_tool_args_value(
+        self,
+        tool_name: str,
+        raw_args: Any,
+        *,
+        source: str = "args",
+        allow_callable: bool = True,
+    ) -> tuple[Dict[str, Any], Optional[str]]:
+        """Normalize tool-call args into a plain dict for execution and recording."""
+        if raw_args is None:
+            return {}, None
+
+        if isinstance(raw_args, dict):
+            return raw_args, None
+
+        if isinstance(raw_args, str):
+            if not raw_args.strip():
+                return {}, None
+            try:
+                parsed = json.loads(raw_args)
+            except Exception as exc:
+                return {}, (
+                    f"{source} for tool '{tool_name}' must be a JSON object string; "
+                    f"decode failed with {type(exc).__name__}: {exc}"
+                )
+            if isinstance(parsed, dict):
+                return parsed, None
+            return {}, (
+                f"{source} for tool '{tool_name}' must decode to a dict, "
+                f"got {type(parsed).__name__}"
+            )
+
+        if callable(raw_args) and allow_callable:
+            try:
+                called_args = raw_args()
+            except Exception as exc:
+                return {}, (
+                    f"{source} callable for tool '{tool_name}' raised "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            return self._normalize_tool_args_value(
+                tool_name,
+                called_args,
+                source=f"{source}()",
+                allow_callable=False,
+            )
+
+        return {}, (
+            f"{source} for tool '{tool_name}' must normalize to a dict; "
+            f"got {type(raw_args).__name__}"
+        )
+
+    def _extract_tool_call_info(
+        self,
+        tool_call: Any,
+    ) -> tuple[str, Dict[str, Any], Optional[str], Optional[str]]:
+        """Extract a tool name, normalized args dict, tool call id, and optional args error."""
+        if isinstance(tool_call, dict):
+            tool_name = tool_call.get('name', 'UNKNOWN')
+            tool_call_id = tool_call.get('id')
+            tool_args, args_error = self._normalize_tool_args_value(
+                tool_name,
+                tool_call.get('args'),
+                source="args",
+            )
+            return tool_name, tool_args, tool_call_id, args_error
+
+        tool_name = getattr(tool_call, 'name', 'UNKNOWN')
+        tool_call_id = getattr(tool_call, 'id', None)
+
+        args_as_dict = getattr(tool_call, 'args_as_dict', None) if hasattr(type(tool_call), 'args_as_dict') else None
+        if callable(args_as_dict):
+            try:
+                raw_args = args_as_dict()
+            except Exception as exc:
+                return tool_name, {}, tool_call_id, (
+                    f"args_as_dict() for tool '{tool_name}' raised "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            tool_args, args_error = self._normalize_tool_args_value(
+                tool_name,
+                raw_args,
+                source="args_as_dict()",
+            )
+            return tool_name, tool_args, tool_call_id, args_error
+
+        tool_args, args_error = self._normalize_tool_args_value(
+            tool_name,
+            getattr(tool_call, 'args', None),
+            source="args",
+        )
+        return tool_name, tool_args, tool_call_id, args_error
 
     def turn(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -134,6 +298,7 @@ class AgentPrimitive:
 
             # Process response
             response_content = getattr(ai_response, 'content', '') or ''
+            self.output = response_content  # Store for Lua access
             tool_calls = getattr(ai_response, 'tool_calls', [])
 
             # Add AI response to conversation
@@ -205,6 +370,32 @@ class AgentPrimitive:
         self._initialized = True
         logger.debug(f"Agent '{self.name}' conversation initialized")
 
+    def _normalize_history_message(self, message: Any) -> Any:
+        """Normalize Lua/Python history entries into LangChain-compatible messages."""
+        message = _coerce_lua_mapping(message)
+        if not isinstance(message, dict):
+            return message
+
+        role = str(message.get('role', 'user') or 'user').lower()
+        content = message.get('content', '')
+        if content is None:
+            content = ''
+        content = str(content)
+
+        try:
+            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+        except ImportError:  # pragma: no cover - compatibility only
+            from langchain.schema import SystemMessage, HumanMessage, AIMessage, ToolMessage
+
+        if role == 'system':
+            return SystemMessage(content=content)
+        if role in ('assistant', 'ai'):
+            return AIMessage(content=content)
+        if role == 'tool':
+            tool_call_id = message.get('tool_call_id') or "manual-tool-call"
+            return ToolMessage(content=content, tool_call_id=str(tool_call_id))
+        return HumanMessage(content=content)
+
     def _queue_recording(self, message_data: Dict[str, Any]):
         """Queue a message for async recording later."""
         if self.chat_recorder:
@@ -220,6 +411,18 @@ class AgentPrimitive:
         self._conversation = []
         self._initialized = False
         logger.debug(f"Agent '{self.name}' reset conversation state")
+
+    def clear_history(self) -> None:
+        """Lua-facing alias for reset()."""
+        self.reset()
+
+    def __call__(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Lua-facing call syntax: agent({message=...}) or agent()."""
+        opts = _coerce_lua_mapping(options)
+        if isinstance(opts, dict) and 'message' in opts and 'inject' not in opts:
+            opts = dict(opts)
+            opts['inject'] = opts.pop('message')
+        return self.turn(opts if isinstance(opts, dict) else None)
 
     async def flush_recordings(self):
         """Flush queued recordings to chat session (called by runtime after workflow)."""
@@ -264,20 +467,16 @@ class AgentPrimitive:
         executed = []
 
         for tool_call in tool_calls:
-            # Extract tool call info (handle both dict and object formats)
-            if isinstance(tool_call, dict):
-                tool_name = tool_call.get('name', 'UNKNOWN')
-                tool_args = tool_call.get('args', {})
-                tool_call_id = tool_call.get('id')
-            else:
-                tool_name = getattr(tool_call, 'name', 'UNKNOWN')
-                tool_args = getattr(tool_call, 'args', {})
-                tool_call_id = getattr(tool_call, 'id', None)
+            tool_name, tool_args, tool_call_id, args_error = self._extract_tool_call_info(tool_call)
 
             logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
 
-            # Execute tool
-            tool_result = self._execute_single_tool(tool_name, tool_args)
+            if args_error:
+                logger.error(f"Malformed tool call args for '{tool_name}': {args_error}")
+                tool_result = f"Tool argument error: {args_error}"
+            else:
+                # Execute tool
+                tool_result = self._execute_single_tool(tool_name, tool_args)
 
             # Record tool call in ToolPrimitive
             self.tool_primitive.record_call(tool_name, tool_args, tool_result)
@@ -294,7 +493,7 @@ class AgentPrimitive:
             })
 
             # Check if this is a stop request
-            if tool_name == "done" or tool_name == "stop":
+            if not args_error and (tool_name == "done" or tool_name == "stop"):
                 reason = tool_args.get('reason', 'Agent requested stop')
                 success = tool_args.get('success', True)
                 self.stop_primitive.request(reason, success)

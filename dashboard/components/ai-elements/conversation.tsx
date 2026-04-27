@@ -4,40 +4,36 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { ArrowDownIcon, DownloadIcon } from "lucide-react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode, RefObject } from "react";
 import { useCallback } from "react";
-import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
+import type { VirtuosoHandle } from "react-virtuoso";
 
-export type ConversationProps = ComponentProps<typeof StickToBottom>;
+// Simple container for the conversation area — Virtuoso manages its own scroll
+export type ConversationProps = ComponentProps<"div">;
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
-  <StickToBottom
-    className={cn("relative flex-1 overflow-y-hidden", className)}
-    initial="smooth"
-    resize="smooth"
+  <div
+    className={cn("relative flex-1 overflow-hidden", className)}
     role="log"
     {...props}
   />
 );
 
-export type ConversationContentProps = ComponentProps<
-  typeof StickToBottom.Content
->;
+// ConversationContent is not used in the Virtuoso path (Virtuoso renders items
+// directly) but kept for any non-virtualised usages.
+export type ConversationContentProps = ComponentProps<"div">;
 
 export const ConversationContent = ({
   className,
   ...props
 }: ConversationContentProps) => (
-  <StickToBottom.Content
-    className={cn("flex flex-col gap-8 p-4", className)}
-    {...props}
-  />
+  <div className={cn("flex flex-col gap-8 p-4", className)} {...props} />
 );
 
 export type ConversationEmptyStateProps = ComponentProps<"div"> & {
   title?: string;
   description?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
 };
 
 export const ConversationEmptyState = ({
@@ -69,17 +65,20 @@ export const ConversationEmptyState = ({
   </div>
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = ComponentProps<typeof Button> & {
+  isAtBottom: boolean;
+  virtuosoRef: RefObject<VirtuosoHandle | null>;
+};
 
 export const ConversationScrollButton = ({
   className,
+  isAtBottom,
+  virtuosoRef,
   ...props
 }: ConversationScrollButtonProps) => {
-  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
-
   const handleScrollToBottom = useCallback(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+    virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "smooth" });
+  }, [virtuosoRef]);
 
   return (
     !isAtBottom && (

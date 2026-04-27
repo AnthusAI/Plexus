@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from .base import BaseReportBlock
 from .score_info import ScoreInfo
+from .feedback_alignment import FeedbackAlignment
 from .feedback_analysis import FeedbackAnalysis
 from .explanation_analysis import ExplanationAnalysis
 from .topic_analysis import TopicAnalysis
@@ -9,10 +10,17 @@ from .cost_analysis import CostAnalysis
 from .vector_topic_memory import VectorTopicMemory
 from .action_items_block import ActionItems
 from .feedback_contradictions import FeedbackContradictions
+from .feedback_alignment_timeline import FeedbackAlignmentTimeline
+from .feedback_volume_timeline import FeedbackVolumeTimeline
+from .correction_rate import CorrectionRate
+from .acceptance_rate import AcceptanceRate
+from .acceptance_rate_timeline import AcceptanceRateTimeline
+from .recent_feedback import RecentFeedback
 
 __all__ = [
     "BaseReportBlock",
     "ScoreInfo",
+    "FeedbackAlignment",
     "FeedbackAnalysis",
     "ExplanationAnalysis",
     "TopicAnalysis",
@@ -20,4 +28,10 @@ __all__ = [
     "VectorTopicMemory",
     "ActionItems",
     "FeedbackContradictions",
+    "FeedbackAlignmentTimeline",
+    "FeedbackVolumeTimeline",
+    "CorrectionRate",
+    "AcceptanceRate",
+    "AcceptanceRateTimeline",
+    "RecentFeedback",
 ]
