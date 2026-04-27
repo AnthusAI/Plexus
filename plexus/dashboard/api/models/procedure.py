@@ -83,7 +83,6 @@ class Procedure(BaseModel):
             code
             parentProcedureId
             isTemplate
-            rootNodeId
             createdAt
             updatedAt
             accountId
@@ -423,6 +422,5 @@ class Procedure(BaseModel):
         self.updatedAt = updated_procedure.updatedAt
         
         return self
-
 
 

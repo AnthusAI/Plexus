@@ -113,7 +113,7 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
         provider: str = "openai",
         model: str = "gpt-5-mini",
         procedure_id: str = "rubric_memory_sme_question_gate",
-        max_tokens: int = 5000,
+        max_tokens: int = 16000,
     ):
         self.provider = provider
         self.model = model
@@ -141,7 +141,7 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
             format="lua",
         )
         raw_text = self._extract_text(result)
-        return json.loads(self._strip_json_fence(raw_text))
+        return json.loads(self._strip_json_fence(raw_text), strict=False)
 
     def _load_tac_source(self) -> str:
         tac_path = Path(__file__).resolve().parent / "procedures" / "sme_question_gate.tac"

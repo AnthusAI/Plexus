@@ -21,15 +21,16 @@ def test_optimizer_yaml_defines_dedicated_reporting_agents():
     assert agents["code_editor"]["model"] == "gpt-5-mini"
 
     assert agents["cycle_analyst"]["model"] == "gpt-5-mini"
-    assert agents["cycle_analyst"]["max_tokens"] == 1200
+    assert agents["cycle_analyst"]["max_tokens"] == 16000
     assert agents["cycle_analyst"]["verbosity"] == "low"
 
     assert agents["report_writer"]["model"] == "gpt-5-mini"
-    assert agents["report_writer"]["max_tokens"] == 900
+    assert agents["report_writer"]["max_tokens"] == 16000
     assert agents["report_writer"]["verbosity"] == "low"
 
     assert agents["reviewer"]["model"] == "gpt-5.4-mini"
     assert agents["early_stop_advisor"]["model"] == "gpt-5.4-mini"
+    assert agents["early_stop_advisor"]["temperature"] == 1
 
 
 def test_optimizer_yaml_routes_report_generation_to_reporting_agents():
@@ -115,6 +116,7 @@ def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch
     assert 'background = false' not in code
     assert "dispatched in background" not in code
     assert "consume results later" not in code
+    assert "include_rubric_memory = false" in code
     assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
     assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
 

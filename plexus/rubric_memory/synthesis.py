@@ -36,7 +36,7 @@ class TactusRubricEvidenceSynthesizer:
         provider: str = "openai",
         model: str = "gpt-5-mini",
         procedure_id: str = "rubric_evidence_pack_synthesis",
-        max_tokens: int = 12000,
+        max_tokens: int = 16000,
     ):
         self.provider = provider
         self.model = model
@@ -115,7 +115,7 @@ class TactusRubricEvidenceSynthesizer:
             format="lua",
         )
         raw_text = self._extract_text(result)
-        parsed = json.loads(self._strip_json_fence(raw_text))
+        parsed = json.loads(self._strip_json_fence(raw_text), strict=False)
         return RubricEvidencePack.model_validate(parsed)
 
     def _load_tac_source(self) -> str:
