@@ -3,7 +3,7 @@
   "title": "ScoreVersion management: pinning, diffs, and champion history",
   "description": "",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Starting implementation. First priority is the urgent GraphQL schema slice: add ScoreVersion.metadata as JSON and one featured-version lookup index, with no other table/index changes. Follow-up implementation will add frontend, CLI, MCP, and champion-history promotion wiring on the same feature branch.",
       "created_at": "2026-04-27T18:14:17.839783Z"
+    },
+    {
+      "id": "407edb58-df8e-497f-9cda-02b1dadc5991",
+      "author": "ryan",
+      "text": "ScoreVersion management feature landed in develop via PR #220. Includes pinning, diffs, champion history metadata, related-version cards, and CLI/MCP utilities. Develop CI passed.",
+      "created_at": "2026-04-27T22:27:33.042791Z"
     }
   ],
   "created_at": "2026-04-27T18:14:11.621385Z",
-  "updated_at": "2026-04-27T18:14:17.839783Z",
-  "closed_at": null,
+  "updated_at": "2026-04-27T22:27:33.139446Z",
+  "closed_at": "2026-04-27T22:27:33.139446Z",
   "custom": {}
 }
