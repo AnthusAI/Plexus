@@ -19,7 +19,7 @@ gate_agent = Agent {
     provider = "{{PROVIDER}}",
     model = "{{MODEL}}",
     model_type = "chat",
-    temperature = 0.0,
+    temperature = 1.0,
     max_tokens = {{MAX_TOKENS}},
     system_prompt = [[
 You gate proposed SME agenda questions using rubric-memory evidence.

@@ -17,15 +17,19 @@ def test_optimizer_yaml_defines_dedicated_reporting_agents():
     config = _load_optimizer_config()
     agents = config["agents"]
 
-    assert agents["code_editor"]["model"] == "gpt-5.4"
+    assert agents["hypothesis_planner"]["model"] == "gpt-5.4-mini"
+    assert agents["code_editor"]["model"] == "gpt-5-mini"
 
-    assert agents["cycle_analyst"]["model"] == "gpt-5.4"
+    assert agents["cycle_analyst"]["model"] == "gpt-5-mini"
     assert agents["cycle_analyst"]["max_tokens"] == 1200
     assert agents["cycle_analyst"]["verbosity"] == "low"
 
-    assert agents["report_writer"]["model"] == "gpt-5.2"
+    assert agents["report_writer"]["model"] == "gpt-5-mini"
     assert agents["report_writer"]["max_tokens"] == 900
     assert agents["report_writer"]["verbosity"] == "low"
+
+    assert agents["reviewer"]["model"] == "gpt-5.4-mini"
+    assert agents["early_stop_advisor"]["model"] == "gpt-5.4-mini"
 
 
 def test_optimizer_yaml_routes_report_generation_to_reporting_agents():
@@ -36,6 +40,18 @@ def test_optimizer_yaml_routes_report_generation_to_reporting_agents():
     assert 'safe_agent_call(report_writer, "report_writer"' in code
     assert "report_writer.history:add({role = \"system\", content = full_ctx})" in code
     assert "Write a complete technical analysis" not in code
+
+
+def test_optimizer_yaml_uses_dedicated_hypothesis_planner_and_agent_model_overrides():
+    config = _load_optimizer_config()
+    code = config["code"]
+    params = config["params"]
+
+    assert params["agent_models"]["type"] == "object"
+    assert "hypothesis_planner" in config["agents"]
+    assert "hypothesis_planner.clear_history()" in code
+    assert 'safe_agent_call(hypothesis_planner, "hypothesis_planner"' in code
+    assert "local response = hypothesis_planner.output or \"\"" in code
 
 
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():
