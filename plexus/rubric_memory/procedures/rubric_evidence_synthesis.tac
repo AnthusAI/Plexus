@@ -19,7 +19,7 @@ synthesizer = Agent {
     provider = "{{PROVIDER}}",
     model = "{{MODEL}}",
     model_type = "chat",
-    temperature = 0.0,
+    temperature = 1.0,
     max_tokens = {{MAX_TOKENS}},
     system_prompt = [[
 You synthesize RubricEvidencePack JSON for Plexus.

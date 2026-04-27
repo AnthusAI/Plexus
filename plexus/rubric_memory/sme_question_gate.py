@@ -110,8 +110,8 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
     def __init__(
         self,
         *,
-        provider: str = "bedrock",
-        model: str = "us.anthropic.claude-sonnet-4-6",
+        provider: str = "openai",
+        model: str = "gpt-5-mini",
         procedure_id: str = "rubric_memory_sme_question_gate",
         max_tokens: int = 5000,
     ):

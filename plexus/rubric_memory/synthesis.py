@@ -33,8 +33,8 @@ class TactusRubricEvidenceSynthesizer:
     def __init__(
         self,
         *,
-        provider: str = "bedrock",
-        model: str = "us.anthropic.claude-sonnet-4-6",
+        provider: str = "openai",
+        model: str = "gpt-5-mini",
         procedure_id: str = "rubric_evidence_pack_synthesis",
         max_tokens: int = 12000,
     ):

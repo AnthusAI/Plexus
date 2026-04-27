@@ -100,6 +100,25 @@ class LuaDSLRuntime:
 
         logger.info(f"LuaDSLRuntime initialized for procedure {procedure_id}")
 
+    @staticmethod
+    def _resolve_agent_model(
+        agent_name: str,
+        agent_config: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> str:
+        overrides = context.get("agent_models") or {}
+        if not isinstance(overrides, dict):
+            raise LuaDSLRuntimeError("context.agent_models must be an object mapping agent names to model names")
+
+        override = overrides.get(agent_name)
+        if override is None:
+            return agent_config.get('model', 'gpt-5')
+
+        model = str(override or "").strip()
+        if not model:
+            raise LuaDSLRuntimeError(f"context.agent_models.{agent_name} must not be blank")
+        return model
+
     async def execute(self, yaml_config: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Execute a Lua-based procedure workflow.
@@ -498,7 +517,7 @@ class LuaDSLRuntime:
             # Create LLM from agent config
             from plexus.cli.procedure.model_config import ModelConfig
 
-            model_name = agent_config.get('model', 'gpt-5')
+            model_name = self._resolve_agent_model(agent_name, agent_config, context)
             temperature = agent_config.get('temperature')
             model_cfg = ModelConfig(
                 model=model_name,
