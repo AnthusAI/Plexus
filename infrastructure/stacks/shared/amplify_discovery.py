@@ -10,6 +10,15 @@ from typing import Dict, Optional, List
 from botocore.exceptions import ClientError
 
 
+METRICS_TABLE_PATTERNS = {
+    'item': 'Item',
+    'scoreResult': 'ScoreResult',
+    'task': 'Task',
+    'evaluation': 'Evaluation',
+    'procedure': 'Procedure'
+}
+
+
 class AmplifyTableDiscovery:
     """
     Discovers DynamoDB table ARNs from Amplify CloudFormation stacks.
@@ -119,7 +128,7 @@ class AmplifyTableDiscovery:
                            resource['ResourceType'] == 'Custom::AmplifyDynamoDBTable')
                 
                 # Match pattern in logical ID - look for exact match with "Table" suffix
-                # e.g., "ItemTable", "ScoreResultTable", "TaskTable", "EvaluationTable"
+                # e.g., "ItemTable", "ScoreResultTable", "TaskTable", "EvaluationTable", "ProcedureTable"
                 matches_pattern = (f"{logical_id_pattern}Table" == resource['LogicalResourceId'])
                 
                 if is_table and matches_pattern:
@@ -248,7 +257,7 @@ def discover_tables_for_metrics_aggregation(region: str = 'us-west-2',
                       If not provided, will use AMPLIFY_STACK_PATTERN env var.
         
     Returns:
-        Dict with 'item', 'scoreResult', 'task', 'evaluation' table information
+        Dict with 'item', 'scoreResult', 'task', 'evaluation', and 'procedure' table information
         
     Raises:
         ValueError: If stack_pattern is not provided and AMPLIFY_STACK_PATTERN env var is not set
@@ -266,14 +275,7 @@ def discover_tables_for_metrics_aggregation(region: str = 'us-west-2',
     
     discovery = AmplifyTableDiscovery(region=region)
     
-    table_patterns = {
-        'item': 'Item',
-        'scoreResult': 'ScoreResult',
-        'task': 'Task',
-        'evaluation': 'Evaluation'
-    }
-    
-    return discovery.discover_amplify_tables(table_patterns, stack_pattern)
+    return discovery.discover_amplify_tables(METRICS_TABLE_PATTERNS, stack_pattern)
 
 
 if __name__ == '__main__':
@@ -287,4 +289,3 @@ if __name__ == '__main__':
         print(f"  Table Name: {info['table_name']}")
         print(f"  Table ARN: {info['table_arn']}")
         print(f"  Stream ARN: {info['stream_arn']}")
-

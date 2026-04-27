@@ -2,21 +2,29 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
-import { useProceduresMetrics } from '../hooks/useUnifiedMetrics'
+import { useEvaluationsMetrics, useProceduresMetrics } from '../hooks/useUnifiedMetrics'
+
+type ProceduresChartPoint = {
+  time: string
+  procedures?: number
+  evaluations?: number
+  bucketStart?: string
+  bucketEnd?: string
+}
 
 // Configuration for procedures-specific gauges.
 const proceduresGaugesConfig: BaseGaugesConfig = {
-  // Use grid layout to match ItemsGauges pattern
+  // Match EvaluationTasksGauges: two gauges side-by-side with the histogram filling the remaining space.
   layout: 'grid',
   gridCols: {
-    base: 1,
-    sm: 2,
-    md: 3,
-    lg: 4,
-    xl: 5
+    base: 2,
+    sm: 3,
+    md: 4,
+    lg: 5,
+    xl: 6
   },
   chartSpan: {
-    base: 1,
+    base: 2,
     sm: 1,
     md: 2,
     lg: 3,
@@ -38,6 +46,21 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
         { start: 0, end: 90, color: 'var(--neutral)' },
         { start: 90, end: 100, color: 'var(--false)' }
       ]
+    },
+    {
+      key: 'evaluations',
+      title: 'Evaluations / hour',
+      valueKey: 'evaluationsPerHour',
+      averageKey: 'evaluationsAveragePerHour',
+      peakKey: 'evaluationsPeakHourly',
+      totalKey: 'evaluationsTotal24h',
+      color: 'hsl(var(--chart-2))',
+      unit: '',
+      decimalPlaces: 0,
+      segments: [
+        { start: 0, end: 90, color: 'var(--neutral)' },
+        { start: 90, end: 100, color: 'var(--false)' }
+      ]
     }
   ],
   chartAreas: [
@@ -46,12 +69,22 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       label: 'Procedures',
       color: 'var(--primary)',
       fillOpacity: 0.8
+    },
+    {
+      dataKey: 'evaluations',
+      label: 'Evaluations',
+      color: 'var(--secondary)',
+      fillOpacity: 0.8
     }
   ],
   chartConfig: {
     procedures: {
       label: 'Procedures',
       color: 'hsl(var(--chart-1))',
+    },
+    evaluations: {
+      label: 'Evaluations',
+      color: 'hsl(var(--chart-2))',
     },
   }
 }
@@ -75,29 +108,69 @@ export function ProceduresGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: ProceduresGaugesProps) {
-  // Use procedures metrics.
-  const { 
-    metrics: metricsData, 
-    isLoading, 
-    error 
-  } = useProceduresMetrics()
+  const [timeRange, setTimeRange] = React.useState<{ start: Date; end: Date; period: 'hour' | 'day' | 'week' } | null>(null)
 
-  // Transform metrics data to BaseGaugesData format
-  const data: BaseGaugesData | null = metricsData ? {
-    // Procedures data
-    proceduresPerHour: metricsData.itemsPerHour || 0,
-    proceduresAveragePerHour: metricsData.itemsAveragePerHour || 0,
-    proceduresPeakHourly: metricsData.itemsPeakHourly || 10, // Use higher baseline for procedures
-    proceduresTotal24h: metricsData.itemsTotal24h || 0,
-    chartData: metricsData.chartData?.map((point: any) => ({
+  // Use procedures and evaluations metrics for the Procedures dashboard.
+  const { 
+    metrics: proceduresMetrics, 
+    isLoading: isProceduresLoading, 
+    error: proceduresError 
+  } = useProceduresMetrics({
+    timeRange: timeRange || undefined
+  })
+  const {
+    metrics: evaluationsMetrics,
+    isLoading: isEvaluationsLoading,
+    error: evaluationsError
+  } = useEvaluationsMetrics({
+    timeRange: timeRange || undefined
+  })
+
+  const chartDataByTime = new Map<string, ProceduresChartPoint>()
+
+  proceduresMetrics?.chartData?.forEach((point: any) => {
+    chartDataByTime.set(point.time, {
       time: point.time,
-      procedures: point.items || 0, // Map items to procedures for chart display
+      procedures: point.items || 0,
       bucketStart: point.bucketStart,
       bucketEnd: point.bucketEnd
-    })) || [],
-    lastUpdated: metricsData.lastUpdated || new Date(),
-    hasErrorsLast24h: metricsData.hasErrorsLast24h || false,
-    totalErrors24h: metricsData.totalErrors24h || 0
+    })
+  })
+
+  evaluationsMetrics?.chartData?.forEach((point: any) => {
+    const existing: ProceduresChartPoint = chartDataByTime.get(point.time) || { time: point.time }
+    chartDataByTime.set(point.time, {
+      ...existing,
+      evaluations: point.items || 0,
+      bucketStart: existing.bucketStart || point.bucketStart,
+      bucketEnd: existing.bucketEnd || point.bucketEnd
+    })
+  })
+
+  const chartData = Array.from(chartDataByTime.values()).map((point) => ({
+    procedures: 0,
+    evaluations: 0,
+    ...point
+  }))
+
+  // Transform metrics data to BaseGaugesData format
+  const data: BaseGaugesData | null = proceduresMetrics || evaluationsMetrics ? {
+    // Procedures data
+    proceduresPerHour: proceduresMetrics?.itemsPerHour || 0,
+    proceduresAveragePerHour: proceduresMetrics?.itemsAveragePerHour || 0,
+    proceduresPeakHourly: proceduresMetrics?.itemsPeakHourly || 10, // Use higher baseline for procedures
+    proceduresTotal24h: proceduresMetrics?.itemsTotal24h || 0,
+
+    // Evaluations data
+    evaluationsPerHour: evaluationsMetrics?.itemsPerHour || 0,
+    evaluationsAveragePerHour: evaluationsMetrics?.itemsAveragePerHour || 0,
+    evaluationsPeakHourly: evaluationsMetrics?.itemsPeakHourly || 10,
+    evaluationsTotal24h: evaluationsMetrics?.itemsTotal24h || 0,
+
+    chartData,
+    lastUpdated: proceduresMetrics?.lastUpdated || evaluationsMetrics?.lastUpdated || new Date(),
+    hasErrorsLast24h: proceduresMetrics?.hasErrorsLast24h || evaluationsMetrics?.hasErrorsLast24h || false,
+    totalErrors24h: (proceduresMetrics?.totalErrors24h || 0) + (evaluationsMetrics?.totalErrors24h || 0)
   } : null
 
   return (
@@ -105,13 +178,15 @@ export function ProceduresGauges({
       className={className}
       config={proceduresGaugesConfig}
       data={useRealData ? data : null}
-      isLoading={isLoading}
-      error={error}
+      isLoading={isProceduresLoading || isEvaluationsLoading}
+      error={proceduresError || evaluationsError}
       title="Procedures"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
       onErrorClick={onErrorClick}
+      enableTimeNavigation={true}
+      onTimeRangeChange={setTimeRange}
     />
   )
 }

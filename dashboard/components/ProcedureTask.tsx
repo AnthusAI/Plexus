@@ -1117,11 +1117,18 @@ export default function ProcedureTask({
         </div>
       )
     } else {
+      const hasGridActions = Boolean(controlButtons)
       // Custom header for grid view with bold scorecard/score
       return (
         <div className="space-y-1.5 p-0 flex flex-col items-start w-full max-w-full">
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {hasGridActions && (
+                <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold min-w-0">
+                  <Waypoints className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  <span className="truncate">{props.task.type || 'Procedure'}</span>
+                </div>
+              )}
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.scorecard}</span>
@@ -1143,9 +1150,11 @@ export default function ProcedureTask({
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               <div className="flex items-center gap-2">
-                <div className="text-muted-foreground">
-                  <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                </div>
+                {!hasGridActions && (
+                  <div className="text-muted-foreground">
+                    <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  </div>
+                )}
                 {controlButtons}
               </div>
             </div>
