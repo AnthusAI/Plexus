@@ -79,8 +79,9 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   const sortedVersions = [...versions].sort((a, b) => 
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
-  const pinnedVersions = sortedVersions.filter(v => v.isFeatured && v.id !== championVersionId)
-  const recentVersions = sortedVersions.filter(v => v.id !== championVersionId && !v.isFeatured)
+  const isPinned = (version: ScoreVersion) => version.featuredKey === 'featured'
+  const pinnedVersions = sortedVersions.filter(v => isPinned(v) && v.id !== championVersionId)
+  const recentVersions = sortedVersions.filter(v => v.id !== championVersionId && !isPinned(v))
 
   const renderVersionButton = (version: ScoreVersion, icon: React.ReactNode, title?: string) => (
     <Button
@@ -109,7 +110,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
           <span
             role="button"
             tabIndex={0}
-            aria-label={version.isFeatured ? "Unstar version" : "Star version"}
+            aria-label={isPinned(version) ? "Unstar version" : "Star version"}
             className="shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-background hover:text-foreground"
             onClick={(event) => {
               event.stopPropagation()
@@ -123,7 +124,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               }
             }}
           >
-            <Star className={`h-3.5 w-3.5 ${version.isFeatured ? 'fill-current' : ''}`} />
+            <Star className={`h-3.5 w-3.5 ${isPinned(version) ? 'fill-current' : ''}`} />
           </span>
         )}
       </div>
@@ -187,7 +188,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
           )}
           {pinnedVersions.map((version) => renderVersionButton(
             version,
-            <Star className="h-4 w-4 flex-shrink-0 fill-current" />
+            <Clock className="h-4 w-4 flex-shrink-0" />
           ))}
 
           {recentVersions.length > 0 && (
@@ -232,7 +233,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               className="w-full h-8 p-0"
               title={version.note || `Version ${version.id.slice(0, 8)}`}
             >
-              {version.isFeatured ? <Star className="h-4 w-4 fill-current" /> : <Clock className="h-4 w-4" />}
+              {isPinned(version) ? <Star className="h-4 w-4 fill-current" /> : <Clock className="h-4 w-4" />}
             </Button>
           ))}
         </div>
