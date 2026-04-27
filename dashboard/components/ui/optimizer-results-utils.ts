@@ -197,6 +197,17 @@ export type OptimizerBestMetricResult = {
   versionId?: string | null
 }
 
+export type ProcedureFeedbackEvaluationSummary = {
+  id: string
+  status?: string | null
+  accuracy?: number | null
+  processedItems?: number | null
+  totalItems?: number | null
+  baselineEvaluationId?: string | null
+  currentBaselineEvaluationId?: string | null
+  updatedAt?: string | null
+}
+
 export type OptimizerManifest = {
   procedure?: {
     id?: string
@@ -206,6 +217,8 @@ export type OptimizerManifest = {
   }
   baseline?: {
     version_id?: string | null
+    current_feedback_evaluation_id?: string | null
+    original_feedback_evaluation_id?: string | null
   }
   summary?: {
     completed_cycles?: number | null
@@ -286,6 +299,7 @@ export type OptimizerRunView = {
   } | null
   manifest?: OptimizerManifest | null
   scoreVersionId?: string | null
+  feedbackEvaluationSummary?: ProcedureFeedbackEvaluationSummary | null
 }
 
 export type ScoreVersionSummary = {
@@ -549,6 +563,142 @@ export function findBestOptimizerEvaluation(
   }
 
   return bestResult
+}
+
+function currentFeedbackEvaluationIdFromCycle(cycle: Record<string, any> | null | undefined): string | null {
+  if (!cycle) return null
+  if (cycle.accepted !== true && cycle.status !== 'accepted' && cycle.status !== 'carried') return null
+  const value = cycle.feedback_evaluation_id ?? cycle.recent_evaluation_id
+  return typeof value === 'string' && value ? value : null
+}
+
+export function currentProcedureFeedbackEvaluationId(
+  manifest: OptimizerManifest | null | undefined
+): string | null {
+  if (!manifest) return null
+
+  for (const cycle of [...(manifest.cycles ?? [])].reverse()) {
+    const cycleEvaluationId = currentFeedbackEvaluationIdFromCycle(cycle)
+    if (cycleEvaluationId) return cycleEvaluationId
+  }
+
+  const bestEvaluationId = manifest.best?.best_feedback_evaluation_id
+  if (typeof bestEvaluationId === 'string' && bestEvaluationId) return bestEvaluationId
+
+  const currentBaselineEvaluationId = manifest.baseline?.current_feedback_evaluation_id
+  if (typeof currentBaselineEvaluationId === 'string' && currentBaselineEvaluationId) return currentBaselineEvaluationId
+
+  const originalBaselineEvaluationId = manifest.baseline?.original_feedback_evaluation_id
+  return typeof originalBaselineEvaluationId === 'string' && originalBaselineEvaluationId
+    ? originalBaselineEvaluationId
+    : null
+}
+
+export function feedbackEvaluationSummaryFromView(
+  evaluation: ScoreEvaluationView | null | undefined
+): ProcedureFeedbackEvaluationSummary | null {
+  if (!evaluation?.id) return null
+  return {
+    id: evaluation.id,
+    status: evaluation.status ?? null,
+    accuracy: evaluation.accuracy ?? null,
+    processedItems: evaluation.processedItems ?? null,
+    totalItems: evaluation.totalItems ?? null,
+    baselineEvaluationId: evaluation.baselineEvaluationId ?? null,
+    currentBaselineEvaluationId: evaluation.currentBaselineEvaluationId ?? null,
+    updatedAt: evaluation.updatedAt ?? evaluation.createdAt ?? null,
+  }
+}
+
+export function procedureRunReferencesFeedbackEvaluation(
+  run: OptimizerRunView,
+  evaluationId: string | null | undefined
+): boolean {
+  return Boolean(evaluationId && currentProcedureFeedbackEvaluationId(run.manifest) === evaluationId)
+}
+
+export function mergeFeedbackEvaluationIntoProcedureRun(
+  run: OptimizerRunView,
+  evaluation: ScoreEvaluationView
+): OptimizerRunView {
+  if (!procedureRunReferencesFeedbackEvaluation(run, evaluation.id)) return run
+  return {
+    ...run,
+    feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
+  }
+}
+
+export async function loadScoreEvaluationById(evaluationId: string): Promise<ScoreEvaluationView | null> {
+  const response = await getAmplifyClient().graphql({
+    query: `
+      query GetEvaluationForProcedurePerformance($id: ID!) {
+        getEvaluation(id: $id) {
+          ${EVALUATION_CARD_FIELDS}
+        }
+      }
+    `,
+    variables: { id: evaluationId },
+  }) as any
+
+  const evaluation = response.data?.getEvaluation
+  return evaluation ? evaluationToScoreEvaluationView(evaluation) : null
+}
+
+export async function hydrateProcedureRunFeedbackEvaluation(
+  run: OptimizerRunView
+): Promise<OptimizerRunView> {
+  const evaluationId = currentProcedureFeedbackEvaluationId(run.manifest)
+  if (!evaluationId) {
+    return { ...run, feedbackEvaluationSummary: null }
+  }
+
+  try {
+    const evaluation = await loadScoreEvaluationById(evaluationId)
+    return {
+      ...run,
+      feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
+    }
+  } catch (error) {
+    console.error('Failed to load procedure feedback evaluation', evaluationId, error)
+    return run
+  }
+}
+
+export async function hydrateProcedureRunsFeedbackEvaluations(
+  runs: OptimizerRunView[]
+): Promise<OptimizerRunView[]> {
+  const evaluationIds = [
+    ...new Set(runs.map((run) => currentProcedureFeedbackEvaluationId(run.manifest)).filter(Boolean)),
+  ] as string[]
+
+  if (evaluationIds.length === 0) {
+    return runs.map((run) => ({ ...run, feedbackEvaluationSummary: null }))
+  }
+
+  const evaluations = await Promise.all(
+    evaluationIds.map(async (evaluationId) => {
+      try {
+        return await loadScoreEvaluationById(evaluationId)
+      } catch (error) {
+        console.error('Failed to load procedure feedback evaluation', evaluationId, error)
+        return null
+      }
+    })
+  )
+  const evaluationsById = new Map(
+    evaluations
+      .filter((evaluation): evaluation is ScoreEvaluationView => Boolean(evaluation?.id))
+      .map((evaluation) => [evaluation.id, evaluation])
+  )
+
+  return runs.map((run) => {
+    const evaluationId = currentProcedureFeedbackEvaluationId(run.manifest)
+    const evaluation = evaluationId ? evaluationsById.get(evaluationId) : null
+    return {
+      ...run,
+      feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
+    }
+  })
 }
 
 export async function copyText(text: string, successMessage: string) {

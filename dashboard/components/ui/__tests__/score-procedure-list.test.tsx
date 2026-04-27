@@ -44,6 +44,11 @@ jest.mock('@/components/ProcedureTask', () => ({
       <div data-testid={`procedure-task-stages-${procedure.id}`}>
         {(procedure.task?.stages?.items ?? []).map((stage: any) => `${stage.name}:${stage.status}:${stage.statusMessage}`).join('|')}
       </div>
+      <div data-testid={`procedure-feedback-${procedure.id}`}>
+        {procedure.feedbackEvaluationSummary
+          ? `${procedure.feedbackEvaluationSummary.id}:${procedure.feedbackEvaluationSummary.accuracy}:${procedure.feedbackEvaluationSummary.processedItems}/${procedure.feedbackEvaluationSummary.totalItems}`
+          : ''}
+      </div>
       {controlButtons}
     </div>
   ),
@@ -58,8 +63,41 @@ describe('ScoreProcedureList', () => {
       if (query.includes('onCreateProcedure')) return subscriptionResult('createProcedure')
       if (query.includes('onUpdateProcedure')) return subscriptionResult('updateProcedure')
       if (query.includes('onDeleteProcedure')) return subscriptionResult('deleteProcedure')
+      if (query.includes('onCreateEvaluation')) return subscriptionResult('createEvaluation')
+      if (query.includes('onUpdateEvaluation')) return subscriptionResult('updateEvaluation')
+      if (query.includes('onDeleteEvaluation')) return subscriptionResult('deleteEvaluation')
       if (query.includes('onUpdateTaskStage')) return subscriptionResult('updateTaskStage')
       if (query.includes('onUpdateTask')) return subscriptionResult('updateTask')
+      if (query.includes('GetEvaluationForProcedurePerformance')) {
+        return {
+          data: {
+            getEvaluation: {
+              id: 'eval-feedback-1',
+              type: 'feedback',
+              status: 'COMPLETED',
+              updatedAt: '2026-04-25T00:10:00Z',
+              createdAt: '2026-04-25T00:06:00Z',
+              parameters: JSON.stringify({
+                metadata: {
+                  baseline_evaluation_id: 'baseline-eval-1',
+                  current_baseline_evaluation_id: 'current-baseline-eval-1',
+                },
+              }),
+              scoreId: 'score-1',
+              scoreVersionId: 'version-1',
+              accuracy: 88,
+              processedItems: 44,
+              totalItems: 50,
+              elapsedSeconds: 120,
+              estimatedRemainingSeconds: null,
+              metrics: JSON.stringify({ accuracy: 88, alignment: 0.83 }),
+              cost: 0.12,
+              taskId: null,
+              task: null,
+            },
+          },
+        }
+      }
       if (query.includes('listTaskByAccountIdAndUpdatedAt')) {
         return {
           data: {
@@ -209,6 +247,7 @@ describe('ScoreProcedureList', () => {
     expect(screen.getByTestId('procedure-task-status-proc-1')).toHaveTextContent('COMPLETED')
     expect(screen.getByTestId('procedure-task-stages-proc-1')).toHaveTextContent('Start:COMPLETED:Initialized optimizer')
     expect(screen.getByTestId('procedure-task-stages-proc-1')).toHaveTextContent('Finalizing:COMPLETED:Saved optimizer result')
+    expect(screen.getByTestId('procedure-feedback-proc-1')).toHaveTextContent('eval-feedback-1:88:44/50')
     expect(screen.getByRole('option', { name: /best feedback precision/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /best regression recall/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /best feedback cost/i })).toBeInTheDocument()
@@ -316,5 +355,49 @@ describe('ScoreProcedureList', () => {
       expect(screen.getByTestId('procedure-task-status-proc-live')).toHaveTextContent('RUNNING')
     })
     expect(screen.getByTestId('procedure-task-stages-proc-live')).toHaveTextContent('Cycle 1:RUNNING:Evaluating candidates')
+  })
+
+  it('updates the procedure feedback summary from live evaluation updates', async () => {
+    render(
+      <ScoreProcedureList
+        scoreId="score-1"
+        scorecardId="scorecard-1"
+        scoreName="Medication Review: Prescriber"
+        scorecardName="SelectQuote HCS Medium-Risk"
+        scope="score"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('procedure-feedback-proc-1')).toHaveTextContent('eval-feedback-1:88:44/50')
+    })
+
+    act(() => {
+      emitSubscription('updateEvaluation', {
+        onUpdateEvaluation: {
+          id: 'eval-feedback-1',
+          type: 'feedback',
+          status: 'RUNNING',
+          updatedAt: '2026-04-25T00:12:00Z',
+          createdAt: '2026-04-25T00:06:00Z',
+          parameters: JSON.stringify({ metadata: {} }),
+          scoreId: 'score-1',
+          scoreVersionId: 'version-1',
+          accuracy: 94,
+          processedItems: 47,
+          totalItems: 50,
+          elapsedSeconds: 160,
+          estimatedRemainingSeconds: 10,
+          metrics: JSON.stringify({ accuracy: 94, alignment: 0.91 }),
+          cost: 0.14,
+          taskId: null,
+          task: null,
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('procedure-feedback-proc-1')).toHaveTextContent('eval-feedback-1:94:47/50')
+    })
   })
 })
