@@ -88,7 +88,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   const sortedVersions = [...versions].sort((a, b) => 
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
-  const isPinned = (version: ScoreVersion) => version.featuredKey === 'featured'
+  const isPinned = (version: ScoreVersion) => version.isFeatured === 'true'
   const pinnedVersions = sortedVersions.filter(v => isPinned(v) && v.id !== championVersionId)
   const recentVersions = sortedVersions.filter(v => v.id !== championVersionId && !isPinned(v))
 
