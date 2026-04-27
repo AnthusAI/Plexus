@@ -234,6 +234,70 @@ class TestScoreTextProcessing:
         assert error_result.value == "Error"
         assert "Timeout/RequestException" in error_result.error
 
+    @pytest.mark.asyncio
+    async def test_score_text_prefers_top_level_linkage_fields(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+        mock_evaluation.dashboard_client = MagicMock()
+        mock_evaluation.experiment_id = "eval-123"
+        mock_evaluation._create_score_result = AsyncMock()
+
+        mock_result = create_mock_score_result("yes", "yes")
+        mock_evaluation.scorecard.score_entire_text = AsyncMock(
+            return_value={"test_score": mock_result}
+        )
+
+        row = pd.Series({
+            "text": "feedback transcript",
+            "content_id": "content-789",
+            "item_id": "item-top-level",
+            "feedback_item_id": "fi-top-level",
+            "columns": {
+                "item_id": "item-nested",
+                "feedback_item_id": "fi-nested",
+                "form_id": "form-789",
+            },
+            "test_score_label": "yes",
+        })
+
+        with patch("plexus.dashboard.api.models.item.Item.get_by_id", return_value=None) as mock_get_item:
+            await mock_evaluation.score_text(row, score_name="test_score")
+
+        assert mock_get_item.call_args.args[0] == "item-top-level"
+        assert mock_evaluation._create_score_result.await_args.kwargs["feedback_item_id"] == "fi-top-level"
+
+    @pytest.mark.asyncio
+    async def test_score_text_raises_when_score_returns_error_result(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+
+        error_result = Score.Result(
+            parameters=Score.Parameters(name="test_score", scorecard_name="test_scorecard"),
+            value="ERROR",
+            error="'dict object' has no attribute 'other_data'",
+            metadata={},
+        )
+        mock_evaluation.scorecard.score_entire_text = AsyncMock(
+            return_value={"test_score": error_result}
+        )
+
+        row = pd.Series({
+            "text": "feedback transcript",
+            "content_id": "content-999",
+            "item_id": "item-999",
+            "feedback_item_id": "fi-999",
+            "metadata": {"source": "top-level", "human_label": "yes"},
+            "columns": {"form_id": "form-999"},
+            "test_score_label": "yes",
+        })
+
+        with pytest.raises(RuntimeError, match="Initial evaluation failed: score 'test_score' returned ERROR"):
+            await mock_evaluation.score_text(row, score_name="test_score")
+
 
 class TestLabelStandardization:
     """Test label standardization and comparison logic"""
@@ -246,6 +310,38 @@ class TestLabelStandardization:
         
         metrics = mock_evaluation.calculate_metrics(results)
         assert metrics['accuracy'] == 1.0
+
+
+class TestAccuracyEvaluationRun:
+    @pytest.mark.asyncio
+    async def test_accuracy_evaluation_run_re_raises_run_failures(self):
+        with patch('plexus.Evaluation.PlexusDashboardClient') as mock_client:
+            mock_client.return_value = MagicMock()
+            mock_client.for_account.return_value = MagicMock()
+
+            evaluation = AccuracyEvaluation(
+                scorecard_name="test_scorecard",
+                scorecard=MockScorecard(),
+                labeled_samples=[{"text": "hello", "test_score_label": "yes"}],
+                evaluation_id="eval-123",
+                account_key="test-account",
+                subset_of_score_names=["test_score"],
+                skip_local_reports=True,
+            )
+
+        evaluation._run_evaluation = AsyncMock(side_effect=RuntimeError("Initial evaluation failed: score returned ERROR"))
+
+        with patch("plexus.dashboard.api.models.evaluation.Evaluation.get_by_id") as mock_get_by_id:
+            mock_record = MagicMock()
+            mock_get_by_id.return_value = mock_record
+
+            with pytest.raises(RuntimeError, match="Initial evaluation failed: score returned ERROR"):
+                await evaluation.run()
+
+        mock_record.update.assert_called_once_with(
+            status="FAILED",
+            errorMessage="Initial evaluation failed: score returned ERROR",
+        )
     
     def test_whitespace_handling(self, mock_evaluation):
         """Test whitespace is handled in label comparison"""

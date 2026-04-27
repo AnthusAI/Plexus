@@ -25,6 +25,10 @@ from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
+from plexus.utils.feedback_selection import (
+    normalize_feedback_sampling_mode,
+    select_feedback_items,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +59,11 @@ class FeedbackItems(DataCache):
     This balancing helps models learn from both agreements and corrections across
     different prediction types, rather than being dominated by the most common pattern.
     """
+
+    LABEL_SOURCE_VETTED = "vetted_feedback"
+    LABEL_SOURCE_FINAL = "regular_final_feedback"
+    LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED = "score_result_or_imported"
+    LABEL_SOURCE_UNRESOLVED = "unresolved"
     
     class Parameters(DataCache.Parameters):
         """Parameters for FeedbackItems data cache."""
@@ -62,6 +71,9 @@ class FeedbackItems(DataCache):
         scorecard: Union[str, int] = Field(..., description="Scorecard identifier (name, key, ID, or external ID)")
         score: Union[str, int] = Field(..., description="Score identifier (name, key, ID, or external ID)")  
         days: Optional[int] = Field(None, description="Number of days back to search for feedback items (None = all time)")
+        max_items: Optional[int] = Field(None, description="Maximum number of feedback items to include using explicit newest/random selection")
+        sampling_mode: str = Field("newest", description="Selection mode when max_items is set: newest or random")
+        sample_seed: Optional[int] = Field(None, description="Optional random seed for random selection mode")
         limit: Optional[int] = Field(None, description="Maximum total number of items in the dataset")
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
@@ -78,6 +90,23 @@ class FeedbackItems(DataCache):
         def days_must_be_positive(cls, v):
             if v is not None and v <= 0:
                 raise ValueError('days must be positive')
+            return v
+
+        @validator('max_items')
+        def max_items_must_be_positive(cls, v):
+            if v is not None and v <= 0:
+                raise ValueError('max_items must be positive')
+            return v
+
+        @validator('sampling_mode')
+        def sampling_mode_must_be_supported(cls, v):
+            return normalize_feedback_sampling_mode(v)
+
+        @validator('sample_seed')
+        def sample_seed_only_for_random(cls, v, values):
+            mode = values.get('sampling_mode', 'newest')
+            if v is not None and mode != 'random':
+                raise ValueError("sample_seed is only valid when sampling_mode='random'")
             return v
             
         @validator('limit')
@@ -248,6 +277,84 @@ class FeedbackItems(DataCache):
         """
         return self._normalize_value(value)
 
+    def _normalize_label_candidate(self, value: Optional[Any]) -> Optional[str]:
+        """Normalize a potential label candidate to a non-empty string."""
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+        return normalized
+
+    def _is_vetted_feedback_item(self, feedback_item: FeedbackItem) -> bool:
+        """Determine whether a feedback item is explicitly marked as vetted/gold."""
+        raw = getattr(feedback_item, "_raw_data", None)
+        if not isinstance(raw, dict):
+            return False
+        vetted_keys = ("isVetted", "isGold", "isGoldStandard", "is_vetted", "is_gold")
+        for key in vetted_keys:
+            if raw.get(key) is True:
+                return True
+        return False
+
+    def _extract_imported_example_label(self, feedback_item: FeedbackItem, score_name: str) -> Optional[str]:
+        """Extract imported/example label from item metadata using deterministic key order."""
+        if not feedback_item.item:
+            return None
+        raw_metadata = getattr(feedback_item.item, "metadata", None)
+        if raw_metadata is None:
+            return None
+        metadata = raw_metadata
+        if isinstance(raw_metadata, str):
+            try:
+                metadata = json.loads(raw_metadata)
+            except Exception:
+                return None
+        if not isinstance(metadata, dict):
+            return None
+
+        keys_in_order = (
+            score_name,
+            "reference_label",
+            "label",
+            "final_label",
+        )
+        for key in keys_in_order:
+            candidate = self._normalize_label_candidate(metadata.get(key))
+            if candidate is not None:
+                return candidate
+
+        score_labels = metadata.get("score_labels")
+        if isinstance(score_labels, dict):
+            candidate = self._normalize_label_candidate(score_labels.get(score_name))
+            if candidate is not None:
+                return candidate
+        return None
+
+    def _resolve_label_for_reference_dataset(self, feedback_item: FeedbackItem, score_name: str) -> Tuple[Optional[str], str]:
+        """
+        Deterministically resolve a dataset label with strict source priority:
+        1) vetted/gold feedback
+        2) regular final feedback
+        3) score-result or imported example label
+        """
+        final_label = self._normalize_label_candidate(feedback_item.finalAnswerValue)
+        if self._is_vetted_feedback_item(feedback_item) and final_label is not None:
+            return final_label, self.LABEL_SOURCE_VETTED
+
+        if final_label is not None:
+            return final_label, self.LABEL_SOURCE_FINAL
+
+        initial_label = self._normalize_label_candidate(feedback_item.initialAnswerValue)
+        if initial_label is not None:
+            return initial_label, self.LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED
+
+        imported_label = self._extract_imported_example_label(feedback_item, score_name)
+        if imported_label is not None:
+            return imported_label, self.LABEL_SOURCE_SCORE_RESULT_OR_IMPORTED
+
+        return None, self.LABEL_SOURCE_UNRESOLVED
+
     def _load_identifier_extractor(self, extractor_class_name: str):
         """
         Load the identifier extractor class following Plexus extension loading pattern.
@@ -332,6 +439,9 @@ class FeedbackItems(DataCache):
             'scorecard_id': scorecard_id,
             'score_id': score_id,
             'days': self.parameters.days,
+            'max_items': self.parameters.max_items,
+            'sampling_mode': self.parameters.sampling_mode,
+            'sample_seed': self.parameters.sample_seed,
             'limit': self.parameters.limit,
             'limit_per_cell': self.parameters.limit_per_cell,
             'initial_value': self.normalized_initial_value,
@@ -455,6 +565,20 @@ class FeedbackItems(DataCache):
         if self.parameters.feedback_id:
             sampled_items = feedback_items
             logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
+        elif self.parameters.max_items is not None:
+            sampled_items, selection_metadata = select_feedback_items(
+                feedback_items,
+                max_items=self.parameters.max_items,
+                sampling_mode=self.parameters.sampling_mode,
+                sample_seed=self.parameters.sample_seed,
+            )
+            logger.info(
+                "Applied explicit feedback selection: mode=%s requested=%s selected=%s candidate_pool=%s",
+                selection_metadata.get("sampling_mode"),
+                selection_metadata.get("requested_max_items"),
+                selection_metadata.get("selected_count"),
+                selection_metadata.get("candidate_pool_count"),
+            )
         else:
             # Build confusion matrix
             matrix_cells = self._build_confusion_matrix(feedback_items)
@@ -713,6 +837,7 @@ class FeedbackItems(DataCache):
                 limit=None,  # We'll apply limits after sampling
                 prioritize_edit_comments=False
             )
+            all_items = [item for item in all_items if not getattr(item, "isInvalid", False)]
             logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService for score {score_name}")
             
             # Debug the first item to see what metadata structure we get
@@ -1050,6 +1175,7 @@ class FeedbackItems(DataCache):
         
         # Create properly formatted dataset rows
         rows = []
+        skipped_feedback_item_ids = []
         
         for i, feedback_item in enumerate(feedback_items):
             # content_id: Use DynamoDB item ID
@@ -1092,14 +1218,26 @@ class FeedbackItems(DataCache):
 
                 # Text content retrieved for processing
             
+            # Resolve label source deterministically for reference dataset builds
+            score_value, label_source = self._resolve_label_for_reference_dataset(feedback_item, mapped_score_name)
+            if score_value is None:
+                skipped_feedback_item_ids.append(feedback_item_id)
+                continue
+
             # metadata: Create JSON string of metadata structure
             metadata = self._create_metadata_structure(feedback_item)
+            try:
+                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else dict(metadata)
+            except Exception:
+                metadata_dict = {}
+            metadata_dict["label_resolution"] = {
+                "source": label_source,
+                "resolved_label": score_value,
+            }
+            metadata = json.dumps(metadata_dict)
             
             # IDs: Create hash of identifiers from Item
             ids_hash = self._create_ids_hash(feedback_item)
-            
-            # Score value: Final answer value (ground truth)
-            score_value = feedback_item.finalAnswerValue
             
             # Score comment: Complex logic for determining the comment
             score_comment = self._determine_score_comment(feedback_item)
@@ -1110,7 +1248,6 @@ class FeedbackItems(DataCache):
             # Extract call_date from metadata for separate column
             call_date = None
             try:
-                metadata_dict = json.loads(metadata) if isinstance(metadata, str) else metadata
                 call_date = metadata_dict.get('call_date')
             except:
                 pass
@@ -1142,7 +1279,22 @@ class FeedbackItems(DataCache):
         else:
             df = pd.DataFrame(rows)
             
+        label_resolution_report = {
+            "total_feedback_items": len(feedback_items),
+            "resolved_rows": len(rows),
+            "skipped_count": len(skipped_feedback_item_ids),
+            "skipped_feedback_item_ids": skipped_feedback_item_ids,
+        }
+        self.last_label_resolution_report = label_resolution_report
+        df.attrs["label_resolution_report"] = label_resolution_report
+
         logger.info(f"Created dataset with {len(df)} rows and {len(df.columns)} columns: {list(df.columns)}")
+        logger.info(
+            "Label resolution report: resolved_rows=%s skipped_count=%s skipped_feedback_item_ids=%s",
+            label_resolution_report["resolved_rows"],
+            label_resolution_report["skipped_count"],
+            label_resolution_report["skipped_feedback_item_ids"],
+        )
         logger.debug(f"Sample row data: {rows[0] if rows else 'No rows'}")
         
         # Use the comprehensive debug utility from base class
@@ -1197,6 +1349,39 @@ class FeedbackItems(DataCache):
                 return value.isoformat()
             return value
 
+        def require_item_metadata_dict() -> Dict[str, Any]:
+            item_id = getattr(getattr(feedback_item, 'item', None), 'id', None) or feedback_item.itemId or 'unknown'
+            feedback_item_id = getattr(feedback_item, 'id', None) or 'unknown'
+
+            if not feedback_item.item:
+                raise ValueError(
+                    "Feedback-backed evaluation requires related Item metadata, "
+                    f"but feedback item {feedback_item_id} has no loaded Item (item_id={item_id})."
+                )
+
+            raw_item_metadata = getattr(feedback_item.item, 'metadata', None)
+            if raw_item_metadata in (None, ""):
+                raise ValueError(
+                    "Feedback-backed evaluation requires Item metadata, "
+                    f"but feedback item {feedback_item_id} item {item_id} had no metadata."
+                )
+
+            try:
+                parsed_metadata = json.loads(raw_item_metadata) if isinstance(raw_item_metadata, str) else raw_item_metadata
+            except Exception as e:
+                raise ValueError(
+                    "Feedback-backed evaluation requires parseable Item metadata, "
+                    f"but feedback item {feedback_item_id} item {item_id} metadata could not be parsed: {e}"
+                ) from e
+
+            if not isinstance(parsed_metadata, dict):
+                raise ValueError(
+                    "Feedback-backed evaluation requires Item metadata to be an object, "
+                    f"but feedback item {feedback_item_id} item {item_id} metadata was {type(parsed_metadata).__name__}."
+                )
+
+            return parsed_metadata
+
         metadata = {
             'feedback_item_id': feedback_item.id,
             'scorecard_id': feedback_item.scorecardId,
@@ -1225,33 +1410,11 @@ class FeedbackItems(DataCache):
             metadata['item'] = item_metadata
             logger.debug(f"Item metadata added: {item_metadata}")
             
-            # Use the Item's cached metadata directly (it should already have the API structure)
-            original_item_metadata = getattr(feedback_item.item, 'metadata', None)
-            logger.debug(f"DEBUG: Checking item metadata for item_id={feedback_item.item.id}")
-            logger.debug(f"DEBUG: feedback_item.item type: {type(feedback_item.item)}")
-            logger.debug(f"DEBUG: feedback_item.item attributes: {dir(feedback_item.item)}")
-            logger.debug(f"DEBUG: original_item_metadata: {original_item_metadata}")
-            logger.debug(f"DEBUG: original_item_metadata type: {type(original_item_metadata)}")
-            if original_item_metadata:
-                logger.debug(f"Found original item metadata for item_id={feedback_item.item.id}: type={type(original_item_metadata)}")
-                try:
-                    # Parse the original item metadata if it's a JSON string
-                    if isinstance(original_item_metadata, str):
-                        parsed_metadata = json.loads(original_item_metadata)
-                        logger.debug(f"Parsed item metadata from JSON string for item_id={feedback_item.item.id}")
-                    else:
-                        parsed_metadata = original_item_metadata
-                        logger.debug(f"Using item metadata as object for item_id={feedback_item.item.id}")
-                    
-                    # Merge the API-cached metadata directly (should already have other_data, etc.)
-                    if isinstance(parsed_metadata, dict):
-                        metadata.update(parsed_metadata)
-                        logger.debug(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
-                    else:
-                        logger.debug(f"Parsed item metadata is not a dict for item_id={feedback_item.item.id}, type={type(parsed_metadata)}")
-                except Exception as e:
-                    logger.warning(f"Could not parse cached item metadata for item_id={feedback_item.item.id}: {e}")
-                    # Continue without the cached metadata
+            parsed_metadata = require_item_metadata_dict()
+            metadata.update(parsed_metadata)
+            logger.debug(f"Merged {len(parsed_metadata)} fields from cached item metadata for item_id={feedback_item.item.id}")
+        else:
+            require_item_metadata_dict()
         
         # Parse JSON string fields in metadata (fix the root cause)
         # Common fields that might be JSON strings: other_data, schools, etc.

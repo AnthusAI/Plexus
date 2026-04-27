@@ -19,6 +19,27 @@ import { format, parseISO } from 'date-fns';
 import { Timestamp } from '@/components/ui/timestamp';
 import { Spinner } from '@/components/ui/spinner';
 
+const LEGACY_PROGRAMMATIC_CONFIG_NAME = "__programmatic_blocks__";
+
+const humanizeBlockClass = (name: string): string =>
+  name.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+
+const formatConfigDisplayName = (name?: string | null): string | null => {
+  if (!name) return null;
+  if (name === LEGACY_PROGRAMMATIC_CONFIG_NAME) return "Programmatic Reports";
+  return name;
+};
+
+const formatReportDisplayName = (name?: string | null): string | null => {
+  if (!name) return null;
+  if (name.startsWith("cache:")) {
+    const match = name.match(/^cache:([^:]+):/);
+    if (match?.[1]) return `${humanizeBlockClass(match[1])} (Programmatic)`;
+    return "Programmatic Report";
+  }
+  return name;
+};
+
 // Share link data type
 type ShareLinkData = {
   token: string;
@@ -50,17 +71,15 @@ export class ReportService {
   // Fetch report by ID for dashboard deep links
   async fetchReportById(id: string): Promise<any> {
     try {
-      // Determine auth mode for unauthenticated access
-      let authMode: 'userPool' | 'apiKey' | undefined = undefined;
+      // Determine auth mode based on user's session
+      let authMode: 'userPool' | 'identityPool' = 'identityPool';
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
           authMode = 'userPool';
-        } else {
-          authMode = 'apiKey';
         }
       } catch (error) {
-        authMode = 'apiKey';
+        console.log('Error checking auth session, falling back to guest access:', error);
       }
 
       // Use the graphql API directly with a single, comprehensive query
@@ -122,19 +141,14 @@ export class ReportService {
   async fetchReportByShareToken(token: string): Promise<any> {
     try {
       // Determine auth mode based on user's session
-      let authMode: 'userPool' | 'apiKey' | undefined = undefined; // Default to public access
+      let authMode: 'userPool' | 'identityPool' = 'identityPool';
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
           authMode = 'userPool';
-        } else {
-          // For unauthenticated access, use API key instead of identity pool
-          authMode = 'apiKey';
-          console.log('Using API key access mode');
         }
       } catch (error) {
-        console.log('Error checking auth session, falling back to API key access');
-        authMode = 'apiKey';
+        console.log('Error checking auth session, falling back to guest access:', error);
       }
       
       // First get the share link data and resource ID
@@ -404,8 +418,10 @@ export function PublicReport({
     }) || [];
     
     // Ensure we have a valid display name
-    const displayName = report.name || 
-      (config?.name ? `${config.name}` : `Report ${report.id.substring(0, 6)}`);
+    const configDisplayName = formatConfigDisplayName(config?.name || null);
+    const displayName =
+      formatReportDisplayName(report.name || null) ||
+      (configDisplayName ? `${configDisplayName}` : `Report ${report.id.substring(0, 6)}`);
     
     // Format stages for display
     const stages = [];
@@ -456,7 +472,7 @@ export function PublicReport({
                 id: report.id,
                 title: displayName,
                 name: displayName,
-                configName: config?.name || displayName,
+                configName: configDisplayName || displayName,
                 configDescription: config?.description,
                 createdAt: report.createdAt,
                 updatedAt: report.updatedAt,

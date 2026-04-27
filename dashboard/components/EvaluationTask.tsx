@@ -1,17 +1,19 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
+import { ProgressBarTiming } from '@/components/ui/progress-bar-timing'
 import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
-import { TopicList } from '@/components/ui/topic-list'
+import { TopicList, type Topic } from '@/components/ui/topic-list'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -148,6 +150,9 @@ export interface EvaluationTaskData extends BaseTaskData {
   task?: TaskData | null
   universalCode?: string | null
   parameters?: string | null
+  baseline_evaluation_id?: string | null
+  current_baseline_evaluation_id?: string | null
+  dataSetId?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
@@ -173,7 +178,7 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     totalItems?: number
     startedAt?: string
     estimatedCompletionAt?: string
-    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
     dispatchStatus?: 'DISPATCHED'
     celeryTaskId?: string
     workerNodeId?: string
@@ -183,6 +188,8 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     scorecardId?: string
     scoreId?: string
     scoreVersionId?: string
+    procedureId?: string
+    dataSetId?: string
   }
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
@@ -191,6 +198,247 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
   commandDisplay?: 'hide' | 'show' | 'full'
   onShare?: () => void
   onDelete?: (evaluationId: string) => void
+}
+
+type MisclassificationCategory =
+  | 'score_configuration_problem'
+  | 'information_gap'
+  | 'guideline_gap_requires_sme'
+  | 'mechanical_malfunction'
+
+type MisclassificationRedFlag = {
+  flag?: string
+  severity?: 'high' | 'medium' | 'low' | string
+  message?: string
+}
+
+type MisclassificationCategorySummary = {
+  category_summary_text?: string
+  top_patterns?: Array<{ pattern?: string; count?: number }>
+  representative_evidence?: Array<{
+    feedback_item_id?: string
+    item_id?: string
+    source?: string
+    quote_or_fact?: string
+  }>
+  item_count?: number
+}
+
+type MisclassificationPrimaryNextAction = {
+  action?: 'bug_investigation' | 'data_remediation' | 'sme_guideline_clarification' | 'score_configuration_optimization' | string
+  confidence?: 'high' | 'medium' | 'low' | string
+  reasons?: string[]
+}
+
+type OptimizationApplicability = {
+  status?: 'applicable' | 'limited' | 'blocked' | string
+  reason?: string
+}
+
+type CandidateAssessmentStageReference = {
+  stage_key?: string
+  baseline_evaluation_id?: string
+  candidate_evaluation_id?: string
+  baseline_status?: string
+  candidate_status?: string
+  delta_ac1?: number
+  delta_value_score?: number
+}
+
+type CandidateAssessmentCompactSummary = {
+  schema_version?: string
+  attachment_key?: string
+  scorecard_id?: string
+  score_id?: string
+  baseline_score_version_id?: string
+  candidate_score_version_id?: string
+  decision?: string
+  decision_reason?: string
+  decision_confidence?: string
+  baseline_generalization_gap?: number
+  candidate_generalization_gap?: number
+  generalization_gap_delta?: number
+  random_delta_mean?: number
+  random_delta_stddev?: number
+  primary_next_action?: string
+  stage_references?: CandidateAssessmentStageReference[]
+}
+
+type MisclassificationAnalysis = {
+  item_classifications_all?: Array<{
+    topic_id?: number | string
+    topic_label?: string
+    feedback_item_id?: string
+    item_id?: string
+    timestamp?: string
+    predicted_value?: string
+    correct_value?: string
+    primary_category?: MisclassificationCategory | string
+    confidence?: string
+    rationale_short?: string
+    rationale_full?: string
+    rationale_paragraph?: string
+    evidence_quote?: string
+    config_fixability?: string
+    evidence_snippets?: Array<{ source?: string; quote_or_fact?: string }>
+    mechanical_subtype?: string | null
+    mechanical_details?: string | null
+    information_gap_subtype?: string | null
+    detailed_cause?: string
+    suggested_fix?: string
+  }>
+  analysis_scope?: {
+    candidate_items_total?: number
+    classified_items_total?: number
+    texts_analyzed_total?: number
+    topics_found?: number
+    topic_assignment_scope?: string
+    topic_assignment_unavailable_count?: number
+  }
+  category_diagnostics?: {
+    information_gap?: {
+      item_count?: number
+      missing_or_degraded_primary_input_count?: number
+      missing_or_degraded_primary_input_share?: number
+      missing_required_context_count?: number
+      missing_required_context_share?: number
+      diagnostic_summary?: string
+    }
+  }
+  category_totals?: Partial<Record<MisclassificationCategory, number>>
+  category_summaries?: Partial<Record<MisclassificationCategory, MisclassificationCategorySummary>>
+  mechanical_subtype_totals?: Record<string, number>
+  primary_next_action?: MisclassificationPrimaryNextAction
+  optimization_applicability?: OptimizationApplicability
+  topic_category_breakdown?: Array<{
+    topic_id?: number | string
+    topic_label?: string
+    topic_primary_category?: string
+    topic_category_purity?: number
+    member_count?: number
+    category_counts?: Record<string, number>
+  }>
+  max_category_summary_items_used?: number
+  overall_assessment?: {
+    total_items?: number
+    predominant_category?: MisclassificationCategory | string
+    score_fix_candidate_items?: number
+  }
+  evaluation_red_flags?: MisclassificationRedFlag[]
+}
+
+type RootCauseData = {
+  topics?: Topic[] | null
+  misclassification_analysis?: MisclassificationAnalysis | null
+  overall_explanation?: string | null
+  overall_improvement_suggestion?: string | null
+}
+
+const MISCLASSIFICATION_CATEGORY_CONFIG: Array<{
+  key: MisclassificationCategory
+  label: string
+  shortLabel: string
+  colorClass: string
+}> = [
+  {
+    key: 'score_configuration_problem',
+    label: 'Score configuration',
+    shortLabel: 'Score',
+    colorClass: 'bg-chart-1',
+  },
+  {
+    key: 'information_gap',
+    label: 'Information gap',
+    shortLabel: 'Info',
+    colorClass: 'bg-chart-2',
+  },
+  {
+    key: 'guideline_gap_requires_sme',
+    label: 'SME guideline gap',
+    shortLabel: 'SME',
+    colorClass: 'bg-chart-3',
+  },
+  {
+    key: 'mechanical_malfunction',
+    label: 'Mechanical malfunction',
+    shortLabel: 'System',
+    colorClass: 'bg-chart-4',
+  },
+]
+
+const getMisclassificationCategoryLabel = (category?: string | null): string => {
+  if (!category) return 'Unavailable'
+  return (
+    MISCLASSIFICATION_CATEGORY_CONFIG.find(config => config.key === category)?.label ??
+    category.replace(/_/g, ' ')
+  )
+}
+
+const getMisclassificationAssessment = (category?: string | null): string => {
+  switch (category) {
+    case 'score_configuration_problem':
+      return 'Optimization likely to help'
+    case 'information_gap':
+      return 'Upstream data remediation likely needed'
+    case 'guideline_gap_requires_sme':
+      return 'SME guideline clarification likely needed'
+    case 'mechanical_malfunction':
+      return 'System malfunction investigation needed'
+    default:
+      return 'Insufficient evidence for a clear recommendation'
+  }
+}
+
+const getPrimaryNextActionLabel = (action?: string | null): string => {
+  switch (action) {
+    case 'bug_investigation':
+      return 'Bug investigation'
+    case 'data_remediation':
+      return 'Data remediation'
+    case 'sme_guideline_clarification':
+      return 'SME guideline clarification'
+    case 'score_configuration_optimization':
+      return 'Score-configuration optimization'
+    default:
+      return 'Unavailable'
+  }
+}
+
+const getAssessmentDecisionLabel = (decision?: string | null): string => {
+  switch ((decision ?? '').toLowerCase()) {
+    case 'accept':
+      return 'Accept'
+    case 'reject':
+      return 'Reject'
+    case 'inconclusive':
+      return 'Inconclusive'
+    default:
+      return 'Unavailable'
+  }
+}
+
+const getAssessmentStageLabel = (stageKey?: string | null): string => {
+  switch ((stageKey ?? '').toLowerCase()) {
+    case 'deterministic_reference':
+      return 'Deterministic reference'
+    case 'random_iteration':
+      return 'Random iteration (n=50)'
+    case 'random_gate':
+      return 'Random gate (n=200)'
+    default:
+      return stageKey ? stageKey.replace(/_/g, ' ') : 'Unknown stage'
+  }
+}
+
+const formatSignedMetric = (value?: number | null, digits = 3): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${value.toFixed(digits)}`
+}
+
+const formatMetric = (value?: number | null, digits = 3): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A'
+  return value.toFixed(digits)
 }
 
 function formatDuration(seconds: number): string {
@@ -287,10 +535,12 @@ const getStatusMessage = (data: EvaluationTaskData) => {
   return undefined;
 }
 
-const GridContent = React.memo(({ data, extra, isSelected }: { 
-  data: EvaluationTaskData; 
+const GridContent = React.memo(({ data, extra, isSelected, baselineAccuracy, currentBaselineAccuracy }: {
+  data: EvaluationTaskData;
   extra?: boolean;
   isSelected?: boolean;
+  baselineAccuracy?: number | null;
+  currentBaselineAccuracy?: number | null;
 }) => {
 
 
@@ -399,8 +649,6 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
       extra,
       isSelected,
       commandDisplay: 'hide' as const,
-      elapsedSeconds: data.elapsedSeconds,
-      estimatedRemainingSeconds: data.estimatedRemainingSeconds
     };
     
     
@@ -421,22 +669,23 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     data.command,
     extra,
     isSelected,
-    data.elapsedSeconds,
-    data.estimatedRemainingSeconds,
     data.id
   ]);
 
   return (
-    <div className="space-y-2">
-      <TaskStatus 
-        {...taskStatus} 
+    <div className="space-y-2 mt-auto">
+      <TaskStatus
+        {...taskStatus}
+        hideElapsedTime
         key={`${data.id}-${JSON.stringify(stages.map(s => ({ name: s.name, status: s.status, processedItems: s.processedItems })))}`}
       />
       {extra && (
-        <EvaluationListAccuracyBar 
+        <EvaluationListAccuracyBar
           progress={progress}
           accuracy={accuracy}
           isSelected={isSelected}
+          baselineAccuracy={baselineAccuracy ?? undefined}
+          currentBaselineAccuracy={currentBaselineAccuracy ?? undefined}
         />
       )}
     </div>
@@ -464,6 +713,8 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   const otherChanged = (
     prevProps.extra !== nextProps.extra ||
     prevProps.isSelected !== nextProps.isSelected ||
+    prevProps.baselineAccuracy !== nextProps.baselineAccuracy ||
+    prevProps.currentBaselineAccuracy !== nextProps.currentBaselineAccuracy ||
     !isEqual(prevProps.data.scoreResults, nextProps.data.scoreResults)
   );
 
@@ -689,13 +940,67 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(result.id)
   }
 
+  const selectFirstFilteredScoreResult = (itemIds: string[]) => {
+    const firstItemId = itemIds.find(Boolean)
+    if (!firstItemId) return
+    const matching = parsedScoreResults.find(result => result.itemId === firstItemId)
+    if (matching) {
+      onSelectScoreResult?.(matching.id)
+    }
+  }
+
   const handleTopicFilter = (
     itemIds: string[] | null,
-    rcaData: Record<string, { detailed_cause?: string; suggested_fix?: string }>
+    topicLabel?: string | null
   ) => {
+    setSelectedCategoryKey(null)
+    setSelectedCategoryLabel(null)
+    setSelectedCategoryItemIds(null)
+    setCategoryMissingItemIdCount(0)
     setSelectedTopicItemIds(itemIds)
-    setRcaDataByItemId(rcaData ?? {})
-    if (itemIds) setSelectedPredictedActual({ predicted: null, actual: null })
+    setSelectedTopicLabel(itemIds ? (topicLabel ?? null) : null)
+    if (itemIds && itemIds.length > 0) {
+      setSelectedPredictedActual({ predicted: null, actual: null })
+      selectFirstFilteredScoreResult(itemIds)
+    }
+  }
+
+  const handleCategoryFilter = (
+    categoryKey: MisclassificationCategory,
+    categoryLabel: string
+  ) => {
+    const classifications = misclassificationCategoryBreakdown.itemClassifications ?? []
+    const filteredClassifications = classifications.filter(
+      classification => classification.primary_category === categoryKey
+    )
+
+    const itemIds: string[] = []
+    let missingCount = 0
+
+    filteredClassifications.forEach(classification => {
+      if (!classification.item_id) {
+        missingCount += 1
+        return
+      }
+
+      itemIds.push(classification.item_id)
+    })
+
+    setSelectedTopicItemIds(null)
+    setSelectedTopicLabel(null)
+    setSelectedCategoryKey(categoryKey)
+    setSelectedCategoryLabel(categoryLabel)
+    setSelectedCategoryItemIds(Array.from(new Set(itemIds)))
+    setCategoryMissingItemIdCount(missingCount)
+    setSelectedPredictedActual({ predicted: null, actual: null })
+    selectFirstFilteredScoreResult(itemIds)
+  }
+
+  const clearCategoryFilter = () => {
+    setSelectedCategoryKey(null)
+    setSelectedCategoryLabel(null)
+    setSelectedCategoryItemIds(null)
+    setCategoryMissingItemIdCount(0)
   }
 
   const handleScoreResultClose = () => {
@@ -749,33 +1054,243 @@ const DetailContent = React.memo(({
     }
   }, [data.confusionMatrix]);
 
-  const rootCauseData = useMemo(() => {
+  const rootCauseData = useMemo((): RootCauseData | null => {
     try {
-      const params = typeof data.parameters === 'string'
-        ? JSON.parse(data.parameters)
-        : data.parameters
-      return params?.root_cause ?? null
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      const rootCause = params?.root_cause
+      return (rootCause && typeof rootCause === 'object') ? (rootCause as RootCauseData) : null
     } catch {
       return null
     }
   }, [data.parameters])
 
   const rootCauseTopics = rootCauseData?.topics ?? null
+  const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
+  const rcaCoverage = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (!params || typeof params !== 'object') return null
+      return {
+        status: typeof params.rca_coverage_status === 'string' ? params.rca_coverage_status : null,
+        incorrectItemsTotal: typeof params.incorrect_items_total === 'number' ? params.incorrect_items_total : 0,
+        incorrectItemsWithFeedbackLink: typeof params.incorrect_items_with_feedback_link === 'number'
+          ? params.incorrect_items_with_feedback_link
+          : 0,
+        incorrectItemsWithoutFeedbackLink: typeof params.incorrect_items_without_feedback_link === 'number'
+          ? params.incorrect_items_without_feedback_link
+          : 0,
+      }
+    } catch {
+      return null
+    }
+  }, [data.parameters])
+  const rcaCoverageNote = useMemo(() => {
+    if (!rcaCoverage || !rcaCoverage.status) return null
+    if (rcaCoverage.status === 'partial') {
+      return `RCA analyzed ${rcaCoverage.incorrectItemsWithFeedbackLink}/${rcaCoverage.incorrectItemsTotal} incorrect item(s); ${rcaCoverage.incorrectItemsWithoutFeedbackLink} missing feedback linkage.`
+    }
+    if (rcaCoverage.status === 'none' && rcaCoverage.incorrectItemsTotal > 0) {
+      return `RCA unavailable: 0/${rcaCoverage.incorrectItemsTotal} incorrect item(s) had feedback linkage.`
+    }
+    if (rcaCoverage.status === 'full' && rcaCoverage.incorrectItemsTotal > 0) {
+      return `RCA analyzed ${rcaCoverage.incorrectItemsWithFeedbackLink}/${rcaCoverage.incorrectItemsTotal} incorrect item(s).`
+    }
+    return null
+  }, [rcaCoverage])
+  const misclassificationCategoryBreakdown = useMemo(() => {
+    const totals = misclassificationAnalysis?.category_totals ?? {}
+    const itemClassifications = Array.isArray(misclassificationAnalysis?.item_classifications_all)
+      ? misclassificationAnalysis.item_classifications_all
+      : []
+    const rows = MISCLASSIFICATION_CATEGORY_CONFIG.map(config => {
+      const rawCount = totals[config.key]
+      const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0
+      return { ...config, count }
+    })
+    const totalItems = rows.reduce((sum, row) => sum + row.count, 0)
+    const informationGapItems = itemClassifications.filter(
+      classification => classification.primary_category === 'information_gap'
+    )
+    const missingOrDegradedPrimaryInputSignals = informationGapItems.filter(classification =>
+      (classification.evidence_snippets ?? []).some(snippet => {
+        const source = (snippet.source ?? '').toLowerCase()
+        if (source !== 'primary_input') return false
+        const text = (snippet.quote_or_fact ?? '').toLowerCase()
+        return (
+          text.includes('unavailable')
+          || text.includes('missing')
+          || text.includes('not available')
+          || text.includes('insufficient')
+          || text.includes('degraded')
+          || text.includes('redacted')
+        )
+      })
+    ).length
+    const missingRequiredContextSignals = informationGapItems.filter(
+      classification => classification.information_gap_subtype === 'missing_required_context'
+    ).length
+    const derivedInfoGapDiagnostics = {
+      item_count: informationGapItems.length,
+      missing_or_degraded_primary_input_count: missingOrDegradedPrimaryInputSignals,
+      missing_or_degraded_primary_input_share: informationGapItems.length > 0
+        ? missingOrDegradedPrimaryInputSignals / informationGapItems.length
+        : 0,
+      missing_required_context_count: missingRequiredContextSignals,
+      missing_required_context_share: informationGapItems.length > 0
+        ? missingRequiredContextSignals / informationGapItems.length
+        : 0,
+      diagnostic_summary: informationGapItems.length > 0
+        ? `${missingOrDegradedPrimaryInputSignals}/${informationGapItems.length} information-gap item(s) include missing/degraded primary-input evidence.`
+        : 'No information-gap items in this run.',
+    }
+
+    return {
+      rows,
+      totalItems,
+      redFlags: Array.isArray(misclassificationAnalysis?.evaluation_red_flags)
+        ? misclassificationAnalysis.evaluation_red_flags
+        : [],
+      overall: misclassificationAnalysis?.overall_assessment ?? null,
+      categorySummaries: misclassificationAnalysis?.category_summaries ?? {},
+      topicCategoryBreakdown: Array.isArray(misclassificationAnalysis?.topic_category_breakdown)
+        ? misclassificationAnalysis.topic_category_breakdown
+        : [],
+      primaryNextAction: misclassificationAnalysis?.primary_next_action ?? null,
+      optimizationApplicability: misclassificationAnalysis?.optimization_applicability ?? null,
+      mechanicalSubtypeTotals: misclassificationAnalysis?.mechanical_subtype_totals ?? {},
+      categoryDiagnostics: {
+        information_gap:
+          misclassificationAnalysis?.category_diagnostics?.information_gap
+          ?? derivedInfoGapDiagnostics,
+      },
+      maxCategorySummaryItemsUsed: misclassificationAnalysis?.max_category_summary_items_used,
+      itemClassifications,
+    }
+  }, [misclassificationAnalysis])
 
   const [showRootCauseCode, setShowRootCauseCode] = useState(false)
   const [selectedTopicItemIds, setSelectedTopicItemIds] = useState<string[] | null>(null)
-  const [rcaDataByItemId, setRcaDataByItemId] = useState<
-    Record<string, { detailed_cause?: string; suggested_fix?: string }>
-  >({})
+  const [selectedTopicLabel, setSelectedTopicLabel] = useState<string | null>(null)
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<MisclassificationCategory | null>(null)
+  const [selectedCategoryLabel, setSelectedCategoryLabel] = useState<string | null>(null)
+  const [selectedCategoryItemIds, setSelectedCategoryItemIds] = useState<string[] | null>(null)
+  const [categoryMissingItemIdCount, setCategoryMissingItemIdCount] = useState(0)
+  const rcaDataByItemId = useMemo<
+    Record<string, {
+      detailed_cause?: string
+      suggested_fix?: string
+      misclassification_category?: string
+      misclassification_confidence?: string
+      misclassification_rationale?: string
+      misclassification_evidence_quote?: string
+      misclassification_config_fixability?: string
+      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
+      misclassification_mechanical_subtype?: string
+      misclassification_mechanical_details?: string
+    }>
+  >(() => {
+    const map: Record<string, {
+      detailed_cause?: string
+      suggested_fix?: string
+      misclassification_category?: string
+      misclassification_confidence?: string
+      misclassification_rationale?: string
+      misclassification_evidence_quote?: string
+      misclassification_config_fixability?: string
+      misclassification_evidence?: Array<{ source?: string; quote_or_fact?: string }>
+      misclassification_mechanical_subtype?: string
+      misclassification_mechanical_details?: string
+    }> = {}
+
+    ;(misclassificationCategoryBreakdown.itemClassifications ?? []).forEach(classification => {
+      if (!classification.item_id) return
+      map[classification.item_id] = {
+        misclassification_category: classification.primary_category ?? undefined,
+        misclassification_confidence: classification.confidence ?? undefined,
+        misclassification_rationale: (
+          classification.rationale_paragraph
+          ?? classification.rationale_full
+          ?? classification.rationale_short
+          ?? undefined
+        ),
+        misclassification_evidence_quote: classification.evidence_quote ?? undefined,
+        misclassification_config_fixability: classification.config_fixability ?? undefined,
+        misclassification_evidence: classification.evidence_snippets ?? undefined,
+        misclassification_mechanical_subtype: classification.mechanical_subtype ?? undefined,
+        misclassification_mechanical_details: classification.mechanical_details ?? undefined,
+        detailed_cause: classification.detailed_cause ?? undefined,
+        suggested_fix: classification.suggested_fix ?? undefined,
+      }
+    })
+
+    ;(rootCauseTopics ?? []).forEach((topic: any) => {
+      ;(topic.exemplars ?? []).forEach((exemplar: any) => {
+        const itemId = exemplar?.item_id
+        if (!itemId) return
+        map[itemId] = {
+          ...(map[itemId] ?? {}),
+          detailed_cause: exemplar?.detailed_cause ?? map[itemId]?.detailed_cause,
+          suggested_fix: exemplar?.suggested_fix ?? map[itemId]?.suggested_fix,
+        }
+      })
+    })
+    return map
+  }, [misclassificationCategoryBreakdown.itemClassifications, rootCauseTopics])
+
+  const activeFilteredItemIds = selectedCategoryItemIds ?? selectedTopicItemIds
+  const activeFilterChipLabel = selectedCategoryLabel
+    ? `Filtered by category: ${selectedCategoryLabel}`
+    : selectedTopicLabel
+      ? `Filtered by topic: ${selectedTopicLabel}`
+      : null
 
   const selectedItemRcaContext = selectedScoreResult?.itemId
     ? rcaDataByItemId[selectedScoreResult.itemId]
     : undefined
+  const topicCategoryInfoByKey = useMemo(() => {
+    const map: Record<string, { primaryCategory?: string; purity?: number; categoryCounts?: Record<string, number> }> = {}
+    ;(misclassificationCategoryBreakdown.topicCategoryBreakdown ?? []).forEach(topic => {
+      const primaryCategory = typeof topic.topic_primary_category === 'string'
+        ? topic.topic_primary_category
+        : undefined
+      const purity = typeof topic.topic_category_purity === 'number'
+        ? topic.topic_category_purity
+        : undefined
+      const categoryCounts =
+        topic.category_counts && typeof topic.category_counts === 'object'
+          ? (topic.category_counts as Record<string, number>)
+          : undefined
+      if (topic.topic_id !== undefined && topic.topic_id !== null) {
+        map[String(topic.topic_id)] = { primaryCategory, purity, categoryCounts }
+      }
+      if (topic.topic_label) {
+        map[String(topic.topic_label)] = { primaryCategory, purity, categoryCounts }
+      }
+    })
+    return map
+  }, [misclassificationCategoryBreakdown.topicCategoryBreakdown])
+
+  const candidateAssessmentSummary = useMemo<CandidateAssessmentCompactSummary | null>(() => {
+    const parsedTaskMetadata = parseJsonDeep(data.task?.metadata)
+    if (!parsedTaskMetadata || typeof parsedTaskMetadata !== 'object') return null
+    const metadataObject = parsedTaskMetadata as Record<string, unknown>
+    const rawCompactSummary = parseJsonDeep(metadataObject.candidate_assessment_compact_summary)
+    if (!rawCompactSummary || typeof rawCompactSummary !== 'object') return null
+    const compactSummary = rawCompactSummary as CandidateAssessmentCompactSummary
+    if (compactSummary.schema_version !== 'candidate_assessment_bundle.v1') return null
+    return compactSummary
+  }, [data.task?.metadata])
+
+  const candidateAssessmentStageRefs = useMemo(() => {
+    const stageRefs = candidateAssessmentSummary?.stage_references
+    if (!Array.isArray(stageRefs)) return []
+    return stageRefs.filter(ref => ref && typeof ref === 'object')
+  }, [candidateAssessmentSummary])
 
   return (
     <div
       ref={containerRef}
-      className="w-full p-3 min-w-[300px] h-full overflow-y-auto"
+      className="w-full px-3 pb-3 min-w-[300px]"
     >
       <div className={`overflow-visible ${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
         style={{
@@ -810,6 +1325,14 @@ const DetailContent = React.memo(({
               onClose={handleScoreResultClose}
               rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
               rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+              misclassificationCategory={selectedItemRcaContext?.misclassification_category}
+              misclassificationConfidence={selectedItemRcaContext?.misclassification_confidence}
+              misclassificationRationale={selectedItemRcaContext?.misclassification_rationale}
+              misclassificationEvidenceQuote={selectedItemRcaContext?.misclassification_evidence_quote}
+              misclassificationConfigFixability={selectedItemRcaContext?.misclassification_config_fixability}
+              misclassificationEvidence={selectedItemRcaContext?.misclassification_evidence}
+              misclassificationMechanicalSubtype={selectedItemRcaContext?.misclassification_mechanical_subtype}
+              misclassificationMechanicalDetails={selectedItemRcaContext?.misclassification_mechanical_details}
             />
           </div>
         )}
@@ -877,10 +1400,98 @@ const DetailContent = React.memo(({
                     isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
-                    elapsedSeconds={data.elapsedSeconds}
-                    estimatedRemainingSeconds={data.estimatedRemainingSeconds}
+                    hideElapsedTime
                   />
                 </div>
+
+                {candidateAssessmentSummary && (
+                  <div className="mb-3">
+                    <div className="font-medium text-muted-foreground text-sm mb-1">
+                      Candidate assessment
+                    </div>
+                    <div className="rounded-md bg-card p-2 space-y-2">
+                      <div className="text-sm text-foreground">
+                        {getAssessmentDecisionLabel(candidateAssessmentSummary.decision)}
+                      </div>
+                      {candidateAssessmentSummary.decision_reason && (
+                        <div className="text-xs text-muted-foreground">
+                          Reason: {candidateAssessmentSummary.decision_reason}
+                        </div>
+                      )}
+                      {candidateAssessmentSummary.decision_confidence && (
+                        <div className="text-xs text-muted-foreground">
+                          Confidence: {candidateAssessmentSummary.decision_confidence}
+                        </div>
+                      )}
+                      {candidateAssessmentSummary.primary_next_action && (
+                        <div className="text-xs text-muted-foreground">
+                          Primary route action: {getPrimaryNextActionLabel(candidateAssessmentSummary.primary_next_action)}
+                        </div>
+                      )}
+
+                      {candidateAssessmentStageRefs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-xs font-medium text-muted-foreground">
+                            Stage evidence
+                          </div>
+                          {candidateAssessmentStageRefs.map((stageRef, index) => (
+                            <div key={`assessment-stage-${stageRef.stage_key ?? 'unknown'}-${index}`} className="rounded bg-muted/40 p-2 space-y-1">
+                              <div className="text-xs text-foreground font-medium">
+                                {getAssessmentStageLabel(stageRef.stage_key)}
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <div>
+                                  Original baseline: {stageRef.baseline_evaluation_id ?? data.baseline_evaluation_id ?? 'Unavailable'} ({stageRef.baseline_status ?? 'Unknown'})
+                                </div>
+                                <div>
+                                  Current best baseline: {data.current_baseline_evaluation_id ?? 'Unavailable'}
+                                </div>
+                                <div>
+                                  Candidate: {stageRef.candidate_evaluation_id ?? 'Unavailable'} ({stageRef.candidate_status ?? 'Unknown'})
+                                </div>
+                                <div>
+                                  Delta AC1: {formatSignedMetric(stageRef.delta_ac1)}
+                                </div>
+                                <div>
+                                  Delta value: {formatSignedMetric(stageRef.delta_value_score)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          Generalization gap KPIs
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <div>
+                            Baseline gap: {formatMetric(candidateAssessmentSummary.baseline_generalization_gap)}
+                          </div>
+                          <div>
+                            Candidate gap: {formatMetric(candidateAssessmentSummary.candidate_generalization_gap)}
+                          </div>
+                          <div>
+                            Gap delta: {formatSignedMetric(candidateAssessmentSummary.generalization_gap_delta)}
+                          </div>
+                          <div>
+                            Random delta mean/stddev: {formatSignedMetric(candidateAssessmentSummary.random_delta_mean)} / {formatMetric(candidateAssessmentSummary.random_delta_stddev)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {candidateAssessmentSummary.attachment_key && (
+                        <div className="text-xs text-muted-foreground">
+                          Bundle attachment key:{' '}
+                          <span className="font-mono break-all text-foreground">
+                            {candidateAssessmentSummary.attachment_key}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mb-3">
                   <ClassDistributionVisualizer
@@ -919,11 +1530,15 @@ const DetailContent = React.memo(({
                   </div>
                 )}
 
-                {/* Root Cause Analysis */}
-                {rootCauseTopics && rootCauseTopics.length > 0 && (
+                {/* Score-Configuration RCA */}
+                {(rootCauseData && (
+                  (rootCauseTopics && rootCauseTopics.length > 0) ||
+                  misclassificationCategoryBreakdown.totalItems > 0 ||
+                  misclassificationCategoryBreakdown.redFlags.length > 0
+                )) && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-sm text-muted-foreground">Root cause analysis</h4>
+                      <h4 className="font-medium text-sm text-muted-foreground">Score-Configuration RCA</h4>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -934,12 +1549,258 @@ const DetailContent = React.memo(({
                         <MessageSquareCode className="w-3.5 h-3.5 text-muted-foreground" />
                       </Button>
                     </div>
+                    {rcaCoverageNote && (
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        {rcaCoverageNote}
+                      </div>
+                    )}
                     {showRootCauseCode ? (
                       <pre className="whitespace-pre-wrap text-xs font-mono text-foreground bg-background rounded-md p-3 overflow-y-auto max-h-96 overflow-x-auto">
                         {JSON.stringify(rootCauseData, null, 2)}
                       </pre>
                     ) : (
                       <>
+                        {misclassificationCategoryBreakdown.totalItems > 0 && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Misclassification categories
+                            </div>
+                            <div className="space-y-2 bg-card rounded-md p-2">
+                              <div className="h-7 rounded-md overflow-hidden bg-muted/70 flex">
+                                {misclassificationCategoryBreakdown.rows
+                                  .filter(row => row.count > 0)
+                                  .map(row => {
+                                    const percentage = misclassificationCategoryBreakdown.totalItems > 0
+                                      ? (row.count / misclassificationCategoryBreakdown.totalItems) * 100
+                                      : 0
+                                    const showLabel = percentage >= 15
+                                    return (
+                                      <div
+                                        key={row.key}
+                                        className={cn('h-full flex items-center justify-center text-xs text-foreground', row.colorClass)}
+                                        style={{ width: `${percentage}%` }}
+                                        title={`${row.label}: ${row.count} (${percentage.toFixed(1)}%)`}
+                                      >
+                                        {showLabel ? row.shortLabel : null}
+                                      </div>
+                                    )
+                                  })}
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+                                {misclassificationCategoryBreakdown.rows.map(row => {
+                                  const percentage = misclassificationCategoryBreakdown.totalItems > 0
+                                    ? (row.count / misclassificationCategoryBreakdown.totalItems) * 100
+                                    : 0
+                                  return (
+                                    <div key={`summary-${row.key}`} className="flex items-center justify-between gap-2 text-xs">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={cn('w-2 h-2 rounded-full shrink-0', row.colorClass)} />
+                                        <span className="truncate text-foreground">{row.label}</span>
+                                      </div>
+                                      <span className="text-muted-foreground shrink-0">
+                                        {row.count} ({percentage.toFixed(1)}%)
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Overall: {getMisclassificationAssessment(
+                                  misclassificationCategoryBreakdown.overall?.predominant_category
+                                )}{' '}
+                                ({getMisclassificationCategoryLabel(
+                                  misclassificationCategoryBreakdown.overall?.predominant_category
+                                )})
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {misclassificationCategoryBreakdown.totalItems > 0 &&
+                          (
+                            misclassificationCategoryBreakdown.overall?.predominant_category === 'information_gap'
+                            || (
+                              (misclassificationCategoryBreakdown.rows.find(row => row.key === 'information_gap')?.count ?? 0)
+                              / Math.max(1, misclassificationCategoryBreakdown.totalItems)
+                            ) >= 0.5
+                          ) && (
+                            <Alert className="mb-3 py-2 px-3 border-chart-2/40 text-chart-2 [&>svg]:text-chart-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              <div className="min-w-0 text-xs">
+                                <AlertTitle className="mb-0.5 text-xs">Information-gap is dominating this run</AlertTitle>
+                                <AlertDescription className="text-xs text-foreground">
+                                  {misclassificationCategoryBreakdown.categoryDiagnostics?.information_gap?.diagnostic_summary}
+                                  {' '}({misclassificationCategoryBreakdown.categoryDiagnostics?.information_gap?.item_count ?? 0} item(s),{' '}
+                                  {(((misclassificationCategoryBreakdown.categoryDiagnostics?.information_gap?.missing_or_degraded_primary_input_share ?? 0) * 100)).toFixed(1)}% with missing/degraded primary-input evidence).
+                                  {' '}This can limit score-configuration-only optimization.
+                                </AlertDescription>
+                              </div>
+                            </Alert>
+                          )}
+                        {misclassificationCategoryBreakdown.totalItems > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <div className="font-medium text-muted-foreground text-sm">
+                                Category summaries
+                              </div>
+                              {selectedCategoryKey && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={clearCategoryFilter}
+                                >
+                                  Clear category filter
+                                </Button>
+                              )}
+                            </div>
+                            <div className="space-y-2 bg-card rounded-md p-2">
+                              {MISCLASSIFICATION_CATEGORY_CONFIG.map(row => {
+                                const summary = misclassificationCategoryBreakdown.categorySummaries?.[row.key]
+                                const summaryText = summary?.category_summary_text
+                                const patterns = Array.isArray(summary?.top_patterns) ? summary?.top_patterns : []
+                                const itemCount = summary?.item_count ?? 0
+                                const categoryClassifications = (misclassificationCategoryBreakdown.itemClassifications ?? [])
+                                  .filter(classification => classification.primary_category === row.key)
+                                const itemsWithMissingId = categoryClassifications
+                                  .filter(classification => !classification.item_id)
+                                  .length
+                                return (
+                                  <div key={`category-summary-${row.key}`} className="rounded-md bg-muted/40 p-2 space-y-1.5">
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={cn('w-2 h-2 rounded-full shrink-0', row.colorClass)} />
+                                        <span className="text-xs font-medium text-foreground truncate">{row.label}</span>
+                                      </div>
+                                      <span className="text-xs text-muted-foreground shrink-0">{itemCount} item(s)</span>
+                                    </div>
+                                    <div className="text-xs text-foreground">
+                                      {summaryText || 'No items in this category for this run.'}
+                                    </div>
+                                    {patterns.length > 0 && (
+                                      <div className="mt-1 text-xs text-muted-foreground">
+                                        Top patterns: {patterns
+                                          .map(pattern => `${pattern.pattern ?? 'unknown'} (${pattern.count ?? 0})`)
+                                          .join(', ')}
+                                      </div>
+                                    )}
+                                    {itemCount > 0 && (
+                                      <div className="flex items-center justify-between gap-2">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className={cn(
+                                            'h-7 text-xs border-0 shadow-none px-2',
+                                            selectedCategoryKey === row.key
+                                              ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90'
+                                              : 'bg-muted text-foreground hover:bg-muted/80'
+                                          )}
+                                          onClick={() => handleCategoryFilter(row.key, row.label)}
+                                        >
+                                          View items ({itemCount})
+                                        </Button>
+                                        {selectedCategoryKey === row.key && categoryMissingItemIdCount > 0 && (
+                                          <span className="text-[11px] text-muted-foreground">
+                                            {categoryMissingItemIdCount} item(s) missing item_id not shown
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                    {itemsWithMissingId > 0 && selectedCategoryKey !== row.key && (
+                                      <div className="text-[11px] text-muted-foreground">
+                                        {itemsWithMissingId} item(s) in this category are missing item_id and cannot appear in score results.
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                              <div className="text-xs text-muted-foreground">
+                                Summary budget per category: {misclassificationCategoryBreakdown.maxCategorySummaryItemsUsed ?? 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {Object.entries(misclassificationCategoryBreakdown.mechanicalSubtypeTotals ?? {}).some(([, value]) => (value ?? 0) > 0) && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Mechanical subtype breakdown
+                            </div>
+                            <div className="rounded-md bg-card p-2 space-y-1">
+                              {Object.entries(misclassificationCategoryBreakdown.mechanicalSubtypeTotals ?? {})
+                                .filter(([, value]) => (value ?? 0) > 0)
+                                .map(([subtype, value]) => (
+                                  <div key={`mechanical-subtype-${subtype}`} className="flex items-center justify-between text-xs">
+                                    <span className="text-foreground">{subtype.replace(/_/g, ' ')}</span>
+                                    <span className="text-muted-foreground">{value}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                        {misclassificationCategoryBreakdown.redFlags.length > 0 && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Evaluation red flags
+                            </div>
+                            <div className="space-y-1">
+                              {misclassificationCategoryBreakdown.redFlags.map((flag, index) => {
+                                const severity = (flag.severity ?? 'low').toLowerCase()
+                                return (
+                                  <Alert
+                                    key={`${flag.flag ?? 'flag'}-${index}`}
+                                    variant={severity === 'high' ? 'destructive' : 'default'}
+                                    className={cn(
+                                      'py-2 px-3',
+                                      severity === 'medium' && 'border-chart-3/40 text-chart-3 [&>svg]:text-chart-3',
+                                      severity === 'low' && 'border-muted text-muted-foreground'
+                                    )}
+                                  >
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <div className="min-w-0">
+                                      <AlertTitle className="mb-0.5 text-xs">
+                                        <span className="uppercase tracking-wide">{severity}</span>
+                                        {flag.flag && (
+                                          <span className="ml-2 font-mono normal-case text-muted-foreground">{flag.flag}</span>
+                                        )}
+                                      </AlertTitle>
+                                      <AlertDescription className="text-xs text-foreground">
+                                        {flag.message ?? 'No details provided.'}
+                                      </AlertDescription>
+                                    </div>
+                                  </Alert>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {misclassificationCategoryBreakdown.primaryNextAction && (
+                          <div className="mb-3">
+                            <div className="font-medium text-muted-foreground text-sm mb-1">
+                              Primary next action
+                            </div>
+                            <div className="rounded-md bg-card p-2 space-y-1">
+                              <div className="text-sm text-foreground">
+                                {getPrimaryNextActionLabel(
+                                  misclassificationCategoryBreakdown.primaryNextAction.action
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Confidence: {misclassificationCategoryBreakdown.primaryNextAction.confidence ?? 'N/A'}
+                              </div>
+                              {Array.isArray(misclassificationCategoryBreakdown.primaryNextAction.reasons) &&
+                                misclassificationCategoryBreakdown.primaryNextAction.reasons.length > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {misclassificationCategoryBreakdown.primaryNextAction.reasons.join(' ')}
+                                  </div>
+                                )}
+                              <div className="text-xs text-muted-foreground">
+                                Optimization applicability: {misclassificationCategoryBreakdown.optimizationApplicability?.status ?? 'N/A'}
+                                {misclassificationCategoryBreakdown.optimizationApplicability?.reason
+                                  ? ` - ${misclassificationCategoryBreakdown.optimizationApplicability.reason}`
+                                  : ''}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {rootCauseData?.overall_explanation && (
                           <div className="mb-3">
                             <div className="font-medium text-muted-foreground text-sm mb-1">Overall root cause</div>
@@ -955,7 +1816,18 @@ const DetailContent = React.memo(({
                         )}
                         {rootCauseData?.overall_improvement_suggestion && (
                           <div className="mb-3">
-                            <div className="font-medium text-muted-foreground text-sm mb-1">Overall improvement</div>
+                            <div className="font-medium text-muted-foreground text-sm mb-1">Score-configuration improvement</div>
+                            {misclassificationCategoryBreakdown.optimizationApplicability?.status &&
+                              misclassificationCategoryBreakdown.optimizationApplicability.status !== 'applicable' && (
+                                <Alert className="mb-2 py-2 px-3">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <div className="text-xs text-foreground">
+                                    RCA recommendations are limited because optimization applicability is{' '}
+                                    <strong>{misclassificationCategoryBreakdown.optimizationApplicability.status}</strong>.
+                                    {' '}Follow primary next action first.
+                                  </div>
+                                </Alert>
+                              )}
                             <div className="prose prose-sm max-w-none prose-p:text-foreground prose-strong:text-foreground prose-headings:text-foreground prose-li:text-foreground">
                               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                                 p: ({children}) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
@@ -966,7 +1838,14 @@ const DetailContent = React.memo(({
                             </div>
                           </div>
                         )}
-                        <TopicList topics={rootCauseTopics} onTopicFilter={handleTopicFilter} />
+                        {rootCauseTopics && rootCauseTopics.length > 0 && (
+                          <TopicList
+                            topics={rootCauseTopics}
+                            topicCategoryInfoByKey={topicCategoryInfoByKey}
+                            onTopicFilter={handleTopicFilter}
+                            activeTopicLabel={selectedTopicLabel}
+                          />
+                        )}
                       </>
                     )}
                   </div>
@@ -979,13 +1858,20 @@ const DetailContent = React.memo(({
         {/* Show score results panel during loading or when results exist, hidden only in narrow detail mode */}
         {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
           <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
+            {activeFilterChipLabel && (
+              <div className="mb-2">
+                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
+                  {activeFilterChipLabel}
+                </span>
+              </div>
+            )}
             <div className="h-full overflow-y-auto">
               <EvaluationTaskScoreResults
                 results={parsedScoreResults}
                 accuracy={data.accuracy ?? 0}
                 selectedPredictedValue={selectedPredictedActual.predicted}
                 selectedActualValue={selectedPredictedActual.actual}
-                selectedItemIds={selectedTopicItemIds}
+                selectedItemIds={activeFilteredItemIds}
                 onResultSelect={handleScoreResultSelect}
                 selectedScoreResult={selectedScoreResult}
                 isLoading={isResultsLoading}
@@ -1018,6 +1904,14 @@ const DetailContent = React.memo(({
               onClose={handleScoreResultClose}
               rcaDetailedCause={selectedItemRcaContext?.detailed_cause}
               rcaSuggestedFix={selectedItemRcaContext?.suggested_fix}
+              misclassificationCategory={selectedItemRcaContext?.misclassification_category}
+              misclassificationConfidence={selectedItemRcaContext?.misclassification_confidence}
+              misclassificationRationale={selectedItemRcaContext?.misclassification_rationale}
+              misclassificationEvidenceQuote={selectedItemRcaContext?.misclassification_evidence_quote}
+              misclassificationConfigFixability={selectedItemRcaContext?.misclassification_config_fixability}
+              misclassificationEvidence={selectedItemRcaContext?.misclassification_evidence}
+              misclassificationMechanicalSubtype={selectedItemRcaContext?.misclassification_mechanical_subtype}
+              misclassificationMechanicalDetails={selectedItemRcaContext?.misclassification_mechanical_details}
             />
           </div>
         )}
@@ -1085,10 +1979,25 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     isChampion: boolean;
   } | null>(null);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
+  const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
+  const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
-  
-  
+  const hasInlineActionMenu = Boolean(onShare || onDelete)
+  const hasGridActions = variant === 'grid' && (Boolean(controlButtons) || hasInlineActionMenu)
+
+  const evaluationNotes = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      if (params && typeof params.notes === 'string' && params.notes.trim()) {
+        // Normalize Markdown: remove spaces before closing bold/italic delimiters so that
+        // AI-generated text like "**label: **" renders correctly (CommonMark rejects a
+        // closing delimiter that is preceded by whitespace).
+        return params.notes.trim().replace(/ (\*+)/g, '$1')
+      }
+    } catch { /* ignore */ }
+    return null
+  }, [data.parameters])
 
   // Add more detailed logging for incoming data
 
@@ -1133,20 +2042,27 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
 
-  // Fetch baseline metrics when a baseline evaluation ID is stored in parameters.metadata
   const baselineEvaluationId = useMemo(() => {
+    return typeof data.baseline_evaluation_id === 'string' ? data.baseline_evaluation_id : null
+  }, [data.baseline_evaluation_id])
+
+  const currentBaselineEvaluationId = useMemo(() => {
+    return typeof data.current_baseline_evaluation_id === 'string' ? data.current_baseline_evaluation_id : null
+  }, [data.current_baseline_evaluation_id])
+
+  const dataSetIdFromParameters = useMemo(() => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
-      const metadata = parseJsonDeep(params?.metadata) as Record<string, unknown> | null
-      return typeof metadata?.baseline === 'string' ? metadata.baseline : null
+      return typeof params?.dataset_id === 'string' ? params.dataset_id : null
     } catch {
       return null
     }
   }, [data.parameters])
 
   useEffect(() => {
-    if (!baselineEvaluationId || variant !== 'detail') {
+    if (!baselineEvaluationId) {
       setBaselineMetrics(null);
+      setBaselineAccuracy(null);
       return;
     }
 
@@ -1158,6 +2074,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
             query GetBaselineEvaluation($id: ID!) {
               getEvaluation(id: $id) {
                 id
+                accuracy
                 metrics
               }
             }
@@ -1166,6 +2083,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         });
 
         const baselineEval = (result as any).data?.getEvaluation;
+        setBaselineAccuracy(baselineEval?.accuracy ?? null);
         if (baselineEval?.metrics) {
           try {
             const parsed = parseJsonDeep(baselineEval.metrics);
@@ -1197,6 +2115,39 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
     fetchBaselineMetrics();
   }, [baselineEvaluationId, variant]);
+
+  // Fetch current baseline accuracy (latest accepted version baseline for dual baseline display)
+  useEffect(() => {
+    if (!currentBaselineEvaluationId) {
+      setCurrentBaselineAccuracy(null);
+      return;
+    }
+
+    const fetchCurrentBaselineAccuracy = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetCurrentBaselineEvaluation($id: ID!) {
+              getEvaluation(id: $id) {
+                id
+                accuracy
+              }
+            }
+          `,
+          variables: { id: currentBaselineEvaluationId }
+        });
+
+        const eval_ = (result as any).data?.getEvaluation;
+        setCurrentBaselineAccuracy(eval_?.accuracy ?? null);
+      } catch (error) {
+        console.error('Error fetching current baseline evaluation:', error);
+        setCurrentBaselineAccuracy(null);
+      }
+    };
+
+    fetchCurrentBaselineAccuracy();
+  }, [currentBaselineEvaluationId, variant]);
 
   // Function to generate universal YAML code for evaluation
   const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
@@ -1267,7 +2218,44 @@ evaluation:
   # Class Distribution
   dataset_balanced: ${evaluationData.isDatasetClassDistributionBalanced || false}
   predicted_balanced: ${evaluationData.isPredictedClassDistributionBalanced || false}
-
+${(() => {
+    try {
+      const params = parseJsonDeep(evaluationData.parameters) as Record<string, unknown> | null
+      const rc = params?.root_cause as Record<string, unknown> | null
+      const ma = rc?.misclassification_analysis as Record<string, unknown> | null
+      if (!ma) return ''
+      const totals = ma.category_totals as Record<string, number> | null
+      const overall = ma.overall_assessment as Record<string, unknown> | null
+      const nextAction = ma.primary_next_action as Record<string, unknown> | null
+      const applicability = ma.optimization_applicability as Record<string, unknown> | null
+      const mechanicalTotals = ma.mechanical_subtype_totals as Record<string, number> | null
+      if (!totals) return ''
+      const categoryLines = Object.entries(totals)
+        .map(([k, v]) => `      ${k}: ${v}`)
+        .join('\n')
+      const mechanicalLines = mechanicalTotals && Object.keys(mechanicalTotals).length > 0
+        ? '\n    mechanical_subtype_totals:\n' + Object.entries(mechanicalTotals).map(([k, v]) => `      ${k}: ${v}`).join('\n')
+        : ''
+      return `
+  # Misclassification Analysis
+  misclassification_analysis:
+    category_totals:
+${categoryLines}${mechanicalLines}
+    overall_assessment:
+      total_items: ${overall?.total_items ?? 0}
+      predominant_category: "${overall?.predominant_category ?? ''}"
+      score_fix_candidate_items: ${overall?.score_fix_candidate_items ?? 0}
+    primary_next_action:
+      action: "${(nextAction?.action as string) ?? ''}"
+      confidence: "${(nextAction?.confidence as string) ?? ''}"
+    optimization_applicability:
+      status: "${(applicability?.status as string) ?? ''}"
+      reason: "${(applicability?.reason as string) ?? ''}"
+`
+    } catch {
+      return ''
+    }
+  })()}
 # Context: This YAML contains evaluation results and metrics for analysis by humans, AI models, and other systems.
 # Usage: Can be used for reporting, monitoring, or further automated analysis.
 `;
@@ -1449,9 +2437,11 @@ evaluation:
       errorMessage: taskData?.errorMessage || task.data?.errorMessage || undefined,
       scorecardId: task.scorecardId,
       scoreId: task.scoreId,
-      scoreVersionId: task.scoreVersionId
+      scoreVersionId: task.scoreVersionId,
+      procedureId: task.procedureId,
+      dataSetId: task.data?.dataSetId ?? task.dataSetId ?? dataSetIdFromParameters ?? undefined
     };
-  }, [task, taskData, variant]);
+  }, [task, taskData, variant, dataSetIdFromParameters]);
 
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {
@@ -1521,6 +2511,7 @@ evaluation:
       onClose={onClose}
       extra={extra}
       isSelected={isSelected}
+      showSelectedOutline={true}
       commandDisplay={commandDisplay}
       {...restProps}
       renderHeader={(props) => (
@@ -1531,76 +2522,61 @@ evaluation:
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
               {variant === 'detail' && (
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2">
                   <FlaskConical className="h-5 w-5 text-muted-foreground" />
                   <span className="text-lg font-semibold text-muted-foreground">{props.task.type}</span>
                 </div>
               )}
-              {props.task.name && (
-                <div className="font-semibold text-sm truncate">{props.task.name}</div>
-              )}
-              {props.task.description && (
-                <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
-                  {props.task.description}
-                </div>
-              )}
-              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
-                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
-                  <span className="truncate">{props.task.scorecard}</span>
-                  {variant === 'detail' && taskWithDefaults.scorecardId && (
-                    <Link 
-                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
-                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
+              {/* Grid variant: show all metadata inline in header */}
+              {variant !== 'detail' && (
+                <>
+                  {props.task.name ? (
+                    <div className="font-semibold text-sm min-w-0 flex items-center gap-1.5">
+                      {hasGridActions && <FlaskConical className="h-4 w-4 flex-shrink-0 text-muted-foreground" />}
+                      <span className="truncate">{props.task.name}</span>
+                    </div>
+                  ) : hasGridActions ? (
+                    <div className="font-semibold text-sm min-w-0 flex items-center gap-1.5">
+                      <FlaskConical className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="truncate">{props.task.type}</span>
+                    </div>
+                  ) : null}
+                  {props.task.description && (
+                    <div className="text-sm text-muted-foreground truncate">
+                      {props.task.description}
+                    </div>
                   )}
-                </div>
-              )}
-              {props.task.score && props.task.score.trim() !== '' && (
-                <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
-                  <span className="truncate">{props.task.score}</span>
-            {variant === 'detail' && taskWithDefaults.scorecardId && taskWithDefaults.scoreId && (() => {
-              
-              const scoreLink = taskWithDefaults.scoreVersionId 
-                ? `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`
-                : `/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}`;
-              
-                    
-                    return (
-                      <Link 
-                        href={scoreLink}
-                        className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    );
-                  })()}
-                </div>
-              )}
-              {variant === 'detail' && scoreVersionInfo && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Score Version:</span>
-                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
-                  {scoreVersionInfo.isChampion && (
-                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                      Champion
-                    </span>
+                  {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                    <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                      <span className="truncate">{props.task.scorecard}</span>
+                    </div>
                   )}
-                </div>
+                  {props.task.score && props.task.score.trim() !== '' && (
+                    <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                      <span className="truncate">{props.task.score}</span>
+                    </div>
+                  )}
+                  <Timestamp time={props.task.time} variant="relative" />
+                  <ProgressBarTiming
+                    startedAt={data.startedAt || (data.task as any)?.startedAt}
+                    completedAt={(data.task as any)?.completedAt}
+                    isInProgress={data.status?.toUpperCase() === 'RUNNING'}
+                    className="text-muted-foreground"
+                  />
+                </>
               )}
-              <Timestamp time={props.task.time} variant="relative" />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex items-center gap-2">
-                    <div className="text-muted-foreground">
-                      <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                    </div>
-                    {(onShare || onDelete) && (
+                    {!hasGridActions && (
+                      <div className="text-muted-foreground">
+                        <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                      </div>
+                    )}
+                    {controlButtons}
+                    {hasInlineActionMenu && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <CardButton
@@ -1635,17 +2611,19 @@ evaluation:
                       </DropdownMenu>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground text-center">
-                    {(() => {
-                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
-                      return (
-                        <>
-                          {firstWord}<br />
-                          {restWords.join(' ')}
-                        </>
-                      );
-                    })()}
-                  </div>
+                  {!hasGridActions && (
+                    <div className="text-xs text-muted-foreground text-center">
+                      {(() => {
+                        const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                        return (
+                          <>
+                            {firstWord}<br />
+                            {restWords.join(' ')}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -1654,30 +2632,194 @@ evaluation:
               )}
             </div>
           </div>
+          {variant !== 'detail' && evaluationNotes && (
+            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                code: ({children, className}) => {
+                  const isBlock = Boolean(className && className.includes('language-'))
+                  if (isBlock) {
+                    return <code className={`${className} text-foreground`}>{children}</code>
+                  }
+                  return <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">{children}</code>
+                },
+              }}>
+                {evaluationNotes}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
       renderContent={(props) => {
-        // Add logging for content rendering decision
+        // Detail variant: metadata section that scrolls with content
+        const detailMetadata = variant === 'detail' ? (
+          <div className="px-4 flex flex-col leading-none">
+            {props.task.name && (
+              <div className="font-semibold text-sm">{props.task.name}</div>
+            )}
+            {props.task.description && (
+              <div className="text-sm text-muted-foreground">
+                {props.task.description}
+              </div>
+            )}
+            {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+              <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                <span className="truncate">{props.task.scorecard}</span>
+                {taskWithDefaults.scorecardId && (
+                  <Link
+                    href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
+                    className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                )}
+              </div>
+            )}
+            {props.task.score && props.task.score.trim() !== '' && (
+              <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
+                <span className="truncate">{props.task.score}</span>
+                {taskWithDefaults.scorecardId &&
+                  taskWithDefaults.scoreId &&
+                  taskWithDefaults.scoreVersionId && (
+                    <Link
+                      href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
+                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Score Version:</span>
+              {scoreVersionInfo ? (
+                <>
+                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
+                  {scoreVersionInfo.isChampion && (
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                      Champion
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span>Unavailable</span>
+              )}
+            </div>
+            {taskWithDefaults.procedureId && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                <span>Procedure:</span>
+                <span className="truncate font-mono">{taskWithDefaults.procedureId}</span>
+                <Link
+                  href={`/lab/procedures/${taskWithDefaults.procedureId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {taskWithDefaults.dataSetId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Dataset:</span>
+                <span className="font-mono truncate max-w-[22rem]">{taskWithDefaults.dataSetId}</span>
+                <Link
+                  href={`/lab/datasets/${taskWithDefaults.dataSetId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {baselineEvaluationId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Original baseline:</span>
+                <span className="font-mono truncate max-w-[22rem]">{baselineEvaluationId}</span>
+                <Link
+                  href={`/lab/evaluations/${baselineEvaluationId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {currentBaselineEvaluationId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Current best baseline:</span>
+                <span className="font-mono truncate max-w-[22rem]">{currentBaselineEvaluationId}</span>
+                <Link
+                  href={`/lab/evaluations/${currentBaselineEvaluationId}`}
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+            {task.data?.cost != null && task.data.cost > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Cost:</span>
+                <span>
+                  ${task.data.cost.toFixed(4)} total
+                  {task.data.processedItems > 0 && (
+                    <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
+                  )}
+                </span>
+              </div>
+            )}
+            <Timestamp time={props.task.time} variant="relative" />
+            <ProgressBarTiming
+              startedAt={data.startedAt || (data.task as any)?.startedAt}
+              completedAt={(data.task as any)?.completedAt}
+              isInProgress={data.status?.toUpperCase() === 'RUNNING'}
+              className="text-muted-foreground"
+            />
+            {evaluationNotes && (
+              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
+                  p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
+                  strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                  code: ({children, className}) => {
+                    const isBlock = Boolean(className && className.includes('language-'))
+                    if (isBlock) {
+                      return <code className={`${className} text-foreground`}>{children}</code>
+                    }
+                    return <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">{children}</code>
+                  },
+                }}>
+                  {evaluationNotes}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        ) : null;
 
         return (
-          <TaskContent {...props} hideTaskStatus={true}>
-            {variant === 'grid' ? (
-              <GridContent data={data} extra={extra} isSelected={isSelected} />
-            ) : (
-              <DetailContent 
-                data={data}
-                isFullWidth={isFullWidth ?? false}
-                metrics={metrics}
-                metricsVariant="detail"
-                selectedScoreResultId={selectedScoreResultId}
-                onSelectScoreResult={onSelectScoreResult}
-                extra={extra}
-                isSelected={isSelected}
-                commandDisplay={commandDisplay}
-                onCommandDisplayChange={setCommandDisplay}
-              />
-            )}
-          </TaskContent>
+          <>
+            {detailMetadata}
+            <TaskContent {...props} hideTaskStatus={true}>
+              {variant === 'grid' ? (
+                <GridContent data={data} extra={extra} isSelected={isSelected} baselineAccuracy={baselineAccuracy} currentBaselineAccuracy={currentBaselineAccuracy} />
+              ) : (
+                <DetailContent
+                  data={data}
+                  isFullWidth={isFullWidth ?? false}
+                  metrics={metrics}
+                  metricsVariant="detail"
+                  selectedScoreResultId={selectedScoreResultId}
+                  onSelectScoreResult={onSelectScoreResult}
+                  extra={extra}
+                  isSelected={isSelected}
+                  commandDisplay={commandDisplay}
+                  onCommandDisplayChange={setCommandDisplay}
+                />
+              )}
+            </TaskContent>
+          </>
         );
       }}
     />

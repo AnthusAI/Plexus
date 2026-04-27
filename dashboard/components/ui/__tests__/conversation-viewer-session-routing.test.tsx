@@ -11,6 +11,7 @@ jest.mock("@/utils/data-operations", () => ({
 jest.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ConversationContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AutoScrollToBottom: () => null,
   ConversationEmptyState: ({
     title,
     description,
@@ -211,14 +212,13 @@ describe("ConversationViewer session-routing states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create New Session" }))
 
     await waitFor(() => {
-        expect(createMock).toHaveBeenCalledWith(
-          expect.objectContaining({
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            category: "Console Chat",
-          }),
-          expect.objectContaining({ authMode: "apiKey" })
-        )
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: "acct-1",
+          procedureId: "builtin:console/chat",
+          category: "Optimize",
+        })
+      )
       expect(onSessionSelect).toHaveBeenCalledWith("session-new")
     })
   })
@@ -249,5 +249,22 @@ describe("ConversationViewer session-routing states", () => {
     expect(screen.getByText("No session selected")).toBeInTheDocument()
     expect(screen.queryByText("hello")).not.toBeInTheDocument()
     expect(screen.queryByText("assistant reply")).not.toBeInTheDocument()
+  })
+
+  it("uses matching fixed header heights for sidebar and main session header", () => {
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const sidebarHeader = screen.getByTestId("conversation-sidebar-header")
+    const mainHeader = screen.getByTestId("conversation-main-header")
+
+    expect(sidebarHeader.className).toContain("h-12")
+    expect(mainHeader.className).toContain("h-12")
   })
 })

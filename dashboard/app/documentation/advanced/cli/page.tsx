@@ -166,9 +166,6 @@ plexus scores list --scorecard example1
 # Pull scorecard configuration to YAML
 plexus scorecards pull --scorecard example1 --output ./my-scorecards
 
-# Push scorecard configuration from YAML
-plexus scorecards push --scorecard example1 --file ./my-scorecard.yaml --note "Updated configuration"
-
 # Delete a scorecard
 plexus scorecards delete --scorecard example1`}</code>
             </div>
@@ -457,8 +454,7 @@ plexus results list --account "Example Account" --limit 20`}</code>
           <h2 className="text-2xl font-semibold mb-4">Report Commands</h2>
           <p className="text-muted-foreground mb-4">
             Manage report configurations and generated reports using the following commands.
-            Remember to run commands from your project root using `python -m plexus.cli.CommandLineInterface ...`
-            if you are working on the codebase locally, to avoid conflicts with globally installed versions.
+            Use the top-level `plexus report ...` command group.
           </p>
 
           <div className="space-y-6">
@@ -467,20 +463,20 @@ plexus results list --account "Example Account" --limit 20`}</code>
               <pre className="bg-muted rounded-lg mb-4">
                 <div className="code-container p-4">
                   <code>{`# List available report configurations for your account
-python -m plexus.cli.CommandLineInterface report config list
+plexus report config list
 
 # Show details of a specific report configuration (using ID or Name)
 # Note: Uses the flexible identifier system (tries ID, then Name if it looks like UUID; otherwise Name then ID)
-python -m plexus.cli.CommandLineInterface report config show <id_or_name>
+plexus report config show <id_or_name>
 
 # Create a new report configuration from a Markdown/YAML file
-python -m plexus.cli.CommandLineInterface report config create --name "My Report Config" --file ./path/to/config.md [--description "Optional description"]
+plexus report config create --name "My Report Config" --file ./path/to/config.md [--description "Optional description"]
 
 # Delete a report configuration (prompts for confirmation)
-python -m plexus.cli.CommandLineInterface report config delete <id_or_name>
+plexus report config delete <id_or_name>
 
 # Delete a report configuration (skip confirmation prompt)
-python -m plexus.cli.CommandLineInterface report config delete <id_or_name> --yes`}</code>
+plexus report config delete <id_or_name> --yes`}</code>
                 </div>
               </pre>
             </div>
@@ -489,33 +485,31 @@ python -m plexus.cli.CommandLineInterface report config delete <id_or_name> --ye
               <h3 className="text-xl font-medium mb-2">Report Generation and Viewing Commands</h3>
               <pre className="bg-muted rounded-lg mb-4">
                 <div className="code-container p-4">
-                  <code>{`# Trigger a new report generation task based on a configuration (using ID or Name for config)
-python -m plexus.cli.CommandLineInterface report run --config <config_id_or_name> [param1=value1 param2=value2 ...]
+                  <code>{`# Trigger a new report generation run based on a configuration (using ID or Name for config)
+plexus report run --config <config_id_or_name> [param1=value1 param2=value2 ...]
 
 # List generated reports, optionally filtered by configuration (using ID or Name for config filter)
 # Shows Report ID, Name, Config ID, Task ID, and Task Status
-python -m plexus.cli.CommandLineInterface report list [--config <config_id_or_name>]
+plexus report list [--config <config_id_or_name>]
 
 # Show details of a specific generated report (using ID or Name)
 # Includes Report details, linked Task status/details, rendered output, and Report Block summary
-python -m plexus.cli.CommandLineInterface report show <report_id_or_name>
+plexus report show <report_id_or_name>
 
 # Show details of the most recently created report
-python -m plexus.cli.CommandLineInterface report last`}</code>
-                </div>
-              </pre>
-            </div>
+plexus report last
 
-            <div>
-              <h3 className="text-xl font-medium mb-2">Report Block Inspection Commands</h3>
-              <pre className="bg-muted rounded-lg mb-4">
-                <div className="code-container p-4">
-                  <code>{`# List the analysis blocks for a specific report (requires Report ID)
-python -m plexus.cli.CommandLineInterface report block list <report_id>
+# Delete one report
+plexus report delete <report_id_or_name>
 
-# Show details of a specific block within a report (requires Report ID and block position or name)
-# Displays block details, output JSON (syntax highlighted), and logs
-python -m plexus.cli.CommandLineInterface report block show <report_id> <block_position_or_name>`}</code>
+# Purge old reports
+plexus report purge --older-than 30 --limit 50
+
+# Generate action items from a feedback report
+plexus report action-items [report_id]
+
+# Verify report S3 bucket access
+plexus report check-s3`}</code>
                 </div>
               </pre>
             </div>

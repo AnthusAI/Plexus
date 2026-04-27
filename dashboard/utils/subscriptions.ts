@@ -418,9 +418,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           },
           error: (error: Error) => {
             console.error('Create subscription error:', error);
-            if (isSubscribed) {
-              subscriber.error(error);
-            }
+            // Don't call subscriber.error() — that terminates the entire observable
           }
         });
         subscriptions.push(createSub);
@@ -518,9 +516,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           },
           error: (error: Error) => {
             console.error('Update subscription error:', error);
-            if (isSubscribed) {
-              subscriber.error(error);
-            }
+            // Don't call subscriber.error() — that terminates the entire observable
           }
         });
         subscriptions.push(updateSub);
@@ -540,9 +536,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
           },
           error: (error: Error) => {
             console.error('Delete subscription error:', error);
-            if (isSubscribed) {
-              subscriber.error(error);
-            }
+            // Don't call subscriber.error() — that terminates the entire observable
           }
         });
         subscriptions.push(deleteSub);
@@ -1036,72 +1030,3 @@ export function observeScoreResultChanges() {
     }
   };
 }
-
-// GraphNode subscription queries
-const onCreateGraphNodeSubscriptionQuery = /* GraphQL */ `
-  subscription OnCreateGraphNode {
-    onCreateGraphNode {
-      id
-      procedureId
-      name
-      metadata
-      status
-      parentNodeId
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-const onUpdateGraphNodeSubscriptionQuery = /* GraphQL */ `
-  subscription OnUpdateGraphNode {
-    onUpdateGraphNode {
-      id
-      procedureId
-      name
-      metadata
-      status
-      parentNodeId
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-export function observeGraphNodeUpdates() {
-  return new Observable(observer => {
-    const client = getClient();
-    const subscriptions: { unsubscribe: () => void }[] = [];
-
-    // Subscribe to create events
-    const createSub = (client.graphql({ query: onCreateGraphNodeSubscriptionQuery }) as any)
-      .subscribe({
-        next: ({ data }: { data: any }) => {
-          observer.next({ type: 'create', data: data?.onCreateGraphNode });
-        },
-        error: (error: any) => {
-          console.error('ExperimentNode create subscription error:', error);
-          observer.error(error);
-        }
-      });
-    subscriptions.push(createSub);
-
-    // Subscribe to update events
-    const updateSub = (client.graphql({ query: onUpdateGraphNodeSubscriptionQuery }) as any)
-      .subscribe({
-        next: ({ data }: { data: any }) => {
-          observer.next({ type: 'update', data: data?.onUpdateGraphNode });
-        },
-        error: (error: any) => {
-          console.error('ExperimentNode update subscription error:', error);
-          observer.error(error);
-        }
-      });
-    subscriptions.push(updateSub);
-
-    return () => {
-      subscriptions.forEach(sub => sub.unsubscribe());
-    };
-  });
-}
-

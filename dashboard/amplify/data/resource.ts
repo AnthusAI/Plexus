@@ -36,7 +36,7 @@ type TaskIndexFields = "accountId" | "type" | "status" | "target" |
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
-type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured" | "featuredKey";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
@@ -49,15 +49,12 @@ type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
 
-// New index types for Feedback Analysis
-// type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
+// New index types for Feedback Alignment
+// type FeedbackAlignmentIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
-});
-const startConsoleRunHandler = defineFunction({
-    entry: './resolvers/startConsoleRun.ts'
 });
 
 const schema = a.schema({
@@ -198,10 +195,12 @@ const schema = a.schema({
             configuration: a.string().required(),
             guidelines: a.string(),
             isFeatured: a.boolean().required(),
+            featuredKey: a.string(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             note: a.string(),
             branch: a.string(),
+            metadata: a.json(),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
@@ -216,7 +215,8 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("scoreId").sortKeys(["createdAt"])
+            idx("scoreId").sortKeys(["createdAt"]),
+            idx("scoreId").sortKeys(["featuredKey", "createdAt"]).name("byScoreIdAndFeaturedKeyAndCreatedAt")
         ]),
 
     Evaluation: a
@@ -228,6 +228,7 @@ const schema = a.schema({
             inferences: a.integer(),
             accuracy: a.float().required(),
             cost: a.float(),
+            costDetails: a.json(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             status: a.string().required(),
@@ -587,28 +588,6 @@ const schema = a.schema({
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
 
-    StartConsoleRunResponse: a.customType({
-        runId: a.string().required(),
-        taskId: a.string().required(),
-        accepted: a.boolean().required(),
-        queuedAt: a.datetime().required(),
-    }),
-
-    startConsoleRun: a
-        .mutation()
-        .arguments({
-            sessionId: a.string().required(),
-            procedureId: a.string().required(),
-            triggerMessageId: a.string().required(),
-            clientInstrumentation: a.json(),
-        })
-        .returns(a.ref('StartConsoleRunResponse'))
-        .authorization(allow => [
-            allow.publicApiKey(),
-            allow.authenticated(),
-        ])
-        .handler(a.handler.function(startConsoleRunHandler)),
-
     ReportConfiguration: a
         .model({
             name: a.string().required(),
@@ -638,7 +617,7 @@ const schema = a.schema({
             output: a.string(), // Generated report output (original markdown template)
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
-            reportConfigurationId: a.string().required(),
+            reportConfigurationId: a.string(),
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
@@ -746,7 +725,7 @@ const schema = a.schema({
         .model({
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
-            compositeKey: a.string().required(), // "recordType#timeRangeStart#numberOfMinutes"
+            compositeKey: a.string().required(), // "recordType[#scopeId]#timeRangeStart#numberOfMinutes"
             scorecardId: a.string(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
@@ -845,6 +824,10 @@ const schema = a.schema({
             description: a.string(),
             file: a.string(), // S3 path to the generated dataset file
             attachedFiles: a.string().array(),
+            isReferenceDataset: a.boolean(), // Marks dataset as an explicit reference dataset artifact
+            provenance: a.json(), // Snapshot of label/source provenance used to build this dataset
+            buildContext: a.json(), // Build metadata (time window, filters, task/evaluation ids, policy versions, etc.)
+            referenceAt: a.datetime(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string(),
@@ -981,6 +964,12 @@ const schema = a.schema({
             parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
             childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
             sequenceNumber: a.integer(), // Order within the session for proper conversation flow
+            responseTarget: a.string(),
+            responseStatus: a.enum(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED']),
+            responseOwner: a.string(),
+            responseStartedAt: a.datetime(),
+            responseCompletedAt: a.datetime(),
+            responseError: a.string(),
             createdAt: a.datetime().required()
         })
         .authorization((allow) => [
@@ -993,7 +982,8 @@ const schema = a.schema({
             idx("procedureId").sortKeys(["createdAt"]),
             idx("parentMessageId"),
             idx("humanInteraction").sortKeys(["createdAt"]),
-            idx("accountId").sortKeys(["createdAt"])
+            idx("accountId").sortKeys(["createdAt"]),
+            idx("responseTarget").sortKeys(["responseStatus", "createdAt"])
         ]),
 });
 

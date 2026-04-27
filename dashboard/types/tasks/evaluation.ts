@@ -46,6 +46,8 @@ export type EvaluationTaskData = BaseTaskData & {
   startedAt?: string
   errorMessage?: string
   errorDetails?: any
+  baseline_evaluation_id?: string | null
+  current_baseline_evaluation_id?: string | null
   confusionMatrix?: ConfusionMatrix
   task?: TaskData | null
 }
@@ -77,6 +79,7 @@ export type TaskData = {
   updatedAt?: string
   scorecardId?: string
   scoreId?: string
+  dataSetId?: string
   scorecard?: LazyLoader<{
     id: string
     name: string
@@ -103,6 +106,7 @@ export type TaskData = {
     errorDetails?: any
     confusionMatrix?: any
     scoreGoal?: string
+    dataSetId?: string
     datasetClassDistribution?: any
     isDatasetClassDistributionBalanced?: boolean
     predictedClassDistribution?: any
@@ -137,6 +141,7 @@ export interface EvaluationTaskProps {
     type: string
     scorecard: string
     score: string
+    procedureId?: string
     time: string
     data: EvaluationTaskData
   }

@@ -12,6 +12,7 @@ import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,36 @@ def truncate_for_log(content: str, max_length: int = 200) -> str:
     if len(content) <= max_length:
         return content
     return content[:max_length] + f"... [truncated, total: {len(content)} chars]"
+
+
+_SLIM_MAX_STR = 200    # enough for UUIDs (36 chars), URLs, short labels
+_SLIM_MAX_BYTES = 512  # keep small dicts/lists; drop large analysis blobs
+
+
+def _slim_tool_response_for_storage(value: Any) -> Any:
+    """Return a compact representation of a tool response for storage.
+
+    Parses JSON strings, keeps scalar values <= _SLIM_MAX_STR chars, and keeps
+    nested structures only when their serialised size is <= _SLIM_MAX_BYTES.
+    Large blobs (confusionMatrix, misclassification_analysis, etc.) are dropped --
+    they already live in the referenced Evaluation record.
+    """
+    if isinstance(value, str):
+        try:
+            return _slim_tool_response_for_storage(json.loads(value))
+        except (json.JSONDecodeError, ValueError):
+            return value[:_SLIM_MAX_STR] if len(value) > _SLIM_MAX_STR else value
+    if isinstance(value, dict):
+        slimmed = {}
+        for k, v in value.items():
+            sv = _slim_tool_response_for_storage(v)
+            if isinstance(sv, (dict, list)) and len(json.dumps(sv).encode()) > _SLIM_MAX_BYTES:
+                continue  # drop large nested structure
+            slimmed[k] = sv
+        return slimmed
+    if isinstance(value, list):
+        return [_slim_tool_response_for_storage(item) for item in value]
+    return value  # int, float, bool, None
 
 
 class ProcedureChatRecorder:
@@ -702,6 +733,23 @@ class ProcedureChatRecorder:
             if not account_id:
                 raise ValueError("Could not resolve account ID. Is PLEXUS_ACCOUNT_KEY set?")
 
+            explicit_session_id = None
+            if isinstance(context, dict):
+                explicit_session_id = (
+                    context.get('chat_session_id')
+                    or context.get('session_id')
+                    or context.get('sessionId')
+                )
+            if isinstance(explicit_session_id, str) and explicit_session_id.strip():
+                self.session_id = explicit_session_id.strip()
+                self.account_id = account_id
+                self.sequence_number = self._get_latest_sequence_number_for_session(self.session_id)
+                logger.info(
+                    f"Reusing explicit chat session: {self.session_id} for account: {account_id} "
+                    f"(last sequence: {self.sequence_number})"
+                )
+                return self.session_id
+
             resume_session_id = self._get_resume_session_id()
             if resume_session_id:
                 self.session_id = resume_session_id
@@ -750,10 +798,6 @@ class ProcedureChatRecorder:
                 'status': 'ACTIVE'
             }
             
-            # Only include nodeId if it's not None (for experiment-level conversations)
-            if self.node_id is not None:
-                session_data['nodeId'] = self.node_id
-
             # Add scorecard/score IDs if they are present
             if scorecard_id and str(scorecard_id).strip():
                 session_data['scorecardId'] = scorecard_id
@@ -772,7 +816,11 @@ class ProcedureChatRecorder:
             }
             """
             
-            result = self.client.execute(mutation, {'input': session_data})
+            result = self.client.execute(
+                mutation,
+                {'input': session_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             # Check for GraphQL errors first
             if 'errors' in result:
@@ -870,17 +918,14 @@ class ProcedureChatRecorder:
             if tool_name:
                 message_data['toolName'] = tool_name
             if tool_parameters:
-                import json
                 message_data['toolParameters'] = json.dumps(tool_parameters)
             if tool_response:
-                import json
-                message_data['toolResponse'] = json.dumps(tool_response)
+                message_data['toolResponse'] = json.dumps(_slim_tool_response_for_storage(tool_response))
             if parent_message_id:
                 message_data['parentMessageId'] = parent_message_id
 
             # Add metadata if provided (for rich message formatting)
             if metadata:
-                import json
                 message_data['metadata'] = json.dumps(metadata)
             
             # Log message recording (reduced noise - just sequence and type)
@@ -900,7 +945,11 @@ class ProcedureChatRecorder:
             }
             """
 
-            result = self.client.execute(mutation, {'input': message_data})
+            result = self.client.execute(
+                mutation,
+                {'input': message_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             # Check for GraphQL errors first
             if 'errors' in result:
@@ -934,6 +983,7 @@ class ProcedureChatRecorder:
         content: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         human_interaction: Optional[str] = None,
+        tool_response: Optional[Any] = None,
     ) -> bool:
         """Update an existing chat message."""
         if not message_id:
@@ -967,6 +1017,9 @@ class ProcedureChatRecorder:
         if human_interaction is not None:
             update_input["humanInteraction"] = human_interaction
 
+        if tool_response is not None:
+            update_input["toolResponse"] = json.dumps(_slim_tool_response_for_storage(tool_response))
+
         if len(update_input) == 1:
             logger.debug("No update fields provided for message %s", message_id)
             return True
@@ -983,7 +1036,11 @@ class ProcedureChatRecorder:
         """
 
         try:
-            result = self.client.execute(mutation, {"input": update_input})
+            result = self.client.execute(
+                mutation,
+                {"input": update_input},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             if isinstance(result, dict) and result.get("errors"):
                 logger.error("GraphQL error updating message %s: %s", message_id, result["errors"])
                 return False
@@ -1136,7 +1193,11 @@ class ProcedureChatRecorder:
             }
             """
             
-            result = self.client.execute(mutation, {'input': message_data})
+            result = self.client.execute(
+                mutation,
+                {'input': message_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             # Check for GraphQL errors first
             if 'errors' in result:
@@ -1234,7 +1295,11 @@ class ProcedureChatRecorder:
                 'name': name
             }
             
-            result = self.client.execute(mutation, {'input': session_data})
+            result = self.client.execute(
+                mutation,
+                {'input': session_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             
             if 'errors' in result:
                 logger.error(f"GraphQL error updating session name: {result['errors']}")
@@ -1312,7 +1377,11 @@ class ProcedureChatRecorder:
             if name:
                 update_data['name'] = name
             
-            result = self.client.execute(mutation, {'input': update_data})
+            result = self.client.execute(
+                mutation,
+                {'input': update_data},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
             if (
                 (result and isinstance(result, dict) and result.get('updateChatSession'))
                 or (result and isinstance(result, dict) and result.get('data', {}).get('updateChatSession'))

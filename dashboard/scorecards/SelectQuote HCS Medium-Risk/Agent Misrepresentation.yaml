@@ -1,0 +1,240 @@
+name: Agent Misrepresentation
+key: agent-misrepresentation
+id: "45813"
+version: 8946e945-68c1-4f41-a94c-bf3c279c2113
+parent: 65440950-54a7-4122-b678-12f27620e46e
+class: LangGraphScore
+model_provider: ChatOpenAI
+model_name: gpt-4o-mini
+graph:
+  - name: misrepresentation_analysis
+    class: Classifier
+    valid_classes:
+      - Copay Guarantee
+      - Free Medication Claim
+      - False Service Claim
+      - Unqualified Savings Promise
+      - Ambiguous Cost Language
+      - Pharmacy Confusion
+      - None
+    system_message: >
+      Task: You are an expert at analyzing healthcare sales call transcripts for
+      quality assurance (QA) purposes.
+
+
+      Objective: Identify if the agent made any misrepresentations, and if so, which type.
+
+
+      CRITICAL PRINCIPLE: Agents following standard scripting should be classified as "None".
+
+      Only flag clear misrepresentations or false guarantees.
+
+
+      Misrepresentation Types:
+
+
+      1. **Copay Guarantee** - Agent explicitly guarantees copay amounts won't change:
+         - "your copays stay the same" (absolute statement)
+         - "copays don't change"
+         - "your copays will be [specific amount]"
+         - "your co pays should get the same, if not similar" (guarantee about amounts)
+         - "copays would remain the same" (guarantee)
+         - "whatever you're paying now, that stays the same" (guarantee about current costs)
+         - "whatever you're paying right now... that's what you'll just keep paying" (cost guarantee)
+         - "if you have copays now, that stays the same. Nothing changes" (absolute guarantee)
+         - "if you don't have co pays, then you won't have any here" (conditional guarantee)
+         - "if you don't pay anything, that's what you will be paying with us" (conditional guarantee)
+         - Customer-specific future-cost predictions such as "you'll pay the same," "you won't pay more," "similar copays," or "not a penny more" are violations when the agent is predicting the member's future medication costs rather than explaining insurance generally
+         - Softened or insurance-tied phrasing can still be a violation if it predicts the customer's future out-of-pocket result: "should be similar," "through your plan you'll pay the same," or "best price, not a penny more"
+
+         NOT violations (these explain how insurance works):
+         - "copays based on your insurance plan" (accurate)
+         - "same copay structure based on insurance" (accurate)
+         - General insurance explanations that do not predict the customer's actual future amount or promise a ceiling on what they will pay
+         - Agent stating a specific copay amount when they have demonstrably accurate, plan-specific knowledge (e.g., agent has verified the customer's actual formulary tier) — this is accurate information, not a guarantee
+
+      2. **Free Medication Claim** - Agent claims medications are free to patient:
+         - "medications will be free"
+         - "no cost for your medications"
+         - "you won't pay anything for medications"
+
+         NOT violations (referring to service/delivery):
+         - "free for them to be your pharmacy" (pharmacy service, not meds)
+         - "free to deliver your medications" (delivery, not medication cost)
+
+      3. **False Service Claim** - Agent makes factually incorrect statements about the service or misrepresents what the customer is receiving:
+         - Incorrect blanket statements about controlled substances
+         - False claims about coverage or formulary
+         - Guaranteed specific medication availability
+         - Framing SRX enrollment as an exclusive "upgrade" the customer "qualifies for" — e.g., "you do qualify for an upgrade on how you're currently receiving your prescriptions" — when SRX is a standard enrollment offer, not a special upgrade
+         - Implying the customer has been specially selected or earned eligibility for SRX when it is a standard offer
+         - Exclusivity framing: "not all seniors qualify for this benefit" or "not all are able to take advantage of this" — SRX is a standard offer, not a limited benefit
+         - Claiming the insurance company recommends or endorses SelectRx: "your insurance recommends SelectRx," "UnitedHealthcare uses SelectRx for all their members" (unless literally accurate)
+         - Claiming SelectRx is included in or part of the customer's insurance plan: "it's included in your insurance plan," "it's part of what you pay for," "it's already in your coverage" — SRX is a separate enrollment, not an insurance benefit the customer has already paid for
+
+         NOT violations:
+         - "This service is an upgrade to your pharmacy experience" describing benefits (describing what the service does is acceptable)
+         - "You qualify for this program/service" without upgrade framing (standard enrollment language)
+         - "UnitedHealthcare partners with SelectRx" or accurate partnership statements
+
+      4. **Unqualified Savings Promise** - Agent promises cost savings without disclaimers:
+         - "will definitely save you money" (without insurance qualifiers)
+         - "guaranteed to lower your costs"
+         - "potentially bring down your copays" (without insurance disclaimers)
+         - Claims about cost savings without mentioning insurance variability
+         - "you're guaranteed the best prices for your prescriptions/medications" (price guarantee without insurance qualifiers)
+         - "guaranteed the best prices" in any form — even with a co-pay acknowledgment, guaranteeing "best prices" is a false promise
+         - Phonetically spelled or deliberately letter-by-letter stated guarantees (e.g., "g u a r a n t e e d the best prices") — obscuring the guarantee word does not negate the violation
+
+      5. **Ambiguous Cost Language** - Statements that blur service vs medication costs:
+         - "It's a free program" without clarifying medication copays still apply
+         - "Free program" combined with unqualified savings claims ("will save you money")
+         - "No cost for it" when context suggests medications rather than just service
+         - "This comes at no fee" without clarifying medication copays
+         - "SelectRx comes at no fee" or "at no cost" without clarifying medication copays apply
+         - Broad overall-offer framing such as "the program is free," "no fee," "no cost," or "no out-of-pocket cost" is a violation when the agent presents the whole SelectRx offer as cost-free and does not clearly separate service/enrollment costs from medication copays
+         - "UnitedHealthcare will pay for this" without insurance coverage disclaimers
+         - Service payment claims that could mislead about patient financial responsibility
+         - "Free program" + benefits description without medication cost clarification
+         - "Work with you on things to help you with those co pay" without clarifying it's payment plans/options, not cost reduction
+         - Suggesting program reduces copay amounts without insurance disclaimers
+         - "SRX is free" presented as a benefit of being a valued member, without clarifying medication copays still apply
+         - "This is free, for free, compliments of SelectQuote" without any copay clarification
+         - "There's no additional cost because of your plan" or "your plan covers this" — implying the customer's insurance pays for SRX without clarifying it is a separate enrollment
+
+         NOT violations:
+         - Clear statements: "the service is free but you pay copays for medications"
+         - Explicit service-only language: "no cost to enroll in the program"
+         - Narrow service-fee statements clearly limited to enrollment, delivery, shipping, packaging, or pharmacy service — without implying medications or copays are free — are acceptable
+         - "No delivery fee" (specific to delivery service)
+         - "Payment plans available" (clarifies it's payment arrangements, not savings)
+         - When the agent makes no cost claims at all — absence of cost discussion is not a violation
+
+      6. **Pharmacy Confusion** - Misleading statements about pharmacy relationships:
+         - "Your pharmacy will remain the same" when actually switching to SelectRx
+         - "CVS will still be your pharmacy" when making SelectRx primary
+         - "You'll have both pharmacies" without clarifying SelectRx becomes primary
+         - Claims patient can keep current pharmacy as primary while enrolling in SelectRx
+         - "Best of both" language suggesting equal access to both pharmacies
+         - Implying patient can pick up regular prescriptions at both pharmacies interchangeably
+         - Lack of explicit statement on which pharmacy is primary and which is backup
+         - Framing the current pharmacy as a "helping hand" or backup without explicitly stating SelectRx is now primary
+         - "SRX will work hand in hand with your current pharmacy" without clarifying SelectRx becomes primary
+         - Language that makes the transition sound like a partnership of equals rather than a pharmacy change
+
+         NOT violations:
+         - Clear explanation: "SelectRx will be your primary, CVS will be your backup"
+         - Accurate: "You can still use your local pharmacy for emergencies"
+         - "You can use local pharmacy for new prescriptions until refills go through SelectRx"
+         - Any statement that explicitly names SelectRx as the primary pharmacy and current pharmacy as backup/secondary — this is the correct relationship and is acceptable
+
+      Acceptable Standard Language (classify as "None"):
+
+      - "No additional cost for the service" (referring to service fees, not medications)
+
+      - "You pay your copays" or "responsible for copays"
+
+      - "Free shipping" or "no delivery fees"
+
+      - "Copays are determined by your insurance"
+
+      - Standard confidence language ("shouldn't be a problem", "won't be an issue")
+
+      - Describing available assistance programs: "we have specialists who can help explore options"
+
+      - "You qualify for this service/program" (standard enrollment language — acceptable on its own)
+    user_message: >
+      Analyze the following call transcript:
+
+
+      <transcript>
+
+      {{text}}
+
+      </transcript>
+
+
+      Identify if the agent made any misrepresentations from the categories above, or "None" if
+
+      the agent followed appropriate scripting.
+
+
+      Analyze for these specific violation patterns:
+
+      1. Did the agent make guarantees or customer-specific future-cost predictions about copay amounts (e.g., "copays stay the same", "that won't change", "you'll pay the same", "you won't pay more", "similar copays", "not a penny more") even if phrased softly or tied to the insurance plan?
+
+      2. Did the agent use ambiguous "free" language without clarifying medication costs (e.g., "free program", "at no cost", "SRX is free", "no additional cost because of your plan")?
+
+      3. Did the agent mislead about pharmacy relationships or fail to clarify primary/backup roles (e.g., current pharmacy described as a "helping hand" or "works hand in hand with SelectRx" without stating SelectRx is primary)?
+
+      4. Did the agent claim medications would be free to the patient?
+
+      5. Did the agent make factually incorrect statements or misrepresent what the customer is receiving (e.g., "you qualify for an upgrade on how you're receiving your prescriptions" — framing standard SRX enrollment as an exclusive upgrade; "not all seniors qualify" — exclusivity framing; "your insurance recommends SelectRx"; "it's included in your insurance plan")?
+
+      6. Did the agent promise cost savings without appropriate insurance disclaimers (e.g., "guaranteed the best prices", or phonetically spelled "g u a r a n t e e d")?
+
+
+      IMPORTANT: Distinguish between service costs and medication costs:
+
+      - "free for them to be your pharmacy" = pharmacy SERVICE is free (acceptable)
+
+      - "free to deliver medications" = DELIVERY is free (acceptable)
+
+      - "free medications" or "won't pay for medications" = meds themselves free (violation)
+
+
+      Statements explaining how insurance works are NOT violations:
+
+      - "copays based on your insurance plan" = accurate explanation
+
+      - General plan/process explanations are acceptable when they do not predict the customer's actual future cost
+
+      - "if...then" statements about copays = conditional logic, not guarantees unless they effectively promise the customer's future amount will stay the same or not increase
+
+
+      Enrollment language distinction:
+
+      - "you qualify for this service/program" = acceptable standard enrollment language
+
+      - "you qualify for an upgrade on how you're receiving your prescriptions" = FALSE SERVICE CLAIM — framing SRX as a special upgrade the customer earned is a misrepresentation
+
+
+      Only flag explicit false guarantees or misleading claims. Standard scripting is acceptable.
+
+
+      Provide a brief explanation, then state the classification type.
+    output:
+      misrepresentation_type: classification
+      analysis_explanation: explanation
+  - name: final_classification
+    class: LogicalClassifier
+    code: >
+      def score(parameters: Score.Parameters, input: Score.Input) ->
+      Score.Result:
+          misrep_type = input.metadata.get('misrepresentation_type', 'None')
+          analysis = input.metadata.get('analysis_explanation', '')
+
+          # Original logic: "Yes" = compliant, "No" = violation (case-insensitive comparison in eval)
+          if misrep_type == 'None':
+              value = "Yes"
+              explanation = "Agent followed appropriate scripting without misrepresentations."
+          else:
+              value = "No"
+              explanation = f"**{misrep_type}**: {analysis}"
+
+          return Score.Result(
+              parameters=parameters,
+              value=value,
+              metadata={"explanation": explanation}
+          )
+    output:
+      value: value
+      explanation: explanation
+data:
+  class: FeedbackItems
+  scorecard: 1438
+  score: Agent Misrepresentation
+  days: 180
+  limit: 200
+  limit_per_cell: 50
+  balance: false

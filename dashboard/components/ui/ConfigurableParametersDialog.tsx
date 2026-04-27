@@ -19,6 +19,7 @@ import {
   NumberParameter,
   BooleanParameter,
   SelectParameter,
+  DateRangeParameter,
   ScorecardSelectParameter,
   ScoreSelectParameter,
   ScoreVersionSelectParameter,
@@ -118,6 +119,9 @@ export function ConfigurableParametersDialog({
       case 'text':
         return <TextParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
 
+      case 'date':
+        return <TextParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
+
       case 'number':
         return <NumberParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
 
@@ -126,6 +130,9 @@ export function ConfigurableParametersDialog({
 
       case 'select':
         return <SelectParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
+
+      case 'date_range':
+        return <DateRangeParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
 
       case 'scorecard_select':
         return <ScorecardSelectParameter key={param.name} definition={param} value={value} onChange={onChange} error={error} />
@@ -200,5 +207,3 @@ export function ConfigurableParametersDialog({
     </Dialog>
   )
 }
-
-

@@ -9,6 +9,7 @@ import {
   NumberParameter,
   BooleanParameter,
   SelectParameter,
+  DateRangeParameter,
   ScorecardSelectParameter,
   ScoreSelectParameter,
   ScoreVersionSelectParameter,
@@ -92,6 +93,8 @@ export function ConfigurableParametersForm({
         return <ScoreVersionSelectParameter {...commonProps} scoreId={scoreId} />
       case 'date':
         return <TextParameter {...commonProps} />
+      case 'date_range':
+        return <DateRangeParameter {...commonProps} />
       default:
         return <TextParameter {...commonProps} />
     }
@@ -111,4 +114,3 @@ export function ConfigurableParametersForm({
     </div>
   )
 }
-

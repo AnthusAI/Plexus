@@ -9,7 +9,6 @@ from .state import StatePrimitive
 from .control import IterationsPrimitive, StopPrimitive
 from .tool import ToolPrimitive
 from .agent import AgentPrimitive
-from .graph import GraphNodePrimitive
 from .human import HumanPrimitive
 from .system import SystemPrimitive
 
@@ -19,7 +18,6 @@ __all__ = [
     'StopPrimitive',
     'ToolPrimitive',
     'AgentPrimitive',
-    'GraphNodePrimitive',
     'HumanPrimitive',
     'SystemPrimitive',
 ]

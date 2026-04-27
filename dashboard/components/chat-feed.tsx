@@ -11,7 +11,8 @@ import { getMessageIcon, getMessageTypeColor, getMessageTypeLabel } from "@/comp
 import { InteractiveMessage, type InteractiveMessageMetadata } from "@/components/ui/interactive-message"
 import { RichMessageContent } from "@/components/ui/rich-message-content"
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 /**
  * Chat Message
@@ -328,7 +329,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
       })
     }
     // @ts-ignore - Amplify generates complex union types that TypeScript can't fully infer
-    const result: any = await client.models.ChatMessage.create(messageData as any)
+    const result: any = await getAmplifyClient().models.ChatMessage.create(messageData as any)
     console.log('[ChatFeed] RESPONSE message created:', result)
 
     // Real-time subscription will trigger reload
@@ -343,7 +344,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
       console.log('[ChatFeed] Loading messages for account:', accountId)
 
       // Use the accountId GSI for efficient querying
-      const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByAccountIdAndCreatedAt as any)({
+      const response: { data?: any[], nextToken?: string } = await (getAmplifyClient().models.ChatMessage.listChatMessageByAccountIdAndCreatedAt as any)({
         accountId: accountId,
         sortDirection: 'ASC',
         limit: 500,
@@ -445,7 +446,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
 
     try {
       // @ts-ignore - Amplify Gen2 subscription type complexity
-      subscription = client.models.ChatMessage.onCreate().subscribe({
+      subscription = getAmplifyClient().models.ChatMessage.onCreate().subscribe({
         next: () => {
           console.log('[ChatFeed] New message notification received')
           loadMessages()

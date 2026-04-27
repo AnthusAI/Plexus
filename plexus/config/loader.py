@@ -38,7 +38,6 @@ class ConfigLoader:
         'plexus.account_key': 'PLEXUS_ACCOUNT_KEY',
         'plexus.default_account_id': 'PLEXUS_DEFAULT_ACCOUNT_ID',
         'plexus.enable_batching': 'PLEXUS_ENABLE_BATCHING',
-        'plexus.langgraph_checkpointer_postgres_uri': 'PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI',
         
         # Working directory (special case)
         'plexus.working_directory': '_PLEXUS_WORKING_DIRECTORY',

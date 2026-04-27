@@ -1,13 +1,8 @@
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-from typing import TYPE_CHECKING
+from unittest.mock import Mock, patch
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 # Import for Mock usage in tests
 from plexus.dashboard.api.client import PlexusDashboardClient
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestFeedbackItemUpsertByCacheKey:
@@ -296,7 +291,7 @@ class TestFeedbackItemUpdateFeedbackItem:
 
     def test_update_returns_updated_feedback_item_on_success(self):
         """Test that update returns updated FeedbackItem on success."""
-        # Mock successful GraphQL response
+        # Mock successful GraphQL response for the update mutation
         mock_response = {
             "updateFeedbackItem": {
                 "id": self.test_feedback_item_id,
@@ -305,7 +300,9 @@ class TestFeedbackItemUpdateFeedbackItem:
                 "initialAnswerValue": "Yes"
             }
         }
-        self.mock_client.execute.return_value = mock_response
+        # _update_feedback_item first does a read to hydrate required composite key fields,
+        # then executes the update mutation.
+        self.mock_client.execute.side_effect = [{"getFeedbackItem": None}, mock_response]
         
         # Mock from_dict to return a FeedbackItem
         mock_feedback_item = Mock(spec=FeedbackItem)
@@ -319,7 +316,9 @@ class TestFeedbackItemUpdateFeedbackItem:
             
             # Verify results
             assert result == mock_feedback_item
-            self.mock_client.execute.assert_called_once()
+            assert self.mock_client.execute.call_count == 2
+            mutation_call = self.mock_client.execute.call_args_list[1]
+            assert "mutation UpdateFeedbackItem" in mutation_call.kwargs["query"]
 
     def test_update_returns_none_on_failure(self):
         """Test that update returns None on failure."""
@@ -505,7 +504,7 @@ class TestFeedbackItemUpsertIntegration:
         with patch.object(FeedbackItem, '_lookup_feedback_item_by_cache_key', return_value=None):
             with patch.object(FeedbackItem, '_create_feedback_item', return_value=mock_created_item) as mock_create:
                 # Call upsert with generated cache key
-                feedback_item_id, was_created, error = FeedbackItem.upsert_by_cache_key(
+                FeedbackItem.upsert_by_cache_key(
                     client=self.mock_client,
                     account_id=self.test_account_id,
                     scorecard_id=self.test_scorecard_id,

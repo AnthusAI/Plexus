@@ -634,7 +634,7 @@ class TestIntegration:
         mock_api.table.return_value = mock_table
         mock_airtable.return_value = mock_api
         
-        # Run feedback analysis
+        # Run feedback alignment
         with patch('plexus.cli.analyze.analysis.pd.DataFrame') as mock_df:
             mock_dataframe = MagicMock()
             mock_dataframe.columns = ['TranscriptText', 'Comments', 'QA SCORE']
