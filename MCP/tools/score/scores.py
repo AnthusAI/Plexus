@@ -6,15 +6,136 @@ import os
 import sys
 import json
 import logging
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Union, Optional, Annotated
 from io import StringIO
 from fastmcp import FastMCP
+from pydantic import BaseModel, Field
+from plexus.cli.shared.optimizer_shadow_invalidation import (
+    extract_shadow_invalid_feedback_item_ids_from_yaml_text,
+    normalize_shadow_invalid_field_in_yaml_text,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def register_score_tools(mcp: FastMCP):
     """Register score tools with the MCP server"""
+
+    def _structured_error(message: str, error: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "success": False,
+            "error": error or message,
+            "message": message,
+        }
+        payload.update(extra)
+        return payload
+
+    def _resolve_scorecard_identifier_quiet(client, identifier: str) -> Optional[str]:
+        """Resolve a scorecard identifier without printing CLI-oriented status lines."""
+        try:
+            from plexus.cli.scorecard.scorecards import (
+                resolve_scorecard_identifier as _resolve_scorecard_identifier,
+            )
+
+            resolver_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = resolver_stdout
+            try:
+                resolved = _resolve_scorecard_identifier(client, identifier)
+            finally:
+                resolver_output = resolver_stdout.getvalue()
+                if resolver_output:
+                    logger.warning(
+                        "Captured unexpected stdout during quiet scorecard resolution: %s",
+                        resolver_output,
+                    )
+                sys.stdout = saved_stdout
+
+            if resolved:
+                return resolved
+        except Exception:
+            # Fall back to the local query-based resolver below if the CLI resolver
+            # is unavailable or errors in the MCP runtime.
+            pass
+
+        try:
+            result = client.execute(
+                f"""
+                query GetScorecard {{
+                    getScorecard(id: "{identifier}") {{
+                        id
+                    }}
+                }}
+                """
+            )
+            if result.get("getScorecard"):
+                return identifier
+        except Exception:
+            pass
+
+        for field in ("key", "name", "externalId"):
+            try:
+                result = client.execute(
+                    f"""
+                    query ListScorecardsForIdentifier {{
+                        listScorecards(filter: {{ {field}: {{ eq: "{identifier}" }} }}, limit: 10) {{
+                            items {{
+                                id
+                            }}
+                        }}
+                    }}
+                    """
+                )
+                items = result.get("listScorecards", {}).get("items", [])
+                if items:
+                    return items[0].get("id")
+            except Exception:
+                continue
+
+        return None
+
+    def _build_optimizer_score_context(client, scorecard_identifier: str, score_identifier: str) -> Dict[str, Any]:
+        from plexus.cli.shared.memoized_resolvers import (
+            memoized_resolve_scorecard_identifier,
+            memoized_resolve_score_identifier,
+        )
+        from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+        scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+        if not scorecard_id:
+            raise ValueError(f"Scorecard not found: {scorecard_identifier}")
+
+        score_id = memoized_resolve_score_identifier(client, scorecard_id, score_identifier)
+        if not score_id:
+            raise ValueError(f"Score not found: {score_identifier}")
+
+        query = """
+        query GetOptimizerScoreContext($scorecardId: ID!, $scoreId: ID!) {
+          getScorecard(id: $scorecardId) {
+            id
+            name
+          }
+          getScore(id: $scoreId) {
+            id
+            name
+            championVersionId
+          }
+        }
+        """
+        result = client.execute(query, {"scorecardId": scorecard_id, "scoreId": score_id})
+        scorecard = result.get("getScorecard") or {}
+        score = result.get("getScore") or {}
+        if not score:
+            raise ValueError(f"Score {score_identifier} resolved to {score_id}, but could not be loaded.")
+
+        return {
+            "scorecard_id": scorecard_id,
+            "scorecard_name": scorecard.get("name") or scorecard_identifier,
+            "score_id": score_id,
+            "score_name": score.get("name") or score_identifier,
+            "champion_version_id": score.get("championVersionId"),
+            "service": OptimizerResultsService(client),
+        }
     
     @mcp.tool()
     async def plexus_score_info(
@@ -289,7 +410,6 @@ def register_score_tools(mcp: FastMCP):
                                 id
                                 configuration
                                 guidelines
-                                description
                                 createdAt
                                 updatedAt
                                 note
@@ -300,19 +420,13 @@ def register_score_tools(mcp: FastMCP):
                         """
                         version_result = client.execute(version_query)
                         version_data = version_result.get('getScoreVersion')
-                        
+
                         if version_data:
                             # Include code and guidelines from the version
                             response["code"] = version_data.get('configuration')
                             response["guidelines"] = version_data.get('guidelines')
-                            
-                            # Use version description if available, otherwise fall back to Score description
-                            version_description = version_data.get('description')
-                            if version_description:
-                                response["description"] = version_description
-                            else:
-                                response["description"] = score.get('description')
-                                
+                            response["description"] = score.get('description')
+
                             # Explicitly show which version ID is being returned
                             response["targetVersionId"] = target_version_id
                             response["isChampionVersion"] = target_version_id == score.get('championVersionId')
@@ -417,10 +531,9 @@ def register_score_tools(mcp: FastMCP):
         try:
             from plexus.dashboard.api.models.score import Score
             from plexus.dashboard.api.models.scorecard import Scorecard
-            from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
             
             # Resolve scorecard identifier
-            scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+            scorecard_id = _resolve_scorecard_identifier_quiet(client, scorecard_identifier)
             if not scorecard_id:
                 return {
                     "success": False,
@@ -466,15 +579,32 @@ def register_score_tools(mcp: FastMCP):
                     "error": f"Could not retrieve scorecard sections for '{scorecard_identifier}'."
                 }
 
+            normalized_identifier = (score_identifier or "").strip()
+            normalized_identifier_ci = normalized_identifier.casefold()
+
+            def _candidate_values(score_data: Dict[str, Any]) -> List[str]:
+                return [
+                    str(score_data.get("id") or "").strip(),
+                    str(score_data.get("name") or "").strip(),
+                    str(score_data.get("key") or "").strip(),
+                    str(score_data.get("externalId") or "").strip(),
+                ]
+
             # Find the specific score
             found_score_data = None
             found_section_id = None
+            available_scores: List[str] = []
             for section in scorecard_data.get('sections', {}).get('items', []):
                 for score_data in section.get('scores', {}).get('items', []):
-                    if (score_data.get('id') == score_identifier or 
-                        score_data.get('name') == score_identifier or 
-                        score_data.get('key') == score_identifier or 
-                        score_data.get('externalId') == score_identifier):
+                    candidates = _candidate_values(score_data)
+                    if score_data.get("name"):
+                        available_scores.append(str(score_data.get("name")))
+
+                    if any(c == normalized_identifier for c in candidates):
+                        found_score_data = score_data
+                        found_section_id = section['id']
+                        break
+                    if any(c and c.casefold() == normalized_identifier_ci for c in candidates):
                         found_score_data = score_data
                         found_section_id = section['id']
                         break
@@ -484,7 +614,12 @@ def register_score_tools(mcp: FastMCP):
             if not found_score_data:
                 return {
                     "success": False,
-                    "error": f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
+                    "error": (
+                        f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'. "
+                        f"resolved_scorecard_id='{scorecard_id}', normalized_identifier='{normalized_identifier}'."
+                    ),
+                    "available_scores": available_scores[:25],
+                    "scorecard_id": scorecard_id,
                 }
 
             # Create Score instance
@@ -519,7 +654,7 @@ def register_score_tools(mcp: FastMCP):
         scorecard_identifier: str,
         score_identifier: str,
         version_id: Optional[str] = None
-    ) -> Union[str, Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Pulls a score's champion version code and guidelines to local files.
         Uses the reusable Score.pull_code_and_guidelines() method for implementation.
@@ -542,15 +677,10 @@ def register_score_tools(mcp: FastMCP):
             try:
                 from plexus.cli.shared.client_utils import create_client as create_dashboard_client
             except ImportError as e:
-                return f"Error: Could not import required modules: {e}. Core modules may not be available."
-            
-            # Check if we have the necessary credentials
-            api_url = os.environ.get('PLEXUS_API_URL', '')
-            api_key = os.environ.get('PLEXUS_API_KEY', '')
-            
-            if not api_url or not api_key:
-                logger.warning("Missing API credentials. Ensure .env file is loaded.")
-                return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+                return _structured_error(
+                    f"Could not import required modules: {e}. Core modules may not be available.",
+                    error="IMPORT_ERROR",
+                )
             
             # Create the client
             try:
@@ -567,15 +697,30 @@ def register_score_tools(mcp: FastMCP):
                     sys.stdout = saved_stdout
             except Exception as client_err:
                 logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
-                return f"Error creating dashboard client: {str(client_err)}"
+                client_error = str(client_err)
+                if "missing" in client_error.lower() and "credential" in client_error.lower():
+                    return _structured_error(
+                        "Missing API credentials. Use --env-file to specify your .env file path.",
+                        error="MISSING_API_CREDENTIALS",
+                    )
+                return _structured_error(
+                    f"Error creating dashboard client: {client_error}",
+                    error="CLIENT_CREATION_ERROR",
+                )
                 
             if not client:
-                return "Error: Could not create dashboard client."
+                return _structured_error(
+                    "Could not create dashboard client.",
+                    error="CLIENT_CREATION_ERROR",
+                )
 
             # Find the score instance
             find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
             if not find_result["success"]:
-                return find_result["error"]
+                return _structured_error(
+                    find_result["error"],
+                    error="SCORE_NOT_FOUND",
+                )
             
             score = find_result["score"]
             scorecard_name = find_result["scorecard_name"]
@@ -590,18 +735,28 @@ def register_score_tools(mcp: FastMCP):
                 pull_result = _pull_champion_with_backup(score, scorecard_name)
 
             if pull_result is None:
-                return "Error: Failed to pull score configuration"
+                return _structured_error(
+                    "Failed to pull score configuration",
+                    error="PULL_FAILED",
+                )
 
             if not pull_result["success"]:
-                return f"Error: {pull_result.get('message', 'Failed to pull code and guidelines')}"
+                return _structured_error(
+                    pull_result.get("message", "Failed to pull code and guidelines"),
+                    error=pull_result.get("error", "PULL_FAILED"),
+                )
             
+            # Return absolute paths so callers can read the files without
+            # path-traversal issues regardless of their working directory
+            code_path = pull_result["code_file_path"]
+            guide_path = pull_result["guidelines_file_path"]
             return {
                 "success": True,
                 "scoreId": score.id,
                 "scoreName": score.name,
                 "scorecardName": scorecard_name,
-                "codeFilePath": pull_result["code_file_path"],
-                "guidelinesFilePath": pull_result["guidelines_file_path"],
+                "codeFilePath": os.path.abspath(code_path) if code_path else None,
+                "guidelinesFilePath": os.path.abspath(guide_path) if guide_path else None,
                 "versionId": pull_result["version_id"],
                 "message": pull_result["message"],
                 "dashboardUrl": _get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
@@ -609,7 +764,10 @@ def register_score_tools(mcp: FastMCP):
             
         except Exception as e:
             logger.error(f"Error pulling score code and guidelines: {str(e)}", exc_info=True)
-            return f"Error pulling score code and guidelines: {str(e)}"
+            return _structured_error(
+                f"Error pulling score code and guidelines: {str(e)}",
+                error="UNEXPECTED_ERROR",
+            )
         finally:
             # Check if anything was written to stdout
             captured_output = temp_stdout.getvalue()
@@ -1072,6 +1230,7 @@ def register_score_tools(mcp: FastMCP):
                 
                 # Use the enhanced create_version_from_code_with_parent method
                 if code is not None:  # Only proceed if we have code
+                    code = _strip_pull_comments(code)
                     result = await _create_version_from_code_with_parent(
                         score=score,
                         client=client,
@@ -1548,6 +1707,427 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
     @mcp.tool()
+    async def plexus_score_test(
+        scorecard_identifier: str,
+        score_identifier: str,
+        version: Optional[str] = None,
+        samples: int = 3,
+        item_ids: Optional[str] = None,
+        days: int = 90,
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Run a mechanical score-version test on sampled items.
+
+        Parameters:
+        - scorecard_identifier: Scorecard identifier (ID, key, name, or external ID)
+        - score_identifier: Score identifier (ID, key, name, or external ID)
+        - version: Optional score version ID to test (defaults to champion)
+        - samples: Number of samples to test (default: 3)
+        - item_ids: Optional comma-separated item identifiers; when provided, count overrides samples
+        - days: Lookback window in days for auto sample discovery (default: 90)
+
+        Returns:
+        - Structured machine-readable test result with pass/fail and per-item details
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+
+        try:
+            if samples <= 0:
+                return _structured_error(
+                    "samples must be a positive integer",
+                    error="invalid_samples",
+                )
+
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+                from plexus.cli.shared.score_version_test import run_score_version_test
+            except ImportError as e:
+                return _structured_error(
+                    f"Could not import required modules: {e}",
+                    error="import_error",
+                )
+
+            api_url = os.environ.get("PLEXUS_API_URL", "")
+            api_key = os.environ.get("PLEXUS_API_KEY", "")
+            if not api_url or not api_key:
+                return _structured_error(
+                    "Missing API credentials. Use --env-file to specify your .env file path.",
+                    error="missing_credentials",
+                )
+
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    client_output = client_stdout.getvalue()
+                    if client_output:
+                        logger.warning(
+                            "Captured unexpected stdout during client creation in plexus_score_test: %s",
+                            client_output,
+                        )
+                    sys.stdout = saved_stdout
+            except Exception as client_err:
+                return _structured_error(
+                    f"Error creating dashboard client: {client_err}",
+                    error="client_error",
+                )
+
+            if not client:
+                return _structured_error(
+                    "Could not create dashboard client.",
+                    error="client_error",
+                )
+
+            parsed_item_ids = None
+            if item_ids:
+                parsed_item_ids = [v.strip() for v in item_ids.split(",") if v.strip()]
+
+            result = await run_score_version_test(
+                client=client,
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                version=version,
+                samples=samples,
+                item_identifiers=parsed_item_ids,
+                days=days,
+            )
+            return result
+
+        except Exception as e:
+            logger.error("Error running plexus_score_test: %s", str(e), exc_info=True)
+            return _structured_error(
+                f"Error running score mechanical test: {str(e)}",
+                error="tool_error",
+            )
+        finally:
+            captured_output = temp_stdout.getvalue()
+            if captured_output:
+                logger.warning(
+                    "Captured unexpected stdout during plexus_score_test: %s",
+                    captured_output,
+                )
+            sys.stdout = old_stdout
+
+    @mcp.tool()
+    async def plexus_score_set_champion(
+        score_id: str,
+        version_id: str
+    ) -> Union[str, Dict[str, Any]]:
+        """
+        Promotes a specific score version to champion (sets it as the active deployed version).
+
+        Parameters:
+        - score_id: The ID of the score
+        - version_id: The version ID to promote to champion
+
+        Returns:
+        - Confirmation with the new championVersionId
+        """
+        old_stdout = sys.stdout
+        temp_stdout = StringIO()
+        sys.stdout = temp_stdout
+
+        try:
+            try:
+                from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+            except ImportError as e:
+                return f"Error: Could not import required modules: {e}"
+
+            api_url = os.environ.get('PLEXUS_API_URL', '')
+            api_key = os.environ.get('PLEXUS_API_KEY', '')
+            if not api_url or not api_key:
+                return "Error: Missing API credentials."
+
+            try:
+                client_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = client_stdout
+                try:
+                    client = create_dashboard_client()
+                finally:
+                    sys.stdout = saved_stdout
+            except Exception as e:
+                return f"Error creating dashboard client: {str(e)}"
+
+            if not client:
+                return "Error: Could not create dashboard client."
+
+            version_query = """
+            query GetScoreVersionForChampionGuard($id: ID!) {
+                getScoreVersion(id: $id) {
+                    id
+                    configuration
+                }
+            }
+            """
+            version_result = client.execute(version_query, {"id": version_id})
+            version_data = version_result.get("getScoreVersion") or {}
+            shadow_invalid_feedback_item_ids = extract_shadow_invalid_feedback_item_ids_from_yaml_text(
+                version_data.get("configuration") or ""
+            )
+            if shadow_invalid_feedback_item_ids:
+                return {
+                    "success": False,
+                    "error": "SHADOW_INVALIDATION_PRESENT",
+                    "message": (
+                        "Cannot promote this version to champion because it still contains "
+                        "optimizer_shadow_invalid_feedback_item_ids. Remove that field in a cleanup "
+                        "version before promoting."
+                    ),
+                    "scoreId": score_id,
+                    "versionId": version_id,
+                    "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
+                }
+
+            mutation = """
+            mutation UpdateScore($input: UpdateScoreInput!) {
+                updateScore(input: $input) {
+                    id
+                    championVersionId
+                }
+            }
+            """
+            try:
+                result = client.execute(mutation, {'input': {
+                    'id': score_id,
+                    'championVersionId': version_id
+                }})
+                if result and 'updateScore' in result:
+                    updated = result['updateScore']
+                    return {
+                        "success": True,
+                        "scoreId": updated['id'],
+                        "championVersionId": updated['championVersionId']
+                    }
+                else:
+                    return f"Error: Failed to set champion: {result}"
+            except Exception as e:
+                return f"Error setting champion: {str(e)}"
+
+        except Exception as e:
+            logger.error(f"Error in plexus_score_set_champion: {str(e)}", exc_info=True)
+            return f"Error: {str(e)}"
+        finally:
+            captured = temp_stdout.getvalue()
+            if captured:
+                logger.warning(f"Captured unexpected stdout during plexus_score_set_champion: {captured}")
+            sys.stdout = old_stdout
+
+    class ScoreOptimizerRunsRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        limit: Annotated[int, Field(description="Maximum number of optimizer runs to return", ge=1)] = 25
+        detail: Annotated[str, Field(description='Response detail level: "summary" or "full"')] = "summary"
+
+    @mcp.tool()
+    async def plexus_score_optimizer_runs(request: ScoreOptimizerRunsRequest) -> Dict[str, Any]:
+        """List indexed optimizer runs for a score."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            runs = context["service"].list_optimizer_runs_for_score(context["score_id"], limit=request.limit)
+            if request.detail == "full":
+                run_payload = [
+                    {
+                        "procedure_id": run.procedure.get("id"),
+                        "name": run.procedure.get("name"),
+                        "status": run.procedure.get("status"),
+                        "updated_at": run.procedure.get("updatedAt"),
+                        "indexed": run.indexed,
+                        "artifact_pointer": run.artifact_pointer,
+                        "summary": (run.manifest or {}).get("summary"),
+                        "best": (run.manifest or {}).get("best"),
+                    }
+                    for run in runs
+                ]
+            else:
+                run_payload = [context["service"].summarize_optimizer_run(run) for run in runs]
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "detail": request.detail,
+                "runs": run_payload,
+            }
+        except Exception as e:
+            logger.error(f"Error listing score optimizer runs: {e}", exc_info=True)
+            return _structured_error("Failed to list optimizer runs", error=str(e))
+
+    class ScoreOptimizerCandidatesRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        limit_runs: Annotated[int, Field(description="Maximum number of indexed runs to aggregate", ge=1)] = 25
+        detail: Annotated[str, Field(description='Response detail level: "summary" or "full"')] = "summary"
+
+    @mcp.tool()
+    async def plexus_score_optimizer_candidates(request: ScoreOptimizerCandidatesRequest) -> Dict[str, Any]:
+        """List optimizer-generated candidate versions and their best visible evaluations for a score."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            candidates = context["service"].list_optimizer_candidates_for_score(
+                context["score_id"],
+                limit_runs=request.limit_runs,
+            )
+            if request.detail != "full":
+                candidates = [context["service"].summarize_optimizer_candidate(candidate) for candidate in candidates]
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "detail": request.detail,
+                "candidates": candidates,
+            }
+        except Exception as e:
+            logger.error(f"Error listing optimizer candidates: {e}", exc_info=True)
+            return _structured_error("Failed to list optimizer candidates", error=str(e))
+
+    class ScoreOptimizerReviewRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+
+    @mcp.tool()
+    async def plexus_score_optimizer_review(request: ScoreOptimizerReviewRequest) -> Dict[str, Any]:
+        """Build a compact optimizer review packet for a score."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            packet = context["service"].build_optimizer_review_packet_for_score(
+                context["score_id"],
+                score_name=context["score_name"],
+                scorecard_name=context["scorecard_name"],
+                champion_version_id=context["champion_version_id"],
+            )
+            return {"success": True, **packet}
+        except Exception as e:
+            logger.error(f"Error building optimizer review packet: {e}", exc_info=True)
+            return _structured_error("Failed to build optimizer review packet", error=str(e))
+
+    class ScoreEvaluationsRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        version_id: Annotated[Optional[str], Field(description="Optional score version ID filter")] = None
+        sort_by: Annotated[str, Field(description='Sort key: "updated", "accuracy", or "alignment"')] = "updated"
+        limit: Annotated[int, Field(description="Maximum number of evaluations to return", ge=1)] = 25
+
+    @mcp.tool()
+    async def plexus_score_evaluations(request: ScoreEvaluationsRequest) -> Dict[str, Any]:
+        """List concise evaluations for a score, optionally filtered to one version."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            evaluations = context["service"].list_score_evaluations(
+                context["score_id"],
+                version_id=request.version_id,
+                sort_by=request.sort_by,
+                limit=request.limit,
+            )
+            return {
+                "success": True,
+                "score_id": context["score_id"],
+                "score_name": context["score_name"],
+                "version_id": request.version_id,
+                "evaluations": evaluations,
+            }
+        except Exception as e:
+            logger.error(f"Error listing score evaluations: {e}", exc_info=True)
+            return _structured_error("Failed to list score evaluations", error=str(e))
+
+    class ScorePromotionPacketRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (ID, key, name, or external ID)")]
+        version_id: Annotated[Optional[str], Field(description="Specific version ID to package (defaults to best indexed candidate)")] = None
+
+    @mcp.tool()
+    async def plexus_score_promotion_packet(request: ScorePromotionPacketRequest) -> Dict[str, Any]:
+        """Build a client-ready promotion packet for a score from indexed optimizer results."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            context = _build_optimizer_score_context(client, request.scorecard_identifier, request.score_identifier)
+            packet = context["service"].build_promotion_packet_for_score(
+                context["score_id"],
+                score_name=context["score_name"],
+                scorecard_name=context["scorecard_name"],
+                champion_version_id=context["champion_version_id"],
+                version_id=request.version_id,
+            )
+            return {"success": True, **packet}
+        except Exception as e:
+            logger.error(f"Error building promotion packet: {e}", exc_info=True)
+            return _structured_error("Failed to build promotion packet", error=str(e))
+
+    class ScorecardPromotionPacketsRequest(BaseModel):
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (ID, key, name, or external ID)")]
+        score_identifiers: Annotated[List[str], Field(description="Score identifiers to package")]
+
+    @mcp.tool()
+    async def plexus_scorecard_promotion_packets(request: ScorecardPromotionPacketsRequest) -> Dict[str, Any]:
+        """Build promotion packets for multiple scores in one scorecard."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = create_dashboard_client()
+            if not client:
+                return _structured_error("Could not create API client")
+
+            packets = []
+            errors = []
+            for score_identifier in request.score_identifiers:
+                try:
+                    context = _build_optimizer_score_context(client, request.scorecard_identifier, score_identifier)
+                    packet = context["service"].build_promotion_packet_for_score(
+                        context["score_id"],
+                        score_name=context["score_name"],
+                        scorecard_name=context["scorecard_name"],
+                        champion_version_id=context["champion_version_id"],
+                    )
+                    packets.append(packet)
+                except Exception as exc:
+                    errors.append({"score_identifier": score_identifier, "error": str(exc)})
+
+            return {
+                "success": True,
+                "scorecard_identifier": request.scorecard_identifier,
+                "packets": packets,
+                "errors": errors,
+                "markdown": OptimizerResultsService.render_promotion_packets_markdown(packets),
+            }
+        except Exception as e:
+            logger.error(f"Error building scorecard promotion packets: {e}", exc_info=True)
+            return _structured_error("Failed to build scorecard promotion packets", error=str(e))
+
+    @mcp.tool()
     async def plexus_score_delete(
         score_id: str,
         confirm: bool = False
@@ -1626,6 +2206,30 @@ def register_score_tools(mcp: FastMCP):
             sys.stdout = old_stdout
 
 
+_PULL_COMMENT_PREFIXES = [
+    '# Pulled from Plexus API',
+    '# Score:',
+    '# Champion Version ID:',
+    '# Version ID:',
+    '# Created:',
+    '# Updated:',
+    '# Note:',
+]
+
+
+def _strip_pull_comments(code: str) -> str:
+    """Strip metadata comment blocks added by score pull operations before storing to the API."""
+    lines = []
+    for line in code.split('\n'):
+        stripped = line.strip()
+        if stripped == '#':
+            continue
+        if any(stripped.startswith(prefix) for prefix in _PULL_COMMENT_PREFIXES):
+            continue
+        lines.append(line)
+    return '\n'.join(lines).strip()
+
+
 async def _create_version_from_code_with_parent(
     score,
     client,
@@ -1668,6 +2272,9 @@ async def _create_version_from_code_with_parent(
                     "error": "INVALID_YAML",
                     "message": f"Invalid YAML code content: {str(e)}"
                 }
+            code_content, _normalized_shadow_invalid_feedback_item_ids = normalize_shadow_invalid_field_in_yaml_text(
+                code_content
+            )
 
         # Get current content from parent version for comparison
         current_yaml = ''
@@ -1688,6 +2295,9 @@ async def _create_version_from_code_with_parent(
                 current_version_data = version_result['getScoreVersion']
                 current_yaml = (current_version_data.get('configuration') or '').strip()
                 current_guidelines = (current_version_data.get('guidelines') or '').strip()
+                if current_yaml:
+                    current_yaml, _ = normalize_shadow_invalid_field_in_yaml_text(current_yaml)
+                    current_yaml = current_yaml.strip()
         
         # Compare both code and guidelines (ignoring whitespace differences)
         code_unchanged = current_yaml == (code_content or '').strip()
@@ -1780,16 +2390,11 @@ def _pull_champion_with_backup(score, scorecard_name: str) -> Dict[str, Any]:
     Returns:
     - Dict with success status, file paths, and backup information
     """
-    import os
     import shutil
 
     try:
-        # Prepare file paths
-        scorecard_dir = f"scorecards/{scorecard_name}"
-        yaml_filename = f"{score.name}.yaml"
-        guidelines_filename = f"{score.name}.md"
-        code_file_path = os.path.join(scorecard_dir, yaml_filename)
-        guidelines_file_path = os.path.join(scorecard_dir, guidelines_filename)
+        code_file_path = str(score.get_local_code_path(scorecard_name))
+        guidelines_file_path = str(score.get_local_guidelines_path(scorecard_name))
 
         # Create backups if files exist
         backup_created = False
@@ -1866,15 +2471,8 @@ async def _pull_specific_version(score, scorecard_name: str, version_id: str, cl
                 "message": f"Version {version_id} not found"
             }
 
-        # Ensure scorecard directory exists
-        scorecard_dir = f"scorecards/{scorecard_name}"
-        os.makedirs(scorecard_dir, exist_ok=True)
-
-        # Prepare file paths
-        yaml_filename = f"{score.name}.yaml"
-        guidelines_filename = f"{score.name}.md"
-        code_file_path = os.path.join(scorecard_dir, yaml_filename)
-        guidelines_file_path = os.path.join(scorecard_dir, guidelines_filename)
+        code_file_path = str(score.get_local_code_path(scorecard_name))
+        guidelines_file_path = str(score.get_local_guidelines_path(scorecard_name))
 
         # Create backups of existing files before overwriting
         backup_created = False
@@ -1895,20 +2493,12 @@ async def _pull_specific_version(score, scorecard_name: str, version_id: str, cl
 
         # Write YAML configuration if present
         if configuration:
-            # Add version metadata comment at the top
-            with open(code_file_path, 'w') as f:
-                f.write(f"# Pulled from Plexus API\n")
-                f.write(f"# Score: {score.name}\n")
-                f.write(f"# Version ID: {version_id}\n")
-                f.write(f"# Created: {version_data.get('createdAt')}\n")
-                if version_data.get('note'):
-                    f.write(f"# Note: {version_data.get('note')}\n")
-                f.write(f"#\n")
+            with open(code_file_path, 'w', encoding='utf-8') as f:
                 f.write(configuration)
 
         # Write guidelines if present
         if guidelines:
-            with open(guidelines_file_path, 'w') as f:
+            with open(guidelines_file_path, 'w', encoding='utf-8') as f:
                 f.write(guidelines)
 
         backup_message = " (backup created)" if backup_created else ""

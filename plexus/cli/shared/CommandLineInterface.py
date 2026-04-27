@@ -58,8 +58,8 @@ def cli(debug):
     root_logger.setLevel(log_level)
 
 # Register all commands
-cli.add_command(score)
 cli.add_command(scores)
+cli.add_command(scores, name="score")
 cli.add_command(tasks)
 cli.add_command(task)
 cli.add_command(items)

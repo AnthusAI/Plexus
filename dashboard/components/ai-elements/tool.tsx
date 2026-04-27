@@ -12,6 +12,7 @@ import {
   ShieldAlertIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import React from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 export type ToolState =
@@ -33,44 +34,44 @@ const STATUS_META: Record<ToolState, StatusMeta> = {
   "input-streaming": {
     label: "Pending",
     icon: <CircleDashedIcon className="size-3.5" />,
-    className: "border-border bg-muted text-muted-foreground",
+    className: "bg-neutral text-primary-foreground",
   },
   "input-available": {
     label: "Running",
     icon: <Loader2Icon className="size-3.5 animate-spin" />,
-    className: "border-blue-300/50 bg-blue-100 text-blue-800 dark:border-blue-500/30 dark:bg-blue-900/30 dark:text-blue-200",
+    className: "bg-info text-primary-foreground",
   },
   "approval-requested": {
     label: "Awaiting Approval",
     icon: <ShieldAlertIcon className="size-3.5" />,
-    className: "border-yellow-300/50 bg-yellow-100 text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/30 dark:text-yellow-200",
+    className: "bg-warning text-primary-foreground",
   },
   "approval-responded": {
     label: "Responded",
     icon: <ShieldCheckIcon className="size-3.5" />,
-    className: "border-slate-300/50 bg-slate-100 text-slate-900 dark:border-slate-500/30 dark:bg-slate-800/40 dark:text-slate-200",
+    className: "bg-neutral text-primary-foreground",
   },
   "output-available": {
     label: "Completed",
     icon: <CheckCircle2Icon className="size-3.5" />,
-    className: "border-green-300/50 bg-green-100 text-green-900 dark:border-green-500/30 dark:bg-green-900/30 dark:text-green-200",
+    className: "bg-true text-primary-foreground",
   },
   "output-error": {
     label: "Error",
     icon: <OctagonXIcon className="size-3.5" />,
-    className: "border-red-300/50 bg-red-100 text-red-900 dark:border-red-500/30 dark:bg-red-900/30 dark:text-red-200",
+    className: "bg-false text-primary-foreground",
   },
   "output-denied": {
     label: "Denied",
     icon: <OctagonXIcon className="size-3.5" />,
-    className: "border-orange-300/50 bg-orange-100 text-orange-900 dark:border-orange-500/30 dark:bg-orange-900/30 dark:text-orange-200",
+    className: "bg-warning text-primary-foreground",
   },
 };
 
 export function getStatusBadge(state: ToolState): ReactNode {
   const status = STATUS_META[state];
   return (
-    <Badge variant="outline" className={cn("inline-flex items-center gap-1.5 text-[11px]", status.className)}>
+    <Badge variant="pill" className={cn("inline-flex items-center gap-1.5 px-1.5 py-0 text-[11px] font-normal", status.className)}>
       {status.icon}
       {status.label}
     </Badge>
@@ -80,7 +81,7 @@ export function getStatusBadge(state: ToolState): ReactNode {
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible className={cn("rounded-md border border-border bg-card/40", className)} {...props} />
+  <Collapsible className={cn("rounded-md bg-card/60", className)} {...props} />
 );
 
 export type ToolHeaderProps = Omit<ComponentProps<typeof CollapsibleTrigger>, "type"> & {
@@ -122,21 +123,46 @@ export const ToolHeader = ({
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
-  <CollapsibleContent className={cn("space-y-2 border-t border-border px-3 py-2", className)} {...props} />
+  <CollapsibleContent className={cn("space-y-2 px-3 pb-3", className)} {...props} />
 );
 
 export type ToolInputProps = ComponentProps<"div"> & {
   input?: unknown;
 };
 
-export const ToolInput = ({ input, className, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-1", className)} {...props}>
-    <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Input</div>
-    <pre className="overflow-x-auto rounded-md bg-background p-2 text-xs text-foreground">
-      {JSON.stringify(input ?? {}, null, 2)}
-    </pre>
-  </div>
-);
+function formatInputValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+export const ToolInput = ({ input, className, ...props }: ToolInputProps) => {
+  const entries =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? Object.entries(input as Record<string, unknown>)
+      : null;
+
+  return (
+    <div className={cn("space-y-1", className)} {...props}>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Input</div>
+      {entries ? (
+        <dl className="rounded-md bg-muted/60 p-2 text-xs text-foreground space-y-1">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex gap-2 min-w-0">
+              <dt className="shrink-0 text-muted-foreground font-medium">{k}:</dt>
+              <dd className="truncate font-mono">{formatInputValue(v)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <pre className="overflow-x-auto rounded-md bg-muted/60 p-2 text-xs text-foreground">
+          {JSON.stringify(input ?? {}, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+};
 
 export type ToolOutputProps = ComponentProps<"div"> & {
   output?: ReactNode;
@@ -147,11 +173,11 @@ export const ToolOutput = ({ output, errorText, className, ...props }: ToolOutpu
   <div className={cn("space-y-1", className)} {...props}>
     <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Output</div>
     {errorText ? (
-      <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-700 dark:text-red-300">
+      <div className="rounded-md bg-red-500/12 p-2 text-xs text-red-700 dark:text-red-300">
         {errorText}
       </div>
     ) : (
-      <div className="rounded-md bg-background p-2 text-xs text-foreground">{output ?? "No output"}</div>
+      <div className="rounded-md bg-muted/60 p-2 text-xs text-foreground">{output ?? "No output"}</div>
     )}
   </div>
 );

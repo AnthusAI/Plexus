@@ -22,9 +22,38 @@ from langchain_community.callbacks import OpenAICallbackHandler
 
 from langgraph.graph import StateGraph, END
 
-from openai_cost_calculator.openai_cost_calculator import calculate_cost
+import litellm as _litellm
 
 from langchain_core.globals import set_debug, set_verbose
+
+# Patch langchain_core's restricted Jinja2 sandbox to allow dict attribute access.
+# langchain_core >=0.3.81 introduced _RestrictedSandboxedEnvironment which blocks
+# attribute access like {{metadata.schools}} or {{school.degree_of_interest}} in
+# Jinja2 templates. LangGraphScore YAML configs rely on this for metadata traversal.
+# We restore the standard SandboxedEnvironment behavior for getattr only.
+try:
+    import langchain_core.prompts.string as _lc_string_mod
+    if hasattr(_lc_string_mod, '_RestrictedSandboxedEnvironment'):
+        from jinja2 import Environment as _Jinja2Env
+        from jinja2 import ChainableUndefined as _ChainableUndefined
+
+        class _PlexusJinja2Environment(_Jinja2Env):
+            """Jinja2 Environment for Plexus score prompts.
+
+            We rely on nested metadata access in templates (e.g. {{ metadata.other_data['X'] }}).
+            Some items legitimately have missing metadata during backfills. Using ChainableUndefined
+            prevents hard failures and lets the score classify those as NA per rubric instead.
+            """
+
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault("undefined", _ChainableUndefined)
+                super().__init__(*args, **kwargs)
+
+        _lc_string_mod._RestrictedSandboxedEnvironment = _PlexusJinja2Environment
+        logging.info("Patched langchain_core Jinja2 sandbox to use unrestricted Environment")
+except Exception as _patch_err:
+    logging.warning(f"Could not patch langchain Jinja2 sandbox: {_patch_err}")
+
 # Only enable debug for very specific debugging scenarios
 debug_mode = os.getenv('LANGCHAIN_DEBUG', '').lower() in ['true', '1', 'yes']
 if debug_mode:
@@ -35,8 +64,6 @@ else:
     set_verbose(False)
 
 from pathlib import Path
-# Lazy import to avoid requiring psycopg for non-LangGraph operations
-AsyncPostgresSaver = None
 import uuid
 from langgraph.errors import NodeInterrupt
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -64,7 +91,7 @@ class LangGraphScore(Score, LangChainUser):
     LangGraphScore enables complex classification logic using a graph of LLM operations.
     It provides:
     - Declarative graph definition in YAML
-    - State management and checkpointing
+    - State management
     - Cost tracking and optimization
     - Batch processing support
     - Integration with multiple LLM providers
@@ -142,17 +169,9 @@ class LangGraphScore(Score, LangChainUser):
         output: Optional[dict] = None
         depends_on: Optional[Union[List[str], Dict[str, Union[str, Dict[str, Any]]]]] = None
         single_line_messages: bool = False
-        checkpoint_db_path: Optional[str] = Field(
-            default="./.plexus/checkpoints/langgraph.db",
-            description="Path to SQLite checkpoint database"
-        )
         thread_id: Optional[str] = Field(
             default=None,
             description="Deprecated - thread_id is now automatically set from content_id"
-        )
-        postgres_url: Optional[str] = Field(
-            default=None,
-            description="PostgreSQL connection URL for LangGraph checkpoints"
         )
 
     class Result(Score.Result):
@@ -208,7 +227,6 @@ class LangGraphScore(Score, LangChainUser):
         self.parameters = self.Parameters(**parameters)
         self.node_instances = []
         self.workflow = None
-        self.checkpointer = None
         self.db_connection = None
 
     def _requires_confidence(self):
@@ -241,38 +259,7 @@ class LangGraphScore(Score, LangChainUser):
         # Load environment variables
         load_dotenv('.env', override=True)
         
-        # Get PostgreSQL URL from parameters or environment
-        db_uri = self.parameters.postgres_url or \
-                 os.getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
-        
-        if db_uri:
-            logging.info("Using PostgreSQL checkpoint database")
-            # Lazy import only when actually using PostgreSQL checkpointer
-            global AsyncPostgresSaver
-            if AsyncPostgresSaver is None:
-                try:
-                    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-                except ImportError as e:
-                    logging.warning(f"PostgreSQL checkpointer requested but psycopg not available: {e}")
-                    logging.warning("Falling back to in-memory checkpointer")
-                    db_uri = None  # Fall through to else branch
-
-            if db_uri and AsyncPostgresSaver is not None:
-                # Create checkpointer and store the context manager
-                self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
-                # Enter the context and store the checkpointer
-                self.checkpointer = await self._checkpointer_context.__aenter__()
-
-                # Initialize tables
-                logging.info("Setting up checkpointer database tables...")
-                await self.checkpointer.setup()
-                logging.info("PostgreSQL checkpointer setup complete")
-        else:
-            logging.info("No PostgreSQL URL provided - running without checkpointing")
-            self.checkpointer = None
-            self._checkpointer_context = None
-        
-        # Build workflow with optional checkpointer
+        # Build workflow
         self.workflow = await self.build_compiled_workflow()
 
     @staticmethod
@@ -715,10 +702,7 @@ class LangGraphScore(Score, LangChainUser):
 
             logging.info("Workflow compilation complete.")
             
-            # Compile with checkpointer only if configured
-            app = workflow.compile(
-                checkpointer=self.checkpointer if self.checkpointer else None
-            )
+            app = workflow.compile()
             
             # Store node instances for later token usage calculation
             self.node_instances = node_instances
@@ -914,16 +898,116 @@ class LangGraphScore(Score, LangChainUser):
         :return: A dictionary containing cost and usage information.
         """
         usage = self.get_token_usage()
+        components = []
+        total_input_cost = 0.0
+        total_output_cost = 0.0
 
-        try:
-            cost_info = calculate_cost(
-                model_name=self.parameters.model_name,
-                input_tokens=usage['prompt_tokens'],
-                output_tokens=usage['completion_tokens']
-            )
-        except ValueError as e:
-            logging.error(f"Error calculating cost: {str(e)}")
-            cost_info = {"input_cost": 0, "output_cost": 0, "total_cost": 0}
+        def _normalize_provider(provider_name: Optional[str]) -> Optional[str]:
+            if not provider_name:
+                return None
+            normalized = str(provider_name).strip().lower()
+            mapping = {
+                "chatopenai": "openai",
+                "azurechatopenai": "azure_openai",
+                "bedrockchat": "bedrock",
+                "chatvertexai": "vertexai",
+                "chatollama": "ollama",
+            }
+            return mapping.get(normalized, normalized)
+
+        def _string_attr(source: object, attribute: str) -> Optional[str]:
+            if source is None:
+                return None
+            value = getattr(source, attribute, None)
+            return value if isinstance(value, str) and value else None
+
+        def _coerce_model_name(node_params: Any) -> Optional[str]:
+            node_model_name = _string_attr(node_params, "model_name")
+            if node_model_name:
+                return node_model_name.strip()
+
+            score_model_name = _string_attr(self.parameters, "model_name")
+            if score_model_name:
+                return score_model_name.strip()
+            return None
+
+        node_instances = getattr(self, "node_instances", None)
+        if isinstance(node_instances, list):
+            for node_name, node_instance in node_instances:
+                if not hasattr(node_instance, "get_token_usage"):
+                    continue
+                try:
+                    node_usage = node_instance.get_token_usage() or {}
+                except Exception as e:
+                    logging.error(f"Error getting token usage for node '{node_name}': {str(e)}")
+                    continue
+
+                prompt_tokens = int(node_usage.get("prompt_tokens", 0) or 0)
+                completion_tokens = int(node_usage.get("completion_tokens", 0) or 0)
+                total_tokens = int(node_usage.get("total_tokens", prompt_tokens + completion_tokens) or 0)
+                cached_tokens = int(node_usage.get("cached_tokens", 0) or 0)
+                llm_calls = int(node_usage.get("successful_requests", 0) or 0)
+                if llm_calls <= 0 and total_tokens <= 0:
+                    continue
+
+                node_params = getattr(node_instance, "parameters", None)
+                model_name = _coerce_model_name(node_params)
+                provider_name = _normalize_provider(
+                    _string_attr(node_params, "model_provider")
+                    or _string_attr(self.parameters, "model_provider")
+                )
+
+                prompt_cost = 0.0
+                completion_cost = 0.0
+                if model_name:
+                    try:
+                        node_prompt_cost, node_completion_cost = _litellm.cost_per_token(
+                            model=model_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                        )
+                        prompt_cost = float(node_prompt_cost)
+                        completion_cost = float(node_completion_cost)
+                    except Exception as e:
+                        logging.error(f"Error calculating cost for node '{node_name}': {str(e)}")
+
+                total_input_cost += prompt_cost
+                total_output_cost += completion_cost
+                components.append({
+                    "type": "api_call",
+                    "provider": provider_name,
+                    "model": model_name,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cached_tokens": cached_tokens,
+                    "llm_calls": llm_calls,
+                    "usd": float(prompt_cost + completion_cost),
+                    "metadata": {"node_name": node_name},
+                })
+
+        if not components:
+            try:
+                prompt_cost, completion_cost = _litellm.cost_per_token(
+                    model=self.parameters.model_name,
+                    prompt_tokens=usage['prompt_tokens'],
+                    completion_tokens=usage['completion_tokens']
+                )
+                total_input_cost = float(prompt_cost)
+                total_output_cost = float(completion_cost)
+                if usage['total_tokens'] > 0 or usage['successful_requests'] > 0:
+                    components.append({
+                        "type": "api_call",
+                        "provider": _normalize_provider(self.parameters.model_provider),
+                        "model": self.parameters.model_name,
+                        "prompt_tokens": usage['prompt_tokens'],
+                        "completion_tokens": usage['completion_tokens'],
+                        "cached_tokens": usage['cached_tokens'],
+                        "llm_calls": usage['successful_requests'],
+                        "usd": float(total_input_cost + total_output_cost),
+                        "metadata": {"node_name": "score"},
+                    })
+            except Exception as e:
+                logging.error(f"Error calculating cost: {str(e)}")
 
         return {
             "prompt_tokens":     usage['prompt_tokens'],
@@ -931,9 +1015,10 @@ class LangGraphScore(Score, LangChainUser):
             "total_tokens":      usage['total_tokens'],
             "llm_calls":         usage['successful_requests'],
             "cached_tokens":     usage['cached_tokens'],
-            "input_cost":        cost_info['input_cost'],
-            "output_cost":       cost_info['output_cost'],
-            "total_cost":        cost_info['total_cost']
+            "input_cost":        total_input_cost,
+            "output_cost":       total_output_cost,
+            "total_cost":        float(total_input_cost + total_output_cost),
+            "components":        components,
         }
 
     def reset_token_usage(self):
@@ -1576,12 +1661,15 @@ class LangGraphScore(Score, LangChainUser):
                     explanation="A timeout occurred during workflow execution"
                 )
         except Exception as e:
-            logging.error(f"Error in predict for thread_id {thread_id}: {e}")
+            # Preserve exception type for operator debugging (the raw message alone is often opaque,
+            # e.g. "the connection is closed").
+            logging.error(f"Error in predict for thread_id {thread_id}: {type(e).__name__}: {e}")
             logging.error(traceback.format_exc())
             return Score.Result(
                 parameters=self.parameters,
                 value="ERROR",
-                error=str(e)
+                error=f"{type(e).__name__}: {e}",
+                metadata={"exception_type": type(e).__name__},
             )
 
     def preprocess_text(self, text):
@@ -1595,18 +1683,6 @@ class LangGraphScore(Score, LangChainUser):
         try:
             # Give LangGraph a chance to finish any pending operations
             await asyncio.sleep(0.1)
-
-            # Close PostgreSQL checkpointer if it was initialized
-            if hasattr(self, '_checkpointer_context') and \
-               self._checkpointer_context is not None:
-                try:
-                    logging.info("Closing PostgreSQL checkpointer...")
-                    await self._checkpointer_context.__aexit__(None, None, None)
-                    self.checkpointer = None
-                    self._checkpointer_context = None
-                    logging.info("PostgreSQL checkpointer closed")
-                except Exception as e:
-                    logging.error(f"Error closing PostgreSQL checkpointer: {e}")
 
             # Close Azure credentials
             if hasattr(self, '_credential'):
@@ -1665,4 +1741,3 @@ class LangGraphScore(Score, LangChainUser):
                        for item in result.get('listBatchJobScoringJobs', {}).get('items', [])]
         logging.info(f"Found {len(scoring_jobs)} scoring jobs for batch {batch_job_id}")
         return scoring_jobs
-

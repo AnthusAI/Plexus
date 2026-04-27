@@ -1,4 +1,0 @@
-interface:
-  display_name: "Plexus Feedback Alignment Improver"
-  short_description: "Iterate score alignment from feedback edits with fixed-baseline comparisons"
-  default_prompt: "Improve alignment for this score using feedback edits as ground truth: run feedback analysis for sufficiency, triage contradictions first, establish a baseline feedback evaluation, then iterate score code with synchronous feedback evaluations that always compare to the original baseline evaluation ID."

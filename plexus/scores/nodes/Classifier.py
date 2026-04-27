@@ -10,6 +10,7 @@ from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import BatchProcessingPause
 import traceback
 import os
+import asyncio
 from plexus.dashboard.api.client import PlexusDashboardClient
 import uuid
 
@@ -967,7 +968,37 @@ class Classifier(BaseNode):
                         else:
                             messages.append(msg)
 
-                    response = await model.ainvoke(messages)
+                    def _is_retryable_connection_error(exc: Exception) -> bool:
+                        # Keep this intentionally narrow: we only retry a known-transient
+                        # transport failure that started surfacing as fatal when ERROR
+                        # results began failing evaluations.
+                        msg = str(exc).lower()
+                        return "the connection is closed" in msg or "connection is closed" in msg
+
+                    # A very small, deterministic retry for transient transport closure.
+                    # This is not a fallback path; it is the same call retried once or twice.
+                    max_attempts = 3
+                    last_exc: Exception | None = None
+                    for attempt in range(1, max_attempts + 1):
+                        try:
+                            response = await model.ainvoke(messages)
+                            break
+                        except Exception as e:
+                            last_exc = e
+                            if attempt < max_attempts and _is_retryable_connection_error(e):
+                                delay_s = 0.5 * attempt
+                                logging.warning(
+                                    "Transient LLM transport error during model.ainvoke "
+                                    f"(attempt {attempt}/{max_attempts}): {type(e).__name__}: {e}. "
+                                    f"Retrying in {delay_s:.1f}s..."
+                                )
+                                await asyncio.sleep(delay_s)
+                                continue
+                            raise
+                    else:
+                        # Should be unreachable, but keep mypy/pylance happy.
+                        assert last_exc is not None
+                        raise last_exc
                     
                     # Normalize completion text (handles Responses API content blocks)
                     completion_text = self.normalize_text_output(response)

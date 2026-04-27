@@ -7,7 +7,23 @@ resolved lazily via ``__getattr__`` when accessed.
 """
 
 import importlib
+import os
 import warnings
+
+# Disable DSPy's on-disk cache when requested, using DSPy's official API.
+# This avoids SQLite lock contention when running parallel evaluations.
+# We also close the FanoutCache that DSPy created at import time so its
+# file descriptors are released.
+if os.environ.get("DSPY_DISABLE_DISK_CACHE", "").lower() in ("1", "true", "yes"):
+    import dspy
+    # Close the FanoutCache that was auto-created at import time
+    _old_disk = getattr(getattr(dspy, "cache", None), "disk_cache", None)
+    if hasattr(_old_disk, "close"):
+        _old_disk.close()
+    # Replace with memory-only cache via DSPy's public configure_cache()
+    from dspy.clients import configure_cache
+    configure_cache(enable_disk_cache=False)
+    del _old_disk
 from typing import Any
 
 warnings.filterwarnings(

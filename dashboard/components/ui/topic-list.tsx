@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, MessageSquareCode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -19,6 +20,15 @@ export interface TopicExemplar {
   timestamp?: string | null;
   detailed_cause?: string | null;
   suggested_fix?: string | null;
+  misclassification_classification?: {
+    primary_category?: string;
+    rationale?: string;
+    confidence?: string;
+    evidence_snippets?: Array<{
+      source?: string;
+      quote_or_fact?: string;
+    }>;
+  };
 }
 
 export interface Topic {
@@ -43,21 +53,90 @@ export interface Topic {
   days_inactive?: number;
 }
 
-type RcaDataByItemId = Record<string, { detailed_cause?: string; suggested_fix?: string }>
-
 interface TopicItemProps {
   topic: Topic;
   isExpanded: boolean;
   onToggle: (topic: Topic) => void;
+  onViewItems?: (topic: Topic) => void;
+  onClearTopicFilter?: () => void;
+  isTopicFiltered?: boolean;
+  topicCategoryInfo?: {
+    primaryCategory?: string;
+    purity?: number;
+    categoryCounts?: Record<string, number>;
+  };
 }
 
-function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
+const getCategoryLabel = (category?: string | null): string => {
+  switch (category) {
+    case "score_configuration_problem":
+      return "Score configuration"
+    case "information_gap":
+      return "Information gap"
+    case "guideline_gap_requires_sme":
+      return "SME guideline gap"
+    case "mechanical_malfunction":
+      return "Mechanical malfunction"
+    default:
+      return category ? category.replace(/_/g, " ") : "Unclassified"
+  }
+}
+
+const getCategoryBadgeClass = (category?: string | null): string => {
+  switch (category) {
+    case "score_configuration_problem":
+      return "bg-chart-1/20 text-chart-1"
+    case "information_gap":
+      return "bg-chart-2/20 text-chart-2"
+    case "guideline_gap_requires_sme":
+      return "bg-chart-3/20 text-chart-3"
+    case "mechanical_malfunction":
+      return "bg-chart-4/20 text-chart-4"
+    default:
+      return "bg-muted text-muted-foreground"
+  }
+}
+
+const containsLuaTablePointer = (value: unknown): boolean => {
+  if (typeof value !== "string") return false;
+  return value.toLowerCase().includes("<lua table at ");
+};
+
+const normalizeTopicText = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (containsLuaTablePointer(trimmed)) return null;
+  return trimmed;
+};
+
+function getTopicItemIds(topic: Topic): string[] {
+  const exemplars = (topic.exemplars ?? []).filter(
+    (ex): ex is TopicExemplar => typeof ex !== "string"
+  );
+  return exemplars
+    .map((ex) => ex.item_id)
+    .filter((id): id is string => !!id);
+}
+
+function TopicItem({
+  topic,
+  isExpanded,
+  onToggle,
+  onViewItems,
+  onClearTopicFilter,
+  isTopicFiltered,
+  topicCategoryInfo,
+}: TopicItemProps) {
   const [showCode, setShowCode] = useState(false);
+  const topicLabel = normalizeTopicText(topic.label) ?? "Unlabeled topic";
+  const topicCause = normalizeTopicText(topic.cause);
+  const topicItemIds = getTopicItemIds(topic);
   const hasDetails =
     (topic.keywords?.length ?? 0) > 0 ||
     (topic.exemplars?.length ?? 0) > 0 ||
     topic.days_inactive !== undefined ||
-    !!topic.cause ||
+    !!topicCause ||
     !!topic.detailed_explanation ||
     !!topic.improvement_suggestion;
 
@@ -77,7 +156,7 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               )
             ) : null}
-            <span className="font-medium truncate">{topic.label}</span>
+            <span className="font-medium truncate">{topicLabel}</span>
           </div>
           <div className="flex gap-2 text-sm text-muted-foreground shrink-0 ml-2">
             {topic.days_inactive !== undefined && (
@@ -99,6 +178,17 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
             >
               {topic.memory_tier}
             </Badge>
+            {topicCategoryInfo?.primaryCategory && (
+              <Badge
+                variant="secondary"
+                className={`border-0 ${getCategoryBadgeClass(topicCategoryInfo.primaryCategory)}`}
+              >
+                {getCategoryLabel(topicCategoryInfo.primaryCategory)}
+                {typeof topicCategoryInfo.purity === "number"
+                  ? ` (${Math.round(topicCategoryInfo.purity * 100)}%)`
+                  : ""}
+              </Badge>
+            )}
             <span>
               {topic.member_count} item{topic.member_count !== 1 ? "s" : ""}
             </span>
@@ -153,16 +243,43 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
                   </div>
                 </div>
               )}
-              {!topic.detailed_explanation && topic.cause && (
+              {!topic.detailed_explanation && topicCause && (
                 <div>
                   <span className="font-medium text-muted-foreground">Root cause: </span>
-                  <span className="text-foreground">{topic.cause}</span>
+                  <span className="text-foreground">{topicCause}</span>
                 </div>
               )}
               {topic.keywords && topic.keywords.length > 0 && (
                 <div>
                   <span className="font-medium text-muted-foreground">Keywords: </span>
                   <span className="text-foreground">{topic.keywords.join(", ")}</span>
+                </div>
+              )}
+              {(onViewItems && topicItemIds.length > 0) && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 text-xs border-0 shadow-none px-2",
+                      isTopicFiltered
+                        ? "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        : "bg-muted text-foreground hover:bg-muted/80"
+                    )}
+                    onClick={() => onViewItems(topic)}
+                  >
+                    View items ({topicItemIds.length})
+                  </Button>
+                  {isTopicFiltered && onClearTopicFilter && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={onClearTopicFilter}
+                    >
+                      Clear topic filter
+                    </Button>
+                  )}
                 </div>
               )}
             </>
@@ -176,15 +293,23 @@ function TopicItem({ topic, isExpanded, onToggle }: TopicItemProps) {
 export interface TopicListProps {
   topics: Topic[];
   label?: string;
-  onTopicFilter?: (itemIds: string[] | null, rcaDataByItemId: RcaDataByItemId) => void;
+  topicCategoryInfoByKey?: Record<string, {
+    primaryCategory?: string;
+    purity?: number;
+    categoryCounts?: Record<string, number>;
+  }>;
+  onTopicFilter?: (
+    itemIds: string[] | null,
+    topicLabel?: string | null
+  ) => void;
+  activeTopicLabel?: string | null;
 }
 
 /**
  * Renders a labeled list of topics with keywords, memory tiers, and expandable analysis.
- * When a topic is expanded, onTopicFilter is called with the topic's exemplar item IDs
- * so the parent can filter the score results list to show only that topic's items.
+ * Expanding a topic only expands details. Filtering to score results is an explicit action.
  */
-export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
+export function TopicList({ topics, label, topicCategoryInfoByKey, onTopicFilter, activeTopicLabel }: TopicListProps) {
   const [expandedKey, setExpandedKey] = useState<string | number | null>(null);
 
   if (!topics || topics.length === 0) return null;
@@ -201,29 +326,16 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
     const isCurrentlyExpanded = expandedKey === key;
     const next = isCurrentlyExpanded ? null : key;
     setExpandedKey(next);
+  };
 
-    if (onTopicFilter) {
-      if (next !== null) {
-        const exemplars = (topic.exemplars ?? []).filter(
-          (ex): ex is TopicExemplar => typeof ex !== "string"
-        );
-        const itemIds = exemplars
-          .map((ex) => ex.item_id)
-          .filter((id): id is string => !!id);
-        const rcaDataByItemId: RcaDataByItemId = {};
-        exemplars.forEach((ex) => {
-          if (ex.item_id) {
-            rcaDataByItemId[ex.item_id] = {
-              detailed_cause: ex.detailed_cause ?? undefined,
-              suggested_fix: ex.suggested_fix ?? undefined,
-            };
-          }
-        });
-        onTopicFilter(itemIds, rcaDataByItemId);
-      } else {
-        onTopicFilter(null, {});
-      }
-    }
+  const handleViewItems = (topic: Topic) => {
+    if (!onTopicFilter) return;
+    onTopicFilter(getTopicItemIds(topic), normalizeTopicText(topic.label) ?? "Unlabeled topic");
+  };
+
+  const handleClearTopicFilter = () => {
+    if (!onTopicFilter) return;
+    onTopicFilter(null, null);
   };
 
   return (
@@ -234,12 +346,17 @@ export function TopicList({ topics, label, onTopicFilter }: TopicListProps) {
       <ul className="space-y-2">
         {sorted.map((t) => {
           const key = t.topic_id ?? t.cluster_id ?? t.label;
+          const normalizedLabel = normalizeTopicText(t.label) ?? "Unlabeled topic";
           return (
             <TopicItem
               key={key}
               topic={t}
               isExpanded={expandedKey === key}
               onToggle={handleToggle}
+              onViewItems={onTopicFilter ? handleViewItems : undefined}
+              onClearTopicFilter={onTopicFilter ? handleClearTopicFilter : undefined}
+              isTopicFiltered={Boolean(activeTopicLabel && activeTopicLabel === normalizedLabel)}
+              topicCategoryInfo={topicCategoryInfoByKey?.[String(key)]}
             />
           );
         })}

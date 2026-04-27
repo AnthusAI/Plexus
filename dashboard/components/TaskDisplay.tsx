@@ -31,6 +31,7 @@ interface TaskDisplayProps {
     type: string
     scorecard?: { name: string } | null
     score?: { name: string } | null
+    procedureId?: string | null | undefined
     createdAt: string
     metrics?: any
     metricsExplanation?: string | null
@@ -55,7 +56,10 @@ interface TaskDisplayProps {
     scorecardId?: string | null | undefined
     scoreId?: string | null | undefined
     scoreVersionId?: string | null | undefined
+    dataSetId?: string | null | undefined
     parameters?: string | null
+    baseline_evaluation_id?: string | null
+    current_baseline_evaluation_id?: string | null
   }
   reportData?: {
     id: string
@@ -287,11 +291,13 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     const evaluationTaskProps = {
       task: {
         ...commonTaskProps,
-        scorecard: evaluationData.scorecard?.name || '-',
-        score: evaluationData.score?.name || '-',
+        scorecard: evaluationData.scorecard?.name || evaluationData.scorecardId || '-',
+        score: evaluationData.score?.name || evaluationData.scoreId || '-',
+        procedureId: evaluationData.procedureId ?? undefined,
         scorecardId: evaluationData.scorecardId,
         scoreId: evaluationData.scoreId,
         scoreVersionId: evaluationData.scoreVersionId,
+        dataSetId: evaluationData.dataSetId,
         data: {
           id: displayId,
           title: displayTitle,
@@ -355,7 +361,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
             JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
           isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
           parameters: evaluationData.parameters ?? null,
-           scoreResults: transformedScoreResults as any,
+          baseline_evaluation_id: evaluationData.baseline_evaluation_id ?? null,
+          current_baseline_evaluation_id: evaluationData.current_baseline_evaluation_id ?? null,
+          scoreResults: transformedScoreResults as any,
           task: processedTask ? { 
               id: processedTask.id,
               accountId: '',
@@ -514,7 +522,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const stagesChanged = prevStages.length !== nextStages.length || 
     prevStages.some((stage: any, index: number) => {
       const nextStage: any = nextStages[index];
-      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status;
+      return !nextStage || stage.name !== nextStage.name || stage.status !== nextStage.status || stage.statusMessage !== nextStage.statusMessage;
     });
   
   if (stagesChanged) {

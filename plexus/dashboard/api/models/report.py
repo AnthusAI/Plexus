@@ -16,24 +16,24 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Report(BaseModel):
-    reportConfigurationId: str
     accountId: str
     name: str
     taskId: str
     createdAt: datetime
     updatedAt: datetime
+    reportConfigurationId: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = field(default_factory=dict)
     output: Optional[str] = None
 
     def __init__(
         self,
         id: str,
-        reportConfigurationId: str,
         accountId: str,
         name: str,
         taskId: str,
         createdAt: datetime,
         updatedAt: datetime,
+        reportConfigurationId: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
         output: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
@@ -99,12 +99,12 @@ class Report(BaseModel):
 
         return cls(
             id=data['id'],
-            reportConfigurationId=data['reportConfigurationId'],
             accountId=data['accountId'],
-            name=data['name'],
+            name=data.get('name', ''),
             taskId=data['taskId'],
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt'],
+            reportConfigurationId=data.get('reportConfigurationId'),
             parameters=data.get('parameters'),
             output=data.get('output'),
             client=client
@@ -114,10 +114,10 @@ class Report(BaseModel):
     def create(
         cls,
         client: '_BaseAPIClient',
-        reportConfigurationId: str,
         accountId: str,
         taskId: str,
         name: str,
+        reportConfigurationId: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
         output: Optional[str] = None
     ) -> 'Report':
@@ -131,12 +131,13 @@ class Report(BaseModel):
         """
 
         input_data = {
-            'reportConfigurationId': reportConfigurationId,
             'accountId': accountId,
             'taskId': taskId,
             'name': name,
             'parameters': json.dumps(parameters or {})
         }
+        if reportConfigurationId is not None:
+            input_data['reportConfigurationId'] = reportConfigurationId
         if output is not None:
             input_data['output'] = output
 
@@ -148,7 +149,7 @@ class Report(BaseModel):
                  raise Exception(error_msg)
             return cls.from_dict(result['createReport'], client)
         except Exception as e:
-            logger.exception(f"Error creating Report for config {reportConfigurationId}, task {taskId}: {e}")
+            logger.exception(f"Error creating Report for task {taskId}: {e}")
             raise
 
     def update(self, **kwargs) -> 'Report':

@@ -46,8 +46,10 @@ import { useRouter, usePathname, useParams } from "next/navigation"
 import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { Task, TaskHeader, TaskContent } from "./Task"
 import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
-import { AdHocFeedbackAnalysis } from "@/components/ui/ad-hoc-feedback-analysis"
+import { AdHocFeedbackAlignment } from "@/components/ui/ad-hoc-feedback-alignment"
 import { AdHocCostAnalysis } from "@/components/ui/ad-hoc-cost-analysis"
+import { ScoreProcedureList } from "@/components/ui/score-procedure-list"
+import { ScoreEvaluationList } from "@/components/ui/score-evaluation-list"
 import { motion, AnimatePresence } from 'framer-motion'
 import { FilterInput } from '@/components/FilterInput'
 import { useAccount } from "@/app/contexts/AccountContext"
@@ -111,7 +113,7 @@ export default function ScorecardsComponent({
   const [shouldExpandExamples, setShouldExpandExamples] = useState(false)
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
   const [isTaskViewActive, setIsTaskViewActive] = useState(false)
-  const [feedbackAnalysisPanel, setFeedbackAnalysisPanel] = useState<{
+  const [feedbackAnalysisPanel, setFeedbackAlignmentPanel] = useState<{
     isOpen: boolean;
     scorecardId?: string;
     scoreId?: string;
@@ -123,6 +125,12 @@ export default function ScorecardsComponent({
     scorecardId?: string;
     scoreId?: string;
     type: 'scorecard' | 'score';
+  } | null>(null)
+  const [scoreExplorerPanel, setScoreExplorerPanel] = useState<{
+    isOpen: boolean;
+    scoreId: string;
+    scoreName?: string;
+    type: 'procedures' | 'evaluations';
   } | null>(null)
   const [scorecardsFilter, setScorecardsFilter] = useState('')
   const router = useRouter()
@@ -234,6 +242,12 @@ export default function ScorecardsComponent({
     };
   }, [scorecards, selectedScorecardSections, isNarrowViewport]);
 
+  useEffect(() => {
+    if (scoreExplorerPanel?.isOpen && selectedScore?.id && scoreExplorerPanel.scoreId !== selectedScore.id) {
+      setScoreExplorerPanel(null)
+    }
+  }, [scoreExplorerPanel, selectedScore?.id])
+
   // Task monitoring with real-time subscriptions
   useEffect(() => {
     if (!selectedTask) return;
@@ -318,14 +332,15 @@ export default function ScorecardsComponent({
     }
   };
 
-  // Handle opening feedback analysis for a scorecard
-  const handleScorecardFeedbackAnalysis = (scorecardId: string) => {
-    console.log('Opening feedback analysis for scorecard:', scorecardId);
-    setFeedbackAnalysisPanel({
+  // Handle opening feedback alignment for a scorecard
+  const handleScorecardFeedbackAlignment = (scorecardId: string) => {
+    console.log('Opening feedback alignment for scorecard:', scorecardId);
+    setFeedbackAlignmentPanel({
       isOpen: true,
       scorecardId,
       type: 'scorecard'
     });
+    setScoreExplorerPanel(null);
     // Close task view if open
     setIsTaskViewActive(false);
     // If we have a selected score, clear it to show scorecard + feedback layout
@@ -339,6 +354,7 @@ export default function ScorecardsComponent({
   const handleScorecardCostAnalysis = (scorecardId: string) => {
     console.log('Opening cost analysis for scorecard:', scorecardId);
     setCostAnalysisPanel({ isOpen: true, scorecardId, type: 'scorecard' });
+    setScoreExplorerPanel(null);
     setIsTaskViewActive(false);
     if (selectedScore) {
       setSelectedScore(null);
@@ -349,26 +365,49 @@ export default function ScorecardsComponent({
   const handleScoreCostAnalysis = (scoreId: string, scorecardId?: string) => {
     console.log('Opening cost analysis for score:', scoreId);
     setCostAnalysisPanel({ isOpen: true, scoreId, scorecardId, type: 'score' });
+    setScoreExplorerPanel(null);
     setIsTaskViewActive(false);
   };
 
-  // Handle opening feedback analysis for a specific score
-  const handleScoreFeedbackAnalysis = (scoreId: string, scoreName?: string, scorecardId?: string) => {
-    console.log('Opening feedback analysis for score:', scoreId);
-    setFeedbackAnalysisPanel({
+  // Handle opening feedback alignment for a specific score
+  const handleScoreFeedbackAlignment = (scoreId: string, scoreName?: string, scorecardId?: string) => {
+    console.log('Opening feedback alignment for score:', scoreId);
+    setFeedbackAlignmentPanel({
       isOpen: true,
       scoreId,
       scoreName,
       scorecardId,
       type: 'score'
     });
+    setScoreExplorerPanel(null);
     // Close task view if open
     setIsTaskViewActive(false);
   };
 
-  // Handle closing feedback analysis panel
-  const handleCloseFeedbackAnalysis = () => {
-    setFeedbackAnalysisPanel(null);
+  const handleScoreViewProcedures = (scoreId: string, scoreName?: string) => {
+    console.log('Opening procedures for score:', scoreId);
+    setFeedbackAlignmentPanel(null);
+    setCostAnalysisPanel(null);
+    setScoreExplorerPanel({
+      isOpen: true,
+      scoreId,
+      scoreName,
+      type: 'procedures',
+    });
+    setIsTaskViewActive(false);
+  };
+
+  const handleScoreViewEvaluations = (scoreId: string, scoreName?: string) => {
+    console.log('Opening evaluations for score:', scoreId);
+    setFeedbackAlignmentPanel(null);
+    setCostAnalysisPanel(null);
+    setScoreExplorerPanel({
+      isOpen: true,
+      scoreId,
+      scoreName,
+      type: 'evaluations',
+    });
+    setIsTaskViewActive(false);
   };
 
   // Handle task closure
@@ -533,6 +572,7 @@ export default function ScorecardsComponent({
                         order: score.order,
                         type: score.type,
                         externalId: score.externalId,
+                        championVersionId: score.championVersionId,
                       }))
                     }
                   };
@@ -578,9 +618,9 @@ export default function ScorecardsComponent({
         setCostAnalysisPanel(null);
       }
       
-      // Close feedback analysis if open when selecting a score
+      // Close feedback alignment if open when selecting a score
       if (feedbackAnalysisPanel?.isOpen) {
-        setFeedbackAnalysisPanel(null);
+        setFeedbackAlignmentPanel(null);
       }
       
       // Set version ID if provided
@@ -1370,7 +1410,7 @@ export default function ScorecardsComponent({
             console.log('View data for scorecard:', selectedScorecard.id)
             // TODO: Implement data source view
           }}
-          onFeedbackAnalysis={() => handleScorecardFeedbackAnalysis(selectedScorecard.id)}
+          onFeedbackAlignment={() => handleScorecardFeedbackAlignment(selectedScorecard.id)}
           onCostAnalysis={() => handleScorecardCostAnalysis(selectedScorecard.id)}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
@@ -1448,12 +1488,20 @@ export default function ScorecardsComponent({
               setSelectedTask(null);
               setIsTaskViewActive(false);
             }
-            // If there's feedback analysis open when closing score, also close it
+            // If there's feedback alignment open when closing score, also close it
             if (feedbackAnalysisPanel?.isOpen) {
-              setFeedbackAnalysisPanel(null);
+              setFeedbackAlignmentPanel(null);
+            }
+            if (costAnalysisPanel?.isOpen) {
+              setCostAnalysisPanel(null);
+            }
+            if (scoreExplorerPanel?.isOpen) {
+              setScoreExplorerPanel(null);
             }
           }}
           onDelete={() => handleDeleteScore(selectedScore.id)}
+          onViewProcedures={() => handleScoreViewProcedures(selectedScore.id, selectedScore.name)}
+          onViewEvaluations={() => handleScoreViewEvaluations(selectedScore.id, selectedScore.name)}
           initialSelectedVersionId={selectedVersionId}
           onVersionSelect={handleVersionSelect}
           onSave={async () => {
@@ -1488,6 +1536,7 @@ export default function ScorecardsComponent({
                           order: score.order,
                           type: score.type,
                           externalId: score.externalId,
+                          championVersionId: score.championVersionId,
                         }))
                       }
                     }
@@ -1513,7 +1562,7 @@ export default function ScorecardsComponent({
               }
             }
           }}
-          onFeedbackAnalysis={() => handleScoreFeedbackAnalysis(selectedScore.id, selectedScore.name, selectedScorecard?.id)}
+          onFeedbackAlignment={() => handleScoreFeedbackAlignment(selectedScore.id, selectedScore.name, selectedScorecard?.id)}
           onCostAnalysis={() => handleScoreCostAnalysis(selectedScore.id, selectedScorecard?.id)}
           exampleItems={scorecardExamples.map(example => {
             // Extract item ID from "item:uuid" format
@@ -1523,12 +1572,38 @@ export default function ScorecardsComponent({
               displayValue: `Item ${itemId.slice(0, 8)}...` // Show first 8 chars of ID as display
             };
           })}
+          scorecardId={selectedScorecard?.id}
           scorecardName={selectedScorecard?.name}
           onTaskCreated={handleTaskCreated}
         />
       </div>
     );
   };
+
+  const renderScoreExplorerPanel = () => {
+    if (!selectedScore || !scoreExplorerPanel?.isOpen) return null
+
+    return (
+      scoreExplorerPanel.type === 'procedures' ? (
+        <ScoreProcedureList
+          scoreId={selectedScore.id}
+          scorecardId={selectedScorecard?.id}
+          scoreName={selectedScore.name}
+          scorecardName={selectedScorecard?.name || 'Unknown Scorecard'}
+          scope="score"
+          showHeader={false}
+          surface="slot"
+        />
+      ) : (
+        <ScoreEvaluationList
+          scoreId={selectedScore.id}
+          scope="score"
+          showHeader={false}
+          surface="slot"
+        />
+      )
+    )
+  }
 
   // Add renderSelectedTask function
   const renderSelectedTask = () => {
@@ -1688,7 +1763,7 @@ export default function ScorecardsComponent({
                 selectedScorecardId={selectedScorecard?.id}
                 onSelectScorecard={handleSelectScorecard}
                 onEdit={handleEdit}
-                onFeedbackAnalysis={handleScorecardFeedbackAnalysis}
+                onFeedbackAlignment={handleScorecardFeedbackAlignment}
                 onCostAnalysis={handleScorecardCostAnalysis}
                 scorecardRefsMap={scorecardRefsMap}
               />
@@ -1709,9 +1784,9 @@ export default function ScorecardsComponent({
 
         {/* Detail Panel Container */}
         <div className="flex-1 flex overflow-hidden">
-          {/* When we have a selected score and feedback analysis, show score + feedback layout */}
+          {/* When we have a selected score and feedback alignment, show score + feedback layout */}
           <AnimatePresence mode="wait">
-            {selectedScore && (feedbackAnalysisPanel?.isOpen || costAnalysisPanel?.isOpen) ? (
+            {selectedScore && (feedbackAnalysisPanel?.isOpen || costAnalysisPanel?.isOpen || scoreExplorerPanel?.isOpen) ? (
               <motion.div
                 key="score-analysis-layout"
                 initial={{ opacity: 0, x: '100%' }}
@@ -1775,22 +1850,36 @@ export default function ScorecardsComponent({
                     <div className="w-full h-full flex flex-col min-h-0">
                       <div className="flex justify-between items-center mb-4 flex-shrink-0">
                         <div className="flex items-center gap-2">
-                          {feedbackAnalysisPanel?.isOpen ? (
+                          {scoreExplorerPanel?.isOpen ? (
+                            scoreExplorerPanel.type === 'procedures' ? (
+                              <Activity className="h-5 w-5 text-foreground" />
+                            ) : (
+                              <Database className="h-5 w-5 text-foreground" />
+                            )
+                          ) : feedbackAnalysisPanel?.isOpen ? (
                             <MessageCircleMore className="h-5 w-5 text-foreground" />
                           ) : (
                             <Coins className="h-5 w-5 text-foreground" />
                           )}
-                          <h2 className="text-lg font-semibold">{feedbackAnalysisPanel?.isOpen ? 'Feedback Analysis' : 'Cost Analysis'}</h2>
+                          <h2 className="text-lg font-semibold">
+                            {scoreExplorerPanel?.isOpen
+                              ? (scoreExplorerPanel.type === 'procedures' ? 'Procedures' : 'Evaluations')
+                              : feedbackAnalysisPanel?.isOpen
+                                ? 'Feedback Alignment'
+                                : 'Cost Analysis'}
+                          </h2>
                         </div>
                         <CardButton
                           icon={X}
-                          onClick={() => { setFeedbackAnalysisPanel(null); setCostAnalysisPanel(null); }}
+                          onClick={() => { setFeedbackAlignmentPanel(null); setCostAnalysisPanel(null); setScoreExplorerPanel(null); }}
                           aria-label="Close analysis"
                         />
                       </div>
                       <div className="flex-1 overflow-y-auto min-h-0">
-                        {feedbackAnalysisPanel?.isOpen ? (
-                          <AdHocFeedbackAnalysis
+                        {scoreExplorerPanel?.isOpen ? (
+                          renderScoreExplorerPanel()
+                        ) : feedbackAnalysisPanel?.isOpen ? (
+                          <AdHocFeedbackAlignment
                             scorecardId={feedbackAnalysisPanel.scorecardId}
                             scoreId={feedbackAnalysisPanel.scoreId}
                             scoreName={feedbackAnalysisPanel.scoreName}
@@ -1820,7 +1909,7 @@ export default function ScorecardsComponent({
                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 className="flex flex-1 overflow-hidden"
               >
-                {/* Scorecard + Feedback Analysis Layout: Scorecard (Left Column) - Explicitly set to 50% */}
+                {/* Scorecard + Feedback Alignment Layout: Scorecard (Left Column) - Explicitly set to 50% */}
                 <div className="w-1/2 overflow-hidden flex-shrink-0">
                   {renderSelectedScorecard()}
                 </div>
@@ -1880,17 +1969,17 @@ export default function ScorecardsComponent({
                           ) : (
                             <Coins className="h-5 w-5 text-foreground" />
                           )}
-                          <h2 className="text-lg font-semibold">{feedbackAnalysisPanel?.isOpen ? 'Feedback Analysis' : 'Cost Analysis'}</h2>
+                          <h2 className="text-lg font-semibold">{feedbackAnalysisPanel?.isOpen ? 'Feedback Alignment' : 'Cost Analysis'}</h2>
                         </div>
-                        <CardButton
-                          icon={X}
-                          onClick={() => { setFeedbackAnalysisPanel(null); setCostAnalysisPanel(null); }}
-                          aria-label="Close analysis"
-                        />
+                          <CardButton
+                            icon={X}
+                            onClick={() => { setFeedbackAlignmentPanel(null); setCostAnalysisPanel(null); setScoreExplorerPanel(null); }}
+                            aria-label="Close analysis"
+                          />
                       </div>
                       <div className="flex-1 overflow-y-auto min-h-0">
                         {feedbackAnalysisPanel?.isOpen ? (
-                          <AdHocFeedbackAnalysis
+                          <AdHocFeedbackAlignment
                             scorecardId={feedbackAnalysisPanel.scorecardId}
                             scoreId={feedbackAnalysisPanel.scoreId}
                             showHeader={false}
@@ -1983,8 +2072,8 @@ export default function ScorecardsComponent({
               )}
               
               {/* Only render these when not in two-column layout */}
-              {!selectedTask && !feedbackAnalysisPanel?.isOpen && renderSelectedScore()}
-              {!selectedTask && !feedbackAnalysisPanel?.isOpen && renderSelectedItem()}
+              {!selectedTask && !feedbackAnalysisPanel?.isOpen && !scoreExplorerPanel?.isOpen && renderSelectedScore()}
+              {!selectedTask && !feedbackAnalysisPanel?.isOpen && !scoreExplorerPanel?.isOpen && renderSelectedItem()}
               {!selectedScore && !selectedScorecard && renderSelectedTask()}
             </>
           )}

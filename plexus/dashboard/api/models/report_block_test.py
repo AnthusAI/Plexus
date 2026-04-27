@@ -19,7 +19,7 @@ def sample_block_data():
         "reportId": "report-xyz-456",
         "name": "block_0",
         "position": 0,
-        "type": "FeedbackAnalysis",
+        "type": "FeedbackAlignment",
         "output": '{"status": "ok"}',
         "attachedFiles": ["reportblocks/block-abc-123/output.json"],
         "log": None,
@@ -36,7 +36,7 @@ class TestReportBlockGetById:
         assert block is not None
         assert block.id == "block-abc-123"
         assert block.reportId == "report-xyz-456"
-        assert block.type == "FeedbackAnalysis"
+        assert block.type == "FeedbackAlignment"
 
     def test_passes_correct_query_and_variables(self, mock_client, sample_block_data):
         mock_client.execute.return_value = {"getReportBlock": sample_block_data}

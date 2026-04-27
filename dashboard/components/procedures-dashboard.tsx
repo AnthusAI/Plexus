@@ -14,17 +14,51 @@ import TemplateSelector from "@/components/template-selector"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
-import { observeTaskUpdates, observeTaskStageUpdates, observeGraphNodeUpdates } from "@/utils/subscriptions"
+import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
 import { ProceduresGauges } from "@/components/ProceduresGauges"
+import { ProceduresDashboardSkeleton } from "@/components/loading-skeleton"
 import { load as parseYaml, dump as stringifyYaml } from "js-yaml"
+import { useInView } from "react-intersection-observer"
+import {
+  EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
+  EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  evaluationToScoreEvaluationView,
+  feedbackEvaluationSummaryFromView,
+  hydrateProcedureRunsFeedbackEvaluations,
+  PROCEDURE_CARD_FIELDS,
+  PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
+  PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
+  procedureIdFromTaskTarget,
+  procedureToOptimizerRunView,
+  TASK_CARD_FIELDS,
+  type ProcedureFeedbackEvaluationSummary,
+} from "@/components/ui/optimizer-results-utils"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
 type ProcedureWithTask = Procedure & {
   task?: Task | null
+  feedbackEvaluationSummary?: ProcedureFeedbackEvaluationSummary | null
 }
 
-const client = generateClient<Schema>()
+const PROCEDURE_PAGE_SIZE = 25
+
+const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
+  const startCandidate =
+    procedure.task?.startedAt ||
+    procedure.task?.createdAt ||
+    procedure.createdAt ||
+    procedure.updatedAt
+  const timestamp = startCandidate ? new Date(startCandidate).getTime() : 0
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
+  [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
+
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 interface ProceduresDashboardProps {
   initialSelectedProcedureId?: string | null
@@ -34,14 +68,19 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
-  const { selectedAccount } = useAccount()
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   
   // Extract procedure ID from URL params if present, or use the prop
   const procedureIdFromParams = (params && 'id' in params) ? params.id as string : null
   const finalInitialProcedureId = initialSelectedProcedureId || procedureIdFromParams
   
   const [procedures, setProcedures] = useState<ProcedureWithTask[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isFetchingProcedures, setIsFetchingProcedures] = useState(false)
+  const [isHydratingTasks, setIsHydratingTasks] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [nextToken, setNextToken] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(finalInitialProcedureId)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -53,6 +92,26 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const [isConversationFullscreen, setIsConversationFullscreen] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const lastLoadTimeRef = useRef(0)
+  const loadRequestIdRef = useRef(0)
+  const hasLoadedProceduresOnceRef = useRef(false)
+  const procedureTaskMapRef = useRef<Map<string, Task>>(new Map())
+  const { ref: sentinelRef, inView } = useInView({ threshold: 0 })
+
+  const hydrateProcedurePerformanceSummaries = useCallback(async (
+    procedureItems: ProcedureWithTask[]
+  ): Promise<ProcedureWithTask[]> => {
+    const runs = await Promise.all(
+      procedureItems.map((procedure) => procedureToOptimizerRunView(procedure, procedure.task ?? null))
+    )
+    const hydratedRuns = await hydrateProcedureRunsFeedbackEvaluations(runs)
+    const summariesByProcedureId = new Map(
+      hydratedRuns.map((run) => [run.procedureId, run.feedbackEvaluationSummary ?? null])
+    )
+    return procedureItems.map((procedure) => ({
+      ...procedure,
+      feedbackEvaluationSummary: summariesByProcedureId.get(procedure.id) ?? null,
+    }))
+  }, [])
 
   // All hooks must be at the top before any conditional returns
   const handleSelectProcedure = useCallback((id: string | null) => {
@@ -88,47 +147,47 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }, [handleSelectProcedure])
 
   const loadProcedures = useCallback(async (force = false) => {
+    const requestId = ++loadRequestIdRef.current
+
     if (!selectedAccount?.id) {
       setProcedures([])
-      setIsLoading(false)
+      setNextToken(null)
+      setHasMore(false)
+      setError(null)
+      setIsInitialLoading(isLoadingAccounts)
+      setIsFetchingProcedures(isLoadingAccounts)
+      setIsHydratingTasks(false)
+      hasLoadedProceduresOnceRef.current = false
+      procedureTaskMapRef.current = new Map()
       return
     }
 
+    const shouldBlockInitialRender = !hasLoadedProceduresOnceRef.current
+
     try {
-      setIsLoading(true)
+      if (shouldBlockInitialRender) {
+        setIsInitialLoading(true)
+      }
+      setIsFetchingProcedures(true)
+      setError(null)
       lastLoadTimeRef.current = Date.now()
-      // First get procedures
-      const proceduresResult = await client.graphql({
+      // Phase A: fetch first procedure page and render immediately without task hydration
+      const proceduresResult: any = await getAmplifyClient().graphql({
         query: `
           query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
+            $nextToken: String
           ) {
             listProcedureByAccountIdAndUpdatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
+              nextToken: $nextToken
             ) {
               items {
-                id
-                featured
-                code
-                rootNodeId
-                createdAt
-                updatedAt
-                accountId
-                scorecardId
-                scorecard {
-                  id
-                  name
-                }
-                scoreId
-                score {
-                  id
-                  name
-                }
-
+                ${PROCEDURE_CARD_FIELDS}
               }
               nextToken
             }
@@ -137,152 +196,184 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         variables: {
           accountId: selectedAccount.id,
           sortDirection: 'DESC',
-          limit: 1000
+          limit: PROCEDURE_PAGE_SIZE,
+          nextToken: null
         }
       })
-      const proceduresData = (proceduresResult as any).data?.listProcedureByAccountIdAndUpdatedAt?.items || []
-      
-      // Then get tasks related to procedures (via metadata)
-      const tasksResult = await client.graphql({
+
+      if (requestId !== loadRequestIdRef.current) return
+
+      const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt
+      const firstPageItems: Procedure[] = procedureResponse?.items || []
+      const newNextToken: string | null = procedureResponse?.nextToken ?? null
+      const firstPageWithoutTasks = sortProceduresByStartTime(
+        firstPageItems.map((procedure: Procedure) => ({ ...procedure, task: null }))
+      )
+
+      setProcedures(firstPageWithoutTasks)
+      setNextToken(newNextToken)
+      setHasMore(!!newNextToken)
+      setIsInitialLoading(false)
+      setIsFetchingProcedures(false)
+      hasLoadedProceduresOnceRef.current = true
+      void hydrateProcedurePerformanceSummaries(firstPageWithoutTasks).then((hydrated) => {
+        if (requestId !== loadRequestIdRef.current) return
+        setProcedures((previous) =>
+          sortProceduresByStartTime(
+            previous.map((procedure) => {
+              const hydratedProcedure = hydrated.find((item) => item.id === procedure.id)
+              return hydratedProcedure
+                ? { ...procedure, feedbackEvaluationSummary: hydratedProcedure.feedbackEvaluationSummary ?? null }
+                : procedure
+            })
+          )
+        )
+      })
+
+      // Phase B: hydrate task/status data in background without blocking rendered cards
+      setIsHydratingTasks(true)
+      try {
+        const tasksResult = await getAmplifyClient().graphql({
+          query: `
+            query ListTaskByAccountIdAndUpdatedAt(
+              $accountId: String!
+              $sortDirection: ModelSortDirection
+              $limit: Int
+            ) {
+              listTaskByAccountIdAndUpdatedAt(
+                accountId: $accountId
+                sortDirection: $sortDirection
+                limit: $limit
+              ) {
+                items {
+                  ${TASK_CARD_FIELDS}
+                }
+              }
+            }
+          `,
+          variables: {
+            accountId: selectedAccount.id,
+            sortDirection: 'DESC',
+            limit: 1000
+          }
+        })
+
+        if (requestId !== loadRequestIdRef.current) return
+
+        const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
+        const procedureTaskMap = new Map<string, Task>()
+        allTasks.forEach((task: Task) => {
+          const procedureId = procedureIdFromTaskTarget(task.target)
+          if (procedureId) procedureTaskMap.set(procedureId, task)
+        })
+
+        procedureTaskMapRef.current = procedureTaskMap
+
+        const proceduresWithTasks = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt?.items
+          ? firstPageItems.map((procedure: Procedure) => ({
+              ...procedure,
+              task: procedureTaskMap.get(procedure.id) || null,
+            }))
+          : []
+        const hydratedProceduresWithTasks = await hydrateProcedurePerformanceSummaries(proceduresWithTasks)
+
+        setProcedures(prev =>
+          sortProceduresByStartTime(
+            prev.map(procedure => {
+              const hydratedProcedure = hydratedProceduresWithTasks.find((item) => item.id === procedure.id)
+              return {
+                ...procedure,
+                task: procedureTaskMap.get(procedure.id) || null,
+                feedbackEvaluationSummary: hydratedProcedure?.feedbackEvaluationSummary ?? procedure.feedbackEvaluationSummary ?? null,
+              }
+            })
+          )
+        )
+
+        if (force) {
+          console.log('Forced reload completed for procedures first page')
+        }
+      } catch (taskErr) {
+        if (requestId !== loadRequestIdRef.current) return
+        console.error('Error hydrating procedure tasks:', taskErr)
+        setError(taskErr instanceof Error ? taskErr.message : 'Failed to hydrate procedure task state')
+      } finally {
+        if (requestId === loadRequestIdRef.current) {
+          setIsHydratingTasks(false)
+        }
+      }
+    } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return
+      console.error('Error loading procedures:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load procedures')
+      setIsInitialLoading(false)
+      setIsFetchingProcedures(false)
+      setIsHydratingTasks(false)
+    }
+  }, [hydrateProcedurePerformanceSummaries, selectedAccount?.id, isLoadingAccounts])
+
+  const loadMoreProcedures = useCallback(async () => {
+    if (!selectedAccount?.id || !nextToken || isLoadingMore) return
+    setIsLoadingMore(true)
+    try {
+      const moreResult = await getAmplifyClient().graphql({
         query: `
-          query ListTaskByAccountIdAndUpdatedAt(
+          query ListProcedureByAccountIdAndUpdatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
+            $nextToken: String
           ) {
-            listTaskByAccountIdAndUpdatedAt(
+            listProcedureByAccountIdAndUpdatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
+              nextToken: $nextToken
             ) {
               items {
-                id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
-                metadata
-                createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
-                }
+                ${PROCEDURE_CARD_FIELDS}
               }
+              nextToken
             }
           }
         `,
         variables: {
           accountId: selectedAccount.id,
           sortDirection: 'DESC',
-          limit: 1000
+          limit: PROCEDURE_PAGE_SIZE,
+          nextToken
         }
       })
-      
-      const allTasks = (tasksResult as any).data?.listTaskByAccountIdAndUpdatedAt?.items || []
-      
-      // Filter tasks that have procedure_id in metadata
-      const procedureTasks = allTasks.filter((task: Task) => {
-        try {
-          const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-          return metadata && metadata.procedure_id
-        } catch {
-          return false
-        }
-      })
-      
-      // Create a map of procedure_id -> task for quick lookup
-      const procedureTaskMap = new Map()
-      procedureTasks.forEach((task: Task) => {
-        try {
-          const metadata = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
-          if (metadata && metadata.procedure_id) {
-            procedureTaskMap.set(metadata.procedure_id, task)
-          }
-        } catch {
-          // Ignore parsing errors
-        }
-      })
-      
-      // Combine procedures with their tasks
-      const data = proceduresData.map((procedure: Procedure): ProcedureWithTask => {
-        const task = procedureTaskMap.get(procedure.id) || null
-        if (task) {
-          const stageStatuses = task.stages?.items?.map((s: any) => `${s.name}:${s.status}`).join(', ') || 'none';
-        } else {
-        }
-        return {
-          ...procedure,
-          task
-        }
-      })
-      
-      // Check if we're looking for a specific procedure (for debugging)
-      if (force) {
-        console.log('Forced reload - checking if we can find recently created procedures...')
-        const recentProcedures = data?.slice(0, 5)?.map((proc: Procedure) => ({
-          id: proc.id,
-          createdAt: proc.createdAt
-        }))
-        console.log('Most recent 5 procedures by API order:', recentProcedures)
-      }
-      
-      // Sort procedures in reverse chronological order (newest first)
-      const sortedData = data?.sort((a: Procedure, b: Procedure) => {
-        const dateA = new Date(a.updatedAt || a.createdAt)
-        const dateB = new Date(b.updatedAt || b.createdAt)
-        return dateB.getTime() - dateA.getTime()
-      }) || []
-      
-      // Only update state if data has actually changed
-      setProcedures(prevProcedures => {
-        // Quick comparison: check length first
-        if (prevProcedures.length !== sortedData.length) {
-          return sortedData
-        }
-        
-        // If same length, check if all IDs match in same order
-        const hasChanges = prevProcedures.some((prev, index) => {
-          const current = sortedData[index]
-          return !current || prev.id !== current.id || prev.updatedAt !== current.updatedAt
-        })
-        
-        if (hasChanges) {
-          console.log('Procedures data changed, updating list')
-          return sortedData
-        } else {
-          console.log('No changes detected, keeping previous data')
-          return prevProcedures
-        }
-      })
+      const moreResponse = (moreResult as any).data?.listProcedureByAccountIdAndUpdatedAt
+      const moreItems: Procedure[] = moreResponse?.items || []
+      const newNextToken: string | null = moreResponse?.nextToken ?? null
+
+      const taskMap = procedureTaskMapRef.current
+      const merged: ProcedureWithTask[] = moreItems.map((procedure) => ({
+        ...procedure,
+        task: taskMap.get(procedure.id) ?? null
+      }))
+      const hydratedMerged = await hydrateProcedurePerformanceSummaries(merged)
+
+      setProcedures(prev => sortProceduresByStartTime([...prev, ...hydratedMerged]))
+      setNextToken(newNextToken)
+      setHasMore(!!newNextToken)
     } catch (err) {
-      console.error('Error loading procedures:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load procedures')
+      console.error('[procedures] loadMoreProcedures failed', err)
     } finally {
-      setIsLoading(false)
+      setIsLoadingMore(false)
     }
-  }, [selectedAccount?.id])
+  }, [hydrateProcedurePerformanceSummaries, selectedAccount?.id, nextToken, isLoadingMore])
 
   useEffect(() => {
     loadProcedures()
   }, [loadProcedures])
+
+  useEffect(() => {
+    if (inView && hasMore && !isLoadingMore) {
+      loadMoreProcedures()
+    }
+  }, [inView, hasMore, isLoadingMore, loadMoreProcedures])
 
   // Task monitoring with real-time subscriptions for procedure tasks
   useEffect(() => {
@@ -290,30 +381,23 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       next: (value: any) => {
         const { type, data } = value;
         
-        // Check if this is a procedure task by looking for procedure_id in metadata
-        if (data?.metadata) {
-          try {
-            const metadata = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
-            if (metadata?.procedure_id) {
-              console.log(`Updating procedure ${metadata.procedure_id} with task data:`, data);
-              
-              // Update the procedures list with new task data, preserving stages
-              setProcedures(prevProcedures => 
-                prevProcedures.map(procedure => {
-                  if (procedure.id === metadata.procedure_id) {
-                    // Merge new task data with existing task, preserving stages
-                    const updatedTask = procedure.task 
-                      ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
-                      : data;
-                    return { ...procedure, task: updatedTask };
-                  }
-                  return procedure;
-                })
-              );
-            }
-          } catch (error) {
-            console.error('Error parsing task metadata:', error);
-          }
+        const procedureId = procedureIdFromTaskTarget(data?.target);
+        if (procedureId) {
+          console.log(`Updating procedure ${procedureId} with task data:`, data);
+
+          // Update the procedures list with new task data, preserving stages
+          setProcedures(prevProcedures =>
+            sortProceduresByStartTime(prevProcedures.map(procedure => {
+              if (procedure.id === procedureId) {
+                // Merge new task data with existing task, preserving stages
+                const updatedTask = procedure.task
+                  ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
+                  : data;
+                return { ...procedure, task: updatedTask };
+              }
+              return procedure;
+            }))
+          );
         }
       },
       error: (error: any) => {
@@ -327,8 +411,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         
         if (data?.taskId) {
           // Update the procedures list with new stage data
-          setProcedures(prevProcedures => 
-            prevProcedures.map((procedure: ProcedureWithTask) => {
+          setProcedures(prevProcedures =>
+            sortProceduresByStartTime(prevProcedures.map((procedure: ProcedureWithTask) => {
               if (procedure.task?.id === data.taskId) {
                 console.log(`Updating procedure ${procedure.id} stages with:`, data);
                 
@@ -362,7 +446,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 return { ...procedure, task: updatedTask };
               }
               return procedure;
-            })
+            }))
           );
         }
       },
@@ -376,6 +460,148 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       stageSubscription.unsubscribe();
     };
   }, []); // Empty dependency array since we want this to run once
+
+  // Realtime subscriptions for procedure create/update events
+  useEffect(() => {
+    if (!selectedAccount?.id) return;
+    const accountId = selectedAccount.id;
+    const subscriptionHandlers: { unsubscribe: () => void }[] = [];
+
+    try {
+      const createSub = (getAmplifyClient().graphql({
+        query: PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onCreateProcedure: any } }) => {
+          const procedure = data?.onCreateProcedure;
+          if (!procedure || procedure.accountId !== accountId) return;
+          const procedureWithTask = { ...procedure, task: null } as ProcedureWithTask
+          setProcedures(prev => {
+            if (prev.some(p => p.id === procedure.id)) return prev;
+            return sortProceduresByStartTime([procedureWithTask, ...prev]);
+          });
+          void hydrateProcedurePerformanceSummaries([procedureWithTask]).then(([hydratedProcedure]) => {
+            if (!hydratedProcedure) return
+            setProcedures(prev =>
+              sortProceduresByStartTime(
+                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
+              )
+            )
+          })
+        },
+        error: (error: Error) => console.error('Error in create procedure subscription:', error)
+      });
+      subscriptionHandlers.push(createSub);
+    } catch (error) {
+      console.error('Failed to set up create procedure subscription:', error);
+    }
+
+    try {
+      const updateSub = (getAmplifyClient().graphql({
+        query: PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onUpdateProcedure: any } }) => {
+          const updated = data?.onUpdateProcedure;
+          if (!updated || updated.accountId !== accountId) return;
+          let existingTask: Task | null | undefined = null
+          setProcedures(prev =>
+            sortProceduresByStartTime(
+              prev.map(p => {
+                if (p.id !== updated.id) return p
+                existingTask = p.task
+                return { ...p, ...updated, task: p.task }
+              })
+            )
+          );
+          void hydrateProcedurePerformanceSummaries([{ ...updated, task: existingTask ?? null } as ProcedureWithTask]).then(([hydratedProcedure]) => {
+            if (!hydratedProcedure) return
+            setProcedures(prev =>
+              sortProceduresByStartTime(
+                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
+              )
+            )
+          })
+        },
+        error: (error: Error) => console.error('Error in update procedure subscription:', error)
+      });
+      subscriptionHandlers.push(updateSub);
+    } catch (error) {
+      console.error('Failed to set up update procedure subscription:', error);
+    }
+
+    const upsertEvaluationSummary = (rawEvaluation: any) => {
+      if (!rawEvaluation?.id) return
+      const summary = feedbackEvaluationSummaryFromView(evaluationToScoreEvaluationView(rawEvaluation))
+      if (!summary) return
+      setProcedures(prev =>
+        prev.map(procedure =>
+          procedure.feedbackEvaluationSummary?.id === summary.id
+            ? { ...procedure, feedbackEvaluationSummary: summary }
+            : procedure
+        )
+      )
+    }
+
+    try {
+      const evaluationCreateResult = getAmplifyClient().graphql({
+        query: EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe?: Function }
+      if (typeof evaluationCreateResult.subscribe === 'function') {
+        const evaluationCreateSub = evaluationCreateResult.subscribe({
+          next: ({ data }: { data?: { onCreateEvaluation: any } }) => upsertEvaluationSummary(data?.onCreateEvaluation),
+          error: (error: Error) => console.error('Error in create evaluation subscription:', error)
+        })
+        subscriptionHandlers.push(evaluationCreateSub)
+      }
+    } catch (error) {
+      console.error('Failed to set up create evaluation subscription:', error)
+    }
+
+    try {
+      const evaluationUpdateResult = getAmplifyClient().graphql({
+        query: EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe?: Function }
+      if (typeof evaluationUpdateResult.subscribe === 'function') {
+        const evaluationUpdateSub = evaluationUpdateResult.subscribe({
+          next: ({ data }: { data?: { onUpdateEvaluation: any } }) => upsertEvaluationSummary(data?.onUpdateEvaluation),
+          error: (error: Error) => console.error('Error in update evaluation subscription:', error)
+        })
+        subscriptionHandlers.push(evaluationUpdateSub)
+      }
+    } catch (error) {
+      console.error('Failed to set up update evaluation subscription:', error)
+    }
+
+    try {
+      const evaluationDeleteResult = getAmplifyClient().graphql({
+        query: EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS
+      }) as unknown as { subscribe?: Function }
+      if (typeof evaluationDeleteResult.subscribe === 'function') {
+        const evaluationDeleteSub = evaluationDeleteResult.subscribe({
+          next: ({ data }: { data?: { onDeleteEvaluation: any } }) => {
+            const deleted = data?.onDeleteEvaluation
+            if (!deleted?.id) return
+            setProcedures(prev =>
+              prev.map(procedure =>
+                procedure.feedbackEvaluationSummary?.id === deleted.id
+                  ? { ...procedure, feedbackEvaluationSummary: null }
+                  : procedure
+              )
+            )
+          },
+          error: (error: Error) => console.error('Error in delete evaluation subscription:', error)
+        })
+        subscriptionHandlers.push(evaluationDeleteSub)
+      }
+    } catch (error) {
+      console.error('Failed to set up delete evaluation subscription:', error)
+    }
+
+    return () => {
+      subscriptionHandlers.forEach(sub => {
+        try { sub.unsubscribe(); } catch {}
+      });
+    };
+  }, [hydrateProcedurePerformanceSummaries, selectedAccount?.id]);
 
   const handleEditProcedure = useCallback((procedureId: string) => {
     console.log('Edit procedure:', procedureId)
@@ -401,10 +627,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       }
       
       // Create a duplicate
-      const { data: newProcedure } = await (client.models.Procedure.create as any)({
+      const { data: newProcedure } = await (getAmplifyClient().models.Procedure.create as any)({
         featured: procedure.featured || false,
         code: procedure.code || null, // Copy the code if it exists
-        rootNodeId: null, // Will be set after creating nodes
         scorecardId: procedure.scorecardId,
         scoreId: procedure.scoreId,
         accountId: selectedAccount.id,
@@ -447,10 +672,23 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }
 
   // Helper function to create Task with stages for a procedure
-  const createTaskWithStagesForProcedure = async (procedureId: string, accountId: string) => {
+  const createTaskWithStagesForProcedure = async (
+    procedureId: string,
+    accountId: string,
+    runParameters?: Record<string, any>,
+  ) => {
     console.log('[createTaskWithStagesForProcedure] Starting for procedure:', procedureId, 'account:', accountId)
     
     // Create Task
+    const metadata: Record<string, any> = {
+      type: 'Procedure',
+      procedure_id: procedureId,
+      task_type: 'Procedure',
+    }
+    if (runParameters && Object.keys(runParameters).length > 0) {
+      metadata.run_parameters = runParameters
+    }
+
     const taskInput = {
       accountId: accountId,
       type: 'Procedure',
@@ -459,14 +697,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       command: `procedure run ${procedureId}`,
       description: `Procedure workflow for ${procedureId}`,
       dispatchStatus: 'PENDING',
-      metadata: JSON.stringify({
-        type: 'Procedure',
-        procedure_id: procedureId,
-        task_type: 'Procedure'
-      })
+      metadata: JSON.stringify(metadata)
     }
 
-    const taskResult = await client.graphql({
+    const taskResult = await getAmplifyClient().graphql({
       query: `
         mutation CreateTask($input: CreateTaskInput!) {
           createTask(input: $input) {
@@ -501,7 +735,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     console.log('[createTaskWithStagesForProcedure] Creating', stages.length, 'stages (Start, Evaluation, Hypothesis, Test, Insights) for task:', task.id)
     for (const stage of stages) {
       console.log('[createTaskWithStagesForProcedure] Creating stage:', stage.name, 'order:', stage.order)
-      await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation CreateTaskStage($input: CreateTaskStageInput!) {
             createTaskStage(input: $input) {
@@ -588,7 +822,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         code: processedCode,
         category: template.category || undefined,
         version: template.version || undefined,
-        rootNodeId: null, // Will be set when nodes are created
         status: 'PENDING',
         metadata: JSON.stringify({
           templateId: template.id,
@@ -606,28 +839,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       
       console.log('Create input:', createInput)
       
-      // Use direct GraphQL mutation instead of client.models
-      const result = await client.graphql({
+      // Use direct GraphQL mutation instead of getAmplifyClient().models
+      const result = await getAmplifyClient().graphql({
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
             createProcedure(input: $input) {
-              id
-              name
-              description
-              featured
-              isTemplate
-              parentProcedureId
-              code
-              category
-              version
-              status
-              metadata
-              rootNodeId
-              scorecardId
-              scoreId
-              accountId
-              createdAt
-              updatedAt
+              ${PROCEDURE_CARD_FIELDS}
             }
           }
         `,
@@ -650,7 +867,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         let createdTask = null
         try {
           console.log('Creating Task with stages for procedure:', newProcedure.id)
-          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id)
+          createdTask = await createTaskWithStagesForProcedure(newProcedure.id, selectedAccount.id, parameters)
           console.log('✓ Task and stages created:', createdTask)
         } catch (taskError) {
           console.error('Failed to create Task for procedure:', taskError)
@@ -701,7 +918,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
   const handleDelete = async (procedureId: string) => {
     try {
-      await (client.models.Procedure.delete as any)({ id: procedureId })
+      await (getAmplifyClient().models.Procedure.delete as any)({ id: procedureId })
       setProcedures(prev => prev.filter(proc => proc.id !== procedureId))
       if (selectedProcedureId === procedureId) {
         setSelectedProcedureId(null)
@@ -719,13 +936,17 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
   const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => ({
     id: procedure.id,
-    title: `${procedure.scorecard?.name || 'Procedure'} - ${procedure.score?.name || 'Score'}`,
+    title: procedure.scorecard?.name
+      ? `${procedure.scorecard.name} - ${procedure.score?.name || 'Score'}`
+      : (procedure.name || 'Procedure'),
     featured: procedure.featured || false,
-    rootNodeId: procedure.rootNodeId || undefined,
     createdAt: procedure.createdAt,
     updatedAt: procedure.updatedAt,
-    scorecard: procedure.scorecard ? { name: procedure.scorecard.name } : null,
+    scorecard: procedure.scorecard
+      ? { name: procedure.scorecard.name }
+      : (procedure.name ? { name: procedure.name } : null),
     score: procedure.score ? { name: procedure.score.name } : null,
+    description: procedure.description || undefined,
     task: procedure.task ? {
       id: procedure.task.id,
       type: procedure.task.type || 'Procedure',
@@ -745,45 +966,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       stages: procedure.task.stages ? {
         items: (procedure.task.stages as any)?.items || []
       } : undefined
-    } : undefined
+    } : undefined,
+    feedbackEvaluationSummary: procedure.feedbackEvaluationSummary ?? null,
   }), [])
   
 
-  // Loading and error states
-  if (isLoading || error) {
-    return (
-      <div className="@container flex flex-col h-full p-3 overflow-hidden">
-        <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
-          <div className="@[600px]:flex-grow w-full">
-            <ScorecardContext 
-              selectedScorecard={selectedScorecard}
-              setSelectedScorecard={setSelectedScorecard}
-              selectedScore={selectedScore}
-              setSelectedScore={setSelectedScore}
-              skeletonMode={isLoading}
-            />
-          </div>
-          <div className="flex-shrink-0">
-            <Button onClick={handleCreateProcedure} disabled={isLoading}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Procedure
-            </Button>
-          </div>
-        </div>
-        
-        {error ? (
-          <div className="text-center text-destructive p-8">
-            <p>Error loading procedures: {error}</p>
-          </div>
-        ) : (
-          <div className="animate-pulse space-y-4">
-            <div className="h-32 bg-gray-200 rounded"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
-          </div>
-        )}
-      </div>
-    )
+  if ((isInitialLoading || isFetchingProcedures || isLoadingAccounts) && procedures.length === 0) {
+    return <ProceduresDashboardSkeleton />
   }
 
 
@@ -848,60 +1037,72 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         </div>
       </div>
 
+      {error && (
+        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Unable to fully refresh procedures: {error}
+        </div>
+      )}
+
+      {isHydratingTasks && procedures.length > 0 && (
+        <div className="pb-2 text-xs text-muted-foreground">
+          Updating procedure statuses...
+        </div>
+      )}
+
       {/* Procedures Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* ProceduresGauges at the top - only show when not in mobile selected procedure view */}
-        {!(selectedProcedureId && isNarrowViewport) && (
-          <div className="pb-3">
-            <ProceduresGauges />
-          </div>
-        )}
-        
         <AnimatePresence mode="popLayout">
-          <motion.div 
+          <motion.div
             key="procedures-layout"
             className="flex flex-1 min-h-0"
             layout
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ 
-              type: "spring", 
-              stiffness: 300, 
+            transition={{
+              type: "spring",
+              stiffness: 300,
               damping: 30,
               opacity: { duration: 0.2 }
             }}
           >
             {/* Left panel - grid content */}
-            <motion.div 
+            <motion.div
               className={`${selectedProcedureId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
               style={selectedProcedureId && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
               layout
-              transition={{ 
-                type: "spring", 
-                stiffness: 300, 
-                damping: 30 
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 30
               }}
             >
               <div className="@container space-y-3 overflow-visible">
-                {procedures.length === 0 && isLoading ? (
-                  <div className="animate-pulse space-y-4">
-                    <div className="h-32 bg-gray-200 rounded"></div>
-                    <div className="h-32 bg-gray-200 rounded"></div>
-                    <div className="h-32 bg-gray-200 rounded"></div>
+                {/* ProceduresGauges at the top - only show when not in mobile selected procedure view */}
+                {!(selectedProcedureId && isNarrowViewport) && (
+                  <ProceduresGauges />
+                )}
+                {procedures.length === 0 &&
+                !!selectedAccount?.id &&
+                !isLoadingAccounts &&
+                !isInitialLoading &&
+                !isFetchingProcedures &&
+                !isHydratingTasks ? (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
+                    No procedures found
                   </div>
-                ) : (
+                ) : procedures.length > 0 ? (
                   <div className={`
                     grid gap-3
                     ${selectedProcedureId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
                   `}>
                     {procedures.map((procedure) => {
                       const clickHandler = getProcedureClickHandler(procedure.id)
-                      
+
                       return (
-                        <div 
+                        <div
                           key={procedure.id}
                           role="button"
                           tabIndex={0}
@@ -927,6 +1128,14 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                         </div>
                       )
                     })}
+                  </div>
+                ) : null}
+                {/* Infinite scroll sentinel */}
+                <div ref={sentinelRef} className="h-4" />
+                {isLoadingMore && (
+                  <div className="animate-pulse space-y-3 pb-3">
+                    <div className="h-24 bg-muted rounded-lg" />
+                    <div className="h-24 bg-muted rounded-lg" />
                   </div>
                 )}
               </div>
@@ -982,8 +1191,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         
         {/* Conversation full-screen view - renders when conversation is fullscreen */}
         {selectedProcedureId && isConversationFullscreen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-background">
-            <div className="w-full h-screen bg-background py-6 px-3 overflow-y-auto flex flex-col">
+          <div className="fixed inset-0 z-50 bg-background">
+            <div className="w-full h-screen bg-background py-6 px-3 flex flex-col">
               <div className="flex items-center justify-between mb-4 flex-shrink-0 px-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-muted-foreground">
                   <BookOpenCheck className="h-5 w-5" />
@@ -999,10 +1208,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                   <Shrink className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <ProcedureConversationViewer 
-                  procedureId={selectedProcedureId} 
-                  onSessionCountChange={() => {}} // We don't need to track session count here
+              <div className="flex-1 min-h-0">
+                <ProcedureConversationViewer
+                  procedureId={selectedProcedureId}
+                  onSessionCountChange={() => {}}
                 />
               </div>
             </div>

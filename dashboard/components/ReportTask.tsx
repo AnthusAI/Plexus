@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import '@/components/blocks/registrySetup'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FileBarChart, Clock, Square, Columns2, X } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -297,6 +298,53 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     return false;
   };
 
+  const hasMeaningfulBlockOutput = (output: unknown): boolean => {
+    if (!output) return false;
+
+    if (typeof output === "string") {
+      const trimmed = output.trim();
+      return trimmed.length > 0 && trimmed !== "{}";
+    }
+
+    if (typeof output !== "object") {
+      return true;
+    }
+
+    const payload = output as Record<string, any>;
+    const keys = Object.keys(payload);
+    if (keys.length === 0) return false;
+
+    if (payload.status === "pending_execution") return false;
+
+    if (payload.output_compacted === true) {
+      return typeof payload.output_attachment === "string" && payload.output_attachment.trim().length > 0;
+    }
+
+    return true;
+  };
+
+  const isBlockPending = (
+    block: ReportBlock,
+    reportComplete: boolean,
+    taskStatus?: string
+  ): boolean => {
+    if (reportComplete) return false;
+    if (taskStatus !== "RUNNING" && taskStatus !== "PENDING") return false;
+    if (hasMeaningfulBlockOutput(block.output)) return false;
+
+    const logText = (block.log || "").toLowerCase();
+    if (
+      logText.includes("processing") ||
+      logText.includes("pending") ||
+      logText.includes("waiting") ||
+      logText.includes("queued")
+    ) {
+      return true;
+    }
+
+    return true;
+  };
+
   // Update the customCodeBlockRenderer function to handle incomplete reports better
   const customCodeBlockRenderer = ({ node, inline, className, children, ...props }: any) => {
     // If it's an inline code block, render normally
@@ -319,7 +367,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       const classMatch = firstLine.match(/class:\s*(\S+)/);
       const blockClass = classMatch ? classMatch[1].trim() : '';
 
-      // Extract name from code fence meta string (e.g. ```block name="Feedback Analysis")
+      // Extract name from code fence meta string (e.g. ```block name="Feedback Alignment")
       const meta: string = node?.data?.meta || '';
       const nameFromMeta = meta.match(/name=["']([^"']+)["']/)?.[1] ?? '';
 
@@ -334,6 +382,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       if (blockData) {
         // Check if the report is complete
         const complete = isReportComplete(task.status, reportBlocks);
+        const blockPending = isBlockPending(blockData, complete, task.status);
         
         // Add a unique key that includes task.id to force re-render when report data changes
         const blockKey = `${task.id}-block-${blockData.id}-${blockData.position}-${Date.now()}`;
@@ -344,19 +393,30 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         // Set up enhanced props for the block when the report is not complete
         const displayName = blockData.name && !blockData.name.startsWith('block_')
           ? blockData.name
-          : blockData.type === 'FeedbackAnalysis'
-            ? 'Feedback Analysis'
+          : blockData.type === 'FeedbackAlignment'
+            ? 'Feedback Alignment'
             : blockData.type === 'VectorTopicMemory'
               ? 'Vector Topic Memory'
               : blockData.type === 'ActionItems'
               ? 'Action Items'
+              : blockData.type === 'FeedbackAlignmentTimeline'
+              ? 'Feedback Alignment Timeline'
+              : blockData.type === 'FeedbackVolumeTimeline'
+              ? 'Feedback Volume Timeline'
+              : blockData.type === 'CorrectionRate'
+              ? 'Correction Rate'
+              : blockData.type === 'AcceptanceRate'
+              ? 'Acceptance Rate'
+              : blockData.type === 'RecentFeedback'
+              ? 'Recent Feedback'
               : blockData.name ?? undefined;
         const blockProps = {
           id: blockData.id,
           config: {
             ...blockData.config,
             // Force the log UI to be shown during generation
-            showLog: !complete && !!blockData.log
+            showLog: blockPending && !!blockData.log,
+            isProcessing: blockPending,
           },
           output: blockData.output,
           log: blockData.log || undefined,
@@ -365,10 +425,11 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           type: blockData.type,
           attachedFiles: attachedFiles,
           // Add a note when the block is generating
-          subtitle: !complete ? "Generating..." : undefined,
+          subtitle: blockPending ? "Generating..." : undefined,
           // Add any error or warning from the block output if available
           error: blockData.output?.error,
-          warning: blockData.output?.warning
+          warning: blockData.output?.warning,
+          isReadOnly: variant === 'bare'
         };
         
         return (
@@ -392,7 +453,21 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         );
       } else {
         // No matching block - show placeholder
-        const blockLabel = blockClass === 'VectorTopicMemory' ? 'Vector Topic Memory' : blockClass === 'FeedbackAnalysis' ? 'Feedback Analysis' : blockClass || 'Report block';
+        const blockLabel = blockClass === 'VectorTopicMemory'
+          ? 'Vector Topic Memory'
+          : blockClass === 'FeedbackAlignment'
+          ? 'Feedback Alignment'
+          : blockClass === 'FeedbackAlignmentTimeline'
+          ? 'Feedback Alignment Timeline'
+          : blockClass === 'FeedbackVolumeTimeline'
+          ? 'Feedback Volume Timeline'
+          : blockClass === 'CorrectionRate'
+          ? 'Correction Rate'
+          : blockClass === 'AcceptanceRate'
+          ? 'Acceptance Rate'
+          : blockClass === 'RecentFeedback'
+          ? 'Recent Feedback'
+          : blockClass || 'Report block';
         return (
           <div className="my-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-4">
             <p className="text-sm text-muted-foreground">
@@ -418,12 +493,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     <div className="prose dark:prose-invert max-w-none">
       <ReactMarkdown
         components={{
-          p: ({node, ...props}) => <p className="mb-2" {...props} />,
+          p: ({node, ...props}) => <p className="mb-1 leading-snug" {...props} />,
           strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
           ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
           li: ({node, ...props}) => <li className="mb-1" {...props} />,
-          h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-2 mb-2" {...props} />,
-          h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-2 mb-2" {...props} />,
+          h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
+          h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
           h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
           h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
           code: ({node, className, children, ...props}: any) => {
@@ -566,12 +641,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
                   components={{
-                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                    p: ({node, ...props}) => <p className="mb-1 leading-snug" {...props} />,
                     strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
                     ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
                     li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-2 mb-2" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-2 mb-2" {...props} />,
+                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-1 mb-1 leading-tight" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-1 mb-1 leading-tight" {...props} />,
                     h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
                     h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
                     code: ({node, className, children, ...props}: any) => {

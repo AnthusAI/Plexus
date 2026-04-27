@@ -14,14 +14,15 @@ from tools.util.think import register_think_tool
 from tools.util.docs import register_docs_tool
 from tools.scorecard.scorecards import register_scorecard_tools
 from tools.evaluation.evaluations import register_evaluation_tools
+from tools.evaluation.evaluation_comparison import register_evaluation_comparison_tools
 from tools.score.scores import register_score_tools
 from tools.procedure.procedures import register_procedure_tools
-from tools.procedure.procedure_nodes import register_procedure_node_tools
 from tools.report.reports import register_report_tools
 from tools.feedback.feedback import register_feedback_tools
 from tools.task.tasks import register_task_tools
 from tools.item.items import register_item_tools
 from tools.prediction.predictions import register_prediction_tools
+from tools.dataset.datasets import register_dataset_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -65,13 +66,13 @@ mcp = FastMCP(
     - plexus_task_last: Get the most recent task for an account, with optional filtering by task type
     - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
-    ## Feedback Analysis & Score Testing Tools
-    - plexus_feedback_analysis: Generate comprehensive feedback analysis with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    ## Feedback Alignment & Score Testing Tools
+    - plexus_feedback_alignment: Generate comprehensive feedback alignment with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
-    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
+    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback alignment and score testing guide)
 
     ## Procedure Tools
     - plexus_procedure_create: Create a new procedure
@@ -110,15 +111,12 @@ def register_all_tools():
     
     # Register evaluation tools
     register_evaluation_tools(mcp)
+    register_evaluation_comparison_tools(mcp)
     logger.info("Registered evaluation tools")
     
     # Register procedure tools
     register_procedure_tools(mcp)
     logger.info("Registered procedure tools")
-
-    # Register procedure node tools
-    register_procedure_node_tools(mcp)
-    logger.info("Registered procedure node tools")
 
     # Register report tools
     register_report_tools(mcp)
@@ -139,6 +137,10 @@ def register_all_tools():
     # Register prediction tools
     register_prediction_tools(mcp)
     logger.info("Registered prediction tools")
+
+    # Register dataset tools
+    register_dataset_tools(mcp)
+    logger.info("Registered dataset tools")
 
     logger.info("All MCP tools registered successfully")
 

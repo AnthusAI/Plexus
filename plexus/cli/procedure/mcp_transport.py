@@ -13,11 +13,43 @@ access for procedure contexts.
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+from plexus.dashboard.api.models.task import Task
+
 logger = logging.getLogger(__name__)
+
+
+def _parse_task_metadata(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _touch_task_runtime_heartbeat(client: Any, task_id: str) -> None:
+    task = Task.get_by_id(task_id, client)
+    runtime = _parse_task_metadata(task.metadata).get("runtime")
+    if not isinstance(runtime, dict):
+        runtime = {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    runtime["lastHeartbeatAt"] = now_iso
+    metadata = _parse_task_metadata(task.metadata)
+    metadata["runtime"] = runtime
+    task.update(
+        metadata=json.dumps(metadata),
+        updatedAt=now_iso,
+    )
 
 
 @dataclass
@@ -179,16 +211,156 @@ class InProcessMCPTransport:
             raise
 
 
+def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -> None:
+    """
+    Update TaskStage records so the named stage is RUNNING and prior stages are COMPLETED.
+
+    Args:
+        client: PlexusDashboardClient
+        task_id: Task whose stages to update
+        stage_name: Name of the stage to mark as RUNNING (case-insensitive match)
+    """
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    name
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    if not stages:
+        logger.debug("No TaskStages found for task %s", task_id)
+        return
+
+    target = next(
+        (s for s in stages if s.get("name", "").lower() == stage_name.lower()),
+        None
+    )
+    if not target:
+        logger.warning("Stage '%s' not found in task %s (available: %s)",
+                       stage_name, task_id, [s.get("name") for s in stages])
+        return
+
+    target_order = target.get("order", 0)
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    for stage in stages:
+        order = stage.get("order", 0)
+        if order < target_order and stage.get("status") != "COMPLETED":
+            client.execute(
+                update_mutation,
+                {
+                    "input": {"id": stage["id"], "status": "COMPLETED", "completedAt": now}
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
+        elif order == target_order and stage.get("status") != "RUNNING":
+            client.execute(
+                update_mutation,
+                {
+                    "input": {"id": stage["id"], "status": "RUNNING", "startedAt": now}
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
+        elif order > target_order and stage.get("status") != "PENDING":
+            client.execute(
+                update_mutation,
+                {
+                    "input": {"id": stage["id"], "status": "PENDING", "startedAt": None, "completedAt": None}
+                },
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
+    try:
+        _touch_task_runtime_heartbeat(client, task_id)
+    except Exception as exc:
+        logger.warning("Could not refresh runtime heartbeat for task %s after stage update: %s", task_id, exc)
+
+
+def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:
+    """
+    Update processedItems and totalItems on the current RUNNING TaskStage.
+
+    Args:
+        client: PlexusDashboardClient
+        task_id: Task whose running stage to update
+        current: Current progress count
+        total: Total expected count
+    """
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    name
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    running = next((s for s in stages if s.get("status") == "RUNNING"), None)
+    if not running:
+        logger.debug("No RUNNING stage found for task %s", task_id)
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            processedItems
+            totalItems
+        }
+    }
+    """
+    client.execute(
+        update_mutation,
+        {
+            "input": {
+                "id": running["id"],
+                "processedItems": current,
+                "totalItems": total
+            }
+        },
+        retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    )
+    logger.info("Updated stage %s progress: %d/%d", running.get("name"), current, total)
+    try:
+        _touch_task_runtime_heartbeat(client, task_id)
+    except Exception as exc:
+        logger.warning("Could not refresh runtime heartbeat for task %s after progress update: %s", task_id, exc)
+
+
 class EmbeddedMCPServer:
     """
     An embedded MCP server that runs within an procedure process.
     Provides MCP tools and resources without requiring a separate server process.
     """
-    
+
     def __init__(self, experiment_context: Optional[Dict[str, Any]] = None):
         self.transport = InProcessMCPTransport()
         self.experiment_context = experiment_context or {}
         self._setup_core_tools()
+        self._setup_stage_tool()
+        self._setup_stage_progress_tool()
     
     def _setup_core_tools(self):
         """Setup core MCP tools that are useful for experiments."""
@@ -221,6 +393,76 @@ class EmbeddedMCPServer:
             handler=self._log_message
         ))
     
+    def _setup_stage_tool(self):
+        """Register the plexus_set_procedure_stage tool."""
+        self.transport.register_tool(MCPToolInfo(
+            name="plexus_set_procedure_stage",
+            description="Update the current stage indicator for this procedure in the dashboard",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "stage": {"type": "string", "description": "Stage name to set as current (e.g. 'setup', 'baseline', 'optimize', 'finalize')"}
+                },
+                "required": ["stage"],
+                "additionalProperties": False
+            },
+            handler=self._set_procedure_stage
+        ))
+
+    def _set_procedure_stage(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Update the TaskStage record in the DB when Stage.set() is called from Lua."""
+        stage_name = arguments.get('stage', '')
+        task_id = self.experiment_context.get('task_id')
+
+        if not task_id:
+            logger.warning("plexus_set_procedure_stage: no task_id in experiment_context, skipping")
+            return {"success": False, "error": "No task_id in context"}
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+            _advance_task_to_stage_by_name(client, task_id, stage_name)
+            logger.info(f"Stage set to '{stage_name}' for task {task_id}")
+            return {"success": True, "stage": stage_name}
+        except Exception as e:
+            logger.warning(f"plexus_set_procedure_stage failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _setup_stage_progress_tool(self):
+        """Register the plexus_set_stage_progress tool."""
+        self.transport.register_tool(MCPToolInfo(
+            name="plexus_set_stage_progress",
+            description="Update progress (processedItems/totalItems) on the current RUNNING stage",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "current": {"type": "integer", "description": "Current progress count (e.g., cycle number)"},
+                    "total": {"type": "integer", "description": "Total expected count (e.g., max cycles)"}
+                },
+                "required": ["current", "total"],
+                "additionalProperties": False
+            },
+            handler=self._set_stage_progress
+        ))
+
+    def _set_stage_progress(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Update processedItems/totalItems on the current RUNNING TaskStage."""
+        current = arguments.get('current', 0)
+        total = arguments.get('total', 0)
+        task_id = self.experiment_context.get('task_id')
+
+        if not task_id:
+            return {"success": False, "error": "No task_id in context"}
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+            _update_stage_progress(client, task_id, current, total)
+            return {"success": True, "current": current, "total": total}
+        except Exception as e:
+            logger.warning(f"plexus_set_stage_progress failed: {e}")
+            return {"success": False, "error": str(e)}
+
     def _get_experiment_context(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handler for get_experiment_context tool."""
         # Create a JSON-serializable copy of procedure context
@@ -271,6 +513,7 @@ class EmbeddedMCPServer:
                 logger.debug(f"Added MCP directory to path: {mcp_dir}")
             
             from tools.util.think import register_think_tool
+            from tools.util.docs import register_docs_tool
             from tools.scorecard.scorecards import register_scorecard_tools
             from tools.score.scores import register_score_tools
             from tools.score.guidelines import register_guidelines_tools
@@ -278,6 +521,8 @@ class EmbeddedMCPServer:
             from tools.feedback.feedback import register_feedback_tools
             from tools.evaluation.evaluations import register_evaluation_tools
             from tools.prediction.predictions import register_prediction_tools
+            from tools.dataset.datasets import register_dataset_tools
+            from tools.report.reports import register_report_tools
             
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
@@ -434,8 +679,25 @@ class EmbeddedMCPServer:
             tool_capture = ToolCapture(self)
 
             @tool_capture.tool()
-            async def done(reason: str = "", success: Optional[bool] = True):
-                """Signal agent completion with an optional reason."""
+            async def done(reason: str = "", success: Optional[bool] = True, **kwargs):
+                """Signal agent completion with an optional reason and any additional fields."""
+                import json as _json
+                # If extra fields were passed (e.g. hypothesis, new_code), encode them
+                # as JSON in the reason field so Lua can decode them with Tool.last_call("done").args.reason
+                if kwargs and not reason:
+                    reason = _json.dumps(kwargs)
+                elif kwargs:
+                    # Merge reason and extra kwargs into a single JSON blob
+                    try:
+                        existing = _json.loads(reason)
+                        if isinstance(existing, dict):
+                            existing.update(kwargs)
+                            reason = _json.dumps(existing)
+                    except (ValueError, TypeError):
+                        # reason is a plain string; wrap everything together
+                        merged = {"reason": reason}
+                        merged.update(kwargs)
+                        reason = _json.dumps(merged)
                 return {
                     "status": "completed",
                     "success": bool(True if success is None else success),
@@ -446,6 +708,7 @@ class EmbeddedMCPServer:
             # Register selected tool sets
             available_tools = {
                 "think": lambda: register_think_tool(tool_capture),
+                "documentation": lambda: register_docs_tool(tool_capture),
                 "scorecard": lambda: register_scorecard_tools(tool_capture),
                 "score": lambda: (register_score_tools(tool_capture), register_guidelines_tools(tool_capture)),
                 "guidelines": lambda: register_guidelines_tools(tool_capture),
@@ -453,6 +716,8 @@ class EmbeddedMCPServer:
                 "feedback": lambda: register_feedback_tools(tool_capture),
                 "evaluation": lambda: register_evaluation_tools(tool_capture),
                 "prediction": lambda: register_prediction_tools(tool_capture),
+                "dataset": lambda: register_dataset_tools(tool_capture),
+                "report": lambda: register_report_tools(tool_capture),
             }
             
             # If no specific tools requested, register all available tools

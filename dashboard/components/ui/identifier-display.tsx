@@ -20,7 +20,7 @@ interface LegacyIdentifier {
 
 interface IdentifierDisplayProps {
   externalId?: string;
-  identifiers?: string | IdentifierItem[]; // Can be JSON string or array
+  identifiers?: string | IdentifierItem[] | Record<string, string>; // Can be JSON string, array, or object map
   className?: string;
   iconSize?: 'sm' | 'md' | 'lg';
   textSize?: 'xs' | 'sm' | 'base';
@@ -50,30 +50,60 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   };
 
   const parsedIdentifiers = useMemo(() => {
+    const normalizeIdentifierEntry = (entry: unknown): IdentifierItem | null => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const candidate = entry as Partial<IdentifierItem & LegacyIdentifier>;
+      const name = typeof candidate.name === 'string' ? candidate.name : '';
+      const rawValue = candidate.value ?? candidate.id;
+      const value = rawValue !== undefined && rawValue !== null ? String(rawValue) : '';
+      const url = typeof candidate.url === 'string' ? candidate.url : undefined;
+
+      if (!name || !value) {
+        return null;
+      }
+
+      return { name, value, url };
+    };
+
+    const normalizeIdentifierInput = (input: unknown): IdentifierItem[] => {
+      if (!input) {
+        return [];
+      }
+
+      if (Array.isArray(input)) {
+        return input
+          .map(normalizeIdentifierEntry)
+          .filter((entry): entry is IdentifierItem => entry !== null);
+      }
+
+      if (typeof input === 'object') {
+        return Object.entries(input as Record<string, unknown>)
+          .map(([name, value]) => ({
+            name,
+            value: value !== undefined && value !== null ? String(value) : ''
+          }))
+          .filter((entry) => entry.value !== '');
+      }
+
+      return [];
+    };
+
     if (!identifiers) return [];
-    
-    // If it's already an array, use it directly
-    if (Array.isArray(identifiers)) {
-      return identifiers;
-    }
-    
-    // If it's a string, parse it as JSON
+
     if (typeof identifiers === 'string') {
       try {
-        const parsed = JSON.parse(identifiers) as LegacyIdentifier[];
-        // Map legacy 'id' field to 'value' field for consistency
-        return parsed.map(item => ({
-          name: item.name,
-          value: item.id, // Map legacy 'id' to 'value'
-          url: item.url
-        }));
+        const parsed = JSON.parse(identifiers) as unknown;
+        return normalizeIdentifierInput(parsed);
       } catch (error) {
         console.error('Failed to parse identifiers JSON string:', error);
         return [];
       }
     }
-    
-    return [];
+
+    return normalizeIdentifierInput(identifiers as unknown);
   }, [identifiers]);
 
   const iconClasses = cn(
