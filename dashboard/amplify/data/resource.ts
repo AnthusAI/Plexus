@@ -202,6 +202,7 @@ const schema = a.schema({
             updatedAt: a.datetime().required(),
             note: a.string(),
             branch: a.string(),
+            metadata: a.json(),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
@@ -216,7 +217,8 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("scoreId").sortKeys(["createdAt"])
+            idx("scoreId").sortKeys(["createdAt"]),
+            idx("scoreId").sortKeys(["isFeatured", "createdAt"]).name("byScoreIdAndIsFeaturedAndCreatedAt")
         ]),
 
     Evaluation: a
