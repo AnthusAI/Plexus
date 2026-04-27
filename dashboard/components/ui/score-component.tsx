@@ -431,7 +431,7 @@ function RelatedScoreVersionCard({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="flex items-start justify-between gap-3 px-2 pb-2">
+          <div className="flex items-start justify-between gap-3 pl-2 pb-2">
             <div className="min-w-0 flex-1 text-xs text-muted-foreground">
               {relatedVersion?.note || (failedToLoad ? 'This related version could not be loaded.' : 'Loading related version details...')}
             </div>
