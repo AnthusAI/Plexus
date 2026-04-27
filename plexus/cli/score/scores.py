@@ -24,6 +24,7 @@ import urllib3.exceptions
 import re
 import datetime
 import requests
+import difflib
 from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
@@ -450,7 +451,8 @@ def dataset_curate_vetted(
 
 @score.command()
 @click.option('--id', required=True, help='Score ID to list versions for')
-def versions(id: str):
+@click.option('--pinned-only', is_flag=True, help='Show only pinned/starred versions')
+def versions(id: str, pinned_only: bool):
     """List all versions for a specific score."""
     client = create_client()
     
@@ -473,6 +475,7 @@ def versions(id: str):
                     createdAt
                     updatedAt
                     isFeatured
+                    featuredKey
                     parentVersionId
                     note
                 }}
@@ -504,8 +507,25 @@ def versions(id: str):
             console.print("[yellow]No versions found for this score.[/yellow]")
             return
         
-        # Sort versions by creation date (newest first)
-        versions.sort(key=lambda v: v.get('createdAt', ''), reverse=True)
+        def is_pinned_version(version):
+            return version.get('featuredKey') == 'featured'
+
+        if pinned_only:
+            versions = [version for version in versions if is_pinned_version(version)]
+
+        def version_sort_key(version):
+            created_at = (version.get('createdAt') or '1970-01-01T00:00:00+00:00').replace('Z', '+00:00')
+            try:
+                created_ts = datetime.datetime.fromisoformat(created_at).timestamp()
+            except ValueError:
+                created_ts = 0
+            return (
+                0 if version.get('id') == champion_version_id else 1,
+                0 if is_pinned_version(version) else 1,
+                -created_ts,
+            )
+
+        versions.sort(key=version_sort_key)
         
         # Create a table to display the versions
         table = Table(title=f"Score Versions ({len(versions)} total)")
@@ -514,6 +534,7 @@ def versions(id: str):
         table.add_column("Updated", style="green")
         table.add_column("Parent ID", style="blue")
         table.add_column("Champion", style="magenta")
+        table.add_column("Pinned", style="magenta")
         table.add_column("Note", style="yellow")
         
         for version in versions:
@@ -522,6 +543,7 @@ def versions(id: str):
             updated_at = version.get('updatedAt')
             parent_id = version.get('parentVersionId', 'None')
             is_champion = "✓" if version_id == champion_version_id else ""
+            is_pinned = "★" if is_pinned_version(version) else ""
             note = version.get('note', '')
             
             # Truncate note if it's too long
@@ -534,6 +556,7 @@ def versions(id: str):
                 updated_at,
                 parent_id,
                 is_champion,
+                is_pinned,
                 note
             )
         
@@ -1316,7 +1339,7 @@ def push(scorecard: str, score: str, note: str):
             console.print(f"[blue]Changes detected: {' and '.join(changes)}. Creating new version.[/blue]")
     else:
         console.print("[blue]Creating initial version.[/blue]")
-    
+
     # Create a new version with the cleaned configuration
     mutation = """
     mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -1342,7 +1365,8 @@ def push(scorecard: str, score: str, note: str):
                 'configuration': cleaned_yaml_content,
                 'note': note,
                 # Never auto-promote to champion via CLI push
-                'isFeatured': False
+                'isFeatured': False,
+                'featuredKey': 'unfeatured'
             }
         }
 
@@ -1717,6 +1741,148 @@ def _resolve_optimizer_score_context(client, scorecard_identifier: str, score_id
         "champion_version_id": score.get("championVersionId"),
         "service": OptimizerResultsService(client),
     }
+
+def _fetch_score_version_for_management(client, version_id: str) -> dict:
+    query = """
+    query GetScoreVersionForManagement($id: ID!) {
+      getScoreVersion(id: $id) {
+        id
+        scoreId
+        configuration
+        guidelines
+        isFeatured
+        featuredKey
+        note
+        branch
+        parentVersionId
+        metadata
+        createdAt
+        updatedAt
+      }
+    }
+    """
+    version = (client.execute(query, {"id": version_id}).get("getScoreVersion") or {})
+    if not version:
+        raise click.ClickException(f"Score version not found: {version_id}")
+    return version
+
+
+def _build_unified_diff(left_text: str, right_text: str, left_label: str, right_label: str) -> str:
+    return "".join(difflib.unified_diff(
+        (left_text or "").splitlines(keepends=True),
+        (right_text or "").splitlines(keepends=True),
+        fromfile=left_label,
+        tofile=right_label,
+    ))
+
+
+@score.command(name="version-pin")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--version', 'version_id', required=True, help='ScoreVersion ID to pin or unpin')
+@click.option('--pinned/--unpinned', default=True, show_default=True, help='Whether the version should be pinned/starred')
+@click.option('--output', '-o', type=click.Choice(['json', 'table']), default='table', show_default=True)
+def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, output: str):
+    """Pin or unpin a ScoreVersion using isFeatured."""
+    client = create_client()
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    version = _fetch_score_version_for_management(client, version_id)
+    if version.get("scoreId") != context["score_id"]:
+        raise click.ClickException(
+            f"Version {version_id} belongs to score {version.get('scoreId')}, not {context['score_id']}"
+        )
+
+    mutation = """
+    mutation UpdateScoreVersionPin($input: UpdateScoreVersionInput!) {
+      updateScoreVersion(input: $input) {
+        id
+        scoreId
+        isFeatured
+        featuredKey
+        updatedAt
+      }
+    }
+    """
+    updated = (client.execute(
+        mutation,
+        {
+            "input": {
+                "id": version_id,
+                "isFeatured": pinned,
+                "featuredKey": "featured" if pinned else "unfeatured",
+                "createdAt": version.get("createdAt"),
+            }
+        },
+    ).get("updateScoreVersion") or {})
+    payload = {
+        "success": True,
+        "score_id": context["score_id"],
+        "score_name": context["score_name"],
+        "version_id": updated.get("id") or version_id,
+        "pinned": updated.get("featuredKey") == "featured",
+    }
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    table = Table(title="Score Version Pin")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Score", context["score_name"])
+    table.add_row("Version", payload["version_id"])
+    table.add_row("Pinned", "yes" if payload["pinned"] else "no")
+    console.print(table)
+
+
+scores.add_command(version_pin)
+
+
+@score.command(name="version-diff")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--left', 'left_version_id', required=True, help='Left/original ScoreVersion ID')
+@click.option('--right', 'right_version_id', required=True, help='Right/modified ScoreVersion ID')
+@click.option('--include', 'include_part', type=click.Choice(['code', 'guidelines', 'both']), default='both', show_default=True)
+@click.option('--output', '-o', type=click.Choice(['json', 'text']), default='text', show_default=True)
+def version_diff(scorecard: str, score: str, left_version_id: str, right_version_id: str, include_part: str, output: str):
+    """Show code and/or guideline diffs between two ScoreVersions."""
+    client = create_client()
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    left = _fetch_score_version_for_management(client, left_version_id)
+    right = _fetch_score_version_for_management(client, right_version_id)
+    for label, version in (("left", left), ("right", right)):
+        if version.get("scoreId") != context["score_id"]:
+            raise click.ClickException(
+                f"{label} version {version.get('id')} belongs to score {version.get('scoreId')}, not {context['score_id']}"
+            )
+
+    include_code = include_part in ('code', 'both')
+    include_guidelines = include_part in ('guidelines', 'both')
+    payload = {
+        "success": True,
+        "score_id": context["score_id"],
+        "score_name": context["score_name"],
+        "left_version_id": left_version_id,
+        "right_version_id": right_version_id,
+        "code_diff": _build_unified_diff(left.get("configuration") or "", right.get("configuration") or "", f"{left_version_id}/code.yaml", f"{right_version_id}/code.yaml") if include_code else None,
+        "guidelines_diff": _build_unified_diff(left.get("guidelines") or "", right.get("guidelines") or "", f"{left_version_id}/guidelines.md", f"{right_version_id}/guidelines.md") if include_guidelines else None,
+    }
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    console.print(f"[bold]Score version diff for {context['score_name']}[/bold]")
+    if include_code:
+        console.print("\n[bold cyan]Code[/bold cyan]")
+        console.print(payload["code_diff"] or "[dim]No code differences.[/dim]")
+    if include_guidelines:
+        console.print("\n[bold cyan]Guidelines[/bold cyan]")
+        console.print(payload["guidelines_diff"] or "[dim]No guideline differences.[/dim]")
+
+
+scores.add_command(version_diff)
 
 
 @score.command(name="optimizer-runs")
