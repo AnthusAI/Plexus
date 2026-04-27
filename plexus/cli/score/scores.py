@@ -507,8 +507,11 @@ def versions(id: str, pinned_only: bool):
             console.print("[yellow]No versions found for this score.[/yellow]")
             return
         
+        def is_pinned_version(version):
+            return version.get('featuredKey') == 'featured'
+
         if pinned_only:
-            versions = [version for version in versions if version.get('isFeatured')]
+            versions = [version for version in versions if is_pinned_version(version)]
 
         def version_sort_key(version):
             created_at = (version.get('createdAt') or '1970-01-01T00:00:00+00:00').replace('Z', '+00:00')
@@ -518,7 +521,7 @@ def versions(id: str, pinned_only: bool):
                 created_ts = 0
             return (
                 0 if version.get('id') == champion_version_id else 1,
-                0 if version.get('isFeatured') else 1,
+                0 if is_pinned_version(version) else 1,
                 -created_ts,
             )
 
@@ -540,7 +543,7 @@ def versions(id: str, pinned_only: bool):
             updated_at = version.get('updatedAt')
             parent_id = version.get('parentVersionId', 'None')
             is_champion = "✓" if version_id == champion_version_id else ""
-            is_pinned = "★" if version.get('isFeatured') else ""
+            is_pinned = "★" if is_pinned_version(version) else ""
             note = version.get('note', '')
             
             # Truncate note if it's too long
@@ -1809,7 +1812,7 @@ def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, outpu
         "score_id": context["score_id"],
         "score_name": context["score_name"],
         "version_id": updated.get("id") or version_id,
-        "pinned": bool(updated.get("isFeatured")),
+        "pinned": updated.get("featuredKey") == "featured",
     }
 
     if output == 'json':
