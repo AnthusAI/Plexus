@@ -1,0 +1,46 @@
+{
+  "id": "plx-9baee99f-132e-48e5-83e4-cf23325d9aa9",
+  "title": "Adjust dependency constraints for Biblicus + RCA stack compatibility",
+  "description": "Update Plexus and Tactus dependency constraints to enforce Biblicus max_exemplars support and prevent RCA stack resolver drift.",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6876d866-8207-4c17-89e7-a506b06954c6",
+      "author": "derek",
+      "text": "Starting implementation: tightening source-level dependency constraints in Tactus and Plexus pyproject.toml to remove resolver drift and RCA breakage.",
+      "created_at": "2026-04-24T23:18:48.440373858Z"
+    },
+    {
+      "id": "93ed96f3-9cf0-4329-899f-18a809fe2376",
+      "author": "derek",
+      "text": "Applied source-level dependency constraints: Plexus pins hdbscan=0.8.40 and umap-learn=0.5.7; Tactus now requires biblicus>=1.10.0,<2.0.0 (max_exemplars-compatible). Pending user review; no commit performed.",
+      "created_at": "2026-04-24T23:19:03.013890080Z"
+    },
+    {
+      "id": "df93807c-e719-455b-8929-f3bfb089a2cc",
+      "author": "derek",
+      "text": "Verification run complete. Tactus: lock+sync successful in isolated Poetry venv, resolved biblicus 1.10.4 with ReinforcementMemory.__init__ containing max_exemplars. Plexus: lock+sync successful in isolated .venv, but still resolves biblicus 1.9.1 because dependency is tactus 0.46.2 from package index. Result: source constraint updates alone in local Tactus are not consumed by Plexus unless Plexus points to local Tactus path or released Tactus version containing the new Biblicus constraint.",
+      "created_at": "2026-04-24T23:23:43.435425175Z"
+    },
+    {
+      "id": "d7c4acd8-39db-44f1-a9d8-9fc79ee2259b",
+      "author": "derek",
+      "text": "Created branch chore/plx-9baee9-rca-dependency-constraints from develop to preserve current Plexus dependency work-in-progress while Tactus release PR is pending. Preparing checkpoint commit with pyproject/lock/env settings and Kanbus artifacts.",
+      "created_at": "2026-04-27T16:23:59.854996282Z"
+    }
+  ],
+  "created_at": "2026-04-24T23:18:43.500721568Z",
+  "updated_at": "2026-04-27T16:23:59.854996282Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
