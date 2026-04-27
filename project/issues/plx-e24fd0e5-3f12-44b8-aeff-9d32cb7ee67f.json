@@ -64,10 +64,22 @@
       "author": "ryan",
       "text": "Favorite reorder animation implemented with framer-motion LayoutGroup and motion row wrappers. Active dashboard dev server recompiled the score-version route successfully after the change. Full dashboard typecheck was started but stopped after several minutes without output to avoid leaving a long-running process; this change is isolated to the sidebar component.",
       "created_at": "2026-04-27T21:33:02.658574Z"
+    },
+    {
+      "id": "8ab777f3-d123-4bcf-b459-6293f4378d23",
+      "author": "ryan",
+      "text": "Implementing related ScoreVersion header cards: parent, previous champion, and next champion. Scope is frontend only, reusing existing parentVersionId and metadata.championHistory plus targeted getScoreVersion hydration.",
+      "created_at": "2026-04-27T21:38:35.219638Z"
+    },
+    {
+      "id": "9887c561-f6b2-4e5e-bcca-6168d080fca9",
+      "author": "ryan",
+      "text": "Related version header cards implemented. The score-version route in the active dev server compiled and served successfully after mirroring the component changes. Full dashboard typecheck was started but stopped after ~90 seconds of no output to avoid leaving a long-running process; git diff --check passed.",
+      "created_at": "2026-04-27T21:43:11.892280Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T21:33:02.658574Z",
+  "updated_at": "2026-04-27T21:43:11.892280Z",
   "closed_at": null,
   "custom": {}
 }
