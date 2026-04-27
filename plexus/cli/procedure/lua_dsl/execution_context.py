@@ -236,7 +236,6 @@ class LocalExecutionContext(ExecutionContext):
                     version
                     isDefault
                     parentProcedureId
-                    rootNodeId
                     waitingOnMessageId
                     metadata
                     createdAt
@@ -281,7 +280,6 @@ class LocalExecutionContext(ExecutionContext):
                     version
                     isDefault
                     parentProcedureId
-                    rootNodeId
                     waitingOnMessageId
                     metadata
                     createdAt

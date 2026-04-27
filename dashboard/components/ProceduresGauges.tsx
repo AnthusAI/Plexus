@@ -4,23 +4,23 @@ import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
 import { useProceduresMetrics } from '../hooks/useUnifiedMetrics'
 
-// Configuration for procedures-specific gauges (two gauges: procedures + graph nodes)  
+// Configuration for procedures-specific gauges.
 const proceduresGaugesConfig: BaseGaugesConfig = {
   // Use grid layout to match ItemsGauges pattern
   layout: 'grid',
   gridCols: {
-    base: 2,  // < 500px: 2 cols, chart spans full width on second row
-    sm: 3,    // >= 500px: 3 cols, chart takes 1 remaining column
-    md: 4,    // >= 700px: 4 cols, chart takes 2 remaining columns  
-    lg: 5,    // >= 900px: 5 cols, chart takes 3 remaining columns
-    xl: 6     // >= 1100px: 6 cols, chart takes 4 remaining columns
+    base: 1,
+    sm: 2,
+    md: 3,
+    lg: 4,
+    xl: 5
   },
   chartSpan: {
-    base: 2,  // spans full width on second row
-    sm: 1,    // spans 1 remaining column
-    md: 2,    // spans 2 remaining columns
-    lg: 3,    // spans 3 remaining columns
-    xl: 4     // spans 4 remaining columns
+    base: 1,
+    sm: 1,
+    md: 2,
+    lg: 3,
+    xl: 4
   },
   
   gauges: [
@@ -38,21 +38,6 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
         { start: 0, end: 90, color: 'var(--neutral)' },
         { start: 90, end: 100, color: 'var(--false)' }
       ]
-    },
-    {
-      key: 'graphNodes',
-      title: 'Graph Nodes / hour',
-      valueKey: 'graphNodesPerHour',
-      averageKey: 'graphNodesAveragePerHour',
-      peakKey: 'graphNodesPeakHourly',
-      totalKey: 'graphNodesTotal24h',
-      color: 'hsl(var(--chart-2))',
-      unit: '',
-      decimalPlaces: 0,
-      segments: [
-        { start: 0, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--false)' }
-      ]
     }
   ],
   chartAreas: [
@@ -61,22 +46,12 @@ const proceduresGaugesConfig: BaseGaugesConfig = {
       label: 'Procedures',
       color: 'var(--primary)',
       fillOpacity: 0.8
-    },
-    {
-      dataKey: 'graphNodes',
-      label: 'Graph Nodes',
-      color: 'var(--secondary)',
-      fillOpacity: 0.8
     }
   ],
   chartConfig: {
     procedures: {
       label: 'Procedures',
       color: 'hsl(var(--chart-1))',
-    },
-    graphNodes: {
-      label: 'Graph Nodes',
-      color: 'hsl(var(--chart-2))',
     },
   }
 }
@@ -100,7 +75,7 @@ export function ProceduresGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: ProceduresGaugesProps) {
-  // Use procedures metrics (procedures and graph nodes)
+  // Use procedures metrics.
   const { 
     metrics: metricsData, 
     isLoading, 
@@ -108,24 +83,15 @@ export function ProceduresGauges({
   } = useProceduresMetrics()
 
   // Transform metrics data to BaseGaugesData format
-  // For procedures, we use both procedures data and graphNodes data
   const data: BaseGaugesData | null = metricsData ? {
     // Procedures data
     proceduresPerHour: metricsData.itemsPerHour || 0,
     proceduresAveragePerHour: metricsData.itemsAveragePerHour || 0,
     proceduresPeakHourly: metricsData.itemsPeakHourly || 10, // Use higher baseline for procedures
     proceduresTotal24h: metricsData.itemsTotal24h || 0,
-    
-    // Graph Nodes data
-    graphNodesPerHour: metricsData.scoreResultsPerHour || 0,
-    graphNodesAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
-    graphNodesPeakHourly: metricsData.scoreResultsPeakHourly || 50, // Use higher baseline for graph nodes
-    graphNodesTotal24h: metricsData.scoreResultsTotal24h || 0,
-    
     chartData: metricsData.chartData?.map((point: any) => ({
       time: point.time,
       procedures: point.items || 0, // Map items to procedures for chart display
-      graphNodes: point.scoreResults || 0, // Map scoreResults to graphNodes for chart display
       bucketStart: point.bucketStart,
       bucketEnd: point.bucketEnd
     })) || [],
@@ -149,4 +115,3 @@ export function ProceduresGauges({
     />
   )
 }
-

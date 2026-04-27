@@ -1585,7 +1585,6 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         score_identifier=None,
         yaml_config=yaml_config,
         featured=False,
-        create_root_node=False,
         stage_configs=get_alignment_optimizer_stage_configs(),
     )
 

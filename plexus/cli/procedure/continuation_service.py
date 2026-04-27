@@ -53,7 +53,6 @@ _UPDATE_PROCEDURE_CODE_MUTATION = """
             version
             isDefault
             parentProcedureId
-            rootNodeId
             waitingOnMessageId
             metadata
             createdAt
@@ -80,7 +79,6 @@ _CREATE_PROCEDURE_MUTATION = """
             version
             isDefault
             parentProcedureId
-            rootNodeId
             waitingOnMessageId
             metadata
             createdAt

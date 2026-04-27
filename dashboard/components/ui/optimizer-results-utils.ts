@@ -55,7 +55,6 @@ export const PROCEDURE_CARD_FIELDS = `
   category
   version
   isDefault
-  rootNodeId
   status
   waitingOnMessageId
   metadata
