@@ -20,6 +20,7 @@ from . import feedback_utils
 from .guideline_vetting import GuidelineVettingService
 from .feedback_scope_resolver import resolve_scorecard
 from .score_resolution import resolve_score_for_scorecard
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -526,7 +527,7 @@ class FeedbackContradictions(BaseReportBlock):
     def _call_bedrock_for_topics(
         self,
         prompt: str,
-        model_id: str = "us.anthropic.claude-sonnet-4-6",
+        model_id: str = CLAUDE_HAIKU_45_MODEL_ID,
     ) -> Dict[str, Any]:
         import boto3
         import re
