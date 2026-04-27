@@ -275,6 +275,9 @@ class TestEmbeddedMCPServer:
 
 def test_advance_task_to_stage_by_name_uses_long_running_retry_policy():
     client = Mock()
+    fake_task = Mock()
+    fake_task.metadata = json.dumps({"runtime": {"pid": 123}})
+    fake_task.update.return_value = fake_task
     client.execute.side_effect = [
         {
             "getTask": {
@@ -290,16 +293,24 @@ def test_advance_task_to_stage_by_name_uses_long_running_retry_policy():
         {"updateTaskStage": {"id": "stage-2", "status": "RUNNING"}},
     ]
 
-    _advance_task_to_stage_by_name(client, "task-1", "Evaluation")
+    with patch("plexus.cli.procedure.mcp_transport.Task.get_by_id", return_value=fake_task):
+        _advance_task_to_stage_by_name(client, "task-1", "Evaluation")
 
     mutation_calls = client.execute.call_args_list[1:]
     assert mutation_calls
     for call in mutation_calls:
         assert call.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+    assert fake_task.update.called
+    heartbeat_metadata = json.loads(fake_task.update.call_args.kwargs["metadata"])
+    assert "lastHeartbeatAt" in heartbeat_metadata["runtime"]
+    assert fake_task.update.call_args.kwargs["updatedAt"] == heartbeat_metadata["runtime"]["lastHeartbeatAt"]
 
 
 def test_update_stage_progress_uses_long_running_retry_policy():
     client = Mock()
+    fake_task = Mock()
+    fake_task.metadata = json.dumps({"runtime": {"pid": 123}})
+    fake_task.update.return_value = fake_task
     client.execute.side_effect = [
         {
             "getTask": {
@@ -313,9 +324,14 @@ def test_update_stage_progress_uses_long_running_retry_policy():
         {"updateTaskStage": {"id": "stage-2", "processedItems": 3, "totalItems": 5}},
     ]
 
-    _update_stage_progress(client, "task-1", 3, 5)
+    with patch("plexus.cli.procedure.mcp_transport.Task.get_by_id", return_value=fake_task):
+        _update_stage_progress(client, "task-1", 3, 5)
 
     assert client.execute.call_args_list[1].kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+    assert fake_task.update.called
+    heartbeat_metadata = json.loads(fake_task.update.call_args.kwargs["metadata"])
+    assert "lastHeartbeatAt" in heartbeat_metadata["runtime"]
+    assert fake_task.update.call_args.kwargs["updatedAt"] == heartbeat_metadata["runtime"]["lastHeartbeatAt"]
 
 
 class TestProcedureMCPClient:

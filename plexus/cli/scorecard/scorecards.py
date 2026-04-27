@@ -1,5 +1,6 @@
 import click
 import os
+import sys
 from pathlib import Path
 import json
 from ruamel.yaml import YAML
@@ -1627,3 +1628,75 @@ def find_duplicates(account: Optional[str], limit: int):
     
     except Exception as e:
         console.print(f"[red]Error finding duplicate scorecards: {e}[/red]")
+
+
+@scorecards.command(name="promotion-packets")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--scores', required=True, help='Comma-separated score identifiers')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def promotion_packets(scorecard: str, scores: str, output: str):
+    """Build promotion packets for multiple scores in one scorecard."""
+    from plexus.cli.score.scores import _resolve_optimizer_score_context
+    from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    packets = []
+    errors = []
+    for score_identifier in [item.strip() for item in scores.split(",") if item.strip()]:
+        try:
+            context = _resolve_optimizer_score_context(client, scorecard, score_identifier)
+            packet = context["service"].build_promotion_packet_for_score(
+                context["score_id"],
+                score_name=context["score_name"],
+                scorecard_name=context["scorecard_name"],
+                champion_version_id=context["champion_version_id"],
+            )
+            packets.append(packet)
+        except Exception as exc:
+            errors.append({"score": score_identifier, "error": str(exc)})
+
+    payload = {
+        "scorecard": scorecard,
+        "packets": packets,
+        "errors": errors,
+        "markdown": OptimizerResultsService.render_promotion_packets_markdown(packets),
+    }
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(payload, sys.stdout)
+        return
+
+    table = Table(title=f"Promotion Packets for {scorecard}")
+    table.add_column("Score", style="cyan")
+    table.add_column("Version", style="magenta")
+    table.add_column("Champion", style="yellow")
+    table.add_column("Feedback AC1", style="green")
+    table.add_column("Regression AC1", style="green")
+    table.add_column("Feedback Alignment Evaluation", style="blue")
+    for packet in packets:
+        table.add_row(
+            packet.get("score_name") or "—",
+            packet.get("version_id") or "—",
+            "yes" if packet.get("is_champion") else "no",
+            f"{packet['best_feedback_alignment']:.4f}" if packet.get("best_feedback_alignment") is not None else "—",
+            f"{packet['best_accuracy_alignment']:.4f}" if packet.get("best_accuracy_alignment") is not None else "—",
+            packet.get("best_feedback_evaluation_url") or "—",
+        )
+    console.print(table)
+    if errors:
+        error_table = Table(title="Scores Without Packets")
+        error_table.add_column("Score", style="cyan")
+        error_table.add_column("Error", style="red")
+        for error in errors:
+            error_table.add_row(error["score"], error["error"])
+        console.print(error_table)
+
+
+scorecard.add_command(promotion_packets)

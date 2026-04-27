@@ -7,6 +7,7 @@ Tests Agent.turn() method for executing agent reasoning and tool calls.
 import pytest
 from unittest.mock import Mock, MagicMock, AsyncMock
 from plexus.cli.procedure.lua_dsl.primitives.agent import AgentPrimitive, AgentResponse
+from plexus.cli.procedure.lua_dsl.lua_sandbox import LuaSandbox
 
 
 @pytest.fixture
@@ -268,6 +269,116 @@ class TestAgentTurn:
         assert result['token_usage']['output'] == 50
         assert result['token_usage']['total'] == 150
 
+    def test_turn_normalizes_object_tool_call_args_with_args_as_dict(
+        self, agent_primitive, mock_llm, mock_tool_primitive
+    ):
+        """Object tool calls should prefer args_as_dict() and record normalized args."""
+        mock_tool = Mock()
+        type(mock_tool).name = 'test_tool'
+        mock_tool.func = Mock(return_value='Tool result')
+        agent_primitive.available_tools = [mock_tool]
+
+        class _ToolCallWithArgsAsDict:
+            def __init__(self):
+                self.name = 'test_tool'
+                self.id = 'call-1'
+                self.args = '{"ignored": true}'
+
+            def args_as_dict(self):
+                return {'param': 'value'}
+
+        mock_response = Mock()
+        mock_response.content = 'Use tool'
+        tool_call = _ToolCallWithArgsAsDict()
+        mock_response.tool_calls = [tool_call]
+        mock_llm.invoke.return_value = mock_response
+
+        result = agent_primitive.turn()
+
+        mock_tool.func.assert_called_once_with({'param': 'value'})
+        mock_tool_primitive.record_call.assert_called_once_with('test_tool', {'param': 'value'}, 'Tool result')
+        assert result['tool_calls'][0]['args'] == {'param': 'value'}
+
+    def test_turn_normalizes_json_string_args_from_tool_call_object(
+        self, agent_primitive, mock_llm, mock_tool_primitive
+    ):
+        """JSON-string args should be parsed into a dict before execution."""
+        mock_tool = Mock()
+        type(mock_tool).name = 'test_tool'
+        mock_tool.func = Mock(return_value='Tool result')
+        agent_primitive.available_tools = [mock_tool]
+
+        mock_response = Mock()
+        mock_response.content = 'Use tool'
+        tool_call = Mock()
+        tool_call.name = 'test_tool'
+        tool_call.id = 'call-1'
+        tool_call.args = '{"param": "value"}'
+        mock_response.tool_calls = [tool_call]
+        mock_llm.invoke.return_value = mock_response
+
+        result = agent_primitive.turn()
+
+        mock_tool.func.assert_called_once_with({'param': 'value'})
+        mock_tool_primitive.record_call.assert_called_once_with('test_tool', {'param': 'value'}, 'Tool result')
+        assert result['tool_calls'][0]['args'] == {'param': 'value'}
+
+    def test_turn_normalizes_callable_args_attribute(
+        self, agent_primitive, mock_llm, mock_tool_primitive
+    ):
+        """Callable args attributes should be called once and normalized to a dict."""
+        mock_tool = Mock()
+        type(mock_tool).name = 'test_tool'
+        mock_tool.func = Mock(return_value='Tool result')
+        agent_primitive.available_tools = [mock_tool]
+
+        mock_response = Mock()
+        mock_response.content = 'Use tool'
+        tool_call = Mock()
+        tool_call.name = 'test_tool'
+        tool_call.id = 'call-1'
+        tool_call.args_as_dict = None
+        tool_call.args = Mock(return_value={'param': 'value'})
+        mock_response.tool_calls = [tool_call]
+        mock_llm.invoke.return_value = mock_response
+
+        result = agent_primitive.turn()
+
+        tool_call.args.assert_called_once_with()
+        mock_tool.func.assert_called_once_with({'param': 'value'})
+        mock_tool_primitive.record_call.assert_called_once_with('test_tool', {'param': 'value'}, 'Tool result')
+        assert result['tool_calls'][0]['args'] == {'param': 'value'}
+
+    def test_turn_handles_malformed_tool_args_without_crashing(
+        self, agent_primitive, mock_llm, mock_tool_primitive
+    ):
+        """Malformed tool args should become a deterministic tool error and record empty args."""
+        mock_tool = Mock()
+        type(mock_tool).name = 'test_tool'
+        mock_tool.func = Mock(return_value='Tool result')
+        agent_primitive.available_tools = [mock_tool]
+
+        mock_response = Mock()
+        mock_response.content = 'Use tool'
+        tool_call = Mock()
+        tool_call.name = 'test_tool'
+        tool_call.id = 'call-1'
+        tool_call.args_as_dict = None
+        tool_call.args = object()
+        mock_response.tool_calls = [tool_call]
+        mock_llm.invoke.return_value = mock_response
+
+        result = agent_primitive.turn()
+
+        mock_tool.func.assert_not_called()
+        mock_tool_primitive.record_call.assert_called_once()
+        record_args = mock_tool_primitive.record_call.call_args[0]
+        assert record_args[0] == 'test_tool'
+        assert record_args[1] == {}
+        assert "Tool argument error:" in record_args[2]
+        assert result['tool_calls'][0]['args'] == {}
+        assert "Tool argument error:" in result['tool_calls'][0]['result']
+
     def test_turn_handles_error_gracefully(self, agent_primitive, mock_llm):
         """Test that turn() handles LLM errors gracefully."""
         mock_llm.invoke.side_effect = Exception('LLM error')
@@ -341,6 +452,77 @@ class TestAgentReset:
         agent_primitive._recording_queue.append({"role": "SYSTEM", "content": "keep"})
         agent_primitive.reset()
         assert len(agent_primitive._recording_queue) == 1
+
+
+class TestLuaFacingAgentInterface:
+    """Regression coverage for the optimizer-facing Lua agent contract."""
+
+    def test_clear_history_alias_resets_state(self, agent_primitive, mock_llm):
+        mock_response = Mock()
+        mock_response.content = 'Hello'
+        mock_response.tool_calls = []
+        mock_llm.invoke.return_value = mock_response
+
+        agent_primitive.turn()
+        assert agent_primitive._initialized is True
+        assert len(agent_primitive._conversation) > 0
+
+        agent_primitive.clear_history()
+        assert agent_primitive._initialized is False
+        assert agent_primitive._conversation == []
+
+    def test_history_accessor_supports_add_get_and_token_count_in_lua(
+        self,
+        agent_primitive,
+    ):
+        sandbox = LuaSandbox()
+        sandbox.inject_primitive("code_editor", agent_primitive)
+
+        result = sandbox.execute(
+            """
+            code_editor.clear_history()
+            code_editor.history:add({role = "system", content = "Current YAML"})
+            code_editor.history:add({role = "user", content = "Apply the edit"})
+            local msgs = code_editor.history:get()
+            return {
+              count = msgs[1] ~= nil and msgs[2] ~= nil and 2 or 0,
+              tokens = code_editor.history:count_tokens(),
+              first = msgs[1].content,
+              second = msgs[2].content
+            }
+            """
+        )
+
+        assert result["count"] == 2
+        assert result["tokens"] >= 2
+        assert result["first"] == "Current YAML"
+        assert result["second"] == "Apply the edit"
+
+    def test_agent_callable_alias_maps_message_to_inject(
+        self,
+        agent_primitive,
+        mock_llm,
+    ):
+        mock_response = Mock()
+        mock_response.content = 'Edited'
+        mock_response.tool_calls = []
+        mock_llm.invoke.return_value = mock_response
+
+        sandbox = LuaSandbox()
+        sandbox.inject_primitive("code_editor", agent_primitive)
+
+        result = sandbox.execute(
+            """
+            code_editor.clear_history()
+            code_editor.history:add({role = "system", content = "Current YAML"})
+            return code_editor({message = "Make the smallest safe edit"})
+            """
+        )
+
+        assert result["content"] == "Edited"
+        invoked_messages = mock_llm.invoke.call_args.args[0]
+        contents = [getattr(msg, "content", "") for msg in invoked_messages]
+        assert contents[:2] == ["Current YAML", "Make the smallest safe edit"]
 
 
 class TestAgentResponse:

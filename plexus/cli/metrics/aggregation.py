@@ -409,8 +409,6 @@ def query_records_for_counting(
         return _query_feedback_items(client, account_id, start_time, end_time, verbose)
     elif record_type == 'procedures':
         return _query_procedures(client, account_id, start_time, end_time, verbose)
-    elif record_type == 'graphNodes':
-        return _query_graph_nodes(client, account_id, start_time, end_time, verbose)
     elif record_type == 'chatSessions':
         return _query_chat_sessions(client, account_id, start_time, end_time, verbose)
     else:
@@ -782,49 +780,6 @@ def _query_procedures(
             'endTime': end_time.isoformat().replace('+00:00', 'Z')
         },
         'listProcedureByAccountIdAndUpdatedAt',
-        verbose
-    )
-
-
-def _query_graph_nodes(
-    client: 'PlexusDashboardClient',
-    account_id: str,
-    start_time: datetime,
-    end_time: datetime,
-    verbose: bool = False
-) -> List[Dict[str, Any]]:
-    """Query GraphNodes in time window."""
-    query = """
-    query ListGraphNodesByTime(
-        $accountId: String!,
-        $startTime: String!,
-        $endTime: String!,
-        $nextToken: String
-    ) {
-        listGraphNodeByAccountIdAndCreatedAt(
-            accountId: $accountId,
-            createdAt: { between: [$startTime, $endTime] },
-            limit: 1000,
-            nextToken: $nextToken
-        ) {
-            items {
-                id
-                createdAt
-            }
-            nextToken
-        }
-    }
-    """
-    
-    return _paginated_query(
-        client,
-        query,
-        {
-            'accountId': account_id,
-            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
-            'endTime': end_time.isoformat().replace('+00:00', 'Z')
-        },
-        'listGraphNodeByAccountIdAndCreatedAt',
         verbose
     )
 

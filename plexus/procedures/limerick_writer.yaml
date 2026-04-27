@@ -72,7 +72,6 @@ code: |
   -- Stage 2: Extract and record the limerick
   local success = Tool.called("done")
   local limerick = ""
-  local node_id = ""
 
   if success then
     State.set("stage", "recording")
@@ -80,16 +79,7 @@ code: |
     local done_call = Tool.last_call("done")
     limerick = done_call.args.reason or "No limerick provided"
 
-    -- Create a graph node with the limerick
-    local node = GraphNode.create(limerick, {
-      type = "poem",
-      genre = "limerick",
-      topic = topic,
-      author = "AI Poet"
-    })
-
-    node_id = node.id
-    State.set("node_id", node_id)
+    State.set("poem", limerick)
     State.set("limerick", limerick)
     State.set("stage", "complete")
 

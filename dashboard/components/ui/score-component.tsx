@@ -39,6 +39,8 @@ import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-di
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
+import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
+import { ScoreEvaluationList } from '@/components/ui/score-evaluation-list'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
@@ -70,6 +72,8 @@ export interface ScoreVersion {
   isFeatured: boolean
   isChampion?: boolean
   note?: string
+  branch?: string
+  parentVersionId?: string
   createdAt: string
   updatedAt: string
   user?: {
@@ -108,6 +112,10 @@ interface GetScoreVersionsByScoreIdResponse {
   }
 }
 
+interface GetScoreVersionResponse {
+  getScoreVersion?: ScoreVersion | null
+}
+
 interface GetScoreResponse {
   getScore: {
     id: string
@@ -137,12 +145,15 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onSave?: () => void
   onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
+  onViewProcedures?: () => void
+  onViewEvaluations?: () => void
   onDelete?: () => void
   exampleItems?: Array<{
     id: string
     displayValue: string
   }>
   scorecardName?: string
+  scorecardId?: string
   onTaskCreated?: (task: any) => void
   initialSelectedVersionId?: string | null
   onVersionSelect?: (versionId: string) => void
@@ -169,6 +180,8 @@ interface DetailContentProps {
   onCancel?: () => void
   onFeedbackAlignment?: () => void
   onCostAnalysis?: () => void
+  onViewProcedures?: () => void
+  onViewEvaluations?: () => void
   onDelete?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
@@ -177,6 +190,11 @@ interface DetailContentProps {
   onVersionSelect?: (version: ScoreVersion) => void
   onToggleFeature?: (versionId: string) => void
   onPromoteToChampion?: (versionId: string) => void
+  isVersionsLoading?: boolean
+  hasLoadedFirstVersionPage?: boolean
+  isLoadingMoreVersions?: boolean
+  versionsLoadError?: string | null
+  loadedVersionCount?: number
   versionNote: string
   onNoteChange: (note: string) => void
   resetEditingCounter: number
@@ -187,6 +205,7 @@ interface DetailContentProps {
   }>
   selectedAccount?: { id: string } | null
   scorecardName?: string
+  scorecardId?: string
   onTaskCreated?: (task: any) => void
   // Guidelines editing props
   isGuidelinesExpanded?: boolean
@@ -202,18 +221,34 @@ interface DetailContentProps {
   onCancelGuidelinesEdit?: () => void
 }
 
-// Helper function to fetch most recent evaluation for a score
-async function fetchMostRecentEvaluation(scoreId: string) {
+function ScoreVersionContentSkeleton({ label = 'Loading version...' }: { label?: string }) {
+  return (
+    <div className="flex-1 bg-background p-4">
+      <div className="mb-4 text-sm text-muted-foreground">{label}</div>
+      <div className="space-y-3">
+        <div className="h-4 w-48 rounded bg-muted animate-pulse" />
+        <div className="h-4 w-full max-w-2xl rounded bg-muted animate-pulse" />
+        <div className="h-4 w-5/6 max-w-xl rounded bg-muted animate-pulse" />
+        <div className="h-4 w-2/3 max-w-lg rounded bg-muted animate-pulse" />
+      </div>
+    </div>
+  )
+}
+
+// Helper function to fetch the most recent evaluation for the champion score version.
+async function fetchMostRecentChampionEvaluation(championVersionId?: string | null) {
+  if (!championVersionId) return null
+
   try {
     const response = await getAmplifyClient().graphql({
       query: `
-        query ListEvaluationByScoreIdAndUpdatedAt(
-          $scoreId: String!
+        query ListEvaluationByScoreVersionIdAndCreatedAt(
+          $scoreVersionId: String!
           $sortDirection: ModelSortDirection!
           $limit: Int
         ) {
-          listEvaluationByScoreIdAndUpdatedAt(
-            scoreId: $scoreId
+          listEvaluationByScoreVersionIdAndCreatedAt(
+            scoreVersionId: $scoreVersionId
             sortDirection: $sortDirection
             limit: $limit
           ) {
@@ -221,18 +256,19 @@ async function fetchMostRecentEvaluation(scoreId: string) {
               id
               metrics
               createdAt
+              scoreVersionId
             }
           }
         }
       `,
       variables: {
-        scoreId,
+        scoreVersionId: championVersionId,
         sortDirection: 'DESC',
         limit: 1
       }
     }) as GraphQLResult<any>
 
-    const evaluation = response.data?.listEvaluationByScoreIdAndUpdatedAt?.items?.[0]
+    const evaluation = response.data?.listEvaluationByScoreVersionIdAndCreatedAt?.items?.[0]
     return evaluation || null
   } catch (error) {
     console.error('Error fetching evaluation:', error)
@@ -391,12 +427,6 @@ function transformEvaluationToSummary(evaluation: any) {
       ? JSON.parse(evaluation.metrics)
       : evaluation.metrics
 
-    const otherMetricsSegments = [
-      { start: 0, end: 60, color: 'var(--gauge-inviable)' },
-      { start: 60, end: 85, color: 'var(--gauge-converging)' },
-      { start: 85, end: 100, color: 'var(--gauge-great)' }
-    ]
-
     const alignmentSegments = [
       { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // -1 to 0
       { start: 50, end: 60, color: 'var(--gauge-converging)' },   // 0 to 0.2
@@ -405,36 +435,23 @@ function transformEvaluationToSummary(evaluation: any) {
       { start: 90, end: 100, color: 'var(--gauge-great)' }        // 0.8 to 1.0
     ]
 
-    // Metrics format: array of {name, value} objects
-    // Get the first metric (should be accuracy)
-    const firstMetric = metrics[0]
-    if (!firstMetric || typeof firstMetric.value !== 'number') {
+    const alignmentMetric = Array.isArray(metrics)
+      ? metrics.find(metric => metric?.name === 'Alignment' && typeof metric.value === 'number')
+      : null
+
+    if (!alignmentMetric) {
       return null
     }
 
-    // Special handling for Alignment (Gwet's AC1)
-    if (firstMetric.name === 'Alignment') {
-      return {
-        gauge: {
-          value: firstMetric.value,
-          label: firstMetric.name,
-          segments: alignmentSegments,
-          min: -1,           // AC1 ranges from -1 to 1
-          max: 1,
-          valueUnit: '',     // No percentage sign
-          decimalPlaces: 2,  // Show 2 decimal places
-          backgroundColor: 'var(--gauge-background)',
-        },
-        evaluationId: evaluation.id
-      }
-    }
-
-    // Default handling for other metrics
     return {
       gauge: {
-        value: firstMetric.value,
-        label: firstMetric.name,
-        segments: otherMetricsSegments,
+        value: alignmentMetric.value,
+        label: alignmentMetric.name,
+        segments: alignmentSegments,
+        min: -1,           // AC1 ranges from -1 to 1
+        max: 1,
+        valueUnit: '',     // No percentage sign
+        decimalPlaces: 2,  // Show 2 decimal places
         backgroundColor: 'var(--gauge-background)',
       },
       evaluationId: evaluation.id
@@ -473,7 +490,7 @@ const GridContent = React.memo(({
 
     async function loadMetrics() {
       setIsLoadingMetrics(true)
-      const evaluation = await fetchMostRecentEvaluation(score.id)
+      const evaluation = await fetchMostRecentChampionEvaluation(score.championVersionId)
 
       if (isMounted) {
         if (evaluation) {
@@ -489,7 +506,7 @@ const GridContent = React.memo(({
     return () => {
       isMounted = false
     }
-  }, [score.id])
+  }, [score.championVersionId])
 
   return (
     <div className="flex items-start gap-4">
@@ -595,6 +612,8 @@ const DetailContent = React.memo(({
   onCancel,
   onFeedbackAlignment,
   onCostAnalysis,
+  onViewProcedures,
+  onViewEvaluations,
   onDelete,
   hasChanges,
   versions,
@@ -603,6 +622,11 @@ const DetailContent = React.memo(({
   onVersionSelect,
   onToggleFeature,
   onPromoteToChampion,
+  isVersionsLoading = false,
+  hasLoadedFirstVersionPage = true,
+  isLoadingMoreVersions = false,
+  versionsLoadError = null,
+  loadedVersionCount = 0,
   versionNote,
   onNoteChange,
   resetEditingCounter,
@@ -610,6 +634,7 @@ const DetailContent = React.memo(({
   exampleItems = [],
   selectedAccount,
   scorecardName,
+  scorecardId,
   onTaskCreated,
   // Guidelines editing props
   isGuidelinesExpanded = false,
@@ -628,6 +653,7 @@ const DetailContent = React.memo(({
   const currentVersion = versions?.find(v => 
     v.id === (selectedVersionId || championVersionId)
   )
+  const shouldShowVersionContentSkeleton = isVersionsLoading && !hasLoadedFirstVersionPage && !currentVersion
   
   // Parse YAML configuration if available, otherwise create default YAML
   const defaultYamlObj: Record<string, any> = {
@@ -983,9 +1009,9 @@ const DetailContent = React.memo(({
 
   // Add sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false)
-  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [activeTab, setActiveTab] = React.useState<'guidelines' | 'code' | 'procedures' | 'evaluations'>('guidelines')
   const [isGuidelinesInlineEdit, setIsGuidelinesInlineEdit] = React.useState(false)
-  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code'>('guidelines')
+  const [fullscreenActiveTab, setFullscreenActiveTab] = React.useState<'guidelines' | 'code' | 'procedures' | 'evaluations'>('guidelines')
   const [newVersionNote, setNewVersionNote] = React.useState('')
   const [associatedDatasets, setAssociatedDatasets] = React.useState<AssociatedDatasetView[]>([])
   const [isAssociatedDatasetsLoading, setIsAssociatedDatasetsLoading] = React.useState(false)
@@ -1106,6 +1132,18 @@ const DetailContent = React.memo(({
                       <DropdownMenuItem onClick={onCostAnalysis}>
                         <Coins className="mr-2 h-4 w-4" />
                         Analyze Cost
+                      </DropdownMenuItem>
+                    )}
+                    {onViewProcedures && (
+                      <DropdownMenuItem onClick={onViewProcedures}>
+                        <FileStack className="mr-2 h-4 w-4" />
+                        View Procedures
+                      </DropdownMenuItem>
+                    )}
+                    {onViewEvaluations && (
+                      <DropdownMenuItem onClick={onViewEvaluations}>
+                        <FlaskConical className="mr-2 h-4 w-4" />
+                        View Evaluations
                       </DropdownMenuItem>
                     )}
                     {onDelete && (
@@ -1257,12 +1295,22 @@ const DetailContent = React.memo(({
             onVersionSelect={onVersionSelect}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            isLoading={isVersionsLoading && !hasLoadedFirstVersionPage}
+            isLoadingMore={isLoadingMoreVersions}
           />
 
           {/* Main Content - Versioned Content */}
           <div className="flex-1 flex flex-col">
             {/* Version Header */}
-            {selectedVersion && (
+            {shouldShowVersionContentSkeleton ? (
+              <div className="p-3">
+                <div className="space-y-2">
+                  <div className="h-4 w-36 rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-24 rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-64 rounded bg-muted animate-pulse" />
+                </div>
+              </div>
+            ) : selectedVersion && (
               <div className="p-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -1322,11 +1370,13 @@ const DetailContent = React.memo(({
 
             {/* Tabbed Content */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+              <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'guidelines' | 'code' | 'procedures' | 'evaluations')} className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between border-b border-border">
                   <TabsList className="h-auto p-0 bg-transparent justify-start">
                     <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                     <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                    <TabsTrigger value="procedures" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Procedures</TabsTrigger>
+                    <TabsTrigger value="evaluations" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-4 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Evaluations</TabsTrigger>
                   </TabsList>
                   <div className="flex gap-1 pr-3">
                     <CardButton
@@ -1341,7 +1391,9 @@ const DetailContent = React.memo(({
                 </div>
                 
                 <TabsContent value="guidelines" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
-                  {isGuidelinesInlineEdit ? (
+                  {shouldShowVersionContentSkeleton ? (
+                    <ScoreVersionContentSkeleton label="Loading guidelines..." />
+                  ) : isGuidelinesInlineEdit ? (
                     <Editor
                       height="100%"
                       defaultLanguage="markdown"
@@ -1420,10 +1472,12 @@ const DetailContent = React.memo(({
                             >
                               {contentToShow}
                             </ReactMarkdown>
-                          ) : (
+                          ) : hasLoadedFirstVersionPage ? (
                             <div className="text-muted-foreground italic">
                               Click to add guidelines...
                             </div>
+                          ) : (
+                            <ScoreVersionContentSkeleton label="Loading guidelines..." />
                           );
                         })()}
                       </div>
@@ -1432,6 +1486,9 @@ const DetailContent = React.memo(({
                 </TabsContent>
                 
                 <TabsContent value="code" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden">
+                  {shouldShowVersionContentSkeleton ? (
+                    <ScoreVersionContentSkeleton label="Loading score code..." />
+                  ) : (
                   <div className="flex flex-col h-full">
                     {/* Code Editor */}
                     <div className="flex-1 min-h-0">
@@ -1472,6 +1529,28 @@ const DetailContent = React.memo(({
                       />
                     </div>
                   </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="procedures" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                  <ScoreProcedureList
+                    scoreId={score.id}
+                    scorecardId={scorecardId}
+                    scoreName={score.name}
+                    scorecardName={scorecardName || 'Unknown Scorecard'}
+                    scope="version"
+                    versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                    className="flex-1 min-h-0"
+                  />
+                </TabsContent>
+
+                <TabsContent value="evaluations" className="flex-1 bg-background mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                  <ScoreEvaluationList
+                    scoreId={score.id}
+                    scope="version"
+                    versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                    className="flex-1 min-h-0"
+                  />
                 </TabsContent>
               </Tabs>
             </div>
@@ -1484,11 +1563,13 @@ const DetailContent = React.memo(({
         <div className="flex flex-col h-full w-full">
           {/* Fullscreen Tabs */}
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code')} className="flex-1 flex flex-col min-h-0">
+            <Tabs value={fullscreenActiveTab} onValueChange={(value: string) => setFullscreenActiveTab(value as 'guidelines' | 'code' | 'procedures' | 'evaluations')} className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between border-b border-border">
                 <TabsList className="h-auto p-0 bg-transparent justify-start">
                   <TabsTrigger value="guidelines" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Guidelines</TabsTrigger>
                   <TabsTrigger value="code" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Code</TabsTrigger>
+                  <TabsTrigger value="procedures" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Procedures</TabsTrigger>
+                  <TabsTrigger value="evaluations" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary rounded-none px-3 py-2">Evaluations</TabsTrigger>
                 </TabsList>
                 <div className="flex gap-2">
                   <CardButton
@@ -1501,6 +1582,9 @@ const DetailContent = React.memo(({
               
               {/* Guidelines Tab - 50/50 split */}
               <TabsContent value="guidelines" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                {shouldShowVersionContentSkeleton ? (
+                  <ScoreVersionContentSkeleton label="Loading guidelines..." />
+                ) : (
                 <div className="flex h-full">
                   {/* Left: Markdown Editor */}
                   <div className="w-1/2 border-r border-border">
@@ -1559,10 +1643,14 @@ const DetailContent = React.memo(({
                     </div>
                   </div>
                 </div>
+                )}
               </TabsContent>
               
               {/* Code Tab - 2/3 + 1/3 split */}
               <TabsContent value="code" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0">
+                {shouldShowVersionContentSkeleton ? (
+                  <ScoreVersionContentSkeleton label="Loading score code..." />
+                ) : (
                 <div className="flex h-full">
                   {/* Left: YAML Editor (2/3) */}
                   <div className="w-2/3 border-r border-border">
@@ -1603,6 +1691,28 @@ const DetailContent = React.memo(({
                     />
                   </div>
                 </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="procedures" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                <ScoreProcedureList
+                  scoreId={score.id}
+                  scorecardId={scorecardId}
+                  scoreName={score.name}
+                  scorecardName={scorecardName || 'Unknown Scorecard'}
+                  scope="version"
+                  versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                  className="flex-1 min-h-0"
+                />
+              </TabsContent>
+
+              <TabsContent value="evaluations" className="flex-1 mt-0 data-[state=inactive]:hidden min-h-0 flex flex-col">
+                <ScoreEvaluationList
+                  scoreId={score.id}
+                  scope="version"
+                  versionId={currentVersion?.id ?? selectedVersionId ?? championVersionId}
+                  className="flex-1 min-h-0"
+                />
               </TabsContent>
             </Tabs>
           </div>
@@ -1768,9 +1878,12 @@ export function ScoreComponent({
   onSave,
   onFeedbackAlignment,
   onCostAnalysis,
+  onViewProcedures,
+  onViewEvaluations,
   onDelete,
   exampleItems = [],
   scorecardName,
+  scorecardId,
   onTaskCreated,
   initialSelectedVersionId,
   onVersionSelect,
@@ -1783,6 +1896,11 @@ export function ScoreComponent({
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
   const [championVersionId, setChampionVersionId] = React.useState<string>()
   const [selectedVersionId, setSelectedVersionId] = React.useState<string | undefined>(initialSelectedVersionId || undefined)
+  const [isVersionsLoading, setIsVersionsLoading] = React.useState(false)
+  const [hasLoadedFirstVersionPage, setHasLoadedFirstVersionPage] = React.useState(false)
+  const [isLoadingMoreVersions, setIsLoadingMoreVersions] = React.useState(false)
+  const [versionsLoadError, setVersionsLoadError] = React.useState<string | null>(null)
+  const [loadedVersionCount, setLoadedVersionCount] = React.useState(0)
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
   const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
@@ -1853,6 +1971,14 @@ export function ScoreComponent({
   // Ensure editedScore is updated when score prop changes
   React.useEffect(() => {
     setEditedScore(score)
+    setVersions([])
+    setChampionVersionId(undefined)
+    setSelectedVersionId(initialSelectedVersionId || undefined)
+    setIsVersionsLoading(variant !== 'grid')
+    setHasLoadedFirstVersionPage(false)
+    setIsLoadingMoreVersions(false)
+    setVersionsLoadError(null)
+    setLoadedVersionCount(0)
     setVersionNote('') // Reset note when score changes
     setHasChanges(false) // Reset changes flag when score changes
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
@@ -1861,21 +1987,146 @@ export function ScoreComponent({
   
   // Fetch versions when score changes - ONLY for detail view
   React.useEffect(() => {
-    // Skip version fetching for grid view to prevent flickering
     if (variant === 'grid') {
       return;
     }
 
-    // Capture the initial version ID synchronously before any async operations.
-    // This must NOT be in the dependency array — adding it creates a feedback loop:
-    // auto-selection → onVersionSelect → parent setSelectedVersionId → prop changes →
-    // effect re-fires → auto-selects again → repeat indefinitely.
+    let cancelled = false;
     const versionIdToSelect = initialSelectedVersionId;
 
+    const sortVersions = (items: ScoreVersion[]) =>
+      [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const mergeVersions = (existing: ScoreVersion[], incoming: ScoreVersion[]) => {
+      const byId = new Map<string, ScoreVersion>();
+      for (const item of existing) byId.set(item.id, item);
+      for (const item of incoming) byId.set(item.id, item);
+      return sortVersions([...byId.values()]);
+    };
+
+    const fetchVersionById = async (versionId: string): Promise<ScoreVersion | null> => {
+      const response = await getAmplifyClient().graphql({
+        query: `
+          query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+              id
+              scoreId
+              configuration
+              guidelines
+              isFeatured
+              note
+              branch
+              parentVersionId
+              createdAt
+              updatedAt
+            }
+          }
+        `,
+        variables: { id: String(versionId) },
+      }) as GraphQLResult<GetScoreVersionResponse>;
+
+      const version = response.data?.getScoreVersion ?? null;
+      return version?.scoreId === score.id ? version : null;
+    };
+
+    const fetchVersionPage = async (nextToken: string | null) => {
+      const response = await getAmplifyClient().graphql({
+        query: `
+          query GetScoreVersionsByScoreId(
+            $scoreId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+            $nextToken: String
+          ) {
+            listScoreVersionByScoreIdAndCreatedAt(
+              scoreId: $scoreId,
+              sortDirection: $sortDirection,
+              limit: $limit,
+              nextToken: $nextToken
+            ) {
+              items {
+                id
+                scoreId
+                configuration
+                guidelines
+                isFeatured
+                note
+                branch
+                parentVersionId
+                createdAt
+                updatedAt
+              }
+              nextToken
+            }
+          }
+        `,
+        variables: {
+          scoreId: String(score.id),
+          sortDirection: "DESC",
+          limit: 100,
+          nextToken,
+        }
+      }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
+
+      if ('errors' in response && response.errors) {
+        console.error('🚨 GraphQL errors loading versions:', response.errors);
+      }
+
+      const resultData = response.data?.listScoreVersionByScoreIdAndCreatedAt;
+      return {
+        items: resultData?.items ?? [],
+        nextToken: resultData?.nextToken ?? null,
+      };
+    };
+
+    const selectPreferredVersion = async (
+      loadedVersions: ScoreVersion[],
+      championId: string | undefined
+    ) => {
+      const sortedVersions = sortVersions(loadedVersions);
+      let selectedVersion: ScoreVersion | null = null;
+
+      if (versionIdToSelect) {
+        selectedVersion = loadedVersions.find(v => v.id === versionIdToSelect) ?? null;
+        if (!selectedVersion) {
+          const hydratedVersion = await fetchVersionById(versionIdToSelect);
+          if (hydratedVersion && !cancelled) {
+            setVersions(prev => mergeVersions(prev, [hydratedVersion]));
+            setLoadedVersionCount(prev => Math.max(prev, mergeVersions(loadedVersions, [hydratedVersion]).length));
+            selectedVersion = hydratedVersion;
+          }
+        }
+      }
+
+      if (!selectedVersion && championId) {
+        selectedVersion = loadedVersions.find(v => v.id === championId) ?? null;
+      }
+
+      if (!selectedVersion && championId) {
+        const hydratedVersion = await fetchVersionById(championId);
+        if (hydratedVersion && !cancelled) {
+          setVersions(prev => mergeVersions(prev, [hydratedVersion]));
+          setLoadedVersionCount(prev => Math.max(prev, mergeVersions(loadedVersions, [hydratedVersion]).length));
+          selectedVersion = hydratedVersion;
+        }
+      }
+
+      selectedVersion = selectedVersion ?? sortedVersions[0] ?? null;
+
+      if (selectedVersion && !cancelled) {
+        handleVersionSelect(selectedVersion);
+      }
+
+      return selectedVersion;
+    };
+
     const fetchVersions = async () => {
+      setIsVersionsLoading(true);
+      setHasLoadedFirstVersionPage(false);
+      setIsLoadingMoreVersions(false);
+      setVersionsLoadError(null);
+
       try {
-        
-        // First, get the score details to get the championVersionId
         const scoreResponse = await getAmplifyClient().graphql({
           query: `
             query GetScore($id: ID!) {
@@ -1888,154 +2139,92 @@ export function ScoreComponent({
               }
             }
           `,
-          variables: {
-            id: String(score.id)
-          }
+          variables: { id: String(score.id) }
         }) as GraphQLResult<GetScoreResponse>;
-        
+
         let championId: string | undefined;
-        
+
         if ('data' in scoreResponse && scoreResponse.data?.getScore) {
           const scoreData = scoreResponse.data.getScore;
           championId = scoreData?.championVersionId;
-          
-          if (championId) {
+
+          if (!cancelled) {
             setChampionVersionId(championId);
+            setEditedScore(prev => ({
+              ...prev,
+              description: scoreData.description || prev.description
+            }));
           }
-          
-          // Update the editedScore with the fetched description
-          setEditedScore(prev => ({
-            ...prev,
-            description: scoreData.description || prev.description
-          }));
         }
-        
-        // Then fetch all versions using the secondary index query
-        // This query uses the GSI on scoreId with createdAt as sort key
-        // which correctly returns all versions for a score
-        let allVersionItems: ScoreVersion[] = [];
-        let versionsNextToken: string | null = null;
-        do {
-          const response = await getAmplifyClient().graphql({
-            query: `
-              query GetScoreVersionsByScoreId(
-                $scoreId: String!
-                $sortDirection: ModelSortDirection
-                $limit: Int
-                $nextToken: String
-              ) {
-                listScoreVersionByScoreIdAndCreatedAt(
-                  scoreId: $scoreId,
-                  sortDirection: $sortDirection,
-                  limit: $limit,
-                  nextToken: $nextToken
-                ) {
-                  items {
+
+        const firstPage = await fetchVersionPage(null);
+        if (cancelled) return;
+
+        const firstPageVersions = sortVersions(firstPage.items);
+        setVersions(firstPageVersions);
+        setLoadedVersionCount(firstPageVersions.length);
+        setHasLoadedFirstVersionPage(true);
+        setIsVersionsLoading(false);
+
+        await selectPreferredVersion(firstPageVersions, championId);
+
+        if (firstPageVersions.length === 1 && !championId) {
+          setChampionVersionId(firstPageVersions[0].id);
+          try {
+            await getAmplifyClient().graphql({
+              query: `
+                mutation UpdateScoreChampion($input: UpdateScoreInput!) {
+                  updateScore(input: $input) {
                     id
-                    scoreId
-                    configuration
-                    guidelines
-                    isFeatured
-                    note
-                    createdAt
-                    updatedAt
+                    championVersionId
                   }
-                  nextToken
+                }
+              `,
+              variables: {
+                input: {
+                  id: String(score.id),
+                  championVersionId: String(firstPageVersions[0].id),
                 }
               }
-            `,
-            variables: {
-              scoreId: String(score.id),
-              sortDirection: "DESC",
-              limit: 100,
-              nextToken: versionsNextToken,
-            }
-          }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
-
-          if ('errors' in response && response.errors) {
-            console.error('🚨 GraphQL errors loading versions:', response.errors);
+            });
+          } catch (error) {
+            console.error('Error setting initial champion version:', error);
           }
+        }
 
-          const resultData = response.data?.listScoreVersionByScoreIdAndCreatedAt;
-          allVersionItems = allVersionItems.concat(resultData?.items ?? []);
-          versionsNextToken = resultData?.nextToken ?? null;
-        } while (versionsNextToken);
-
-        if (allVersionItems.length > 0) {
-          const versionItems = allVersionItems;
-          setVersions(versionItems);
-          
-          // Sort versions by createdAt in descending order
-          const sortedVersions = [...versionItems].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-          
-          // Find champion version or use the most recent one if no champion exists
-          const champion = championId 
-            ? versionItems.find(v => v.id === championId) 
-            : null;
-            
-          // Priority order for version selection:
-          // 1. initialSelectedVersionId (from deep link)
-          // 2. champion version
-          // 3. most recent version
-          
-          if (versionIdToSelect) {
-            // Try to select the version specified in the URL
-            const initialVersion = versionItems.find(v => v.id === versionIdToSelect);
-            if (initialVersion) {
-              handleVersionSelect(initialVersion);
-            } else {
-              console.warn('⚠️ Deep link: Initial version not found, falling back to champion');
-              // Fallback to champion if initial version not found
-              if (champion) {
-                handleVersionSelect(champion);
-              } else if (sortedVersions.length > 0) {
-                handleVersionSelect(sortedVersions[0]);
-              }
-            }
-          } else if (champion) {
-            // No deep link, select champion version
-            handleVersionSelect(champion);
-          } else if (sortedVersions.length > 0) {
-            // No champion, select most recent version
-            handleVersionSelect(sortedVersions[0]);
-            
-            // Only set the most recent version as champion if there are no champions at all
-            // AND there are no existing versions (this is the first version)
-            if (!championId && sortedVersions.length === 1) {
-              setChampionVersionId(sortedVersions[0].id);
-              
-              // Update the Score record to set this as the champion version
-              try {
-                await getAmplifyClient().graphql({
-                  query: `
-                    mutation UpdateScoreChampion($input: UpdateScoreInput!) {
-                      updateScore(input: $input) {
-                        id
-                        championVersionId
-                      }
-                    }
-                  `,
-                  variables: {
-                    input: {
-                      id: String(score.id),
-                      championVersionId: String(sortedVersions[0].id),
-                    }
-                  }
-                });
-
-              } catch (error) {
-                console.error('Error setting initial champion version:', error);
-              }
-            }
-          }
+        let nextToken = firstPage.nextToken;
+        if (nextToken && !cancelled) {
+          setIsLoadingMoreVersions(true);
+        }
+        while (nextToken && !cancelled) {
+          const page = await fetchVersionPage(nextToken);
+          if (cancelled) return;
+          setVersions(prev => {
+            const merged = mergeVersions(prev, page.items);
+            setLoadedVersionCount(merged.length);
+            return merged;
+          });
+          nextToken = page.nextToken;
         }
       } catch (error) {
         console.error('Error fetching versions:', error);
+        if (!cancelled) {
+          setVersionsLoadError('Failed to load score versions');
+          setHasLoadedFirstVersionPage(true);
+          setIsVersionsLoading(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingMoreVersions(false);
+          setIsVersionsLoading(false);
+        }
       }
     };
+
     fetchVersions();
+    return () => {
+      cancelled = true;
+    };
   }, [score, variant])
 
 
@@ -2564,6 +2753,8 @@ export function ScoreComponent({
               onCancel={handleCancel}
               onFeedbackAlignment={onFeedbackAlignment}
               onCostAnalysis={onCostAnalysis}
+              onViewProcedures={onViewProcedures}
+              onViewEvaluations={onViewEvaluations}
               onDelete={onDelete}
               hasChanges={hasChanges}
               versions={versions}
@@ -2572,6 +2763,11 @@ export function ScoreComponent({
               onVersionSelect={handleVersionSelect}
               onToggleFeature={handleToggleFeature}
               onPromoteToChampion={handlePromoteToChampion}
+              isVersionsLoading={isVersionsLoading}
+              hasLoadedFirstVersionPage={hasLoadedFirstVersionPage}
+              isLoadingMoreVersions={isLoadingMoreVersions}
+              versionsLoadError={versionsLoadError}
+              loadedVersionCount={loadedVersionCount}
               versionNote={versionNote}
               onNoteChange={handleNoteChange}
               resetEditingCounter={resetEditingCounter}
@@ -2579,6 +2775,7 @@ export function ScoreComponent({
               exampleItems={exampleItems}
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
+              scorecardId={scorecardId}
               onTaskCreated={onTaskCreated}
               // Guidelines editing props
               isGuidelinesExpanded={isGuidelinesExpanded}

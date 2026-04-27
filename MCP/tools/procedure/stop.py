@@ -36,36 +36,6 @@ def register_stop_tool(mcp: FastMCP, procedure_context: Optional[Dict[str, Any]]
         try:
             logger.info(f"Stop tool invoked with reason: {reason}")
 
-            # Mark the active parent node as completed
-            if procedure_context and 'active_parent_node_id' in procedure_context:
-                active_parent_id = procedure_context['active_parent_node_id']
-                if active_parent_id:
-                    try:
-                        from plexus.dashboard.api.models.graph_node import GraphNode
-                        import json
-
-                        # Get client from context
-                        client = procedure_context.get('client')
-                        if client:
-                            # Get the node
-                            node = GraphNode.get_by_id(active_parent_id, client)
-                            if node:
-                                # Parse existing metadata
-                                metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata if node.metadata else {}
-
-                                # Mark as completed
-                                metadata['state'] = 'completed'
-
-                                # Update the node
-                                node.update_content(metadata=metadata)
-                                logger.info(f"Marked parent node {active_parent_id} as completed")
-                            else:
-                                logger.warning(f"Could not find parent node {active_parent_id} to mark as completed")
-                        else:
-                            logger.warning("No client available in context to mark parent node as completed")
-                    except Exception as e:
-                        logger.warning(f"Could not mark parent node as completed: {e}")
-
             # Return a special marker that the conversation system will recognize
             return f"STOP_REQUESTED: {reason}"
 

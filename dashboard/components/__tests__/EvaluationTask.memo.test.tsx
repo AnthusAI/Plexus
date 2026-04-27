@@ -2,6 +2,12 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import EvaluationTask from '@/components/EvaluationTask'
 
+jest.mock('@/utils/amplify-client', () => ({
+  getClient: jest.fn(() => ({
+    graphql: jest.fn(() => new Promise(() => {})),
+  })),
+}))
+
 const makeData = (overrides: Partial<any> = {}) => ({
   id: 'e1',
   title: 'Eval',
@@ -55,6 +61,32 @@ describe('EvaluationTask memo behavior', () => {
     expect(screen.getByText(/Processing 1 of 4 items/)).toBeInTheDocument()
   })
 
+  test('grid header hides split type label when control actions are present', () => {
+    const data = makeData()
+    const { container } = render(
+      <EvaluationTask
+        variant="grid"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+        controlButtons={<button type="button" aria-label="Evaluation actions">actions</button>}
+      />
+    )
+
+    expect(screen.getByLabelText('Evaluation actions')).toBeInTheDocument()
+    expect(container.querySelectorAll('br').length).toBe(0)
+  })
+
+  test('grid header keeps split type label when no actions are present', () => {
+    const data = makeData()
+    const { container } = render(
+      <EvaluationTask
+        variant="grid"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+      />
+    )
+
+    expect(container.querySelectorAll('br').length).toBeGreaterThan(0)
+  })
+
   test('DetailContent re-renders on stage change', () => {
     const stages = {
       items: [
@@ -93,6 +125,8 @@ describe('EvaluationTask memo behavior', () => {
   test('DetailContent renders candidate assessment compact summary KPIs', () => {
     const data = makeData({
       status: 'COMPLETED',
+      baseline_evaluation_id: 'eval-original-base',
+      current_baseline_evaluation_id: 'eval-current-best',
       task: {
         status: 'COMPLETED',
         stages: {
@@ -140,7 +174,38 @@ describe('EvaluationTask memo behavior', () => {
     expect(screen.getByText('Candidate assessment')).toBeInTheDocument()
     expect(screen.getByText('Accept')).toBeInTheDocument()
     expect(screen.getByText(/Deterministic reference/)).toBeInTheDocument()
+    expect(screen.getByText(/Original baseline:\s*eval-base/i)).toBeInTheDocument()
+    expect(screen.getByText(/Current best baseline:\s*eval-current-best/i)).toBeInTheDocument()
     expect(screen.getByText(/Gap delta:\s*\+0.030/)).toBeInTheDocument()
     expect(screen.getByText(/Bundle attachment key:/)).toBeInTheDocument()
+  })
+
+  test('DetailContent renders original and current best baseline references', () => {
+    const data = makeData({
+      status: 'COMPLETED',
+      baseline_evaluation_id: 'eval-original',
+      current_baseline_evaluation_id: 'eval-current',
+      task: {
+        status: 'COMPLETED',
+        stages: {
+          items: [
+            { id:'s1', name:'Setup', order:1, status:'COMPLETED' },
+            { id:'s2', name:'Processing', order:2, status:'COMPLETED', processedItems: 4, totalItems: 4 },
+          ]
+        },
+      },
+    })
+
+    render(
+      <EvaluationTask
+        variant="detail"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+      />
+    )
+
+    expect(screen.getByText('Original baseline:')).toBeInTheDocument()
+    expect(screen.getByText('eval-original')).toBeInTheDocument()
+    expect(screen.getByText('Current best baseline:')).toBeInTheDocument()
+    expect(screen.getByText('eval-current')).toBeInTheDocument()
   })
 })

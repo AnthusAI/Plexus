@@ -71,9 +71,6 @@ jest.mock('@/utils/subscriptions', () => ({
   observeTaskStageUpdates: () => ({
     subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
   }),
-  observeGraphNodeUpdates: () => ({
-    subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
-  }),
 }))
 
 jest.mock('@/components/ProcedureTask', () => ({
@@ -176,7 +173,6 @@ describe('Procedures dashboard loading UX', () => {
                   name: 'Procedure 1',
                   featured: false,
                   code: null,
-                  rootNodeId: null,
                   createdAt: '2026-04-20T00:00:00.000Z',
                   updatedAt: '2026-04-20T00:00:00.000Z',
                   accountId: 'account-1',
@@ -264,6 +260,69 @@ describe('Procedures dashboard loading UX', () => {
     expect(screen.queryByTestId('procedures-dashboard-skeleton')).not.toBeInTheDocument()
   })
 
+  it('adds newly-created procedures from realtime subscription payloads', async () => {
+    let createHandler: ((payload: any) => void) | null = null
+
+    mockGraphql.mockImplementation(({ query }: { query: string }) => {
+      const text = String(query)
+      if (text.includes('onCreateProcedure')) {
+        return {
+          subscribe: ({ next }: { next: (payload: any) => void }) => {
+            createHandler = next
+            return { unsubscribe: jest.fn() }
+          },
+        }
+      }
+      if (text.includes('onUpdateProcedure')) {
+        return createSubscriptionResult()
+      }
+      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+        return Promise.resolve({
+          data: {
+            listProcedureByAccountIdAndUpdatedAt: {
+              items: [],
+              nextToken: null,
+            },
+          },
+        })
+      }
+      if (text.includes('listTaskByAccountIdAndUpdatedAt')) {
+        return Promise.resolve({ data: { listTaskByAccountIdAndUpdatedAt: { items: [] } } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<ProceduresDashboard />)
+
+    await waitFor(() => {
+      expect(screen.getByText('No procedures found')).toBeInTheDocument()
+    })
+
+    act(() => {
+      createHandler?.({
+        data: {
+          onCreateProcedure: {
+            id: 'proc-live',
+            name: 'Live Procedure',
+            featured: false,
+            code: null,
+            createdAt: '2026-04-26T00:00:00.000Z',
+            updatedAt: '2026-04-26T00:00:00.000Z',
+            accountId: 'account-1',
+            scorecardId: null,
+            scorecard: null,
+            scoreId: null,
+            score: null,
+          },
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('procedure-card-proc-live')).toBeInTheDocument()
+    })
+  })
+
   it('keeps rendered cards and shows non-blocking error banner when task hydration fails', async () => {
     mockGraphql.mockImplementation(({ query }: { query: string }) => {
       const text = String(query)
@@ -280,7 +339,6 @@ describe('Procedures dashboard loading UX', () => {
                   name: 'Procedure Error',
                   featured: false,
                   code: null,
-                  rootNodeId: null,
                   createdAt: '2026-04-20T00:00:00.000Z',
                   updatedAt: '2026-04-20T00:00:00.000Z',
                   accountId: 'account-1',

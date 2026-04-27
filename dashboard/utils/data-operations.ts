@@ -49,6 +49,8 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
   scorecard: { name: string } | null;
   score: { name: string } | null;
   procedureId?: string | null;
+  baseline_evaluation_id?: string | null;
+  current_baseline_evaluation_id?: string | null;
   metrics: any;  // Allow any for processed metrics since we parse JSON
   confusionMatrix: any;  // Allow any for processed matrix since we parse JSON
   datasetClassDistribution: any;  // Allow any for processed distribution since we parse JSON
@@ -1053,6 +1055,16 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
   });
 
   const procedureId = getTaskProcedureId(taskData);
+  const parsedParameters = parseJsonMaybeDeep(evaluation.parameters);
+  const parsedMetadata = parsedParameters && typeof parsedParameters === 'object'
+    ? parseJsonMaybeDeep((parsedParameters as Record<string, unknown>).metadata)
+    : null;
+  const baselineEvaluationId = parsedMetadata && typeof parsedMetadata === 'object' && typeof (parsedMetadata as Record<string, unknown>).baseline === 'string'
+    ? (parsedMetadata as Record<string, unknown>).baseline as string
+    : null;
+  const currentBaselineEvaluationId = parsedMetadata && typeof parsedMetadata === 'object' && typeof (parsedMetadata as Record<string, unknown>).current_baseline === 'string'
+    ? (parsedMetadata as Record<string, unknown>).current_baseline as string
+    : null;
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
@@ -1061,6 +1073,8 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     scorecard: scorecardData ? { name: scorecardData.name } : null,
     score: scoreData ? { name: scoreData.name } : null,
     procedureId,
+    baseline_evaluation_id: baselineEvaluationId,
+    current_baseline_evaluation_id: currentBaselineEvaluationId,
     metrics: typeof evaluation.metrics === 'string' ? 
       JSON.parse(evaluation.metrics) : evaluation.metrics,
     confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
@@ -1074,6 +1088,24 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
 
 
   return transformedEvaluation;
+}
+
+function parseJsonMaybeDeep(value: unknown): unknown {
+  let current = value;
+
+  for (let i = 0; i < 2; i += 1) {
+    if (typeof current !== 'string') {
+      return current;
+    }
+
+    try {
+      current = JSON.parse(current);
+    } catch {
+      return current;
+    }
+  }
+
+  return current;
 }
 
 // Add to the existing types at the top

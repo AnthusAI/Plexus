@@ -24,7 +24,6 @@ from .primitives import (
     StopPrimitive,
     ToolPrimitive,
     AgentPrimitive,
-    GraphNodePrimitive,
     HumanPrimitive,
     SystemPrimitive
 )
@@ -87,7 +86,6 @@ class LuaDSLRuntime:
         self.iterations_primitive: Optional[IterationsPrimitive] = None
         self.stop_primitive: Optional[StopPrimitive] = None
         self.tool_primitive: Optional[ToolPrimitive] = None
-        self.graph_primitive: Optional[GraphNodePrimitive] = None
         self.human_primitive: Optional[HumanPrimitive] = None
         self.system_primitive: Optional[SystemPrimitive] = None
         self.step_primitive: Optional[StepPrimitive] = None
@@ -409,11 +407,6 @@ class LuaDSLRuntime:
         self.iterations_primitive = IterationsPrimitive()
         self.stop_primitive = StopPrimitive()
         self.tool_primitive = ToolPrimitive()
-        self.graph_primitive = GraphNodePrimitive(
-            client=self.client,
-            procedure_id=self.procedure_id,
-            account_id=self.account_id
-        )
 
         logger.debug("All primitives initialized")
 
@@ -543,7 +536,6 @@ class LuaDSLRuntime:
         self.lua_sandbox.inject_primitive("Iterations", self.iterations_primitive)
         self.lua_sandbox.inject_primitive("Stop", self.stop_primitive)
         self.lua_sandbox.inject_primitive("Tool", self.tool_primitive)
-        self.lua_sandbox.inject_primitive("GraphNode", self.graph_primitive)
 
         # Inject checkpoint primitives
         self.lua_sandbox.inject_primitive("Step", self.step_primitive)

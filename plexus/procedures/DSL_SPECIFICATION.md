@@ -1043,20 +1043,6 @@ Iterations.current()
 Iterations.exceeded(n)
 ```
 
-### Graph Primitives
-
-```lua
-GraphNode.root()
-GraphNode.current()
-GraphNode.create({...})
-GraphNode.set_current(node)
-node:children()
-node:parent()
-node:score()
-node:metadata()
-node:set_metadata(key, value)
-```
-
 ### Utility Primitives
 
 ```lua
