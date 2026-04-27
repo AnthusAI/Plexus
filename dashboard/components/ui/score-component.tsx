@@ -389,7 +389,7 @@ function RelatedScoreVersionCard({
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div className="bg-background rounded-md">
         <CollapsibleTrigger asChild>
-          <button type="button" className="w-full p-2 text-left">
+          <button type="button" className="w-full py-2 pr-2 text-left">
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex items-center gap-2">
                 {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
