@@ -7,7 +7,6 @@ This agent handles the test phase of the SOP procedure workflow:
 3. Uses LLM with file editing tools to modify YAML based on hypothesis
 4. Validates edited YAML via syntax check and predict tool
 5. Pushes valid YAML to new ScoreVersion
-6. Updates GraphNode metadata with scoreVersionId
 """
 
 import asyncio
@@ -49,7 +48,7 @@ class TestPhaseAgent:
         the hypothesis, validates it, and updates the node metadata.
 
         Args:
-            hypothesis_node: GraphNode containing the hypothesis
+            hypothesis_node: Hypothesis object containing the candidate change
             score_version_id: ID of baseline ScoreVersion to start from
             procedure_context: Context dict with scorecard/score info, docs, etc.
 
@@ -125,10 +124,6 @@ class TestPhaseAgent:
                     "node_id": hypothesis_node.id,
                     "temp_yaml_path": temp_yaml_path
                 }
-
-            # 6. Update GraphNode metadata
-            logger.info(f"Updating GraphNode metadata with new ScoreVersion ID and parent version ID")
-            await self._update_node_metadata(hypothesis_node.id, new_version_id, score_version_id)
 
             logger.info(f"✓ Successfully created ScoreVersion {new_version_id} for hypothesis node {hypothesis_node.id}")
 
@@ -247,7 +242,7 @@ class TestPhaseAgent:
 
         Args:
             yaml_path: Path to YAML file to edit
-            hypothesis_node: GraphNode with hypothesis description
+            hypothesis_node: Hypothesis object with hypothesis description
             context: Procedure context with documentation
 
         Returns:
@@ -671,7 +666,7 @@ START NOW: Use read_file to see the configuration, then make focused edits."""
             yaml_path: Path to edited YAML file
             parent_version_id: ID of parent ScoreVersion
             context: Procedure context with scorecard/score info
-            hypothesis_node: GraphNode with hypothesis (for version note)
+            hypothesis_node: Hypothesis object (for version note)
 
         Returns:
             ID of new ScoreVersion, or None on failure
@@ -714,105 +709,6 @@ START NOW: Use read_file to see the configuration, then make focused edits."""
         except Exception as e:
             logger.error(f"Error pushing new version: {e}", exc_info=True)
             return None
-
-    async def _update_node_metadata(self, node_id: str, score_version_id: str, parent_version_id: Optional[str] = None) -> bool:
-        """
-        Update GraphNode metadata with scoreVersionId, parent_version_id, and code_diff.
-
-        Args:
-            node_id: ID of GraphNode to update
-            score_version_id: ID of ScoreVersion to store in metadata
-            parent_version_id: Optional ID of the baseline/parent version used for comparison
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            from plexus.dashboard.api.models.graph_node import GraphNode
-            import json
-            import difflib
-
-            # Get node
-            node = GraphNode.get_by_id(node_id, self.client)
-
-            # Parse existing metadata
-            metadata = {}
-            if node.metadata:
-                try:
-                    metadata = json.loads(node.metadata) if isinstance(node.metadata, str) else node.metadata
-                except:
-                    pass
-
-            # Add scoreVersionId and parent_version_id
-            metadata['scoreVersionId'] = score_version_id
-            if parent_version_id:
-                metadata['parent_version_id'] = parent_version_id
-
-            # Generate code diff if we have both parent and new version
-            if parent_version_id:
-                try:
-                    logger.info(f"Generating code diff between parent {parent_version_id} and new {score_version_id}")
-
-                    # Fetch parent version code
-                    parent_query = f"""
-                    query GetScoreVersionCode {{
-                        getScoreVersion(id: "{parent_version_id}") {{
-                            id
-                            configuration
-                        }}
-                    }}
-                    """
-                    parent_result = self.client.execute(parent_query)
-                    parent_code = parent_result.get('getScoreVersion', {}).get('configuration', '')
-
-                    # Fetch new version code
-                    new_query = f"""
-                    query GetScoreVersionCode {{
-                        getScoreVersion(id: "{score_version_id}") {{
-                            id
-                            configuration
-                        }}
-                    }}
-                    """
-                    new_result = self.client.execute(new_query)
-                    new_code = new_result.get('getScoreVersion', {}).get('configuration', '')
-
-                    if parent_code and new_code:
-                        # Generate unified diff
-                        parent_lines = parent_code.splitlines(keepends=True)
-                        new_lines = new_code.splitlines(keepends=True)
-
-                        diff = difflib.unified_diff(
-                            parent_lines,
-                            new_lines,
-                            fromfile=f'version_{parent_version_id[:8]}',
-                            tofile=f'version_{score_version_id[:8]}',
-                            lineterm=''
-                        )
-
-                        diff_text = ''.join(diff)
-
-                        if diff_text:
-                            metadata['code_diff'] = diff_text
-                            logger.info(f"✓ Generated code diff ({len(diff_text)} chars)")
-                        else:
-                            logger.warning("No differences found between versions")
-                    else:
-                        logger.warning(f"Could not fetch code for diff generation (parent: {bool(parent_code)}, new: {bool(new_code)})")
-
-                except Exception as diff_error:
-                    logger.error(f"Error generating code diff: {diff_error}", exc_info=True)
-                    # Continue even if diff generation fails - don't block the update
-
-            # Update node
-            node.update_content(metadata=metadata)
-
-            logger.info(f"✓ Updated node {node_id} with scoreVersionId: {score_version_id}, parent: {parent_version_id}, code_diff: {'yes' if 'code_diff' in metadata else 'no'}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error updating node metadata: {e}", exc_info=True)
-            return False
 
     def cleanup(self):
         """Clean up temporary directory."""

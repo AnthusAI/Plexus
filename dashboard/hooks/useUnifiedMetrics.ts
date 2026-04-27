@@ -112,7 +112,7 @@ function alignTimeToBucket(time: Date, bucketMinutes: number): Date {
  */
 async function queryAggregatedMetrics(
   accountId: string,
-  recordType: 'items' | 'scoreResults' | 'tasks' | 'procedures' | 'graphNodes' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' | 'predictionScoreResults' | 'evaluationScoreResults' | 'evaluations',
+  recordType: 'items' | 'scoreResults' | 'tasks' | 'procedures' | 'predictionItems' | 'evaluationItems' | 'feedbackItems' | 'predictionScoreResults' | 'evaluationScoreResults' | 'evaluations',
   startTime: Date,
   endTime: Date
 ): Promise<AggregatedMetricsRecord[]> {
@@ -692,7 +692,7 @@ export function useTaskMetrics(config: MetricsConfig = {}): UseUnifiedMetricsRes
 }
 
 /**
- * Hook for procedures metrics (procedures + graph nodes)
+ * Hook for procedures metrics.
  */
 export function useProceduresMetrics(): UseUnifiedMetricsResult {
   const { selectedAccount } = useAccount()
@@ -716,46 +716,33 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
       const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
       const last60min = new Date(now.getTime() - 60 * 60 * 1000)
 
-      // Query AggregatedMetrics for procedures and graphNodes
-      const [proceduresRecords, graphNodesRecords] = await Promise.all([
-        queryAggregatedMetrics(selectedAccount.id, 'procedures', last24h, now),
-        queryAggregatedMetrics(selectedAccount.id, 'graphNodes', last24h, now)
-      ])
+      const proceduresRecords = await queryAggregatedMetrics(selectedAccount.id, 'procedures', last24h, now)
 
       // Calculate hourly metrics (last 60 minutes)
       const proceduresHourly = calculateMetricsFromRecords(proceduresRecords, last60min, now)
-      const graphNodesHourly = calculateMetricsFromRecords(graphNodesRecords, last60min, now)
 
       // Calculate 24h totals
       const procedures24h = calculateMetricsFromRecords(proceduresRecords, last24h, now)
-      const graphNodes24h = calculateMetricsFromRecords(graphNodesRecords, last24h, now)
 
       // Generate chart data
-      const chartData = generateChartData(proceduresRecords, graphNodesRecords, last24h, now, 'day')
+      const chartData = generateChartData(proceduresRecords, [], last24h, now, 'day')
 
       // Calculate peaks with higher baselines for procedures
       const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for procedures
-      const scoreResultsPeak = Math.max(...chartData.map(point => point.scoreResults), 50) // Minimum 50 for graph nodes
 
       // Calculate averages
       const itemsAveragePerHour = Math.round(procedures24h.count / 24)
-      const scoreResultsAveragePerHour = Math.round(graphNodes24h.count / 24)
 
       // Detect errors
-      const hasErrorsLast24h = (procedures24h.errorCount + graphNodes24h.errorCount) > 0
-      const totalErrors24h = procedures24h.errorCount + graphNodes24h.errorCount
+      const hasErrorsLast24h = procedures24h.errorCount > 0
+      const totalErrors24h = procedures24h.errorCount
 
       const metricsData: UnifiedMetricsData = {
         itemsPerHour: proceduresHourly.count,
         itemsAveragePerHour,
         itemsPeakHourly: itemsPeak,
         itemsTotal24h: procedures24h.count,
-        
-        scoreResultsPerHour: graphNodesHourly.count,
-        scoreResultsAveragePerHour,
-        scoreResultsPeakHourly: scoreResultsPeak,
-        scoreResultsTotal24h: graphNodes24h.count,
-        
+
         chartData,
         lastUpdated: now,
         hasErrorsLast24h,

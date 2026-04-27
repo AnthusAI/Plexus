@@ -71,9 +71,6 @@ jest.mock('@/utils/subscriptions', () => ({
   observeTaskStageUpdates: () => ({
     subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
   }),
-  observeGraphNodeUpdates: () => ({
-    subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
-  }),
 }))
 
 jest.mock('@/components/ProcedureTask', () => ({
@@ -176,7 +173,6 @@ describe('Procedures dashboard loading UX', () => {
                   name: 'Procedure 1',
                   featured: false,
                   code: null,
-                  rootNodeId: null,
                   createdAt: '2026-04-20T00:00:00.000Z',
                   updatedAt: '2026-04-20T00:00:00.000Z',
                   accountId: 'account-1',
@@ -310,7 +306,6 @@ describe('Procedures dashboard loading UX', () => {
             name: 'Live Procedure',
             featured: false,
             code: null,
-            rootNodeId: null,
             createdAt: '2026-04-26T00:00:00.000Z',
             updatedAt: '2026-04-26T00:00:00.000Z',
             accountId: 'account-1',
@@ -344,7 +339,6 @@ describe('Procedures dashboard loading UX', () => {
                   name: 'Procedure Error',
                   featured: false,
                   code: null,
-                  rootNodeId: null,
                   createdAt: '2026-04-20T00:00:00.000Z',
                   updatedAt: '2026-04-20T00:00:00.000Z',
                   accountId: 'account-1',

@@ -781,10 +781,6 @@ class ProcedureChatRecorder:
                 'status': 'ACTIVE'
             }
             
-            # Only include nodeId if it's not None (for experiment-level conversations)
-            if self.node_id is not None:
-                session_data['nodeId'] = self.node_id
-
             # Add scorecard/score IDs if they are present
             if scorecard_id and str(scorecard_id).strip():
                 session_data['scorecardId'] = scorecard_id
