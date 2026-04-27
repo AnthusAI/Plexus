@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Implemented first pass: ProceduresGauges now displays Procedures/hour plus Evaluations/hour from AggregatedMetrics, and metrics aggregation infra now discovers/subscribes to the Procedure table stream. Local validation passing: ProceduresGauges Jest test, metrics aggregator pytest, dashboard typecheck, and metrics CDK synth.",
       "created_at": "2026-04-27T16:22:17.765841Z"
+    },
+    {
+      "id": "239cd11c-4a5e-454a-b0af-2721f0b7651b",
+      "author": "ryan",
+      "text": "Adjusted Procedures dashboard gauges to mirror the Evaluations dashboard two-gauge plus histogram layout and added time-range support to procedure metrics so both procedures and evaluations series navigate together.",
+      "created_at": "2026-04-27T16:38:18.323679Z"
     }
   ],
   "created_at": "2026-04-27T15:07:53.196191Z",
-  "updated_at": "2026-04-27T16:22:17.765841Z",
+  "updated_at": "2026-04-27T16:38:18.323679Z",
   "closed_at": null,
   "custom": {}
 }
