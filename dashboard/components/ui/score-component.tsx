@@ -375,43 +375,43 @@ function RelatedScoreVersionCard({
       <div className="bg-background rounded-md">
         <CollapsibleTrigger asChild>
           <button type="button" className="w-full p-2 text-left">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
               <div className="min-w-0 flex items-center gap-2">
                 {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
                 <div className="min-w-0 flex items-center gap-1.5 text-xs truncate">
                   <span className="font-medium truncate">{label}</span>
                   <span className="text-muted-foreground">·</span>
-                  <span className="text-muted-foreground truncate">
-                    {relatedVersion
-                      ? <Timestamp time={relatedVersion.createdAt} variant="relative" showIcon={false} className="text-xs" />
-                      : failedToLoad
-                        ? `Unavailable: ${relatedVersionId}`
-                        : `Loading: ${relatedVersionId}`}
-                  </span>
+                  {relatedVersion ? (
+                    <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground truncate">
+                      <Timestamp time={relatedVersion.createdAt} variant="relative" className="text-xs" />
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Open related version"
+                        title="Open related version"
+                        className="shrink-0 rounded-sm p-1 text-foreground hover:bg-card"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onSelect?.(relatedVersion)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            onSelect?.(relatedVersion)
+                          }
+                        }}
+                      >
+                        <LinkIcon className="h-4 w-4" />
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground truncate">
+                      {failedToLoad ? `Unavailable: ${relatedVersionId}` : `Loading: ${relatedVersionId}`}
+                    </span>
+                  )}
                 </div>
               </div>
-              {relatedVersion && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Open related version"
-                  title="Open related version"
-                  className="shrink-0 rounded-sm p-1 text-foreground hover:bg-card"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSelect?.(relatedVersion)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onSelect?.(relatedVersion)
-                    }
-                  }}
-                >
-                  <LinkIcon className="h-4 w-4" />
-                </span>
-              )}
             </div>
           </button>
         </CollapsibleTrigger>
