@@ -61,6 +61,32 @@ describe('EvaluationTask memo behavior', () => {
     expect(screen.getByText(/Processing 1 of 4 items/)).toBeInTheDocument()
   })
 
+  test('grid header hides split type label when control actions are present', () => {
+    const data = makeData()
+    const { container } = render(
+      <EvaluationTask
+        variant="grid"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+        controlButtons={<button type="button" aria-label="Evaluation actions">actions</button>}
+      />
+    )
+
+    expect(screen.getByLabelText('Evaluation actions')).toBeInTheDocument()
+    expect(container.querySelectorAll('br').length).toBe(0)
+  })
+
+  test('grid header keeps split type label when no actions are present', () => {
+    const data = makeData()
+    const { container } = render(
+      <EvaluationTask
+        variant="grid"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+      />
+    )
+
+    expect(container.querySelectorAll('br').length).toBeGreaterThan(0)
+  })
+
   test('DetailContent re-renders on stage change', () => {
     const stages = {
       items: [
