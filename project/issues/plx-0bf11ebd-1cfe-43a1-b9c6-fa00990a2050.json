@@ -28,10 +28,28 @@
       "author": "ryan",
       "text": "Patched dashboard/amplify/backend.ts to force explicit env on ConsoleRunWorkerStack (account/region from CDK_DEFAULT_* with AWS_* fallback) and fail fast if unresolved, so CDK does not synthesize current_account-current_region during staging deploy.",
       "created_at": "2026-04-27T12:21:33.630985Z"
+    },
+    {
+      "id": "2fdde07b-18a6-4347-bea9-ae2e9b31da13",
+      "author": "ryan",
+      "text": "Staging job 119 failed before deploy on backend type-check: workerImageUri passed in backend.ts but ConsoleRunWorkerStackProps in staging branch lacks that field. Preparing follow-up staging commit to align backend.ts and consoleRunWorker/resource.ts so deploy can proceed to CloudFormation.",
+      "created_at": "2026-04-27T12:28:31.020732Z"
+    },
+    {
+      "id": "1d3e3322-6881-4ddd-9229-5ed01f914b28",
+      "author": "ryan",
+      "text": "Job 120 failure isolated: staging branch env is missing CONSOLE_WORKER_IMAGE_URI. Next action: update Amplify staging branch environment variable to match main and rerun deploy to validate CloudFormation/schema change path.",
+      "created_at": "2026-04-27T12:34:09.505031Z"
+    },
+    {
+      "id": "852a8da9-1cd7-4333-9fb4-6ff9e2f19ec5",
+      "author": "ryan",
+      "text": "Job 121 failure root cause: cross-environment reference requires explicit physical name for ConsoleRunWorkerQueue. Implementing explicit queue names (queue + DLQ) in ConsoleRunWorkerStack and redeploying staging.",
+      "created_at": "2026-04-27T12:39:32.777876Z"
     }
   ],
   "created_at": "2026-04-25T15:15:43.216098Z",
-  "updated_at": "2026-04-27T12:21:33.630985Z",
+  "updated_at": "2026-04-27T12:39:32.777876Z",
   "closed_at": null,
   "custom": {}
 }
