@@ -104,6 +104,7 @@ export function ScoreVersionDiffDialog({
               }}
               disabled={!leftVersionId || !rightVersionId}
             >
+              <GitCompareArrows className="mr-2 h-4 w-4" />
               Swap
             </Button>
             <VersionSelect
