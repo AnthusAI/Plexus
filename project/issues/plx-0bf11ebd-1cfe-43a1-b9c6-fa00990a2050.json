@@ -58,10 +58,16 @@
       "author": "ryan",
       "text": "Performed targeted staging->feature reconciliation by cherry-picking today's staging commits. GraphNode/schema commit was already present (empty pick skipped). Applied staging-aligned backend deltas for console worker env/queue/nested-stack behavior onto feature branch.",
       "created_at": "2026-04-27T13:27:07.806656Z"
+    },
+    {
+      "id": "0beb3dd1-9691-4c80-a62e-33e20e37cc3b",
+      "author": "ryan",
+      "text": "Fixing post-merge blocker on develop->main PR #206: dashboard typecheck failure in useUnifiedMetrics procedures metrics object missing required scoreResults* fields. Applying minimal patch and pushing bugfix PR to develop.",
+      "created_at": "2026-04-27T13:42:58.464143Z"
     }
   ],
   "created_at": "2026-04-25T15:15:43.216098Z",
-  "updated_at": "2026-04-27T13:27:07.806656Z",
+  "updated_at": "2026-04-27T13:42:58.464143Z",
   "closed_at": null,
   "custom": {}
 }

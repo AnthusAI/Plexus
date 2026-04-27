@@ -743,6 +743,12 @@ export function useProceduresMetrics(): UseUnifiedMetricsResult {
         itemsPeakHourly: itemsPeak,
         itemsTotal24h: procedures24h.count,
 
+        // Procedures metrics do not include score result volume.
+        scoreResultsPerHour: 0,
+        scoreResultsAveragePerHour: 0,
+        scoreResultsPeakHourly: 10,
+        scoreResultsTotal24h: 0,
+
         chartData,
         lastUpdated: now,
         hasErrorsLast24h,
