@@ -3,8 +3,8 @@ import logging
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from collections import Counter
-import json # Ensure json import at the top
-import yaml # For YAML formatted output with contextual comments
+import json  # Ensure json import at the top
+import yaml  # For YAML formatted output with contextual comments
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
@@ -271,7 +271,7 @@ class FeedbackAlignment(BaseReportBlock):
                 raise
 
             # --- 3. Determine Plexus Score(s) to Process ---
-            scores_to_process = [] # List of {'plexus_score_id': str, 'plexus_score_name': str, 'cc_question_id': str}
+            scores_to_process = []  # List of {'plexus_score_id': str, 'plexus_score_name': str, 'cc_question_id': str}
             
             if cc_question_id_param:
                 self._log(f"Looking up specific Plexus Score for identifier: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
@@ -331,7 +331,7 @@ class FeedbackAlignment(BaseReportBlock):
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
             all_feedback_items_retrieved_count = 0
-            all_date_filtered_feedback_items = [] # For overall calculation
+            all_date_filtered_feedback_items = []  # For overall calculation
             per_score_analysis_results = []
             # For optional memory analysis: collect edit comment texts per score
             per_score_raw_texts: List[Dict] = []
@@ -411,7 +411,7 @@ class FeedbackAlignment(BaseReportBlock):
                     try:
                         analysis_for_this_score = self._analyze_feedback_data_gwet(
                             feedback_items=items_for_this_score,
-                            score_id_info=score_info['plexus_score_id'] # For logging within analysis
+                            score_id_info=score_info['plexus_score_id']  # For logging within analysis
                         )
                         analysis_for_this_score["score_id"] = score_info['plexus_score_id']
                         analysis_for_this_score["score_name"] = score_info['plexus_score_name']
@@ -550,11 +550,11 @@ class FeedbackAlignment(BaseReportBlock):
                     "total_mismatches": overall_analysis.get("mismatches"),
                     "classes_count": overall_analysis.get("classes_count", 2),
                 },
-                "overall_ac1": overall_analysis.get("ac1"), # Renamed from overall_ac1
-                "total_items": overall_analysis.get("item_count"), # Renamed from item_count
-                "total_mismatches": overall_analysis.get("mismatches"), # Renamed from mismatches
-                "total_agreements": overall_analysis.get("agreements"), # Renamed from agreements
-                "accuracy": overall_analysis.get("accuracy"), # Renamed from accuracy
+                "overall_ac1": overall_analysis.get("ac1"),  # Renamed from overall_ac1
+                "total_items": overall_analysis.get("item_count"),  # Renamed from item_count
+                "total_mismatches": overall_analysis.get("mismatches"),  # Renamed from mismatches
+                "total_agreements": overall_analysis.get("agreements"),  # Renamed from agreements
+                "accuracy": overall_analysis.get("accuracy"),  # Renamed from accuracy
                 "scores": per_score_analysis_results,
                 "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
                 "date_range": {
@@ -662,8 +662,8 @@ class FeedbackAlignment(BaseReportBlock):
             from tactus.core.runtime import TactusRuntime
             from tactus.adapters.memory import MemoryStorage
 
-            provider = self.config.get("memory_llm_provider", "bedrock")
-            model = self.config.get("memory_llm_model", "anthropic.claude-3-haiku-20240307-v1:0")
+            provider = self.config.get("memory_llm_provider", "openai")
+            model = self.config.get("memory_llm_model", "gpt-5-mini")
 
             # Reasoning models (gpt-5 / o3 series) use the Responses API and
             # do not support the Chat Completions tool format, so we use a
@@ -965,7 +965,7 @@ class FeedbackAlignment(BaseReportBlock):
     ) -> Optional[str]:
         """Synthesize a single root cause statement for a topic bucket from per-exemplar causes."""
         keyword_str = ", ".join(keywords[:8]) if keywords else ""
-        causes_str = "\n".join(f"{i+1}. {c}" for i, c in enumerate(exemplar_causes))
+        causes_str = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(exemplar_causes))
         system_msg = (
             "You write extremely concise root cause statements — one short sentence, under 20 words. "
             "No preamble, no qualifications, no restating the cluster name."
@@ -1466,7 +1466,7 @@ class FeedbackAlignment(BaseReportBlock):
             if item.initialAnswerValue is not None and item.finalAnswerValue is not None:
                 paired_initial.append(item.initialAnswerValue)
                 paired_final.append(item.finalAnswerValue)
-                valid_pairs_count +=1
+                valid_pairs_count += 1
         
         self._log(f"Found {valid_pairs_count} valid initial/final pairs for analysis for {score_id_info}.")
 
@@ -1513,7 +1513,7 @@ class FeedbackAlignment(BaseReportBlock):
             
             # Calculate Gwet's AC1
             calculation_result = gwet_ac1_calculator.calculate(metric_input)
-            ac1_value = calculation_result.value # Get value from the result object
+            ac1_value = calculation_result.value  # Get value from the result object
 
             self._log(f"Gwet's AC1 for {score_id_info}: {ac1_value}")
             
@@ -2033,7 +2033,7 @@ class FeedbackAlignment(BaseReportBlock):
                 self._log(f"Before sorting {len(items_list)} items for initial={initial_value}, final={final_value}")
                 for i, item in enumerate(items_list[:3]):  # Show first 3 items before sorting
                     date_val = item.get('editedAt') or item.get('updatedAt') or item.get('createdAt')
-                    self._log(f"BEFORE - Item {i+1}: ID={item.get('id')}, sort_date={date_val}")
+                    self._log(f"BEFORE - Item {i + 1}: ID={item.get('id')}, sort_date={date_val}")
                 
                 items_list.sort(key=sort_key, reverse=True)
                 
@@ -2041,7 +2041,7 @@ class FeedbackAlignment(BaseReportBlock):
                 self._log(f"After sorting {len(items_list)} items for initial={initial_value}, final={final_value}")
                 for i, item in enumerate(items_list[:3]):  # Show first 3 items after sorting
                     date_val = item.get('editedAt') or item.get('updatedAt') or item.get('createdAt')
-                    self._log(f"AFTER - Item {i+1}: ID={item.get('id')}, sort_date={date_val}")
+                    self._log(f"AFTER - Item {i + 1}: ID={item.get('id')}, sort_date={date_val}")
         
         # Add summary count of items with identifiers
         items_with_identifiers = 0

@@ -18,6 +18,34 @@ from plexus.rubric_memory import validate_rubric_memory_citations
 
 logger = logging.getLogger(__name__)
 
+RCA_OPENAI_MODEL = "gpt-5-mini"
+
+
+def _invoke_rca_openai_text(
+    *,
+    system: str,
+    messages: list[dict[str, str]],
+    max_output_tokens: int,
+) -> str:
+    """Invoke the RCA standard OpenAI model and return plain response text."""
+    from dotenv import load_dotenv
+    from openai import OpenAI
+
+    load_dotenv(override=False)
+    client = OpenAI()
+    response = client.responses.create(
+        model=RCA_OPENAI_MODEL,
+        instructions=system,
+        input=messages,
+        max_output_tokens=max_output_tokens,
+    )
+    text = getattr(response, "output_text", "") or ""
+    text = text.strip()
+    if not text:
+        raise ValueError(f"{RCA_OPENAI_MODEL} returned an empty response")
+    return text
+
+
 MISCLASSIFICATION_CATEGORIES = (
     "score_configuration_problem",
     "information_gap",
@@ -607,8 +635,6 @@ def extract_misclassification_evidence_flags(
 
     The returned flags are inputs to deterministic category assignment.
     """
-    import boto3
-
     system = (
         "You extract evidence flags for misclassification triage. "
         "Focus on explicit evidence in the provided context. "
@@ -662,24 +688,10 @@ def extract_misclassification_evidence_flags(
         f"Item context JSON:\n{json.dumps(_compact_context_for_triage(item_context), ensure_ascii=True)}\n"
     )
 
-    client = boto3.client("bedrock-runtime", region_name="us-east-1")
-    body = json.dumps({
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 320,
-        "system": system,
-        "messages": [{"role": "user", "content": prompt}],
-    })
-    response = client.invoke_model(
-        modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
-        body=body,
-        contentType="application/json",
-        accept="application/json",
-    )
-    parsed = json.loads(response["body"].read())
-    text = (
-        ((parsed.get("content") or [{}])[0]).get("text")
-        if isinstance(parsed, dict)
-        else None
+    text = _invoke_rca_openai_text(
+        system=system,
+        messages=[{"role": "user", "content": prompt}],
+        max_output_tokens=320,
     )
     if not isinstance(text, str) or not text.strip():
         raise ValueError("Invalid evidence flag output: empty response")
@@ -1109,8 +1121,6 @@ def explain_misclassification_item_classification(
     Generate a short, operator-focused explanation for an assigned misclassification category.
     Raises ValueError when the LLM output is invalid.
     """
-    import boto3
-
     system = (
         "You explain misclassification triage decisions for AI evaluations. "
         "Use neutral, modality-agnostic language. Call transcripts are only one possible example."
@@ -1154,20 +1164,11 @@ def explain_misclassification_item_classification(
         f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n\n"
         f"Deterministic classification JSON:\n{json.dumps(classification, ensure_ascii=True)}\n"
     )
-    client = boto3.client("bedrock-runtime", region_name="us-east-1")
-    body = json.dumps({
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 320,
-        "system": system,
-        "messages": [{"role": "user", "content": prompt}],
-    })
-    response = client.invoke_model(
-        modelId="anthropic.claude-3-haiku-20240307-v1:0",
-        body=body,
-        contentType="application/json",
-        accept="application/json",
+    raw_text = _invoke_rca_openai_text(
+        system=system,
+        messages=[{"role": "user", "content": prompt}],
+        max_output_tokens=320,
     )
-    raw_text = json.loads(response["body"].read())["content"][0]["text"].strip()
     line_map = {}
     for line in str(raw_text or "").splitlines():
         if ":" not in line:
@@ -1696,7 +1697,7 @@ def analyze_score_result(
     feedback_context: str = "",
 ) -> tuple:
     """
-    Run a two-turn Bedrock Haiku conversation to analyze a misclassification.
+    Run a two-turn GPT-5 mini conversation to analyze a misclassification.
 
     Returns (detailed_cause, suggested_fix):
       - detailed_cause: why the AI prediction was wrong (2-4 sentences)
@@ -1712,8 +1713,6 @@ def analyze_score_result(
         score_yaml_code: Score YAML configuration (truncated to 4000 chars)
         feedback_context: Additional context about reviewer feedback
     """
-    import boto3
-
     system = (
         "You are an expert quality analyst reviewing AI scoring errors across domains and modalities."
     )
@@ -1741,25 +1740,15 @@ def analyze_score_result(
     )
 
     try:
-        client = boto3.client("bedrock-runtime", region_name="us-east-1")
-
-        def _haiku_call(messages: list, max_tokens: int) -> str:
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
-                "system": system,
-                "messages": messages,
-            })
-            resp = client.invoke_model(
-                modelId="anthropic.claude-3-haiku-20240307-v1:0",
-                body=body,
-                contentType="application/json",
-                accept="application/json",
+        def _gpt5_mini_call(messages: list[dict[str, str]], max_tokens: int) -> str:
+            return _invoke_rca_openai_text(
+                system=system,
+                messages=messages,
+                max_output_tokens=max_tokens,
             )
-            return json.loads(resp["body"].read())["content"][0]["text"].strip()
 
         messages = [{"role": "user", "content": turn1_prompt}]
-        detailed_cause = _haiku_call(messages, max_tokens=200)
+        detailed_cause = _gpt5_mini_call(messages, max_tokens=200)
 
         messages.append({"role": "assistant", "content": detailed_cause})
         messages.append({"role": "user", "content": (
@@ -1767,7 +1756,7 @@ def analyze_score_result(
             "suggest one concrete change to the score code that would prevent "
             "this specific misclassification. Be specific and brief (1-2 sentences)."
         )})
-        suggested_fix = _haiku_call(messages, max_tokens=150)
+        suggested_fix = _gpt5_mini_call(messages, max_tokens=150)
 
         return detailed_cause, suggested_fix
     except Exception as exc:
