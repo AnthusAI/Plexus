@@ -106,10 +106,16 @@
       "author": "ryan",
       "text": "Investigating champion promotion failure from the score-version UI. Goal: fix the real promotion mutation/path and improve error reporting enough that future failures are diagnosable.",
       "created_at": "2026-04-27T21:58:05.146494Z"
+    },
+    {
+      "id": "34f4ff51-e33b-4a49-a00a-6927444eb65b",
+      "author": "ryan",
+      "text": "Refining expanded related ScoreVersion cards so the compare action is compact and aligned to the right of the note instead of appearing as a larger primary row.",
+      "created_at": "2026-04-27T22:01:13.580875Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T21:58:05.146494Z",
+  "updated_at": "2026-04-27T22:01:13.580875Z",
   "closed_at": null,
   "custom": {}
 }
