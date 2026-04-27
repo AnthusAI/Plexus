@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "e6b1a7dd-c466-414d-9ac4-f4a165af0619",
+  "issue_id": "plx-e24fd0e5-3f12-44b8-aeff-9d32cb7ee67f",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-27T18:14:34.874Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "Implement the ScoreVersion management feature: schema field/index, frontend pin/diff/history UI, CLI and MCP tools, and champion promotion metadata updates. Keep the GraphQL schema delta limited to ScoreVersion.metadata plus one featured-version index."
+      }
+    }
+  }
+}
