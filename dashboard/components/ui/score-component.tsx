@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit, Star, GitCompareArrows, History } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -41,6 +41,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
 import { ScoreEvaluationList } from '@/components/ui/score-evaluation-list'
+import { ScoreVersionDiffDialog } from '@/components/ui/score-version-diff-dialog'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
@@ -70,10 +71,12 @@ export interface ScoreVersion {
   configuration: string // YAML string
   guidelines?: string
   isFeatured: boolean
+  featuredKey?: string
   isChampion?: boolean
   note?: string
   branch?: string
   parentVersionId?: string
+  metadata?: Record<string, any> | null
   createdAt: string
   updatedAt: string
   user?: {
@@ -102,6 +105,72 @@ interface GetScoreVersionsResponse {
 
 interface CreateScoreVersionResponse {
   createScoreVersion: ScoreVersion
+}
+
+const buildChampionMetadata = ({
+  metadata,
+  scoreId,
+  versionId,
+  enteredAt,
+  exitedAt,
+  previousChampionVersionId,
+  nextChampionVersionId,
+  transitionId,
+  incoming,
+}: {
+  metadata?: Record<string, any> | null
+  scoreId: string
+  versionId: string
+  enteredAt?: string | null
+  exitedAt?: string | null
+  previousChampionVersionId?: string | null
+  nextChampionVersionId?: string | null
+  transitionId: string
+  incoming: boolean
+}) => {
+  const nextMetadata = {
+    ...(metadata && typeof metadata === 'object' ? metadata : {}),
+  }
+  const history = Array.isArray(nextMetadata.championHistory)
+    ? [...nextMetadata.championHistory]
+    : []
+
+  if (incoming) {
+    history.push({
+      scoreId,
+      versionId,
+      enteredAt,
+      exitedAt: null,
+      previousChampionVersionId: previousChampionVersionId || null,
+      nextChampionVersionId: null,
+      transitionId,
+    })
+  } else {
+    const openIndex = [...history].reverse().findIndex((entry) => entry && !entry.exitedAt)
+    if (openIndex >= 0) {
+      const actualIndex = history.length - 1 - openIndex
+      history[actualIndex] = {
+        ...history[actualIndex],
+        exitedAt,
+        nextChampionVersionId: nextChampionVersionId || null,
+        transitionId,
+      }
+    } else {
+      history.push({
+        scoreId,
+        versionId,
+        enteredAt: null,
+        exitedAt,
+        previousChampionVersionId: null,
+        nextChampionVersionId: nextChampionVersionId || null,
+        transitionId,
+        inferred: true,
+      })
+    }
+  }
+
+  nextMetadata.championHistory = history
+  return nextMetadata
 }
 
 // Add a new interface for the secondary index query response
@@ -147,6 +216,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onCostAnalysis?: () => void
   onViewProcedures?: () => void
   onViewEvaluations?: () => void
+  onViewChampionHistory?: () => void
   onDelete?: () => void
   exampleItems?: Array<{
     id: string
@@ -182,6 +252,7 @@ interface DetailContentProps {
   onCostAnalysis?: () => void
   onViewProcedures?: () => void
   onViewEvaluations?: () => void
+  onViewChampionHistory?: () => void
   onDelete?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
@@ -614,6 +685,7 @@ const DetailContent = React.memo(({
   onCostAnalysis,
   onViewProcedures,
   onViewEvaluations,
+  onViewChampionHistory,
   onDelete,
   hasChanges,
   versions,
@@ -862,6 +934,7 @@ const DetailContent = React.memo(({
   const [evaluationAction, setEvaluationAction] = React.useState<{name: string, type: string, versionId?: string} | null>(null)
   const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = React.useState(false)
   const [feedbackAction, setFeedbackAction] = React.useState<{name: string, versionId?: string} | null>(null)
+  const [isVersionDiffOpen, setIsVersionDiffOpen] = React.useState(false)
 
   
 
@@ -1146,6 +1219,12 @@ const DetailContent = React.memo(({
                         View Evaluations
                       </DropdownMenuItem>
                     )}
+                    {onViewChampionHistory && (
+                      <DropdownMenuItem onClick={onViewChampionHistory}>
+                        <History className="mr-2 h-4 w-4" />
+                        View Champion History
+                      </DropdownMenuItem>
+                    )}
                     {onDelete && (
                       <>
                         <DropdownMenuSeparator />
@@ -1293,6 +1372,7 @@ const DetailContent = React.memo(({
             championVersionId={championVersionId}
             selectedVersionId={selectedVersionId}
             onVersionSelect={onVersionSelect}
+            onToggleFeature={onToggleFeature}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             isLoading={isVersionsLoading && !hasLoadedFirstVersionPage}
@@ -1343,6 +1423,15 @@ const DetailContent = React.memo(({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onToggleFeature?.(selectedVersion.id)}>
+                            <Star className="mr-2 h-4 w-4" />
+                            {selectedVersion.isFeatured ? 'Unstar Version' : 'Star Version'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setIsVersionDiffOpen(true)}>
+                            <GitCompareArrows className="mr-2 h-4 w-4" />
+                            Compare Versions
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           {selectedVersion.id !== championVersionId && onPromoteToChampion && (
                             <>
                               <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
@@ -1863,6 +1952,14 @@ const DetailContent = React.memo(({
         scoreName={score.name}
         exampleItems={exampleItems}
       />
+
+      <ScoreVersionDiffDialog
+        isOpen={isVersionDiffOpen}
+        onClose={() => setIsVersionDiffOpen(false)}
+        versions={versions ?? []}
+        selectedVersionId={selectedVersionId}
+        championVersionId={championVersionId}
+      />
     </div>
   )
 })
@@ -1880,6 +1977,7 @@ export function ScoreComponent({
   onCostAnalysis,
   onViewProcedures,
   onViewEvaluations,
+  onViewChampionHistory,
   onDelete,
   exampleItems = [],
   scorecardName,
@@ -2014,11 +2112,13 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
+              featuredKey
               note
               branch
               parentVersionId
               createdAt
               updatedAt
+              metadata
             }
           }
         `,
@@ -2050,21 +2150,23 @@ export function ScoreComponent({
                 configuration
                 guidelines
                 isFeatured
+                featuredKey
                 note
                 branch
                 parentVersionId
                 createdAt
                 updatedAt
+                metadata
               }
               nextToken
             }
           }
         `,
         variables: {
-          scoreId: String(score.id),
-          sortDirection: "DESC",
-          limit: 100,
-          nextToken,
+            scoreId: String(score.id),
+            sortDirection: "DESC",
+            limit: 100,
+            nextToken,
         }
       }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
 
@@ -2077,6 +2179,51 @@ export function ScoreComponent({
         items: resultData?.items ?? [],
         nextToken: resultData?.nextToken ?? null,
       };
+    };
+
+    const fetchPinnedVersions = async () => {
+      const response = await getAmplifyClient().graphql({
+        query: `
+          query GetPinnedScoreVersionsByScoreId(
+            $scoreId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+          ) {
+            listScoreVersionByScoreIdAndFeaturedKeyAndCreatedAt(
+              scoreId: $scoreId,
+              featuredKeyCreatedAt: { beginsWith: { featuredKey: "featured" } },
+              sortDirection: $sortDirection,
+              limit: $limit
+            ) {
+              items {
+                id
+                scoreId
+                configuration
+                guidelines
+                isFeatured
+                featuredKey
+                note
+                branch
+                parentVersionId
+                createdAt
+                updatedAt
+                metadata
+              }
+            }
+          }
+        `,
+        variables: {
+          scoreId: String(score.id),
+          sortDirection: "DESC",
+          limit: 100,
+        }
+      }) as GraphQLResult<{
+        listScoreVersionByScoreIdAndFeaturedKeyAndCreatedAt?: {
+          items: ScoreVersion[]
+        }
+      }>;
+
+      return response.data?.listScoreVersionByScoreIdAndFeaturedKeyAndCreatedAt?.items ?? [];
     };
 
     const selectPreferredVersion = async (
@@ -2157,10 +2304,13 @@ export function ScoreComponent({
           }
         }
 
-        const firstPage = await fetchVersionPage(null);
+        const [firstPage, pinnedVersions] = await Promise.all([
+          fetchVersionPage(null),
+          fetchPinnedVersions(),
+        ]);
         if (cancelled) return;
 
-        const firstPageVersions = sortVersions(firstPage.items);
+        const firstPageVersions = mergeVersions(firstPage.items, pinnedVersions);
         setVersions(firstPageVersions);
         setLoadedVersionCount(firstPageVersions.length);
         setHasLoadedFirstVersionPage(true);
@@ -2416,13 +2566,15 @@ export function ScoreComponent({
             updateScoreVersion(input: $input) {
               id
               isFeatured
+              featuredKey
             }
           }
         `,
         variables: {
           input: {
             id: String(versionId),
-            isFeatured: !version.isFeatured
+            isFeatured: !version.isFeatured,
+            featuredKey: !version.isFeatured ? 'featured' : 'unfeatured',
           }
         }
       });
@@ -2430,7 +2582,9 @@ export function ScoreComponent({
       // Update local state regardless of response
       // This ensures UI is updated even if we can't verify the response format
       setVersions(prev => prev.map(v => 
-        v.id === versionId ? { ...v, isFeatured: !v.isFeatured } : v
+        v.id === versionId
+          ? { ...v, isFeatured: !v.isFeatured, featuredKey: !v.isFeatured ? 'featured' : 'unfeatured' }
+          : v
       ));
 
       toast.success('Version feature status updated');
@@ -2574,6 +2728,7 @@ export function ScoreComponent({
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
         isFeatured: false,
+        featuredKey: 'unfeatured',
         note: versionNote || 'Updated score configuration',
         createdAt: now,
         updatedAt: now
@@ -2588,6 +2743,7 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
+              featuredKey
               note
               createdAt
               updatedAt
@@ -2669,6 +2825,14 @@ export function ScoreComponent({
     try {
       const version = versions.find(v => v.id === versionId);
       if (!version) return;
+      const previousChampionVersionId = championVersionId && championVersionId !== versionId ? championVersionId : undefined;
+      const previousChampionVersion = previousChampionVersionId
+        ? versions.find(v => v.id === previousChampionVersionId)
+        : undefined;
+      const promotedAt = new Date().toISOString();
+      const transitionId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${versionId}-${promotedAt}`;
 
       // Update the Score record to set this as the champion version
       await getAmplifyClient().graphql({
@@ -2688,8 +2852,71 @@ export function ScoreComponent({
         }
       });
 
+      const updateVersionMetadata = async (targetVersionId: string, metadata: Record<string, any>) => {
+        await getAmplifyClient().graphql({
+          query: `
+            mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
+              updateScoreVersion(input: $input) {
+                id
+                metadata
+              }
+            }
+          `,
+          variables: {
+            input: {
+              id: String(targetVersionId),
+              metadata,
+            }
+          }
+        });
+      };
+
+      const incomingMetadata = buildChampionMetadata({
+        metadata: version.metadata,
+        scoreId: score.id,
+        versionId,
+        enteredAt: promotedAt,
+        previousChampionVersionId: previousChampionVersionId || null,
+        transitionId,
+        incoming: true,
+      });
+      await updateVersionMetadata(versionId, incomingMetadata);
+
+      if (previousChampionVersionId) {
+        const outgoingMetadata = buildChampionMetadata({
+          metadata: previousChampionVersion?.metadata,
+          scoreId: score.id,
+          versionId: previousChampionVersionId,
+          exitedAt: promotedAt,
+          nextChampionVersionId: versionId,
+          transitionId,
+          incoming: false,
+        });
+        await updateVersionMetadata(previousChampionVersionId, outgoingMetadata);
+      }
+
       // Update local state
       setChampionVersionId(versionId);
+      setVersions(prev => prev.map(item => {
+        if (item.id === versionId) {
+          return { ...item, metadata: incomingMetadata };
+        }
+        if (item.id === previousChampionVersionId) {
+          return {
+            ...item,
+            metadata: buildChampionMetadata({
+              metadata: item.metadata,
+              scoreId: score.id,
+              versionId: item.id,
+              exitedAt: promotedAt,
+              nextChampionVersionId: versionId,
+              transitionId,
+              incoming: false,
+            })
+          };
+        }
+        return item;
+      }));
       
       // If this version is not already selected, select it
       if (selectedVersionId !== versionId) {
@@ -2755,6 +2982,7 @@ export function ScoreComponent({
               onCostAnalysis={onCostAnalysis}
               onViewProcedures={onViewProcedures}
               onViewEvaluations={onViewEvaluations}
+              onViewChampionHistory={onViewChampionHistory}
               onDelete={onDelete}
               hasChanges={hasChanges}
               versions={versions}

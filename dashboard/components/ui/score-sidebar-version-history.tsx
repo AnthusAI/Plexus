@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Button } from "@/components/ui/button"
-import { Crown, Clock, PanelLeftOpen, PanelLeftClose } from 'lucide-react'
+import { Crown, Clock, PanelLeftOpen, PanelLeftClose, Star } from 'lucide-react'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreVersion } from "./score-component"
 
@@ -11,6 +11,7 @@ interface ScoreSidebarVersionHistoryProps {
   championVersionId?: string
   selectedVersionId?: string
   onVersionSelect?: (version: ScoreVersion) => void
+  onToggleFeature?: (versionId: string) => void
   isSidebarCollapsed?: boolean
   onToggleSidebar?: () => void
   isLoading?: boolean
@@ -22,6 +23,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   championVersionId,
   selectedVersionId,
   onVersionSelect,
+  onToggleFeature,
   isSidebarCollapsed = false,
   onToggleSidebar,
   isLoading = false,
@@ -77,6 +79,56 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   const sortedVersions = [...versions].sort((a, b) => 
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
+  const pinnedVersions = sortedVersions.filter(v => v.isFeatured && v.id !== championVersionId)
+  const recentVersions = sortedVersions.filter(v => v.id !== championVersionId && !v.isFeatured)
+
+  const renderVersionButton = (version: ScoreVersion, icon: React.ReactNode, title?: string) => (
+    <Button
+      key={version.id}
+      variant={selectedVersionId === version.id ? "secondary" : "ghost"}
+      size="sm"
+      onClick={() => onVersionSelect?.(version)}
+      className="w-full justify-start text-left p-2 h-auto"
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        {icon}
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-medium truncate">
+            {title || version.note || `Version ${version.id.slice(0, 8)}`}
+          </div>
+          {title && (
+            <div className="text-xs text-muted-foreground truncate">
+              {version.note || `Version ${version.id.slice(0, 8)}`}
+            </div>
+          )}
+          <div className="text-xs text-muted-foreground">
+            <Timestamp time={version.createdAt} variant="relative" showIcon={false} className="text-xs" />
+          </div>
+        </div>
+        {onToggleFeature && version.id !== championVersionId && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={version.isFeatured ? "Unstar version" : "Star version"}
+            className="shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleFeature(version.id)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                event.stopPropagation()
+                onToggleFeature(version.id)
+              }
+            }}
+          >
+            <Star className={`h-3.5 w-3.5 ${version.isFeatured ? 'fill-current' : ''}`} />
+          </span>
+        )}
+      </div>
+    </Button>
+  )
 
   return (
     <div 
@@ -125,51 +177,27 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
 
           {/* Champion Version - Always at top */}
           {!isLoading && championVersion && (
-            <Button
-              key={championVersion.id}
-              variant={selectedVersionId === championVersion.id ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => onVersionSelect?.(championVersion)}
-              className="w-full justify-start text-left p-2 h-auto"
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <Crown className="h-4 w-4 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium truncate">
-                    Champion Version
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {championVersion.note || `Version ${championVersion.id.slice(0, 8)}`}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    <Timestamp time={championVersion.createdAt} variant="relative" showIcon={false} className="text-xs" />
-                  </div>
-                </div>
-              </div>
-            </Button>
+            renderVersionButton(championVersion, <Crown className="h-4 w-4 flex-shrink-0" />, "Champion Version")
           )}
-          
-          {/* Other Versions */}
-          {sortedVersions.filter(v => v.id !== championVersionId).map((version) => (
-            <Button
-              key={version.id}
-              variant={selectedVersionId === version.id ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => onVersionSelect?.(version)}
-              className="w-full justify-start text-left p-2 h-auto"
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <Clock className="h-4 w-4 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium truncate">
-                    {version.note || `Version ${version.id.slice(0, 8)}`}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    <Timestamp time={version.createdAt} variant="relative" showIcon={false} className="text-xs" />
-                  </div>
-                </div>
-              </div>
-            </Button>
+
+          {pinnedVersions.length > 0 && (
+            <div className="px-2 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Starred
+            </div>
+          )}
+          {pinnedVersions.map((version) => renderVersionButton(
+            version,
+            <Star className="h-4 w-4 flex-shrink-0 fill-current" />
+          ))}
+
+          {recentVersions.length > 0 && (
+            <div className="px-2 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Recent
+            </div>
+          )}
+          {recentVersions.map((version) => renderVersionButton(
+            version,
+            <Clock className="h-4 w-4 flex-shrink-0" />
           ))}
           {isLoadingMore && versions.length > 0 && (
             <div className="px-2 py-1 text-xs text-muted-foreground">Loading more versions...</div>
@@ -195,7 +223,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
           )}
           
           {/* Other Versions */}
-          {sortedVersions.filter(v => v.id !== championVersionId).slice(0, 4).map((version) => (
+          {[...pinnedVersions, ...recentVersions].slice(0, 4).map((version) => (
             <Button
               key={version.id}
               variant={selectedVersionId === version.id ? "secondary" : "ghost"}
@@ -204,7 +232,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               className="w-full h-8 p-0"
               title={version.note || `Version ${version.id.slice(0, 8)}`}
             >
-              <Clock className="h-4 w-4" />
+              {version.isFeatured ? <Star className="h-4 w-4 fill-current" /> : <Clock className="h-4 w-4" />}
             </Button>
           ))}
         </div>
