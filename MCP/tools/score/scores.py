@@ -451,6 +451,7 @@ def register_score_tools(mcp: FastMCP):
                                     id
                                     createdAt
                                     isFeatured
+                                    featuredKey
                                     parentVersionId
                                     note
                                     metadata
@@ -476,6 +477,7 @@ def register_score_tools(mcp: FastMCP):
                                     "createdAt": v.get('createdAt'),
                                     "note": v.get('note'),
                                     "isFeatured": v.get('isFeatured'),
+                                    "featuredKey": v.get('featuredKey'),
                                     "parentVersionId": v.get('parentVersionId'),
                                     "isChampion": v.get('id') == score.get('championVersionId'),
                                     "metadata": v.get('metadata'),
@@ -503,6 +505,7 @@ def register_score_tools(mcp: FastMCP):
                                 updatedAt
                                 note
                                 isFeatured
+                                featuredKey
                                 parentVersionId
                                 metadata
                             }}
@@ -528,6 +531,7 @@ def register_score_tools(mcp: FastMCP):
                                 "updatedAt": version_data.get('updatedAt'),
                                 "note": version_data.get('note'),
                                 "isFeatured": version_data.get('isFeatured'),
+                                "featuredKey": version_data.get('featuredKey'),
                                 "parentVersionId": version_data.get('parentVersionId'),
                                 "metadata": version_data.get('metadata'),
                                 "isChampion": target_version_id == score.get('championVersionId')
@@ -2113,7 +2117,7 @@ def register_score_tools(mcp: FastMCP):
                 "score_id": context["score_id"],
                 "score_name": context["score_name"],
                 "version_id": updated.get("id") or request.version_id,
-                "pinned": bool(updated.get("isFeatured")),
+                "pinned": updated.get("featuredKey") == "featured",
             }
         except Exception as e:
             logger.error(f"Error pinning score version: {e}", exc_info=True)

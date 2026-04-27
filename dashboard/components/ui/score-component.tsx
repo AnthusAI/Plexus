@@ -1425,7 +1425,7 @@ const DetailContent = React.memo(({
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => onToggleFeature?.(selectedVersion.id)}>
                             <Star className="mr-2 h-4 w-4" />
-                            {selectedVersion.isFeatured ? 'Unstar Version' : 'Star Version'}
+                            {selectedVersion.featuredKey === 'featured' ? 'Unstar Version' : 'Star Version'}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setIsVersionDiffOpen(true)}>
                             <GitCompareArrows className="mr-2 h-4 w-4" />
@@ -2558,6 +2558,8 @@ export function ScoreComponent({
     try {
       const version = versions.find(v => v.id === versionId);
       if (!version) return;
+      const isPinned = version.featuredKey === 'featured';
+      const nextPinned = !isPinned;
 
       // Enable API call to persist the feature status
       await getAmplifyClient().graphql({
@@ -2573,8 +2575,8 @@ export function ScoreComponent({
         variables: {
           input: {
             id: String(versionId),
-            isFeatured: !version.isFeatured,
-            featuredKey: !version.isFeatured ? 'featured' : 'unfeatured',
+            isFeatured: nextPinned,
+            featuredKey: nextPinned ? 'featured' : 'unfeatured',
           }
         }
       });
@@ -2583,7 +2585,7 @@ export function ScoreComponent({
       // This ensures UI is updated even if we can't verify the response format
       setVersions(prev => prev.map(v => 
         v.id === versionId
-          ? { ...v, isFeatured: !v.isFeatured, featuredKey: !v.isFeatured ? 'featured' : 'unfeatured' }
+          ? { ...v, isFeatured: nextPinned, featuredKey: nextPinned ? 'featured' : 'unfeatured' }
           : v
       ));
 
